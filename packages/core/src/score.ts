@@ -22,7 +22,9 @@ export function sumTotals(pieces: GearPiece[]): Partial<Record<StatType, number>
     for (const sub of p.subs) {
       totals[sub.stat] = (totals[sub.stat] ?? 0) + sub.value;
     }
-    if (p.main) totals[p.main.stat] = (totals[p.main.stat] ?? 0) + p.main.value;
+    for (const m of p.main) {
+      totals[m.stat] = (totals[m.stat] ?? 0) + m.value;
+    }
   }
   return totals;
 }

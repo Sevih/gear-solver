@@ -1,59 +1,57 @@
 /**
- * Map captured wire payloads (raw.ts) into the domain model (types.ts).
- *
- * What's solid now: identity fields, breakthrough/reforge/singularity, equip
- * state, substat ticks. What's pending: stat resolution (stats.ts) and the
- * slot/set/rarity/main-stat lookup, which come from the Outerpedia equipment
- * DB keyed by ItemID (to be wired via a provided lookup table).
+ * Map captured wire payloads (raw.ts) + static game data (gamedata.ts) into the
+ * domain model (types.ts). Stat values are fully resolved here.
  */
 import type { RawItem, RawUserItem, RawUserCharacter } from "./raw.js";
-import type { Character, GearPiece, Inventory, RolledStat } from "./types.js";
-import { resolveSubStat } from "./stats.js";
+import type { Character, GearPiece, Inventory, RolledStat, Rarity, GearSlot } from "./types.js";
+import type { GameData } from "./gamedata.js";
+import { resolveStat } from "./stats.js";
 
-/** Equipment static data, keyed by ItemID — supplied from the Outerpedia DB. */
-export interface EquipmentMeta {
-  slot: GearPiece["slot"];
-  set: string | null;
-  rarity: GearPiece["rarity"];
-}
-export type EquipmentLookup = (itemId: number) => EquipmentMeta | undefined;
-
-const NO_META: EquipmentLookup = () => undefined;
-
-/** True when a RawItem is an equippable gear piece (has rolled substats). */
-export function isGear(item: RawItem): boolean {
+/** True when a RawItem is an equippable gear piece. */
+export function isGear(item: RawItem, game?: GameData): boolean {
+  if (game) return Boolean(game.equipment[String(item.ItemID)]);
   return Array.isArray(item.SubOptionList) && item.SubOptionList.length > 0;
 }
 
-export function parseGearPiece(item: RawItem, lookup: EquipmentLookup = NO_META): GearPiece {
-  const meta = lookup(item.ItemID);
-  const subs: RolledStat[] = item.SubOptionList
-    .filter((s) => s.OptionID !== 0)
-    .map((s) => {
-      const r = resolveSubStat(s.OptionID, s.Level);
-      const sub: RolledStat = {
-        stat: r.stat ?? ("atk" as RolledStat["stat"]), // placeholder until stats map filled
-        value: r.value,
-        ticks: s.Level,
-        reforgeTicks: s.Level - s.BaseLevel,
-      };
-      return sub;
-    });
+function toRolled(optionId: number, ticks: number, game: GameData | undefined): RolledStat | null {
+  if (!game) return null;
+  const r = resolveStat(optionId, ticks, game.options);
+  if (!r) return null;
+  return { stat: r.stat, value: r.value, percent: r.percent };
+}
+
+export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
+  const meta = game?.equipment[String(item.ItemID)];
+
+  const subs: RolledStat[] = [];
+  for (const s of item.SubOptionList) {
+    if (s.OptionID === 0) continue;
+    const r = toRolled(s.OptionID, s.Level, game);
+    if (r) subs.push({ ...r, ticks: s.Level, reforgeTicks: s.Level - s.BaseLevel });
+    else subs.push({ stat: "atk", value: 0, percent: false, ticks: s.Level, reforgeTicks: s.Level - s.BaseLevel });
+  }
+
+  const main: RolledStat[] = [];
+  for (const oid of item.OptionList) {
+    if (!oid) continue;
+    const r = toRolled(oid, 1, game); // base (+0) value; enhancement scaling TODO
+    if (r) main.push(r);
+  }
 
   return {
     uid: item.ItemUID,
-    itemUid: item.ItemUID,
     itemId: item.ItemID,
-    slot: meta?.slot ?? null,
-    set: meta?.set ?? null,
-    rarity: meta?.rarity ?? null,
-    enhance: null, // TODO: derive from Exp/level once formula known
+    slot: (meta?.slot as GearSlot) ?? null,
+    setId: meta?.setId ?? null,
+    rarity: (meta?.grade as Rarity) ?? null,
+    name: meta?.name ?? null,
+    classLimit: meta?.classLimit ?? null,
     breakthrough: item.BreakLimitLevel,
     reforgeCount: item.SmeltingCount,
     singularityLevel: item.SingularityLevel,
     locked: item.IsLock === 1,
     equippedBy: item.CharUID === "0" ? null : item.CharUID,
-    main: null, // TODO: resolve from OptionList once encoding decoded
+    main,
     subs,
   };
 }
@@ -61,12 +59,13 @@ export function parseGearPiece(item: RawItem, lookup: EquipmentLookup = NO_META)
 export function parseInventory(
   userItem: RawUserItem,
   userCharacter?: RawUserCharacter,
-  lookup: EquipmentLookup = NO_META,
+  game?: GameData,
 ): Inventory {
-  const gear = userItem.ItemList.filter(isGear).map((i) => parseGearPiece(i, lookup));
+  const gear = userItem.ItemList.filter((i) => isGear(i, game)).map((i) => parseGearPiece(i, game));
   const characters: Character[] = (userCharacter?.CharList ?? []).map((c) => ({
     uid: c.CharUID,
     charId: c.CharID,
+    name: game?.characters[String(c.CharID)]?.name ?? null,
     stars: c.TransStar,
     locked: c.IsLock === 1,
   }));

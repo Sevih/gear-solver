@@ -1,67 +1,62 @@
 /**
  * Domain model — the clean, engine-facing representation the solver and UI use.
- * Parsed from the wire types (raw.ts) via parse.ts.
+ * Parsed from the wire types (raw.ts) + game data (gamedata.ts) via parse.ts.
  */
 
-/** Canonical stat keys used throughout the engine. */
+/** Canonical stat keys. Percent stats hold display values (e.g. 12 = 12%). */
 export type StatType =
   | "atk" | "atkPct"
   | "hp" | "hpPct"
   | "def" | "defPct"
   | "critRate" | "critDmg"
   | "spd"
-  | "eff" | "effRes"
-  | "pen"
-  // TODO: confirm full set vs Outerplane stat list (resilience, heal, acc, eva...)
-  ;
+  | "eff" | "effRes"        // effectiveness (BUFF_CHANCE) / effect resist (BUFF_RESIST)
+  | "dmgUp" | "dmgReduce"   // DMG_BOOST / DMG_REDUCE_RATE
+  | "pen"                   // PIERCE_POWER_RATE
+  | "critDmgReduce"         // E_CRI_DMG_REDUCE
+  | "hitAp" | "killAp";     // chain-point gain
 
-/** Equipment slots. TODO: confirm exact slot set + how SlotList encodes them. */
 export type GearSlot =
-  | "weapon"
-  | "helmet"
-  | "armor"
-  | "gloves"
-  | "boots"
-  | "accessory";
+  | "weapon" | "helmet" | "armor" | "gloves" | "boots"
+  | "accessory" | "exclusive" | "ooparts";
 
-export type Rarity = "normal" | "superior" | "epic" | "legendary";
+/** Game grades: normal < magic < rare < unique. */
+export type Rarity = "normal" | "magic" | "rare" | "unique";
 
 /** A single rolled stat (main or sub) with its resolved numeric value. */
 export interface RolledStat {
   stat: StatType;
-  /** Resolved value (e.g. 61.8 for 61.8%). */
+  /** Resolved display value (e.g. 61.8 for 61.8%, or 240 for flat ATK). */
   value: number;
-  /** For substats: total ticks. Undefined for main stat. */
+  percent: boolean;
+  /** For substats: total ticks. Undefined for main. */
   ticks?: number;
   /** For substats: reforge (orange) ticks = total - initial. */
   reforgeTicks?: number;
 }
 
-/** A gear piece in domain form. */
 export interface GearPiece {
   uid: string;
   itemId: number;
   slot: GearSlot | null;
-  set: string | null;
+  /** Set group id (from equipment.setId); resolve name/effects via GameData.sets. */
+  setId: string | null;
   rarity: Rarity | null;
-  /** "+0".."+15" enhancement level once known; null until resolved. */
-  enhance: number | null;
-  /** Breakthrough tier T0–T4. */
+  name: string | null;
+  classLimit: string | null;
   breakthrough: number;
   reforgeCount: number;
   singularityLevel: number;
   locked: boolean;
-  /** Equipped character uid, null when free. */
   equippedBy: string | null;
-  main: RolledStat | null;
+  main: RolledStat[];
   subs: RolledStat[];
-  /** Original wire id for traceability. */
-  itemUid: string;
 }
 
 export interface Character {
   uid: string;
   charId: number;
+  name: string | null;
   stars: number;
   locked: boolean;
 }

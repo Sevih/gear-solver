@@ -1,0 +1,162 @@
+[
+  {
+    "ID": "1",
+    "ItemSubType": "ITS_EQUIP_WEAPON",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_01",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "20%",
+    "SingularityOptionPopUpValueMax": "50%"
+  },
+  {
+    "ID": "2",
+    "ItemSubType": "ITS_EQUIP_WEAPON",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_02",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "40%",
+    "SingularityOptionPopUpValueMax": "100%"
+  },
+  {
+    "ID": "3",
+    "ItemSubType": "ITS_EQUIP_WEAPON",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_03",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_ON",
+    "SingularityOptionPopUpValueMin": "90%",
+    "SingularityOptionPopUpValueMax": "150%"
+  },
+  {
+    "ID": "4",
+    "ItemSubType": "ITS_EQUIP_WEAPON",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_04",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_ON",
+    "SingularityOptionPopUpValueMin": "100%",
+    "SingularityOptionPopUpValueMax": "200%"
+  },
+  {
+    "ID": "5",
+    "ItemSubType": "ITS_EQUIP_ACCESSORY",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_01",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "20%",
+    "SingularityOptionPopUpValueMax": "50%"
+  },
+  {
+    "ID": "6",
+    "ItemSubType": "ITS_EQUIP_ACCESSORY",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_02",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "40%",
+    "SingularityOptionPopUpValueMax": "100%"
+  },
+  {
+    "ID": "7",
+    "ItemSubType": "ITS_EQUIP_ACCESSORY",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_03",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_ON",
+    "SingularityOptionPopUpValueMin": "90%",
+    "SingularityOptionPopUpValueMax": "150%"
+  },
+  {
+    "ID": "8",
+    "ItemSubType": "ITS_EQUIP_ACCESSORY",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_04",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_ON",
+    "SingularityOptionPopUpValueMin": "100%",
+    "SingularityOptionPopUpValueMax": "200%"
+  },
+  {
+    "ID": "9",
+    "ItemSubType": "ITS_EQUIP_HELMET",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_01",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "10%",
+    "SingularityOptionPopUpValueMax": "25%"
+  },
+  {
+    "ID": "10",
+    "ItemSubType": "ITS_EQUIP_HELMET",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_02",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "20%",
+    "SingularityOptionPopUpValueMax": "50%"
+  },
+  {
+    "ID": "11",
+    "ItemSubType": "ITS_EQUIP_HELMET",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_03",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_ON",
+    "SingularityOptionPopUpValueMin": "45%",
+    "SingularityOptionPopUpValueMax": "75%"
+  },
+  {
+    "ID": "12",
+    "ItemSubType": "ITS_EQUIP_ARMOR",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_01",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "10%",
+    "SingularityOptionPopUpValueMax": "25%"
+  },
+  {
+    "ID": "13",
+    "ItemSubType": "ITS_EQUIP_ARMOR",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_02",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "20%",
+    "SingularityOptionPopUpValueMax": "50%"
+  },
+  {
+    "ID": "14",
+    "ItemSubType": "ITS_EQUIP_ARMOR",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_03",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_ON",
+    "SingularityOptionPopUpValueMin": "45%",
+    "SingularityOptionPopUpValueMax": "75%"
+  },
+  {
+    "ID": "15",
+    "ItemSubType": "ITS_EQUIP_GLOVES",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_01",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "10%",
+    "SingularityOptionPopUpValueMax": "25%"
+  },
+  {
+    "ID": "16",
+    "ItemSubType": "ITS_EQUIP_GLOVES",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_02",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "20%",
+    "SingularityOptionPopUpValueMax": "50%"
+  },
+  {
+    "ID": "17",
+    "ItemSubType": "ITS_EQUIP_GLOVES",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_03",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_ON",
+    "SingularityOptionPopUpValueMin": "45%",
+    "SingularityOptionPopUpValueMax": "75%"
+  },
+  {
+    "ID": "18",
+    "ItemSubType": "ITS_EQUIP_SHOES",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_01",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "10%",
+    "SingularityOptionPopUpValueMax": "25%"
+  },
+  {
+    "ID": "19",
+    "ItemSubType": "ITS_EQUIP_SHOES",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_02",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_OFF",
+    "SingularityOptionPopUpValueMin": "20%",
+    "SingularityOptionPopUpValueMax": "50%"
+  },
+  {
+    "ID": "20",
+    "ItemSubType": "ITS_EQUIP_SHOES",
+    "SingularityOptionPopUpString1": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_DMG_REDUCE_03",
+    "SingularityOptionPopUpString2": "SYS_POPUP_SINGULARITY_SPEIAL_OPTION_SINGULARITY_ON",
+    "SingularityOptionPopUpValueMin": "45%",
+    "SingularityOptionPopUpValueMax": "75%"
+  }
+]

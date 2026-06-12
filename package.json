@@ -12,7 +12,8 @@
     "dev": "npm run dev -w @gear-solver/web",
     "build": "npm run build -w @gear-solver/core && npm run build -w @gear-solver/web",
     "test": "npm run test -w @gear-solver/core",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "data:build": "node data/build.mjs"
   },
   "engines": {
     "node": ">=20"

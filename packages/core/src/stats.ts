@@ -1,54 +1,66 @@
 /**
- * Stat option-id mapping.
+ * Stat resolution - maps the game's ST_xxx / OAT_xxx option encoding to the engine's
+ * canonical StatType and computes display values.
  *
- * STATUS: PARTIAL — the OptionID -> (stat, per-tick value) table is the main
- * open data task (see docs/data-schema.md). The structure is wired up; values
- * must be filled by cross-checking captured items against the in-game display
- * and the Outerpedia equipment DB.
- *
- * Known from capture:
- *  - Substat OptionIDs observed: 160001..160013 (13 distinct types).
- *  - Substat value = ticks * perTick (orange/reforge ticks = Level - BaseLevel).
- *  - Main stat lives in RawItem.OptionList; observed patterns include
- *    (5024,5048), (4024,0), (3024,0), (6024,6048), (24,94|95|96).
- *    Encoding TBD (likely <statClass><tier> + value index).
+ * Validated against real capture + in-game display:
+ *   crit rate  30/tick -> 12% at 4 ticks (div 10)
+ *   crit dmg   40/tick -> 24% at 6 ticks (div 10)
+ *   dmg boost  20/tick ->  8% at 4 ticks (div 10)
+ *   speed       3/tick ->  9  at 3 ticks (raw)
+ * Percent stats are stored x10 (one decimal); flat ATK/DEF/HP and SPEED are raw.
  */
 import type { StatType } from "./types.js";
+import type { OptionDef, OptionsTable } from "./gamedata.js";
 
-export interface SubStatDef {
+interface StatMeta {
+  /** flat vs percent variant resolved from ApplyingType. */
+  add: StatType;
+  rate: StatType;
+  /** whether the stat displays as a percentage (÷10 from raw). */
+  addPercent: boolean;
+}
+
+/** ST_* → engine stat, split by OAT_ADD vs OAT_RATE. */
+const GAME_STAT: Record<string, StatMeta> = {
+  ST_ATK: { add: "atk", rate: "atkPct", addPercent: false },
+  ST_DEF: { add: "def", rate: "defPct", addPercent: false },
+  ST_HP: { add: "hp", rate: "hpPct", addPercent: false },
+  ST_SPEED: { add: "spd", rate: "spd", addPercent: false },
+  ST_CRITICAL_RATE: { add: "critRate", rate: "critRate", addPercent: true },
+  ST_CRITICAL_DMG_RATE: { add: "critDmg", rate: "critDmg", addPercent: true },
+  ST_DMG_BOOST: { add: "dmgUp", rate: "dmgUp", addPercent: true },
+  ST_DMG_REDUCE_RATE: { add: "dmgReduce", rate: "dmgReduce", addPercent: true },
+  ST_BUFF_CHANCE: { add: "eff", rate: "eff", addPercent: true },
+  ST_BUFF_RESIST: { add: "effRes", rate: "effRes", addPercent: true },
+  ST_PIERCE_POWER_RATE: { add: "pen", rate: "pen", addPercent: true },
+  ST_E_CRI_DMG_REDUCE: { add: "critDmgReduce", rate: "critDmgReduce", addPercent: true },
+  ST_HIT_AP: { add: "hitAp", rate: "hitAp", addPercent: false },
+  ST_KILL_AP: { add: "killAp", rate: "killAp", addPercent: false },
+};
+
+export interface ResolvedStat {
   stat: StatType;
-  /** Value gained per tick. Fill from datamine. */
-  perTick: number;
-  /** Whether the value is a percentage (display only). */
+  value: number;
   percent: boolean;
 }
 
-/**
- * OptionID -> substat definition. TODO: fill perTick + confirm stat per id.
- * Left intentionally sparse; resolveSubStat() degrades gracefully for unknowns.
- */
-export const SUB_OPTION_STATS: Record<number, SubStatDef> = {
-  // 160001: { stat: "atk",      perTick: 0,   percent: false },
-  // 160002: { stat: "atkPct",   perTick: 0,   percent: true  },
-  // ... 160003..160013
-};
+/** Resolve a single option definition for a given tick count. */
+export function resolveOption(def: OptionDef, ticks: number): ResolvedStat | null {
+  const meta = GAME_STAT[def.st];
+  if (!meta) return null;
+  const isRate = def.ap === "OAT_RATE";
+  const stat = isRate ? meta.rate : meta.add;
+  const percent = isRate || meta.addPercent;
+  const raw = def.v * ticks;
+  return { stat, value: percent ? raw / 10 : raw, percent };
+}
 
-/** OptionID -> main stat. TODO: decode OptionList encoding. */
-export const MAIN_OPTION_STATS: Record<number, { stat: StatType; percent: boolean }> = {
-  // filled once OptionList encoding is decoded
-};
-
-/** All substat option ids seen in captures, for reference / validation. */
-export const OBSERVED_SUB_OPTION_IDS: readonly number[] = [
-  160001, 160002, 160004, 160005, 160006, 160007,
-  160008, 160009, 160010, 160011, 160012, 160013,
-];
-
-export function resolveSubStat(
-  optionId: number,
+/** Resolve a substat/main option by id from the options table. */
+export function resolveStat(
+  optionId: number | string,
   ticks: number,
-): { stat: StatType | null; value: number; percent: boolean } {
-  const def = SUB_OPTION_STATS[optionId];
-  if (!def) return { stat: null, value: ticks, percent: false };
-  return { stat: def.stat, value: ticks * def.perTick, percent: def.percent };
+  options: OptionsTable,
+): ResolvedStat | null {
+  const def = options[String(optionId)];
+  return def ? resolveOption(def, ticks) : null;
 }

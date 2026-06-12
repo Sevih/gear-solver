@@ -1,0 +1,806 @@
+[
+  {
+    "ID": "MAX_CHARACTER_LEVEL",
+    "ValueString": "120"
+  },
+  {
+    "ID": "MAX_PVE_DUNGEON_LEVEL",
+    "ValueString": "13"
+  },
+  {
+    "ID": "MAX_DAILY_BONUS_COUNT_GOLD_DUNGEON",
+    "ValueString": "2"
+  },
+  {
+    "ID": "MAX_DAILY_BONUS_COUNT_EXP_DUNGEON",
+    "ValueString": "2"
+  },
+  {
+    "ID": "MAX_DAILY_BONUS_COUNT_DAYOFWEEK_DUNGEON",
+    "ValueString": "2"
+  },
+  {
+    "ID": "MAX_DAILY_BONUS_COUNT_RAID_1",
+    "ValueString": "1"
+  },
+  {
+    "ID": "MAX_DAILY_BONUS_COUNT_RAID_2",
+    "ValueString": "1"
+  },
+  {
+    "ID": "GOLD_DUNGEON_HIDDEN_MONSTER",
+    "ValueString": "204011024, 214011024, 224011024, 234011024, 244011024, 254011024, 264011024, 274011024, 284011024, 294011024, 304011024, 314011024"
+  },
+  {
+    "ID": "DAILY_RESET_TIME",
+    "ValueString": "0"
+  },
+  {
+    "ID": "WEEKLY_RESET_TIME",
+    "ValueString": "2"
+  },
+  {
+    "ID": "MONTHLY_RESET_TIME",
+    "ValueString": "1"
+  },
+  {
+    "ID": "EXP_DUNGEON_MONSTER_TURN_COUNT",
+    "ValueString": "2"
+  },
+  {
+    "ID": "EXP_DUNGEON_HIDDEN_MONSTER",
+    "ValueString": "304004008, 314004008, 324004008, 334004008, 344004008, 354004008, 364004008, 374004008, 384004008, 394004008, 404004008, 414004008"
+  },
+  {
+    "ID": "MAX_ACTION_POINT",
+    "ValueString": "3000"
+  },
+  {
+    "ID": "MISSED_DAMAGE_RATE",
+    "ValueString": "500"
+  },
+  {
+    "ID": "MAX_PLAY_COUNT_PEICE_DUNGEON",
+    "ValueString": "10"
+  },
+  {
+    "ID": "NICKNAME_CHANGE_CRYSTAL_COST",
+    "ValueString": "1"
+  },
+  {
+    "ID": "FRIEND_POINT_DAILY_LIMIT",
+    "ValueString": "1000"
+  },
+  {
+    "ID": "FRIEND_POINT_MAX_LIMIT",
+    "ValueString": "3000"
+  },
+  {
+    "ID": "FRIEND_POINT_SEND",
+    "ValueString": "10"
+  },
+  {
+    "ID": "FRIEND_POINT_GET",
+    "ValueString": "10"
+  },
+  {
+    "ID": "FRIEND_POINT_SUPPORT_HELP",
+    "ValueString": "10"
+  },
+  {
+    "ID": "FRIEND_POINT_SUPPORT_USE",
+    "ValueString": "10"
+  },
+  {
+    "ID": "FRIEND_POINT_SUPPORT_COOL_TIME",
+    "ValueString": "10"
+  },
+  {
+    "ID": "FRIEND_MAX_LIMIT_COUNT",
+    "ValueString": "50"
+  },
+  {
+    "ID": "FRIEND_REQUEST_MAX_LIMIT_COUNT",
+    "ValueString": "10"
+  },
+  {
+    "ID": "ATTENDANCE_NEW_USER_PERIOD",
+    "ValueString": "14"
+  },
+  {
+    "ID": "ATTENDANCE_RETURN_USER_PERIOD",
+    "ValueString": "7"
+  },
+  {
+    "ID": "ATTENDANCE_BECOMMING_RETURN_USER_PERIOD",
+    "ValueString": "14"
+  },
+  {
+    "ID": "PERSONAL_SHOP_BASIC_REFRESH_COUNT",
+    "ValueString": "1"
+  },
+  {
+    "ID": "PERSONAL_SHOP_REFRESH_COST",
+    "ValueString": "0, 50, 100"
+  },
+  {
+    "ID": "DETACHMENT_BASIC_WORKER",
+    "ValueString": "1"
+  },
+  {
+    "ID": "AETHER_BASIC_TIME",
+    "ValueString": "720"
+  },
+  {
+    "ID": "PVP_REFRESH_FREE_COUNT",
+    "ValueString": "1"
+  },
+  {
+    "ID": "PVP_REFRESH_INTERVAL_TIME",
+    "ValueString": "60"
+  },
+  {
+    "ID": "PVP_REFRESH_COST",
+    "ValueString": "50"
+  },
+  {
+    "ID": "PVP_ATK_PENALTY_START_TURN",
+    "ValueString": "10"
+  },
+  {
+    "ID": "PVP_ATK_PENALTY_LOOP_TURN",
+    "ValueString": "5"
+  },
+  {
+    "ID": "PVP_ATK_PENALTY_DMG_RATE",
+    "ValueString": "100"
+  },
+  {
+    "ID": "PVP_ATK_PENALTY_DMG_ADD_RATE",
+    "ValueString": "30"
+  },
+  {
+    "ID": "GUILD_NAME_CHANGE_GOODS_TYPE",
+    "ValueString": "1"
+  },
+  {
+    "ID": "GUILD_NAME_CHANGE_GOODS_VALUE",
+    "ValueString": "1"
+  },
+  {
+    "ID": "GUILD_CREATE_GOODS_TYPE",
+    "ValueString": "1"
+  },
+  {
+    "ID": "GUILD_CREATE_GOODS_VALUE",
+    "ValueString": "300000"
+  },
+  {
+    "ID": "GUILD_COIN_MAX_STACK_VALUE",
+    "ValueString": "999999"
+  },
+  {
+    "ID": "GUILD_STONE_MAX_STACK_VALUE",
+    "ValueString": "999999"
+  },
+  {
+    "ID": "SWEEP_TICKET_ID",
+    "ValueString": "1000000"
+  },
+  {
+    "ID": "SWEEP_TICKET_VALUE",
+    "ValueString": "1"
+  },
+  {
+    "ID": "GEM_REMOVE_COST_1",
+    "ValueString": "1000"
+  },
+  {
+    "ID": "GEM_REMOVE_COST_2",
+    "ValueString": "2000"
+  },
+  {
+    "ID": "GEM_REMOVE_COST_3",
+    "ValueString": "4000"
+  },
+  {
+    "ID": "GEM_REMOVE_COST_4",
+    "ValueString": "6000"
+  },
+  {
+    "ID": "GEM_REMOVE_COST_5",
+    "ValueString": "8000"
+  },
+  {
+    "ID": "GEM_REMOVE_COST_6",
+    "ValueString": "10000"
+  },
+  {
+    "ID": "CHARGE_CP",
+    "ValueString": "4,6,7,8"
+  },
+  {
+    "ID": "CHARACTER_PUBLIC_PIECE_1",
+    "ValueString": "0"
+  },
+  {
+    "ID": "CHARACTER_PUBLIC_PIECE_2",
+    "ValueString": "1"
+  },
+  {
+    "ID": "CHARACTER_PUBLIC_PIECE_3",
+    "ValueString": "15"
+  },
+  {
+    "ID": "CHARACTER_PIECE_1",
+    "ValueString": "5"
+  },
+  {
+    "ID": "CHARACTER_PIECE_2",
+    "ValueString": "10"
+  },
+  {
+    "ID": "CHARACTER_PIECE_3",
+    "ValueString": "150"
+  },
+  {
+    "ID": "CHARACTER_PIECE_PICKUP",
+    "ValueString": "150"
+  },
+  {
+    "ID": "TRUST_ENCHANT_INCREASE_VALUE",
+    "ValueString": "50"
+  },
+  {
+    "ID": "MAX_AP",
+    "ValueString": "400"
+  },
+  {
+    "ID": "BASIC_MAX_BUY_COUNT",
+    "ValueString": "1000"
+  },
+  {
+    "ID": "DIALOG_AUTO_PLAY_DELAY_MIL_SEC",
+    "ValueString": "1000"
+  },
+  {
+    "ID": "MAX_USER_LEVEL",
+    "ValueString": "70"
+  },
+  {
+    "ID": "INVENTORY_EQUIPMENT_DEFAULT_SLOT",
+    "ValueString": "500"
+  },
+  {
+    "ID": "INVENTORY_SPECIAL_DEFAULT_SLOT",
+    "ValueString": "250"
+  },
+  {
+    "ID": "GUILD_REJOIN_DAY",
+    "ValueString": "1"
+  },
+  {
+    "ID": "PVP_RESET_TIME",
+    "ValueString": "60"
+  },
+  {
+    "ID": "OOPARTS_UNLOCK_DUNGEON",
+    "ValueString": "100309"
+  },
+  {
+    "ID": "REMAINS_SKIP_EFFECT_RATE",
+    "ValueString": "100"
+  },
+  {
+    "ID": "TRUST_MATERIAL_EVO_COUNT_DAILY",
+    "ValueString": "0"
+  },
+  {
+    "ID": "RESEARCH_OPEN_DUNGEON_ID",
+    "ValueString": "110106"
+  },
+  {
+    "ID": "MAX_PLAY_COUNT_EVENT_DUNGEON_HARD",
+    "ValueString": "20"
+  },
+  {
+    "ID": "RECALL_MATERIAL_ID",
+    "ValueString": "1001001"
+  },
+  {
+    "ID": "PRODUCT_NEW_TAG_PERIOD",
+    "ValueString": "7"
+  },
+  {
+    "ID": "PRESET_MAX_COUNT",
+    "ValueString": "30"
+  },
+  {
+    "ID": "GUIDE_SEASON2_OPEN_DUNGEON_ID",
+    "ValueString": "101014"
+  },
+  {
+    "ID": "RESEARCH_SEASON2_OPEN_DUNGEON_ID",
+    "ValueString": "120514"
+  },
+  {
+    "ID": "MAX_PLAY_COUNT_ELEMENTAL_TOWER",
+    "ValueString": "10"
+  },
+  {
+    "ID": "RESURRECTION_ACTION_POINT_RATE_PVE",
+    "ValueString": "1000"
+  },
+  {
+    "ID": "RESURRECTION_ACTION_POINT_RATE_PVP",
+    "ValueString": "700"
+  },
+  {
+    "ID": "RECRUIT_ELEMENTAL_PERIOD",
+    "ValueString": "29"
+  },
+  {
+    "ID": "REALTIME_ARENA_UNLOCK_ACCOUNT_LEVEL",
+    "ValueString": "50"
+  },
+  {
+    "ID": "REALTIME_ARENA_UNLOCK_CHARACTER_COUNT",
+    "ValueString": "24"
+  },
+  {
+    "ID": "PURCHASE_LIMIT_AGE_1",
+    "ValueString": "16"
+  },
+  {
+    "ID": "PURCHASE_LIMIT_AGE_2",
+    "ValueString": "18"
+  },
+  {
+    "ID": "PURCHASE_LIMIT_PRICE_1",
+    "ValueString": "5000"
+  },
+  {
+    "ID": "PURCHASE_LIMIT_PRICE_2",
+    "ValueString": "30000"
+  },
+  {
+    "ID": "CHECK_AVOID_VALUE_1",
+    "ValueString": "1000"
+  },
+  {
+    "ID": "CHECK_AVOID_VALUE_2",
+    "ValueString": "1"
+  },
+  {
+    "ID": "CHECK_AVOID_VALUE_3",
+    "ValueString": "100"
+  },
+  {
+    "ID": "CHECK_AVOID_VALUE_4",
+    "ValueString": "1"
+  },
+  {
+    "ID": "REALTIME_ARENA_FREE_BAN_COOL",
+    "ValueString": "35"
+  },
+  {
+    "ID": "REALTIME_ARENA_SELECT_COOL",
+    "ValueString": "25"
+  },
+  {
+    "ID": "REALTIME_ARENA_CHARACTER_BAN_COOL",
+    "ValueString": "25"
+  },
+  {
+    "ID": "REALTIME_ARENA_TEAM_SET_COOL",
+    "ValueString": "45"
+  },
+  {
+    "ID": "REALTIME_ARENA_BATTLE_TURN_COOL",
+    "ValueString": "10"
+  },
+  {
+    "ID": "REALTIME_ARENA_BATTLE_START_DELAY_SEC",
+    "ValueString": "3"
+  },
+  {
+    "ID": "REALTIME_ARENA_MATCH_TIME_UP_SEC",
+    "ValueString": "120"
+  },
+  {
+    "ID": "RECRUIT_DEMIURGE_SELECT_PERIODE",
+    "ValueString": "0"
+  },
+  {
+    "ID": "EVENT_BOSS_ENTRANCE_LIMIT",
+    "ValueString": "2"
+  },
+  {
+    "ID": "CHARACTER_AWAKENING_RESET_PRICE",
+    "ValueString": "100, 200, 300, 500, 800, 1200"
+  },
+  {
+    "ID": "RETURN_USER_BUFF_GROUP",
+    "ValueString": "49,50,51"
+  },
+  {
+    "ID": "SELECT_OPTION_CRAFT_COST_PARTS",
+    "ValueString": "550"
+  },
+  {
+    "ID": "SELECT_OPTION_CRAFT_COST_SPECIAL",
+    "ValueString": "650"
+  },
+  {
+    "ID": "SELECT_OPTION_CRAFT_COST_MAIN",
+    "ValueString": "400"
+  },
+  {
+    "ID": "SELECT_OPTION_CRAFT_COST_SUB",
+    "ValueString": "50"
+  },
+  {
+    "ID": "SELECT_OPTION_CRAFT_COST_GOLD",
+    "ValueString": "2000000"
+  },
+  {
+    "ID": "SELECT_OPTION_CRAFT_COST_ADD_COUNT",
+    "ValueString": "1500"
+  },
+  {
+    "ID": "SELECT_OPTION_CRAFT_COUNT_COOLTIME_DAY",
+    "ValueString": "30"
+  },
+  {
+    "ID": "EXPLORATION_COUNT",
+    "ValueString": "1"
+  },
+  {
+    "ID": "EXPLORATION_TIME",
+    "ValueString": "240"
+  },
+  {
+    "ID": "EXPLORATION_SYSTEM_BUFF_DURAITION",
+    "ValueString": "1440"
+  },
+  {
+    "ID": "EXPLORATION_MAX_SPOT_COUNT",
+    "ValueString": "5"
+  },
+  {
+    "ID": "EXPLORATION_REQUIRE_STAMINA",
+    "ValueString": "30"
+  },
+  {
+    "ID": "EXPLORATION_LEVEL_CHANGE_COUNT",
+    "ValueString": "1"
+  },
+  {
+    "ID": "SELECT_OPTION_CRAFT_BUY_COUNT_BONUS_EFFECTION",
+    "ValueString": "1600"
+  },
+  {
+    "ID": "WORLD_BOSS_ENTRANCE_LIMIT",
+    "ValueString": "10"
+  },
+  {
+    "ID": "NEW_USER_PACKAGE_PURCHASBLE_DAYCOUNT",
+    "ValueString": "30"
+  },
+  {
+    "ID": "EVENT_BOSS_COIN_CONVERSION_RATE",
+    "ValueString": "1000"
+  },
+  {
+    "ID": "TOWER_NORMAL_SWEEP_COST",
+    "ValueString": "1000"
+  },
+  {
+    "ID": "TOWER_HARD_SWEEP_COST",
+    "ValueString": "3500"
+  },
+  {
+    "ID": "TOWER_SWEEP_STAMINA_COST",
+    "ValueString": "500"
+  },
+  {
+    "ID": "TOWER_SWEEP_FLOOR_LIMIT",
+    "ValueString": "990"
+  },
+  {
+    "ID": "SEASONAL_MILEAGE_EXCHANGE_TO_STAR_MEMORY",
+    "ValueString": "5"
+  },
+  {
+    "ID": "OUTER_FES_MILEAGE_EXCHANGE_TO_STAR_MEMORY",
+    "ValueString": "5"
+  },
+  {
+    "ID": "SUBOPTION_CONSECUTIVELY_TIME_MIL_SEC",
+    "ValueString": "200"
+  },
+  {
+    "ID": "FIREWORKS_RANDOM_MODE_PLAY_MAX",
+    "ValueString": "50"
+  },
+  {
+    "ID": "ADVENTURE_DUNGEON_ENTER_COUNT",
+    "ValueString": "3"
+  },
+  {
+    "ID": "ADVENTURE_DUNGEON_RESET_COST",
+    "ValueString": "50"
+  },
+  {
+    "ID": "ADVENTURE_DUNGEON_CLEAR_COST_RATIO",
+    "ValueString": "450"
+  },
+  {
+    "ID": "WORLD_BOSS_SEASON_RANKING_COUNT",
+    "ValueString": "10"
+  },
+  {
+    "ID": "IRREGULAR_CHASE_MAX_JOIN_BOSS",
+    "ValueString": "10"
+  },
+  {
+    "ID": "MAX_POSSESSION_SANCTUM",
+    "ValueString": "8"
+  },
+  {
+    "ID": "MAX_ANTIBODY_VALUE",
+    "ValueString": "100"
+  },
+  {
+    "ID": "IRREGULAR_HUNTER_ID",
+    "ValueString": "2000001, 2000060, 2000087, 2000089, 2000101, 2000117, 2000114"
+  },
+  {
+    "ID": "SELECT_OPTION_CRAFT_BUY_COUNT",
+    "ValueString": "2"
+  },
+  {
+    "ID": "IRREGULAR_HUNTER_BUFF_ID",
+    "ValueString": "1001,1002,1003"
+  },
+  {
+    "ID": "IRREGULAR_CHASE_BATTLE_RECORD_HP_RATE",
+    "ValueString": "20"
+  },
+  {
+    "ID": "WORLD_BOSS_NOTICE_REWARD",
+    "ValueString": "999179"
+  },
+  {
+    "ID": "CHALLENGE_NOTICE_REWARD",
+    "ValueString": "999178"
+  },
+  {
+    "ID": "GUILD_RAID_AFTER_10_BOSS_STAT",
+    "ValueString": "300,300,10"
+  },
+  {
+    "ID": "GUILD_RAID_BOSS_HP_FOR_BONUS_TICKET",
+    "ValueString": "50"
+  },
+  {
+    "ID": "IRREGULAR_SATELLITE_COOLTIME",
+    "ValueString": "3"
+  },
+  {
+    "ID": "GUILD_RAID_MAIN_BOSS_MAX_GRADE",
+    "ValueString": "100"
+  },
+  {
+    "ID": "ANTIBODY_RECOVERY_VALUE",
+    "ValueString": "30"
+  },
+  {
+    "ID": "PVP_WINNING_STREAK_BONUS",
+    "ValueString": "2,5,7,10"
+  },
+  {
+    "ID": "PVP_BLIND_COUNT",
+    "ValueString": "2"
+  },
+  {
+    "ID": "EXPLORATION_SKIP_CLEAR_LEVEL",
+    "ValueString": "10"
+  },
+  {
+    "ID": "EXPLORATION_SKIP_CLEAR_LEVEL_COUNT",
+    "ValueString": "2"
+  },
+  {
+    "ID": "MAX_DAILY_BONUS_COUNT_DM_IVANEZ_DUNGEON",
+    "ValueString": "10"
+  },
+  {
+    "ID": "IVANEZ_HERITAGE_REWARD_ID",
+    "ValueString": "970000, 970001, 970002, 970003, 970004, 970005, 970006"
+  },
+  {
+    "ID": "IVANEZ_DEMI_CHARACTER_ID_LIST",
+    "ValueString": "2000053, 2000059, 2000063, 2000075, 2000084"
+  },
+  {
+    "ID": "MONAD_GATE_CUBE_SELECT_COUNT",
+    "ValueString": "3"
+  },
+  {
+    "ID": "MONAD_GATE_ROUTE_INIT_MAX_COUNT",
+    "ValueString": "1"
+  },
+  {
+    "ID": "MIRSHA_SUPPORTERS_DARK_REWARD_ID",
+    "ValueString": "71999"
+  },
+  {
+    "ID": "MIRSHA_SUPPORTERS_LIGHT_REWARD_ID",
+    "ValueString": "71998"
+  },
+  {
+    "ID": "MIRSHA_SUPPORTERS_USER_BUFF_GROUP",
+    "ValueString": "39,91,92"
+  },
+  {
+    "ID": "BOX_TYPE_CHOICE_CHAR_MAX_LEVEL",
+    "ValueString": "100"
+  },
+  {
+    "ID": "BOX_TYPE_CHOICE_CHAR_MAX_EVOLUTION",
+    "ValueString": "6"
+  },
+  {
+    "ID": "BOX_TYPE_CHOICE_CHAR_MAX_SKILL_LEVEL",
+    "ValueString": "5"
+  },
+  {
+    "ID": "MIRSHA_SUPPORTERS_OPENCONDITION_LOGIN_DAYS",
+    "ValueString": "5"
+  },
+  {
+    "ID": "SERVICE_TRNSFER_USER_REWARD",
+    "ValueString": "9990001"
+  },
+  {
+    "ID": "TOWER_SWEEP_FLOOR_LIMIT_HARD",
+    "ValueString": "800"
+  },
+  {
+    "ID": "RECRUIT_CUSTOM_PICK_UP_SELECT_ID_LIST",
+    "ValueString": "2000066,2000060,2000012"
+  },
+  {
+    "ID": "SERVICE_TRNSFER_MAIL_SEND_COUNT",
+    "ValueString": "5"
+  },
+  {
+    "ID": "PIECE_DUNGEON_IGNORE_CHAR_PIECE_ID",
+    "ValueString": "0"
+  },
+  {
+    "ID": "TRANSCENDENT_PACK_PIECE_COUNT_MSG",
+    "ValueString": "450"
+  },
+  {
+    "ID": "TOWER_SIGMA_UI_INVISIBLE",
+    "ValueString": "40101100"
+  },
+  {
+    "ID": "PVP_HEAL_PENALTY_REDUCE_RATE",
+    "ValueString": "500"
+  },
+  {
+    "ID": "PVP_HEAL_PENALTY_REDUCE_ADD_RATE",
+    "ValueString": "250"
+  },
+  {
+    "ID": "PRECISION_MANUFACT_ADD_MATERIAL_ID",
+    "ValueString": "20008"
+  },
+  {
+    "ID": "SMELTING_RESET_MATERIAL_ITEM_RARE_ID",
+    "ValueString": "21128"
+  },
+  {
+    "ID": "SMELTING_RESET_MATERIAL_ITEM_UNIQUE_ID",
+    "ValueString": "21129"
+  },
+  {
+    "ID": "EQUIP_RESET_MATERIAL_ITEM_ID",
+    "ValueString": "1001002"
+  },
+  {
+    "ID": "EVENT_STORY_OPEN_VALUE",
+    "ValueString": "100000"
+  },
+  {
+    "ID": "EVENT_CHAPTER_OPEN_VALUE",
+    "ValueString": "5000"
+  },
+  {
+    "ID": "IRREGULAR_SWEEP_DAMAGE_PERCENT",
+    "ValueString": "100"
+  },
+  {
+    "ID": "REMAINS_LOOP_RESEARCH_POINT",
+    "ValueString": "35000131"
+  },
+  {
+    "ID": "MIRSHA_SETTLEMENT_EQUIP_REWARD_ID",
+    "ValueString": "971000, 971001, 971002, 971003, 971004, 971005, 971006, 971007, 971008"
+  },
+  {
+    "ID": "MIRSHA_SETTLEMENT_DEMI_CHARACTER_ID_LIST",
+    "ValueString": "2000119, 2000084, 2000075, 2000059, 2000063"
+  },
+  {
+    "ID": "RECRUIT_SEASONAL_SELECTION_NEW_USER_PERIOD",
+    "ValueString": "30"
+  },
+  {
+    "ID": "SEASONAL_SELECTION_NEW_USER_RECRUIT_END_PERIOD",
+    "ValueString": "30"
+  },
+  {
+    "ID": "MIRSHA_SETTLEMENT_EXPIRY_TIME",
+    "ValueString": "30"
+  },
+  {
+    "ID": "NEED_STAMINA_LUCKY_BOX",
+    "ValueString": "100"
+  },
+  {
+    "ID": "PVP_REALTIME_PLACEMENT_COUNT_1",
+    "ValueString": "5"
+  },
+  {
+    "ID": "PVP_REALTIME_PLACEMENT_COUNT_2",
+    "ValueString": "5"
+  },
+  {
+    "ID": "MEMORY_PIECE_SEASONAL_PICKUP",
+    "ValueString": "150"
+  },
+  {
+    "ID": "SPECIAL_REWARD_COST",
+    "ValueString": "0,150,150"
+  },
+  {
+    "ID": "SPECIAL_REWARD_TIME",
+    "ValueString": "9"
+  },
+  {
+    "ID": "PVP_REALTIME_BAN_GUARD_SLOT",
+    "ValueString": "3"
+  },
+  {
+    "ID": "MAX_DAILY_BONUS_COUNT_FARMING_DUNGEON",
+    "ValueString": "2"
+  },
+  {
+    "ID": "DAILY_DIALOGUE_COUNT",
+    "ValueString": "1"
+  },
+  {
+    "ID": "DAILY_DIALOGUE_COUNT_ALL",
+    "ValueString": "5"
+  },
+  {
+    "ID": "SINGULAR_ENCHANT_RERALL_WARNING_RATE_WEAPON",
+    "ValueString": "20"
+  },
+  {
+    "ID": "SINGULAR_ENCHANT_RERALL_WARNING_RATE_ACCESSORY",
+    "ValueString": "20"
+  },
+  {
+    "ID": "SINGULAR_ENCHANT_RERALL_WARNING_RATE_ARMOR",
+    "ValueString": "40"
+  },
+  {
+    "ID": "PRESENT_TO_SPECIAL_EQUIP   ",
+    "ValueString": "10"
+  }
+]
