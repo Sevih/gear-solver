@@ -1,0 +1,28 @@
+# dependencies / build
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+coverage/
+
+# capture runtime artifacts & PERSONAL account data — never commit
+tools/capture/out/
+tools/capture/dumps/
+*.flows
+*.log
+*.log.err
+
+# mitmproxy CA private material / duplicate PEM (the hashed .0 is kept for the one-button flow)
+tools/capture/cert/mitmproxy-ca-cert.pem
+tools/capture/cert/*.p12
+tools/capture/cert/*-ca.pem
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+
+# env
+.env
+.env.local

@@ -1,0 +1,20 @@
+{
+  "name": "gear-solver",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Gear optimizer for OUTERPLANE (Fribbels-style)",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @gear-solver/web",
+    "build": "npm run build -w @gear-solver/core && npm run build -w @gear-solver/web",
+    "test": "npm run test -w @gear-solver/core",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
