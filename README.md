@@ -3,7 +3,10 @@
 Gear optimizer for **OUTERPLANE** — Fribbels-style. Capture your account's gear and
 characters, then solve for optimal builds per hero.
 
-> Status: **data capture proven & automated** (one button). Engine + UI scaffolded.
+> Status: **data capture proven & automated** (one button). Engine parses real data with
+> resolved stats; web auto-imports. Solver + UI are next.
+>
+> **Reprendre le projet → [docs/STATUS.md](docs/STATUS.md).**
 
 ## Monorepo layout
 
