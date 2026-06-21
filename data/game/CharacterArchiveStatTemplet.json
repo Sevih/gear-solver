@@ -1,0 +1,68 @@
+[
+  {
+    "ID": "1",
+    "Atk_Rate": "20",
+    "Def_Rate": "0",
+    "HP_Rate": "0"
+  },
+  {
+    "ID": "2",
+    "Atk_Rate": "20",
+    "Def_Rate": "20",
+    "HP_Rate": "0"
+  },
+  {
+    "ID": "3",
+    "Atk_Rate": "20",
+    "Def_Rate": "20",
+    "HP_Rate": "40"
+  },
+  {
+    "ID": "4",
+    "Atk_Rate": "40",
+    "Def_Rate": "20",
+    "HP_Rate": "40"
+  },
+  {
+    "ID": "5",
+    "Atk_Rate": "40",
+    "Def_Rate": "40",
+    "HP_Rate": "40"
+  },
+  {
+    "ID": "6",
+    "Atk_Rate": "40",
+    "Def_Rate": "40",
+    "HP_Rate": "70"
+  },
+  {
+    "ID": "7",
+    "Atk_Rate": "70",
+    "Def_Rate": "40",
+    "HP_Rate": "70"
+  },
+  {
+    "ID": "8",
+    "Atk_Rate": "70",
+    "Def_Rate": "70",
+    "HP_Rate": "70"
+  },
+  {
+    "ID": "9",
+    "Atk_Rate": "70",
+    "Def_Rate": "70",
+    "HP_Rate": "100"
+  },
+  {
+    "ID": "10",
+    "Atk_Rate": "100",
+    "Def_Rate": "70",
+    "HP_Rate": "100"
+  },
+  {
+    "ID": "11",
+    "Atk_Rate": "100",
+    "Def_Rate": "100",
+    "HP_Rate": "100"
+  }
+]

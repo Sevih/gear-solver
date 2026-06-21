@@ -1,0 +1,74 @@
+[
+  {
+    "ID": "1",
+    "FusionGroupID": "1",
+    "FusionNameID": "SYS_CHARACTER_FUSION_NAME_01",
+    "FusionCompleteDescID": "SYS_ACHIEVE_PROFILE_2700037",
+    "CharacterID": "2000037",
+    "CharacterTransStar": "6",
+    "ChangeCharID": "2700037",
+    "FusionRewardID": "2700037",
+    "FusionScenarioID01": "725010000",
+    "FusionScenarioID02": "725010100"
+  },
+  {
+    "ID": "2",
+    "FusionGroupID": "2",
+    "FusionNameID": "SYS_CHARACTER_FUSION_NAME_02",
+    "FusionCompleteDescID": "SYS_ACHIEVE_PROFILE_2700005",
+    "CharacterID": "2000005",
+    "CharacterTransStar": "6",
+    "ChangeCharID": "2700005",
+    "FusionRewardID": "2700005",
+    "FusionScenarioID01": "725020000",
+    "FusionScenarioID02": "725020100"
+  },
+  {
+    "ID": "3",
+    "FusionGroupID": "3",
+    "FusionNameID": "SYS_CHARACTER_FUSION_NAME_03",
+    "FusionCompleteDescID": "SYS_ACHIEVE_PROFILE_2700003",
+    "CharacterID": "2000003",
+    "CharacterTransStar": "6",
+    "ChangeCharID": "2700003",
+    "FusionRewardID": "2700003",
+    "FusionScenarioID01": "726030000",
+    "FusionScenarioID02": "726030100"
+  },
+  {
+    "ID": "4",
+    "FusionGroupID": "4",
+    "FusionNameID": "SYS_CHARACTER_FUSION_NAME_04",
+    "FusionCompleteDescID": "SYS_ACHIEVE_PROFILE_2700056",
+    "CharacterID": "2000056",
+    "CharacterTransStar": "6",
+    "ChangeCharID": "2700056",
+    "FusionRewardID": "2700056",
+    "FusionScenarioID01": "726040000",
+    "FusionScenarioID02": "726040100"
+  },
+  {
+    "ID": "5",
+    "FusionGroupID": "5",
+    "FusionNameID": "SYS_CHARACTER_FUSION_NAME_05",
+    "FusionCompleteDescID": "SYS_ACHIEVE_PROFILE_2700043",
+    "CharacterID": "2000043",
+    "CharacterTransStar": "6",
+    "ChangeCharID": "2700043",
+    "FusionRewardID": "2700043",
+    "FusionScenarioID01": "726050000",
+    "FusionScenarioID02": "726050100"
+  },
+  {
+    "ID": "6",
+    "FusionGroupID": "6",
+    "FusionNameID": "SYS_CHARACTER_FUSION_NAME_06",
+    "FusionCompleteDescID": "SYS_ACHIEVE_PROFILE_2700070",
+    "CharacterID": "2000070",
+    "CharacterTransStar": "6",
+    "ChangeCharID": "2700070",
+    "FusionRewardID": "2700070",
+    "FusionScenarioID01": "726060000",
+    "FusionScenarioID02": "726060100"
+  }
+]

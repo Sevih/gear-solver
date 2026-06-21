@@ -1,0 +1,9 @@
+# Shell scripts pushed to Android via adb MUST have LF line endings — CRLF
+# breaks `sh` interpretation on the device (carriage return ends up in arg
+# values, paths gain a literal \r, scripts silently fail).
+*.sh text eol=lf
+
+# Likewise for the Python addon executed by mitmproxy on the host (it runs
+# on Windows but autocrlf can still produce subtle issues with embedded
+# strings); keep LF for consistency across editors.
+*.py text eol=lf

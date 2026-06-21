@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* gear-solver design tokens — ported from outerpedia/project/gs-data.jsx + data.jsx
+   Visual language: Space Grotesk (UI) + JetBrains Mono (numbers/data), violet
+   brand accent, cyan for the solve/optimise action, dark indigo surface. */
+
+@theme {
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* surfaces (oklch indigo-black) */
+  --color-bg-app: oklch(0.135 0.012 270);
+  --color-bg-elev-1: oklch(0.16 0.015 270);
+  --color-bg-elev-2: oklch(0.21 0.018 270 / 0.7);
+
+  /* rarity tokens */
+  --color-rarity-normal: #e5e7eb;
+  --color-rarity-superior: #4ade80;
+  --color-rarity-epic: #93c5fd;
+  --color-rarity-legendary: #f87171;
+
+  /* element tokens */
+  --color-fire: #ff6b6b;
+  --color-water: #4dabf7;
+  --color-earth: #51cf66;
+  --color-light: #ffe066;
+  --color-dark: #cc5de8;
+
+  /* stat / action tokens */
+  --color-stat-gold: #fbbf24;
+  --color-action-cyan: #22d3ee;
+  --color-buff: #38bdf8;
+  --color-debuff: #f87171;
+
+  /* star colors */
+  --color-star-gold: #facc15;
+}
+
+html,
+body,
+#root {
+  background: #0b0a0f;
+  color: #e7e5e4;
+  font-family: var(--font-sans);
+  min-height: 100vh;
+}
+
+/* hide all scrollbars in the app (matches the design's gs-scope styling) */
+.gs-scope ::-webkit-scrollbar { width: 0; height: 0; }
+.gs-scope * { scrollbar-width: none; }
+
+/* Singularity gradient utilities — vertical (icons/text) and horizontal (chips) */
+.gs-singularity-bg { background: linear-gradient(180deg, #16ebf1 0%, #9d51ff 50%, #e02bcd 100%); }
+.gs-singularity-bg-h { background: linear-gradient(90deg, #16ebf1 0%, #9d51ff 50%, #e02bcd 100%); }
+.gs-singularity-text {
+  background: linear-gradient(90deg, #16ebf1 0%, #9d51ff 50%, #e02bcd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

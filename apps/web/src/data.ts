@@ -6,11 +6,27 @@
  */
 import {
   parseInventory,
+  resolveCodexLevel,
   type GameData,
   type Inventory,
   type RawUserItem,
   type RawUserCharacter,
+  type UserGeasLevels,
 } from "@gear-solver/core";
+
+/** Shape of the captured `/gift/info` payload — account-wide list of unlocked
+ *  Geas nodes with their per-node level. `GiftID` matches `NodeID` in
+ *  `CharacterAwakeningNodeTemplet`. */
+interface RawUserGift {
+  GiftList?: Array<{ GiftID: number; Level: number }>;
+}
+
+/** Shape of the captured `/archive/info` payload — codex (Hero Archive) state.
+ *  We currently only consume `ArchiveCharacterRewardInfo` to derive the global
+ *  codex stat level via `ArchiveBonusTemplet.CompleteCount` thresholds. */
+interface RawUserArchive {
+  ArchiveCharacterRewardInfo?: Array<{ CharacterID: number; RewardList: number[] }>;
+}
 
 async function getJSON<T>(url: string): Promise<T | null> {
   try {
@@ -23,31 +39,75 @@ async function getJSON<T>(url: string): Promise<T | null> {
 }
 
 export async function loadGameData(): Promise<GameData | null> {
-  const [options, equipment, sets, characters] = await Promise.all([
+  const [options, equipment, sets, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, trustBuffs] = await Promise.all([
     getJSON<GameData["options"]>("/gamedata/options.json"),
     getJSON<GameData["equipment"]>("/gamedata/equipment.json"),
     getJSON<GameData["sets"]>("/gamedata/sets.json"),
     getJSON<GameData["characters"]>("/gamedata/characters.json"),
+    getJSON<GameData["enhance"]>("/gamedata/enhance.json"),
+    getJSON<GameData["buffs"]>("/gamedata/buffs.json"),
+    getJSON<GameData["expCharacter"]>("/gamedata/exp-character.json"),
+    getJSON<GameData["charLevelMax"]>("/gamedata/char-level-max.json"),
+    getJSON<GameData["codexCurve"]>("/gamedata/codex-curve.json"),
+    getJSON<GameData["archiveBonus"]>("/gamedata/archive-bonus.json"),
+    getJSON<GameData["trustCharacter"]>("/gamedata/trust-character.json"),
+    getJSON<GameData["trustBuffs"]>("/gamedata/trust-buffs.json"),
   ]);
-  if (!options || !equipment || !sets || !characters) return null;
-  return { options, equipment, sets, characters };
+  if (!options || !equipment || !sets || !characters || !enhance || !buffs || !expCharacter || !charLevelMax || !codexCurve || !archiveBonus || !trustCharacter || !trustBuffs) return null;
+  return { options, equipment, sets, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, trustBuffs };
 }
 
 export interface LoadResult {
   game: GameData | null;
   inventory: Inventory | null;
+  /** Account-wide Geas node levels — null when `/captured/user_gift.json` is
+   *  absent (composer then falls back to per-node max). */
+  userGeasLevels: UserGeasLevels | null;
+  /** Resolved codex level 0..11 from the captured `/archive/info` reward
+   *  count. Null when capture or archive curve is missing (composer falls
+   *  back to its own default, currently max). */
+  userCodexLevel: number | null;
   source: "auto" | "none";
 }
 
 /** Try to auto-load everything. Returns nulls if the captured files aren't present. */
 export async function autoImport(): Promise<LoadResult> {
-  const [game, userItem, userChar] = await Promise.all([
+  const [game, userItem, userChar, userGift, userArchive] = await Promise.all([
     loadGameData(),
     getJSON<RawUserItem>("/captured/user_item.json"),
     getJSON<RawUserCharacter>("/captured/user_character.json"),
+    getJSON<RawUserGift>("/captured/user_gift.json"),
+    getJSON<RawUserArchive>("/captured/user_archive.json"),
   ]);
-  if (!userItem) return { game, inventory: null, source: "none" };
-  return { game, inventory: parseInventory(userItem, userChar ?? undefined, game ?? undefined), source: "auto" };
+  const userGeasLevels = toUserGeasLevels(userGift);
+  const userCodexLevel = toUserCodexLevel(userArchive, game);
+  if (!userItem) return { game, inventory: null, userGeasLevels, userCodexLevel, source: "none" };
+  return {
+    game,
+    inventory: parseInventory(userItem, userChar ?? undefined, game ?? undefined),
+    userGeasLevels,
+    userCodexLevel,
+    source: "auto",
+  };
+}
+
+function toUserGeasLevels(raw: RawUserGift | null): UserGeasLevels | null {
+  if (!raw?.GiftList) return null;
+  const out: UserGeasLevels = {};
+  for (const g of raw.GiftList) out[String(g.GiftID)] = g.Level;
+  return out;
+}
+
+/** Sum every reward milestone the user has unlocked across all characters,
+ *  then look up the matching codex level via `ArchiveBonusTemplet`. The
+ *  in-game codex tab shows one global level driven by this exact count. */
+function toUserCodexLevel(raw: RawUserArchive | null, game: GameData | null): number | null {
+  if (!raw?.ArchiveCharacterRewardInfo || !game?.archiveBonus) return null;
+  let total = 0;
+  for (const c of raw.ArchiveCharacterRewardInfo) {
+    for (const v of c.RewardList) total += v;
+  }
+  return resolveCodexLevel(game.archiveBonus, total);
 }
 
 /** Manual fallback: parse user-provided files with the (already loaded) game data. */

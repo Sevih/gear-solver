@@ -4,5 +4,6 @@ export * from "./types.js";
 export * from "./gamedata.js";
 export * from "./stats.js";
 export * from "./parse.js";
+export * from "./compose-stats.js";
 export * from "./score.js";
 export * from "./solver.js";

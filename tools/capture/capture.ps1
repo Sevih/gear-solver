@@ -74,12 +74,17 @@ Remove-Item (Join-Path $Out ".captured") -ErrorAction SilentlyContinue
 $env:OP_OUT = $Out
 $log = Join-Path $Out "mitm.log"
 $flows = Join-Path $Out "game.flows"
+# Start-Process w/ -ArgumentList does NOT auto-quote args containing spaces on
+# Windows PS 5.1 (see PowerShell/PowerShell#5576). Wrap any path arg whose
+# value can contain whitespace (here: $Root, $flows) — else `mitmdump -s …\Projet perso\…\addon.py`
+# is parsed as two args and mitmdump dies with "No such script".
+function Quote($s) { if ($s -match '\s') { '"' + $s + '"' } else { $s } }
 $mitmArgs = @(
   "--mode","reverse:https://glb-game.outerplane.vagames.co.kr:38001@9001",
   "--mode","reverse:https://glb-login.outerplane.vagames.co.kr:38002@9002",
   "--listen-host","0.0.0.0",
-  "-s", (Join-Path $Root "addon.py"),
-  "-w", $flows,
+  "-s", (Quote (Join-Path $Root "addon.py")),
+  "-w", (Quote $flows),
   "--set","flow_detail=0"
 )
 Info "Demarrage mitmproxy reverse (decode en direct)..."

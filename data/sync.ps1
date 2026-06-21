@@ -4,11 +4,21 @@
 
   Usage: powershell -ExecutionPolicy Bypass -File .\data\sync.ps1
 #>
+# Auto-detect the Outerpedia checkout — the path differs across the maintainer's
+# two machines. Override explicitly with `-Source <path>` if needed.
 param(
-  [string]$Source = "C:\Users\Sevih\Documents\dev\outerpedia\data\admin\json2"
+  [string]$Source
 )
 $ErrorActionPreference = "Stop"
 $dst = Join-Path $PSScriptRoot "game"
+
+if (-not $Source) {
+  $candidates = @(
+    "C:\Users\Sevih\Documents\Projet perso\outerpedia-v2\data\admin\json2",
+    "C:\Users\Sevih\Documents\dev\outerpedia\data\admin\json2"
+  )
+  $Source = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
 
 # Only the subset the engine needs (keeps the repo small).
 $files = @(
@@ -17,6 +27,11 @@ $files = @(
   "ItemEnchantExpTemplet.json","ItemSmeltingTemplet.json","SingularityEquipEnchantTemplet.json",
   "SingularityGradeTemplet.json","SingularityOptionPopUpTemplet.json","SpecialEquipEnchantTemplet.json",
   "CharacterTemplet.json","CharacterEvolutionStatTemplet.json","GameConfigTemplet.json",
+  "CharacterArchiveStatTemplet.json","ArchiveBonusTemplet.json","CharacterTranscendentTemplet.json",
+  "CharacterSkillLevelTemplet.json","CharacterAwakeningLevelTemplet.json",
+  "CharacterAwakeningNodeTemplet.json","CharacterFusionTemplet.json",
+  "CharacterMaxLevelTemplet.json","ExpCharacterTemplet.json",
+  "BuffTemplet.json","TrustBuffTemplet.json",
   "TextItem.json","TextCharacter.json","TextSystem.json"
 )
 if (-not (Test-Path $Source)) { Write-Host "[X] Source introuvable: $Source" -ForegroundColor Red; exit 1 }

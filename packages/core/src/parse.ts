@@ -4,8 +4,8 @@
  */
 import type { RawItem, RawUserItem, RawUserCharacter } from "./raw.js";
 import type { Character, GearPiece, Inventory, RolledStat, Rarity, GearSlot } from "./types.js";
-import type { GameData } from "./gamedata.js";
-import { resolveStat } from "./stats.js";
+import type { EnhanceData, EquipmentDef, GameData } from "./gamedata.js";
+import { resolveOption, resolveStat } from "./stats.js";
 
 /** True when a RawItem is an equippable gear piece. */
 export function isGear(item: RawItem, game?: GameData): boolean {
@@ -20,22 +20,115 @@ function toRolled(optionId: number, ticks: number, game: GameData | undefined): 
   return { stat: r.stat, value: r.value, percent: r.percent };
 }
 
+/** Resolve a main-stat OptionID that points at a buff (IOT_BUFF in ItemOptionTemplet)
+ *  rather than a direct stat. Talisman (ooparts) mains take this path: the BuffID
+ *  has a per-level stat table in BuffsTable; we pick the row matching the item's
+ *  current enhanceLevel (clamping to the array bounds). Returns null when the
+ *  OptionID isn't a buff or the lookup fails. */
+function resolveBuffMain(optionId: number, enhanceLevel: number, game: GameData): RolledStat | null {
+  const def = game.options[String(optionId)];
+  if (!def || !("buffId" in def)) return null;
+  const levels = game.buffs[def.buffId];
+  if (!levels || levels.length === 0) return null;
+  const idx = Math.max(0, Math.min(enhanceLevel, levels.length - 1));
+  const row = levels[idx];
+  if (!row) return null;
+  const r = resolveOption(row, 1);
+  if (!r) return null;
+  return { stat: r.stat, value: r.value, percent: r.percent };
+}
+
+/** Resolve the cumulative-Exp curve for a piece (slot+grade+star) and walk it to
+ *  the highest level whose threshold is ≤ exp. Curve missing or exp=0 ⇒ +0. */
+function levelFromExp(meta: EquipmentDef, enhance: EnhanceData, exp: number): number {
+  if (exp <= 0 || !meta.grade || !meta.star) return 0;
+  const curve = enhance.expCurves[`${meta.slot}|${meta.grade}|${meta.star}`];
+  if (!curve) return 0;
+  let lv = 0;
+  for (let i = 1; i < curve.length; i++) {
+    const threshold = curve[i];
+    if (threshold === undefined) break;
+    if (exp >= threshold) lv = i;
+    else break;
+  }
+  return lv;
+}
+
+/** Apply enhance + breakthrough + (optional) singularity scaling to a rolled main stat.
+ *  Mirrors outerpedia-v2 `mainStat` / `mainStatAscended`. Talisman (slot=ooparts) has
+ *  enhanceFactor=0 in-game ⇒ we just return the base. */
+function scaleMain(base: RolledStat, slot: string, lv: number, tier: number, ascended: boolean, singLevel: number, e: EnhanceData): number {
+  if (slot === "ooparts") return base.value;
+  let mult: number;
+  if (ascended) {
+    const stepsSum = e.singularity.steps.slice(0, singLevel).reduce((a, b) => a + b, 0);
+    mult = 1 + e.enhanceFactor * e.maxEnhanceLevel + e.singularity.activation + stepsSum;
+  } else {
+    mult = 1 + e.enhanceFactor * lv;
+  }
+  mult *= 1 + e.tierFactor * tier;
+  const raw = base.value * mult;
+  // Percent stats keep 1 decimal (floor), flat stats are integers (floor).
+  return base.percent ? Math.floor(raw * 10 + 1e-9) / 10 : Math.floor(raw + 1e-9);
+}
+
 export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
   const meta = game?.equipment[String(item.ItemID)];
+  const enhance = game?.enhance;
+
+  const ascended = item.SingularityStep > 0;
+  const enhanceLevel = ascended
+    ? 10 + item.SingularityLevel
+    : (meta && enhance ? levelFromExp(meta, enhance, item.Exp) : 0);
 
   const subs: RolledStat[] = [];
   for (const s of item.SubOptionList) {
+    // Skip empty padding slots only (OptionID=0). The captured `Level` is the
+    // number of procs ABOVE the initial rolled tick — in-game displays
+    // `LV (Level + 1)`. So Level=0 means a real sub with 1 proc (its base
+    // value), NOT a placeholder. Validated against in-game readout:
+    //   Surefire +15: 160005 L3 B2 → LV4 = 4 × 2% = 8% DMG+, …
+    //   Fine Sword +0: 160013 L0 B0 → LV1 = 1 × 3 = 3 SPD
     if (s.OptionID === 0) continue;
-    const r = toRolled(s.OptionID, s.Level, game);
-    if (r) subs.push({ ...r, ticks: s.Level, reforgeTicks: s.Level - s.BaseLevel });
-    else subs.push({ stat: "atk", value: 0, percent: false, ticks: s.Level, reforgeTicks: s.Level - s.BaseLevel });
+    const totalTicks = s.Level + 1;
+    const r = toRolled(s.OptionID, totalTicks, game);
+    if (r) {
+      // EFF/RES rate substats are scaled by the piece's breakthrough factor.
+      // The substat pools use a half-integer step (2.5/tick) for these two
+      // stats specifically; in-game the value is multiplied by (1 + bt × 0.05)
+      // so a +12.5% sub on a bt4 piece displays as +15. Validated against
+      // M.S.Ame weapon EFF sub: 12.5 × 1.20 = 15 → in-game EFF 245 vs 242.5
+      // pre-fix. ATK%/DEF%/HP%/CHC/CHD rate subs use integer steps and do
+      // NOT receive this scaling.
+      let value = r.value;
+      if (enhance && r.percent && (r.stat === "eff" || r.stat === "effRes")) {
+        const btFactor = 1 + enhance.tierFactor * item.BreakLimitLevel;
+        value = Math.floor(value * btFactor * 10) / 10;
+      }
+      subs.push({ ...r, value, ticks: totalTicks, reforgeTicks: s.Level - s.BaseLevel });
+    } else {
+      subs.push({ stat: "atk", value: 0, percent: false, ticks: totalTicks, reforgeTicks: s.Level - s.BaseLevel });
+    }
   }
 
   const main: RolledStat[] = [];
   for (const oid of item.OptionList) {
     if (!oid) continue;
-    const r = toRolled(oid, 1, game); // base (+0) value; enhancement scaling TODO
-    if (r) main.push(r);
+    // Talisman main stats are IOT_BUFF — they're already per-level (no scaling
+    // applied on top). Try the buff path first; fall back to the standard IOT_STAT
+    // path with enhance/tier/singularity scaling.
+    if (game) {
+      const buffMain = resolveBuffMain(oid, enhanceLevel, game);
+      if (buffMain) { main.push(buffMain); continue; }
+    }
+    const r = toRolled(oid, 1, game); // base (+0) value, before enhancement scaling
+    if (!r) continue;
+    if (enhance && meta) {
+      const scaled = scaleMain(r, meta.slot, enhanceLevel, item.BreakLimitLevel, ascended, item.SingularityLevel, enhance);
+      main.push({ ...r, value: scaled });
+    } else {
+      main.push(r);
+    }
   }
 
   return {
@@ -43,12 +136,16 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
     itemId: item.ItemID,
     slot: (meta?.slot as GearSlot) ?? null,
     setId: meta?.setId ?? null,
+    armorSetId: meta?.armorSetId ?? null,
     rarity: (meta?.grade as Rarity) ?? null,
+    star: meta?.star ?? null,
     name: meta?.name ?? null,
     classLimit: meta?.classLimit ?? null,
     breakthrough: item.BreakLimitLevel,
     reforgeCount: item.SmeltingCount,
+    enhanceLevel,
     singularityLevel: item.SingularityLevel,
+    ascended,
     locked: item.IsLock === 1,
     equippedBy: item.CharUID === "0" ? null : item.CharUID,
     main,
@@ -68,6 +165,15 @@ export function parseInventory(
     name: game?.characters[String(c.CharID)]?.name ?? null,
     stars: c.TransStar,
     locked: c.IsLock === 1,
+    exp: c.Exp,
+    levelMaxStep: c.LevelMaxStep,
+    trustExp: c.TrustExp,
+    skills: {
+      first: c.First,
+      second: c.Second,
+      ultimate: c.Ultimate,
+      chainPassive: c.ChainPassive,
+    },
   }));
   return { gear, characters };
 }

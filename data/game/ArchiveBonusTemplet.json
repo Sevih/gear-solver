@@ -1,0 +1,68 @@
+[
+  {
+    "ID": "1",
+    "CompleteCount": "3",
+    "Level": "1",
+    "CharacterArchiveStatID": "1"
+  },
+  {
+    "ID": "2",
+    "CompleteCount": "8",
+    "Level": "2",
+    "CharacterArchiveStatID": "2"
+  },
+  {
+    "ID": "3",
+    "CompleteCount": "14",
+    "Level": "3",
+    "CharacterArchiveStatID": "3"
+  },
+  {
+    "ID": "4",
+    "CompleteCount": "23",
+    "Level": "4",
+    "CharacterArchiveStatID": "4"
+  },
+  {
+    "ID": "5",
+    "CompleteCount": "37",
+    "Level": "5",
+    "CharacterArchiveStatID": "5"
+  },
+  {
+    "ID": "6",
+    "CompleteCount": "60",
+    "Level": "6",
+    "CharacterArchiveStatID": "6"
+  },
+  {
+    "ID": "7",
+    "CompleteCount": "90",
+    "Level": "7",
+    "CharacterArchiveStatID": "7"
+  },
+  {
+    "ID": "8",
+    "CompleteCount": "140",
+    "Level": "8",
+    "CharacterArchiveStatID": "8"
+  },
+  {
+    "ID": "9",
+    "CompleteCount": "210",
+    "Level": "9",
+    "CharacterArchiveStatID": "9"
+  },
+  {
+    "ID": "10",
+    "CompleteCount": "300",
+    "Level": "10",
+    "CharacterArchiveStatID": "10"
+  },
+  {
+    "ID": "11",
+    "CompleteCount": "400",
+    "Level": "11",
+    "CharacterArchiveStatID": "11"
+  }
+]

@@ -1,0 +1,62 @@
+[
+  {
+    "ID": "1",
+    "BuffID": "trust_level_ATK_1"
+  },
+  {
+    "ID": "2",
+    "BuffID": "trust_level_ATK_2"
+  },
+  {
+    "ID": "3",
+    "BuffID": "trust_level_ATK_3"
+  },
+  {
+    "ID": "4",
+    "BuffID": "trust_level_ATK_4"
+  },
+  {
+    "ID": "5",
+    "BuffID": "trust_level_ATK_5"
+  },
+  {
+    "ID": "6",
+    "BuffID": "trust_level_DEF_1"
+  },
+  {
+    "ID": "7",
+    "BuffID": "trust_level_DEF_2"
+  },
+  {
+    "ID": "8",
+    "BuffID": "trust_level_DEF_3"
+  },
+  {
+    "ID": "9",
+    "BuffID": "trust_level_DEF_4"
+  },
+  {
+    "ID": "10",
+    "BuffID": "trust_level_DEF_5"
+  },
+  {
+    "ID": "11",
+    "BuffID": "trust_level_HP_1"
+  },
+  {
+    "ID": "12",
+    "BuffID": "trust_level_HP_2"
+  },
+  {
+    "ID": "13",
+    "BuffID": "trust_level_HP_3"
+  },
+  {
+    "ID": "14",
+    "BuffID": "trust_level_HP_4"
+  },
+  {
+    "ID": "15",
+    "BuffID": "trust_level_HP_5"
+  }
+]

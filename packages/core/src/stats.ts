@@ -7,10 +7,15 @@
  *   crit dmg   40/tick -> 24% at 6 ticks (div 10)
  *   dmg boost  20/tick ->  8% at 4 ticks (div 10)
  *   speed       3/tick ->  9  at 3 ticks (raw)
- * Percent stats are stored x10 (one decimal); flat ATK/DEF/HP and SPEED are raw.
+ *   buff chance flat OAT_ADD v=21 on Overdrive accessory -> EFF +21 (flat)
+ * Percent stats are stored x10 (one decimal); flat ATK/DEF/HP/SPEED/EFF/RES are raw.
+ *
+ * EFF (ST_BUFF_CHANCE) and RES (ST_BUFF_RESIST) are context-dependent: flat on gear
+ * (OAT_ADD on accessories/armor) and percent on talismans/EE (OAT_RATE). The percent
+ * flag follows ApplyingType only — addPercent stays false for these two.
  */
 import type { StatType } from "./types.js";
-import type { OptionDef, OptionsTable } from "./gamedata.js";
+import type { OptionDef, OptionsTable, StatOption } from "./gamedata.js";
 
 interface StatMeta {
   /** flat vs percent variant resolved from ApplyingType. */
@@ -30,8 +35,8 @@ const GAME_STAT: Record<string, StatMeta> = {
   ST_CRITICAL_DMG_RATE: { add: "critDmg", rate: "critDmg", addPercent: true },
   ST_DMG_BOOST: { add: "dmgUp", rate: "dmgUp", addPercent: true },
   ST_DMG_REDUCE_RATE: { add: "dmgReduce", rate: "dmgReduce", addPercent: true },
-  ST_BUFF_CHANCE: { add: "eff", rate: "eff", addPercent: true },
-  ST_BUFF_RESIST: { add: "effRes", rate: "effRes", addPercent: true },
+  ST_BUFF_CHANCE: { add: "eff", rate: "eff", addPercent: false },
+  ST_BUFF_RESIST: { add: "effRes", rate: "effRes", addPercent: false },
   ST_PIERCE_POWER_RATE: { add: "pen", rate: "pen", addPercent: true },
   ST_E_CRI_DMG_REDUCE: { add: "critDmgReduce", rate: "critDmgReduce", addPercent: true },
   ST_HIT_AP: { add: "hitAp", rate: "hitAp", addPercent: false },
@@ -44,8 +49,11 @@ export interface ResolvedStat {
   percent: boolean;
 }
 
-/** Resolve a single option definition for a given tick count. */
-export function resolveOption(def: OptionDef, ticks: number): ResolvedStat | null {
+/** Resolve a single stat-shaped option for a given tick count. Returns null for
+ *  unknown StatTypes. Callers that look up by OptionID and may hit IOT_BUFF
+ *  entries should check the shape first (or use `resolveStat` which handles
+ *  the discriminator). */
+export function resolveOption(def: StatOption, ticks: number): ResolvedStat | null {
   const meta = GAME_STAT[def.st];
   if (!meta) return null;
   const isRate = def.ap === "OAT_RATE";
@@ -55,12 +63,20 @@ export function resolveOption(def: OptionDef, ticks: number): ResolvedStat | nul
   return { stat, value: percent ? raw / 10 : raw, percent };
 }
 
-/** Resolve a substat/main option by id from the options table. */
+function isStatOption(def: OptionDef): def is StatOption {
+  return "st" in def;
+}
+
+/** Resolve a substat/main option by id from the options table. Handles both
+ *  IOT_STAT (direct) and substat ticks; talisman main IOT_BUFF entries are
+ *  resolved separately in parse.ts since they depend on the item's enhance level. */
 export function resolveStat(
   optionId: number | string,
   ticks: number,
   options: OptionsTable,
 ): ResolvedStat | null {
   const def = options[String(optionId)];
-  return def ? resolveOption(def, ticks) : null;
+  if (!def) return null;
+  if (!isStatOption(def)) return null; // IOT_BUFF — caller must resolve via BuffsTable
+  return resolveOption(def, ticks);
 }
