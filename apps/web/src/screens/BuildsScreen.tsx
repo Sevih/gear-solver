@@ -591,98 +591,99 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
               key={char.uid}
               className="relative rounded-xl border border-white/[0.07] bg-bg-elev-2 p-3 backdrop-blur-sm shadow-[0_1px_0_oklch(1_0_0/0.04)_inset,0_24px_60px_-30px_rgb(0_0_0/0.7)]"
             >
-              <div className="absolute right-2 top-2 z-10 flex flex-col gap-1">
-                {stats && hasDrift && (
-                  <button
-                    type="button"
-                    title="Accept current values for all drifted stats (refresh their locks)"
-                    onClick={() => {
-                      const next = { ...lockedStats };
-                      const cur = { ...(next[char.uid] ?? {}) };
-                      for (const k of lockedKeys) cur[k] = stats[k];
-                      next[char.uid] = cur;
-                      setLockedStats(next);
-                    }}
-                    className="grid h-6 w-6 place-items-center rounded-md border border-emerald-400/40 bg-black/40 text-emerald-300 hover:bg-black/60"
-                  >
-                    <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6}>
-                      <path d="M3 7 L6 10 L11 4" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-                )}
-                {stats && (
-                  <button
-                    type="button"
-                    title={hasAnyLock
-                      ? (hasDrift ? `Drift on ${lockedKeys.filter(k => round1(stats[k] - (locked![k] ?? 0)) !== 0).length}/${lockedKeys.length} locked — click to UNLOCK ALL`
-                                  : `Locked ${lockedKeys.length} stat${lockedKeys.length === 1 ? "" : "s"} ✓ — click to UNLOCK ALL`)
-                      : "Lock ALL stats as the regression baseline (click a single stat to lock just that one)"}
-                    onClick={() => {
-                      if (hasAnyLock) {
-                        const next = { ...lockedStats };
-                        delete next[char.uid];
-                        setLockedStats(next);
-                      } else {
-                        // Lock every visible stat (skip hideIfZero rows that are currently 0).
-                        const snap: Partial<FinalStats> = {};
-                        for (const row of FINAL_ROWS) {
-                          if (row.hideIfZero && !stats[row.key]) continue;
-                          snap[row.key] = stats[row.key];
-                        }
-                        setLockedStats({ ...lockedStats, [char.uid]: snap });
-                      }
-                    }}
-                    className={cx(
-                      "grid h-6 w-6 place-items-center rounded-md border bg-black/40 hover:bg-black/60",
-                      hasAnyLock
-                        ? (hasDrift ? "border-rose-400/50 text-rose-300" : "border-amber-400/40 text-amber-300")
-                        : "border-white/[0.07] text-zinc-400 hover:text-zinc-200",
-                    )}
-                  >
-                    <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
-                      {hasAnyLock ? (
-                        <>
-                          <rect x={3} y={6.5} width={8} height={6} rx={1} />
-                          <path d="M5 6.5 V4 a2 2 0 0 1 4 0 V6.5" />
-                        </>
-                      ) : (
-                        <>
-                          <rect x={3} y={6.5} width={8} height={6} rx={1} />
-                          <path d="M5 6.5 V4 a2 2 0 0 1 4 0" />
-                        </>
-                      )}
-                    </svg>
-                  </button>
-                )}
-                {scaling && (
-                  <button
-                    type="button"
-                    title="Copy stat-debug dump to clipboard"
-                    onClick={async () => {
-                      const dump = buildStatsDump(displayName, char.charId, level, scaling, rawPieces, game);
-                      try { await navigator.clipboard.writeText(dump); }
-                      catch { /* clipboard denied — paste from console as fallback */ console.log(dump); }
-                    }}
-                    className="grid h-6 w-6 place-items-center rounded-md border border-white/[0.07] bg-black/40 text-zinc-400 hover:bg-black/60 hover:text-zinc-200"
-                  >
-                    <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
-                      <rect x={3} y={3} width={8} height={9} rx={1.2} />
-                      <path d="M5 3 V2 a1 1 0 0 1 1-1 h2 a1 1 0 0 1 1 1 V3" />
-                    </svg>
-                  </button>
-                )}
-              </div>
               <div className="flex items-start gap-3">
-                <CharacterPortrait
-                  charId={char.charId}
-                  name={displayName}
-                  cls={meta?.cls}
-                  element={meta?.element}
-                  level={game?.expCharacter ? expToLevel(game.expCharacter, char.exp) : null}
-                  transStar={char.stars}
-                  basicStar={meta?.star ?? null}
-                  size={80}
-                />
+                <div className="flex flex-col items-center gap-1.5">
+                  <CharacterPortrait
+                    charId={char.charId}
+                    name={displayName}
+                    cls={meta?.cls}
+                    element={meta?.element}
+                    level={game?.expCharacter ? expToLevel(game.expCharacter, char.exp) : null}
+                    transStar={char.stars}
+                    basicStar={meta?.star ?? null}
+                    size={80}
+                  />
+                  <div className="flex gap-1">
+                    {stats && hasDrift && (
+                      <button
+                        type="button"
+                        title="Accept current values for all drifted stats (refresh their locks)"
+                        onClick={() => {
+                          const next = { ...lockedStats };
+                          const cur = { ...(next[char.uid] ?? {}) };
+                          for (const k of lockedKeys) cur[k] = stats[k];
+                          next[char.uid] = cur;
+                          setLockedStats(next);
+                        }}
+                        className="grid h-6 w-6 place-items-center rounded-md border border-emerald-400/40 bg-black/40 text-emerald-300 hover:bg-black/60"
+                      >
+                        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                          <path d="M3 7 L6 10 L11 4" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    )}
+                    {stats && (
+                      <button
+                        type="button"
+                        title={hasAnyLock
+                          ? (hasDrift ? `Drift on ${lockedKeys.filter(k => round1(stats[k] - (locked![k] ?? 0)) !== 0).length}/${lockedKeys.length} locked — click to UNLOCK ALL`
+                                      : `Locked ${lockedKeys.length} stat${lockedKeys.length === 1 ? "" : "s"} ✓ — click to UNLOCK ALL`)
+                          : "Lock ALL stats as the regression baseline (click a single stat to lock just that one)"}
+                        onClick={() => {
+                          if (hasAnyLock) {
+                            const next = { ...lockedStats };
+                            delete next[char.uid];
+                            setLockedStats(next);
+                          } else {
+                            const snap: Partial<FinalStats> = {};
+                            for (const row of FINAL_ROWS) {
+                              if (row.hideIfZero && !stats[row.key]) continue;
+                              snap[row.key] = stats[row.key];
+                            }
+                            setLockedStats({ ...lockedStats, [char.uid]: snap });
+                          }
+                        }}
+                        className={cx(
+                          "grid h-6 w-6 place-items-center rounded-md border bg-black/40 hover:bg-black/60",
+                          hasAnyLock
+                            ? (hasDrift ? "border-rose-400/50 text-rose-300" : "border-amber-400/40 text-amber-300")
+                            : "border-white/[0.07] text-zinc-400 hover:text-zinc-200",
+                        )}
+                      >
+                        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
+                          {hasAnyLock ? (
+                            <>
+                              <rect x={3} y={6.5} width={8} height={6} rx={1} />
+                              <path d="M5 6.5 V4 a2 2 0 0 1 4 0 V6.5" />
+                            </>
+                          ) : (
+                            <>
+                              <rect x={3} y={6.5} width={8} height={6} rx={1} />
+                              <path d="M5 6.5 V4 a2 2 0 0 1 4 0" />
+                            </>
+                          )}
+                        </svg>
+                      </button>
+                    )}
+                    {scaling && (
+                      <button
+                        type="button"
+                        title="Copy stat-debug dump to clipboard"
+                        onClick={async () => {
+                          const dump = buildStatsDump(displayName, char.charId, level, scaling, rawPieces, game);
+                          try { await navigator.clipboard.writeText(dump); }
+                          catch { console.log(dump); }
+                        }}
+                        className="grid h-6 w-6 place-items-center rounded-md border border-white/[0.07] bg-black/40 text-zinc-400 hover:bg-black/60 hover:text-zinc-200"
+                      >
+                        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
+                          <rect x={3} y={3} width={8} height={9} rx={1.2} />
+                          <path d="M5 3 V2 a1 1 0 0 1 1-1 h2 a1 1 0 0 1 1 1 V3" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div className="min-w-0 flex-1">
                   {stats && baseline && <StatBlock stats={stats} baseline={baseline} locked={locked} onToggleLock={toggleStatLock} />}
                 </div>
