@@ -341,10 +341,14 @@ const CLASS_CHOICES: Array<{ id: string; label: string }> = [
   { id: "CCT_PRIEST",   label: "Healer" },
 ];
 
+type LockMode = "all" | "locked" | "drift";
 interface RosterFilters {
   query: string;
   elements: Set<string>;
   classes: Set<string>;
+  /** Regression-lock filter — "all" (default), "locked" (only chars with at
+   *  least one locked stat), "drift" (only chars with a drifted locked stat). */
+  locks: LockMode;
 }
 
 // Persist the roster filters across reloads — the two Set<>-typed fields need
@@ -420,9 +424,36 @@ function FilterBar({ f, setF }: { f: RosterFilters; setF: (next: RosterFilters) 
           );
         })}
       </div>
-      {(f.query || f.elements.size || f.classes.size) ? (
+      <button
+        type="button"
+        onClick={() => {
+          const next: LockMode = f.locks === "all" ? "locked" : f.locks === "locked" ? "drift" : "all";
+          setF({ ...f, locks: next });
+        }}
+        title={f.locks === "all"
+          ? "Show all heroes (click to filter to LOCKED only)"
+          : f.locks === "locked"
+            ? "Showing heroes with locked stats — click to filter to DRIFT only"
+            : "Showing heroes with a DRIFTED locked stat — click to reset"}
+        className={cx(
+          "inline-flex h-7 items-center gap-1.5 rounded-md border bg-black/30 px-2 text-[11px]",
+          f.locks === "drift" ? "border-rose-400/50 text-rose-300"
+            : f.locks === "locked" ? "border-amber-400/40 text-amber-300"
+            : "border-white/[0.07] text-zinc-400 hover:text-zinc-200",
+        )}
+      >
+        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
+          {f.locks === "all" ? (
+            <><rect x={3} y={6.5} width={8} height={6} rx={1} /><path d="M5 6.5 V4 a2 2 0 0 1 4 0" /></>
+          ) : (
+            <><rect x={3} y={6.5} width={8} height={6} rx={1} /><path d="M5 6.5 V4 a2 2 0 0 1 4 0 V6.5" /></>
+          )}
+        </svg>
+        <span>{f.locks === "all" ? "All" : f.locks === "locked" ? "Locked" : "Drift"}</span>
+      </button>
+      {(f.query || f.elements.size || f.classes.size || f.locks !== "all") ? (
         <button
-          onClick={() => setF({ query: "", elements: new Set(), classes: new Set() })}
+          onClick={() => setF({ query: "", elements: new Set(), classes: new Set(), locks: "all" })}
           className="ml-1 text-[11px] text-cyan-300 hover:text-cyan-200"
         >Reset</button>
       ) : null}
@@ -444,28 +475,42 @@ interface BuildsScreenProps {
 export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }: BuildsScreenProps) {
   // Roster filter state — name search + element/class multi-toggles. Empty
   // sets mean "no filter on this axis".
-  const [filters, setFilters] = usePersistedState<RosterFilters>(
+  const [filtersRaw, setFilters] = usePersistedState<RosterFilters>(
     "gs.builds.filters",
-    () => ({ query: "", elements: new Set(), classes: new Set() }),
+    () => ({ query: "", elements: new Set(), classes: new Set(), locks: "all" }),
     ROSTER_FILTER_CODEC,
+  );
+  // Defaultify `locks` for users with a pre-migration entry in localStorage
+  // (no `locks` field on the stored object). Memoized so the identity stays
+  // stable across renders and we don't re-trigger the roster useMemo.
+  const filters = useMemo<RosterFilters>(
+    () => ({ ...filtersRaw, locks: filtersRaw.locks ?? "all" }),
+    [filtersRaw],
   );
 
   // Regression-guard locks: per-(char, stat) snapshot once validated against
-  // in-game. Storage shape is { [charUid]: { [statKey]: number } }. Persisted
-  // SERVER-SIDE at data/stat-locks.json (via the vite dev API) so the file is
-  // committable and the maintainer can see lock evolution via git history.
-  const [lockedStats, setLockedStatsRaw] = useState<Record<string, Partial<FinalStats>>>({});
-  // Initial fetch from the dev endpoint. If the endpoint is missing (prod
-  // build, etc.) we just stay at {} — no locks shown.
+  // in-game. Storage shape: { [charUid]: { name, charId, level, stats } }.
+  // The name/charId/level fields are human-readable identifiers so the file
+  // is debuggable at a glance — the char UID alone is opaque. Persisted
+  // SERVER-SIDE at data/stat-locks.json (via the vite dev API).
+  interface LockEntry { name: string; charId: number; level: number; stats: Partial<FinalStats>; }
+  const [lockedStats, setLockedStatsRaw] = useState<Record<string, LockEntry>>({});
   useEffect(() => {
     fetch("/api/stat-locks")
       .then((r) => r.ok ? r.json() : {})
-      .then((data) => setLockedStatsRaw(data ?? {}))
+      .then((data: Record<string, LockEntry | Partial<FinalStats>>) => {
+        // Back-compat: legacy entries were just the stats blob. Wrap them so
+        // downstream code only ever sees the enriched shape.
+        const migrated: Record<string, LockEntry> = {};
+        for (const [uid, v] of Object.entries(data ?? {})) {
+          if (v && typeof v === "object" && "stats" in v) migrated[uid] = v as LockEntry;
+          else migrated[uid] = { name: "?", charId: 0, level: 0, stats: v as Partial<FinalStats> };
+        }
+        setLockedStatsRaw(migrated);
+      })
       .catch(() => { /* leave empty */ });
   }, []);
-  // Wrapped setter that also POSTs to the dev endpoint. Fire-and-forget; if it
-  // fails the file isn't updated but the UI still reflects the change locally.
-  const setLockedStats = (next: Record<string, Partial<FinalStats>>) => {
+  const setLockedStats = (next: Record<string, LockEntry>) => {
     setLockedStatsRaw(next);
     fetch("/api/stat-locks", {
       method: "POST",
@@ -544,8 +589,18 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
           level,
         };
       })
+      .filter(({ char, stats }) => {
+        if (filters.locks === "all") return true;
+        const entry = lockedStats[char.uid];
+        const lockedSnap = entry?.stats;
+        const lockedKs = lockedSnap ? Object.keys(lockedSnap) as (keyof FinalStats)[] : [];
+        if (filters.locks === "locked") return lockedKs.length > 0;
+        // "drift": at least one locked stat whose live value drifted
+        if (!stats || lockedKs.length === 0) return false;
+        return lockedKs.some((k) => round1(stats[k] - (lockedSnap![k] ?? 0)) !== 0);
+      })
       .sort((a, b) => (b.count - a.count) || (b.char.stars - a.char.stars));
-  }, [inventory, game, filters, userGeasLevels, userCodexLevel]);
+  }, [inventory, game, filters, userGeasLevels, userCodexLevel, lockedStats]);
 
   if (!inventory) {
     return <Empty title="No capture yet" subtitle="Arm capture and import your roster to see equipped builds here." />;
@@ -567,23 +622,26 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
         {roster.map(({ char, equipped, stats, baseline, scaling, rawPieces, level }) => {
           const meta = game?.characters[String(char.charId)];
           const displayName = meta?.nickname ? `${meta.nickname} ${char.name ?? ""}`.trim() : (char.name ?? `#${char.charId}`);
-          const locked = lockedStats[char.uid] ?? null;
+          const lockEntry = lockedStats[char.uid] ?? null;
+          const locked = lockEntry?.stats ?? null;
           const lockedKeys = locked ? Object.keys(locked) as (keyof FinalStats)[] : [];
           const hasAnyLock = lockedKeys.length > 0;
-          // Drift detection — any LOCKED stat whose current value drifted from
-          // its snapshot. Drives the card-level lock button tint (amber when
-          // all locks match, rose when any locked stat drifted).
           const hasDrift = stats && hasAnyLock
             ? lockedKeys.some((k) => round1(stats[k] - (locked![k] ?? 0)) !== 0)
             : false;
+          // Build the enriched entry — when updating an existing lock, keep its
+          // identifying meta if the current displayName/charId/level match.
+          const makeEntry = (s: Partial<FinalStats>): LockEntry => ({
+            name: displayName, charId: char.charId, level, stats: s,
+          });
           const toggleStatLock = (key: keyof FinalStats) => {
             if (!stats) return;
             const next = { ...lockedStats };
-            const cur = { ...(next[char.uid] ?? {}) };
-            if (cur[key] != null) delete cur[key];
-            else cur[key] = stats[key];
-            if (Object.keys(cur).length === 0) delete next[char.uid];
-            else next[char.uid] = cur;
+            const curStats = { ...(next[char.uid]?.stats ?? {}) };
+            if (curStats[key] != null) delete curStats[key];
+            else curStats[key] = stats[key];
+            if (Object.keys(curStats).length === 0) delete next[char.uid];
+            else next[char.uid] = makeEntry(curStats);
             setLockedStats(next);
           };
           return (
@@ -610,9 +668,9 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
                         title="Accept current values for all drifted stats (refresh their locks)"
                         onClick={() => {
                           const next = { ...lockedStats };
-                          const cur = { ...(next[char.uid] ?? {}) };
+                          const cur = { ...(next[char.uid]?.stats ?? {}) };
                           for (const k of lockedKeys) cur[k] = stats[k];
-                          next[char.uid] = cur;
+                          next[char.uid] = makeEntry(cur);
                           setLockedStats(next);
                         }}
                         className="grid h-6 w-6 place-items-center rounded-md border border-emerald-400/40 bg-black/40 text-emerald-300 hover:bg-black/60"
@@ -640,7 +698,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
                               if (row.hideIfZero && !stats[row.key]) continue;
                               snap[row.key] = stats[row.key];
                             }
-                            setLockedStats({ ...lockedStats, [char.uid]: snap });
+                            setLockedStats({ ...lockedStats, [char.uid]: makeEntry(snap) });
                           }
                         }}
                         className={cx(

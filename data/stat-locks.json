@@ -1,0 +1,69 @@
+{
+  "4050056716": {
+    "name": "Aer",
+    "charId": 2000055,
+    "level": 100,
+    "stats": {
+      "atk": 2273,
+      "def": 1220,
+      "hp": 5657,
+      "spd": 136,
+      "crc": 23,
+      "chd": 188,
+      "eff": 120,
+      "res": 110
+    }
+  },
+  "4050414800": {
+    "name": "Gnosis Dahlia",
+    "charId": 2000090,
+    "level": 120,
+    "stats": {
+      "atk": 9593,
+      "hp": 13066,
+      "def": 2191,
+      "crc": 92,
+      "chd": 336,
+      "eff": 201,
+      "res": 205,
+      "pen": 41.4,
+      "spd": 148,
+      "dmgUp": 30
+    }
+  },
+  "6009285516": {
+    "name": "Midnight Rush Skadi",
+    "charId": 2000114,
+    "level": 110,
+    "stats": {
+      "atk": 2127,
+      "def": 2170,
+      "hp": 11851,
+      "spd": 120,
+      "crc": 32,
+      "chd": 220,
+      "eff": 120,
+      "res": 213,
+      "dmgRed": 2,
+      "pen": 36
+    }
+  },
+  "6004717280": {
+    "name": "Mystic Sage Ame",
+    "charId": 2000110,
+    "level": 105,
+    "stats": {
+      "hp": 9419,
+      "def": 1643,
+      "atk": 5679,
+      "chd": 276,
+      "eff": 245,
+      "res": 176,
+      "dmgUp": 18,
+      "dmgRed": 2.4,
+      "pen": 48,
+      "crc": 105,
+      "spd": 247
+    }
+  }
+}
