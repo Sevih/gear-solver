@@ -7,7 +7,7 @@ import { CyanButton, GsLabel } from "../design/Shell.js";
 import { CharacterPortrait, SlotMini, StatIcon } from "../design/EquipmentIcon.js";
 import { Pill } from "../design/Chips.js";
 import { TOKENS, toDesignSlot, type SlotId } from "../design/tokens.js";
-import { toIconPiece, toUiPiece } from "../design/adapter.js";
+import { toUiPiece } from "../design/adapter.js";
 
 /** In-game equipment layout for the build card: weapon row pairs with EE +
  *  armor pieces, second row gathers accessory/talisman + the body extremities. */
@@ -818,7 +818,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game }: 
           {BUILD_SLOT_ORDER.map((id) => {
             const p = equipped.get(id);
             return (
-              <SlotMini key={id} slot={id} piece={p ? toIconPiece(p) : null} size={64} />
+              <SlotMini key={id} slot={id} piece={p?.iconPiece ?? null} size={64} />
             );
           })}
         </div>

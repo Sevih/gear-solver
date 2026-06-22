@@ -50,6 +50,11 @@ export interface UiPiece {
    *  Null on weapons/accessories which use `effectIcon` instead. */
   setIcon: string | null;
   class: string | null;
+  /** Pre-computed `IconPiece` projection — pin it on the UiPiece so render
+   *  passes can hand a STABLE reference to memo'd `EquipmentIcon`/`SlotMini`.
+   *  Computing `toIconPiece(p)` inline in JSX defeats the memo (fresh object
+   *  every render), so we materialize it once when the UiPiece is built. */
+  iconPiece: IconPiece;
 }
 
 function fmtStat(s: RolledStat): UiMainStat {
@@ -61,15 +66,20 @@ function fmtStat(s: RolledStat): UiMainStat {
 export function toUiPiece(g: GearPiece, game?: GameData | null): UiPiece {
   const slot = toDesignSlot(g.slot);
   const meta = game?.equipment[String(g.itemId)];
+  const rarity = toDesignRarity(g.rarity);
+  const stars = g.star ?? 0;
+  const enhance = g.enhanceLevel;
+  const bt = g.breakthrough;
+  const singularity = g.ascended;
+  const image = meta?.image ?? null;
+  const effectIcon = meta?.effectIcon ?? null;
+  const setIcon = meta?.armorSetIcon ?? null;
+  const cls = meta?.class ?? null;
   return {
     id: g.uid,
     itemId: g.itemId,
     slot,
-    rarity: toDesignRarity(g.rarity),
-    stars: g.star ?? 0,
-    enhance: g.enhanceLevel,
-    bt: g.breakthrough,
-    singularity: g.ascended,
+    rarity, stars, enhance, bt, singularity,
     name: g.name?.trim() || `#${g.itemId}`,
     main: g.main.map(fmtStat),
     subs: g.subs.map((s) => {
@@ -81,26 +91,20 @@ export function toUiPiece(g: GearPiece, game?: GameData | null): UiPiece {
     status: g.equippedBy ? "equipped" : "free",
     locked: g.locked,
     equippedBy: g.equippedBy,
-    image: meta?.image ?? null,
-    effectIcon: meta?.effectIcon ?? null,
-    setIcon: meta?.armorSetIcon ?? null,
-    class: meta?.class ?? null,
+    image, effectIcon, setIcon, class: cls,
+    iconPiece: {
+      slot: slot ?? "weapon",
+      rarity, stars, enhance, bt, singularity,
+      reforge: g.reforgeCount,
+      image, effectIcon, setIcon, class: cls,
+    },
   };
 }
 
-/** Lossy projection to the `IconPiece` shape used by EquipmentIcon/SlotMini. */
+/** @deprecated Use `piece.iconPiece` directly — kept for the rare callers
+ *  that still construct ad-hoc IconPieces. The cached `iconPiece` on UiPiece
+ *  is referentially stable across renders so it activates `memo` on the
+ *  consuming icon components. */
 export function toIconPiece(p: UiPiece): IconPiece {
-  return {
-    slot: p.slot ?? "weapon",
-    rarity: p.rarity,
-    stars: p.stars,
-    enhance: p.enhance,
-    bt: p.bt,
-    singularity: p.singularity,
-    reforge: p.reforge.n,
-    image: p.image,
-    effectIcon: p.effectIcon,
-    setIcon: p.setIcon,
-    class: p.class,
-  };
+  return p.iconPiece;
 }

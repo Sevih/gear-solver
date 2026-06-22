@@ -9,7 +9,7 @@ import {
   RARITY, SINGULARITY_GRADIENT_H, SLOTS, STAT, TOKENS, statColor,
   type DesignRarity, type SlotId,
 } from "../design/tokens.js";
-import { toIconPiece, toUiPiece, type UiPiece } from "../design/adapter.js";
+import { toUiPiece, type UiPiece } from "../design/adapter.js";
 
 // ── tiny atoms ──────────────────────────────────────────────────────────
 function Search({ className = "h-3.5 w-3.5" }: { className?: string }) {
@@ -319,7 +319,7 @@ const GearRow = memo(function GearRow({ piece, equippedChar, active, onSelect }:
         containIntrinsicSize: "0 105px",
       }}
     >
-      <EquipmentIcon piece={toIconPiece(piece)} size={80} />
+      <EquipmentIcon piece={piece.iconPiece} size={80} />
 
       <div className="min-w-0">
         <div className="flex items-center gap-1.5">
@@ -363,7 +363,7 @@ const GearCard = memo(function GearCard({ piece, equippedChar, active, onSelect 
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 180px" }}
     >
       <div className="flex items-start gap-2">
-        <EquipmentIcon piece={toIconPiece(piece)} size={80} />
+        <EquipmentIcon piece={piece.iconPiece} size={80} />
         <div className="ml-auto">
           {equippedChar
             ? <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={56} />
@@ -499,7 +499,7 @@ function GearDrawer({
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
         <div className="flex items-start gap-3">
-          <EquipmentIcon piece={toIconPiece(piece)} size={80} />
+          <EquipmentIcon piece={piece.iconPiece} size={80} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="font-display text-[16px] font-semibold text-zinc-50">{piece.name}</span>

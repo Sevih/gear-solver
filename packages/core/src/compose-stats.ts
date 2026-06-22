@@ -151,6 +151,21 @@ function maxTranscendStar(transcendByStar: CharacterIngredients["transcendByStar
   return max;
 }
 
+/** Pick the per-skill StatBlock row matching the user's captured level. Falls
+ *  back to the highest emitted level when the user has no slider for the
+ *  skill (S4-S22 auto-leveled passives, Skill_23 Core Fusion). Hoisted to
+ *  module scope so it doesn't allocate a fresh closure on every
+ *  `composeCharStats` call (× 121 chars × 3 skill slots per roster pass). */
+function pickSkillBlock(table: Record<string, StatBlock>, lv: number | undefined): StatBlock {
+  if (lv != null && lv > 0 && table[String(lv)]) return table[String(lv)]!;
+  let max = 0;
+  for (const k of Object.keys(table)) {
+    const n = Number(k);
+    if (n > max) max = n;
+  }
+  return max > 0 ? (table[String(max)] ?? ZERO) : ZERO;
+}
+
 /** Sum every evolution row with EvolutionLevel ≤ min(targetStar, evoCap).
  *  Evolutions Lv 2..6 unlock via TransStar progression; Lv 7..9 are gated by
  *  the Limit-Break step (LB1 → 7, LB2 → 8, LB3 → 9), so `evoCap = 6 + LB`.
@@ -294,18 +309,10 @@ export function composeCharStats(
   const geasResolved = resolveGeasTotal(ingredients.geasByNode, options.userGeasLevels);
   const geas = geasResolved.all;
   const geasStat = geasResolved.fromStat;
-  // Skill passives (S1/S2/S3 + core fusion). Pick the row matching the
-  // captured user skill level; fall back to the highest emitted level when
-  // no user levels are provided. Core passive is single-block (no slider).
-  const pickSkillBlock = (table: Record<string, StatBlock>, lv: number | undefined): StatBlock => {
-    if (lv != null && lv > 0 && table[String(lv)]) return table[String(lv)]!;
-    let max = 0;
-    for (const k of Object.keys(table)) {
-      const n = Number(k);
-      if (n > max) max = n;
-    }
-    return max > 0 ? (table[String(max)] ?? ZERO) : ZERO;
-  };
+  // Skill passives (S1/S2/S3 + core fusion). `pickSkillBlock` (hoisted
+  // above) picks the row matching the captured user skill level; falls back
+  // to the highest emitted level when no user level is provided. The Core
+  // Fusion passive is a single block (no slider).
   const usl = options.userSkillLevels;
   const s1 = pickSkillBlock(ingredients.s1ByLevel ?? {}, usl?.first);
   const s2 = pickSkillBlock(ingredients.s2ByLevel ?? {}, usl?.second);

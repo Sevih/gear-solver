@@ -171,9 +171,9 @@ export interface EquipmentIconProps {
   className?: string;
 }
 
-/** Memo'd — `piece` should be a stable reference (memoize `toIconPiece`
- *  upstream or hoist it). Shallow-compare lets the icon skip re-render when
- *  the surrounding row re-renders for unrelated reasons. */
+/** Memo'd — `piece` must be a stable reference for the shallow compare to
+ *  actually skip renders. Callers should hand `UiPiece.iconPiece` (cached
+ *  once when the UiPiece is built) rather than `toIconPiece(p)` inline. */
 export const EquipmentIcon = memo(EquipmentIconImpl);
 function EquipmentIconImpl({ piece, size = 50, detail = "full", className }: EquipmentIconProps) {
   const k = size / 50;
