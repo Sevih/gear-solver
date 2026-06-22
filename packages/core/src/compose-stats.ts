@@ -52,8 +52,9 @@ function baseAtLevel(bracket: StatBracket, level: number, modifier: number): num
 export interface ComposeOptions {
   /** Captured TransStar (0..9). Null = treat as max for the BasicStar. */
   transStar?: number | null;
-  /** Codex level (0..11). Default 11 (max) — TODO: resolve from the captured
-   *  `/archive/info` ArchiveItemRewardInfo once we map item-tier thresholds. */
+  /** Codex level 0..11 — resolved by the caller from the captured
+   *  `/archive/info` reward count via `resolveCodexLevel`. Missing/null
+   *  falls back to the curve's max level (current default behavior). */
   codexLevel?: number;
   /** Captured character level (from Exp via expToLevel). Default 100. Used to
    *  interpolate base stats between lv 1 (Min) and lv 100 (Max). Above lv 100
@@ -171,20 +172,21 @@ function sumEvoUpTo(
  *  libil2cpp.so (1.4.9, RVA 0x2C59E48). All rate inputs are per-mille (×10
  *  of the % display), all flat inputs are integers. The two-stage compound
  *  is the key — additive rates are amplified first as a single bundle, then
- *  the (gearFlat-extended) sum is amplified by `buffRate` (where Skill_22
- *  class passive, Skill_8 transcend passive and Geas BT_STAT_PREMIUM buffs
- *  all land per `SetBuffPremiumValue`):
+ *  the (gearFlat + flat-buff)-extended sum is amplified by `buffRate` (where
+ *  Skill_22 class passive, Skill_8 transcend passive, Geas BT_STAT_PREMIUM
+ *  buffs, user-leveled S1/S2/S3 passives and the Core Fusion Skill_23
+ *  passive all land per `SetBuffPremiumValue`):
  *    sum_flat = baseValue + evoValue + awakValue
- *    sum_rate = awakRate + transcendRate + gearRate     (per-mille)
- *    part1    = floor(sum_flat × (1000 + sum_rate) / 1000)
- *    combined = part1 + gearFlat
- *    part2    = floor(combined × (1000 + buffRate) / 1000)
- *    codex    = floor(baseValue × archiveRate / 1000)
+ *    sum_rate = awakRate + transcendRate + gearRate           (per-mille)
+ *    part1    = trunc(sum_flat × (1000 + sum_rate) / 1000)
+ *    combined = part1 + gearFlat + buffValue
+ *    part2    = trunc(combined × (1000 + buffRate) / 1000)
+ *    codex    = trunc(baseValue × archiveRate / 1000)
  *    final    = max(0, part2 + codex)
- *  Validated 0-diff on 7/9 stats across 5 chars (M.Skadi ATK/DEF, G.Dahlia
- *  ATK/DEF/HP, D.Luna DEF/HP, M.Ame ATK). Residual deltas on M.Skadi HP
- *  (-2273) and D.Luna ATK (-868) trace back to BT_STAT (non-_PREMIUM)
- *  always-on skill buffs we don't yet identify in BuffsTable. */
+ *  Validated 0-diff on 11/11 ATK/DEF/HP stats across 5 chars plus EFF/RES
+ *  on G.Beth / Notia (core fusion +50% EFF baseline 120 → 255 exact match).
+ *  `Math.trunc` mirrors the ARM64 signed-magic-divide-by-1000 — `Math.floor`
+ *  would diverge on negative intermediates (rare but real on debuff sources). */
 function calcFinalStat(
   baseValue: number,
   evoValue: number,
@@ -259,7 +261,12 @@ export interface ComposedStats {
    *    baseline (base + evo + class + skill_8 + geas) since these stats are
    *    additive — there's no compound to isolate. */
   intrinsicStats: NoGearStats;
-  scaling: { atk: StatScaling; def: StatScaling; hp: StatScaling; eff: StatScaling; res: StatScaling };
+  /** Per-axis CalcFinalStat ingredients. ATK/DEF/HP carry the full compound
+   *  inputs (codex / transcend / class / geas / skill passives); EFF/RES
+   *  expose `awakPct` (rare IOT_STAT geas rates) and `buffPct` (Skill_8 /
+   *  geas IOT_BUFF / core fusion OAT_RATE) so the gear-side composer can
+   *  route them through the right CalcFinalStat channel. */
+  scaling: Record<"atk" | "def" | "hp" | "eff" | "res", StatScaling>;
 }
 
 /** Compose the no-gear stats and the ATK/DEF/HP scaling ingredients for one
@@ -369,10 +376,10 @@ export function composeCharStats(
     pen: evo.pen + classPass.pen + skill8.pen + geas.pen + skillPass.pen,
     dmgInc: evo.dmgInc + classPass.dmgInc + skill8.dmgInc + geas.dmgInc + skillPass.dmgInc,
     dmgRed: evo.dmgRed + classPass.dmgRed + skill8.dmgRed + geas.dmgRed + skillPass.dmgRed,
-    // EFF / RES — same CalcFinalStat path as ATK/DEF/HP. With no gear inputs
-    // (gear_flat = 0, gear_rate = 0), part2 collapses to sum_flat + buffValue,
-    // which equals baseEff + evo.eff + geas.eff + classPass.eff + skill8.eff —
-    // matching the previous additive sum.
+    // EFF / RES — full CalcFinalStat path so OAT_RATE buffs (Skill_8 /
+    // geas IOT_BUFF / core fusion) amplify multiplicatively per the
+    // in-game `BuffValueRate` channel. Matches in-game exactly on Notia
+    // core (+50% EFF baseline 120 → 255) and G.Beth (636 with gear).
     eff: calcStat(scaling.eff),
     res: calcStat(scaling.res),
   };

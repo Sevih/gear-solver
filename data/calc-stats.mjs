@@ -14,8 +14,13 @@
  *   - ATK/DEF/HP OAT_RATE         — folded into atkPct/defPct/hpPct
  *   - ATK/DEF/HP OAT_ADD          — flat
  *   - SPD/EFF/RES OAT_ADD         — flat integer
- *   - SPD/EFF/RES OAT_RATE        — `floor(baseForRate × value / 1000)` (flat
- *                                   premium on base+evo)
+ *   - EFF/RES OAT_RATE            — folded into effRate/resRate (display %);
+ *                                   the runtime composer routes them through
+ *                                   `BuffValueRate` per CalcFinalStat — see
+ *                                   `compose-stats.ts` `scaling.eff.buffPct`
+ *   - SPD OAT_RATE                — `floor(baseForRate.spd × value / 1000)`
+ *                                   (pre-baked flat; SPD baseline is constant
+ *                                   per char so the approximation is exact)
  */
 
 const ELEMENT_INDEX = { CET_EARTH: 0, CET_WATER: 1, CET_FIRE: 2, CET_LIGHT: 3, CET_DARK: 4 };
@@ -370,15 +375,15 @@ export function computeCharacterIngredients(tables) {
     const basicStar = num(row.BasicStar);
     const base = extractBase(row);
     const evoByLevel = extractEvoByLevel(evoStats, evoCharId);
-    // baseForRate is used by OAT_RATE buffs for SPD/EFF/RES — computed against
-    // base + max evolution (sum of all rows). When the user is below max trans
-    // some of the rate-based buffs will be slightly off; acceptable for now.
+    // `baseForRate.spd` is the only field still consumed — SPD OAT_RATE buffs
+    // (trancendent_8_speed, etc.) are pre-baked here against (lv100 max + max
+    // evo) since SPD baselines are flat per char (no LB modifier scaling) so
+    // the approximation is exact. EFF/RES OAT_RATE used to bake the same way
+    // but now route through `effRate`/`resRate` (display %) → composer applies
+    // them via `BuffValueRate` (correct for any `combined` value).
     const evoMax = zeroStats();
     for (const k of Object.keys(evoByLevel)) for (const f of Object.keys(evoMax)) evoMax[f] += evoByLevel[k][f];
-    // OAT_RATE buffs on SPD/EFF/RES resolve against (lv100 max + max evo); we
-    // ignore lv > 100 scaling here since rate buffs round to int and re-emit-
-    // ting per (level, LB step) would explode the ingredient size.
-    const baseForRate = { spd: base.spd.max + evoMax.spd, eff: base.eff.max + evoMax.eff, res: base.res.max + evoMax.res };
+    const baseForRate = { spd: base.spd.max + evoMax.spd };
     const transcendByStar = extractTranscendByStar(transcendent, basicStar, id);
     const classPassive = extractClassPassive(row, skillLevels, buffs, baseForRate);
     const skill8ByLevel = extractSkill8ByLevel(row, skillLevels, buffs, transcendByStar, baseForRate);

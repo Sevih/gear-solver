@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import type { GameData, GearPiece, Inventory, NoGearStats, StatScaling, UserGeasLevels } from "@gear-solver/core";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import type { Character, GameData, GearPiece, Inventory, NoGearStats, StatScaling, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
 import { cx } from "../design/cx.js";
 import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
 import { CyanButton, GsLabel } from "../design/Shell.js";
 import { CharacterPortrait, SlotMini, StatIcon } from "../design/EquipmentIcon.js";
 import { Pill } from "../design/Chips.js";
-import { TOKENS, toDesignSlot, toDesignRarity, type SlotId } from "../design/tokens.js";
+import { TOKENS, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toIconPiece, toUiPiece } from "../design/adapter.js";
 
 /** In-game equipment layout for the build card: weapon row pairs with EE +
@@ -193,7 +193,7 @@ function aggregateGearBuckets(pieces: GearPiece[], game: GameData | null): {
 
 function computeFinalStats(
   baseline: NoGearStats,
-  scaling: { atk: StatScaling; def: StatScaling; hp: StatScaling; eff: StatScaling; res: StatScaling },
+  scaling: ScalingMap,
   pieces: GearPiece[],
   game: GameData | null,
 ): FinalStats {
@@ -206,19 +206,16 @@ function computeFinalStats(
     // Set 2pc gives +13% SPD which lands as floor(baseline_spd × 0.13) on
     // top of the flat sub adds). Verified against M.S.Ame: 158 × 0.13 = 20.
     spd: baseline.spd + (flat.spd ?? 0) + (buffPct.spd ?? 0) + Math.floor(baseline.spd * (pct.spd ?? 0) / 100),
-    // Non-compound stats: ooparts / EE mains route through `buffPct` (they
-    // resolve via IOT_BUFF → BT_STAT_PREMIUM, OAT_ADD-typed for the integer
-    // scale ones — CRC/CHD/EFF/RES — and they land in the per-stat BuffValue
-    // bucket alongside class-passive / Skill_8 contributions). Since sum_rate
-    // and BR are typically zero for these axes, CalcFinalStat reduces to the
-    // simple additive sum we already had, plus the buff bucket.
+    // Non-compound stats — plain additive: gear pct/flat + ooparts/EE main
+    // (IOT_BUFF → buffPct). Sum_rate and BuffRate are typically zero on
+    // these axes, so CalcFinalStat collapses to a simple sum.
     crc: round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0)),
     chd: round1(baseline.chd + (pct.critDmg  ?? 0) + (buffPct.critDmg  ?? 0)),
-    // EFF / RES — full CalcFinalStat path. Gear OAT_RATE EFF subs (armor/oo/EE/set)
-    // and talisman main (IOT_BUFF → BR) carry meaningful sum_rate amplification
-    // when baseline EFF grows above ~100 (e.g. lv120 Ranger Beth baseline = 140,
-    // sum_rate = 1295 from 7 OAT_RATE EFF sources). Additive approximation
-    // (bt-scaled flat) diverges by ~+10% per gearPct level past 100.
+    // EFF / RES go through the full CalcFinalStat path: gear OAT_RATE subs
+    // amplify sum_rate, talisman/EE/core-fusion OAT_RATE land in BuffRate.
+    // Validated on G.Beth (in-game 636 EFF) and Notia core (255 EFF, +50%
+    // rate baseline 120). Pre-baked flat approximation diverges whenever
+    // `combined` ≠ `baseForRate`.
     eff: composeMultStat(scaling.eff, flat.eff    ?? 0, pct.eff    ?? 0, buffPct.eff    ?? 0),
     res: composeMultStat(scaling.res, flat.effRes ?? 0, pct.effRes ?? 0, buffPct.effRes ?? 0),
     dmgUp: round1(baseline.dmgInc + (pct.dmgUp ?? 0) + (flat.dmgUp ?? 0) + (buffPct.dmgUp ?? 0)),
@@ -247,29 +244,43 @@ function setBonusStatKey(st: string, isRate: boolean): string | null {
   }
 }
 
+/** Per-stat-axis dump spec — pairs the engine stat key with its `*Pct` /
+ *  flat bucket name in the aggregated gear maps. EFF/RES use unsuffixed
+ *  flat/pct keys (gear EFF subs land in `flat.eff` / `pct.eff`) which
+ *  differs from ATK/DEF/HP (suffixed `*Pct`). */
+type ScalingAxis = "atk" | "def" | "hp" | "eff" | "res";
+type ScalingMap = Record<ScalingAxis, StatScaling>;
+const DUMP_AXES: ReadonlyArray<{ key: ScalingAxis; flatKey: string; pctKey: string }> = [
+  { key: "atk", flatKey: "atk", pctKey: "atkPct" },
+  { key: "def", flatKey: "def", pctKey: "defPct" },
+  { key: "hp",  flatKey: "hp",  pctKey: "hpPct" },
+  { key: "eff", flatKey: "eff", pctKey: "eff" },
+  { key: "res", flatKey: "effRes", pctKey: "effRes" },
+];
+
 /** Format a complete stat-debug dump for one character: every input to the
- *  compose pipeline (scaling per ATK/DEF/HP) plus every equipped piece with
- *  main/subs/bt/asc. Copied to the clipboard by the card's debug button so
- *  we can paste it back to the dev when chasing an off-by-N discrepancy
- *  against the in-game character sheet. */
+ *  compose pipeline (per-axis scaling = base/evo/awak + the four amplifier
+ *  rates) plus every equipped piece with main/subs/bt/asc. Copied to the
+ *  clipboard by the card's debug button so we can paste it back when
+ *  chasing an off-by-N discrepancy against the in-game character sheet. */
 function buildStatsDump(
   displayName: string,
   charId: number | string,
   level: number,
-  scaling: { atk: StatScaling; def: StatScaling; hp: StatScaling },
+  scaling: ScalingMap,
   pieces: GearPiece[],
   game: GameData | null,
 ): string {
   const { flat, pct, buffPct } = aggregateGearBuckets(pieces, game);
   const lines: string[] = [];
   lines.push(`${displayName} (id=${charId}, lv${level})`);
-  for (const k of ["atk", "def", "hp"] as const) {
-    const sc = scaling[k];
-    const pctKey = k === "atk" ? "atkPct" : k === "def" ? "defPct" : "hpPct";
+  for (const { key, flatKey, pctKey } of DUMP_AXES) {
+    const sc = scaling[key];
     lines.push(
-      `[${k}] base=${sc.baseValue} evo=${sc.evoValue} awak=${sc.awakValue} ` +
-      `awakPct=${sc.awakPct} transcend=${sc.transcendPct} codex=${sc.codexPct} buff=${sc.buffPct} | ` +
-      `gearFlat=${flat[k] ?? 0} gearPct=${pct[pctKey] ?? 0} gearBuffPct=${buffPct[pctKey] ?? 0}`
+      `[${key}] base=${sc.baseValue} evo=${sc.evoValue} awak=${sc.awakValue} ` +
+      `awakPct=${sc.awakPct} transcend=${sc.transcendPct} codex=${sc.codexPct} ` +
+      `buff=${sc.buffPct} buffVal=${sc.buffValue} | ` +
+      `gearFlat=${flat[flatKey] ?? 0} gearPct=${pct[pctKey] ?? 0} gearBuffPct=${buffPct[pctKey] ?? 0}`
     );
   }
   lines.push("pieces:");
@@ -508,6 +519,282 @@ function FilterBar({ f, setF }: { f: RosterFilters; setF: (next: RosterFilters) 
   );
 }
 
+/** Effective in-game CharID — the fused variant when Core Fusion is active,
+ *  otherwise the base. Used for portrait / base-stat / skill-id lookups. */
+function effectiveCharId(c: { charId: number; fusionCharId: number }): number {
+  return c.fusionCharId !== 0 ? c.fusionCharId : c.charId;
+}
+
+/** Resolve the right `CharacterDef` for a captured Character — fused
+ *  variant's meta when active (its `FaceIconID` / BasicStar / ingredients
+ *  differ from the base), base meta otherwise. */
+function metaOf(c: { charId: number; fusionCharId: number }, game: GameData | null) {
+  return game?.characters[String(effectiveCharId(c))] ?? null;
+}
+
+/** On-card display name. `Core Fusion ${baseName}` when fused — the in-game
+ *  NickName for fusion variants is flavor text, not the variant identifier.
+ *  Otherwise prefixes the meta nickname for Mystic Sage / Gnosis / etc. */
+function displayNameOf(c: Character, meta: { nickname: string | null } | null): string {
+  const base = meta?.nickname ? `${meta.nickname} ${c.name ?? ""}`.trim() : (c.name ?? `#${c.charId}`);
+  return c.fusionCharId !== 0 ? `Core Fusion ${base}` : base;
+}
+
+/** Per-(char, stat) lock snapshot — persisted at `data/stat-locks.json` via
+ *  the vite dev API so regressions on validated stats stay visible across
+ *  reloads. `name`/`charId`/`level` are debug context for the json file. */
+interface LockEntry { name: string; charId: number; level: number; stats: Partial<FinalStats>; }
+
+/** Stable functional-updater type — `BuildCard`s call this through `useCallback`
+ *  closures that only depend on `setLocks` (referentially stable). */
+type LocksMap = Record<string, LockEntry>;
+type SetLocks = (next: LocksMap | ((prev: LocksMap) => LocksMap)) => void;
+
+/** Custom hook bundling the locked-stats state + persistence. Migrates the
+ *  pre-rich legacy shape (a bare `Partial<FinalStats>` keyed by uid) to the
+ *  enriched `LockEntry` on first load. `setLocks` accepts either a value or a
+ *  React-style functional updater and stays stable across renders so the
+ *  memoized cards never need to break their handler closures. */
+function useStatLocks(): readonly [LocksMap, SetLocks] {
+  const [locks, setLocksRaw] = useState<LocksMap>({});
+  useEffect(() => {
+    fetch("/api/stat-locks")
+      .then((r) => r.ok ? r.json() : {})
+      .then((data: Record<string, LockEntry | Partial<FinalStats>>) => {
+        const migrated: LocksMap = {};
+        for (const [uid, v] of Object.entries(data ?? {})) {
+          if (v && typeof v === "object" && "stats" in v) migrated[uid] = v as LockEntry;
+          else migrated[uid] = { name: "?", charId: 0, level: 0, stats: v as Partial<FinalStats> };
+        }
+        setLocksRaw(migrated);
+      })
+      .catch(() => { /* leave empty */ });
+  }, []);
+  const setLocks = useCallback<SetLocks>((nextOrFn) => {
+    setLocksRaw((prev) => {
+      const next = typeof nextOrFn === "function" ? nextOrFn(prev) : nextOrFn;
+      fetch("/api/stat-locks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next, null, 2),
+      }).catch(() => { /* dev-only; ignore */ });
+      return next;
+    });
+  }, []);
+  return [locks, setLocks] as const;
+}
+
+/** Composed entry per character — heavy compose pipeline result plus the
+ *  derived meta/portrait/name needed by every card. Built once per
+ *  (inventory, game, geas, codex) tuple in `composedRoster`; the cheap
+ *  filter/sort pass in `filteredRoster` just narrows this list, so lock
+ *  toggles don't re-trigger the compose. */
+interface ComposedEntry {
+  char: Character;
+  equipped: Map<SlotId, ReturnType<typeof toUiPiece>>;
+  count: number;
+  stats: FinalStats | null;
+  baseline: NoGearStats | null;
+  scaling: ScalingMap | null;
+  rawPieces: GearPiece[];
+  level: number;
+  bp: number | null;
+  /** Fused variant's meta when active, base meta otherwise. */
+  meta: NonNullable<ReturnType<typeof metaOf>> | null;
+  /** ID used for portrait/face icon (fused or base). */
+  displayCharId: number;
+  /** "Core Fusion X" / "Nickname X" / "X" — final string for the card title. */
+  displayName: string;
+}
+
+interface BuildCardProps {
+  entry: ComposedEntry;
+  /** Just this char's lock row — slicing in the parent means cards whose
+   *  lock didn't change keep a stable `lockEntry` reference and skip the
+   *  re-render via `memo`. */
+  lockEntry: LockEntry | null;
+  /** Stable setter from `useStatLocks`. The card always uses the functional
+   *  form so it never has to read `locks` from props. */
+  setLocks: SetLocks;
+  game: GameData | null;
+}
+
+/** Per-character build card. Memoized — re-renders only when its `entry` or
+ *  its own `lockEntry` slice changes (composedRoster ref stays stable across
+ *  lock toggles, so unaffected cards skip the render entirely). All handlers
+ *  use the functional updater form of `setLocks` so they never depend on
+ *  the current `locks` map and stay referentially stable. */
+const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game }: BuildCardProps) {
+  const { char, equipped, stats, baseline, scaling, rawPieces, level, bp, meta, displayCharId, displayName } = entry;
+  const locked = lockEntry?.stats ?? null;
+  const lockedKeys = locked ? Object.keys(locked) as (keyof FinalStats)[] : [];
+  const hasAnyLock = lockedKeys.length > 0;
+  const hasDrift = stats && hasAnyLock
+    ? lockedKeys.some((k) => round1(stats[k] - (locked![k] ?? 0)) !== 0)
+    : false;
+  const driftCount = stats && hasAnyLock
+    ? lockedKeys.filter((k) => round1(stats[k] - (locked![k] ?? 0)) !== 0).length
+    : 0;
+  const uid = char.uid;
+
+  /** Build the enriched `LockEntry` from a `Partial<FinalStats>` snapshot. */
+  const wrapEntry = useCallback((s: Partial<FinalStats>): LockEntry => ({
+    name: displayName, charId: char.charId, level, stats: s,
+  }), [displayName, char.charId, level]);
+
+  const toggleStatLock = useCallback((key: keyof FinalStats) => {
+    if (!stats) return;
+    setLocks((prev) => {
+      const next = { ...prev };
+      const curStats = { ...(next[uid]?.stats ?? {}) };
+      if (curStats[key] != null) delete curStats[key];
+      else curStats[key] = stats[key];
+      if (Object.keys(curStats).length === 0) delete next[uid];
+      else next[uid] = wrapEntry(curStats);
+      return next;
+    });
+  }, [setLocks, uid, stats, wrapEntry]);
+
+  const acceptDrift = useCallback(() => {
+    if (!stats) return;
+    setLocks((prev) => {
+      const next = { ...prev };
+      const cur = { ...(next[uid]?.stats ?? {}) };
+      for (const k of lockedKeys) cur[k] = stats[k];
+      next[uid] = wrapEntry(cur);
+      return next;
+    });
+  }, [setLocks, uid, stats, lockedKeys, wrapEntry]);
+
+  const toggleAllLocks = useCallback(() => {
+    if (!stats) return;
+    setLocks((prev) => {
+      if (hasAnyLock) {
+        const next = { ...prev };
+        delete next[uid];
+        return next;
+      }
+      const snap: Partial<FinalStats> = {};
+      for (const row of FINAL_ROWS) {
+        if (row.hideIfZero && !stats[row.key]) continue;
+        snap[row.key] = stats[row.key];
+      }
+      return { ...prev, [uid]: wrapEntry(snap) };
+    });
+  }, [setLocks, uid, stats, hasAnyLock, wrapEntry]);
+
+  const copyDump = useCallback(async () => {
+    if (!scaling) return;
+    const dump = buildStatsDump(displayName, char.charId, level, scaling, rawPieces, game);
+    try { await navigator.clipboard.writeText(dump); }
+    catch { console.log(dump); }
+  }, [scaling, displayName, char.charId, level, rawPieces, game]);
+
+  return (
+    <div className="relative rounded-xl border border-white/[0.07] bg-bg-elev-2 p-3 backdrop-blur-sm shadow-[0_1px_0_oklch(1_0_0/0.04)_inset,0_24px_60px_-30px_rgb(0_0_0/0.7)]">
+      <div className="flex items-start gap-3">
+        <div className="flex flex-col items-center gap-1.5">
+          <CharacterPortrait
+            charId={displayCharId}
+            name={displayName}
+            cls={meta?.cls}
+            element={meta?.element}
+            level={level}
+            transStar={char.stars}
+            basicStar={meta?.star ?? null}
+            size={80}
+          />
+          <div className="flex gap-1">
+            {stats && hasDrift && (
+              <button
+                type="button"
+                title="Accept current values for all drifted stats (refresh their locks)"
+                onClick={acceptDrift}
+                className="grid h-6 w-6 place-items-center rounded-md border border-emerald-400/40 bg-black/40 text-emerald-300 hover:bg-black/60"
+              >
+                <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6}>
+                  <path d="M3 7 L6 10 L11 4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+            {stats && (
+              <button
+                type="button"
+                title={hasAnyLock
+                  ? (hasDrift ? `Drift on ${driftCount}/${lockedKeys.length} locked — click to UNLOCK ALL`
+                              : `Locked ${lockedKeys.length} stat${lockedKeys.length === 1 ? "" : "s"} ✓ — click to UNLOCK ALL`)
+                  : "Lock ALL stats as the regression baseline (click a single stat to lock just that one)"}
+                onClick={toggleAllLocks}
+                className={cx(
+                  "grid h-6 w-6 place-items-center rounded-md border bg-black/40 hover:bg-black/60",
+                  hasAnyLock
+                    ? (hasDrift ? "border-rose-400/50 text-rose-300" : "border-amber-400/40 text-amber-300")
+                    : "border-white/[0.07] text-zinc-400 hover:text-zinc-200",
+                )}
+              >
+                <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
+                  {hasAnyLock ? (
+                    <>
+                      <rect x={3} y={6.5} width={8} height={6} rx={1} />
+                      <path d="M5 6.5 V4 a2 2 0 0 1 4 0 V6.5" />
+                    </>
+                  ) : (
+                    <>
+                      <rect x={3} y={6.5} width={8} height={6} rx={1} />
+                      <path d="M5 6.5 V4 a2 2 0 0 1 4 0" />
+                    </>
+                  )}
+                </svg>
+              </button>
+            )}
+            {scaling && (
+              <button
+                type="button"
+                title="Copy stat-debug dump to clipboard"
+                onClick={copyDump}
+                className="grid h-6 w-6 place-items-center rounded-md border border-white/[0.07] bg-black/40 text-zinc-400 hover:bg-black/60 hover:text-zinc-200"
+              >
+                <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
+                  <rect x={3} y={3} width={8} height={9} rx={1.2} />
+                  <path d="M5 3 V2 a1 1 0 0 1 1-1 h2 a1 1 0 0 1 1 1 V3" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {bp != null && (
+            <div
+              className="mt-0.5 rounded-md border border-cyan-400/30 bg-cyan-500/6 px-2 py-0.5 font-mono text-[11px] tabular-nums text-cyan-200"
+              title={`Combat Power: ${bp.toLocaleString()}`}
+            >
+              <span className="text-[9.5px] uppercase tracking-wider text-cyan-400/80">CP</span>{" "}
+              {bp.toLocaleString()}
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          {stats && baseline && <StatBlock stats={stats} baseline={baseline} locked={locked} onToggleLock={toggleStatLock} />}
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <GsLabel>Gear equipped</GsLabel>
+        <div className="mt-1.5 grid grid-cols-4 gap-2">
+          {BUILD_SLOT_ORDER.map((id) => {
+            const p = equipped.get(id);
+            return (
+              <SlotMini key={id} slot={id} piece={p ? toIconPiece(p) : null} size={64} />
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-end">
+        <CyanButton size="sm">Optimize →</CyanButton>
+      </div>
+    </div>
+  );
+});
+
 interface BuildsScreenProps {
   inventory: Inventory | null;
   game: GameData | null;
@@ -535,38 +822,11 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
     [filtersRaw],
   );
 
-  // Regression-guard locks: per-(char, stat) snapshot once validated against
-  // in-game. Storage shape: { [charUid]: { name, charId, level, stats } }.
-  // The name/charId/level fields are human-readable identifiers so the file
-  // is debuggable at a glance — the char UID alone is opaque. Persisted
-  // SERVER-SIDE at data/stat-locks.json (via the vite dev API).
-  interface LockEntry { name: string; charId: number; level: number; stats: Partial<FinalStats>; }
-  const [lockedStats, setLockedStatsRaw] = useState<Record<string, LockEntry>>({});
-  useEffect(() => {
-    fetch("/api/stat-locks")
-      .then((r) => r.ok ? r.json() : {})
-      .then((data: Record<string, LockEntry | Partial<FinalStats>>) => {
-        // Back-compat: legacy entries were just the stats blob. Wrap them so
-        // downstream code only ever sees the enriched shape.
-        const migrated: Record<string, LockEntry> = {};
-        for (const [uid, v] of Object.entries(data ?? {})) {
-          if (v && typeof v === "object" && "stats" in v) migrated[uid] = v as LockEntry;
-          else migrated[uid] = { name: "?", charId: 0, level: 0, stats: v as Partial<FinalStats> };
-        }
-        setLockedStatsRaw(migrated);
-      })
-      .catch(() => { /* leave empty */ });
-  }, []);
-  const setLockedStats = (next: Record<string, LockEntry>) => {
-    setLockedStatsRaw(next);
-    fetch("/api/stat-locks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(next, null, 2),
-    }).catch(() => { /* dev-only; ignore */ });
-  };
+  const [lockedStats, setLockedStats] = useStatLocks();
 
-  const roster = useMemo(() => {
+  // STEP A — heavy compose pass: runs only when inventory / game / geas /
+  // codex change. Lock toggles & filter typing do NOT recompute this.
+  const composedRoster = useMemo<ComposedEntry[]>(() => {
     if (!inventory) return [];
     // Index gear by character UID, keeping both the raw GearPiece list (for
     // stat aggregation) and the slot-keyed UiPiece map (for the slot grid).
@@ -583,94 +843,75 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
       if (!raws) { raws = []; rawByChar.set(g.equippedBy, raws); }
       raws.push(g);
     }
+    return inventory.characters.map((c): ComposedEntry => {
+      const meta = metaOf(c, game);
+      const displayCharId = effectiveCharId(c);
+      const displayName = displayNameOf(c, meta);
+      const equipped = gearByChar.get(c.uid) ?? new Map();
+      const raws = rawByChar.get(c.uid) ?? [];
+      // CharacterMaxLevelTemplet row is keyed by `${BasicStar}|${LevelMaxStep}`
+      // — only present once the user has broken the lv 100 cap.
+      const level = game?.expCharacter ? expToLevel(game.expCharacter, c.exp) : 100;
+      const lbKey = meta?.star != null && c.levelMaxStep > 0 ? `${meta.star}|${c.levelMaxStep}` : null;
+      const levelMaxModifier = lbKey ? (game?.charLevelMax[lbKey]?.statModifierAfter100 ?? 0) : 0;
+      const composed = (meta?.ingredients && game?.codexCurve)
+        ? composeCharStats(meta.ingredients, game.codexCurve, {
+            transStar: c.stars,
+            level,
+            levelMaxModifier,
+            levelMaxStep: c.levelMaxStep,
+            userGeasLevels,
+            userSkillLevels: { first: c.skills.first, second: c.skills.second, ultimate: c.skills.ultimate },
+            ...(userCodexLevel != null ? { codexLevel: userCodexLevel } : {}),
+          })
+        : null;
+      const stats = composed
+        ? computeFinalStats(composed.noGearStats, composed.scaling, raws, game)
+        : null;
+      // In-game BP (CalcBattlePower) — needs star UI metadata from the captured
+      // TransStar row + equipped EE/Talisman from the raw gear list.
+      const transRow = meta?.ingredients?.transcendByStar?.[String(c.stars)] ?? null;
+      const ee = raws.find((p) => p.slot === "exclusive") ?? null;
+      const ooparts = raws.find((p) => p.slot === "ooparts") ?? null;
+      const bp = stats && transRow
+        ? calcBattlePower({
+            stats,
+            showUIStar: transRow.showUIStar ?? 0,
+            starPlus: transRow.starPlus ?? 0,
+            skills: c.skills,
+            ee,
+            ooparts,
+            fused: c.fusionCharId !== 0,
+          })
+        : null;
+      return {
+        char: c, equipped, count: equipped.size, stats,
+        baseline: composed?.intrinsicStats ?? null,
+        scaling: composed?.scaling ?? null,
+        rawPieces: raws, level, bp,
+        meta, displayCharId, displayName,
+      };
+    });
+  }, [inventory, game, userGeasLevels, userCodexLevel]);
+
+  // Cheap filter/sort pass — runs on every filter or lock-state change but
+  // never re-touches the compose pipeline above.
+  const roster = useMemo<ComposedEntry[]>(() => {
+    if (composedRoster.length === 0) return [];
     const q = filters.query.trim().toLowerCase();
-    return inventory.characters
-      .filter((c) => {
-        // Resolve meta against the fused variant when active — element/class
-        // carry over but BasicStar / portrait differ. Searching "core" or
-        // "fusion" matches every fused char via the literal prefix.
-        const metaId = String(c.fusionCharId !== 0 ? c.fusionCharId : c.charId);
-        const meta = game?.characters[metaId];
+    return composedRoster
+      .filter((entry) => {
+        const { char, meta, stats } = entry;
         if (filters.elements.size > 0 && (!meta?.element || !filters.elements.has(meta.element))) return false;
         if (filters.classes.size > 0 && (!meta?.cls || !filters.classes.has(meta.cls))) return false;
         if (q) {
-          const fusionTag = c.fusionCharId !== 0 ? "core fusion" : "";
-          const hay = `${fusionTag} ${meta?.nickname ?? ""} ${c.name ?? ""} ${c.charId}`.toLowerCase();
+          // Searching "core" or "fusion" matches fused chars via the literal prefix.
+          const fusionTag = char.fusionCharId !== 0 ? "core fusion" : "";
+          const hay = `${fusionTag} ${meta?.nickname ?? ""} ${char.name ?? ""} ${char.charId}`.toLowerCase();
           if (!hay.includes(q)) return false;
         }
-        return true;
-      })
-      .map((c) => {
-        const equipped = gearByChar.get(c.uid) ?? new Map();
-        // Core Fusion is a complete replacement, not an additive layer:
-        // BasicStar, base stats and every Skill_N differ between the base
-        // (e.g. Snow 2000003, 2★) and its fused variant (2700003, 3★) — only
-        // Element/Class and evo (redirected via CharacterFusionTemplet at
-        // build time) carry over. When the capture has `FusionCharID != 0`
-        // the player IS the fused variant, so we resolve ingredients from
-        // that ID. The base `charId` stays the identity key (matches gear
-        // assignments and BP `fused` bonus).
-        const ingredientsCharId = String(c.fusionCharId !== 0 ? c.fusionCharId : c.charId);
-        const meta = game?.characters[ingredientsCharId];
-        // Resolve captured level and LB modifier. The CharacterMaxLevelTemplet
-        // row is keyed by `${BasicStar}|${LevelMaxStep}` — when the user hasn't
-        // broken the lv 100 cap (LevelMaxStep === 0) there's no modifier.
-        const level = game?.expCharacter ? expToLevel(game.expCharacter, c.exp) : 100;
-        const lbKey = meta?.star != null && c.levelMaxStep > 0 ? `${meta.star}|${c.levelMaxStep}` : null;
-        const levelMaxModifier = lbKey ? (game?.charLevelMax[lbKey]?.statModifierAfter100 ?? 0) : 0;
-        const composed = (meta?.ingredients && game?.codexCurve)
-          ? composeCharStats(meta.ingredients, game.codexCurve, {
-              transStar: c.stars,
-              level,
-              levelMaxModifier,
-              levelMaxStep: c.levelMaxStep,
-              userGeasLevels,
-              userSkillLevels: { first: c.skills.first, second: c.skills.second, ultimate: c.skills.ultimate },
-              ...(userCodexLevel != null ? { codexLevel: userCodexLevel } : {}),
-            })
-          : null;
-        const stats = composed
-          ? computeFinalStats(composed.noGearStats, composed.scaling, rawByChar.get(c.uid) ?? [], game)
-          : null;
-        // The yellow "(+X)" delta on the build card matches the in-game
-        // character sheet convention: white = raw additive sources (base +
-        // evo + geas for ATK/DEF/HP; full baseline for non-compound stats),
-        // yellow = everything the compound formula and gear pile on top
-        // (codex + transcend + class % + skill_8 % + gear flat + gear pct +
-        // set bonuses). See `intrinsicStats` in compose-stats.ts.
-        // In-game BP (CalcBattlePower). Needs star UI metadata from the
-        // captured TransStar row + equipped EE/Talisman from the raw gear list.
-        const transRow = meta?.ingredients?.transcendByStar?.[String(c.stars)] ?? null;
-        const raws = rawByChar.get(c.uid) ?? [];
-        const ee = raws.find((p) => p.slot === "exclusive") ?? null;
-        const ooparts = raws.find((p) => p.slot === "ooparts") ?? null;
-        const bp = stats && transRow
-          ? calcBattlePower({
-              stats,
-              showUIStar: transRow.showUIStar ?? 0,
-              starPlus: transRow.starPlus ?? 0,
-              skills: c.skills,
-              ee,
-              ooparts,
-              fused: c.fusionCharId !== 0,
-            })
-          : null;
-        return {
-          char: c,
-          equipped,
-          count: equipped.size,
-          stats,
-          baseline: composed?.intrinsicStats ?? null,
-          scaling: composed?.scaling ?? null,
-          rawPieces: rawByChar.get(c.uid) ?? [],
-          level,
-          bp,
-        };
-      })
-      .filter(({ char, stats }) => {
         if (filters.locks === "all") return true;
-        const entry = lockedStats[char.uid];
-        const lockedSnap = entry?.stats;
+        const lockedSnap = lockedStats[char.uid]?.stats;
         const lockedKs = lockedSnap ? Object.keys(lockedSnap) as (keyof FinalStats)[] : [];
         if (filters.locks === "locked") return lockedKs.length > 0;
         // "drift": at least one locked stat whose live value drifted
@@ -678,7 +919,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
         return lockedKs.some((k) => round1(stats[k] - (lockedSnap![k] ?? 0)) !== 0);
       })
       .sort((a, b) => (b.count - a.count) || (b.char.stars - a.char.stars));
-  }, [inventory, game, filters, userGeasLevels, userCodexLevel, lockedStats]);
+  }, [composedRoster, filters, lockedStats]);
 
   if (!inventory) {
     return <Empty title="No capture yet" subtitle="Arm capture and import your roster to see equipped builds here." />;
@@ -697,169 +938,15 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
       <FilterBar f={filters} setF={setFilters} />
 
       <div className="grid auto-rows-min gap-3 overflow-y-auto px-6 pb-6 pt-3 md:grid-cols-2 lg:grid-cols-3" style={{ maxHeight: "calc(100vh - 130px)" }}>
-        {roster.map(({ char, equipped, stats, baseline, scaling, rawPieces, level, bp }) => {
-          // Core Fusion: resolve meta against the fused variant (its
-          // FaceIconID points at the new portrait, BasicStar may differ),
-          // and prefix the display name with a literal "Core Fusion" tag
-          // — the in-game NickName for fusion variants is flavor text, not
-          // the variant identifier.
-          const isFused = char.fusionCharId !== 0;
-          const displayCharId = isFused ? char.fusionCharId : char.charId;
-          const meta = game?.characters[String(displayCharId)];
-          const baseName = meta?.nickname ? `${meta.nickname} ${char.name ?? ""}`.trim() : (char.name ?? `#${char.charId}`);
-          const displayName = isFused ? `Core Fusion ${baseName}` : baseName;
-          const lockEntry = lockedStats[char.uid] ?? null;
-          const locked = lockEntry?.stats ?? null;
-          const lockedKeys = locked ? Object.keys(locked) as (keyof FinalStats)[] : [];
-          const hasAnyLock = lockedKeys.length > 0;
-          const hasDrift = stats && hasAnyLock
-            ? lockedKeys.some((k) => round1(stats[k] - (locked![k] ?? 0)) !== 0)
-            : false;
-          // Build the enriched entry — when updating an existing lock, keep its
-          // identifying meta if the current displayName/charId/level match.
-          const makeEntry = (s: Partial<FinalStats>): LockEntry => ({
-            name: displayName, charId: char.charId, level, stats: s,
-          });
-          const toggleStatLock = (key: keyof FinalStats) => {
-            if (!stats) return;
-            const next = { ...lockedStats };
-            const curStats = { ...(next[char.uid]?.stats ?? {}) };
-            if (curStats[key] != null) delete curStats[key];
-            else curStats[key] = stats[key];
-            if (Object.keys(curStats).length === 0) delete next[char.uid];
-            else next[char.uid] = makeEntry(curStats);
-            setLockedStats(next);
-          };
-          return (
-            <div
-              key={char.uid}
-              className="relative rounded-xl border border-white/[0.07] bg-bg-elev-2 p-3 backdrop-blur-sm shadow-[0_1px_0_oklch(1_0_0/0.04)_inset,0_24px_60px_-30px_rgb(0_0_0/0.7)]"
-            >
-              <div className="flex items-start gap-3">
-                <div className="flex flex-col items-center gap-1.5">
-                  <CharacterPortrait
-                    charId={displayCharId}
-                    name={displayName}
-                    cls={meta?.cls}
-                    element={meta?.element}
-                    level={game?.expCharacter ? expToLevel(game.expCharacter, char.exp) : null}
-                    transStar={char.stars}
-                    basicStar={meta?.star ?? null}
-                    size={80}
-                  />
-                  <div className="flex gap-1">
-                    {stats && hasDrift && (
-                      <button
-                        type="button"
-                        title="Accept current values for all drifted stats (refresh their locks)"
-                        onClick={() => {
-                          const next = { ...lockedStats };
-                          const cur = { ...(next[char.uid]?.stats ?? {}) };
-                          for (const k of lockedKeys) cur[k] = stats[k];
-                          next[char.uid] = makeEntry(cur);
-                          setLockedStats(next);
-                        }}
-                        className="grid h-6 w-6 place-items-center rounded-md border border-emerald-400/40 bg-black/40 text-emerald-300 hover:bg-black/60"
-                      >
-                        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6}>
-                          <path d="M3 7 L6 10 L11 4" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    )}
-                    {stats && (
-                      <button
-                        type="button"
-                        title={hasAnyLock
-                          ? (hasDrift ? `Drift on ${lockedKeys.filter(k => round1(stats[k] - (locked![k] ?? 0)) !== 0).length}/${lockedKeys.length} locked — click to UNLOCK ALL`
-                                      : `Locked ${lockedKeys.length} stat${lockedKeys.length === 1 ? "" : "s"} ✓ — click to UNLOCK ALL`)
-                          : "Lock ALL stats as the regression baseline (click a single stat to lock just that one)"}
-                        onClick={() => {
-                          if (hasAnyLock) {
-                            const next = { ...lockedStats };
-                            delete next[char.uid];
-                            setLockedStats(next);
-                          } else {
-                            const snap: Partial<FinalStats> = {};
-                            for (const row of FINAL_ROWS) {
-                              if (row.hideIfZero && !stats[row.key]) continue;
-                              snap[row.key] = stats[row.key];
-                            }
-                            setLockedStats({ ...lockedStats, [char.uid]: makeEntry(snap) });
-                          }
-                        }}
-                        className={cx(
-                          "grid h-6 w-6 place-items-center rounded-md border bg-black/40 hover:bg-black/60",
-                          hasAnyLock
-                            ? (hasDrift ? "border-rose-400/50 text-rose-300" : "border-amber-400/40 text-amber-300")
-                            : "border-white/[0.07] text-zinc-400 hover:text-zinc-200",
-                        )}
-                      >
-                        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
-                          {hasAnyLock ? (
-                            <>
-                              <rect x={3} y={6.5} width={8} height={6} rx={1} />
-                              <path d="M5 6.5 V4 a2 2 0 0 1 4 0 V6.5" />
-                            </>
-                          ) : (
-                            <>
-                              <rect x={3} y={6.5} width={8} height={6} rx={1} />
-                              <path d="M5 6.5 V4 a2 2 0 0 1 4 0" />
-                            </>
-                          )}
-                        </svg>
-                      </button>
-                    )}
-                    {scaling && (
-                      <button
-                        type="button"
-                        title="Copy stat-debug dump to clipboard"
-                        onClick={async () => {
-                          const dump = buildStatsDump(displayName, char.charId, level, scaling, rawPieces, game);
-                          try { await navigator.clipboard.writeText(dump); }
-                          catch { console.log(dump); }
-                        }}
-                        className="grid h-6 w-6 place-items-center rounded-md border border-white/[0.07] bg-black/40 text-zinc-400 hover:bg-black/60 hover:text-zinc-200"
-                      >
-                        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
-                          <rect x={3} y={3} width={8} height={9} rx={1.2} />
-                          <path d="M5 3 V2 a1 1 0 0 1 1-1 h2 a1 1 0 0 1 1 1 V3" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                  {bp != null && (
-                    <div
-                      className="mt-0.5 rounded-md border border-cyan-400/30 bg-cyan-500/6 px-2 py-0.5 font-mono text-[11px] tabular-nums text-cyan-200"
-                      title={`Combat Power: ${bp.toLocaleString()}`}
-                    >
-                      <span className="text-[9.5px] uppercase tracking-wider text-cyan-400/80">CP</span>{" "}
-                      {bp.toLocaleString()}
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  {stats && baseline && <StatBlock stats={stats} baseline={baseline} locked={locked} onToggleLock={toggleStatLock} />}
-                </div>
-              </div>
-
-              <div className="mt-3">
-                <GsLabel>Gear equipped</GsLabel>
-                <div className="mt-1.5 grid grid-cols-4 gap-2">
-                  {BUILD_SLOT_ORDER.map((id) => {
-                    const p = equipped.get(id);
-                    return (
-                      <SlotMini key={id} slot={id} piece={p ? toIconPiece(p) : null} size={64} />
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-center justify-end">
-                <CyanButton size="sm">Optimize →</CyanButton>
-              </div>
-            </div>
-          );
-        })}
+        {roster.map((entry) => (
+          <BuildCard
+            key={entry.char.uid}
+            entry={entry}
+            lockEntry={lockedStats[entry.char.uid] ?? null}
+            setLocks={setLockedStats}
+            game={game}
+          />
+        ))}
       </div>
     </div>
   );
@@ -873,5 +960,3 @@ function Empty({ title, subtitle }: { title: string; subtitle: string }) {
     </div>
   );
 }
-// Keep `toDesignRarity` import live in case of future use without polluting unused warns.
-void toDesignRarity;
