@@ -41,12 +41,12 @@ const round1 = (x: number) => Math.round(x * 10) / 10;
  *  reach per-mille for the in-game arithmetic. Truncation matches the ARM64
  *  signed-magic-divide (asr-then-add) — Math.trunc reproduces it for both
  *  positive and negative intermediates. */
-function composeMultStat(sc: StatScaling, gearFlat: number, gearPct: number): number {
+function composeMultStat(sc: StatScaling, gearFlat: number, gearPct: number, gearBuffPct: number): number {
   const sumFlat = sc.baseValue + sc.evoValue + sc.awakValue;
   const sumRate = sc.awakPct * 10 + sc.transcendPct * 10 + gearPct * 10;
   const part1 = Math.trunc(sumFlat * (1000 + sumRate) / 1000);
   const combined = part1 + gearFlat;
-  const part2 = Math.trunc(combined * (1000 + sc.buffPct * 10) / 1000);
+  const part2 = Math.trunc(combined * (1000 + (sc.buffPct + gearBuffPct) * 10) / 1000);
   const codex = Math.trunc(sc.baseValue * sc.codexPct / 100);
   return Math.max(0, part2 + codex);
 }
@@ -146,21 +146,36 @@ function computeSetBonuses(
   return out;
 }
 
-/** Aggregate gear pieces (mains, subs, set bonuses) into flat/pct buckets keyed
- *  by engine stat key. Shared between `computeFinalStats` and `buildStatsDump`
- *  so the debug copy stays 1:1 with what the engine actually consumed. */
+/** Aggregate gear pieces (mains, subs, set bonuses) into flat/pct/buffPct buckets
+ *  keyed by engine stat key. Shared between `computeFinalStats` and `buildStatsDump`
+ *  so the debug copy stays 1:1 with what the engine actually consumed.
+ *
+ *  Three-way split mirrors the in-game CalcFinalStat input separation:
+ *  - `flat` / `pct` (IOT_STAT-typed contributions) → `ItemOptionValue` / Rate via
+ *    `SetItemOptionsValue` (sum_rate compound layer).
+ *  - `buffPct` (IOT_BUFF mains — talisman / EE) → `BuffValueRate` via
+ *    `SetBuffPremiumValue` (outermost amplifier alongside Skill_22 / Skill_8). */
 const PERCENT_STATS = new Set(["critRate", "critDmg", "dmgUp", "dmgReduce", "pen"]);
 function aggregateGearBuckets(pieces: GearPiece[], game: GameData | null): {
-  flat: Record<string, number>; pct: Record<string, number>;
+  flat: Record<string, number>; pct: Record<string, number>; buffPct: Record<string, number>;
 } {
   const flat: Record<string, number> = {};
   const pct: Record<string, number> = {};
+  const buffPct: Record<string, number> = {};
   for (const p of pieces) {
-    // EE main stats are combat-only buffs — gems still apply, main is skipped.
-    const stats = p.slot === "exclusive" ? p.subs : [...p.main, ...p.subs];
-    for (const s of stats) {
-      const bucket = s.percent ? pct : flat;
-      bucket[s.stat] = (bucket[s.stat] ?? 0) + s.value;
+    // EE main stats are dmgUp buffs — combat-only, skipped from any sheet stat.
+    // Subs always count. For non-EE pieces, mains count — but IOT_BUFF mains
+    // (talisman main, ooparts) route to `buffPct` instead of `pct`.
+    const includeMain = p.slot !== "exclusive";
+    if (includeMain) {
+      for (const s of p.main) {
+        const target = s.fromBuff ? buffPct : (s.percent ? pct : flat);
+        target[s.stat] = (target[s.stat] ?? 0) + s.value;
+      }
+    }
+    for (const s of p.subs) {
+      const target = s.percent ? pct : flat;
+      target[s.stat] = (target[s.stat] ?? 0) + s.value;
     }
   }
   for (const b of computeSetBonuses(pieces, game?.sets ?? null)) {
@@ -171,7 +186,7 @@ function aggregateGearBuckets(pieces: GearPiece[], game: GameData | null): {
     const bucket = (isRate || PERCENT_STATS.has(statKey)) ? pct : flat;
     bucket[statKey] = (bucket[statKey] ?? 0) + value;
   }
-  return { flat, pct };
+  return { flat, pct, buffPct };
 }
 
 function computeFinalStats(
@@ -180,24 +195,30 @@ function computeFinalStats(
   pieces: GearPiece[],
   game: GameData | null,
 ): FinalStats {
-  const { flat, pct } = aggregateGearBuckets(pieces, game);
+  const { flat, pct, buffPct } = aggregateGearBuckets(pieces, game);
   return {
-    atk: composeMultStat(scaling.atk, flat.atk ?? 0, pct.atkPct ?? 0),
-    def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0),
-    hp:  composeMultStat(scaling.hp,  flat.hp  ?? 0, pct.hpPct  ?? 0),
+    atk: composeMultStat(scaling.atk, flat.atk ?? 0, pct.atkPct ?? 0, buffPct.atkPct ?? 0),
+    def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0, buffPct.defPct ?? 0),
+    hp:  composeMultStat(scaling.hp,  flat.hp  ?? 0, pct.hpPct  ?? 0, buffPct.hpPct  ?? 0),
     // SPD set bonus arrives as `pct.spd` (a %-of-baseline multiplier — Speed
     // Set 2pc gives +13% SPD which lands as floor(baseline_spd × 0.13) on
     // top of the flat sub adds). Verified against M.S.Ame: 158 × 0.13 = 20.
-    spd: baseline.spd + (flat.spd ?? 0) + Math.floor(baseline.spd * (pct.spd ?? 0) / 100),
-    crc: round1(baseline.chc + (pct.critRate ?? 0)),
-    chd: round1(baseline.chd + (pct.critDmg  ?? 0)),
+    spd: baseline.spd + (flat.spd ?? 0) + (buffPct.spd ?? 0) + Math.floor(baseline.spd * (pct.spd ?? 0) / 100),
+    // Non-compound stats: ooparts / EE mains route through `buffPct` (they
+    // resolve via IOT_BUFF → BT_STAT_PREMIUM, OAT_ADD-typed for the integer
+    // scale ones — CRC/CHD/EFF/RES — and they land in the per-stat BuffValue
+    // bucket alongside class-passive / Skill_8 contributions). Since sum_rate
+    // and BR are typically zero for these axes, CalcFinalStat reduces to the
+    // simple additive sum we already had, plus the buff bucket.
+    crc: round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0)),
+    chd: round1(baseline.chd + (pct.critDmg  ?? 0) + (buffPct.critDmg  ?? 0)),
     // EFF/RES — gear delivers both flat (accessory main) and percent (substats /
     // talisman mains) buckets; both are points on the same integer scale.
-    eff: baseline.eff + (pct.eff    ?? 0) + (flat.eff    ?? 0),
-    res: baseline.res + (pct.effRes ?? 0) + (flat.effRes ?? 0),
-    dmgUp: round1(baseline.dmgInc + (pct.dmgUp ?? 0) + (flat.dmgUp ?? 0)),
-    dmgRed: round1(baseline.dmgRed + (pct.dmgReduce ?? 0) + (flat.dmgReduce ?? 0)),
-    pen:    round1(baseline.pen    + (pct.pen ?? 0) + (flat.pen ?? 0)),
+    eff: baseline.eff + (pct.eff    ?? 0) + (flat.eff    ?? 0) + (buffPct.eff    ?? 0),
+    res: baseline.res + (pct.effRes ?? 0) + (flat.effRes ?? 0) + (buffPct.effRes ?? 0),
+    dmgUp: round1(baseline.dmgInc + (pct.dmgUp ?? 0) + (flat.dmgUp ?? 0) + (buffPct.dmgUp ?? 0)),
+    dmgRed: round1(baseline.dmgRed + (pct.dmgReduce ?? 0) + (flat.dmgReduce ?? 0) + (buffPct.dmgReduce ?? 0)),
+    pen:    round1(baseline.pen    + (pct.pen ?? 0) + (flat.pen ?? 0) + (buffPct.pen ?? 0)),
   };
 }
 
@@ -234,7 +255,7 @@ function buildStatsDump(
   pieces: GearPiece[],
   game: GameData | null,
 ): string {
-  const { flat, pct } = aggregateGearBuckets(pieces, game);
+  const { flat, pct, buffPct } = aggregateGearBuckets(pieces, game);
   const lines: string[] = [];
   lines.push(`${displayName} (id=${charId}, lv${level})`);
   for (const k of ["atk", "def", "hp"] as const) {
@@ -243,7 +264,7 @@ function buildStatsDump(
     lines.push(
       `[${k}] base=${sc.baseValue} evo=${sc.evoValue} awak=${sc.awakValue} ` +
       `awakPct=${sc.awakPct} transcend=${sc.transcendPct} codex=${sc.codexPct} buff=${sc.buffPct} | ` +
-      `gearFlat=${flat[k] ?? 0} gearPct=${pct[pctKey] ?? 0}`
+      `gearFlat=${flat[k] ?? 0} gearPct=${pct[pctKey] ?? 0} gearBuffPct=${buffPct[pctKey] ?? 0}`
     );
   }
   lines.push("pieces:");

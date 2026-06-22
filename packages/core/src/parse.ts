@@ -35,7 +35,7 @@ function resolveBuffMain(optionId: number, enhanceLevel: number, game: GameData)
   if (!row) return null;
   const r = resolveOption(row, 1);
   if (!r) return null;
-  return { stat: r.stat, value: r.value, percent: r.percent };
+  return { stat: r.stat, value: r.value, percent: r.percent, fromBuff: true };
 }
 
 /** Resolve the cumulative-Exp curve for a piece (slot+grade+star) and walk it to
@@ -128,6 +128,21 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
       main.push({ ...r, value: scaled });
     } else {
       main.push(r);
+    }
+  }
+
+  // Singularity-ascended pieces (weapon / accessory / armor 4-piece) roll an
+  // unconditional `BT_STAT_PREMIUM` unique option captured as
+  // `SingularityOptionID`. The unconditional variants are unconditional
+  // DMG_BOOST (weapon/acc) or DMG_REDUCE_RATE (armor) — always on the
+  // character sheet, routed through BuffValueRate (fromBuff=true). The
+  // conditional `BT_STAT|TARGET_ELEMENT` and `BT_STAT|TARGET_HAS_BUFF`
+  // variants (combat-only) are filtered out in data/build.mjs.
+  if (game && item.SingularityOptionID) {
+    const sopt = game.singularityOptions?.[String(item.SingularityOptionID)];
+    if (sopt) {
+      const resolved = resolveOption(sopt as unknown as { st: string; ap: string; v: number }, 1);
+      if (resolved) main.push({ ...resolved, fromBuff: true });
     }
   }
 

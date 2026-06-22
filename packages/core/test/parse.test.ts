@@ -17,6 +17,7 @@ const game: GameData = {
     "10203": { slot: "ooparts", grade: "unique", star: 6, classLimit: null, setId: null, armorSetId: null, name: "Rogue's Charm", mainGroup: "10002", subGroup: null, image: null, effectIcon: null, armorSetIcon: null, class: null },
   },
   sets: {},
+  singularityOptions: {},
   characters: {},
   enhance: {
     enhanceFactor: 0.4,

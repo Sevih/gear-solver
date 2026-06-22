@@ -33,6 +33,13 @@ export interface RolledStat {
   ticks?: number;
   /** For substats: reforge (orange) ticks = total - initial. */
   reforgeTicks?: number;
+  /** True when the option resolved through an IOT_BUFF entry (BT_STAT_PREMIUM
+   *  via BuffsTable). Talisman / EE mains take this path. In CalcFinalStat
+   *  these contributions feed `BuffValueRate` (outermost amplifier) instead
+   *  of `ItemOptionValueRate` (sum_rate compound), because `SetItemOptionsValue`
+   *  filters by IOT_STAT only — IOT_BUFF mains are aggregated via
+   *  `SetBuffPremiumValue` in the in-game pipeline. */
+  fromBuff?: boolean;
 }
 
 export interface GearPiece {

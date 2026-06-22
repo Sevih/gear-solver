@@ -14,12 +14,27 @@
       "res": 110
     }
   },
+  "4050194270": {
+    "name": "Gnosis Beth",
+    "charId": 2000092,
+    "level": 120,
+    "stats": {
+      "atk": 4580,
+      "def": 2656,
+      "hp": 14530,
+      "spd": 279,
+      "crc": 66,
+      "chd": 200,
+      "res": 204,
+      "eff": 636,
+      "dmgUp": 66.5
+    }
+  },
   "4050414800": {
     "name": "Gnosis Dahlia",
     "charId": 2000090,
     "level": 120,
     "stats": {
-      "atk": 8465,
       "def": 2184,
       "hp": 12911,
       "spd": 231,

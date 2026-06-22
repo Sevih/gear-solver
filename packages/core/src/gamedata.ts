@@ -76,6 +76,21 @@ export interface SetDef {
 }
 export type SetsTable = Record<string, SetDef>;
 
+/** Singularity Equip "common" unique options — the unconditional
+ *  `BT_STAT_PREMIUM` BuffIDs that ascended pieces can roll. Each ID maps to a
+ *  stat addition the in-game routes through `SetBuffPremiumValue` (lands in
+ *  `BuffValueRate` per CalcFinalStat). Two families today:
+ *   - DMG_BOOST / OAT_ADD (200..500 per-mille) → on weapon / accessory
+ *   - DMG_REDUCE_RATE / OAT_ADD (100..250 per-mille) → on helmet / armor / gloves / boots
+ *  Conditional variants (TARGET_ELEMENT, TARGET_HAS_BUFF) are NOT emitted —
+ *  they're combat-only and don't show on the character sheet. */
+export interface SingularityOptionDef {
+  st: string;
+  ap: string;
+  v: number;
+}
+export type SingularityOptionsTable = Record<string, SingularityOptionDef>;
+
 /** A 14-field stat delta — every contribution to a character's no-gear sheet
  *  flows through this shape. `*Pct` are %-multipliers on the relevant base
  *  stat (folded into the compound formula by `composeCharStats`). EFF/RES are
@@ -234,6 +249,7 @@ export interface GameData {
   options: OptionsTable;
   equipment: EquipmentTable;
   sets: SetsTable;
+  singularityOptions: SingularityOptionsTable;
   characters: CharactersTable;
   enhance: EnhanceData;
   buffs: BuffsTable;

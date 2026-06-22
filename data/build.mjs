@@ -227,7 +227,19 @@ save("enhance.json", {
 });
 
 // ---- sets: groupId -> { name, levels:[{level, p2, p4}] } ----
+// Also extracts the ItemSpecialOption rows that carry an unconditional
+// `BT_STAT_PREMIUM` BuffID — those are the Singularity-ascended-piece
+// "common" unique options (uncondional DMG_BOOST on weapon/accessory,
+// unconditional DMG_REDUCE on armor pieces). The conditional `BT_STAT`
+// variants (TARGET_ELEMENT / TARGET_HAS_BUFF) are combat-only and stay
+// off the character sheet.
 const sets = {};
+const singularityOptions = {}; // SingularityOptionID -> { st, ap, v }  (per-mille raw)
+const buffTemplet = load("BuffTemplet.json");
+const buffByID = new Map();
+for (const b of buffTemplet) {
+  if (!buffByID.has(b.BuffID)) buffByID.set(b.BuffID, b);
+}
 for (const s of load("ItemSpecialOptionTemplet.json")) {
   const g = (sets[s.GroupID] ??= { name: textItem.get(s.NameID) ?? null, levels: [] });
   g.levels.push({
@@ -235,8 +247,19 @@ for (const s of load("ItemSpecialOptionTemplet.json")) {
     p2: s.StatType_2P ? { st: s.StatType_2P, ap: s.ApplyingType_2P, v: Number(s.OptionValue_2P) } : null,
     p4: s.StatType_4P ? { st: s.StatType_4P, ap: s.ApplyingType_4P, v: Number(s.OptionValue_4P) } : null,
   });
+  if (s.OptionType === "IOT_BUFF" && s.BuffID) {
+    const buff = buffByID.get(s.BuffID);
+    if (buff && buff.Type === "BT_STAT_PREMIUM" && (!buff.BuffConditionType || buff.BuffConditionType === "NONE")) {
+      singularityOptions[s.ID] = {
+        st: buff.StatType,
+        ap: buff.ApplyingType,
+        v: Number(buff.Value),
+      };
+    }
+  }
 }
 save("sets.json", sets);
+save("singularity-options.json", singularityOptions);
 
 // ---- expCharacter: per-level cumulative XP threshold (ExpCharacterTemplet) ----
 // Used at runtime to resolve a captured character's `Exp` to a level. Array index

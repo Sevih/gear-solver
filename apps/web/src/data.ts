@@ -39,10 +39,11 @@ async function getJSON<T>(url: string): Promise<T | null> {
 }
 
 export async function loadGameData(): Promise<GameData | null> {
-  const [options, equipment, sets, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, trustBuffs] = await Promise.all([
+  const [options, equipment, sets, singularityOptions, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, trustBuffs] = await Promise.all([
     getJSON<GameData["options"]>("/gamedata/options.json"),
     getJSON<GameData["equipment"]>("/gamedata/equipment.json"),
     getJSON<GameData["sets"]>("/gamedata/sets.json"),
+    getJSON<GameData["singularityOptions"]>("/gamedata/singularity-options.json"),
     getJSON<GameData["characters"]>("/gamedata/characters.json"),
     getJSON<GameData["enhance"]>("/gamedata/enhance.json"),
     getJSON<GameData["buffs"]>("/gamedata/buffs.json"),
@@ -53,8 +54,8 @@ export async function loadGameData(): Promise<GameData | null> {
     getJSON<GameData["trustCharacter"]>("/gamedata/trust-character.json"),
     getJSON<GameData["trustBuffs"]>("/gamedata/trust-buffs.json"),
   ]);
-  if (!options || !equipment || !sets || !characters || !enhance || !buffs || !expCharacter || !charLevelMax || !codexCurve || !archiveBonus || !trustCharacter || !trustBuffs) return null;
-  return { options, equipment, sets, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, trustBuffs };
+  if (!options || !equipment || !sets || !singularityOptions || !characters || !enhance || !buffs || !expCharacter || !charLevelMax || !codexCurve || !archiveBonus || !trustCharacter || !trustBuffs) return null;
+  return { options, equipment, sets, singularityOptions, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, trustBuffs };
 }
 
 export interface LoadResult {
