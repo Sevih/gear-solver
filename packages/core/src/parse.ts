@@ -93,19 +93,13 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
     const totalTicks = s.Level + 1;
     const r = toRolled(s.OptionID, totalTicks, game);
     if (r) {
-      // EFF/RES rate substats are scaled by the piece's breakthrough factor.
-      // The substat pools use a half-integer step (2.5/tick) for these two
-      // stats specifically; in-game the value is multiplied by (1 + bt × 0.05)
-      // so a +12.5% sub on a bt4 piece displays as +15. Validated against
-      // M.S.Ame weapon EFF sub: 12.5 × 1.20 = 15 → in-game EFF 245 vs 242.5
-      // pre-fix. ATK%/DEF%/HP%/CHC/CHD rate subs use integer steps and do
-      // NOT receive this scaling.
-      let value = r.value;
-      if (enhance && r.percent && (r.stat === "eff" || r.stat === "effRes")) {
-        const btFactor = 1 + enhance.tierFactor * item.BreakLimitLevel;
-        value = Math.floor(value * btFactor * 10) / 10;
-      }
-      subs.push({ ...r, value, ticks: totalTicks, reforgeTicks: s.Level - s.BaseLevel });
+      // EFF / RES rate substats: keep the RAW per-mille display value (no bt
+      // scaling). The in-game CalcFinalStat consumes these as `ItemOptionValueRate`
+      // and multiplies the sum_flat (white EFF) by `(1 + sum_rate/1000)` — adding
+      // a flat bt-scaled approximation only matches when baseline ≈ 100, and
+      // diverges for higher baselines (e.g. G.Beth lv120 Ranger baseline EFF
+      // 140 → +78 EFF mismatch vs in-game).
+      subs.push({ ...r, ticks: totalTicks, reforgeTicks: s.Level - s.BaseLevel });
     } else {
       subs.push({ stat: "atk", value: 0, percent: false, ticks: totalTicks, reforgeTicks: s.Level - s.BaseLevel });
     }

@@ -186,11 +186,12 @@ function calcFinalStat(
   gearRatePM: number,
   archiveRatePM: number,
   buffRatePM: number,
+  buffValue: number = 0,
 ): number {
   const sumFlat = baseValue + evoValue + awakValue;
   const sumRate = awakRatePM + transcendRatePM + gearRatePM;
   const part1 = Math.trunc(sumFlat * (1000 + sumRate) / 1000);
-  const combined = part1 + gearFlat;
+  const combined = part1 + gearFlat + buffValue;
   const part2 = Math.trunc(combined * (1000 + buffRatePM) / 1000);
   const codex = Math.trunc(baseValue * archiveRatePM / 1000);
   return Math.max(0, part2 + codex);
@@ -225,6 +226,13 @@ export interface StatScaling {
   transcendPct: number;
   codexPct: number;
   buffPct: number;
+  /** Flat BuffValue contributions (BT_STAT_PREMIUM OAT_ADD via `SetBuffPremiumValue`).
+   *  ATK / DEF / HP buffs from class passive / Skill_8 / Geas are all OAT_RATE for
+   *  those axes, so buffValue stays 0. EFF / RES use OAT_ADD on buff routing
+   *  (e.g. RANGER_PASSIVE_3_10 → +50 EFF, ATTACKER_PASSIVE_2 → +5 CHC), so
+   *  buffValue carries that flat additive layer applied to `combined` before
+   *  the BR amplifier. */
+  buffValue: number;
 }
 
 export interface ComposedStats {
@@ -242,7 +250,7 @@ export interface ComposedStats {
    *    baseline (base + evo + class + skill_8 + geas) since these stats are
    *    additive — there's no compound to isolate. */
   intrinsicStats: NoGearStats;
-  scaling: { atk: StatScaling; def: StatScaling; hp: StatScaling };
+  scaling: { atk: StatScaling; def: StatScaling; hp: StatScaling; eff: StatScaling; res: StatScaling };
 }
 
 /** Compose the no-gear stats and the ATK/DEF/HP scaling ingredients for one
@@ -292,15 +300,22 @@ export function composeCharStats(
   const atkBuffPct = classPass.atkPct + skill8.atkPct + (geas.atkPct - geasStat.atkPct);
   const defBuffPct = classPass.defPct + skill8.defPct + (geas.defPct - geasStat.defPct);
   const hpBuffPct  = classPass.hpPct  + skill8.hpPct  + (geas.hpPct  - geasStat.hpPct);
+  // EFF / RES buff bonuses are OAT_ADD (flat) — class passive +CHC/EFF, geas
+  // [141] +50 EFF, skill_8 EFF buffs — all routed to buffValue. None of these
+  // axes have OAT_RATE buff sources, so buffPct stays 0 for eff/res.
+  const effBuffValue = classPass.eff + skill8.eff + (geas.eff - geasStat.eff);
+  const resBuffValue = classPass.res + skill8.res + (geas.res - geasStat.res);
 
   const scaling = {
-    atk: { baseValue: baseAtk, evoValue: evo.atk, awakValue: geas.atk, awakPct: geasStat.atkPct, transcendPct: transRow.atkPct, codexPct: codexRow.atkPct, buffPct: atkBuffPct },
-    def: { baseValue: baseDef, evoValue: evo.def, awakValue: geas.def, awakPct: geasStat.defPct, transcendPct: transRow.defPct, codexPct: codexRow.defPct, buffPct: defBuffPct },
-    hp:  { baseValue: baseHp,  evoValue: evo.hp,  awakValue: geas.hp,  awakPct: geasStat.hpPct,  transcendPct: transRow.hpPct,  codexPct: codexRow.hpPct,  buffPct: hpBuffPct  },
+    atk: { baseValue: baseAtk, evoValue: evo.atk, awakValue: geas.atk, awakPct: geasStat.atkPct, transcendPct: transRow.atkPct, codexPct: codexRow.atkPct, buffPct: atkBuffPct, buffValue: 0 },
+    def: { baseValue: baseDef, evoValue: evo.def, awakValue: geas.def, awakPct: geasStat.defPct, transcendPct: transRow.defPct, codexPct: codexRow.defPct, buffPct: defBuffPct, buffValue: 0 },
+    hp:  { baseValue: baseHp,  evoValue: evo.hp,  awakValue: geas.hp,  awakPct: geasStat.hpPct,  transcendPct: transRow.hpPct,  codexPct: codexRow.hpPct,  buffPct: hpBuffPct, buffValue: 0  },
+    eff: { baseValue: baseEff, evoValue: evo.eff, awakValue: geasStat.eff, awakPct: 0, transcendPct: 0, codexPct: 0, buffPct: 0, buffValue: effBuffValue },
+    res: { baseValue: baseRes, evoValue: evo.res, awakValue: geasStat.res, awakPct: 0, transcendPct: 0, codexPct: 0, buffPct: 0, buffValue: resBuffValue },
   };
 
   const calcStat = (s: StatScaling): number =>
-    calcFinalStat(s.baseValue, s.evoValue, s.awakValue, s.awakPct * 10, s.transcendPct * 10, 0, 0, s.codexPct * 10, s.buffPct * 10);
+    calcFinalStat(s.baseValue, s.evoValue, s.awakValue, s.awakPct * 10, s.transcendPct * 10, 0, 0, s.codexPct * 10, s.buffPct * 10, s.buffValue);
 
   const noGearStats: NoGearStats = {
     atk: calcStat(scaling.atk),
@@ -315,8 +330,12 @@ export function composeCharStats(
     pen: evo.pen + classPass.pen + skill8.pen + geas.pen,
     dmgInc: evo.dmgInc + classPass.dmgInc + skill8.dmgInc + geas.dmgInc,
     dmgRed: evo.dmgRed + classPass.dmgRed + skill8.dmgRed + geas.dmgRed,
-    eff: Math.floor(baseEff + evo.eff + classPass.eff + skill8.eff + geas.eff),
-    res: Math.floor(baseRes + evo.res + classPass.res + skill8.res + geas.res),
+    // EFF / RES — same CalcFinalStat path as ATK/DEF/HP. With no gear inputs
+    // (gear_flat = 0, gear_rate = 0), part2 collapses to sum_flat + buffValue,
+    // which equals baseEff + evo.eff + geas.eff + classPass.eff + skill8.eff —
+    // matching the previous additive sum.
+    eff: calcStat(scaling.eff),
+    res: calcStat(scaling.res),
   };
 
   // Intrinsic = the in-game "white" portion of each stat. Rules per stat axis:

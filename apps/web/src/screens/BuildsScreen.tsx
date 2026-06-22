@@ -45,7 +45,7 @@ function composeMultStat(sc: StatScaling, gearFlat: number, gearPct: number, gea
   const sumFlat = sc.baseValue + sc.evoValue + sc.awakValue;
   const sumRate = sc.awakPct * 10 + sc.transcendPct * 10 + gearPct * 10;
   const part1 = Math.trunc(sumFlat * (1000 + sumRate) / 1000);
-  const combined = part1 + gearFlat;
+  const combined = part1 + gearFlat + sc.buffValue;
   const part2 = Math.trunc(combined * (1000 + (sc.buffPct + gearBuffPct) * 10) / 1000);
   const codex = Math.trunc(sc.baseValue * sc.codexPct / 100);
   return Math.max(0, part2 + codex);
@@ -191,7 +191,7 @@ function aggregateGearBuckets(pieces: GearPiece[], game: GameData | null): {
 
 function computeFinalStats(
   baseline: NoGearStats,
-  scaling: { atk: StatScaling; def: StatScaling; hp: StatScaling },
+  scaling: { atk: StatScaling; def: StatScaling; hp: StatScaling; eff: StatScaling; res: StatScaling },
   pieces: GearPiece[],
   game: GameData | null,
 ): FinalStats {
@@ -212,10 +212,13 @@ function computeFinalStats(
     // simple additive sum we already had, plus the buff bucket.
     crc: round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0)),
     chd: round1(baseline.chd + (pct.critDmg  ?? 0) + (buffPct.critDmg  ?? 0)),
-    // EFF/RES — gear delivers both flat (accessory main) and percent (substats /
-    // talisman mains) buckets; both are points on the same integer scale.
-    eff: baseline.eff + (pct.eff    ?? 0) + (flat.eff    ?? 0) + (buffPct.eff    ?? 0),
-    res: baseline.res + (pct.effRes ?? 0) + (flat.effRes ?? 0) + (buffPct.effRes ?? 0),
+    // EFF / RES — full CalcFinalStat path. Gear OAT_RATE EFF subs (armor/oo/EE/set)
+    // and talisman main (IOT_BUFF → BR) carry meaningful sum_rate amplification
+    // when baseline EFF grows above ~100 (e.g. lv120 Ranger Beth baseline = 140,
+    // sum_rate = 1295 from 7 OAT_RATE EFF sources). Additive approximation
+    // (bt-scaled flat) diverges by ~+10% per gearPct level past 100.
+    eff: composeMultStat(scaling.eff, flat.eff    ?? 0, pct.eff    ?? 0, buffPct.eff    ?? 0),
+    res: composeMultStat(scaling.res, flat.effRes ?? 0, pct.effRes ?? 0, buffPct.effRes ?? 0),
     dmgUp: round1(baseline.dmgInc + (pct.dmgUp ?? 0) + (flat.dmgUp ?? 0) + (buffPct.dmgUp ?? 0)),
     dmgRed: round1(baseline.dmgRed + (pct.dmgReduce ?? 0) + (flat.dmgReduce ?? 0) + (buffPct.dmgReduce ?? 0)),
     pen:    round1(baseline.pen    + (pct.pen ?? 0) + (flat.pen ?? 0) + (buffPct.pen ?? 0)),
