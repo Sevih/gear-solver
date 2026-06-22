@@ -135,7 +135,7 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
   if (game && item.SingularityOptionID) {
     const sopt = game.singularityOptions?.[String(item.SingularityOptionID)];
     if (sopt) {
-      const resolved = resolveOption(sopt as unknown as { st: string; ap: string; v: number }, 1);
+      const resolved = resolveOption(sopt, 1);
       if (resolved) main.push({ ...resolved, fromBuff: true });
     }
   }
@@ -156,7 +156,9 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
         // "Upgrade Effect" text).
         const unlocked = ep.levelThreshold <= 1 || enhanceLevel >= ep.levelThreshold;
         if (!unlocked) continue;
-        const resolved = resolveOption({ st: ep.st, ap: ep.ap, v: ep.v }, 1);
+        // EePassiveDef extends StatOption so the destructuring picks up
+        // st/ap/v directly — no need to rebuild the triple.
+        const resolved = resolveOption(ep, 1);
         if (resolved) main.push({ ...resolved, fromBuff: true });
       }
     }

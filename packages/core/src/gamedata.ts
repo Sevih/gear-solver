@@ -83,27 +83,20 @@ export type SetsTable = Record<string, SetDef>;
  *   - DMG_BOOST / OAT_ADD (200..500 per-mille) → on weapon / accessory
  *   - DMG_REDUCE_RATE / OAT_ADD (100..250 per-mille) → on helmet / armor / gloves / boots
  *  Conditional variants (TARGET_ELEMENT, TARGET_HAS_BUFF) are NOT emitted —
- *  they're combat-only and don't show on the character sheet. */
-export interface SingularityOptionDef {
-  st: string;
-  ap: string;
-  v: number;
-}
-export type SingularityOptionsTable = Record<string, SingularityOptionDef>;
+ *  they're combat-only and don't show on the character sheet.
+ *
+ *  Shape is the same `{ st, ap, v }` triple as `StatOption` / a per-level
+ *  `BuffsTable` row — `resolveOption` consumes any of them. */
+export type SingularityOptionsTable = Record<string, StatOption>;
 
-/** EE level-gated permanent passives — every entry is a `BT_STAT_PREMIUM`
- *  passive self buff that's active on the character sheet once the EE has
- *  reached `levelThreshold` enhancement levels. The two observed thresholds
- *  are `1` (always-on once the EE is equipped — e.g. some healers' +100%
- *  EFF) and `10` (unlocks at +10 — e.g. Caren's `BID_CEQUIP_2000089_ADD`
- *  +20% DEF). Combat-only base effects (`BT_STAT`, `SKILL_START`,
- *  `TurnDuration ≥ 0`) are filtered out at build time. */
-export interface EePassiveDef {
+/** EE level-gated permanent passive — `StatOption` plus an enhance-level
+ *  unlock threshold. Two observed thresholds: `1` (always-on once equipped —
+ *  e.g. some healers' +100% EFF) and `10` (unlocks at +10 — e.g. Caren's
+ *  `BID_CEQUIP_2000089_ADD` +20% DEF). Combat-only base effects (`BT_STAT`,
+ *  `SKILL_START`, `TurnDuration ≥ 0`) are filtered out at build time. */
+export interface EePassiveDef extends StatOption {
   /** EE enhance level needed to activate. `1` means always on when equipped. */
   levelThreshold: number;
-  st: string;
-  ap: string;
-  v: number;
 }
 /** Keyed by the EE's GroupID, which matches the item's `ItemID` (and the first
  *  fragment of its `UniqueOptionID`) per the observed EE data shape. */

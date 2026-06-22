@@ -90,26 +90,42 @@ SubOptionList[]      substats: { OptionID, Level (total ticks), BaseLevel (initi
 
 ## Reproduce (each capture)
 
-1. Start the reverse proxies on the host (one per game host, decrypts via the trusted cert):
+`capture.ps1` does it all (preferred):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\capture.ps1
+```
+
+Manual equivalent:
+
+1. Start mitmdump with the addon (decodes live, no `.flows` file needed):
    ```
-   mitmdump \
+   mitmdump -s addon.py \
      --mode "reverse:https://glb-game.outerplane.vagames.co.kr:38001@9001" \
      --mode "reverse:https://glb-login.outerplane.vagames.co.kr:38002@9002" \
-     --listen-host 0.0.0.0 -w game.flows
+     --listen-host 0.0.0.0
    ```
 2. Tunnel + redirect on the device (`scripts/redir.sh` as root):
    ```
    adb reverse tcp:9001 tcp:9001 ; adb reverse tcp:9002 tcp:9002
    # device: iptables nat OUTPUT REDIRECT dport 38001→9001, 38002→9002 (route_localnet=1)
    ```
-3. Force-stop + relaunch the game, tap "TOUCH TO START". The login + account sync flows through.
-4. Extract + decode: `mitmdump -nr game.flows -s extract.py` then `python decode_all.py`
-   (XOR key `ASLDKGFJASPODIFJSOWEI`). Clean JSON lands in `dumps/`.
+3. Force-stop + relaunch the game, tap "TOUCH TO START". `addon.py` writes
+   `out/user_item.json`, `out/user_character.json` etc. on the fly and drops
+   a `out/.captured` sentinel once `/user/item` is seen.
 
 ## Files
 
+- `capture.ps1` / `disarm.ps1` — one-shot orchestration (arm + relaunch +
+  live-decode / tear down). Vite dev server's "Arm capture" button wraps
+  these via `/api/capture/run|disarm`.
+- `addon.py` — mitmproxy addon: live XOR-decode of every `{"msg":"<hex>"}`
+  body. Known endpoints land in `out/<name>.json`; unknown ones get
+  written to `out/_unknown/` plus logged to `out/seen-paths.log` so new
+  game endpoints are easy to discover after navigating the menus.
+- `cert/c8750f0d.0` — mitmproxy CA in Android `subject_hash_old` format,
+  pushed to the device by `capture.ps1`.
 - `scripts/bind_cert.sh` — install CA via bind mount (run as root).
-- `scripts/redir.sh` — iptables redirect of game ports to local reverse-proxy ports (run as root).
-- `extract.py` — mitmproxy addon: pulls target endpoint bodies out of a `.flows` file.
-- `decode_all.py` — XOR-decodes the `{"msg":"<hex>"}` bodies to clean JSON.
-- `dumps/` — decoded sample capture (real account snapshot).
+- `scripts/redir.sh` — iptables redirect of game ports to local
+  reverse-proxy ports (run as root).
+- `out/` — decoded capture snapshot.

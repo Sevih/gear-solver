@@ -17,15 +17,20 @@ const DISARM_PS1 = join(CAPTURE_DIR, "disarm.ps1");
 
 // Outerpedia-v2 checkout — serves the public/images/* assets at /img/ so
 // equipment art, class icons, effect badges and character portraits render
-// without copying gigabytes into gear-solver. Autodetected like sync.ps1.
-// `normalize` keeps the separator consistent with what path.join produces
-// downstream — otherwise the file.startsWith(dir) traversal check fails on
-// Windows when one side has forward slashes and the other backslashes.
+// without copying gigabytes into gear-solver. `OUTERPEDIA_PATH` env wins;
+// otherwise autodetected at the two known checkouts (kept parallel with the
+// `findOuterpedia()` helper in data/build.mjs). `normalize` keeps the
+// separator consistent with what path.join produces downstream — otherwise
+// the file.startsWith(dir) traversal check fails on Windows when one side
+// has forward slashes and the other backslashes.
 function findOuterpediaImages(): string | null {
-  for (const p of [
+  const env = process.env.OUTERPEDIA_PATH;
+  const candidates = [
+    env ? `${env.replace(/\\/g, "/")}/public/images` : null,
     "C:/Users/Sevih/Documents/Projet perso/outerpedia-v2/public/images",
     "C:/Users/Sevih/Documents/dev/outerpedia/public/images",
-  ]) if (existsSync(p)) return normalize(p);
+  ].filter((p): p is string => Boolean(p));
+  for (const p of candidates) if (existsSync(p)) return normalize(p);
   return null;
 }
 const OUTERPEDIA_IMAGES = findOuterpediaImages();
@@ -139,7 +144,22 @@ function localData(): Plugin {
             : ext === ".svg" ? "image/svg+xml"
             : "application/octet-stream";
           res.setHeader("Content-Type", ct);
-          if (prefix === "/img/") res.setHeader("Cache-Control", "public, max-age=86400");
+          // Aggressive cache via `mtime` ETag so the browser short-circuits
+          // every gamedata/captured fetch after the first load. Re-running
+          // `data/build.mjs` or a fresh capture bumps mtime → ETag misses
+          // → fresh body. Images already had a static max-age.
+          if (prefix === "/img/") {
+            res.setHeader("Cache-Control", "public, max-age=86400");
+          } else {
+            const st = statSync(file);
+            const etag = `W/"${st.size}-${Math.floor(st.mtimeMs)}"`;
+            if (req.headers["if-none-match"] === etag) {
+              res.statusCode = 304;
+              return res.end();
+            }
+            res.setHeader("ETag", etag);
+            res.setHeader("Cache-Control", "no-cache"); // revalidate via ETag, don't skip
+          }
           return createReadStream(file).pipe(res);
         }
         next();

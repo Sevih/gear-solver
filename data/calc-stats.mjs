@@ -45,25 +45,40 @@ function zeroStats() {
 }
 function isEmpty(s) { for (const k of Object.keys(s)) if (s[k] !== 0) return false; return true; }
 
-function pickSkillLevelRow(rows, skillId, level) {
-  let best;
+/** Group an array by a key into a `Map<key, sorted-rows>` once, so per-char
+ *  hot paths can do `Map.get(id)` instead of full-array `.filter(…)` scans.
+ *  With a 150k-row BuffTemplet and 250 chars × ~6 buff lookups per char,
+ *  this turns an O(chars × buffs × rows) scan into O(chars × buffs). */
+function indexBy(rows, keyField, sortField) {
+  const m = new Map();
   for (const r of rows) {
-    if (r.SkillID !== skillId) continue;
-    if (level != null) {
-      if (num(r.SkillLevel) === level) return r;
-      continue;
-    }
-    if (!best || num(r.SkillLevel) > num(best.SkillLevel)) best = r;
+    const k = r[keyField];
+    if (k == null) continue;
+    let arr = m.get(k);
+    if (!arr) { arr = []; m.set(k, arr); }
+    arr.push(r);
   }
-  return best;
+  if (sortField) {
+    for (const arr of m.values()) arr.sort((a, b) => num(a[sortField]) - num(b[sortField]));
+  }
+  return m;
 }
-function pickMaxBuff(rows, buffId) {
-  let best;
-  for (const r of rows) {
-    if (r.BuffID !== buffId) continue;
-    if (!best || num(r.Level) > num(best.Level)) best = r;
+
+/** Per-skill row picker — `rows` is the pre-indexed list for ONE SkillID
+ *  (sorted ascending by SkillLevel). With `level != null` returns the exact
+ *  row; without, returns the highest-SkillLevel row. */
+function pickSkillLevelRow(rows, level) {
+  if (!rows || rows.length === 0) return undefined;
+  if (level != null) {
+    for (const r of rows) if (num(r.SkillLevel) === level) return r;
+    return undefined;
   }
-  return best;
+  return rows[rows.length - 1];
+}
+/** Per-buff row picker — `rows` is the pre-indexed list for ONE BuffID
+ *  (sorted ascending by Level). Returns the highest-Level row. */
+function pickMaxBuff(rows) {
+  return rows && rows.length > 0 ? rows[rows.length - 1] : undefined;
 }
 
 // Emit raw lv 1 (Min) / lv 100 (Max) anchors from CharacterTemplet. The
@@ -89,10 +104,12 @@ function extractBase(row) {
 
 // Per-row evolution adds keyed by EvolutionLevel (the captured TransStar gates
 // which rows the in-game character has unlocked — cumulative through TransStar).
-function extractEvoByLevel(evoStats, charId) {
+// `evoRows` is the pre-indexed slice for one CharacterID (built once outside
+// the per-char loop in computeCharacterIngredients).
+function extractEvoByLevel(evoRows) {
   const out = {};
-  for (const r of evoStats) {
-    if (r.CharacterID !== charId) continue;
+  if (!evoRows) return out;
+  for (const r of evoRows) {
     const lvl = String(num(r.EvolutionLevel));
     const dest = out[lvl] ?? zeroStats();
     for (let i = 1; i <= 3; i++) {
@@ -125,12 +142,15 @@ function extractCodexCurve(archiveStats) {
   return out;
 }
 
-// Per-TransStar transcend % bonuses + Skill_8 unlocked level. Indexed by TransStar.
-function extractTranscendByStar(transcendent, basicStar, charId) {
-  const charSpecific = transcendent.filter((r) => r.CharacterID === charId);
+// Per-TransStar transcend % bonuses + Skill_8 unlocked level. Indexed by
+// TransStar. `transcendByCharId` is the pre-indexed `Map<CharacterID, rows>`
+// — the catch-all `CharacterID="0"` rows feed every char that has no
+// char-specific entries.
+function extractTranscendByStar(transcendByCharId, basicStar, charId) {
+  const charSpecific = transcendByCharId.get(charId) ?? [];
   const pool = charSpecific.length > 0
     ? charSpecific
-    : transcendent.filter((r) => r.CharacterID === "0" && num(r.BasicStar) === basicStar);
+    : (transcendByCharId.get("0") ?? []).filter((r) => num(r.BasicStar) === basicStar);
   const out = {};
   for (const r of pool) {
     const star = num(r.TransStar);
@@ -150,49 +170,60 @@ function extractTranscendByStar(transcendent, basicStar, charId) {
   return out;
 }
 
-function applyPremiumBuff(dest, buff, baseForRate) {
-  if (buff.Type !== "BT_STAT_PREMIUM") return;
-  if ((buff.BuffConditionType ?? "NONE") !== "NONE") return;
-  const value = num(buff.Value);
-  const rate = buff.ApplyingType === "OAT_RATE";
-  const add  = buff.ApplyingType === "OAT_ADD";
+/** Route a (statType, applying, value) tuple to the right StatBlock field.
+ *  Shared by `applyPremiumBuff` (buff side) and `accumulateGeasBonus` (geas
+ *  side) — both produce the same triple after their own source-specific
+ *  normalization (BT_STAT_PREMIUM filter / IOT_BUFF resolve). Encoding rules:
+ *   - CHC/CHD/PEN/DMG± always per-mille → ÷10 for display %
+ *   - ATK/DEF/HP   : OAT_RATE → `*Pct` (display %), OAT_ADD → flat
+ *   - SPD          : OAT_ADD → flat, OAT_RATE → pre-baked flat against
+ *                    `baseForRate.spd` (SPD baseline is per-char constant
+ *                    so the approximation is exact)
+ *   - EFF/RES      : OAT_ADD → `eff`/`res` flat, OAT_RATE → `effRate`/`resRate`
+ *                    (display %) so the composer applies them via
+ *                    `BuffValueRate` multiplicatively — pre-baking to a flat
+ *                    `eff += floor(base × value/1000)` only matches when
+ *                    `combined ≈ baseForRate`, diverged on Notia core
+ *                    +50% EFF (baseline 170 → in-game 255 vs baked 240). */
+function applyStatBonus(dest, statType, applying, value, baseForRate) {
+  const rate = applying === "OAT_RATE";
+  const add  = applying === "OAT_ADD";
   if (!rate && !add) return;
-  if (buff.StatType === "ST_CRITICAL_RATE")     { dest.chc    += value / 10; return; }
-  if (buff.StatType === "ST_CRITICAL_DMG_RATE") { dest.chd    += value / 10; return; }
-  if (buff.StatType === "ST_PIERCE_POWER_RATE") { dest.pen    += value / 10; return; }
-  if (buff.StatType === "ST_DMG_REDUCE_RATE")   { dest.dmgRed += value / 10; return; }
-  if (buff.StatType === "ST_DMG_BOOST")         { dest.dmgInc += value / 10; return; }
-  if (buff.StatType === "ST_ATK") { if (rate) dest.atkPct += value / 10; else dest.atk += value; return; }
-  if (buff.StatType === "ST_DEF") { if (rate) dest.defPct += value / 10; else dest.def += value; return; }
-  if (buff.StatType === "ST_HP")  { if (rate) dest.hpPct  += value / 10; else dest.hp  += value; return; }
-  if (buff.StatType === "ST_SPEED") {
-    if (rate) dest.spd += Math.floor(baseForRate.spd * value / 1000); else dest.spd += value;
-    return;
-  }
-  // EFF / RES OAT_RATE: route to the rate field (display % units) so the
-  // composer can apply it via `BuffValueRate` multiplicatively, the way
-  // CalcFinalStat does in-game. Pre-baking to a flat `eff +=
-  // floor(base × value / 1000)` only matches when `combined ≈ baseForRate`
-  // (no other buffs / no gear) and diverges otherwise — Notia core
-  // `core_passive_buff_chance` +50% EFF on baseline 170 → in-game 255,
-  // baked approximation gives 240.
-  if (buff.StatType === "ST_BUFF_CHANCE") {
-    if (rate) dest.effRate += value / 10; else dest.eff += value;
-    return;
-  }
-  if (buff.StatType === "ST_BUFF_RESIST") {
-    if (rate) dest.resRate += value / 10; else dest.res += value;
-    return;
+  switch (statType) {
+    case "ST_CRITICAL_RATE":     dest.chc    += value / 10; return;
+    case "ST_CRITICAL_DMG_RATE": dest.chd    += value / 10; return;
+    case "ST_PIERCE_POWER_RATE": dest.pen    += value / 10; return;
+    case "ST_DMG_REDUCE_RATE":   dest.dmgRed += value / 10; return;
+    case "ST_DMG_BOOST":         dest.dmgInc += value / 10; return;
+    case "ST_ATK": if (rate) dest.atkPct += value / 10; else dest.atk += value; return;
+    case "ST_DEF": if (rate) dest.defPct += value / 10; else dest.def += value; return;
+    case "ST_HP":  if (rate) dest.hpPct  += value / 10; else dest.hp  += value; return;
+    case "ST_SPEED":
+      if (rate) dest.spd += Math.floor(baseForRate.spd * value / 1000);
+      else      dest.spd += value;
+      return;
+    case "ST_BUFF_CHANCE":
+      if (rate) dest.effRate += value / 10; else dest.eff += value;
+      return;
+    case "ST_BUFF_RESIST":
+      if (rate) dest.resRate += value / 10; else dest.res += value;
+      return;
   }
 }
 
-function extractClassPassive(row, skillLevels, buffs, baseForRate) {
+function applyPremiumBuff(dest, buff, baseForRate) {
+  if (buff.Type !== "BT_STAT_PREMIUM") return;
+  if ((buff.BuffConditionType ?? "NONE") !== "NONE") return;
+  applyStatBonus(dest, buff.StatType, buff.ApplyingType, num(buff.Value), baseForRate);
+}
+
+function extractClassPassive(row, skillsByID, buffsByID, baseForRate) {
   const out = zeroStats();
   const skillId = row.Skill_22;
   if (!skillId) return out;
-  const levelRow = pickSkillLevelRow(skillLevels, skillId);
+  const levelRow = pickSkillLevelRow(skillsByID.get(String(skillId)));
   for (const bid of splitCsv(levelRow?.BuffID)) {
-    const b = pickMaxBuff(buffs, bid);
+    const b = pickMaxBuff(buffsByID.get(bid));
     if (b) applyPremiumBuff(out, b, baseForRate);
   }
   return out;
@@ -206,22 +237,23 @@ function extractClassPassive(row, skillLevels, buffs, baseForRate) {
  *  `BuffCreateType=PASSIVE` + `BuffConditionType=NONE` + `TurnDuration=-1`
  *  — other types (BT_DMG_OWNER_STAT, BT_SWAP_STAT_ATTACK, etc.) are combat
  *  damage modifiers that don't change the displayed character sheet. */
-function extractSkillPassiveByLevel(skillId, skillLevels, buffs, baseForRate) {
+function extractSkillPassiveByLevel(skillId, skillsByID, buffsByID, baseForRate) {
   if (!skillId) return {};
-  const rows = skillLevels
-    .filter((r) => r.SkillID === String(skillId))
-    .sort((a, b) => num(a.SkillLevel) - num(b.SkillLevel));
-  if (!rows.length) return {};
+  const rows = skillsByID.get(String(skillId));
+  if (!rows || rows.length === 0) return {};
   const out = {};
   for (const row of rows) {
     const skillLv = num(row.SkillLevel);
     const dest = zeroStats();
     for (const bid of splitCsv(row.BuffID)) {
-      const bRows = buffs.filter((b) => b.BuffID === bid).sort((a, b) => num(a.Level) - num(b.Level));
-      if (!bRows.length) continue;
-      let chosen = null;
-      for (const b of bRows) if (num(b.Level) <= skillLv) chosen = b;
-      if (!chosen) chosen = bRows[0];
+      const bRows = buffsByID.get(bid);
+      if (!bRows || bRows.length === 0) continue;
+      // Floor pick: highest BuffLevel ≤ skillLv; fallback to lowest.
+      let chosen = bRows[0];
+      for (const b of bRows) {
+        if (num(b.Level) <= skillLv) chosen = b;
+        else break;
+      }
       // Strict permanent-self-stat filter (see docstring).
       const ok = chosen.Type === "BT_STAT_PREMIUM"
         && chosen.TargetType === "ME"
@@ -236,20 +268,22 @@ function extractSkillPassiveByLevel(skillId, skillLevels, buffs, baseForRate) {
 }
 
 // Per-level Skill_8 buffs. Each transcend skillLevel index gets its own block.
-function extractSkill8ByLevel(row, skillLevels, buffs, transcendByStar, baseForRate) {
+function extractSkill8ByLevel(row, skillsByID, buffsByID, transcendByStar, baseForRate) {
   const out = {};
   const skillId = row.Skill_8;
   if (!skillId) return out;
+  const skillRows = skillsByID.get(String(skillId));
+  if (!skillRows) return out;
   const seen = new Set();
   for (const star of Object.keys(transcendByStar)) {
     const lvl = transcendByStar[star].skillLevel;
     if (lvl <= 0 || seen.has(lvl)) continue;
     seen.add(lvl);
-    const levelRow = pickSkillLevelRow(skillLevels, skillId, lvl);
+    const levelRow = pickSkillLevelRow(skillRows, lvl);
     if (!levelRow) continue;
     const dest = zeroStats();
     for (const bid of splitCsv(levelRow.BuffID)) {
-      const b = pickMaxBuff(buffs, bid);
+      const b = pickMaxBuff(buffsByID.get(bid));
       if (b) applyPremiumBuff(dest, b, baseForRate);
     }
     if (!isEmpty(dest)) out[String(lvl)] = dest;
@@ -257,42 +291,19 @@ function extractSkill8ByLevel(row, skillLevels, buffs, transcendByStar, baseForR
   return out;
 }
 
-function accumulateGeasBonus(dest, levelRow, buffs) {
+function accumulateGeasBonus(dest, levelRow, buffsByID, baseForRate) {
   let statType = levelRow.StatType ?? "ST_NONE";
   let applying = levelRow.ApplyingType ?? "OAT_NONE";
   let value    = num(levelRow.OptionValue);
   let condition = "NONE";
   if (levelRow.OptionType === "IOT_BUFF" && levelRow.BuffID) {
-    const b = pickMaxBuff(buffs, levelRow.BuffID);
+    const b = pickMaxBuff(buffsByID.get(levelRow.BuffID));
     if (!b) return;
     if (b.Type !== "BT_STAT_PREMIUM") return;
     statType = b.StatType; applying = b.ApplyingType; value = num(b.Value); condition = b.BuffConditionType ?? "NONE";
   }
   if (condition !== "NONE") return;
-  const rate = applying === "OAT_RATE";
-  const add  = applying === "OAT_ADD";
-  if (!rate && !add) return;
-  if (statType === "ST_CRITICAL_RATE")     { dest.chc    += value / 10; return; }
-  if (statType === "ST_CRITICAL_DMG_RATE") { dest.chd    += value / 10; return; }
-  if (statType === "ST_PIERCE_POWER_RATE") { dest.pen    += value / 10; return; }
-  if (statType === "ST_DMG_REDUCE_RATE")   { dest.dmgRed += value / 10; return; }
-  if (statType === "ST_DMG_BOOST")         { dest.dmgInc += value / 10; return; }
-  if (statType === "ST_ATK") { if (rate) dest.atkPct += value / 10; else dest.atk += value; return; }
-  if (statType === "ST_DEF") { if (rate) dest.defPct += value / 10; else dest.def += value; return; }
-  if (statType === "ST_HP")  { if (rate) dest.hpPct  += value / 10; else dest.hp  += value; return; }
-  if (add) {
-    if (statType === "ST_SPEED")            dest.spd += value;
-    else if (statType === "ST_BUFF_CHANCE") dest.eff += value;
-    else if (statType === "ST_BUFF_RESIST") dest.res += value;
-  }
-  if (rate) {
-    // OAT_RATE on EFF/RES via geas (e.g. `Awakening_Boss_Buff_RESIST_Down_*`)
-    // routes through `BuffValueRate` like the buff-side equivalents above.
-    // SPD OAT_RATE is rare on geas and stays flat-baked for now (matches
-    // pre-refactor behavior; revisit if a char surfaces a delta).
-    if (statType === "ST_BUFF_CHANCE")      dest.effRate += value / 10;
-    else if (statType === "ST_BUFF_RESIST") dest.resRate += value / 10;
-  }
+  applyStatBonus(dest, statType, applying, value, baseForRate);
 }
 
 // Geas — element / class / subclass nodes that apply to this char. Emitted as
@@ -311,18 +322,10 @@ function accumulateGeasBonus(dest, levelRow, buffs) {
 // counts the IOT_STAT contributions in the WHITE portion of each stat (raw
 // additive sources) and bundles IOT_BUFF contributions into the YELLOW
 // delta alongside class passive / Skill_8 / gear.
-function extractGeasByNode(row, awakNodes, awakLevels, buffs) {
+function extractGeasByNode(row, awakNodes, awakLevelsByGroup, buffsByID, baseForRate) {
   const elemIdx  = ELEMENT_INDEX[row.Element ?? ""]   ?? -1;
   const classIdx = CLASS_INDEX[row.Class ?? ""]       ?? -1;
   const subIdx   = SUBCLASS_INDEX[row.SubClass ?? ""] ?? -1;
-  const levelsByGroup = new Map();
-  for (const r of awakLevels) {
-    const gid = r.AwakeningLevelGroupID;
-    if (!gid) continue;
-    let inner = levelsByGroup.get(gid);
-    if (!inner) { inner = new Map(); levelsByGroup.set(gid, inner); }
-    inner.set(num(r.AwakeningLevel), r);
-  }
   const out = {};
   for (const node of awakNodes) {
     const gid = node.AwakeningLevelGroupID;
@@ -333,13 +336,13 @@ function extractGeasByNode(row, awakNodes, awakLevels, buffs) {
     else if (node.AwakeningApplyType === "AAT_CLASS" && v === classIdx) match = true;
     else if (node.AwakeningApplyType === "AAT_SUBCLASS" && v === subIdx) match = true;
     if (!match) continue;
-    const inner = levelsByGroup.get(gid);
+    const inner = awakLevelsByGroup.get(gid);
     if (!inner) continue;
     const perLevel = {};
     let source = null;
     for (const [lvl, lvlRow] of inner) {
       const dest = zeroStats();
-      accumulateGeasBonus(dest, lvlRow, buffs);
+      accumulateGeasBonus(dest, lvlRow, buffsByID, baseForRate);
       if (!isEmpty(dest)) {
         perLevel[String(lvl)] = dest;
         if (source === null) source = lvlRow.OptionType === "IOT_BUFF" ? "buff" : "stat";
@@ -366,15 +369,40 @@ export function computeCharacterIngredients(tables) {
 
   const codexByLevel = extractCodexCurve(archiveStats); // global
 
+  // Build the per-key indexes ONCE — every per-char extractor below would
+  // otherwise re-scan these multi-thousand-row tables in `.filter(…)`. With
+  // 121 PC chars × ~6 buff/skill lookups per char and ~150k BuffTemplet rows,
+  // the unindexed cost was the biggest chunk of `node data/build.mjs` time.
+  const buffsByID = indexBy(buffs, "BuffID", "Level");
+  const skillsByID = indexBy(skillLevels, "SkillID", "SkillLevel");
+  const evosByCharId = indexBy(evoStats, "CharacterID");
+  const transcendByCharId = indexBy(transcendent, "CharacterID");
+  // Awakening rows are grouped by AwakeningLevelGroupID — extractGeasByNode
+  // walks them in unlock-order, so build the inner Map<level, row> once too.
+  const awakLevelsByGroup = new Map();
+  for (const r of awakLevels) {
+    const gid = r.AwakeningLevelGroupID;
+    if (!gid) continue;
+    let inner = awakLevelsByGroup.get(gid);
+    if (!inner) { inner = new Map(); awakLevelsByGroup.set(gid, inner); }
+    inner.set(num(r.AwakeningLevel), r);
+  }
+
+  // Skip "variant" chars whose NameID points at another char's name file
+  // (transcend-visual alts, PvP variants — see the equivalent filter in
+  // data/build.mjs). They share ingredients with the canonical entry and
+  // are never referenced by captured user data, so computing their
+  // ingredients here is pure waste.
   const characters = {};
   for (const row of characterTemplet) {
     if (row.Type !== "CT_PC") continue;
+    if (row.NameID !== `${row.ID}_Name`) continue;
     const id = row.ID;
     const fusionRow = fusionTemplet.find((r) => r.ChangeCharID === id);
     const evoCharId = fusionRow?.CharacterID ?? id;
     const basicStar = num(row.BasicStar);
     const base = extractBase(row);
-    const evoByLevel = extractEvoByLevel(evoStats, evoCharId);
+    const evoByLevel = extractEvoByLevel(evosByCharId.get(evoCharId));
     // `baseForRate.spd` is the only field still consumed — SPD OAT_RATE buffs
     // (trancendent_8_speed, etc.) are pre-baked here against (lv100 max + max
     // evo) since SPD baselines are flat per char (no LB modifier scaling) so
@@ -384,10 +412,10 @@ export function computeCharacterIngredients(tables) {
     const evoMax = zeroStats();
     for (const k of Object.keys(evoByLevel)) for (const f of Object.keys(evoMax)) evoMax[f] += evoByLevel[k][f];
     const baseForRate = { spd: base.spd.max + evoMax.spd };
-    const transcendByStar = extractTranscendByStar(transcendent, basicStar, id);
-    const classPassive = extractClassPassive(row, skillLevels, buffs, baseForRate);
-    const skill8ByLevel = extractSkill8ByLevel(row, skillLevels, buffs, transcendByStar, baseForRate);
-    const geasByNode = extractGeasByNode(row, awakNodes, awakLevels, buffs);
+    const transcendByStar = extractTranscendByStar(transcendByCharId, basicStar, id);
+    const classPassive = extractClassPassive(row, skillsByID, buffsByID, baseForRate);
+    const skill8ByLevel = extractSkill8ByLevel(row, skillsByID, buffsByID, transcendByStar, baseForRate);
+    const geasByNode = extractGeasByNode(row, awakNodes, awakLevelsByGroup, buffsByID, baseForRate);
     // User-leveled skill passives (S1 = First, S2 = Second, S3 = Ultimate)
     // emit per-SkillLevel StatBlocks; the runtime composer picks the row
     // matching the captured user level. Core-fusion chars (`27xxxxx` IDs)
@@ -395,12 +423,12 @@ export function computeCharacterIngredients(tables) {
     // its max SkillLevel since the user has no slider for it. 3/6 core
     // fusion chars currently have a sheet-visible passive (Snow / Lisha
     // share the `core_passive_2star_ablity_*` boost; Notia gets +50% EFF).
-    const s1ByLevel = extractSkillPassiveByLevel(row.Skill_1, skillLevels, buffs, baseForRate);
-    const s2ByLevel = extractSkillPassiveByLevel(row.Skill_2, skillLevels, buffs, baseForRate);
-    const s3ByLevel = extractSkillPassiveByLevel(row.Skill_3, skillLevels, buffs, baseForRate);
+    const s1ByLevel = extractSkillPassiveByLevel(row.Skill_1, skillsByID, buffsByID, baseForRate);
+    const s2ByLevel = extractSkillPassiveByLevel(row.Skill_2, skillsByID, buffsByID, baseForRate);
+    const s3ByLevel = extractSkillPassiveByLevel(row.Skill_3, skillsByID, buffsByID, baseForRate);
     let corePassive = null;
     if (/^2700\d{3}$/.test(id) && row.Skill_23) {
-      const byLv = extractSkillPassiveByLevel(row.Skill_23, skillLevels, buffs, baseForRate);
+      const byLv = extractSkillPassiveByLevel(row.Skill_23, skillsByID, buffsByID, baseForRate);
       const levels = Object.keys(byLv).map(Number);
       if (levels.length) corePassive = byLv[String(Math.max(...levels))];
     }

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Character, GameData, GearPiece, Inventory, NoGearStats, StatScaling, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
 import { cx } from "../design/cx.js";
@@ -119,6 +119,10 @@ function computeSetBonuses(
   sets: GameData["sets"] | null,
 ): Array<{ st: string; ap: string; v: number }> {
   if (!sets) return [];
+  // Single pass over pieces: bump (count, bt4Count) per armor set id. Lv-row
+  // resolution (`useLv2 = all pieces are bt4`) happens in the second pass
+  // over the counts map — both are O(armor-pieces + active-sets) instead of
+  // the old O(armor-pieces × 2 + setLevels × active-sets) `.find(...)` scan.
   type Bucket = { count: number; bt4Count: number };
   const counts = new Map<string, Bucket>();
   for (const p of pieces) {
@@ -133,15 +137,13 @@ function computeSetBonuses(
     if (b.count < 2) continue;
     const def = sets[setId];
     if (!def) continue;
-    const useLv2 = b.bt4Count >= b.count;
-    const lvRow = def.levels.find((l) => l.level === (useLv2 ? 2 : 1));
+    const targetLevel = b.bt4Count >= b.count ? 2 : 1;
+    let lvRow = null;
+    for (const l of def.levels) { if (l.level === targetLevel) { lvRow = l; break; } }
     if (!lvRow) continue;
-    if (lvRow.p2 && lvRow.p2.st !== "ST_NONE" && lvRow.p2.v != null) {
-      out.push({ st: lvRow.p2.st, ap: lvRow.p2.ap, v: lvRow.p2.v });
-    }
-    if (b.count >= 4 && lvRow.p4 && lvRow.p4.st !== "ST_NONE" && lvRow.p4.v != null) {
-      out.push({ st: lvRow.p4.st, ap: lvRow.p4.ap, v: lvRow.p4.v });
-    }
+    const { p2, p4 } = lvRow;
+    if (p2 && p2.st !== "ST_NONE" && p2.v != null) out.push({ st: p2.st, ap: p2.ap, v: p2.v });
+    if (b.count >= 4 && p4 && p4.st !== "ST_NONE" && p4.v != null) out.push({ st: p4.st, ap: p4.ap, v: p4.v });
   }
   return out;
 }
@@ -226,22 +228,22 @@ function computeFinalStats(
 
 /** Map an ST_xxx stat type + OAT_RATE flag to the engine bucket key. Mirrors
  *  the GAME_STAT table in core/stats.ts; kept local to avoid pulling it into
- *  the design layer. */
+ *  the design layer. Two static maps (rate / add) keep `setBonusStatKey` a
+ *  pure `Record.get`-shaped call instead of a switch chain. */
+const SET_BONUS_KEY_RATE: Record<string, string> = {
+  ST_ATK: "atkPct", ST_DEF: "defPct", ST_HP: "hpPct",
+  ST_SPEED: "spd", ST_CRITICAL_RATE: "critRate", ST_CRITICAL_DMG_RATE: "critDmg",
+  ST_DMG_BOOST: "dmgUp", ST_DMG_REDUCE_RATE: "dmgReduce",
+  ST_BUFF_CHANCE: "eff", ST_BUFF_RESIST: "effRes", ST_PIERCE_POWER_RATE: "pen",
+};
+const SET_BONUS_KEY_ADD: Record<string, string> = {
+  ST_ATK: "atk", ST_DEF: "def", ST_HP: "hp",
+  ST_SPEED: "spd", ST_CRITICAL_RATE: "critRate", ST_CRITICAL_DMG_RATE: "critDmg",
+  ST_DMG_BOOST: "dmgUp", ST_DMG_REDUCE_RATE: "dmgReduce",
+  ST_BUFF_CHANCE: "eff", ST_BUFF_RESIST: "effRes", ST_PIERCE_POWER_RATE: "pen",
+};
 function setBonusStatKey(st: string, isRate: boolean): string | null {
-  switch (st) {
-    case "ST_ATK":               return isRate ? "atkPct" : "atk";
-    case "ST_DEF":               return isRate ? "defPct" : "def";
-    case "ST_HP":                return isRate ? "hpPct"  : "hp";
-    case "ST_SPEED":             return "spd";
-    case "ST_CRITICAL_RATE":     return "critRate";
-    case "ST_CRITICAL_DMG_RATE": return "critDmg";
-    case "ST_DMG_BOOST":         return "dmgUp";
-    case "ST_DMG_REDUCE_RATE":   return "dmgReduce";
-    case "ST_BUFF_CHANCE":       return "eff";
-    case "ST_BUFF_RESIST":       return "effRes";
-    case "ST_PIERCE_POWER_RATE": return "pen";
-    default:                     return null;
-  }
+  return (isRate ? SET_BONUS_KEY_RATE : SET_BONUS_KEY_ADD)[st] ?? null;
 }
 
 /** Per-stat-axis dump spec — pairs the engine stat key with its `*Pct` /
@@ -554,9 +556,27 @@ type SetLocks = (next: LocksMap | ((prev: LocksMap) => LocksMap)) => void;
  *  pre-rich legacy shape (a bare `Partial<FinalStats>` keyed by uid) to the
  *  enriched `LockEntry` on first load. `setLocks` accepts either a value or a
  *  React-style functional updater and stays stable across renders so the
- *  memoized cards never need to break their handler closures. */
+ *  memoized cards never need to break their handler closures.
+ *
+ *  Writes are **debounced** (300ms trailing) so a burst of toggles — e.g.
+ *  locking ATK/DEF/HP in quick succession — collapses to one POST. The
+ *  latest snapshot wins; if the user navigates away mid-flight the
+ *  beforeunload flush below covers the in-flight pending write. */
+const PERSIST_DEBOUNCE_MS = 300;
 function useStatLocks(): readonly [LocksMap, SetLocks] {
   const [locks, setLocksRaw] = useState<LocksMap>({});
+  const pendingRef = useRef<{ snapshot: LocksMap | null; timer: ReturnType<typeof setTimeout> | null }>({ snapshot: null, timer: null });
+
+  const flush = useCallback(() => {
+    const pending = pendingRef.current;
+    if (pending.timer != null) { clearTimeout(pending.timer); pending.timer = null; }
+    if (pending.snapshot == null) return;
+    const body = JSON.stringify(pending.snapshot, null, 2);
+    pending.snapshot = null;
+    fetch("/api/stat-locks", { method: "POST", headers: { "Content-Type": "application/json" }, body })
+      .catch(() => { /* dev-only; ignore */ });
+  }, []);
+
   useEffect(() => {
     fetch("/api/stat-locks")
       .then((r) => r.ok ? r.json() : {})
@@ -569,18 +589,27 @@ function useStatLocks(): readonly [LocksMap, SetLocks] {
         setLocksRaw(migrated);
       })
       .catch(() => { /* leave empty */ });
-  }, []);
+    // Flush pending writes if the user reloads / closes mid-debounce so the
+    // server-side json never drifts behind the in-memory state.
+    const onUnload = () => flush();
+    window.addEventListener("beforeunload", onUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onUnload);
+      flush();
+    };
+  }, [flush]);
+
   const setLocks = useCallback<SetLocks>((nextOrFn) => {
     setLocksRaw((prev) => {
       const next = typeof nextOrFn === "function" ? nextOrFn(prev) : nextOrFn;
-      fetch("/api/stat-locks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(next, null, 2),
-      }).catch(() => { /* dev-only; ignore */ });
+      const pending = pendingRef.current;
+      pending.snapshot = next;
+      if (pending.timer != null) clearTimeout(pending.timer);
+      pending.timer = setTimeout(flush, PERSIST_DEBOUNCE_MS);
       return next;
     });
-  }, []);
+  }, [flush]);
+
   return [locks, setLocks] as const;
 }
 
@@ -691,7 +720,14 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game }: 
   }, [scaling, displayName, char.charId, level, rawPieces, game]);
 
   return (
-    <div className="relative rounded-xl border border-white/[0.07] bg-bg-elev-2 p-3 backdrop-blur-sm shadow-[0_1px_0_oklch(1_0_0/0.04)_inset,0_24px_60px_-30px_rgb(0_0_0/0.7)]">
+    <div
+      className="relative rounded-xl border border-white/[0.07] bg-bg-elev-2 p-3 backdrop-blur-sm shadow-[0_1px_0_oklch(1_0_0/0.04)_inset,0_24px_60px_-30px_rgb(0_0_0/0.7)]"
+      // CSS-native virtualization — the roster grid renders up to 121 cards
+      // and each one has 8 gear slot icons + a portrait + stat block. The
+      // browser skips layout/paint for offscreen cards (intrinsic size
+      // measured from a typical fully-populated card).
+      style={{ contentVisibility: "auto", containIntrinsicSize: "0 360px" }}
+    >
       <div className="flex items-start gap-3">
         <div className="flex flex-col items-center gap-1.5">
           <CharacterPortrait

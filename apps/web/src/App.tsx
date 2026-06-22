@@ -1,12 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { GameData, Inventory, RawUserItem, RawUserCharacter, UserGeasLevels } from "@gear-solver/core";
 import { autoImport, parseFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
-import { InventoryScreen } from "./screens/InventoryScreen.js";
-import { BuildsScreen } from "./screens/BuildsScreen.js";
-import { BuilderScreen } from "./screens/BuilderScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
+
+// Per-screen code splits — each screen ships its own chunk so the initial
+// bundle drops to just the shell + the first screen the user opens.
+// BuildsScreen pulls in compose-stats + the gear icon set; InventoryScreen
+// pulls the design tokens + the GearRow/Card pair; Builder is mostly empty
+// today but isolated for future growth. Suspense boundary below renders a
+// minimal placeholder while the chunk arrives (one-time, then cached).
+const InventoryScreen = lazy(() => import("./screens/InventoryScreen.js").then((m) => ({ default: m.InventoryScreen })));
+const BuildsScreen = lazy(() => import("./screens/BuildsScreen.js").then((m) => ({ default: m.BuildsScreen })));
+const BuilderScreen = lazy(() => import("./screens/BuilderScreen.js").then((m) => ({ default: m.BuilderScreen })));
 
 // Resolved-at-build-time site version (set in next.config / vite env).
 const APP_VERSION =
@@ -123,9 +130,11 @@ export function App() {
       )}
 
       <main className="min-h-[calc(100vh-60px)]">
-        {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} lastCapture={lastCapture} />}
-        {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} />}
-        {tab === "Builder" && <BuilderScreen />}
+        <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-500">Loading {tab.toLowerCase()}…</div>}>
+          {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} lastCapture={lastCapture} />}
+          {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} />}
+          {tab === "Builder" && <BuilderScreen />}
+        </Suspense>
       </main>
 
       {!inv && (

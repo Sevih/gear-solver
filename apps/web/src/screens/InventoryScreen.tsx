@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
 import { cx } from "../design/cx.js";
 import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
@@ -286,10 +286,19 @@ function EquippedByChip({ charId, name }: { charId: number | string; name: strin
   return <CharFace charId={charId} name={name} size={80} />;
 }
 
-function GearRow({
-  piece, characters, active, onClick,
-}: { piece: UiPiece; characters: Character[]; active: boolean; onClick: () => void }) {
-  const equippedChar = piece.equippedBy ? characters.find((c) => c.uid === piece.equippedBy) : null;
+/** Row / card props share the same shape. Parent passes the resolved
+ *  `equippedChar` (looked up once via the `charsByUid` Map in the screen)
+ *  + a stable `onSelect(id)` callback so `memo` actually skips renders
+ *  when scrolling / filtering / selecting a different row. */
+interface GearItemProps {
+  piece: UiPiece;
+  equippedChar: Character | null;
+  active: boolean;
+  onSelect: (id: string) => void;
+}
+
+const GearRow = memo(function GearRow({ piece, equippedChar, active, onSelect }: GearItemProps) {
+  const onClick = useCallback(() => onSelect(piece.id), [onSelect, piece.id]);
   return (
     <div
       onClick={onClick}
@@ -299,7 +308,16 @@ function GearRow({
           ? "border-cyan-400/30 bg-cyan-500/5"
           : "border-white/5 bg-white/[0.012] hover:border-white/10 hover:bg-white/3",
       )}
-      style={{ gridTemplateColumns: "80px minmax(220px,1.3fr) minmax(220px,1.6fr) auto" }}
+      // `content-visibility: auto` lets the browser skip layout+paint for
+      // rows that aren't in the viewport (CSS-native virtualization, no JS
+      // deps). `contain-intrinsic-size` reserves height so the scrollbar
+      // stays stable — measured against the actual rendered row (80px icon
+      // + ~25px padding).
+      style={{
+        gridTemplateColumns: "80px minmax(220px,1.3fr) minmax(220px,1.6fr) auto",
+        contentVisibility: "auto",
+        containIntrinsicSize: "0 105px",
+      }}
     >
       <EquipmentIcon piece={toIconPiece(piece)} size={80} />
 
@@ -325,14 +343,12 @@ function GearRow({
       </div>
     </div>
   );
-}
+});
 
 /** Compact card variant of GearRow — same data, vertical layout, suitable for
  *  a responsive grid (auto-fill, min 220px). Used in the "compact" view mode. */
-function GearCard({
-  piece, characters, active, onClick,
-}: { piece: UiPiece; characters: Character[]; active: boolean; onClick: () => void }) {
-  const equippedChar = piece.equippedBy ? characters.find((c) => c.uid === piece.equippedBy) : null;
+const GearCard = memo(function GearCard({ piece, equippedChar, active, onSelect }: GearItemProps) {
+  const onClick = useCallback(() => onSelect(piece.id), [onSelect, piece.id]);
   return (
     <div
       onClick={onClick}
@@ -342,6 +358,9 @@ function GearCard({
           ? "border-cyan-400/30 bg-cyan-500/5"
           : "border-white/5 bg-white/[0.012] hover:border-white/10 hover:bg-white/3",
       )}
+      // CSS-native virtualization — see `GearRow` for the rationale. Card
+      // intrinsic size is taller (80px icon + name + main + subs).
+      style={{ contentVisibility: "auto", containIntrinsicSize: "0 180px" }}
     >
       <div className="flex items-start gap-2">
         <EquipmentIcon piece={toIconPiece(piece)} size={80} />
@@ -363,7 +382,7 @@ function GearCard({
       )}
     </div>
   );
-}
+});
 
 // ── sort header ─────────────────────────────────────────────────────────
 type SortKey = "stars" | "enhance" | "bt" | "name";
@@ -466,10 +485,9 @@ function SubstatBar({ s }: { s: UiPiece["subs"][number] }) {
 }
 
 function GearDrawer({
-  piece, characters, onClose,
-}: { piece: UiPiece; characters: Character[]; onClose: () => void }) {
+  piece, equippedChar, onClose,
+}: { piece: UiPiece; equippedChar: Character | null; onClose: () => void }) {
   const slot = piece.slot ? SLOTS.find((s) => s.id === piece.slot) : null;
-  const equippedChar = piece.equippedBy ? characters.find((c) => c.uid === piece.equippedBy) : null;
   return (
     <div className="flex h-full w-85 flex-col border-l border-white/8 bg-bg-elev-1 shadow-[-30px_0_80px_-30px_rgba(0,0,0,0.8)]">
       <header className="flex items-center justify-between border-b border-white/6 px-4 py-3">
@@ -579,6 +597,15 @@ export function InventoryScreen({ inventory, game, lastCapture }: InventoryScree
 
   const ui = useMemo<UiPiece[]>(() => (inventory ? inventory.gear.map((g) => toUiPiece(g, game)) : []), [inventory, game]);
 
+  // Index characters by uid once — every gear row resolves its `equippedBy`
+  // against this map (was a linear `.find` per row × 100+ rows × every
+  // selection/filter change).
+  const charsByUid = useMemo(() => {
+    const m = new Map<string, Character>();
+    for (const c of inventory?.characters ?? []) m.set(c.uid, c);
+    return m;
+  }, [inventory]);
+
   const filtered = useMemo(() => ui.filter((p) => matchesFilters(p, f)), [ui, f]);
 
   const sorted = useMemo(() => {
@@ -601,6 +628,14 @@ export function InventoryScreen({ inventory, game, lastCapture }: InventoryScree
   const view = sorted.slice(0, limit);
   const selected = selectedId ? sorted.find((p) => p.id === selectedId) ?? null : null;
 
+  // Stable click handler — toggles the selection so a second click closes
+  // the drawer. Stays referentially stable across renders so memoized
+  // `GearRow`/`GearCard` skip re-renders when other rows change.
+  const onSelect = useCallback((id: string) => {
+    setSelectedId((cur) => (cur === id ? null : id));
+  }, []);
+  const onCloseDrawer = useCallback(() => setSelectedId(null), []);
+
   function toggleSort(k: SortKey) {
     if (sort === k) setDir(dir === "desc" ? "asc" : "desc");
     else { setSort(k); setDir("desc"); }
@@ -611,7 +646,6 @@ export function InventoryScreen({ inventory, game, lastCapture }: InventoryScree
   }
 
   const captured = lastCapture ? new Date(lastCapture).toLocaleString(undefined, { day: "2-digit", month: "short" }) : null;
-  const characters = inventory.characters;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -645,33 +679,29 @@ export function InventoryScreen({ inventory, game, lastCapture }: InventoryScree
           >
             {view.length === 0
               ? <div className="col-span-full rounded-lg border border-white/5 bg-white/[0.012] px-6 py-12 text-center text-[13px] text-zinc-500">No piece matches the current filters.</div>
-              : view.map((p) => (
-                viewMode === "list"
-                  ? (
-                    <GearRow
-                      key={p.id}
-                      piece={p}
-                      characters={characters}
-                      active={p.id === selectedId}
-                      onClick={() => setSelectedId(p.id === selectedId ? null : p.id)}
-                    />
-                  )
-                  : (
-                    <GearCard
-                      key={p.id}
-                      piece={p}
-                      characters={characters}
-                      active={p.id === selectedId}
-                      onClick={() => setSelectedId(p.id === selectedId ? null : p.id)}
-                    />
-                  )
-              ))}
+              : view.map((p) => {
+                const equippedChar = p.equippedBy ? charsByUid.get(p.equippedBy) ?? null : null;
+                const Item = viewMode === "list" ? GearRow : GearCard;
+                return (
+                  <Item
+                    key={p.id}
+                    piece={p}
+                    equippedChar={equippedChar}
+                    active={p.id === selectedId}
+                    onSelect={onSelect}
+                  />
+                );
+              })}
           </div>
         </div>
 
         {selected && (
           <div className="shrink-0">
-            <GearDrawer piece={selected} characters={characters} onClose={() => setSelectedId(null)} />
+            <GearDrawer
+              piece={selected}
+              equippedChar={selected.equippedBy ? charsByUid.get(selected.equippedBy) ?? null : null}
+              onClose={onCloseDrawer}
+            />
           </div>
         )}
       </div>

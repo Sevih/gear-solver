@@ -17,18 +17,32 @@ const GAME = join(here, "game");
 const DERIVED = join(here, "derived");
 mkdirSync(DERIVED, { recursive: true });
 
-const load = (n) => JSON.parse(readFileSync(join(GAME, n), "utf-8"));
+// Memoize per-file: BuffTemplet (4×), ItemTemplet (2×), CharacterTemplet (2×)
+// would otherwise re-read + re-parse multi-MB JSON multiple times during a
+// single build run. Mutation hazard is nil — every caller iterates read-only.
+const _loadCache = new Map();
+const load = (n) => {
+  let v = _loadCache.get(n);
+  if (v === undefined) {
+    v = JSON.parse(readFileSync(join(GAME, n), "utf-8"));
+    _loadCache.set(n, v);
+  }
+  return v;
+};
 const save = (n, o) => writeFileSync(join(DERIVED, n), JSON.stringify(o));
 const lang = "English";
 
 // Outerpedia-v2 checkout — used to enrich the equipment table with image refs
-// (item art, effect icon, class). Auto-detected across the maintainer's two PCs;
-// missing entries are skipped silently so the build never hard-fails.
+// (item art, effect icon, class). `OUTERPEDIA_PATH` env var wins; otherwise
+// auto-detected across the maintainer's two known checkouts. Missing entries
+// are skipped silently so the build never hard-fails.
 function findOuterpedia() {
-  for (const p of [
+  const candidates = [
+    process.env.OUTERPEDIA_PATH,
     "C:\\Users\\Sevih\\Documents\\Projet perso\\outerpedia-v2",
     "C:\\Users\\Sevih\\Documents\\dev\\outerpedia",
-  ]) if (existsSync(p)) return p;
+  ].filter(Boolean);
+  for (const p of candidates) if (existsSync(p)) return p;
   return null;
 }
 const OUTERPEDIA = findOuterpedia();
@@ -408,9 +422,18 @@ const ingredientsResult = computeCharacterIngredients({
 });
 save("codex-curve.json", ingredientsResult.codexByLevel);
 
+// Skip "variant" chars whose `NameID` points at another char's name file —
+// they're transcend-visual alt-models or PvP/event variants that share
+// ingredients with the canonical entry (e.g. 2010065-2050065 are Ame
+// 2000065 alt visuals; 2300001/2400001/… are Stella variants; 2710005 is
+// a Lisha-core alt). The canonical rule is `NameID === ID + "_Name"`. Drops
+// ~122 entries (243 → 121, characters.json 1.5 MB → 800 KB) without
+// touching any runtime lookup — verified against the captured
+// user_character: zero captured CharID/FusionCharID fails this test.
 const characters = {};
 for (const c of load("CharacterTemplet.json")) {
   if (c.Type !== "CT_PC") continue;
+  if (c.NameID !== `${c.ID}_Name`) continue;
   const ing = ingredientsResult.characters[c.ID];
   // Nickname prefix (e.g. "Gnosis" for Gnosis Dahlia, "Mystic Sage" for
   // M.S.Ame). Only emit when CharacterExtraTemplet.ShowNickName=True for

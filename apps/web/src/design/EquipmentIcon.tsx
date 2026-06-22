@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { cx } from "./cx.js";
 import { SLOT_BY, STAT, type DesignRarity, type SlotId } from "./tokens.js";
 
@@ -170,7 +171,11 @@ export interface EquipmentIconProps {
   className?: string;
 }
 
-export function EquipmentIcon({ piece, size = 50, detail = "full", className }: EquipmentIconProps) {
+/** Memo'd — `piece` should be a stable reference (memoize `toIconPiece`
+ *  upstream or hoist it). Shallow-compare lets the icon skip re-render when
+ *  the surrounding row re-renders for unrelated reasons. */
+export const EquipmentIcon = memo(EquipmentIconImpl);
+function EquipmentIconImpl({ piece, size = 50, detail = "full", className }: EquipmentIconProps) {
   const k = size / 50;
   const showOverlays = detail === "full";
   const showEnhance = detail !== "mini";
@@ -338,7 +343,8 @@ export function EquipmentIcon({ piece, size = 50, detail = "full", className }: 
  *  At size ≥ 50 we surface the full overlays (effect / class / T<N>); smaller
  *  tiles drop them to stay legible — compare against the per-overlay size
  *  formula `max(10, size * 0.25)` in EquipmentIcon. */
-export function SlotMini({ slot, piece, size = 32 }: { slot: SlotId | string; piece?: IconPiece | null; size?: number }) {
+export const SlotMini = memo(SlotMiniImpl);
+function SlotMiniImpl({ slot, piece, size = 32 }: { slot: SlotId | string; piece?: IconPiece | null; size?: number }) {
   if (piece) {
     const detail = size >= 50 ? "full" : size >= 30 ? "compact" : "mini";
     return <EquipmentIcon piece={piece} size={size} detail={detail} />;
@@ -383,7 +389,8 @@ export function StarRow({ count = 6, reforge = 0, size = 12 }: { count?: number;
 }
 
 /** Character face icon — small portrait pulled from /img/characters/faceicon/. */
-export function CharFace({
+export const CharFace = memo(CharFaceImpl);
+function CharFaceImpl({
   charId, name, size = 28, className,
 }: { charId: number | string; name?: string; size?: number; className?: string }) {
   return (
@@ -475,7 +482,8 @@ function starRowForLevel(lv: string): StarColor[] {
  *  it), and an overlapping transcend-colored star row at the bottom matching
  *  the in-game character sheet. Percentages reference the UICharacterThumbnail
  *  prefab (128 px baseline) so overlays auto-scale with the frame. */
-export function CharacterPortrait({
+export const CharacterPortrait = memo(CharacterPortraitImpl);
+function CharacterPortraitImpl({
   charId, name, cls, element, level, transStar, basicStar, size = 64, className,
 }: {
   charId: number | string;
