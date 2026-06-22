@@ -74,6 +74,13 @@ export interface ComposeOptions {
    *  pass `null`/omit to fall back to the per-node max level (assumes every
    *  applicable node is fully unlocked — useful for what-if previews). */
   userGeasLevels?: UserGeasLevels | null;
+  /** Per-character user-leveled skill levels (S1 = First, S2 = Second,
+   *  S3 = Ultimate). Used to pick the correct `s{1,2,3}ByLevel` row for
+   *  chars whose skills have permanent self-stat passives (Ame S2 CHC,
+   *  Bell Cranel S2 ATK, Claire S2 ATK at time of writing). Missing or
+   *  `null` falls back to the highest available level emitted in the
+   *  ingredient — matches "max-everything" previews. */
+  userSkillLevels?: { first: number; second: number; ultimate: number } | null;
 }
 
 const ZERO: StatBlock = {
@@ -81,6 +88,7 @@ const ZERO: StatBlock = {
   chc: 0, chd: 0, pen: 0,
   dmgInc: 0, dmgRed: 0,
   eff: 0, res: 0,
+  effRate: 0, resRate: 0,
   atkPct: 0, defPct: 0, hpPct: 0,
 };
 
@@ -128,6 +136,7 @@ function addBlock(a: StatBlock, b: StatBlock): StatBlock {
     chc: a.chc + b.chc, chd: a.chd + b.chd, pen: a.pen + b.pen,
     dmgInc: a.dmgInc + b.dmgInc, dmgRed: a.dmgRed + b.dmgRed,
     eff: a.eff + b.eff, res: a.res + b.res,
+    effRate: a.effRate + b.effRate, resRate: a.resRate + b.resRate,
     atkPct: a.atkPct + b.atkPct, defPct: a.defPct + b.defPct, hpPct: a.hpPct + b.hpPct,
   };
 }
@@ -278,6 +287,24 @@ export function composeCharStats(
   const geasResolved = resolveGeasTotal(ingredients.geasByNode, options.userGeasLevels);
   const geas = geasResolved.all;
   const geasStat = geasResolved.fromStat;
+  // Skill passives (S1/S2/S3 + core fusion). Pick the row matching the
+  // captured user skill level; fall back to the highest emitted level when
+  // no user levels are provided. Core passive is single-block (no slider).
+  const pickSkillBlock = (table: Record<string, StatBlock>, lv: number | undefined): StatBlock => {
+    if (lv != null && lv > 0 && table[String(lv)]) return table[String(lv)]!;
+    let max = 0;
+    for (const k of Object.keys(table)) {
+      const n = Number(k);
+      if (n > max) max = n;
+    }
+    return max > 0 ? (table[String(max)] ?? ZERO) : ZERO;
+  };
+  const usl = options.userSkillLevels;
+  const s1 = pickSkillBlock(ingredients.s1ByLevel ?? {}, usl?.first);
+  const s2 = pickSkillBlock(ingredients.s2ByLevel ?? {}, usl?.second);
+  const s3 = pickSkillBlock(ingredients.s3ByLevel ?? {}, usl?.ultimate);
+  const core = ingredients.corePassive ?? ZERO;
+  const skillPass = addBlock(addBlock(addBlock(s1, s2), s3), core);
 
   // Resolve every base stat at the captured level (with LB modifier above
   // lv 100). Stats where min == max stay constant — baseAtLevel returns max.
@@ -295,23 +322,35 @@ export function composeCharStats(
   // Bucket split mirrors the in-game CalcFinalStat parameters:
   //  - awakRate (`AwakeningValueRate` in IL2CPP) = geas IOT_STAT %-bonuses
   //  - buffRate (`BuffValueRate`, fed by `SetBuffPremiumValue`) = Skill_22
-  //    class passive + Skill_8 transcend passive + Geas BT_STAT_PREMIUM
+  //    class passive + Skill_8 transcend passive + Geas BT_STAT_PREMIUM +
+  //    S1/S2/S3 user-leveled passives + Core Fusion passive
   //  - awakValue = geas IOT_STAT flat adds (a single bucket alongside evo)
-  const atkBuffPct = classPass.atkPct + skill8.atkPct + (geas.atkPct - geasStat.atkPct);
-  const defBuffPct = classPass.defPct + skill8.defPct + (geas.defPct - geasStat.defPct);
-  const hpBuffPct  = classPass.hpPct  + skill8.hpPct  + (geas.hpPct  - geasStat.hpPct);
-  // EFF / RES buff bonuses are OAT_ADD (flat) — class passive +CHC/EFF, geas
-  // [141] +50 EFF, skill_8 EFF buffs — all routed to buffValue. None of these
-  // axes have OAT_RATE buff sources, so buffPct stays 0 for eff/res.
-  const effBuffValue = classPass.eff + skill8.eff + (geas.eff - geasStat.eff);
-  const resBuffValue = classPass.res + skill8.res + (geas.res - geasStat.res);
+  const atkBuffPct = classPass.atkPct + skill8.atkPct + (geas.atkPct - geasStat.atkPct) + skillPass.atkPct;
+  const defBuffPct = classPass.defPct + skill8.defPct + (geas.defPct - geasStat.defPct) + skillPass.defPct;
+  const hpBuffPct  = classPass.hpPct  + skill8.hpPct  + (geas.hpPct  - geasStat.hpPct)  + skillPass.hpPct;
+  // EFF / RES buff bonuses split by ApplyingType:
+  //  - OAT_ADD (flat) → `buffValue`: class passive +CHC/EFF, geas [141]
+  //    +50 EFF, skill_8 EFF flats — added to `combined` before BuffRate.
+  //  - OAT_RATE (rate, display %) → `buffPct`: Notia core +50% EFF, Skill_8
+  //    `trancendent_8_buff_chance`/`_resist`, geas Awakening_Boss_*, etc.
+  //    Routed via `BuffValueRate` per CalcFinalStat — multiplied with
+  //    `combined` so the result correctly scales with whatever sum_flat ends
+  //    up being (gear, geas, transcend already folded in). Pre-baking a rate
+  //    to flat only matches when combined ≈ baseForRate.
+  const effBuffValue = classPass.eff + skill8.eff + (geas.eff - geasStat.eff) + skillPass.eff;
+  const resBuffValue = classPass.res + skill8.res + (geas.res - geasStat.res) + skillPass.res;
+  const effBuffPct   = classPass.effRate + skill8.effRate + (geas.effRate - geasStat.effRate) + skillPass.effRate;
+  const resBuffPct   = classPass.resRate + skill8.resRate + (geas.resRate - geasStat.resRate) + skillPass.resRate;
 
   const scaling = {
     atk: { baseValue: baseAtk, evoValue: evo.atk, awakValue: geas.atk, awakPct: geasStat.atkPct, transcendPct: transRow.atkPct, codexPct: codexRow.atkPct, buffPct: atkBuffPct, buffValue: 0 },
     def: { baseValue: baseDef, evoValue: evo.def, awakValue: geas.def, awakPct: geasStat.defPct, transcendPct: transRow.defPct, codexPct: codexRow.defPct, buffPct: defBuffPct, buffValue: 0 },
     hp:  { baseValue: baseHp,  evoValue: evo.hp,  awakValue: geas.hp,  awakPct: geasStat.hpPct,  transcendPct: transRow.hpPct,  codexPct: codexRow.hpPct,  buffPct: hpBuffPct, buffValue: 0  },
-    eff: { baseValue: baseEff, evoValue: evo.eff, awakValue: geasStat.eff, awakPct: 0, transcendPct: 0, codexPct: 0, buffPct: 0, buffValue: effBuffValue },
-    res: { baseValue: baseRes, evoValue: evo.res, awakValue: geasStat.res, awakPct: 0, transcendPct: 0, codexPct: 0, buffPct: 0, buffValue: resBuffValue },
+    // IOT_STAT geas EFF/RES rate (rare — e.g. some `Awakening_*` nodes) goes
+    // to `awakPct` so it amplifies sum_flat at the inner CalcFinalStat layer,
+    // mirroring how ATK/DEF/HP IOT_STAT geas rates route to `awakPct` above.
+    eff: { baseValue: baseEff, evoValue: evo.eff, awakValue: geasStat.eff, awakPct: geasStat.effRate, transcendPct: 0, codexPct: 0, buffPct: effBuffPct, buffValue: effBuffValue },
+    res: { baseValue: baseRes, evoValue: evo.res, awakValue: geasStat.res, awakPct: geasStat.resRate, transcendPct: 0, codexPct: 0, buffPct: resBuffPct, buffValue: resBuffValue },
   };
 
   const calcStat = (s: StatScaling): number =>
@@ -324,12 +363,12 @@ export function composeCharStats(
     // Floor (not round) on the per-level interpolated base stats to match the
     // in-game truncation — round() would push e.g. Luna's lv120 RES 130.91 to
     // 131 when the in-game sheet shows 130.
-    spd: Math.floor(baseSpd + evo.spd + classPass.spd + skill8.spd + geas.spd),
-    chc: Math.floor(baseChc + evo.chc + classPass.chc + skill8.chc + geas.chc),
-    chd: Math.floor(baseChd + evo.chd + classPass.chd + skill8.chd + geas.chd),
-    pen: evo.pen + classPass.pen + skill8.pen + geas.pen,
-    dmgInc: evo.dmgInc + classPass.dmgInc + skill8.dmgInc + geas.dmgInc,
-    dmgRed: evo.dmgRed + classPass.dmgRed + skill8.dmgRed + geas.dmgRed,
+    spd: Math.floor(baseSpd + evo.spd + classPass.spd + skill8.spd + geas.spd + skillPass.spd),
+    chc: Math.floor(baseChc + evo.chc + classPass.chc + skill8.chc + geas.chc + skillPass.chc),
+    chd: Math.floor(baseChd + evo.chd + classPass.chd + skill8.chd + geas.chd + skillPass.chd),
+    pen: evo.pen + classPass.pen + skill8.pen + geas.pen + skillPass.pen,
+    dmgInc: evo.dmgInc + classPass.dmgInc + skill8.dmgInc + geas.dmgInc + skillPass.dmgInc,
+    dmgRed: evo.dmgRed + classPass.dmgRed + skill8.dmgRed + geas.dmgRed + skillPass.dmgRed,
     // EFF / RES — same CalcFinalStat path as ATK/DEF/HP. With no gear inputs
     // (gear_flat = 0, gear_rate = 0), part2 collapses to sum_flat + buffValue,
     // which equals baseEff + evo.eff + geas.eff + classPass.eff + skill8.eff —

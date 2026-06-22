@@ -163,15 +163,17 @@ function aggregateGearBuckets(pieces: GearPiece[], game: GameData | null): {
   const pct: Record<string, number> = {};
   const buffPct: Record<string, number> = {};
   for (const p of pieces) {
-    // EE main stats are dmgUp buffs — combat-only, skipped from any sheet stat.
-    // Subs always count. For non-EE pieces, mains count — but IOT_BUFF mains
-    // (talisman main, ooparts) route to `buffPct` instead of `pct`.
-    const includeMain = p.slot !== "exclusive";
-    if (includeMain) {
-      for (const s of p.main) {
-        const target = s.fromBuff ? buffPct : (s.percent ? pct : flat);
-        target[s.stat] = (target[s.stat] ?? 0) + s.value;
-      }
+    // Mains always count. IOT_BUFF mains (talisman / EE / singularity) route
+    // to `buffPct` via `fromBuff`. The historical "skip EE main entirely"
+    // shortcut was wrong for the unconditional `_CORE` variants (4/29 EE
+    // main buffs) and especially for EE level-gated passives (Caren EE
+    // +20% DEF at +10) — both are valid sheet contributions and reach us
+    // via `main[]` with `fromBuff: true`. Conditional EE mains (element-
+    // gated debuffs that don't show on the sheet) are filtered out at
+    // build time in `data/build.mjs`.
+    for (const s of p.main) {
+      const target = s.fromBuff ? buffPct : (s.percent ? pct : flat);
+      target[s.stat] = (target[s.stat] ?? 0) + s.value;
     }
     for (const s of p.subs) {
       const target = s.percent ? pct : flat;
@@ -584,20 +586,32 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
     const q = filters.query.trim().toLowerCase();
     return inventory.characters
       .filter((c) => {
-        const meta = game?.characters[String(c.charId)];
+        // Resolve meta against the fused variant when active — element/class
+        // carry over but BasicStar / portrait differ. Searching "core" or
+        // "fusion" matches every fused char via the literal prefix.
+        const metaId = String(c.fusionCharId !== 0 ? c.fusionCharId : c.charId);
+        const meta = game?.characters[metaId];
         if (filters.elements.size > 0 && (!meta?.element || !filters.elements.has(meta.element))) return false;
         if (filters.classes.size > 0 && (!meta?.cls || !filters.classes.has(meta.cls))) return false;
         if (q) {
-          // Include the in-game NickName prefix (e.g. "Gnosis", "Mystic Sage")
-          // so searching "gnosis" matches Gnosis Dahlia / Gnosis Viella.
-          const hay = `${meta?.nickname ?? ""} ${c.name ?? ""} ${c.charId}`.toLowerCase();
+          const fusionTag = c.fusionCharId !== 0 ? "core fusion" : "";
+          const hay = `${fusionTag} ${meta?.nickname ?? ""} ${c.name ?? ""} ${c.charId}`.toLowerCase();
           if (!hay.includes(q)) return false;
         }
         return true;
       })
       .map((c) => {
         const equipped = gearByChar.get(c.uid) ?? new Map();
-        const meta = game?.characters[String(c.charId)];
+        // Core Fusion is a complete replacement, not an additive layer:
+        // BasicStar, base stats and every Skill_N differ between the base
+        // (e.g. Snow 2000003, 2★) and its fused variant (2700003, 3★) — only
+        // Element/Class and evo (redirected via CharacterFusionTemplet at
+        // build time) carry over. When the capture has `FusionCharID != 0`
+        // the player IS the fused variant, so we resolve ingredients from
+        // that ID. The base `charId` stays the identity key (matches gear
+        // assignments and BP `fused` bonus).
+        const ingredientsCharId = String(c.fusionCharId !== 0 ? c.fusionCharId : c.charId);
+        const meta = game?.characters[ingredientsCharId];
         // Resolve captured level and LB modifier. The CharacterMaxLevelTemplet
         // row is keyed by `${BasicStar}|${LevelMaxStep}` — when the user hasn't
         // broken the lv 100 cap (LevelMaxStep === 0) there's no modifier.
@@ -611,6 +625,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
               levelMaxModifier,
               levelMaxStep: c.levelMaxStep,
               userGeasLevels,
+              userSkillLevels: { first: c.skills.first, second: c.skills.second, ultimate: c.skills.ultimate },
               ...(userCodexLevel != null ? { codexLevel: userCodexLevel } : {}),
             })
           : null;
@@ -683,8 +698,16 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
 
       <div className="grid auto-rows-min gap-3 overflow-y-auto px-6 pb-6 pt-3 md:grid-cols-2 lg:grid-cols-3" style={{ maxHeight: "calc(100vh - 130px)" }}>
         {roster.map(({ char, equipped, stats, baseline, scaling, rawPieces, level, bp }) => {
-          const meta = game?.characters[String(char.charId)];
-          const displayName = meta?.nickname ? `${meta.nickname} ${char.name ?? ""}`.trim() : (char.name ?? `#${char.charId}`);
+          // Core Fusion: resolve meta against the fused variant (its
+          // FaceIconID points at the new portrait, BasicStar may differ),
+          // and prefix the display name with a literal "Core Fusion" tag
+          // — the in-game NickName for fusion variants is flavor text, not
+          // the variant identifier.
+          const isFused = char.fusionCharId !== 0;
+          const displayCharId = isFused ? char.fusionCharId : char.charId;
+          const meta = game?.characters[String(displayCharId)];
+          const baseName = meta?.nickname ? `${meta.nickname} ${char.name ?? ""}`.trim() : (char.name ?? `#${char.charId}`);
+          const displayName = isFused ? `Core Fusion ${baseName}` : baseName;
           const lockEntry = lockedStats[char.uid] ?? null;
           const locked = lockEntry?.stats ?? null;
           const lockedKeys = locked ? Object.keys(locked) as (keyof FinalStats)[] : [];
@@ -715,7 +738,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
               <div className="flex items-start gap-3">
                 <div className="flex flex-col items-center gap-1.5">
                   <CharacterPortrait
-                    charId={char.charId}
+                    charId={displayCharId}
                     name={displayName}
                     cls={meta?.cls}
                     element={meta?.element}

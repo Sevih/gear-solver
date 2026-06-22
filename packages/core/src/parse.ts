@@ -140,6 +140,28 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
     }
   }
 
+  // EE level-gated permanent passives. Each entry's `levelThreshold` is the
+  // EE enhance level needed to activate: `1` = always-on once equipped, `10`
+  // = unlocks at +10 (e.g. Caren's +20% DEF via `BID_CEQUIP_2000089_ADD`).
+  // All entries are `BT_STAT_PREMIUM` permanent self buffs (filter applied
+  // in data/build.mjs), so `fromBuff: true` routes them through
+  // `BuffValueRate` like singularity / talisman mains.
+  if (game && meta?.slot === "exclusive") {
+    const ePassives = game.eePassives?.[String(item.ItemID)];
+    if (ePassives) {
+      for (const ep of ePassives) {
+        // Lv 1 entries unlock at enhanceLevel ≥ 0 (always when equipped); higher
+        // thresholds require an actual enhance level. The in-game EE description
+        // gates the upgrade by its enhancement readout (+10 → unlocks the
+        // "Upgrade Effect" text).
+        const unlocked = ep.levelThreshold <= 1 || enhanceLevel >= ep.levelThreshold;
+        if (!unlocked) continue;
+        const resolved = resolveOption({ st: ep.st, ap: ep.ap, v: ep.v }, 1);
+        if (resolved) main.push({ ...resolved, fromBuff: true });
+      }
+    }
+  }
+
   return {
     uid: item.ItemUID,
     itemId: item.ItemID,

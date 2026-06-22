@@ -77,14 +77,25 @@ save("options.json", options);
 // Level N+1 = +N (for N ≤ maxEnhanceLevel). Engine resolves stat (flat vs percent) the
 // same way as IOT_STAT entries via core/src/stats.ts. We strip non-BT_STAT_PREMIUM rows
 // (Type) to focus on talisman main stat lookups.
+//
+// EE mains: 25/29 `BID_CEQUIP_MAIN_*` buffs are conditional (TARGET_ELEMENT /
+// OWNER_ELEMENT) — those are combat-only triggers and don't show on the
+// character sheet. We gate by the buff's `BuffConditionType` so only the 4
+// unconditional `_CORE` variants (DMG_REDUCE_CORE / ACCURACY_CORE /
+// BUFF_CHANCE_CORE / BUFF_CRITICAL_RATE_CORE) emit. The check needs the
+// buff's full row, so we resolve via the BuffTemplet on the first pass.
+const eeCondByBuffId = new Map();
+for (const b of load("BuffTemplet.json")) {
+  const bid = b.BuffID;
+  if (!bid || !bid.startsWith("BID_CEQUIP_MAIN_")) continue;
+  if (!eeCondByBuffId.has(bid)) eeCondByBuffId.set(bid, b.BuffConditionType ?? "NONE");
+}
 const buffs = {};
 for (const b of load("BuffTemplet.json")) {
   const bid = b.BuffID;
   if (!bid) continue;
-  // Talisman main stats use BT_STAT_PREMIUM; broaden if we later care about other
-  // buff-driven main stats (e.g. EE BID_CEQUIP_MAIN_*). Keeping the filter narrow
-  // keeps the derived file small (only ~hundreds of rows out of ~thousands).
   if (!(bid.startsWith("BID_ITEM_STAT_OOPARTS_") || bid.startsWith("BID_CEQUIP_MAIN_"))) continue;
+  if (bid.startsWith("BID_CEQUIP_MAIN_") && eeCondByBuffId.get(bid) !== "NONE") continue;
   if (!b.StatType || b.StatType === "ST_NONE") continue;
   const lv = Number(b.Level);
   if (!Number.isFinite(lv) || lv < 1) continue;
@@ -236,10 +247,25 @@ save("enhance.json", {
 const sets = {};
 const singularityOptions = {}; // SingularityOptionID -> { st, ap, v }  (per-mille raw)
 const buffTemplet = load("BuffTemplet.json");
+// Buff lookup: pick the MAX-Level row per BuffID. EE upgrades reference an
+// `_ADD` buff that only exists at one Level; for buffs with multiple level
+// rows (rare for EE passives) we conservatively pick the strongest.
 const buffByID = new Map();
 for (const b of buffTemplet) {
-  if (!buffByID.has(b.BuffID)) buffByID.set(b.BuffID, b);
+  const cur = buffByID.get(b.BuffID);
+  if (!cur || Number(b.Level) > Number(cur.Level)) buffByID.set(b.BuffID, b);
 }
+// EE GroupIDs — used to gate the `eePassives` extraction below. For EE items
+// the first part of `UniqueOptionID` IS the GroupID (and matches the ItemID
+// per observed data), so we collect them directly from ItemTemplet.
+const eeGroupIds = new Set();
+for (const it of load("ItemTemplet.json")) {
+  if (it.ItemSubType !== "ITS_EQUIP_EXCLUSIVE") continue;
+  for (const g of String(it.UniqueOptionID ?? "").split(",")) {
+    if (g) eeGroupIds.add(g);
+  }
+}
+const eePassives = {}; // GroupID -> [{ levelThreshold, st, ap, v }]
 for (const s of load("ItemSpecialOptionTemplet.json")) {
   const g = (sets[s.GroupID] ??= { name: textItem.get(s.NameID) ?? null, levels: [] });
   g.levels.push({
@@ -257,9 +283,33 @@ for (const s of load("ItemSpecialOptionTemplet.json")) {
       };
     }
   }
+  // EE level-gated passive: same `IOT_BUFF` + `BT_STAT_PREMIUM` + `Cond=NONE`
+  // shape as singularity options, but with extra filters that pin it to
+  // PERMANENT SELF passives (combat-only base effects like Caren's
+  // `BID_CEQUIP_2000089` at Lv1 are `BT_STAT` `SKILL_START` `TurnDuration=1`
+  // — they fail this gate). The `Level` field is the EE enhance-level
+  // threshold to unlock (1 = always when equipped, 10 = unlocks at +10).
+  if (s.BuffID && eeGroupIds.has(s.GroupID)) {
+    const buff = buffByID.get(s.BuffID);
+    const ok = buff
+      && buff.Type === "BT_STAT_PREMIUM"
+      && buff.TargetType === "ME"
+      && buff.BuffCreateType === "PASSIVE"
+      && (buff.BuffConditionType ?? "NONE") === "NONE"
+      && buff.TurnDuration === "-1";
+    if (ok) {
+      (eePassives[s.GroupID] ??= []).push({
+        levelThreshold: Number(s.Level),
+        st: buff.StatType,
+        ap: buff.ApplyingType,
+        v: Number(buff.Value),
+      });
+    }
+  }
 }
 save("sets.json", sets);
 save("singularity-options.json", singularityOptions);
+save("ee-passives.json", eePassives);
 
 // ---- expCharacter: per-level cumulative XP threshold (ExpCharacterTemplet) ----
 // Used at runtime to resolve a captured character's `Exp` to a level. Array index
@@ -365,6 +415,9 @@ for (const c of load("CharacterTemplet.json")) {
   // Nickname prefix (e.g. "Gnosis" for Gnosis Dahlia, "Mystic Sage" for
   // M.S.Ame). Only emit when CharacterExtraTemplet.ShowNickName=True for
   // this CharacterID — otherwise the in-game just shows the base Name.
+  // Core Fusion variants (`2700xxx` IDs) are handled at the UI layer with
+  // a literal "Core Fusion" prefix — their in-game NickName text (e.g.
+  // "Eye of the Snowy Mountains") is flavor, not the variant identifier.
   const nickname = showNickName.has(c.ID) ? (textChar.get(c.NickNameID) ?? null) : null;
   characters[c.ID] = {
     name: textChar.get(c.NameID) ?? null,
@@ -382,5 +435,5 @@ console.log(
   `derived: options=${Object.keys(options).length} equipment=${Object.keys(equipment).length} ` +
     `sets=${Object.keys(sets).length} characters=${Object.keys(characters).length} ` +
     `expCurves=${Object.keys(expCurves).length} singSteps=${singularitySteps.length} ` +
-    `buffs=${Object.keys(buffs).length}`,
+    `buffs=${Object.keys(buffs).length} eePassives=${Object.keys(eePassives).length}`,
 );

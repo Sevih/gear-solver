@@ -91,15 +91,42 @@ export interface SingularityOptionDef {
 }
 export type SingularityOptionsTable = Record<string, SingularityOptionDef>;
 
-/** A 14-field stat delta — every contribution to a character's no-gear sheet
+/** EE level-gated permanent passives — every entry is a `BT_STAT_PREMIUM`
+ *  passive self buff that's active on the character sheet once the EE has
+ *  reached `levelThreshold` enhancement levels. The two observed thresholds
+ *  are `1` (always-on once the EE is equipped — e.g. some healers' +100%
+ *  EFF) and `10` (unlocks at +10 — e.g. Caren's `BID_CEQUIP_2000089_ADD`
+ *  +20% DEF). Combat-only base effects (`BT_STAT`, `SKILL_START`,
+ *  `TurnDuration ≥ 0`) are filtered out at build time. */
+export interface EePassiveDef {
+  /** EE enhance level needed to activate. `1` means always on when equipped. */
+  levelThreshold: number;
+  st: string;
+  ap: string;
+  v: number;
+}
+/** Keyed by the EE's GroupID, which matches the item's `ItemID` (and the first
+ *  fragment of its `UniqueOptionID`) per the observed EE data shape. */
+export type EePassivesTable = Record<string, EePassiveDef[]>;
+
+/** A 16-field stat delta — every contribution to a character's no-gear sheet
  *  flows through this shape. `*Pct` are %-multipliers on the relevant base
  *  stat (folded into the compound formula by `composeCharStats`). EFF/RES are
- *  integer points matching the in-game display. */
+ *  integer points matching the in-game display.
+ *
+ *  `effRate` / `resRate` carry **OAT_RATE** buff contributions on EFF/RES in
+ *  display % units (50 = +50%). They route through the in-game
+ *  `BuffValueRate` channel — multiplicative on `combined` per `CalcFinalStat`
+ *  — so they CANNOT be pre-baked to a flat `eff` add without diverging
+ *  whenever `combined` ≠ `baseForRate.eff`. Example: Notia core
+ *  `core_passive_buff_chance` +50% EFF on baseline 170 → in-game 255, baked
+ *  approximation gives 240 (off by 15). */
 export interface StatBlock {
   atk: number; def: number; hp: number; spd: number;
   chc: number; chd: number; pen: number;
   dmgInc: number; dmgRed: number;
   eff: number; res: number;
+  effRate: number; resRate: number;
   atkPct: number; defPct: number; hpPct: number;
 }
 
@@ -142,6 +169,19 @@ export interface CharacterIngredients {
    *  matches the in-game character sheet (e.g. D.Luna's CRC 21 / CHD 230 /
    *  PEN 30 only reproduce with the Skill_8 lv4 contributions included). */
   skill8ByLevel: Record<string, StatBlock>;
+  /** User-leveled skill passives. S1 / S2 / S3 map to the captured
+   *  `First` / `Second` / `Ultimate` skill levels. Each entry is the
+   *  cumulative buff at that SkillLevel (buff progression follows the
+   *  floor convention: at SkillLv L we use the highest BuffLevel ≤ L —
+   *  Ame S2 Lv5 = BuffLv4 = +25% CHC since no BuffLv5 exists). Empty
+   *  object when the skill has no permanent self-stat passive. */
+  s1ByLevel: Record<string, StatBlock>;
+  s2ByLevel: Record<string, StatBlock>;
+  s3ByLevel: Record<string, StatBlock>;
+  /** Core Fusion passive (Skill_23, only present on `27xxxxx` char IDs).
+   *  Always at max SkillLevel since the user has no slider for it. Null
+   *  for non-core chars or when the Skill_23 buffs are combat-only. */
+  corePassive: StatBlock | null;
   /** Geas — per-node table of awakening contributions that apply to this
    *  char (element/class/subclass scope). Outer key = NodeID matching the
    *  GiftID in the captured `/gift/info` GiftList. Each entry carries:
@@ -250,6 +290,7 @@ export interface GameData {
   equipment: EquipmentTable;
   sets: SetsTable;
   singularityOptions: SingularityOptionsTable;
+  eePassives: EePassivesTable;
   characters: CharactersTable;
   enhance: EnhanceData;
   buffs: BuffsTable;

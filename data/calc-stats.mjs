@@ -34,6 +34,7 @@ function zeroStats() {
     chc: 0, chd: 0, pen: 0,
     dmgInc: 0, dmgRed: 0,
     eff: 0, res: 0,
+    effRate: 0, resRate: 0,
     atkPct: 0, defPct: 0, hpPct: 0,
   };
 }
@@ -163,12 +164,19 @@ function applyPremiumBuff(dest, buff, baseForRate) {
     if (rate) dest.spd += Math.floor(baseForRate.spd * value / 1000); else dest.spd += value;
     return;
   }
+  // EFF / RES OAT_RATE: route to the rate field (display % units) so the
+  // composer can apply it via `BuffValueRate` multiplicatively, the way
+  // CalcFinalStat does in-game. Pre-baking to a flat `eff +=
+  // floor(base × value / 1000)` only matches when `combined ≈ baseForRate`
+  // (no other buffs / no gear) and diverges otherwise — Notia core
+  // `core_passive_buff_chance` +50% EFF on baseline 170 → in-game 255,
+  // baked approximation gives 240.
   if (buff.StatType === "ST_BUFF_CHANCE") {
-    if (rate) dest.eff += Math.floor(baseForRate.eff * value / 1000); else dest.eff += value;
+    if (rate) dest.effRate += value / 10; else dest.eff += value;
     return;
   }
   if (buff.StatType === "ST_BUFF_RESIST") {
-    if (rate) dest.res += Math.floor(baseForRate.res * value / 1000); else dest.res += value;
+    if (rate) dest.resRate += value / 10; else dest.res += value;
     return;
   }
 }
@@ -181,6 +189,43 @@ function extractClassPassive(row, skillLevels, buffs, baseForRate) {
   for (const bid of splitCsv(levelRow?.BuffID)) {
     const b = pickMaxBuff(buffs, bid);
     if (b) applyPremiumBuff(out, b, baseForRate);
+  }
+  return out;
+}
+
+/** Walk a skill's per-SkillLevel rows and emit one StatBlock per level — the
+ *  cumulative permanent passive self-stat contribution active at that level.
+ *  Buff progression follows the floor convention: at SkillLv L we use the
+ *  highest BuffLevel ≤ L (Ame S2 Lv5 → BuffLv4 +25% CHC, since no BuffLv5
+ *  exists). Filter is strict: `BT_STAT_PREMIUM` + `TargetType=ME` +
+ *  `BuffCreateType=PASSIVE` + `BuffConditionType=NONE` + `TurnDuration=-1`
+ *  — other types (BT_DMG_OWNER_STAT, BT_SWAP_STAT_ATTACK, etc.) are combat
+ *  damage modifiers that don't change the displayed character sheet. */
+function extractSkillPassiveByLevel(skillId, skillLevels, buffs, baseForRate) {
+  if (!skillId) return {};
+  const rows = skillLevels
+    .filter((r) => r.SkillID === String(skillId))
+    .sort((a, b) => num(a.SkillLevel) - num(b.SkillLevel));
+  if (!rows.length) return {};
+  const out = {};
+  for (const row of rows) {
+    const skillLv = num(row.SkillLevel);
+    const dest = zeroStats();
+    for (const bid of splitCsv(row.BuffID)) {
+      const bRows = buffs.filter((b) => b.BuffID === bid).sort((a, b) => num(a.Level) - num(b.Level));
+      if (!bRows.length) continue;
+      let chosen = null;
+      for (const b of bRows) if (num(b.Level) <= skillLv) chosen = b;
+      if (!chosen) chosen = bRows[0];
+      // Strict permanent-self-stat filter (see docstring).
+      const ok = chosen.Type === "BT_STAT_PREMIUM"
+        && chosen.TargetType === "ME"
+        && chosen.BuffCreateType === "PASSIVE"
+        && (chosen.BuffConditionType ?? "NONE") === "NONE"
+        && chosen.TurnDuration === "-1";
+      if (ok) applyPremiumBuff(dest, chosen, baseForRate);
+    }
+    if (!isEmpty(dest)) out[String(skillLv)] = dest;
   }
   return out;
 }
@@ -234,6 +279,14 @@ function accumulateGeasBonus(dest, levelRow, buffs) {
     if (statType === "ST_SPEED")            dest.spd += value;
     else if (statType === "ST_BUFF_CHANCE") dest.eff += value;
     else if (statType === "ST_BUFF_RESIST") dest.res += value;
+  }
+  if (rate) {
+    // OAT_RATE on EFF/RES via geas (e.g. `Awakening_Boss_Buff_RESIST_Down_*`)
+    // routes through `BuffValueRate` like the buff-side equivalents above.
+    // SPD OAT_RATE is rare on geas and stays flat-baked for now (matches
+    // pre-refactor behavior; revisit if a char surfaces a delta).
+    if (statType === "ST_BUFF_CHANCE")      dest.effRate += value / 10;
+    else if (statType === "ST_BUFF_RESIST") dest.resRate += value / 10;
   }
 }
 
@@ -330,7 +383,26 @@ export function computeCharacterIngredients(tables) {
     const classPassive = extractClassPassive(row, skillLevels, buffs, baseForRate);
     const skill8ByLevel = extractSkill8ByLevel(row, skillLevels, buffs, transcendByStar, baseForRate);
     const geasByNode = extractGeasByNode(row, awakNodes, awakLevels, buffs);
-    characters[id] = { base, evoByLevel, transcendByStar, classPassive, skill8ByLevel, geasByNode };
+    // User-leveled skill passives (S1 = First, S2 = Second, S3 = Ultimate)
+    // emit per-SkillLevel StatBlocks; the runtime composer picks the row
+    // matching the captured user level. Core-fusion chars (`27xxxxx` IDs)
+    // additionally carry a `Skill_23` passive — emitted as a single block at
+    // its max SkillLevel since the user has no slider for it. 3/6 core
+    // fusion chars currently have a sheet-visible passive (Snow / Lisha
+    // share the `core_passive_2star_ablity_*` boost; Notia gets +50% EFF).
+    const s1ByLevel = extractSkillPassiveByLevel(row.Skill_1, skillLevels, buffs, baseForRate);
+    const s2ByLevel = extractSkillPassiveByLevel(row.Skill_2, skillLevels, buffs, baseForRate);
+    const s3ByLevel = extractSkillPassiveByLevel(row.Skill_3, skillLevels, buffs, baseForRate);
+    let corePassive = null;
+    if (/^2700\d{3}$/.test(id) && row.Skill_23) {
+      const byLv = extractSkillPassiveByLevel(row.Skill_23, skillLevels, buffs, baseForRate);
+      const levels = Object.keys(byLv).map(Number);
+      if (levels.length) corePassive = byLv[String(Math.max(...levels))];
+    }
+    characters[id] = {
+      base, evoByLevel, transcendByStar, classPassive, skill8ByLevel, geasByNode,
+      s1ByLevel, s2ByLevel, s3ByLevel, corePassive,
+    };
   }
   return { codexByLevel, characters };
 }

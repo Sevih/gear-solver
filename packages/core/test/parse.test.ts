@@ -18,6 +18,7 @@ const game: GameData = {
   },
   sets: {},
   singularityOptions: {},
+  eePassives: {},
   characters: {},
   enhance: {
     enhanceFactor: 0.4,

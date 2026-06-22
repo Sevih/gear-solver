@@ -14,6 +14,14 @@
       "res": 110
     }
   },
+  "4050125254": {
+    "name": "Core Fusion Notia",
+    "charId": 2000056,
+    "level": 100,
+    "stats": {
+      "eff": 255
+    }
+  },
   "4050194270": {
     "name": "Gnosis Beth",
     "charId": 2000092,
@@ -29,6 +37,15 @@
       "dmgUp": 66.5,
       "eff": 636,
       "dmgRed": 20.5
+    }
+  },
+  "4050317893": {
+    "name": "Caren",
+    "charId": 2000089,
+    "level": 120,
+    "stats": {
+      "atk": 4018,
+      "hp": 16367
     }
   },
   "4050414800": {
