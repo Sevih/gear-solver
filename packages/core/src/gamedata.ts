@@ -111,9 +111,16 @@ export interface CharacterIngredients {
    *  the in-game tree — at TransStar N the character has unlocked every row
    *  with EvolutionLevel ≤ N. */
   evoByLevel: Record<string, StatBlock>;
-  /** Per-TransStar transcend %-bonuses + the Skill_8 level unlocked at that
-   *  star. Keys are TransStar (2..9 / 3..9 depending on BasicStar). */
-  transcendByStar: Record<string, { atkPct: number; defPct: number; hpPct: number; skillLevel: number }>;
+  /** Per-TransStar transcend %-bonuses + the Skill_8 level + UI star fields.
+   *  `showUIStar` / `starPlus` are sourced from CharacterTranscendentTemplet
+   *  and feed the CalcBattlePower formula (star_bonus = showUIStar×500 +
+   *  starPlus×120). Keys are TransStar (2..9 / 3..9 depending on BasicStar). */
+  transcendByStar: Record<string, {
+    atkPct: number; defPct: number; hpPct: number;
+    skillLevel: number;
+    showUIStar: number;
+    starPlus: number;
+  }>;
   /** Skill_22 always-on class passive stats (already at max level). */
   classPassive: StatBlock;
   /** Skill_8 transcendent-skill stats keyed by SkillLevel. Always applied —

@@ -82,6 +82,9 @@ export interface Character {
    *  transcend passive Skill_8 isn't user-leveled — its level is derived
    *  from TransStar via CharacterTranscendentTemplet. */
   skills: { first: number; second: number; ultimate: number; chainPassive: number };
+  /** Non-zero when the char was created by fusing a lower-star instance. Drives
+   *  the +5000 BP bonus in CalcBattlePower. */
+  fusionCharId: number;
 }
 
 export interface Inventory {

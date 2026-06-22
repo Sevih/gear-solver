@@ -19,33 +19,32 @@
     "charId": 2000090,
     "level": 120,
     "stats": {
-      "atk": 9593,
-      "hp": 13066,
-      "def": 2191,
-      "crc": 92,
-      "chd": 336,
-      "eff": 201,
-      "res": 205,
-      "pen": 41.4,
-      "spd": 148,
-      "dmgUp": 30
+      "atk": 8465,
+      "def": 2184,
+      "hp": 12911,
+      "spd": 231,
+      "chd": 320,
+      "pen": 52.4,
+      "eff": 200,
+      "res": 204,
+      "crc": 101,
+      "dmgUp": 56.5
     }
   },
-  "6009285516": {
-    "name": "Midnight Rush Skadi",
-    "charId": 2000114,
-    "level": 110,
+  "4052486765": {
+    "name": "Demiurge Luna",
+    "charId": 2000119,
+    "level": 120,
     "stats": {
-      "atk": 2127,
-      "def": 2170,
-      "hp": 11851,
-      "spd": 120,
-      "crc": 32,
-      "chd": 220,
-      "eff": 120,
-      "res": 213,
-      "dmgRed": 2,
-      "pen": 36
+      "hp": 13034,
+      "def": 2094,
+      "spd": 236,
+      "chd": 346,
+      "pen": 82.4,
+      "res": 191,
+      "eff": 203,
+      "dmgUp": 72.5,
+      "crc": 102
     }
   },
   "6004717280": {
@@ -53,17 +52,34 @@
     "charId": 2000110,
     "level": 105,
     "stats": {
-      "hp": 9419,
+      "atk": 5381,
       "def": 1643,
-      "atk": 5679,
+      "hp": 9419,
+      "spd": 259,
+      "crc": 102,
       "chd": 276,
-      "eff": 245,
+      "eff": 230,
       "res": 176,
-      "dmgUp": 18,
-      "dmgRed": 2.4,
+      "dmgUp": 12,
       "pen": 48,
-      "crc": 105,
-      "spd": 247
+      "dmgRed": 2.4
+    }
+  },
+  "6009285516": {
+    "name": "Midnight Rush Skadi",
+    "charId": 2000114,
+    "level": 110,
+    "stats": {
+      "atk": 3576,
+      "chd": 308,
+      "pen": 47,
+      "dmgRed": 2,
+      "res": 273,
+      "eff": 180,
+      "def": 3421,
+      "crc": 101,
+      "hp": 34105,
+      "spd": 183
     }
   }
 }

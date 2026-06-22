@@ -158,31 +158,42 @@ function sumEvoUpTo(
   return acc;
 }
 
-/** Compound multiplier formula for ATK / DEF / HP. Mirrors the in-game
- *  truncation:
- *   - compound layer (codex + class% + skill8% + geasStat%) is floored
- *     together with flat × compound as a single inner sum.
- *   - geasBuff% (IOT_BUFF rate, e.g. Mr.Skadi's +15% ATK awakening) is
- *     applied as a SEPARATE term compounded only with transcend, then
- *     floored independently. Validated on Mr.Skadi 2000114 lv110: matches
- *     in-game ATK 2127 / DEF 2170 / HP 11851 exactly (single-floor with
- *     geasBuffPct folded into pctBonus overshoots ATK & HP by +1). */
-function calcMultStat(
-  baseMax: number,
-  flat: number,
-  pctBonus: number,
-  geasBuffPct: number,
-  codexPct: number,
-  transcendPct: number,
+/** CalcFinalStat — reverse-engineered from CFormula::CalcFinalStat in
+ *  libil2cpp.so (1.4.9, RVA 0x2C59E48). All rate inputs are per-mille (×10
+ *  of the % display), all flat inputs are integers. The two-stage compound
+ *  is the key — additive rates are amplified first as a single bundle, then
+ *  the (gearFlat-extended) sum is amplified by `buffRate` (where Skill_22
+ *  class passive, Skill_8 transcend passive and Geas BT_STAT_PREMIUM buffs
+ *  all land per `SetBuffPremiumValue`):
+ *    sum_flat = baseValue + evoValue + awakValue
+ *    sum_rate = awakRate + transcendRate + gearRate     (per-mille)
+ *    part1    = floor(sum_flat × (1000 + sum_rate) / 1000)
+ *    combined = part1 + gearFlat
+ *    part2    = floor(combined × (1000 + buffRate) / 1000)
+ *    codex    = floor(baseValue × archiveRate / 1000)
+ *    final    = max(0, part2 + codex)
+ *  Validated 0-diff on 7/9 stats across 5 chars (M.Skadi ATK/DEF, G.Dahlia
+ *  ATK/DEF/HP, D.Luna DEF/HP, M.Ame ATK). Residual deltas on M.Skadi HP
+ *  (-2273) and D.Luna ATK (-868) trace back to BT_STAT (non-_PREMIUM)
+ *  always-on skill buffs we don't yet identify in BuffsTable. */
+function calcFinalStat(
+  baseValue: number,
+  evoValue: number,
+  awakValue: number,
+  awakRatePM: number,
+  transcendRatePM: number,
+  gearFlat: number,
+  gearRatePM: number,
+  archiveRatePM: number,
+  buffRatePM: number,
 ): number {
-  const compoundPct = ((1 + transcendPct / 100) * (1 + pctBonus / 100) - 1) * 100;
-  const onBase = codexPct + compoundPct;
-  const onFlat = compoundPct;
-  const geasBuffTerm = (baseMax + flat) * (geasBuffPct / 100) * (1 + transcendPct / 100);
-  // Inner: split-floor (mirrors composeMultStat in BuildsScreen, see comment there).
-  return Math.floor(baseMax * (1 + onBase / 100))
-       + Math.floor(flat * (1 + onFlat / 100))
-       + Math.round(geasBuffTerm);
+  const sumFlat = baseValue + evoValue + awakValue;
+  const sumRate = awakRatePM + transcendRatePM + gearRatePM;
+  const part1 = Math.trunc(sumFlat * (1000 + sumRate) / 1000);
+  const combined = part1 + gearFlat;
+  const part2 = Math.trunc(combined * (1000 + buffRatePM) / 1000);
+  const codex = Math.trunc(baseValue * archiveRatePM / 1000);
+  return Math.max(0, part2 + codex);
 }
 
 /** Result of composing the character ingredients without gear. ATK/DEF/HP
@@ -194,20 +205,26 @@ export interface NoGearStats {
   eff: number; res: number;
 }
 
-/** Ingredients exposed alongside the no-gear stats so the gear-composition
- *  step (in BuildsScreen) can plug gear flats + gear %s back into the
- *  compound formula without re-extracting them from the ingredients.
- *  `pctBonus` aggregates everything that compounds normally (class% +
- *  skill8% + geasStat%); `geasBuffPct` is held apart because the in-game
- *  applies IOT_BUFF rate-based geas (BT_STAT_PREMIUM) as a separate
- *  transcend-only-amplified term, floored independently. */
+/** CalcFinalStat ingredients. Mirrors the per-bucket parameters the in-game
+ *  CFormula::CalcFinalStat takes (per-mille for rates, integer for flats):
+ *   - baseValue  : per-level interpolated base stat (Min/Max bracket)
+ *   - evoValue   : sum of evolution row flats up to evoCap
+ *   - awakValue  : sum of geas IOT_STAT flats (raw stat adds from gift nodes)
+ *   - awakPct    : sum of geas IOT_STAT rates                    (compounded first)
+ *   - transcendPct: per-TransStar % bonus                         (compounded first)
+ *   - codexPct   : ArchiveStatRate %                              (codex term, on baseValue only)
+ *   - buffPct    : Skill_22 class passive + Skill_8 transcend passive +
+ *                  Geas BT_STAT_PREMIUM rate                      (outermost amplifier)
+ *  All %s are in DISPLAY units (10 = 10%). The composer converts to per-mille
+ *  when applying the in-game formula. */
 export interface StatScaling {
-  baseMax: number;
-  flat: number;
-  pctBonus: number;
-  geasBuffPct: number;
-  codexPct: number;
+  baseValue: number;
+  evoValue: number;
+  awakValue: number;
+  awakPct: number;
   transcendPct: number;
+  codexPct: number;
+  buffPct: number;
 }
 
 export interface ComposedStats {
@@ -267,25 +284,28 @@ export function composeCharStats(
   const baseEff = baseAtLevel(ingredients.base.eff, level, modifier);
   const baseRes = baseAtLevel(ingredients.base.res, level, modifier);
 
-  // pctBonus carries the "normal compound" %-layers (class + skill8 + geasStat).
-  // geasBuffPct stays separate — see calcMultStat / composeMultStat for why.
-  const atkPctBonus = classPass.atkPct + skill8.atkPct + geasStat.atkPct;
-  const defPctBonus = classPass.defPct + skill8.defPct + geasStat.defPct;
-  const hpPctBonus  = classPass.hpPct  + skill8.hpPct  + geasStat.hpPct;
-  const atkGeasBuffPct = geas.atkPct - geasStat.atkPct;
-  const defGeasBuffPct = geas.defPct - geasStat.defPct;
-  const hpGeasBuffPct  = geas.hpPct  - geasStat.hpPct;
+  // Bucket split mirrors the in-game CalcFinalStat parameters:
+  //  - awakRate (`AwakeningValueRate` in IL2CPP) = geas IOT_STAT %-bonuses
+  //  - buffRate (`BuffValueRate`, fed by `SetBuffPremiumValue`) = Skill_22
+  //    class passive + Skill_8 transcend passive + Geas BT_STAT_PREMIUM
+  //  - awakValue = geas IOT_STAT flat adds (a single bucket alongside evo)
+  const atkBuffPct = classPass.atkPct + skill8.atkPct + (geas.atkPct - geasStat.atkPct);
+  const defBuffPct = classPass.defPct + skill8.defPct + (geas.defPct - geasStat.defPct);
+  const hpBuffPct  = classPass.hpPct  + skill8.hpPct  + (geas.hpPct  - geasStat.hpPct);
 
   const scaling = {
-    atk: { baseMax: baseAtk, flat: evo.atk + geas.atk, pctBonus: atkPctBonus, geasBuffPct: atkGeasBuffPct, codexPct: codexRow.atkPct, transcendPct: transRow.atkPct },
-    def: { baseMax: baseDef, flat: evo.def + geas.def, pctBonus: defPctBonus, geasBuffPct: defGeasBuffPct, codexPct: codexRow.defPct, transcendPct: transRow.defPct },
-    hp:  { baseMax: baseHp,  flat: evo.hp  + geas.hp,  pctBonus: hpPctBonus,  geasBuffPct: hpGeasBuffPct,  codexPct: codexRow.hpPct,  transcendPct: transRow.hpPct  },
+    atk: { baseValue: baseAtk, evoValue: evo.atk, awakValue: geas.atk, awakPct: geasStat.atkPct, transcendPct: transRow.atkPct, codexPct: codexRow.atkPct, buffPct: atkBuffPct },
+    def: { baseValue: baseDef, evoValue: evo.def, awakValue: geas.def, awakPct: geasStat.defPct, transcendPct: transRow.defPct, codexPct: codexRow.defPct, buffPct: defBuffPct },
+    hp:  { baseValue: baseHp,  evoValue: evo.hp,  awakValue: geas.hp,  awakPct: geasStat.hpPct,  transcendPct: transRow.hpPct,  codexPct: codexRow.hpPct,  buffPct: hpBuffPct  },
   };
 
+  const calcStat = (s: StatScaling): number =>
+    calcFinalStat(s.baseValue, s.evoValue, s.awakValue, s.awakPct * 10, s.transcendPct * 10, 0, 0, s.codexPct * 10, s.buffPct * 10);
+
   const noGearStats: NoGearStats = {
-    atk: calcMultStat(scaling.atk.baseMax, scaling.atk.flat, scaling.atk.pctBonus, scaling.atk.geasBuffPct, scaling.atk.codexPct, scaling.atk.transcendPct),
-    def: calcMultStat(scaling.def.baseMax, scaling.def.flat, scaling.def.pctBonus, scaling.def.geasBuffPct, scaling.def.codexPct, scaling.def.transcendPct),
-    hp:  calcMultStat(scaling.hp.baseMax,  scaling.hp.flat,  scaling.hp.pctBonus,  scaling.hp.geasBuffPct,  scaling.hp.codexPct,  scaling.hp.transcendPct),
+    atk: calcStat(scaling.atk),
+    def: calcStat(scaling.def),
+    hp:  calcStat(scaling.hp),
     // Floor (not round) on the per-level interpolated base stats to match the
     // in-game truncation — round() would push e.g. Luna's lv120 RES 130.91 to
     // 131 when the in-game sheet shows 130.
@@ -310,9 +330,9 @@ export function composeCharStats(
   //    Validated on M.S.Ame EFF (120 = 10 + 110 + 0; the +50 Geas EFF lives
   //    on an IOT_BUFF node and lands in the +125 yellow delta).
   const intrinsicStats: NoGearStats = {
-    atk: Math.floor(scaling.atk.baseMax + evo.atk + geasStat.atk),
-    def: Math.floor(scaling.def.baseMax + evo.def + geasStat.def),
-    hp:  Math.floor(scaling.hp.baseMax  + evo.hp  + geasStat.hp),
+    atk: Math.floor(scaling.atk.baseValue + evo.atk + geasStat.atk),
+    def: Math.floor(scaling.def.baseValue + evo.def + geasStat.def),
+    hp:  Math.floor(scaling.hp.baseValue  + evo.hp  + geasStat.hp),
     spd: Math.floor(baseSpd + evo.spd + geasStat.spd),
     chc: Math.floor(baseChc + evo.chc + geasStat.chc),
     chd: Math.floor(baseChd + evo.chd + geasStat.chd),

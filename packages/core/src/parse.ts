@@ -174,6 +174,7 @@ export function parseInventory(
       ultimate: c.Ultimate,
       chainPassive: c.ChainPassive,
     },
+    fusionCharId: Number((c as { FusionCharID?: unknown }).FusionCharID ?? 0) || 0,
   }));
   return { gear, characters };
 }

@@ -134,6 +134,11 @@ function extractTranscendByStar(transcendent, basicStar, charId) {
       defPct: num(r.RewardDefRate) / 10,
       hpPct:  num(r.RewardHPRate)  / 10,
       skillLevel: num(r.SkillLevel),
+      // Star UI metadata used by the BP formula (CalcBattlePower in libil2cpp).
+      // ShowUIStar drives the in-game star display (1..6 for 3★ chars), StarPlus
+      // adds a "+" star indicator. Both feed star_bonus = ShowUIStar×500 + StarPlus×120.
+      showUIStar: num(r.ShowUIStar),
+      starPlus:   num(r.StarPlus),
     };
   }
   return out;
