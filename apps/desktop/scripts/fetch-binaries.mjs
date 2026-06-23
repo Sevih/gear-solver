@@ -20,7 +20,7 @@
  * / MuMu / NoxPlayer, all Windows.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, rmSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -185,8 +185,48 @@ async function provisionProdCert() {
   console.log(`[ok] android cert ready: ${hashFile}`);
 }
 
+/** Wrap a PNG as a single-image Windows ICO container. electron-builder
+ *  needs build/icon.ico to be >= 256x256 square; the favicon.ico in
+ *  outerpedia-v2 is 189x256 (the site's tall-logo favicon) so we
+ *  regenerate from the square 512x512 PNG asset. Inline because
+ *  ImageMagick isn't on the dev's PATH and the format is trivial: 6-byte
+ *  header + 16-byte directory entry + the raw PNG payload. */
+function provisionWindowsIcon() {
+  const srcPng = join(here, "..", "..", "..", "..", "outerpedia-v2", "public", "icons", "icon-512x512.png");
+  const buildDir = join(here, "..", "build");
+  const outIco = join(buildDir, "icon.ico");
+  if (!existsSync(srcPng)) {
+    console.warn(`[warn] icon source not found at ${srcPng} - skipping .ico generation`);
+    return;
+  }
+  mkdirSync(buildDir, { recursive: true });
+  const png = readFileSync(srcPng);
+  const width = png.readUInt32BE(16);
+  const height = png.readUInt32BE(20);
+  // ICO width/height fields are 1 byte each; 256+ is encoded as 0.
+  const w = width >= 256 ? 0 : width;
+  const h = height >= 256 ? 0 : height;
+  const dataOffset = 6 + 16; // 6-byte header + 1 dir entry
+  const out = Buffer.alloc(dataOffset + png.length);
+  out.writeUInt16LE(0, 0);                  // Reserved
+  out.writeUInt16LE(1, 2);                  // Type (1 = icon)
+  out.writeUInt16LE(1, 4);                  // Image count
+  out.writeUInt8(w, 6);                     // Width
+  out.writeUInt8(h, 7);                     // Height
+  out.writeUInt8(0, 8);                     // Palette (0 for non-indexed)
+  out.writeUInt8(0, 9);                     // Reserved
+  out.writeUInt16LE(1, 10);                 // Color planes
+  out.writeUInt16LE(32, 12);                // Bits per pixel
+  out.writeUInt32LE(png.length, 14);        // Payload size
+  out.writeUInt32LE(dataOffset, 18);        // Payload offset
+  png.copy(out, dataOffset);
+  writeFileSync(outIco, out);
+  console.log(`[ok] windows icon ${width}x${height} -> ${outIco}`);
+}
+
 mkdirSync(BIN, { recursive: true });
 await provisionMitmproxy();
 await provisionPlatformTools();
 await provisionProdCert();
-console.log(`[done] all binaries + prod cert provisioned under ${BIN}/..`);
+provisionWindowsIcon();
+console.log(`[done] all binaries + prod cert + icon provisioned under ${BIN}/..`);

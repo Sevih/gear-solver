@@ -2,11 +2,11 @@ import { memo, useCallback, useMemo, useState } from "react";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
 import { cx } from "../design/cx.js";
 import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
-import { CharFace, EquipmentIcon, SlotIcon, StarRow, StatIcon } from "../design/EquipmentIcon.js";
-import { LockIcon, Pill, RarityPill, SubstatChip } from "../design/Chips.js";
-import { CyanButton, GhostButton, GsLabel } from "../design/Shell.js";
+import { CharFace, EquipmentIcon, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
+import { RarityPill } from "../design/Chips.js";
+import { GsLabel } from "../design/Shell.js";
 import {
-  RARITY, SINGULARITY_GRADIENT_H, SLOTS, STAT, TOKENS, statColor,
+  RARITY, SINGULARITY_GRADIENT_H, SLOTS, TOKENS,
   type DesignRarity, type SlotId,
 } from "../design/tokens.js";
 import { toUiPiece, type UiPiece } from "../design/adapter.js";
@@ -20,21 +20,6 @@ function Search({ className = "h-3.5 w-3.5" }: { className?: string }) {
     </svg>
   );
 }
-function ChevronRight({ className = "h-3 w-3" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 12 12" className={className} fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 3 L8 6 L5 9" />
-    </svg>
-  );
-}
-function XIcon({ className = "h-3 w-3" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 12 12" className={className} fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round">
-      <path d="M3 3 L9 9 M3 9 L9 3" />
-    </svg>
-  );
-}
-
 // ── filter state ────────────────────────────────────────────────────────
 interface FilterState {
   slots: Set<SlotId>;
@@ -151,16 +136,64 @@ function Checkbox({
   );
 }
 
-function FilterPanel({ f, setF }: { f: FilterState; setF: (next: FilterState) => void }) {
+/** How many filter dimensions are currently non-default — surfaced as a
+ *  badge on the collapsed strip so the user knows whether collapsing hid
+ *  anything load-bearing. */
+function activeFilterCount(f: FilterState): number {
+  let n = 0;
+  if (f.slots.size > 0) n++;
+  if (f.rarities.size > 0) n++;
+  if (f.stars.size > 0) n++;
+  if (f.brk.size > 0) n++;
+  if (f.enhMin !== 0 || f.enhMax !== 15) n++;
+  if (!f.showEquipped || !f.showFree || !f.showLocked) n++;
+  if (f.singularityOnly) n++;
+  if (f.query.trim() !== "") n++;
+  return n;
+}
+
+function FilterPanel({
+  f, setF, collapsed, onToggle,
+}: { f: FilterState; setF: (next: FilterState) => void; collapsed: boolean; onToggle: () => void }) {
   const toggle = <T,>(s: Set<T>, v: T): Set<T> => {
     const n = new Set(s);
     if (n.has(v)) n.delete(v); else n.add(v);
     return n;
   };
+  if (collapsed) {
+    const active = activeFilterCount(f);
+    return (
+      <aside className="flex h-full w-10 shrink-0 flex-col items-center gap-2 rounded-xl border border-white/[0.07] bg-[oklch(0.19_0.016_270/0.7)] py-3 backdrop-blur-sm">
+        <button
+          onClick={onToggle}
+          title="Expand filters"
+          className="grid h-7 w-7 place-items-center rounded-md text-zinc-400 transition-colors hover:bg-white/6 hover:text-zinc-100"
+        >
+          <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 3 L5 7 L9 11" />
+          </svg>
+        </button>
+        <div className="vertical-text text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400" style={{ writingMode: "vertical-rl" }}>
+          Filters{active > 0 ? ` · ${active}` : ""}
+        </div>
+      </aside>
+    );
+  }
   return (
     <aside className="w-60 shrink-0 overflow-hidden rounded-xl border border-white/[0.07] bg-[oklch(0.19_0.016_270/0.7)] backdrop-blur-sm">
       <div className="flex items-center justify-between border-b border-white/6 px-3 py-2.5">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-300">Filters</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onToggle}
+            title="Collapse filters"
+            className="grid h-5 w-5 place-items-center rounded text-zinc-500 hover:bg-white/6 hover:text-zinc-200"
+          >
+            <svg viewBox="0 0 14 14" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 3 L9 7 L5 11" />
+            </svg>
+          </button>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-300">Filters</span>
+        </div>
         <button onClick={() => setF(emptyFilters())} className="text-[10.5px] text-cyan-300 hover:text-cyan-200">Reset</button>
       </div>
 
@@ -265,28 +298,7 @@ function FilterPanel({ f, setF }: { f: FilterState; setF: (next: FilterState) =>
   );
 }
 
-// ── gear row + main stat line ───────────────────────────────────────────
-function MainStatLine({ mains }: { mains: UiPiece["main"] }) {
-  return (
-    <span className="inline-flex items-center gap-2 font-mono text-[13px] tabular-nums">
-      {mains.map((m, i) => (
-        <span key={i} className="inline-flex items-center gap-1">
-          {i > 0 && <span className="text-zinc-600">/</span>}
-          <StatIcon stat={m.stat} size={16} />
-          <span style={{ color: TOKENS.gold }}>{m.value}</span>
-        </span>
-      ))}
-    </span>
-  );
-}
-
-/** Inline portrait chip — replaces the textual character name; the name lives
- *  in the tooltip. Pulls from /img/characters/faceicon/. */
-function EquippedByChip({ charId, name }: { charId: number | string; name: string }) {
-  return <CharFace charId={charId} name={name} size={80} />;
-}
-
-/** Row / card props share the same shape. Parent passes the resolved
+/** Common props for the grid card — parent passes the resolved
  *  `equippedChar` (looked up once via the `charsByUid` Map in the screen)
  *  + a stable `onSelect(id)` callback so `memo` actually skips renders
  *  when scrolling / filtering / selecting a different row. */
@@ -297,135 +309,70 @@ interface GearItemProps {
   onSelect: (id: string) => void;
 }
 
-const GearRow = memo(function GearRow({ piece, equippedChar, active, onSelect }: GearItemProps) {
+/** Icon-only grid tile — clicking it surfaces the full detail in the left
+ *  ItemDetail panel. Keeping the tile down to ~96px lets us pack ~10 columns
+ *  on a 1480px window instead of ~6 with the old name+stats card.
+ *  Overlays:
+ *    - top-left:  "E" badge when equipped (white-on-black, replaces the
+ *                 character portrait — too noisy at this density).
+ *    - bottom-left, above the EquipmentIcon's own T<n> tier badge: the
+ *                 in-game CT_Slot_Lock sprite, sourced from outerpedia-v2's
+ *                 datamine and served at /img/ui/inven/CT_Slot_Lock.png.
+ *  Selection is conveyed by a soft cyan halo (ring + outer glow) rather
+ *  than a hard border so the focus reads as ambient light, not a frame. */
+const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect }: GearItemProps) {
   const onClick = useCallback(() => onSelect(piece.id), [onSelect, piece.id]);
   return (
-    <div
+    <button
       onClick={onClick}
+      title={piece.name}
       className={cx(
-        "group grid cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+        "group relative grid place-items-center rounded-lg border p-0 transition-all",
+        // Selection = solid cyan border directly on the tile edge + a soft
+        // outer cyan glow (the previous `ring-2` sat outside the p-1.5
+        // padding so it looked like a frame floating 6px away from the
+        // icon - too far to read as a halo).
         active
-          ? "border-cyan-400/30 bg-cyan-500/5"
-          : "border-white/5 bg-white/[0.012] hover:border-white/10 hover:bg-white/3",
+          ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_12px_-1px_rgba(34,211,238,0.55)]"
+          : "border-white/5 bg-white/[0.012] hover:border-white/15 hover:bg-white/3",
       )}
-      // `content-visibility: auto` lets the browser skip layout+paint for
-      // rows that aren't in the viewport (CSS-native virtualization, no JS
-      // deps). `contain-intrinsic-size` reserves height so the scrollbar
-      // stays stable — measured against the actual rendered row (80px icon
-      // + ~25px padding).
-      style={{
-        gridTemplateColumns: "80px minmax(220px,1.3fr) minmax(220px,1.6fr) auto",
-        contentVisibility: "auto",
-        containIntrinsicSize: "0 105px",
-      }}
+      // CSS-native virtualization - skip layout/paint for off-screen tiles.
+      style={{ contentVisibility: "auto", containIntrinsicSize: "0 96px" }}
     >
-      <EquipmentIcon piece={piece.iconPiece} size={80} />
-
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-[14px] font-semibold text-zinc-100">{piece.name}</span>
-          {piece.locked && <LockIcon className="h-3.5 w-3.5 text-amber-300/80" />}
-        </div>
-        <div className="mt-2"><MainStatLine mains={piece.main} /></div>
-      </div>
-
-      <div className="min-w-0">
-        <div className="flex flex-wrap gap-1">
-          {piece.subs.map((s, i) => <SubstatChip key={i} stat={s.stat} value={s.value} lv={s.lv} />)}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 justify-self-end">
-        {equippedChar
-          ? <EquippedByChip charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} />
-          : <span className="font-mono text-[11px] text-zinc-600">unequipped</span>}
-        <ChevronRight className="h-3.5 w-3.5 text-zinc-600 group-hover:text-zinc-400" />
-      </div>
-    </div>
-  );
-});
-
-/** Compact card variant of GearRow — same data, vertical layout, suitable for
- *  a responsive grid (auto-fill, min 220px). Used in the "compact" view mode. */
-const GearCard = memo(function GearCard({ piece, equippedChar, active, onSelect }: GearItemProps) {
-  const onClick = useCallback(() => onSelect(piece.id), [onSelect, piece.id]);
-  return (
-    <div
-      onClick={onClick}
-      className={cx(
-        "group cursor-pointer rounded-lg border p-3 transition-colors",
-        active
-          ? "border-cyan-400/30 bg-cyan-500/5"
-          : "border-white/5 bg-white/[0.012] hover:border-white/10 hover:bg-white/3",
+      <EquipmentIcon piece={piece.iconPiece} size={84} />
+      {/* "E" sits well inside the icon's top-left art area (not on the tile
+          frame) so it reads as an overlay on the gear, not a tile chrome. */}
+      {equippedChar && (
+        <span
+          title={`Equipped on ${equippedChar.name ?? `#${equippedChar.charId}`}`}
+          className="absolute left-2.75 top-1 grid h-4 w-4 place-items-center bg-black/85 font-mono text-[9px] font-bold text-white"
+        >
+          E
+        </span>
       )}
-      // CSS-native virtualization — see `GearRow` for the rationale. Card
-      // intrinsic size is taller (80px icon + name + main + subs).
-      style={{ contentVisibility: "auto", containIntrinsicSize: "0 180px" }}
-    >
-      <div className="flex items-start gap-2">
-        <EquipmentIcon piece={piece.iconPiece} size={80} />
-        <div className="ml-auto">
-          {equippedChar
-            ? <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={56} />
-            : null}
-        </div>
-      </div>
-      <div className="mt-2 flex items-center gap-1.5">
-        <span className="truncate text-[13.5px] font-semibold text-zinc-100">{piece.name}</span>
-        {piece.locked && <LockIcon className="h-3.5 w-3.5 shrink-0 text-amber-300/80" />}
-      </div>
-      <div className="mt-1.5"><MainStatLine mains={piece.main} /></div>
-      {piece.subs.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {piece.subs.map((s, i) => <SubstatChip key={i} stat={s.stat} value={s.value} lv={s.lv} />)}
-        </div>
+      {/* Lock sits noticeably above the EquipmentIcon's own T<n> tier badge
+          (the tier text in an 84px icon lives near bottom 20-34px). Bumped
+          to bottom-12 + h-5 to read as a clear "locked" stamp rather than a
+          tiny corner indicator. */}
+      {piece.locked && (
+        <img
+          src="/img/ui/inven/CT_Slot_Lock.png"
+          alt="Locked"
+          className="pointer-events-none absolute left-2.5 bottom-10.5 h-4.5 w-4.5"
+        />
       )}
-    </div>
+    </button>
   );
 });
 
 // ── sort header ─────────────────────────────────────────────────────────
 type SortKey = "stars" | "enhance" | "bt" | "name";
-type ViewMode = "list" | "compact";
-
-function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
-  const Btn = ({ m, children, title }: { m: ViewMode; children: React.ReactNode; title: string }) => (
-    <button
-      onClick={() => onChange(m)}
-      title={title}
-      className={cx(
-        "grid h-6 w-7 place-items-center transition-colors",
-        mode === m ? "bg-cyan-500/15 text-cyan-200" : "text-zinc-500 hover:text-zinc-300",
-      )}
-    >
-      {children}
-    </button>
-  );
-  return (
-    <div className="inline-flex overflow-hidden rounded-md border border-white/[0.07] bg-black/30">
-      <Btn m="list" title="List view">
-        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round">
-          <path d="M3 4 H11 M3 7 H11 M3 10 H11" />
-        </svg>
-      </Btn>
-      <Btn m="compact" title="Compact card view">
-        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.2}>
-          <rect x="2.5" y="2.5" width="4" height="4" rx="0.5" />
-          <rect x="7.5" y="2.5" width="4" height="4" rx="0.5" />
-          <rect x="2.5" y="7.5" width="4" height="4" rx="0.5" />
-          <rect x="7.5" y="7.5" width="4" height="4" rx="0.5" />
-        </svg>
-      </Btn>
-    </div>
-  );
-}
 
 function SortHeader({
-  sort, dir, total, shown, onSort, limit, onLimitChange, viewMode, onViewModeChange,
+  sort, dir, total, shown, onSort, limit, onLimitChange,
 }: {
   sort: SortKey; dir: "asc" | "desc"; total: number; shown: number;
   onSort: (k: SortKey) => void; limit: number; onLimitChange: (n: number) => void;
-  viewMode: ViewMode; onViewModeChange: (m: ViewMode) => void;
 }) {
   const Th = ({ k, label }: { k: SortKey; label: string }) => (
     <button
@@ -449,7 +396,6 @@ function SortHeader({
         <Th k="name" label="Name" />
       </div>
       <div className="flex items-center gap-2 text-[11.5px] text-zinc-500">
-        <ViewToggle mode={viewMode} onChange={onViewModeChange} />
         <span className="font-mono">{total} pieces · {shown} shown</span>
         <select
           value={limit}
@@ -464,37 +410,52 @@ function SortHeader({
   );
 }
 
-// ── drawer ──────────────────────────────────────────────────────────────
+// ── detail ──────────────────────────────────────────────────────────────
+/** Substat row in the ItemDetail panel. Used to color-code value + bar by
+ *  stat kind (off=yellow, def=blue, util=cyan) — same convention as the
+ *  removed SubstatChip coloring. Dropped after user feedback: the icon
+ *  already says what the stat is, the extra color was just noise. */
 function SubstatBar({ s }: { s: UiPiece["subs"][number] }) {
-  const meta = STAT[s.stat] ?? { label: s.stat.toUpperCase(), kind: "util" as const, color: "#cbd5e1", icon: null };
-  const color = meta.kind === "off" ? "#fbbf24" : meta.kind === "def" ? "#93c5fd" : "#38bdf8";
   const pct = Math.min(100, (s.lv / 6) * 100);
   return (
     <div className="flex items-center gap-2">
       <StatIcon stat={s.stat} size={18} className="w-4.5 shrink-0" />
       <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
-        <div
-          className="absolute inset-y-0 left-0 rounded-full"
-          style={{ width: `${pct}%`, background: color, boxShadow: `0 0 8px ${color}80` }}
-        />
+        <div className="absolute inset-y-0 left-0 rounded-full bg-cyan-400/70" style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-16 text-right font-mono text-[13px] tabular-nums" style={{ color: statColor(meta.kind) }}>{s.value}</span>
+      <span className="w-16 text-right font-mono text-[13px] tabular-nums text-zinc-100">{s.value}</span>
       <span className="w-8 text-right font-mono text-[10.5px] text-zinc-600">lv{s.lv}</span>
     </div>
   );
 }
 
-function GearDrawer({
-  piece, equippedChar, onClose,
-}: { piece: UiPiece; equippedChar: Character | null; onClose: () => void }) {
+/** Left-side detail panel — visible at all times. Renders an empty
+ *  placeholder when nothing is selected so the layout stays stable (the
+ *  grid in the middle doesn't reflow when the user clicks a piece). The
+ *  populated state shows the full main / sub / equipped char / set / brk
+ *  breakdown that used to live in the right-side `GearDrawer`. */
+function ItemDetail({
+  piece, equippedChar,
+}: { piece: UiPiece | null; equippedChar: Character | null }) {
+  if (!piece) {
+    return (
+      <aside className="flex h-full w-80 shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/6 bg-white/[0.012] px-6 py-8 text-center">
+        <div className="grid h-10 w-10 place-items-center rounded-md border border-white/6 bg-black/30 text-zinc-500">
+          <svg viewBox="0 0 14 14" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.4}>
+            <rect x="2" y="2" width="10" height="10" rx="1.5" />
+            <path d="M5 7 H9 M7 5 V9" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div className="mt-3 text-[12px] font-medium text-zinc-300">No item selected</div>
+        <div className="mt-1 text-[11px] leading-snug text-zinc-500">Click a tile in the grid to inspect its main / substats / equipped character.</div>
+      </aside>
+    );
+  }
   const slot = piece.slot ? SLOTS.find((s) => s.id === piece.slot) : null;
   return (
-    <div className="flex h-full w-85 flex-col border-l border-white/8 bg-bg-elev-1 shadow-[-30px_0_80px_-30px_rgba(0,0,0,0.8)]">
+    <aside className="flex h-full w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-white/8 bg-bg-elev-1">
       <header className="flex items-center justify-between border-b border-white/6 px-4 py-3">
         <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">{slot?.label ?? "Item"} detail</span>
-        <button onClick={onClose} className="grid h-6 w-6 place-items-center rounded-md border border-white/6 bg-black/30 text-zinc-400 hover:text-zinc-200">
-          <XIcon />
-        </button>
       </header>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -503,15 +464,21 @@ function GearDrawer({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="font-display text-[16px] font-semibold text-zinc-50">{piece.name}</span>
-              {piece.locked && <LockIcon className="h-3.5 w-3.5 text-amber-300/80" />}
-            </div>
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              <RarityPill rarity={piece.rarity} />
-            </div>
-            <div className="mt-1.5 flex items-center gap-2">
-              {piece.stars > 0 && (
-                <StarRow count={piece.stars} reforge={piece.reforge.n} size={13} />
+              {piece.locked && (
+                <img
+                  src="/img/ui/inven/CT_Slot_Lock.png"
+                  alt="Locked"
+                  title="Locked in-game"
+                  className="h-4 w-4 shrink-0"
+                />
               )}
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <RarityPill rarity={piece.rarity} />
+              {/* Star row dropped here - the EquipmentIcon above already
+                  renders the stars overlay, so showing them again next to
+                  the rarity pill was redundant. Singularity tag stays
+                  because the icon doesn't otherwise distinguish ascended. */}
               {piece.singularity && (
                 <span
                   className="font-mono text-[10px] uppercase tracking-wider"
@@ -534,17 +501,10 @@ function GearDrawer({
               </div>
             ))}
           </div>
-          <div className="mt-2 flex items-center gap-2 font-mono text-[11px] text-zinc-500">
-            <span>Enhance +{piece.enhance}</span>
-            <span>·</span>
-            <span>Breakthrough T{piece.bt}</span>
-            {piece.singularity && (
-              <>
-                <span>·</span>
-                <span style={{ background: SINGULARITY_GRADIENT_H, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>Ascended</span>
-              </>
-            )}
-          </div>
+          {/* +N enhance / T<n> tier / Ascended were duplicated here from
+              the EquipmentIcon overlays (which already render +15 / T4
+              prominently on the art). The "Singularity" gradient tag two
+              lines up still handles the ascended visual signal. */}
         </div>
 
         {piece.subs.length > 0 && (
@@ -569,11 +529,9 @@ function GearDrawer({
         )}
       </div>
 
-      <footer className="flex items-center gap-2 border-t border-white/6 px-4 py-3">
-        <GhostButton className="flex-1"><LockIcon className="h-3 w-3" />{piece.locked ? "Unlock" : "Lock"}</GhostButton>
-        <CyanButton size="sm" className="flex-1">Use in Builder</CyanButton>
-      </footer>
-    </div>
+      {/* No footer yet - "Use in Builder" was a placeholder, removed until
+          the Builder screen is wired up. Lock state stays read-only. */}
+    </aside>
   );
 }
 
@@ -581,10 +539,9 @@ function GearDrawer({
 export interface InventoryScreenProps {
   inventory: Inventory | null;
   game: GameData | null;
-  lastCapture: number | null;
 }
 
-export function InventoryScreen({ inventory, game, lastCapture }: InventoryScreenProps) {
+export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
   // Persist filters / sort / view so the page survives a reload (or tab swap).
   // `selectedId` stays ephemeral — re-opening the drawer to a random item after
   // a reload would be more annoying than useful.
@@ -592,7 +549,7 @@ export function InventoryScreen({ inventory, game, lastCapture }: InventoryScree
   const [sort, setSort] = usePersistedState<SortKey>("gs.inv.sort", "enhance");
   const [dir, setDir] = usePersistedState<"asc" | "desc">("gs.inv.dir", "desc");
   const [limit, setLimit] = usePersistedState("gs.inv.limit", 100);
-  const [viewMode, setViewMode] = usePersistedState<ViewMode>("gs.inv.view", "list");
+  const [filtersCollapsed, setFiltersCollapsed] = usePersistedState<boolean>("gs.inv.filtersCollapsed", false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const ui = useMemo<UiPiece[]>(() => (inventory ? inventory.gear.map((g) => toUiPiece(g, game)) : []), [inventory, game]);
@@ -628,13 +585,12 @@ export function InventoryScreen({ inventory, game, lastCapture }: InventoryScree
   const view = sorted.slice(0, limit);
   const selected = selectedId ? sorted.find((p) => p.id === selectedId) ?? null : null;
 
-  // Stable click handler — toggles the selection so a second click closes
-  // the drawer. Stays referentially stable across renders so memoized
-  // `GearRow`/`GearCard` skip re-renders when other rows change.
+  // Stable click handler — toggles the selection so a second click clears
+  // the detail panel. Stays referentially stable across renders so memoized
+  // `GearTile`s skip re-renders when other tiles change.
   const onSelect = useCallback((id: string) => {
     setSelectedId((cur) => (cur === id ? null : id));
   }, []);
-  const onCloseDrawer = useCallback(() => setSelectedId(null), []);
 
   function toggleSort(k: SortKey) {
     if (sort === k) setDir(dir === "desc" ? "asc" : "desc");
@@ -645,66 +601,47 @@ export function InventoryScreen({ inventory, game, lastCapture }: InventoryScree
     return <InventoryEmpty />;
   }
 
-  const captured = lastCapture ? new Date(lastCapture).toLocaleString(undefined, { day: "2-digit", month: "short" }) : null;
-
+  // 3-column layout: [ItemDetail (always shown, empty placeholder if no
+  // selection)] | [tiles grid + sort header] | [collapsible FilterPanel].
+  // The page-level title + subtitle were removed in favor of the tab badge
+  // up top — see `counts` in App.tsx.
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-baseline justify-between px-6 pt-4">
-        <div className="flex items-baseline gap-3">
-          <h1 className="font-display text-[22px] font-semibold tracking-tight text-zinc-50">Inventory</h1>
-          <span className="text-[13px] text-zinc-500">Every captured piece, with resolved stats. Click a row for detail.</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Pill tone="emerald">{ui.length} pieces</Pill>
-          {captured && <Pill>last capture · {captured}</Pill>}
+    <div className="flex h-full min-h-0 flex-1 gap-3 px-4 py-3">
+      <ItemDetail
+        piece={selected}
+        equippedChar={selected?.equippedBy ? charsByUid.get(selected.equippedBy) ?? null : null}
+      />
+      <div className="min-w-0 flex-1 flex-col flex">
+        <SortHeader
+          sort={sort} dir={dir} total={ui.length} shown={view.length}
+          onSort={toggleSort} limit={limit} onLimitChange={setLimit}
+        />
+        <div
+          className="mt-2 grid gap-1.5 overflow-y-auto pr-1 grid-cols-[repeat(auto-fill,minmax(100px,1fr))]"
+          style={{ maxHeight: "calc(100vh - 180px)" }}
+        >
+          {view.length === 0
+            ? <div className="col-span-full rounded-lg border border-white/5 bg-white/[0.012] px-6 py-12 text-center text-[13px] text-zinc-500">No piece matches the current filters.</div>
+            : view.map((p) => {
+              const equippedChar = p.equippedBy ? charsByUid.get(p.equippedBy) ?? null : null;
+              return (
+                <GearTile
+                  key={p.id}
+                  piece={p}
+                  equippedChar={equippedChar}
+                  active={p.id === selectedId}
+                  onSelect={onSelect}
+                />
+              );
+            })}
         </div>
       </div>
-
-      <div className="flex min-h-0 flex-1 gap-4 px-6 pb-6 pt-3">
-        <FilterPanel f={f} setF={setF} />
-        <div className="min-w-0 flex-1 flex-col flex">
-          <SortHeader
-            sort={sort} dir={dir} total={ui.length} shown={view.length}
-            onSort={toggleSort} limit={limit} onLimitChange={setLimit}
-            viewMode={viewMode} onViewModeChange={setViewMode}
-          />
-          <div
-            className={cx(
-              "mt-2 overflow-y-auto pr-1",
-              viewMode === "list"
-                ? "space-y-1.5"
-                : "grid gap-2 grid-cols-[repeat(auto-fill,minmax(240px,1fr))]",
-            )}
-            style={{ maxHeight: "calc(100vh - 240px)" }}
-          >
-            {view.length === 0
-              ? <div className="col-span-full rounded-lg border border-white/5 bg-white/[0.012] px-6 py-12 text-center text-[13px] text-zinc-500">No piece matches the current filters.</div>
-              : view.map((p) => {
-                const equippedChar = p.equippedBy ? charsByUid.get(p.equippedBy) ?? null : null;
-                const Item = viewMode === "list" ? GearRow : GearCard;
-                return (
-                  <Item
-                    key={p.id}
-                    piece={p}
-                    equippedChar={equippedChar}
-                    active={p.id === selectedId}
-                    onSelect={onSelect}
-                  />
-                );
-              })}
-          </div>
-        </div>
-
-        {selected && (
-          <div className="shrink-0">
-            <GearDrawer
-              piece={selected}
-              equippedChar={selected.equippedBy ? charsByUid.get(selected.equippedBy) ?? null : null}
-              onClose={onCloseDrawer}
-            />
-          </div>
-        )}
-      </div>
+      <FilterPanel
+        f={f}
+        setF={setF}
+        collapsed={filtersCollapsed}
+        onToggle={() => setFiltersCollapsed(!filtersCollapsed)}
+      />
     </div>
   );
 }

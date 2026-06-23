@@ -18,18 +18,6 @@ export function PageBackground({ children }: { children: ReactNode }) {
   );
 }
 
-export function GearGlyph({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth={1.5}>
-      <circle cx={8} cy={8} r={2.3} />
-      <path
-        d="M8 1.6 V3.4 M8 12.6 V14.4 M1.6 8 H3.4 M12.6 8 H14.4 M3.4 3.4 L4.7 4.7 M11.3 11.3 L12.6 12.6 M3.4 12.6 L4.7 11.3 M11.3 4.7 L12.6 3.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 export function ReloadIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
     <svg viewBox="0 0 14 14" className={className} fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">
@@ -96,11 +84,14 @@ export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = f
         onClick={onReload}
         disabled={disable}
         className={cx(
-          "inline-flex h-7 items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 text-[11.5px] text-zinc-300 hover:bg-white/[0.06] transition-colors",
+          "inline-flex h-7 items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 text-[11.5px] text-zinc-300 transition-colors hover:bg-white/6 hover:text-zinc-100 active:scale-95",
           disable && "cursor-not-allowed opacity-50",
         )}
       >
-        <ReloadIcon className="h-3.5 w-3.5" /> Reload
+        {/* Spin the reload icon while capture/disarm is running so the user
+            gets unambiguous "something is happening" feedback even when the
+            button itself is disabled. */}
+        <ReloadIcon className={cx("h-3.5 w-3.5", capturing && "animate-spin")} /> Reload
       </button>
     </div>
   );
@@ -108,6 +99,16 @@ export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = f
 
 export type Tab = "Inventory" | "Builds" | "Builder";
 const TABS: Tab[] = ["Inventory", "Builds", "Builder"];
+
+/** Per-tab activity counts. Renders next to the tab label as a mini pill so
+ *  the page-level "Inventory · 1450 pieces" header can disappear without
+ *  the user losing the at-a-glance summary. Use `null` to hide a tab's
+ *  badge (e.g. "Builder" has no natural count today). */
+export interface TabCounts {
+  Inventory: number | null;
+  Builds: number | null;
+  Builder: number | null;
+}
 
 export interface EmulatorBadgeProps {
   /** Display label like "LDPlayer", "MuMu Player" — null when nothing was
@@ -160,43 +161,53 @@ interface GsHeaderProps {
    *  first launch via App-level state. */
   onSetup: () => void;
   version: string;
+  /** Live Outerplane resource version pulled from outerpedia-v2's
+   *  `game-version.json`. Null while loading / on fetch failure (we just
+   *  omit it from the subtitle rather than show a placeholder). */
+  gameVersion: string | null;
+  /** Per-tab counts rendered as a chip next to each label — replaces the
+   *  page-level "Inventory · 1450 pieces" header so the screen can use the
+   *  vertical space for content (3-column inventory layout). */
+  counts: TabCounts;
 }
 
-export function GsHeader({ active, onTabChange, capture, emulator, onSetup, version }: GsHeaderProps) {
+export function GsHeader({ active, onTabChange, capture, emulator, onSetup, version, gameVersion, counts }: GsHeaderProps) {
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.06] bg-black/45 px-4 py-2.5 backdrop-blur-md">
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2.5">
-          <div
-            className="grid h-7 w-7 place-items-center rounded-md"
-            style={{
-              background: "linear-gradient(135deg, #16EBF1, #9D51FF 60%, #E02BCD)",
-              boxShadow: "0 0 16px rgba(157,81,255,0.45)",
-            }}
-          >
-            <GearGlyph className="h-4 w-4 text-white" />
-          </div>
-          <div className="leading-tight">
-            <div className="font-display text-[13.5px] font-semibold tracking-tight text-zinc-100">gear-solver</div>
-            <div className="font-mono text-[8.5px] uppercase tracking-[0.18em] text-zinc-500">Outerpedia · v{version}</div>
+        <div className="leading-tight">
+          <div className="font-display text-[14px] font-semibold tracking-tight text-zinc-100">Gear Solver</div>
+          <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-300">
+            Outerpedia · v{version}{gameVersion ? <> · game {gameVersion}</> : null}
           </div>
         </div>
 
         <nav className="flex items-center gap-1 rounded-lg border border-white/[0.06] bg-black/30 p-0.5 text-[12.5px]">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              onClick={() => onTabChange(t)}
-              className={cx(
-                "rounded-md px-3 py-1 font-medium transition-colors",
-                t === active
-                  ? "bg-white/[0.07] text-zinc-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-                  : "text-zinc-400 hover:text-zinc-200",
-              )}
-            >
-              {t}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const count = counts[t];
+            return (
+              <button
+                key={t}
+                onClick={() => onTabChange(t)}
+                className={cx(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition-colors",
+                  t === active
+                    ? "bg-white/[0.07] text-zinc-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+                    : "text-zinc-400 hover:text-zinc-200",
+                )}
+              >
+                {t}
+                {count != null && (
+                  <span className={cx(
+                    "rounded-sm px-1 font-mono text-[10px] tabular-nums",
+                    t === active ? "bg-cyan-500/15 text-cyan-200" : "bg-white/5 text-zinc-500",
+                  )}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
       </div>
 
@@ -205,12 +216,17 @@ export function GsHeader({ active, onTabChange, capture, emulator, onSetup, vers
         <button
           onClick={onSetup}
           title="Open the setup checklist (emulator, ADB, root)"
-          className="grid h-7 w-7 place-items-center rounded-md border border-white/8 bg-white/3 text-zinc-400 hover:bg-white/6 hover:text-zinc-200"
+          className="grid h-7 w-7 place-items-center rounded-md border border-white/8 bg-white/3 text-zinc-400 transition-colors hover:bg-white/6 hover:text-zinc-200 active:scale-95"
           aria-label="Setup"
         >
-          <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-            <circle cx={7} cy={7} r={2} />
-            <path d="M7 1 V3 M7 11 V13 M1 7 H3 M11 7 H13 M2.5 2.5 L4 4 M10 10 L11.5 11.5 M2.5 11.5 L4 10 M10 4 L11.5 2.5" />
+          {/* Sliders / settings icon — three horizontal lines with adjuster
+              knobs. Reads as "configuration" rather than the previous gear
+              SVG which looked like a sun. */}
+          <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 3.5 H12 M2 7 H12 M2 10.5 H12" />
+            <circle cx={5} cy={3.5} r={1.4} fill="currentColor" stroke="none" />
+            <circle cx={9} cy={7} r={1.4} fill="currentColor" stroke="none" />
+            <circle cx={4} cy={10.5} r={1.4} fill="currentColor" stroke="none" />
           </svg>
         </button>
         <CaptureControls {...capture} />

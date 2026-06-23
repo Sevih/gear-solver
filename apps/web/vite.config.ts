@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync, readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, extname, join, normalize } from "node:path";
 import { detectEmulators, pickEmulator, pickPort, preflight } from "../desktop/src/emulator-detect.js";
@@ -128,6 +128,29 @@ function localData(): Plugin {
           return;
         }
         if (url === "/api/capture/status" && req.method === "GET") return captureStatus(res);
+        if (url === "/api/capture/wipe" && req.method === "POST") {
+          res.setHeader("Content-Type", "application/json");
+          if (existsSync(join(CAPTURED, ".mitm.pid"))) {
+            res.statusCode = 409;
+            res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
+            return;
+          }
+          let removed = 0;
+          try {
+            for (const f of readdirSync(CAPTURED)) {
+              if (f.endsWith(".json") || f === ".captured" || f === "seen-paths.log" || f.endsWith(".flows")) {
+                rmSync(join(CAPTURED, f), { force: true });
+                removed++;
+              }
+            }
+          } catch (err) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: (err as Error).message }));
+            return;
+          }
+          res.end(JSON.stringify({ removed }));
+          return;
+        }
         // Emulator detection — same endpoint as the Electron prod server so the
         // renderer's `useEmulator()` hook works identically across dev/prod.
         if (url === "/api/emulators" && req.method === "GET") {
@@ -212,9 +235,19 @@ function localData(): Plugin {
   };
 }
 
+// The desktop package owns the shipped version (NSIS installer + auto-update
+// both read it from apps/desktop/package.json), so inline its value here at
+// build time and expose it to the renderer via `import.meta.env.VITE_APP_VERSION`.
+// Bumping the version in just one place — apps/desktop/package.json — keeps the
+// header pill, the installer filename, and the electron-updater feed in sync.
+const desktopPkg = JSON.parse(readFileSync(fileURLToPath(new URL("../desktop/package.json", import.meta.url)), "utf-8")) as { version: string };
+
 export default defineConfig({
   plugins: [react(), tailwindcss(), localData()],
   server: { port: 5173 },
+  define: {
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify(desktopPkg.version),
+  },
   resolve: {
     alias: {
       "@gear-solver/core": fileURLToPath(new URL("../../packages/core/src/index.ts", import.meta.url)),

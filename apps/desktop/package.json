@@ -54,7 +54,12 @@
       { "from": "../../tools/capture/addon.py", "to": "tools/capture/addon.py" },
       { "from": "../../tools/capture/scripts", "to": "tools/capture/scripts" },
       { "from": "resources/bin", "to": "bin", "filter": ["**/*"] },
-      { "from": "resources/prod-cert", "to": "prod-cert", "filter": ["**/*"] }
+      { "from": "resources/prod-cert", "to": "prod-cert", "filter": ["**/*"] },
+      { "from": "../../../outerpedia-v2/public/images/equipment", "to": "img/equipment" },
+      { "from": "../../../outerpedia-v2/public/images/ui", "to": "img/ui" },
+      { "from": "../../../outerpedia-v2/public/images/characters/faceicon", "to": "img/characters/faceicon" },
+      { "from": "../../../outerpedia-v2/public/images/characters/portrait", "to": "img/characters/portrait" },
+      { "from": "../../../outerpedia-v2/public/images/characters/ee", "to": "img/characters/ee" }
     ],
     "win": {
       "target": "nsis"

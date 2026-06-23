@@ -15,7 +15,12 @@
 import { app, BrowserWindow, dialog } from "electron";
 import electronUpdaterPkg from "electron-updater";
 import type { Server } from "node:http";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { disarmIfArmed, startServer } from "./server.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // electron-updater ships a CommonJS bundle; the ESM-friendly default
 // export gives us the `autoUpdater` singleton we want.
@@ -62,6 +67,11 @@ function setupAutoUpdate(): void {
 }
 
 async function createWindow(): Promise<void> {
+  // In dev `electron.exe` runs unbranded — pass the bundled icon explicitly so
+  // the window title bar + taskbar entry at least show the right artwork
+  // (electron.exe itself stays default; only the packaged build can swap that).
+  // In prod the .exe metadata already carries the icon via electron-builder.
+  const iconPath = join(__dirname, "..", "build", "icon.ico");
   const win = new BrowserWindow({
     width: 1480,
     height: 920,
@@ -69,6 +79,7 @@ async function createWindow(): Promise<void> {
     minHeight: 720,
     backgroundColor: "#0a0a0a",
     autoHideMenuBar: true,
+    icon: existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

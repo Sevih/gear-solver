@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cx } from "./cx.js";
 import { StatIcon } from "./EquipmentIcon.js";
-import { RARITY, STAT, statColor, type DesignRarity } from "./tokens.js";
+import { RARITY, type DesignRarity } from "./tokens.js";
 
 /** Generic small pill. */
 export function Pill({
@@ -75,18 +75,20 @@ export function LockIcon({ className = "h-3 w-3" }: { className?: string }) {
   );
 }
 
-/** Substat chip — `[icon] value [lvN]`, monospace, color-coded by stat kind. */
+/** Substat chip — `[icon] value [lvN]`, monospace. The stat icon already
+ *  conveys "what kind of stat" — coloring the value too (was: off=yellow,
+ *  def=blue, util=cyan) added visual noise without payoff, so the value
+ *  stays uniform zinc. */
 export function SubstatChip({
   stat, value, lv, className,
 }: { stat: string; value: string | number; lv?: number; className?: string }) {
-  const meta = STAT[stat] ?? { label: stat.toUpperCase(), kind: "util" as const, color: "#cbd5e1", icon: null };
   return (
     <span className={cx(
       "inline-flex items-center gap-1 rounded border border-white/[0.05] bg-black/25 px-1.5 py-0.5 font-mono text-[11.5px] tabular-nums",
       className,
     )}>
       <StatIcon stat={stat} size={14} />
-      <span style={{ color: statColor(meta.kind) }}>{value}</span>
+      <span className="text-zinc-100">{value}</span>
       {lv != null && <span className="text-[9px] text-zinc-600">lv{lv}</span>}
     </span>
   );

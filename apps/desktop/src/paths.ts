@@ -72,9 +72,18 @@ export const BUNDLED_PROD_CERT_DIR = IS_DEV
   ? join(REPO_ROOT, "apps", "desktop", "resources", "prod-cert")
   : join(RES, "prod-cert");
 
-/** Outerpedia-v2 public images checkout — only used in dev (the Vite
- *  middleware already mounts these). Prod redirects `/img/*` straight to
- *  outerpedia.com (see `server.ts`). */
+/** Curated `outerpedia-v2/public/images` subset bundled into the packaged
+ *  app (equipment / ui / characters/faceicon / characters/portrait /
+ *  characters/ee). The Electron prod server serves /img/* straight from
+ *  here when the file exists, and falls back to a 302 to outerpedia.com for
+ *  anything we didn't ship (new patch gear, characters added since the last
+ *  release, …). In dev this points at a stub that never has files; the
+ *  Vite middleware handles its own mount via findOuterpediaImagesDev. */
+export const BUNDLED_IMG = IS_DEV ? join(REPO_ROOT, "apps", "desktop", "resources", "img") : join(RES, "img");
+
+/** Outerpedia-v2 public images checkout - only used in dev (the Vite
+ *  middleware already mounts these). Prod uses the BUNDLED_IMG subset
+ *  above + outerpedia.com fallback. */
 export function findOuterpediaImagesDev(): string | null {
   const env = process.env.OUTERPEDIA_PATH;
   const candidates = [

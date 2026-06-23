@@ -1,10 +1,12 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { GameData, Inventory, RawUserItem, RawUserCharacter, UserGeasLevels } from "@gear-solver/core";
 import { autoImport, parseFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
 import { getEmulators, type EmulatorStatus } from "./emulator.js";
+import { getGameVersion } from "./game-version.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
-import { OnboardingWizard } from "./design/OnboardingWizard.js";
+import { LogView } from "./design/LogView.js";
+import { SettingsModal } from "./design/SettingsModal.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
@@ -31,10 +33,10 @@ export function App() {
   const [status, setStatus] = useState("");
   const [capStatus, setCapStatus] = useState<CaptureStatus | null>(null);
   const [emulator, setEmulator] = useState<EmulatorStatus | null>(null);
+  const [gameVersion, setGameVersion] = useState<string | null>(null);
   const [running, setRunning] = useState<"none" | "capture" | "disarm">("none");
   const [log, setLog] = useState<string[]>([]);
   const [logOpen, setLogOpen] = useState(false);
-  const logRef = useRef<HTMLPreElement | null>(null);
   // Onboarding wizard — persisted "seen" flag so the modal only auto-opens
   // once per fresh install. The header's gear icon re-opens it on demand.
   // `wizardOpen` is the immediate UI state; `onboardingDone` survives reloads.
@@ -47,14 +49,19 @@ export function App() {
     setInv(r.inventory);
     setUserGeas(r.userGeasLevels);
     setUserCodex(r.userCodexLevel);
-    if (r.inventory) setStatus(`${label} · ${r.game ? "stats resolved" : "engine-only fallback"}`);
-    else setStatus(r.game ? "Game data loaded — no capture found." : "No data. Arm capture to begin.");
+    if (r.inventory) {
+      // Silent on the initial auto-import — the loaded inventory is its
+      // own visual signal (tab badges fill in, tiles render). Only chime
+      // when an explicit user action (Reload, Capture OK, Manual import)
+      // produced the refresh.
+      setStatus(label === "Auto-import" ? "" : `${label} · ${r.game ? "stats resolved" : "engine-only fallback"}`);
+    } else setStatus(r.game ? "Game data loaded - no capture found." : "No data. Arm capture to begin.");
   }
 
   useEffect(() => { void refreshInventory("Auto-import"); }, []);
   useEffect(() => { void getCaptureStatus().then(setCapStatus); }, []);
   useEffect(() => { void getEmulators().then(setEmulator); }, []);
-  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log]);
+  useEffect(() => { void getGameVersion().then(setGameVersion); }, []);
 
   async function onFiles(files: FileList | null) {
     if (!files) return;
@@ -107,7 +114,6 @@ export function App() {
   }
 
   const captureState = running === "capture" ? "capturing" : (capStatus?.armed ? "armed" : "idle");
-  const lastCapture = capStatus?.userItemMtime ?? null;
 
   return (
     <PageBackground>
@@ -115,6 +121,17 @@ export function App() {
         active={tab}
         onTabChange={setTab}
         version={APP_VERSION}
+        gameVersion={gameVersion}
+        counts={{
+          // Total piece count is the more useful at-a-glance figure than
+          // "equipped/total" (we always know it from inv.gear.length without
+          // resolving char ownership). Null while no capture has loaded yet.
+          Inventory: inv ? inv.gear.length : null,
+          // Builds = number of distinct equipped characters. Computed on the
+          // fly — sparse enough to not need memoization.
+          Builds: inv ? new Set(inv.gear.filter((g) => g.equippedBy).map((g) => g.equippedBy)).size : null,
+          Builder: null,
+        }}
         capture={{
           state: captureState,
           onCapture: () => runCapture("capture"),
@@ -132,7 +149,7 @@ export function App() {
         onSetup={() => setWizardOpen(true)}
       />
 
-      <OnboardingWizard
+      <SettingsModal
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onReady={() => {
@@ -141,6 +158,8 @@ export function App() {
           // immediately after the wizard confirms everything is set.
           void getEmulators().then(setEmulator);
         }}
+        onResetOnboarding={() => setOnboardingDone(false)}
+        onAfterWipe={() => void refreshInventory("Wiped captured data")}
       />
 
       {(status || log.length > 0) && (
@@ -157,19 +176,16 @@ export function App() {
             )}
           </div>
           {logOpen && log.length > 0 && (
-            <pre
-              ref={logRef}
-              className="mt-2 max-h-48 overflow-y-auto rounded-md border border-white/[0.07] bg-black/40 p-2 font-mono text-[10.5px] leading-relaxed text-zinc-400"
-            >
-              {log.join("\n")}
-            </pre>
+            <div className="mt-2">
+              <LogView lines={log} />
+            </div>
           )}
         </div>
       )}
 
       <main className="min-h-[calc(100vh-60px)]">
         <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-500">Loading {tab.toLowerCase()}…</div>}>
-          {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} lastCapture={lastCapture} />}
+          {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} />}
           {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} />}
           {tab === "Builder" && <BuilderScreen />}
         </Suspense>

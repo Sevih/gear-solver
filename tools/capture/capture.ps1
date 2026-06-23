@@ -1,5 +1,5 @@
 <#
-  Outerplane gear-solver — one-shot capture.
+  Outerplane gear-solver - one-shot capture.
   Arms the MITM pipeline, relaunches the game, and live-decodes the account data
   into .\out\ as clean JSON. Leaves the pipeline armed so any later in-game data
   fetch keeps decoding automatically. Run .\disarm.ps1 to tear everything down.
@@ -40,44 +40,62 @@ if (-not $CertDir) { $CertDir = Join-Path $Root "cert" }
 $Pkg    = "com.smilegate.outerplane.stove.google"
 $CertHashFile = "c8750f0d.0"   # mitmproxy CA, Android subject_hash_old name
 
+# Adb wrapper bound to the configured device. `MuteAdb` discards both stdout
+# AND stderr from native calls - adb / monkey / iptables-shells dump a lot of
+# noise (monkey echoes its parsed args to stderr, adb push echoes throughput,
+# etc.) and that noise lands in the Electron capture log without it.
+#
+# The local $ErrorActionPreference override is what actually silences the
+# noise: PS 5.1 wraps every stderr line from a native command into a
+# NativeCommandError BEFORE the `2>$null` redirect kicks in, so the
+# error-record exists even with the redirect - and with $EAP=Stop (set at
+# the top of the script), that record terminates the whole pipeline. By
+# locally flipping $EAP to SilentlyContinue we let the wrapped records be
+# discarded silently. The redirect is kept as belt-and-suspenders in case
+# we ever drop $EAP=Stop globally.
 function Adb { & $Adb -s $Device @args }
-function Su($cmd) { & $Adb -s $Device shell "su -c '$cmd'" }
+function MuteAdb {
+  $ErrorActionPreference = "SilentlyContinue"
+  & $script:Adb -s $Device @args 2>$null | Out-Null
+}
+function Su($cmd) { & $script:Adb -s $Device shell "su -c '$cmd'" }
 
-function Die($m) { Write-Host "[X] $m" -ForegroundColor Red; exit 1 }
-function Ok($m)  { Write-Host "[OK] $m" -ForegroundColor Green }
-function Info($m){ Write-Host "[*] $m" -ForegroundColor Cyan }
+function Die($m) { Write-Host "x  $m" -ForegroundColor Red; exit 1 }
+function Ok($m)  { Write-Host "v  $m" -ForegroundColor Green }
+function Info($m){ Write-Host ">  $m" -ForegroundColor Cyan }
+function Warn($m){ Write-Host "!  $m" -ForegroundColor Yellow }
 
 # --- preflight ---
-if (-not (Test-Path $Adb))      { Die "adb introuvable: $Adb" }
-if (-not (Test-Path $Mitmdump)) { Die "mitmdump introuvable: $Mitmdump" }
+if (-not (Test-Path $Adb))      { Die "adb not found: $Adb" }
+if (-not (Test-Path $Mitmdump)) { Die "mitmdump not found: $Mitmdump" }
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
-Info "Connexion ADB..."
-& $Adb connect $Device | Out-Null
+Info "Connecting to ADB ($Device)..."
+MuteAdb connect $Device
 $state = (Adb get-state) 2>$null
-if ($state -ne "device") { Die "device $Device pas pret (etat=$state). Lance LDPlayer + active ADB." }
-Ok "device $Device"
+if ($state -ne "device") { Die "Device $Device not ready (state=$state). Launch the emulator and enable ADB." }
+Ok "Connected: $Device"
 
 $id = Su "id" 2>$null
-if ($id -notmatch "uid=0") { Die "Root indisponible (su a echoue). Active le toggle Root de LDPlayer (instance redemarree)." }
-Ok "root disponible"
+if ($id -notmatch "uid=0") { Die "Root unavailable (su failed). Enable the Root toggle in your emulator and restart the instance." }
+Ok "Root access verified"
 
-# --- 1. cert systeme (bind mount, idempotent) ---
+# --- 1. system cert (bind mount, idempotent) ---
 $certPresent = Su "ls /system/etc/security/cacerts/$CertHashFile 2>/dev/null"
 if ($certPresent -match $CertHashFile) {
-  Ok "cert deja installe dans le store systeme"
+  Ok "MITM cert already in system store"
 } else {
-  Info "Installation du cert (bind mount)..."
-  Adb push (Join-Path $CertDir $CertHashFile) "/sdcard/$CertHashFile" | Out-Null
-  Adb push (Join-Path $Root "scripts\bind_cert.sh") "/sdcard/bind_cert.sh" | Out-Null
+  Info "Installing MITM cert (bind mount)..."
+  MuteAdb push (Join-Path $CertDir $CertHashFile) "/sdcard/$CertHashFile"
+  MuteAdb push (Join-Path $Root "scripts\bind_cert.sh") "/sdcard/bind_cert.sh"
   Su "sh /sdcard/bind_cert.sh" | Out-Null
   $certPresent = Su "ls /system/etc/security/cacerts/$CertHashFile 2>/dev/null"
-  if ($certPresent -notmatch $CertHashFile) { Die "echec installation cert" }
-  Ok "cert installe"
+  if ($certPresent -notmatch $CertHashFile) { Die "Cert install failed" }
+  Ok "MITM cert installed"
 }
 
-# --- 2. demarrer mitmproxy reverse + addon (live decode) ---
-# kill un eventuel ancien daemon
+# --- 2. start mitmproxy reverse proxy + addon (live decode) ---
+# Kill any stale daemon from a previous arm so we don't leak processes.
 $pidFile = Join-Path $Out ".mitm.pid"
 if (Test-Path $pidFile) {
   $old = Get-Content $pidFile -ErrorAction SilentlyContinue
@@ -91,7 +109,7 @@ $log = Join-Path $Out "mitm.log"
 $flows = Join-Path $Out "game.flows"
 # Start-Process w/ -ArgumentList does NOT auto-quote args containing spaces on
 # Windows PS 5.1 (see PowerShell/PowerShell#5576). Wrap any path arg whose
-# value can contain whitespace (here: $Root, $flows) — else `mitmdump -s …\Projet perso\…\addon.py`
+# value can contain whitespace (here: $Root, $flows) - else `mitmdump -s ...\Projet perso\...\addon.py`
 # is parsed as two args and mitmdump dies with "No such script".
 function Quote($s) { if ($s -match '\s') { '"' + $s + '"' } else { $s } }
 $mitmArgs = @(
@@ -111,36 +129,37 @@ $mitmArgs = @(
 # the arg in two and mitmdump interprets the tail as a filter expression
 # ("Invalid filter expression: 'perso\\...\\prod-cert'").
 if ($MitmConfDir) { $mitmArgs += @("--set", (Quote "confdir=$MitmConfDir")) }
-Info "Demarrage mitmproxy reverse (decode en direct)..."
+Info "Starting mitmproxy (reverse-proxy + XOR decoder)..."
 $proc = Start-Process -FilePath $Mitmdump -ArgumentList $mitmArgs -PassThru -WindowStyle Hidden `
           -RedirectStandardOutput $log -RedirectStandardError "$log.err"
 $proc.Id | Out-File -Encoding ascii $pidFile
 Start-Sleep -Seconds 3
-if ($proc.HasExited) { Die "mitmdump s'est arrete (voir $log.err)" }
-Ok "mitmproxy actif (pid $($proc.Id)), ports 9001/9002"
+if ($proc.HasExited) { Die "mitmdump exited (see $log.err)" }
+Ok "mitmproxy active (pid $($proc.Id)) on ports 9001 / 9002"
 
-# --- 3. tunnel + redirection iptables (idempotent) ---
-Info "Tunnel adb + redirection iptables..."
-Adb reverse tcp:9001 tcp:9001 | Out-Null
-Adb reverse tcp:9002 tcp:9002 | Out-Null
-Adb push (Join-Path $Root "scripts\redir.sh") "/sdcard/redir.sh" | Out-Null
+# --- 3. adb reverse tunnel + iptables redirect (idempotent) ---
+Info "Setting up ADB reverse tunnel + iptables redirect..."
+MuteAdb reverse tcp:9001 tcp:9001
+MuteAdb reverse tcp:9002 tcp:9002
+MuteAdb push (Join-Path $Root "scripts\redir.sh") "/sdcard/redir.sh"
 Su "sh /sdcard/redir.sh" | Out-Null
-# le jeu route les ports de jeu via le proxy : on neutralise un eventuel proxy http residuel
-Adb shell settings put global http_proxy ":0" | Out-Null
-Ok "pipeline arme (ports 38001->9001, 38002->9002)"
+# Neutralize any leftover Android http_proxy setting so the game's BestHTTP/2
+# traffic only goes through our iptables redirect, not a stray system proxy.
+MuteAdb shell settings put global http_proxy ":0"
+Ok "Pipeline armed (38001 -> 9001, 38002 -> 9002)"
 
-# --- 4. relancer le jeu pour declencher le fetch ---
+# --- 4. relaunch the game so it triggers the /user/* fetches ---
 if (-not $NoRelaunch) {
-  Info "Relance du jeu..."
-  Adb shell am force-stop $Pkg | Out-Null
-  Adb shell "monkey -p $Pkg -c android.intent.category.LAUNCHER 1" | Out-Null
-  # auto-tap 'TOUCH TO START' apres le chargement initial
+  Info "Relaunching Outerplane..."
+  MuteAdb shell am force-stop $Pkg
+  MuteAdb shell "monkey -p $Pkg -c android.intent.category.LAUNCHER 1"
+  # Auto-tap "TOUCH TO START" a few times after the splash loads.
   Start-Sleep -Seconds 12
-  1..6 | ForEach-Object { Adb shell input tap 880 400 | Out-Null; Start-Sleep -Milliseconds 2500 }
+  1..6 | ForEach-Object { MuteAdb shell input tap 880 400; Start-Sleep -Milliseconds 2500 }
 }
 
-# --- 5. attendre la capture de l'inventaire ---
-Info "Attente de /user/item (max ${TimeoutSec}s)... joue jusqu'au lobby si besoin."
+# --- 5. wait for the inventory snapshot to land ---
+Info "Waiting for /user/item (timeout: ${TimeoutSec}s)..."
 $captured = $false
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 while ((Get-Date) -lt $deadline) {
@@ -150,14 +169,15 @@ while ((Get-Date) -lt $deadline) {
 
 if (-not $captured) {
   Write-Host ""
-  Write-Host "[!] Inventaire pas encore capture. Le pipeline reste ARME :" -ForegroundColor Yellow
-  Write-Host "    entre simplement dans le jeu (lobby) et les donnees seront decodees dans .\out\." -ForegroundColor Yellow
-  Write-Host "    Verifie l'etat avec: type `"$Out\mitm.log`"" -ForegroundColor Yellow
+  Warn "Inventory not captured yet - pipeline stays armed."
+  Warn "Just walk to the lobby in-game and the snapshots will land in:"
+  Warn "  $Out"
   exit 2
 }
 
-Ok "inventaire capture et decode."
-# --- 6. resume ---
+Ok "Inventory captured + decoded"
+
+# --- 6. tiny summary (gear / hero counts) ---
 $summary = @"
 import json,os
 o=r'$Out'
@@ -167,20 +187,17 @@ def load(n):
 it=load('user_item.json'); ch=load('user_character.json')
 if it:
   il=it['ItemList']; eq=[x for x in il if x['CharUID']!='0']
-  print('  gear: %d pieces (%d equipees, %d libres)'%(len(il),len(eq),len(il)-len(eq)))
+  print('   %d gear pieces (%d equipped, %d free)'%(len(il),len(eq),len(il)-len(eq)))
 if ch:
-  cl=ch.get('CharList',[]); print('  heros: %d'%len(cl))
-print('  fichiers JSON: '+', '.join(sorted(f for f in os.listdir(o) if f.endswith('.json'))))
+  cl=ch.get('CharList',[]); print('   %d characters'%len(cl))
 "@
 $tmp = Join-Path $env:TEMP "op_summary.py"
 $summary | Out-File -Encoding utf8 $tmp
-Write-Host ""
-Write-Host "=== Resultat (dans $Out) ===" -ForegroundColor Green
 # Best-effort summary via python. Jean kevin's packaged build may not have
 # python on PATH (mitmdump ships its own bundled interpreter that we don't
-# expose). Swallow the failure — the .captured sentinel is what callers act
+# expose). Swallow the failure - the .captured sentinel is what callers act
 # on, the summary is pure cosmetic.
-try { & python $tmp 2>$null } catch { Write-Host "(summary skipped: python not available)" -ForegroundColor DarkGray }
-Write-Host ""
-Write-Host "Pipeline laisse ARME : toute nouvelle visite d'ecran rafraichit les JSON." -ForegroundColor Cyan
-Write-Host "Pour tout retirer : .\disarm.ps1" -ForegroundColor Cyan
+try { & python $tmp 2>$null } catch {}
+# No "pipeline stays armed" hint here: the Electron renderer fires an
+# auto-disarm immediately after we exit 0 (see App.tsx runCapture flow),
+# so by the time the user reads this log the pipeline is already down.

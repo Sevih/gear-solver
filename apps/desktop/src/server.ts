@@ -19,13 +19,16 @@ import {
   createReadStream,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, extname, join, normalize } from "node:path";
 import {
   BUNDLED_ADB,
+  BUNDLED_IMG,
   BUNDLED_MITMDUMP,
   BUNDLED_PROD_CERT_DIR,
   CAPTURE_DIR,
@@ -205,6 +208,33 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   if (url === "/api/capture/status" && req.method === "GET") {
     return captureStatus(res);
   }
+  // Settings → Data → "Wipe captured data". Deletes the user_*.json /
+  // item_customInfo.json snapshots so the renderer reverts to its empty
+  // state. We refuse while the pipeline is still armed — otherwise the
+  // next /user/* fetch would silently re-write what we just nuked.
+  if (url === "/api/capture/wipe" && req.method === "POST") {
+    res.setHeader("Content-Type", "application/json");
+    if (existsSync(join(CAPTURE_OUT, ".mitm.pid"))) {
+      res.statusCode = 409;
+      res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
+      return;
+    }
+    let removed = 0;
+    try {
+      for (const f of readdirSync(CAPTURE_OUT)) {
+        if (f.endsWith(".json") || f === ".captured" || f === "seen-paths.log" || f.endsWith(".flows")) {
+          rmSync(join(CAPTURE_OUT, f), { force: true });
+          removed++;
+        }
+      }
+    } catch (err) {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: (err as Error).message }));
+      return;
+    }
+    res.end(JSON.stringify({ removed }));
+    return;
+  }
   // --- emulator detection — surfaced in the header so the user knows which
   // instance / port we'll target before they click Arm capture. ---
   if (url === "/api/emulators" && req.method === "GET") {
@@ -256,12 +286,26 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
-  // --- /img/* — local mount in dev, 302 to outerpedia.com in prod ---
+  // --- /img/* — bundled subset first, then 302 to outerpedia.com fallback ---
+  // The packaged build ships a curated tree (equipment / ui / characters
+  // faceicon|portrait|ee) so the inventory grid pulls icons off local disk
+  // instead of hammering outerpedia.com for every tile on every launch.
+  // Anything outside that subset (new gear added in a game patch, alt
+  // character art, …) falls through to the public CDN so we don't have to
+  // ship a new installer for every Outerplane content drop.
   if (url.startsWith("/img/")) {
     if (IS_DEV) {
       const local = findOuterpediaImagesDev();
       if (local && tryMount(req, res, url, "/img/", local, "long")) return;
       // fall through to 302 if the local checkout isn't there
+    } else if (existsSync(BUNDLED_IMG)) {
+      const rel = decodeURIComponent(url.slice("/img/".length));
+      const file = normalize(join(BUNDLED_IMG, rel));
+      if (file.startsWith(BUNDLED_IMG) && existsSync(file) && statSync(file).isFile()) {
+        serveStatic(req, res, file, "long");
+        return;
+      }
+      // file not bundled — fall through to outerpedia.com 302
     }
     const path = url.slice("/img/".length);
     res.statusCode = 302;
