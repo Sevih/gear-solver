@@ -18,9 +18,23 @@ export interface BuffOption {
 export type OptionDef = StatOption | BuffOption;
 export type OptionsTable = Record<string, OptionDef>;
 
-/** Per-buff stat table: BuffID → [stat entry at enhance level 0..N]. Used to resolve
- *  IOT_BUFF main stats on talismans. */
-export type BuffsTable = Record<string, StatOption[]>;
+/** Per-buff entry — extends a StatOption with the combat-only flag for
+ *  EE conditional mains (e.g. `BID_CEQUIP_MAIN_DMG_WATER`: DMG +X% vs
+ *  Water targets only). The flag flows into `RolledStat.combatOnly` so
+ *  the stat aggregators skip them; UI still surfaces them as main
+ *  stats. Unset / false = unconditional contribution.
+ *
+ *  `name` is the in-game label resolved at build time from TextSystem
+ *  (e.g. "DMG Increase vs Water", "Gains AP when hit"). Forwarded to
+ *  `RolledStat.name` so the UI renders the wording the player sees
+ *  in-game instead of the synthesized short stat label. */
+export interface BuffLevelEntry extends StatOption {
+  combatOnly?: boolean;
+  name?: string;
+}
+/** Per-buff stat table: BuffID → [stat entry at enhance level 0..N]. Used
+ *  to resolve IOT_BUFF main stats on talismans + EE. */
+export type BuffsTable = Record<string, BuffLevelEntry[]>;
 
 export interface EquipmentDef {
   slot: string;
@@ -72,22 +86,114 @@ export interface SetLevel {
 }
 export interface SetDef {
   name: string | null;
+  /** Narrative description from the game's locale (TextItem) - text like
+   *  "Increases Attack. Requires at least 2 pieces to activate.". Null if
+   *  the build pipeline didn't see a DescID for this set. */
+  desc: string | null;
   levels: SetLevel[];
 }
 export type SetsTable = Record<string, SetDef>;
 
-/** Singularity Equip "common" unique options — the unconditional
- *  `BT_STAT_PREMIUM` BuffIDs that ascended pieces can roll. Each ID maps to a
- *  stat addition the in-game routes through `SetBuffPremiumValue` (lands in
- *  `BuffValueRate` per CalcFinalStat). Two families today:
- *   - DMG_BOOST / OAT_ADD (200..500 per-mille) → on weapon / accessory
- *   - DMG_REDUCE_RATE / OAT_ADD (100..250 per-mille) → on helmet / armor / gloves / boots
- *  Conditional variants (TARGET_ELEMENT, TARGET_HAS_BUFF) are NOT emitted —
- *  they're combat-only and don't show on the character sheet.
+/** Per-item base unique-option passive — the "Destruction" / "Aurora" /
+ *  etc. effect on a weapon or accessory. Resolved from `ItemTemplet
+ *  .UniqueOptionID` → `ItemSpecialOptionTemplet[uoID]` (gives the
+ *  DescID + BuffID) → `TextSkill[DescID]` (the localized template with
+ *  `[Value]`, `[Rate]`, `[Turn]` placeholders) and `BuffTemplet[BuffID]`
+ *  rows (one row per Level, Level = breakthrough tier + 1).
  *
- *  Shape is the same `{ st, ap, v }` triple as `StatOption` / a per-level
- *  `BuffsTable` row — `resolveOption` consumes any of them. */
-export type SingularityOptionsTable = Record<string, StatOption>;
+ *  `name` is the canonical effect title ("Destruction"). `textByTier[bt]`
+ *  is the fully resolved English description for breakthrough tier `bt`
+ *  (0..4). The build pipeline fills the placeholders at build time so
+ *  the UI consumes plain text — no per-render templating needed. */
+export interface EquipmentPassive {
+  name: string | null;
+  /** Index 0 = T0 (BuffTemplet Level 1) … index 4 = T4 (Level 5).
+   *  Length matches the BuffTemplet level count (5 for the standard
+   *  weapon / accessory unique options). */
+  textByTier: string[];
+}
+/** Keyed by `ItemID` (the equipment item's ID) — every weapon and
+ *  accessory has a row (most other slots don't carry a unique-option
+ *  passive). Missing key means the build pipeline saw no resolvable
+ *  passive (no UniqueOptionID, no DescID, no BuffID, …). */
+export type EquipmentPassivesTable = Record<string, EquipmentPassive>;
+
+/** Talisman / EE passive — fundamentally different from equipment
+ *  passives: instead of one passive that scales across breakthrough
+ *  tiers (T0..T4), talismans and EE expose a SHORT LIST of tiers
+ *  (typically 1 base + 1 optional `+10 unlock` upgrade). Each tier:
+ *    - `unlockLevel`: enhance level needed to activate (1 = always
+ *      active when equipped; 10 = unlocks at +10).
+ *    - `isAdd`: when true, the tier ADDS to the base (both effects
+ *      active together when unlocked). When false, it UPGRADES the
+ *      base (same effect, stronger value — the base is hidden once
+ *      the upgrade activates).
+ *    - `desc`: fully resolved English description with
+ *      `<color=#hex>…</color>` tags + substituted `[Value]/[Rate]/…`
+ *      placeholders. UI renders via GameText.
+ *  Source: `ItemTemplet.UniqueOptionID` is comma-separated (`base[, lv10]`);
+ *  each fragment resolves to an ItemSpecialOptionTemplet row whose
+ *  Level / IsAdd populate this tier's metadata. */
+export interface MultiTierPassiveTier {
+  unlockLevel: number;
+  isAdd: boolean;
+  desc: string;
+}
+export interface MultiTierPassive {
+  name: string | null;
+  tiers: MultiTierPassiveTier[];
+}
+/** Keyed by `ItemID` — present for talisman / exclusive-equipment items
+ *  where UniqueOptionID resolves to one or more multi-tier rows. */
+export type MultiTierPassivesTable = Record<string, MultiTierPassive>;
+
+/** Talisman / EE gem — one of the 5 swappable stones the player slots in
+ *  the substat positions. The in-game encoding (`OptionID` in the captured
+ *  SubOptionList) packs all 9 stats × 6 levels into 54 consecutive IDs
+ *  starting at 15001 (15001..15009 = lv1 ATK/DEF/HP/CRC/CHD/EFF/RES/DMG+/DMG-
+ *  in that exact order; 15010..15018 = lv2; … 15046..15054 = lv6).
+ *
+ *  Extends `StatOption` so `resolveOption` consumes it directly to produce
+ *  the displayed value. `type` is the image filename fragment served at
+ *  `/img/items/TI_GEM_<type>_<level>.webp` (ATK / Def / Heal / CriRate /
+ *  CriDmgRate / BuffChance / BuffResist / DMG_INCREASE / DMG_REDUCE).
+ *  `level` is the gem tier 1..6. */
+export interface GemDef extends StatOption {
+  type: string;
+  level: number;
+}
+/** Keyed by the gem's OptionID (15001..15054). */
+export type GemsTable = Record<string, GemDef>;
+
+/** Singularity Equip unique options — every BuffID that an ascended (+15)
+ *  piece can roll, regardless of whether the contribution applies to the
+ *  character stat sheet. Two families today:
+ *   - Unconditional (`combatOnly: false`): `BT_STAT_PREMIUM` with no
+ *     condition — DMG_BOOST / DMG_REDUCE_RATE that always apply, routed
+ *     via `SetBuffPremiumValue` → `BuffValueRate` per CalcFinalStat.
+ *   - Combat-only (`combatOnly: true`): conditional / turn-duration buffs
+ *     (`TARGET_HAS_BUFF`, `TARGET_ELEMENT`, `SKILL_START`, …) that don't
+ *     show on the character sheet but DO appear as the rolled effect on
+ *     the gear — collected here so the inventory UI can display them.
+ *
+ *  Math-side aggregators (`composeCharStats`, `score.sumTotals`,
+ *  `aggregateGearBuckets`) MUST skip `combatOnly: true` entries; the engine
+ *  forwards the flag through `RolledStat.combatOnly` from `parse.ts`.
+ *
+ *  Shape extends `StatOption` so `resolveOption` consumes it directly.
+ *  `name` carries the in-game narrative label (e.g. "DMG Increase to
+ *  target") resolved at build time via TextSkill[NameID]; null when
+ *  TextSkill isn't available. */
+export interface SingularityOption extends StatOption {
+  name: string | null;
+  /** Rich in-game description from TextSkill[DescID] — keeps the original
+   *  `<color=#hex>…</color>` tags (e.g. the grade letter wrap and the
+   *  per-mille value already baked into the string). UI renders these via
+   *  the `GameText` component. Null when the checkout is missing. */
+  desc: string | null;
+  combatOnly: boolean;
+}
+export type SingularityOptionsTable = Record<string, SingularityOption>;
 
 /** EE level-gated permanent passive — `StatOption` plus an enhance-level
  *  unlock threshold. Two observed thresholds: `1` (always-on once equipped —
@@ -282,6 +388,9 @@ export interface GameData {
   options: OptionsTable;
   equipment: EquipmentTable;
   sets: SetsTable;
+  equipmentPassives: EquipmentPassivesTable;
+  multiTierPassives: MultiTierPassivesTable;
+  gems: GemsTable;
   singularityOptions: SingularityOptionsTable;
   eePassives: EePassivesTable;
   characters: CharactersTable;

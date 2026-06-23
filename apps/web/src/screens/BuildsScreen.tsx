@@ -174,6 +174,10 @@ function aggregateGearBuckets(pieces: GearPiece[], game: GameData | null): {
     // gated debuffs that don't show on the sheet) are filtered out at
     // build time in `data/build.mjs`.
     for (const s of p.main) {
+      // Combat-only rolls (e.g. Singularity DMG_BOOST gated by
+      // TARGET_HAS_BUFF) are real on the gear but don't show on the
+      // character sheet — skip them for stat aggregation.
+      if (s.combatOnly) continue;
       const target = s.fromBuff ? buffPct : (s.percent ? pct : flat);
       target[s.stat] = (target[s.stat] ?? 0) + s.value;
     }

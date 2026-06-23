@@ -23,6 +23,10 @@ export function sumTotals(pieces: GearPiece[]): Partial<Record<StatType, number>
       totals[sub.stat] = (totals[sub.stat] ?? 0) + sub.value;
     }
     for (const m of p.main) {
+      // Combat-only rolls (conditional Singularity buffs etc.) don't
+      // contribute to the character sheet; the scoring layer reflects
+      // the displayed totals so it has to skip them too.
+      if (m.combatOnly) continue;
       totals[m.stat] = (totals[m.stat] ?? 0) + m.value;
     }
   }

@@ -56,6 +56,18 @@ function loadOuterpedia(rel) {
 // ---- text lookups (NameID -> localized name) ----
 const textItem = new Map(load("TextItem.json").map((t) => [t.ID, t[lang]]));
 const textChar = new Map(load("TextCharacter.json").map((t) => [t.ID, t[lang]]));
+const textSystem = new Map(load("TextSystem.json").map((t) => [t.ID, t[lang]]));
+// TextSkill carries the unique-option / Singularity narrative labels
+// (`UO_SINGULAREQUIP_*` keys etc.) — it lives only in the outerpedia-v2
+// admin dump, NOT in the API capture, so resolve via `loadOuterpedia()`.
+// Empty Map when the checkout is absent — Singularity options just lose
+// their narrative `name` (UI falls back to the synthesized stat label).
+const textSkillRows = loadOuterpedia("data/admin/json2/TextSkill.json");
+const textSkill = new Map(
+  Array.isArray(textSkillRows)
+    ? textSkillRows.map((t) => [t.ID, t.English ?? null])
+    : []
+);
 
 // ---- character "show nickname" flag (Gnosis Dahlia, Mystic Sage Ame, …) ----
 // CharacterExtraTemplet (admin-only dump, lives in outerpedia-v2) holds the
@@ -86,34 +98,95 @@ for (const o of load("ItemOptionTemplet.json")) {
 }
 save("options.json", options);
 
-// ---- buffs: BuffID -> [{ st, ap, v } per enhancement level 0..maxLv] ----
+// ---- buffs: BuffID -> [{ st, ap, v, combatOnly? } per enhancement level 0..maxLv] ----
 // BuffTemplet rows give StatType/ApplyingType/Value per Level. In-game Level 1 = +0,
 // Level N+1 = +N (for N ≤ maxEnhanceLevel). Engine resolves stat (flat vs percent) the
-// same way as IOT_STAT entries via core/src/stats.ts. We strip non-BT_STAT_PREMIUM rows
-// (Type) to focus on talisman main stat lookups.
+// same way as IOT_STAT entries via core/src/stats.ts.
 //
-// EE mains: 25/29 `BID_CEQUIP_MAIN_*` buffs are conditional (TARGET_ELEMENT /
-// OWNER_ELEMENT) — those are combat-only triggers and don't show on the
-// character sheet. We gate by the buff's `BuffConditionType` so only the 4
-// unconditional `_CORE` variants (DMG_REDUCE_CORE / ACCURACY_CORE /
-// BUFF_CHANCE_CORE / BUFF_CRITICAL_RATE_CORE) emit. The check needs the
-// buff's full row, so we resolve via the BuffTemplet on the first pass.
+// EE mains: 25/29 `BID_CEQUIP_MAIN_*` buffs are CONDITIONAL (TARGET_ELEMENT /
+// OWNER_ELEMENT, e.g. DMG +X% vs Water) — they only fire in combat against a
+// specific target so they don't contribute to the character sheet. We keep
+// them here (so the UI can display them as the EE's main stat — Regina's
+// EE for instance only has a conditional `DMG_WATER` main) but tag each
+// level entry `combatOnly: true`. parse.ts forwards the flag onto the
+// `RolledStat`; stat aggregators (composer / score) already skip
+// `combatOnly` entries so the math layer stays correct.
+//
+// Talisman mains (`BID_ITEM_STAT_OOPARTS_*`) are always unconditional.
 const eeCondByBuffId = new Map();
 for (const b of load("BuffTemplet.json")) {
   const bid = b.BuffID;
   if (!bid || !bid.startsWith("BID_CEQUIP_MAIN_")) continue;
   if (!eeCondByBuffId.has(bid)) eeCondByBuffId.set(bid, b.BuffConditionType ?? "NONE");
 }
+// Build the human-readable label for an EE main BuffID. Examples:
+//   BID_CEQUIP_MAIN_DMG_WATER             → "DMG Increase vs Water"
+//   BID_CEQUIP_MAIN_DMG_REDUCE_FIRE       → "DMG Reduction vs Fire"
+//   BID_CEQUIP_MAIN_BUFF_CHANCE_EARTH     → "Effectiveness vs Earth"
+//   BID_CEQUIP_MAIN_BUFF_CRITICAL_RATE_W… → "Critical Hit Chance vs Water"
+//                                            (from SYS_STAT_..._TARGET_WATER)
+//   BID_CEQUIP_MAIN_DMG_REDUCE_CORE       → "DMG Reduction"   (unconditional)
+//   BID_CEQUIP_MAIN_ACCURACY_CORE         → "Accuracy"        (unconditional)
+//
+// Strategy: split the suffix into (stat prefix, trailing modifier). The
+// trailing modifier is either an element (WATER/FIRE/EARTH/LIGHT/DARK) or
+// CORE (unconditional). Stat prefix → `SYS_STAT_*` in TextSystem. For
+// element variants we PREFER the game's per-element key
+// (`SYS_STAT_<…>_TARGET_<ELEMENT>`) when it exists — it's the wording the
+// in-game tooltip shows; otherwise we compose "<Stat> vs <Element>".
+// Returns null when any lookup fails so the UI falls back to statLong.
+const EE_BUFF_PREFIX_STAT_KEY = {
+  "DMG":                 "SYS_STAT_DMG_BOOST",
+  "DMG_REDUCE":          "SYS_STAT_DMG_REDUCE_RATE",
+  "BUFF_CHANCE":         "SYS_STAT_BUFF_CHANCE",
+  "BUFF_CRITICAL_RATE":  "SYS_STAT_CRITICAL_RATE",
+  "ACCURACY":            "SYS_STAT_ACCURACY",
+};
+const EE_TRAILING_MODIFIERS = ["FIRE", "WATER", "EARTH", "LIGHT", "DARK", "CORE"];
+function eeMainLabel(buffId) {
+  if (!buffId.startsWith("BID_CEQUIP_MAIN_")) return null;
+  const rest = buffId.slice("BID_CEQUIP_MAIN_".length);
+  let modifier = null;
+  let statPrefix = rest;
+  for (const mod of EE_TRAILING_MODIFIERS) {
+    if (rest.endsWith(`_${mod}`)) {
+      modifier = mod;
+      statPrefix = rest.slice(0, -(mod.length + 1));
+      break;
+    }
+  }
+  const statKey = EE_BUFF_PREFIX_STAT_KEY[statPrefix];
+  if (!statKey) return null;
+  const statLabel = textSystem.get(statKey);
+  if (!statLabel) return null;
+  if (!modifier || modifier === "CORE") return statLabel;
+  // Element variant — try the specific per-element key first (cleans the
+  // literal `\n` line breaks the game embeds for narrow column display).
+  const specific = textSystem.get(`${statKey}_TARGET_${modifier}`);
+  if (specific) return specific.replace(/\\n|\r?\n/g, " ").replace(/\s+/g, " ").trim();
+  const elLabel = textSystem.get(`SYS_ELEMENT_${modifier}`);
+  return elLabel ? `${statLabel} vs ${elLabel}` : statLabel;
+}
+
 const buffs = {};
 for (const b of load("BuffTemplet.json")) {
   const bid = b.BuffID;
   if (!bid) continue;
   if (!(bid.startsWith("BID_ITEM_STAT_OOPARTS_") || bid.startsWith("BID_CEQUIP_MAIN_"))) continue;
-  if (bid.startsWith("BID_CEQUIP_MAIN_") && eeCondByBuffId.get(bid) !== "NONE") continue;
   if (!b.StatType || b.StatType === "ST_NONE") continue;
   const lv = Number(b.Level);
   if (!Number.isFinite(lv) || lv < 1) continue;
-  (buffs[bid] ??= [])[lv - 1] = { st: b.StatType, ap: b.ApplyingType, v: Number(b.Value) };
+  const combatOnly = bid.startsWith("BID_CEQUIP_MAIN_") && eeCondByBuffId.get(bid) !== "NONE";
+  const entry = { st: b.StatType, ap: b.ApplyingType, v: Number(b.Value) };
+  if (combatOnly) entry.combatOnly = true;
+  // Synthesize the in-game-style label once per BuffID — duplicated across
+  // every Level entry so resolveBuffMain can pick it up without re-doing
+  // the lookup at runtime. Cheap (≤29 unique IDs × ≤11 levels each).
+  if (bid.startsWith("BID_CEQUIP_MAIN_")) {
+    const label = eeMainLabel(bid);
+    if (label) entry.name = label;
+  }
+  (buffs[bid] ??= [])[lv - 1] = entry;
 }
 save("buffs.json", buffs);
 
@@ -281,19 +354,43 @@ for (const it of load("ItemTemplet.json")) {
 }
 const eePassives = {}; // GroupID -> [{ levelThreshold, st, ap, v }]
 for (const s of load("ItemSpecialOptionTemplet.json")) {
-  const g = (sets[s.GroupID] ??= { name: textItem.get(s.NameID) ?? null, levels: [] });
+  const g = (sets[s.GroupID] ??= { name: textItem.get(s.NameID) ?? null, desc: textItem.get(s.DescID) ?? null, levels: [] });
+  // desc is per-group not per-level; ??= keeps the first non-null we see
+  // (the lvl-1 row carries the canonical NameID/DescID per the agent's findings).
+  g.desc ??= textItem.get(s.DescID) ?? null;
   g.levels.push({
     level: Number(s.Level),
     p2: s.StatType_2P ? { st: s.StatType_2P, ap: s.ApplyingType_2P, v: Number(s.OptionValue_2P) } : null,
     p4: s.StatType_4P ? { st: s.StatType_4P, ap: s.ApplyingType_4P, v: Number(s.OptionValue_4P) } : null,
   });
-  if (s.OptionType === "IOT_BUFF" && s.BuffID) {
+  // Collect EVERY Singularity option (group 30000 / 31000) regardless of
+  // whether it's combat-only — the UI needs them all to display the rolled
+  // effect; only stat aggregators filter via `combatOnly` to keep the
+  // character sheet correct.
+  if (s.OptionType === "IOT_BUFF" && s.BuffID && (s.GroupID === "30000" || s.GroupID === "31000")) {
     const buff = buffByID.get(s.BuffID);
-    if (buff && buff.Type === "BT_STAT_PREMIUM" && (!buff.BuffConditionType || buff.BuffConditionType === "NONE")) {
+    if (buff && buff.StatType && buff.StatType !== "ST_NONE") {
+      // Unconditional `BT_STAT_PREMIUM` rows ALWAYS apply (routed through
+      // BuffValueRate in-game). Everything else (BT_STAT with
+      // BuffConditionType / TurnDuration ≠ -1 / SKILL_START triggers, …)
+      // is gear-rolled but only fires in combat — flag `combatOnly: true`
+      // so the math layer skips it while the UI still surfaces it.
+      const unconditional = buff.Type === "BT_STAT_PREMIUM"
+        && (!buff.BuffConditionType || buff.BuffConditionType === "NONE");
       singularityOptions[s.ID] = {
         st: buff.StatType,
         ap: buff.ApplyingType,
         v: Number(buff.Value),
+        // Narrative label from TextSkill (e.g. "DMG Increase to target",
+        // "DMG Reduction vs Earth"). NameID lives in TextSkill via the
+        // `UO_SINGULAREQUIP_*` keys; null when the checkout is missing.
+        name: textSkill.get(s.NameID) ?? null,
+        // Rich description — preserves the in-game `<color=#hex>…</color>`
+        // tags around the grade letter + value (e.g.
+        // "<color=#b266ff>S</color> DMG dealt … <color=#0D99DA>138%</color>").
+        // Value is already baked per option, no token substitution needed.
+        desc: textSkill.get(s.DescID) ?? null,
+        combatOnly: !unconditional,
       };
     }
   }
@@ -324,6 +421,249 @@ for (const s of load("ItemSpecialOptionTemplet.json")) {
 save("sets.json", sets);
 save("singularity-options.json", singularityOptions);
 save("ee-passives.json", eePassives);
+
+// ---- equipmentPassives: itemId -> { name, textByTier[5] } ----
+// The per-weapon / per-accessory base "unique option" passive (e.g.
+// "Destruction" on weapon ID 754). Resolution pipeline:
+//   1. ItemTemplet.UniqueOptionID (first comma fragment) → ItemSpecialOptionTemplet row
+//   2. row.NameID + row.DescID → TextSkill (English) — name + template
+//   3. row.BuffID (first comma fragment) → BuffTemplet rows per Level (1..5 = T0..T4)
+//   4. Fill placeholders ([Value], [Rate], [Turn], [+Value2], …) per Level
+//
+// Mirrors outerpedia-v2/scripts/generate-item-stats-detail.py `build_passive()`:
+// same _is_permille / _fmt_value / _fmt_turn / _token_values logic so the
+// rendered text matches outerpedia-v2's interactive equipment detail view.
+const specialOptByID = new Map();
+for (const r of load("ItemSpecialOptionTemplet.json")) {
+  if (!specialOptByID.has(r.ID)) specialOptByID.set(r.ID, r);
+}
+
+// Buff levels keyed by BuffID — list of rows sorted by Level ascending.
+const buffLevelsByID = new Map();
+for (const b of buffTemplet) {
+  if (!b.BuffID) continue;
+  const arr = buffLevelsByID.get(b.BuffID) ?? [];
+  arr.push(b);
+  buffLevelsByID.set(b.BuffID, arr);
+}
+for (const arr of buffLevelsByID.values()) {
+  arr.sort((a, b) => Number(a.Level) - Number(b.Level));
+}
+
+const TOKEN_RE = /\[[^\]]+\]/g;
+
+function isPermille(buff) {
+  if (!buff) return false;
+  if (buff.ApplyingType === "OAT_RATE") return true;
+  const st = buff.StatType ?? "";
+  if (st.includes("_RATE") || st.includes("_DMG")) return true;
+  const t = buff.Type ?? "";
+  return t === "BT_ADDITIVE_TURN" || t.includes("_ENHANCE");
+}
+
+function jsNum(x) {
+  // Match outerpedia-v2 `_num()`: drop trailing .0 (15.0 → "15", 1.5 → "1.5").
+  return x === Math.trunc(x) ? String(Math.trunc(x)) : String(x);
+}
+
+function fmtValue(buff) {
+  if (!buff) return "?";
+  const v = Number.parseInt(buff.Value ?? 0, 10) || 0;
+  return isPermille(buff)
+    ? `${jsNum(Math.abs(v) / 10)}%`
+    : String(Math.abs(v));
+}
+
+function fmtTurn(buff) {
+  const td = (buff?.TurnDuration ?? "").toString();
+  return /^\d+$/.test(td) ? td : "?";
+}
+
+function findBuff(buffIdStr, level, index = 0) {
+  const ids = buffIdStr.split(",").map((s) => s.trim());
+  const target = index === 0 ? ids[0] : (ids[index] ?? `${ids[0]}_${index + 1}`);
+  const rows = buffLevelsByID.get(target) ?? [];
+  return rows.find((b) => Number(b.Level) === level) ?? null;
+}
+
+function maxBuffLevel(buffIdStr) {
+  const first = buffIdStr.split(",")[0].trim();
+  const rows = buffLevelsByID.get(first) ?? [];
+  return rows.length ? Math.max(...rows.map((b) => Number(b.Level) || 1)) : 1;
+}
+
+function tokenValues(buffIdStr, level) {
+  const b0 = findBuff(buffIdStr, level, 0);
+  const b2 = findBuff(buffIdStr, level, 1);
+  const b4 = findBuff(buffIdStr, level, 3);
+  const b5 = findBuff(buffIdStr, level, 4);
+  const rate = b0 && b0.CreateRate
+    ? `${jsNum(Number(b0.CreateRate) / 10)}%`
+    : "?";
+  const val = fmtValue(b0), turn = fmtTurn(b0);
+  const val2 = fmtValue(b2), turn2 = fmtTurn(b2);
+  const val4 = fmtValue(b4), val5 = fmtValue(b5);
+  return {
+    "[Value]": val, "[+Value]": `+${val}`, "[-Value]": `-${val}`,
+    "[Value2]": val2, "[+Value2]": `+${val2}`, "[-Value2]": `-${val2}`,
+    "[Value4]": val4, "[Value5]": val5,
+    "[Rate]": rate, "[RATE]": rate, "[Rate1]": rate,
+    "[Turn]": turn, "[Turn1]": turn, "[+Turn]": turn, "[+Turn1]": turn, "[-Turn]": `-${turn}`,
+    "[Turn2]": turn2,
+  };
+}
+
+// Talismans + EE expose their passives via the multi-tier table below
+// (base + +10 unlock semantics), not the per-breakthrough-tier shape the
+// equipmentPassives loop produces. Defined here so the equipmentPassives
+// gate (right below) can skip these subtypes — otherwise both tables
+// would emit for the same item and the UI would render two passive cards.
+const MULTI_TIER_SUBTYPES = new Set(["ITS_EQUIP_OOPARTS", "ITS_EQUIP_EXCLUSIVE"]);
+
+const equipmentPassives = {};
+for (const it of load("ItemTemplet.json")) {
+  if (!SLOT[it.ItemSubType]) continue;          // gear only
+  if (MULTI_TIER_SUBTYPES.has(it.ItemSubType)) continue;
+  const uo = it.UniqueOptionID;
+  if (!uo || uo === "0") continue;
+  const opt = specialOptByID.get(String(uo).split(",")[0].trim());
+  if (!opt) continue;
+  const buffIdStr = opt.BuffID ?? "";
+  if (!buffIdStr) continue;
+  const descId = opt.DescID || opt.CustomCraftDescID;
+  if (!descId) continue;
+  const desc = textSkill.get(descId);
+  if (!desc) continue;
+  const tokens = new Set(desc.match(TOKEN_RE) ?? []);
+  const maxLv = maxBuffLevel(buffIdStr);
+  const textByTier = [];
+  for (let lv = 1; lv <= maxLv; lv++) {
+    const vals = tokenValues(buffIdStr, lv);
+    let text = desc;
+    // Only substitute tokens that actually appear in the desc, to avoid
+    // touching colons / brackets used as plain punctuation. Wrap each
+    // substituted value in `<color=#28d9ed>…</color>` to match outerpedia-v2's
+    // rendering convention — the UI's GameText parses these tags into
+    // colored spans so the dynamic value pops visually.
+    for (const tok of tokens) {
+      if (vals[tok] !== undefined) {
+        text = text.split(tok).join(`<color=#28d9ed>${vals[tok]}</color>`);
+      }
+    }
+    textByTier.push(text);
+  }
+  equipmentPassives[it.ID] = {
+    name: textSkill.get(opt.NameID) ?? null,
+    textByTier,
+  };
+}
+save("equipment-passives.json", equipmentPassives);
+
+// ---- multiTierPassives: itemId -> { name, tiers[{unlockLevel, isAdd, desc}] } ----
+// Talisman / EE passive — fundamentally different from `equipmentPassives`:
+// instead of one passive scaling per breakthrough tier, the item carries a
+// SHORT LIST of independent tiers (typically base + optional `+10 unlock`).
+// Source: `ItemTemplet.UniqueOptionID` is a comma-separated list (`base[, lv10]`).
+// Each fragment resolves to an ItemSpecialOptionTemplet row at its own Level
+// (1 = always-on, 10 = +10 unlock). Each tier's BuffID has a single Level=1
+// row in BuffTemplet (different BuffID for the upgrade variant); placeholders
+// `[Value]/[Rate]/…` substituted from that single row.
+const multiTierPassives = {};
+for (const it of load("ItemTemplet.json")) {
+  if (!MULTI_TIER_SUBTYPES.has(it.ItemSubType)) continue;
+  const uoIds = String(it.UniqueOptionID ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s && s !== "0");
+  if (uoIds.length === 0) continue;
+  const tiers = [];
+  let nameForItem = null;
+  for (const uid of uoIds) {
+    const opt = specialOptByID.get(uid);
+    if (!opt) continue;
+    const descId = opt.DescID || opt.CustomCraftDescID;
+    const buffIdStr = opt.BuffID ?? "";
+    if (!descId || !buffIdStr) continue;
+    const descTpl = textSkill.get(descId);
+    if (!descTpl) continue;
+    nameForItem ??= textSkill.get(opt.NameID) ?? null;
+    // Two valid talisman/EE encodings co-exist in the game data:
+    //   1. Per-tier BuffID — base uses `BID_..._01`, +10 uses
+    //      `BID_..._01_lv10`. Each buff has a single Level=1 row that
+    //      carries the value for that tier.
+    //   2. Shared BuffID — base and +10 share one `BID_..._04`, but the
+    //      buff has TWO rows: Level=1 (base value) and Level=10 (upgraded
+    //      value). The per-tier separation lives in BuffTemplet's Level
+    //      column, not the BuffID.
+    // Look up at the SpecOpt row's `Level` field, capped to whatever
+    // levels the buff actually exposes — handles both shapes correctly
+    // (encoding 1: only Level=1 exists → cap takes us back to 1; encoding
+    // 2: Levels 1 and 10 both exist → we hit the right one).
+    const buffMaxLv = maxBuffLevel(buffIdStr);
+    const lookupLv = Math.min(Number(opt.Level) || 1, buffMaxLv);
+    const vals = tokenValues(buffIdStr, lookupLv);
+    const tokens = new Set(descTpl.match(TOKEN_RE) ?? []);
+    let desc = descTpl;
+    for (const tok of tokens) {
+      if (vals[tok] !== undefined) {
+        desc = desc.split(tok).join(`<color=#28d9ed>${vals[tok]}</color>`);
+      }
+    }
+    tiers.push({
+      unlockLevel: Number(opt.Level) || 1,
+      isAdd: opt.IsAdd === "True",
+      desc,
+    });
+  }
+  if (tiers.length === 0) continue;
+  // Sort by unlockLevel so the UI always lists base first, then upgrades.
+  tiers.sort((a, b) => a.unlockLevel - b.unlockLevel);
+  multiTierPassives[it.ID] = { name: nameForItem, tiers };
+}
+save("multi-tier-passives.json", multiTierPassives);
+
+// ---- gems: OptionID -> { type, level, stat, percent, value } ----
+// Talisman / EE substat slots are NOT rolled — they're swappable gems the
+// player slots in/out. Each gem is encoded as an ItemOptionTemplet entry
+// in the 15001..15054 range: 9 stat slots × 6 levels packed sequentially
+// (15001 = ATK lv1, 15002 = DEF lv1, …, 15009 = DMG- lv1, 15010 = ATK lv2,
+// …, 15054 = DMG- lv6). We index by OptionID so the UI can resolve a
+// captured gem to its image filename + value badge in one lookup.
+const GEM_STAT_BY_INDEX = [
+  { st: "ST_ATK",                ap: "OAT_RATE", type: "ATK" },
+  { st: "ST_DEF",                ap: "OAT_RATE", type: "Def" },
+  { st: "ST_HP",                 ap: "OAT_RATE", type: "Heal" },
+  { st: "ST_CRITICAL_RATE",      ap: "OAT_ADD",  type: "CriRate" },
+  { st: "ST_CRITICAL_DMG_RATE",  ap: "OAT_ADD",  type: "CriDmgRate" },
+  { st: "ST_BUFF_CHANCE",        ap: "OAT_RATE", type: "BuffChance" },
+  { st: "ST_BUFF_RESIST",        ap: "OAT_RATE", type: "BuffResist" },
+  { st: "ST_DMG_BOOST",          ap: "OAT_ADD",  type: "DMG_INCREASE" },
+  { st: "ST_DMG_REDUCE_RATE",    ap: "OAT_ADD",  type: "DMG_REDUCE" },
+];
+const GEMS_BASE_ID = 15001;
+const GEMS_PER_LEVEL = GEM_STAT_BY_INDEX.length;   // 9
+const GEM_MAX_LEVEL = 6;
+
+const gems = {};
+for (let lv = 1; lv <= GEM_MAX_LEVEL; lv++) {
+  for (let i = 0; i < GEMS_PER_LEVEL; i++) {
+    const id = String(GEMS_BASE_ID + (lv - 1) * GEMS_PER_LEVEL + i);
+    const slot = GEM_STAT_BY_INDEX[i];
+    const opt = options[id];
+    // Cross-check with ItemOptionTemplet — if our stat-slot mapping ever
+    // drifts (game update reorders the gem family), we'd silently emit a
+    // wrong gem. Skipping the entry surfaces the drift in the next rebuild.
+    if (!opt || !("st" in opt) || opt.st !== slot.st || opt.ap !== slot.ap) continue;
+    gems[id] = {
+      type: slot.type,
+      level: lv,
+      st: opt.st,
+      ap: opt.ap,
+      v: opt.v,
+    };
+  }
+}
+save("gems.json", gems);
 
 // ---- expCharacter: per-level cumulative XP threshold (ExpCharacterTemplet) ----
 // Used at runtime to resolve a captured character's `Exp` to a level. Array index

@@ -1,15 +1,16 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
+import { resolveOption } from "@gear-solver/core";
 import { cx } from "../design/cx.js";
 import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
 import { CharFace, EquipmentIcon, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
-import { RarityPill } from "../design/Chips.js";
-import { GsLabel } from "../design/Shell.js";
 import {
-  RARITY, SINGULARITY_GRADIENT_H, SLOTS, TOKENS,
+  RARITY, SINGULARITY_GRADIENT_H, SLOTS, STAT,
   type DesignRarity, type SlotId,
 } from "../design/tokens.js";
 import { toUiPiece, type UiPiece } from "../design/adapter.js";
+import { GameText } from "../design/GameText.js";
+import { HoverHint } from "../design/HoverHint.js";
 
 // ── tiny atoms ──────────────────────────────────────────────────────────
 function Search({ className = "h-3.5 w-3.5" }: { className?: string }) {
@@ -327,19 +328,23 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect 
       onClick={onClick}
       title={piece.name}
       className={cx(
-        "group relative grid place-items-center rounded-lg border p-0 transition-all",
-        // Selection = solid cyan border directly on the tile edge + a soft
-        // outer cyan glow (the previous `ring-2` sat outside the p-1.5
-        // padding so it looked like a frame floating 6px away from the
-        // icon - too far to read as a halo).
+        "group relative grid place-items-center rounded-lg border-2 p-0 transition-all",
+        // Selection halo: thicker (2px) cyan stroke hugging the tile edge,
+        // plus a two-layer glow - a tight bright inner bloom for "shine"
+        // and a wider soft aura around it. Lateral whitespace between
+        // ring and art is removed by sizing the icon to fit the grid
+        // column (see size below).
         active
-          ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_12px_-1px_rgba(34,211,238,0.55)]"
+          ? "border-cyan-300 bg-cyan-500/10 shadow-[0_0_8px_0_rgba(34,211,238,0.9),0_0_22px_4px_rgba(34,211,238,0.5)]"
           : "border-white/5 bg-white/[0.012] hover:border-white/15 hover:bg-white/3",
       )}
       // CSS-native virtualization - skip layout/paint for off-screen tiles.
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 96px" }}
     >
-      <EquipmentIcon piece={piece.iconPiece} size={84} />
+      {/* Icon size tuned to grid column min (96px) minus the 4px border so
+          the cyan stroke sits right on the icon's visual edge with no
+          leftover lateral whitespace. */}
+      <EquipmentIcon piece={piece.iconPiece} size={92} />
       {/* "E" sits well inside the icon's top-left art area (not on the tile
           frame) so it reads as an overlay on the gear, not a tile chrome. */}
       {equippedChar && (
@@ -411,20 +416,174 @@ function SortHeader({
 }
 
 // ── detail ──────────────────────────────────────────────────────────────
-/** Substat row in the ItemDetail panel. Used to color-code value + bar by
- *  stat kind (off=yellow, def=blue, util=cyan) — same convention as the
- *  removed SubstatChip coloring. Dropped after user feedback: the icon
- *  already says what the stat is, the extra color was just noise. */
-function SubstatBar({ s }: { s: UiPiece["subs"][number] }) {
-  const pct = Math.min(100, (s.lv / 6) * 100);
+/** Long-form label for a stat — falls back to the engine key uppercased
+ *  when STAT doesn't know the type (talisman / EE mains that didn't make
+ *  it into the table get a readable placeholder). */
+function statLong(key: string): string {
+  return STAT[key]?.longLabel ?? key.toUpperCase();
+}
+
+/** "Quality" score for an item — sum of every substat's total ticks
+ *  (initial roll + reforge procs), benchmarked against the cap for the
+ *  item's CURRENT investment state (not the theoretical max it could
+ *  ever reach):
+ *
+ *    - Base cap is 14 (initial-roll spread cap = 4+4+3+3 across 4 subs).
+ *    - Each reforge proc the user has actually spent raises the cap by
+ *      1 tick (a reforged sub can land anywhere from +1 to whatever the
+ *      pool allows; reflecting CONSUMED reforges keeps the score honest
+ *      for fresh items vs heavily-invested ones).
+ *
+ *  So:
+ *    - A pristine 6★ with no reforges → cap 14 (1/1/1/3 ≈ 6 → 42% Poor).
+ *    - A non-ascended 6★ fully reforged (6 procs) → cap 20.
+ *    - An ascended 6★ fully reforged (6 + 3 = 9 procs) → cap 23.
+ *
+ *  Tier (poor / decent / good / excellent / perfect) drives the bar
+ *  color so the user gets a glance read. */
+type QualityTier = "poor" | "decent" | "good" | "excellent" | "perfect";
+function computeQuality(piece: UiPiece): {
+  current: number; max: number; pct: number; tier: QualityTier;
+} | null {
+  // Talisman + Exclusive Equipment don't use rolled substats (talisman has
+  // IOT_BUFF mains, EE has fixed conditional stats + gem-style slots that
+  // can be swapped in/out). The "Quality" score is only meaningful for the
+  // gear slots with rollable + reforgable subs.
+  if (piece.slot === "talisman" || piece.slot === "exclusive") return null;
+  if (piece.subs.length === 0 || piece.stars <= 0) return null;
+  const current = piece.subs.reduce((sum, s) => sum + s.lv, 0);
+  // `reforge.n` is the count of reforge attempts the user has spent.
+  // Each one bumps the achievable tick pool by 1.
+  const max = 14 + piece.reforge.n;
+  const pct = Math.min(100, Math.round((current / max) * 100));
+  const tier: QualityTier =
+    pct >= 100 ? "perfect" :
+    pct >= 85  ? "excellent" :
+    pct >= 70  ? "good" :
+    pct >= 50  ? "decent" : "poor";
+  return { current, max, pct, tier };
+}
+
+const QUALITY_TONE: Record<QualityTier, { text: string; bar: string; label: string }> = {
+  poor:      { text: "text-zinc-400",   bar: "#52525b", label: "Poor" },
+  decent:    { text: "text-sky-300",    bar: "#7dd3fc", label: "Decent" },
+  good:      { text: "text-emerald-300",bar: "#6ee7b7", label: "Good" },
+  excellent: { text: "text-violet-300", bar: "#c4b5fd", label: "Excellent" },
+  perfect:   { text: "text-amber-300",  bar: "#fbbf24", label: "Perfect" },
+};
+
+/** Render a single substat row in the detail panel - matches the mockup
+ *  layout: "LV {n}  [icon]  {long label}              {value}".
+ *  When the sub has received any reforge proc the label expands to
+ *  "LV {n} (base + {reforges})" so the user sees the breakdown. When the
+ *  sub has reached its star-tier max (e.g. Lv 6 on a 6-star piece — all
+ *  possible reforge procs landed here) the whole row tints gold. */
+function SubstatRow({ s, stars }: { s: UiPiece["subs"][number]; stars: number }) {
+  const isMax = stars > 0 && s.lv >= stars;
+  const sign = s.value.startsWith("-") ? "" : "+";
   return (
-    <div className="flex items-center gap-2">
-      <StatIcon stat={s.stat} size={18} className="w-4.5 shrink-0" />
-      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
-        <div className="absolute inset-y-0 left-0 rounded-full bg-cyan-400/70" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="w-16 text-right font-mono text-[13px] tabular-nums text-zinc-100">{s.value}</span>
-      <span className="w-8 text-right font-mono text-[10.5px] text-zinc-600">lv{s.lv}</span>
+    <div
+      className={cx(
+        "flex items-center gap-2 font-mono text-[12px] tabular-nums",
+        isMax ? "text-amber-300" : "text-zinc-300",
+      )}
+    >
+      <span className={cx("shrink-0", isMax ? "text-amber-300" : "text-zinc-400")}>
+        LV {s.lv}
+        {s.reforges > 0 && (
+          <span className={cx("ml-1", isMax ? "text-amber-400/80" : "text-zinc-500")}>
+            ({s.lv - s.reforges} + {s.reforges})
+          </span>
+        )}
+      </span>
+      <StatIcon stat={s.stat} size={16} className="shrink-0" />
+      <span className="flex-1">{statLong(s.stat)}</span>
+      <span className={cx("font-semibold", isMax ? "text-amber-200" : "text-zinc-100")}>
+        {sign}{s.value}
+      </span>
+    </div>
+  );
+}
+
+/** Pull the set-effect entry that matches the piece's star tier. Set bonuses
+ *  scale with star level in Outerplane — a 5-star piece grants the level-5
+ *  p2/p4 effect, a 6-star piece the level-6 one. */
+function pickSetLevel(game: GameData, setId: string, stars: number) {
+  const def = game.sets?.[setId];
+  if (!def) return null;
+  const wrap = (level: SetLevelEntry) => ({ name: def.name ?? null, desc: def.desc ?? null, level });
+  // Find exact match first; fall back to the highest available level
+  // (some sets only emit up to a certain tier).
+  const exact = def.levels.find((l) => l.level === stars);
+  if (exact) return wrap(exact);
+  const sorted = [...def.levels].sort((a, b) => b.level - a.level);
+  return sorted[0] ? wrap(sorted[0]) : null;
+}
+type SetLevelEntry = NonNullable<GameData["sets"][string]>["levels"][number];
+
+/** Talisman / EE gem panel — vertical list of the 5 slot positions, one
+ *  row each, laid out as:  [icon] Lv N · stat label · value
+ *  Empty slot → muted placeholder (lock icon for the 5th slot when locked). */
+function GemPanel({ slots }: { slots: NonNullable<UiPiece["gemSlots"]> }) {
+  return (
+    <div className="space-y-1">
+      {slots.map((s, i) => {
+        if (s.gem) {
+          const sign = s.gem.value < 0 ? "-" : "+";
+          const valueLabel = `${sign}${Math.abs(s.gem.value)}${s.gem.percent ? "%" : ""}`;
+          return (
+            <div
+              key={i}
+              className="flex items-center gap-2 font-mono text-[12px] tabular-nums"
+              title={`Gem Lv ${s.gem.level} · ${statLong(s.gem.stat)} ${valueLabel}`}
+            >
+              <img
+                src={`/img/items/TI_GEM_${s.gem.type}_${s.gem.level}.webp`}
+                alt=""
+                className="h-5 w-5 shrink-0 object-contain"
+              />
+              <span className="shrink-0 text-zinc-400">Lv {s.gem.level}</span>
+              <span className="flex-1 text-zinc-300">{statLong(s.gem.stat)}</span>
+              <span className="shrink-0 text-zinc-100">{valueLabel}</span>
+            </div>
+          );
+        }
+        return (
+          <div
+            key={i}
+            className="flex items-center gap-2 text-[12px] text-zinc-600"
+            title={s.unlocked ? "Empty gem slot" : "Locked — unlocks at enhance +5"}
+          >
+            <div className="grid h-5 w-5 shrink-0 place-items-center rounded-sm border border-dashed border-white/10 bg-white/2">
+              {!s.unlocked && (
+                <svg viewBox="0 0 14 14" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.4}>
+                  <rect x="3" y="6" width="8" height="6" rx="1" />
+                  <path d="M5 6 V4.5 a2 2 0 0 1 4 0 V6" />
+                </svg>
+              )}
+            </div>
+            <span className="flex-1 italic">
+              {s.unlocked ? "Empty" : "Locked"}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Resolve a {st, ap, v} stat triple to a display row (icon + long label +
+ *  signed value). Used for set p2/p4 effects + Singularity option entries. */
+function ResolvedEffectRow({ st, ap, v }: { st: string; ap: string; v: number }) {
+  const resolved = resolveOption({ st, ap, v }, 1);
+  if (!resolved) return null;
+  const sign = resolved.value < 0 ? "" : "+";
+  const value = resolved.percent ? `${sign}${resolved.value}%` : `${sign}${resolved.value}`;
+  return (
+    <div className="flex items-center gap-2 font-mono text-[12px] tabular-nums">
+      <StatIcon stat={resolved.stat} size={16} className="shrink-0" />
+      <span className="flex-1 text-zinc-300">{statLong(resolved.stat)}</span>
+      <span className="text-emerald-200">{value}</span>
     </div>
   );
 }
@@ -435,8 +594,8 @@ function SubstatBar({ s }: { s: UiPiece["subs"][number] }) {
  *  populated state shows the full main / sub / equipped char / set / brk
  *  breakdown that used to live in the right-side `GearDrawer`. */
 function ItemDetail({
-  piece, equippedChar,
-}: { piece: UiPiece | null; equippedChar: Character | null }) {
+  piece, equippedChar, game,
+}: { piece: UiPiece | null; equippedChar: Character | null; game: GameData | null }) {
   if (!piece) {
     return (
       <aside className="flex h-full w-80 shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/6 bg-white/[0.012] px-6 py-8 text-center">
@@ -451,86 +610,263 @@ function ItemDetail({
       </aside>
     );
   }
+
   const slot = piece.slot ? SLOTS.find((s) => s.id === piece.slot) : null;
+  const rarity = RARITY[piece.rarity];
+  // 2-pc / 4-pc set bonuses ONLY exist on armor pieces (helmet/armor/gloves/
+  // boots) — they carry the set ID in `armorSetId`. Weapons + accessories
+  // expose a `setId` too but it's the UniqueOptionID (the per-item passive's
+  // group, e.g. "5" on a weapon ≠ Effectiveness Set), NOT a 2-pc/4-pc group.
+  // Don't fall back to `setId` here — it falsely matched armor-set IDs whose
+  // numeric range collided with UniqueOptionIDs.
+  const setEntry = game && piece.armorSetId ? pickSetLevel(game, piece.armorSetId, piece.stars) : null;
+  // Class info line: "<Rarity> <Slot>[ <Class> Exclusive]".
+  const classLine = piece.classLimit ? `${slot?.label ?? "Item"}    ${piece.classLimit} Exclusive` : slot?.label ?? "Item";
+
   return (
     <aside className="flex h-full w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-white/8 bg-bg-elev-1">
-      <header className="flex items-center justify-between border-b border-white/6 px-4 py-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">{slot?.label ?? "Item"} detail</span>
-      </header>
-
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+
+        {/* ── header row: lock + name (singularity gradient if ascended) ── */}
+        <div className="flex items-center gap-1.5">
+          {piece.locked && (
+            <img
+              src="/img/ui/inven/CT_Slot_Lock.png"
+              alt="Locked"
+              title="Locked in-game"
+              className="h-4 w-4 shrink-0"
+            />
+          )}
+          <span
+            className="truncate font-display text-[15px] font-semibold"
+            style={piece.singularity
+              ? { background: SINGULARITY_GRADIENT_H, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }
+              : { color: rarity?.fg ?? "#f4f4f5" }
+            }
+          >
+            {piece.name}{piece.singularity ? " - [Singularity]" : ""}
+          </span>
+        </div>
+
+        {/* ── icon + rarity/class line + equipped char ── */}
         <div className="flex items-start gap-3">
           <EquipmentIcon piece={piece.iconPiece} size={80} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="font-display text-[16px] font-semibold text-zinc-50">{piece.name}</span>
-              {piece.locked && (
-                <img
-                  src="/img/ui/inven/CT_Slot_Lock.png"
-                  alt="Locked"
-                  title="Locked in-game"
-                  className="h-4 w-4 shrink-0"
-                />
-              )}
-            </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <RarityPill rarity={piece.rarity} />
-              {/* Star row dropped here - the EquipmentIcon above already
-                  renders the stars overlay, so showing them again next to
-                  the rarity pill was redundant. Singularity tag stays
-                  because the icon doesn't otherwise distinguish ascended. */}
-              {piece.singularity && (
-                <span
-                  className="font-mono text-[10px] uppercase tracking-wider"
-                  style={{ background: SINGULARITY_GRADIENT_H, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}
-                >
-                  Singularity
-                </span>
-              )}
+            <div className="flex flex-col text-[11px] leading-tight">
+              <span style={{ color: rarity?.fg ?? "#e4e4e7" }} className="font-semibold">
+                {rarity?.label ?? piece.rarity}
+              </span>
+              <span className="text-zinc-400">{classLine}</span>
             </div>
           </div>
+          {equippedChar && (
+            <CharFace
+              charId={equippedChar.charId}
+              name={equippedChar.name ?? `#${equippedChar.charId}`}
+              size={36}
+            />
+          )}
         </div>
 
-        <div className="rounded-lg border border-white/6 bg-black/25 px-3 py-2.5">
-          <GsLabel>Main stat</GsLabel>
-          <div className="mt-1 space-y-1.5">
+        {/* ── main stats ── */}
+        {/* Prefer the in-game narrative label (e.g. "DMG Increase vs Water"
+            for EE conditional mains) over the synthesized short label when
+            the build pipeline resolved one — falls back to statLong for
+            regular gear mains where no narrative exists. */}
+        {piece.main.length > 0 && (
+          <div className="space-y-1.5">
             {piece.main.map((m, i) => (
-              <div key={i} className="flex items-center justify-between">
-                <StatIcon stat={m.stat} size={22} />
-                <span className="font-mono text-[20px] font-semibold tabular-nums" style={{ color: TOKENS.gold }}>{m.value}</span>
+              <div key={i} className="flex items-center gap-2 font-mono text-[13px] tabular-nums">
+                <StatIcon stat={m.stat} size={18} className="shrink-0" />
+                <span className="flex-1 text-zinc-200">{m.name ?? statLong(m.stat)}</span>
+                <span className="font-semibold text-zinc-50">{m.value}</span>
               </div>
             ))}
           </div>
-          {/* +N enhance / T<n> tier / Ascended were duplicated here from
-              the EquipmentIcon overlays (which already render +15 / T4
-              prominently on the art). The "Singularity" gradient tag two
-              lines up still handles the ascended visual signal. */}
-        </div>
+        )}
 
-        {piece.subs.length > 0 && (
-          <div className="rounded-lg border border-white/6 bg-black/25 px-3 py-2.5">
-            <GsLabel>Substats</GsLabel>
-            <div className="mt-2 space-y-2">
-              {piece.subs.map((s, i) => <SubstatBar key={i} s={s} />)}
+        {/* ── substats (gear) or gems (talisman / EE) ── */}
+        {piece.gemSlots ? (
+          <GemPanel slots={piece.gemSlots} />
+        ) : piece.subs.length > 0 ? (
+          <div className="space-y-1">
+            {piece.subs.map((s, i) => <SubstatRow key={i} s={s} stars={piece.stars} />)}
+          </div>
+        ) : null}
+
+        {/* ── quality score (sum of substat ticks / state-aware cap) ── */}
+        {(() => {
+          const q = computeQuality(piece);
+          if (!q) return null;
+          const tone = QUALITY_TONE[q.tier];
+          return (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <HoverHint
+                  className="font-semibold uppercase tracking-wider text-zinc-400"
+                  name="Quality"
+                  text="Sum of every substat tick (initial roll + reforge procs) vs the cap for the item's CURRENT investment: base 14 (4+4+3+3) plus 1 per reforge already spent. Singularity adds up to 3 extra reforges. So a pristine 6★ caps at 14; fully reforged 20; ascended + fully reforged 23."
+                />
+                <span className="font-mono tabular-nums">
+                  <span className={cx("font-bold", tone.text)}>{q.current}</span>
+                  <span className="text-zinc-500"> / {q.max}</span>
+                  <span className={cx("ml-2", tone.text)}>{tone.label}</span>
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+                <div
+                  className="h-full rounded-full transition-[width]"
+                  style={{ width: `${q.pct}%`, background: tone.bar }}
+                />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── multi-tier passive (talisman / EE) ── */}
+        {/* The +10 entry can be one of two patterns:
+              - ADDITIONAL (`isAdd=true`):  a SECOND effect that stacks on top
+                of the base.
+              - UPGRADE    (`isAdd=false` at unlockLevel > 1): REPLACES the
+                base (same conceptual effect, stronger value).
+            Visibility rule (talismans + EE both):
+              - When NOT YET unlocked (lv < unlockLevel) — ALWAYS show both
+                rows regardless of pattern, with the +10 row greyed out. The
+                player needs to know what's coming, even for upgrade-style
+                items.
+              - When unlocked (lv ≥ unlockLevel) — additional keeps both
+                visible (they stack); upgrade hides the base (it's been
+                superseded by the +10 row, in-game tooltip behaves the same). */}
+        {piece.multiTierPassive && (() => {
+          const tiers = piece.multiTierPassive.tiers;
+          const upgrade = tiers.find((t, i) => i > 0 && !t.isAdd);
+          const visible = tiers.filter((t, i) => {
+            if (!upgrade) return true;
+            // Only hide the base, and only once the upgrade is actually live.
+            if (i === 0 && upgrade.active) return false;
+            return true;
+          });
+          return (
+            <div className="pt-1">
+              <div className="mb-2 flex items-center gap-2">
+                {piece.effectIcon && (
+                  <img src={`/img/ui/effect/${piece.effectIcon}.webp`} alt="" className="h-5 w-5 shrink-0" />
+                )}
+                <span className="font-mono text-[12px] font-semibold text-zinc-100">
+                  {piece.multiTierPassive!.name ?? "Passive"}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {visible.map((t, i) => {
+                  const eyebrow = t.unlockLevel <= 1
+                    ? "Base"
+                    : `+${t.unlockLevel} · ${t.isAdd ? "additional" : "upgraded"}`;
+                  return (
+                    <div
+                      key={i}
+                      className={cx(
+                        "rounded-md border border-white/6 bg-black/25 px-3 py-2 transition-opacity",
+                        !t.active && "opacity-40",
+                      )}
+                    >
+                      <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                        {eyebrow}
+                      </div>
+                      <GameText text={t.desc} className="text-[11px] leading-snug text-zinc-300" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── unique-option passive (weapons / accessories) ── */}
+        {/* The "Destruction" / "Aurora" / … effect that scales per breakthrough
+            tier. Resolved at build time via TextSkill + BuffTemplet — `text`
+            already has the per-tier values substituted. */}
+        {piece.passive && (
+          <div className="pt-1">
+            <div className="mb-2 flex items-center gap-2">
+              {piece.effectIcon && (
+                <img src={`/img/ui/effect/${piece.effectIcon}.webp`} alt="" className="h-5 w-5 shrink-0" />
+              )}
+              <span className="font-mono text-[12px] font-semibold text-zinc-100">
+                {piece.passive.name ?? "Passive"}
+              </span>
+              <span className="ml-auto rounded-sm border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
+                T{piece.bt}
+              </span>
+            </div>
+            <p className="rounded-md border border-white/6 bg-black/25 px-3 py-2 text-[11px] leading-snug text-zinc-300">
+              <GameText text={piece.passive.text} />
+            </p>
+          </div>
+        )}
+
+        {/* ── set effect (armor 4-piece or matching set group) ── */}
+        {setEntry && (
+          <div className="pt-1">
+            <div className="mb-2 flex items-center gap-2">
+              {piece.setIcon
+                ? <img src={`/img/ui/effect/${piece.setIcon}.webp`} alt="" className="h-5 w-5 shrink-0" />
+                : piece.effectIcon
+                  ? <img src={`/img/ui/effect/${piece.effectIcon}.webp`} alt="" className="h-5 w-5 shrink-0" />
+                  : null}
+              <span className="font-mono text-[12px] font-semibold text-zinc-100">
+                Lv. {setEntry.level.level} {setEntry.name ?? "Set"}
+              </span>
+            </div>
+            {setEntry.desc && (
+              <p className="mb-2 text-[11px] leading-snug text-zinc-400">
+                <GameText text={setEntry.desc} />
+              </p>
+            )}
+            <div className="space-y-1 rounded-md border border-white/6 bg-black/25 px-3 py-2">
+              {setEntry.level.p2 && (
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="w-12 shrink-0 font-mono text-zinc-500">2-pc</span>
+                  <ResolvedEffectRow st={setEntry.level.p2.st} ap={setEntry.level.p2.ap} v={setEntry.level.p2.v} />
+                </div>
+              )}
+              {setEntry.level.p4 && (
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="w-12 shrink-0 font-mono text-zinc-500">4-pc</span>
+                  <ResolvedEffectRow st={setEntry.level.p4.st} ap={setEntry.level.p4.ap} v={setEntry.level.p4.v} />
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {equippedChar && (
-          <div className="flex items-center justify-between rounded-lg border border-emerald-400/15 bg-emerald-500/5 px-3 py-2.5">
-            <div className="flex items-center gap-2">
-              <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={64} />
-              <div className="leading-tight">
-                <div className="text-[10.5px] uppercase tracking-wider text-emerald-300/70">Equipped on</div>
-                <div className="text-[13.5px] font-medium text-zinc-100">{equippedChar.name ?? `#${equippedChar.charId}`}</div>
-              </div>
+        {/* ── Singularity active effect (ascended pieces only) ── */}
+        {/* Two rendering layers, in preference order:
+            1. `desc` — full in-game sentence (with grade-color + value
+               already baked in) rendered through GameText. No standalone
+               "S" badge — the grade letter is already in the desc.
+            2. `name` + resolved value — used only when desc is missing
+               (e.g. TextSkill unavailable at build time). */}
+        {piece.singularity && piece.effects.length > 0 && (
+          <div className="pt-1">
+            <div className="mb-2 text-[11px] font-semibold text-amber-200">
+              Active Effect at +15 Enhancement
+            </div>
+            <div className="space-y-1.5 text-[11px] leading-snug text-zinc-300">
+              {piece.effects.map((e, i) => {
+                if (e.desc) return <GameText key={i} text={e.desc} className="block wrap-break-word" />;
+                const sign = e.value.startsWith("-") ? "" : "+";
+                const label = e.name ?? statLong(e.stat);
+                return (
+                  <div key={i} className="flex items-start gap-2 wrap-break-word">
+                    <span className="min-w-0 flex-1">{label}</span>
+                    <span className="shrink-0 text-zinc-100">{sign}{e.value}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
       </div>
-
-      {/* No footer yet - "Use in Builder" was a placeholder, removed until
-          the Builder screen is wired up. Lock state stays read-only. */}
     </aside>
   );
 }
@@ -610,6 +946,7 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
       <ItemDetail
         piece={selected}
         equippedChar={selected?.equippedBy ? charsByUid.get(selected.equippedBy) ?? null : null}
+        game={game}
       />
       <div className="min-w-0 flex-1 flex-col flex">
         <SortHeader
@@ -617,7 +954,7 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
           onSort={toggleSort} limit={limit} onLimitChange={setLimit}
         />
         <div
-          className="mt-2 grid gap-1.5 overflow-y-auto pr-1 grid-cols-[repeat(auto-fill,minmax(100px,1fr))]"
+          className="mt-2 grid gap-1 overflow-y-auto pr-1 grid-cols-[repeat(auto-fill,minmax(96px,1fr))]"
           style={{ maxHeight: "calc(100vh - 180px)" }}
         >
           {view.length === 0

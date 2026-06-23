@@ -35,7 +35,18 @@ function resolveBuffMain(optionId: number, enhanceLevel: number, game: GameData)
   if (!row) return null;
   const r = resolveOption(row, 1);
   if (!r) return null;
-  return { stat: r.stat, value: r.value, percent: r.percent, fromBuff: true };
+  return {
+    stat: r.stat,
+    value: r.value,
+    percent: r.percent,
+    fromBuff: true,
+    source: "option",
+    // EE conditional mains are real on the gear (and surface in the UI's
+    // main-stat panel) but don't apply to the character sheet — combat-only.
+    ...(row.combatOnly ? { combatOnly: true } : {}),
+    // EE main label resolved at build time ("DMG Increase vs Water", …).
+    ...(row.name ? { name: row.name } : {}),
+  };
 }
 
 /** Resolve the cumulative-Exp curve for a piece (slot+grade+star) and walk it to
@@ -119,9 +130,9 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
     if (!r) continue;
     if (enhance && meta) {
       const scaled = scaleMain(r, meta.slot, enhanceLevel, item.BreakLimitLevel, ascended, item.SingularityLevel, enhance);
-      main.push({ ...r, value: scaled });
+      main.push({ ...r, value: scaled, source: "option" });
     } else {
-      main.push(r);
+      main.push({ ...r, source: "option" });
     }
   }
 
@@ -136,7 +147,14 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
     const sopt = game.singularityOptions?.[String(item.SingularityOptionID)];
     if (sopt) {
       const resolved = resolveOption(sopt, 1);
-      if (resolved) main.push({ ...resolved, fromBuff: true });
+      if (resolved) main.push({
+        ...resolved,
+        fromBuff: true,
+        source: "singularity",
+        name: sopt.name ?? null,
+        desc: sopt.desc ?? null,
+        combatOnly: sopt.combatOnly,
+      });
     }
   }
 
@@ -159,10 +177,16 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
         // EePassiveDef extends StatOption so the destructuring picks up
         // st/ap/v directly — no need to rebuild the triple.
         const resolved = resolveOption(ep, 1);
-        if (resolved) main.push({ ...resolved, fromBuff: true });
+        if (resolved) main.push({ ...resolved, fromBuff: true, source: "eePassive" });
       }
     }
   }
+
+  // Talisman / EE gem slots — raw OptionIDs preserved at slot position
+  // (length always 5, 0 = empty). Other gear slots leave gemSlots undefined.
+  const gemSlots = (meta?.slot === "ooparts" || meta?.slot === "exclusive")
+    ? Array.from({ length: 5 }, (_, i) => item.SubOptionList[i]?.OptionID ?? 0)
+    : undefined;
 
   return {
     uid: item.ItemUID,
@@ -183,6 +207,7 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
     equippedBy: item.CharUID === "0" ? null : item.CharUID,
     main,
     subs,
+    ...(gemSlots ? { gemSlots } : {}),
   };
 }
 

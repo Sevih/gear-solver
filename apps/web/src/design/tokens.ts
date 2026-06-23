@@ -36,29 +36,40 @@ export const TOKENS = {
 } as const;
 
 export type StatKind = "off" | "def" | "util";
-export interface StatTokens { label: string; kind: StatKind; color: string; icon: string | null }
+export interface StatTokens {
+  /** Short label (3-5 chars) used in dense UI (substat chips, sort headers). */
+  label: string;
+  /** Long label used in the item-detail panel - matches the in-game wording
+   *  (sourced manually from TextSystem - the build pipeline could one day
+   *  derive these from the game's locale tables, but the set of stat types
+   *  is small enough to maintain by hand). */
+  longLabel: string;
+  kind: StatKind;
+  color: string;
+  icon: string | null;
+}
 
-/** Maps engine StatType → display label + kind + color + APK icon filename.
+/** Maps engine StatType → display labels + kind + color + APK icon filename.
  *  Icons live in outerpedia-v2's /images/ui/effect/ folder (served at /img/ui/effect/).
  *  `null` when no game-side icon exists for the stat. */
 export const STAT: Record<string, StatTokens> = {
-  atk:       { label: "ATK",   kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_ATK" },
-  atkPct:    { label: "ATK%",  kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_ATK" },
-  hp:        { label: "HP",    kind: "def",  color: "#a3e635", icon: "CM_Stat_Icon_HP" },
-  hpPct:     { label: "HP%",   kind: "def",  color: "#a3e635", icon: "CM_Stat_Icon_HP" },
-  def:       { label: "DEF",   kind: "def",  color: "#93c5fd", icon: "CM_Stat_Icon_DEF" },
-  defPct:    { label: "DEF%",  kind: "def",  color: "#93c5fd", icon: "CM_Stat_Icon_DEF" },
-  spd:       { label: "SPD",   kind: "util", color: "#22d3ee", icon: "CM_Stat_Icon_SPEED" },
-  critRate:  { label: "CRC",   kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_CRITICAL" },
-  critDmg:   { label: "C.DMG", kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_CRITICAL_DMG" },
-  eff:       { label: "EFF",   kind: "util", color: "#38bdf8", icon: "CM_Stat_Icon_CHANCE" },
-  effRes:    { label: "RES",   kind: "util", color: "#38bdf8", icon: "CM_Stat_Icon_RESIST" },
-  dmgUp:     { label: "DMG+",  kind: "off",  color: "#fb923c", icon: "CM_Stat_Icon_DMG_INCREASE" },
-  dmgReduce: { label: "DMG-",  kind: "def",  color: "#93c5fd", icon: "CM_Stat_Icon_ENEMY_DMG_REDUCE" },
-  pen:       { label: "PEN",   kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_PIERCE_POWER" },
-  critDmgReduce: { label: "CDR", kind: "def", color: "#93c5fd", icon: "CM_Stat_Icon_ENEMY_CRITICAL_DMG_REDUCE" },
-  hitAp:     { label: "HitAP", kind: "util", color: "#22d3ee", icon: null },
-  killAp:    { label: "KillAP", kind: "util", color: "#22d3ee", icon: null },
+  atk:       { label: "ATK",   longLabel: "Attack",            kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_ATK" },
+  atkPct:    { label: "ATK%",  longLabel: "Attack",            kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_ATK" },
+  hp:        { label: "HP",    longLabel: "HP",                kind: "def",  color: "#a3e635", icon: "CM_Stat_Icon_HP" },
+  hpPct:     { label: "HP%",   longLabel: "HP",                kind: "def",  color: "#a3e635", icon: "CM_Stat_Icon_HP" },
+  def:       { label: "DEF",   longLabel: "Defense",           kind: "def",  color: "#93c5fd", icon: "CM_Stat_Icon_DEF" },
+  defPct:    { label: "DEF%",  longLabel: "Defense",           kind: "def",  color: "#93c5fd", icon: "CM_Stat_Icon_DEF" },
+  spd:       { label: "SPD",   longLabel: "Speed",             kind: "util", color: "#22d3ee", icon: "CM_Stat_Icon_SPEED" },
+  critRate:  { label: "CRC",   longLabel: "Crit Chance",       kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_CRITICAL" },
+  critDmg:   { label: "C.DMG", longLabel: "Crit DMG",          kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_CRITICAL_DMG" },
+  eff:       { label: "EFF",   longLabel: "Effectiveness",     kind: "util", color: "#38bdf8", icon: "CM_Stat_Icon_CHANCE" },
+  effRes:    { label: "RES",   longLabel: "Effect Resistance", kind: "util", color: "#38bdf8", icon: "CM_Stat_Icon_RESIST" },
+  dmgUp:     { label: "DMG+",  longLabel: "DMG Increase",      kind: "off",  color: "#fb923c", icon: "CM_Stat_Icon_DMG_INCREASE" },
+  dmgReduce: { label: "DMG-",  longLabel: "DMG Reduction",     kind: "def",  color: "#93c5fd", icon: "CM_Stat_Icon_ENEMY_DMG_REDUCE" },
+  pen:       { label: "PEN",   longLabel: "Penetration",       kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_PIERCE_POWER" },
+  critDmgReduce: { label: "CDR", longLabel: "Crit DMG Reduction", kind: "def", color: "#93c5fd", icon: "CM_Stat_Icon_ENEMY_CRITICAL_DMG_REDUCE" },
+  hitAp:     { label: "HitAP", longLabel: "Hit AP",            kind: "util", color: "#22d3ee", icon: null },
+  killAp:    { label: "KillAP",longLabel: "Kill AP",           kind: "util", color: "#22d3ee", icon: null },
 };
 
 export interface SlotMeta {
