@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, extname, join, normalize } from "node:path";
+import { detectEmulators, pickEmulator, pickPort, preflight } from "../desktop/src/emulator-detect.js";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const DERIVED = join(root, "data", "derived");
@@ -36,7 +37,7 @@ function findOuterpediaImages(): string | null {
 const OUTERPEDIA_IMAGES = findOuterpediaImages();
 
 /** Spawn a PowerShell script and stream stdout+stderr as plain text. */
-function streamPs(res: ServerResponse, script: string): void {
+function streamPs(res: ServerResponse, script: string, extraArgs: string[] = []): void {
   if (!existsSync(script)) {
     res.statusCode = 404;
     res.end(`script not found: ${script}\n__EXIT__:127\n`);
@@ -49,7 +50,7 @@ function streamPs(res: ServerResponse, script: string): void {
 
   const child = spawn(
     "powershell.exe",
-    ["-ExecutionPolicy", "Bypass", "-NoLogo", "-NonInteractive", "-File", script],
+    ["-ExecutionPolicy", "Bypass", "-NoLogo", "-NonInteractive", "-File", script, ...extraArgs],
     { cwd: CAPTURE_DIR, windowsHide: true },
   );
   child.stdout.setEncoding("utf-8");
@@ -71,6 +72,24 @@ function streamPs(res: ServerResponse, script: string): void {
   });
 
   res.on("close", () => { if (!child.killed && child.exitCode == null) child.kill(); });
+}
+
+/** Resolve the args the dev-mode middleware hands capture.ps1 / disarm.ps1.
+ *  Mirrors the Electron prod server's behavior so swapping between
+ *  `npm run dev` and a packaged build is transparent. Detects the running
+ *  emulator and overrides the script's `-Adb` / `-Device` defaults so
+ *  MuMu / Nox work without the user editing capture.ps1's hardcoded
+ *  LDPlayer paths. */
+async function detectArgs(): Promise<string[]> {
+  const detected = await detectEmulators();
+  const chosen = pickEmulator(detected);
+  const args: string[] = [];
+  if (chosen) {
+    args.push("-Adb", chosen.adbPath);
+    const port = pickPort(chosen);
+    if (port) args.push("-Device", `127.0.0.1:${port}`);
+  }
+  return args;
 }
 
 function captureStatus(res: ServerResponse): void {
@@ -98,9 +117,34 @@ function localData(): Plugin {
       server.middlewares.use((req: IncomingMessage, res: ServerResponse, next) => {
         const url = (req.url ?? "").split("?")[0]!;
 
-        if (url === "/api/capture/run" && req.method === "POST") return streamPs(res, CAPTURE_PS1);
-        if (url === "/api/capture/disarm" && req.method === "POST") return streamPs(res, DISARM_PS1);
+        if (url === "/api/capture/run" && req.method === "POST") {
+          detectArgs().then((args) => streamPs(res, CAPTURE_PS1, args))
+            .catch((err: Error) => { res.write(`\n[detect error] ${err.message}\n__EXIT__:1\n`); res.end(); });
+          return;
+        }
+        if (url === "/api/capture/disarm" && req.method === "POST") {
+          detectArgs().then((args) => streamPs(res, DISARM_PS1, args))
+            .catch((err: Error) => { res.write(`\n[detect error] ${err.message}\n__EXIT__:1\n`); res.end(); });
+          return;
+        }
         if (url === "/api/capture/status" && req.method === "GET") return captureStatus(res);
+        // Emulator detection — same endpoint as the Electron prod server so the
+        // renderer's `useEmulator()` hook works identically across dev/prod.
+        if (url === "/api/emulators" && req.method === "GET") {
+          detectEmulators().then((list) => {
+            const chosen = pickEmulator(list);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ detected: list, chosen, chosenPort: chosen ? pickPort(chosen) : null }));
+          }).catch((err: Error) => { res.statusCode = 500; res.end(`detect failed: ${err.message}`); });
+          return;
+        }
+        if (url === "/api/preflight" && req.method === "GET") {
+          preflight().then((result) => {
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(result));
+          }).catch((err: Error) => { res.statusCode = 500; res.end(`preflight failed: ${err.message}`); });
+          return;
+        }
         // Stat regression locks — persisted at data/stat-locks.json (committable
         // so the maintainer can see the lock evolution via git history, vs
         // localStorage which lives only in the user's browser).

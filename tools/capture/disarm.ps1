@@ -4,12 +4,21 @@
   prochain redemarrage de l'instance. Tu peux ensuite recouper le Root LDPlayer si tu veux.
 #>
 param(
-  [string]$Device = "127.0.0.1:5555",
-  [string]$Adb    = "C:\LDPlayer\LDPlayer9\adb.exe"
+  [string]$Device   = "127.0.0.1:5555",
+  [string]$Adb      = "C:\LDPlayer\LDPlayer9\adb.exe",
+  # The four args below are unused here — they exist for arg-shape parity
+  # with capture.ps1 so the same extraArgs array can drive either script
+  # from the Electron prod server without branching.
+  [string]$Mitmdump    = $null,
+  [string]$MitmConfDir = $null,
+  [string]$CertDir     = $null,
+  # Where the previously-armed pipeline left its .mitm.pid file. Same
+  # default story as capture.ps1.
+  [string]$Out         = $null
 )
 $ErrorActionPreference = "SilentlyContinue"
 $Root = $PSScriptRoot
-$Out  = Join-Path $Root "out"
+if (-not $Out) { $Out = Join-Path $Root "out" }
 
 function Adb { & $Adb -s $Device @args }
 

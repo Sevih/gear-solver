@@ -109,14 +109,60 @@ export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = f
 export type Tab = "Inventory" | "Builds" | "Builder";
 const TABS: Tab[] = ["Inventory", "Builds", "Builder"];
 
+export interface EmulatorBadgeProps {
+  /** Display label like "LDPlayer", "MuMu Player" — null when nothing was
+   *  detected on disk (user has no supported emulator installed). */
+  label: string | null;
+  /** Port the backend will target. Null when the emulator is installed but
+   *  not currently running. */
+  port: number | null;
+}
+
+/** Header pill that surfaces what the backend's `/api/emulators` saw. Green
+ *  when an emulator is running and we have a port locked, amber when one is
+ *  installed but stopped, gray when no supported emulator exists at all. */
+export function EmulatorBadge({ label, port }: EmulatorBadgeProps) {
+  const tone = label && port ? "ready" : label ? "stopped" : "missing";
+  const text = label
+    ? port ? `${label} · ${port}` : `${label} · not running`
+    : "No emulator detected";
+  return (
+    <span
+      title={
+        tone === "ready" ? "Backend will target this instance on Arm capture"
+        : tone === "stopped" ? "Launch your emulator, then click Reload"
+        : "Install LDPlayer, MuMu, or NoxPlayer — capture needs a rooted Android emulator"
+      }
+      className={cx(
+        "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium",
+        tone === "ready" && "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
+        tone === "stopped" && "border-amber-400/30 bg-amber-500/10 text-amber-200",
+        tone === "missing" && "border-white/8 bg-white/3 text-zinc-500",
+      )}
+    >
+      <span className={cx(
+        "h-1.5 w-1.5 rounded-full",
+        tone === "ready" && "bg-emerald-400 shadow-[0_0_6px_#34d399]",
+        tone === "stopped" && "bg-amber-400 shadow-[0_0_6px_#fbbf24]",
+        tone === "missing" && "bg-zinc-500",
+      )} />
+      {text}
+    </span>
+  );
+}
+
 interface GsHeaderProps {
   active: Tab;
   onTabChange: (tab: Tab) => void;
   capture: CaptureControlsProps;
+  emulator: EmulatorBadgeProps;
+  /** Opens the onboarding wizard manually. Wizard is otherwise auto-shown on
+   *  first launch via App-level state. */
+  onSetup: () => void;
   version: string;
 }
 
-export function GsHeader({ active, onTabChange, capture, version }: GsHeaderProps) {
+export function GsHeader({ active, onTabChange, capture, emulator, onSetup, version }: GsHeaderProps) {
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.06] bg-black/45 px-4 py-2.5 backdrop-blur-md">
       <div className="flex items-center gap-4">
@@ -154,7 +200,21 @@ export function GsHeader({ active, onTabChange, capture, version }: GsHeaderProp
         </nav>
       </div>
 
-      <CaptureControls {...capture} />
+      <div className="flex items-center gap-2">
+        <EmulatorBadge {...emulator} />
+        <button
+          onClick={onSetup}
+          title="Open the setup checklist (emulator, ADB, root)"
+          className="grid h-7 w-7 place-items-center rounded-md border border-white/8 bg-white/3 text-zinc-400 hover:bg-white/6 hover:text-zinc-200"
+          aria-label="Setup"
+        >
+          <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx={7} cy={7} r={2} />
+            <path d="M7 1 V3 M7 11 V13 M1 7 H3 M11 7 H13 M2.5 2.5 L4 4 M10 10 L11.5 11.5 M2.5 11.5 L4 10 M10 4 L11.5 2.5" />
+          </svg>
+        </button>
+        <CaptureControls {...capture} />
+      </div>
     </header>
   );
 }

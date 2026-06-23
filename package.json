@@ -13,7 +13,13 @@
     "build": "npm run build -w @gear-solver/core && npm run build -w @gear-solver/web",
     "test": "npm run test -w @gear-solver/core",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "data:build": "node data/build.mjs"
+    "data:build": "node data/build.mjs",
+    "desktop:dev": "concurrently -k -n vite,electron -c cyan,yellow \"npm run dev -w @gear-solver/web\" \"wait-on http-get://localhost:5173 && npm run dev -w @gear-solver/desktop\"",
+    "desktop:build": "npm run build -w @gear-solver/web && npm run build -w @gear-solver/desktop"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1",
+    "wait-on": "^8.0.1"
   },
   "engines": {
     "node": ">=20"

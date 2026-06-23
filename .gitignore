@@ -6,6 +6,13 @@ build/
 *.tsbuildinfo
 coverage/
 
+# Electron desktop — packaged builds + downloaded bundled binaries (mitmdump,
+# adb, …) + the prod-only mitmproxy CA (private key inside, NEVER commit).
+# Both bin/ and prod-cert/ are reproducible from scripts/fetch-binaries.mjs.
+apps/desktop/release/
+apps/desktop/resources/bin/
+apps/desktop/resources/prod-cert/
+
 # capture runtime artifacts & PERSONAL account data — never commit
 tools/capture/out/
 tools/capture/dumps/

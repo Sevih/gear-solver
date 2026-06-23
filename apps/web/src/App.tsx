@@ -2,7 +2,9 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { GameData, Inventory, RawUserItem, RawUserCharacter, UserGeasLevels } from "@gear-solver/core";
 import { autoImport, parseFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
+import { getEmulators, type EmulatorStatus } from "./emulator.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
+import { OnboardingWizard } from "./design/OnboardingWizard.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
@@ -28,10 +30,16 @@ export function App() {
   const [userCodex, setUserCodex] = useState<number | null>(null);
   const [status, setStatus] = useState("");
   const [capStatus, setCapStatus] = useState<CaptureStatus | null>(null);
+  const [emulator, setEmulator] = useState<EmulatorStatus | null>(null);
   const [running, setRunning] = useState<"none" | "capture" | "disarm">("none");
   const [log, setLog] = useState<string[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const logRef = useRef<HTMLPreElement | null>(null);
+  // Onboarding wizard — persisted "seen" flag so the modal only auto-opens
+  // once per fresh install. The header's gear icon re-opens it on demand.
+  // `wizardOpen` is the immediate UI state; `onboardingDone` survives reloads.
+  const [onboardingDone, setOnboardingDone] = usePersistedState<boolean>("gs.onboarding.done", false);
+  const [wizardOpen, setWizardOpen] = useState(!onboardingDone);
 
   async function refreshInventory(label: string) {
     const r = await autoImport();
@@ -45,6 +53,7 @@ export function App() {
 
   useEffect(() => { void refreshInventory("Auto-import"); }, []);
   useEffect(() => { void getCaptureStatus().then(setCapStatus); }, []);
+  useEffect(() => { void getEmulators().then(setEmulator); }, []);
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log]);
 
   async function onFiles(files: FileList | null) {
@@ -72,7 +81,17 @@ export function App() {
         (line) => setLog((l) => [...l, line]),
       );
       if (mode === "capture") {
-        if (exitCode === 0) await refreshInventory("Capture OK");
+        if (exitCode === 0) {
+          await refreshInventory("Capture OK");
+          // Auto-disarm in the background so mitmdump + the device iptables
+          // redirect get torn down — otherwise mitmdump.exe stays alive after
+          // window close and locks the bundled binary for the next rebuild.
+          // Re-arm to capture supplementary endpoints (Codex, Awakening, …).
+          void (async () => {
+            try { await streamCapture("/api/capture/disarm", () => {}); } catch {}
+            void getCaptureStatus().then(setCapStatus);
+          })();
+        }
         else if (exitCode === 2) setStatus("Pipeline armed — play to the lobby, then reload.");
         else setStatus(`Capture failed (exit ${exitCode}) — see log.`);
       } else {
@@ -100,8 +119,27 @@ export function App() {
           state: captureState,
           onCapture: () => runCapture("capture"),
           onDisarm: () => runCapture("disarm"),
-          onReload: () => refreshInventory("Reloaded inventory"),
+          onReload: () => {
+            void refreshInventory("Reloaded inventory");
+            void getEmulators().then(setEmulator);
+          },
           busy: running !== "none",
+        }}
+        emulator={{
+          label: emulator?.chosen?.label ?? null,
+          port: emulator?.chosenPort ?? null,
+        }}
+        onSetup={() => setWizardOpen(true)}
+      />
+
+      <OnboardingWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onReady={() => {
+          setOnboardingDone(true);
+          // Re-poll the emulator status so the header badge flips green
+          // immediately after the wizard confirms everything is set.
+          void getEmulators().then(setEmulator);
         }}
       />
 
