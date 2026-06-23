@@ -51,10 +51,31 @@ function run(cmd, opts = {}) {
     console.log(`  \x1b[90m$ ${cmd}\x1b[0m`);
     return "";
   }
-  return execSync(cmd, { stdio: opts.silent ? "pipe" : "inherit", cwd: ROOT, ...opts }).toString();
+  // `stdio: "inherit"` lets the child stream straight to the user's terminal
+  // (essential for npm/electron-builder progress bars) BUT it makes execSync
+  // return `null` instead of a Buffer — guard against that since we never
+  // need the captured output in inherit mode.
+  const buf = execSync(cmd, { stdio: opts.silent ? "pipe" : "inherit", cwd: ROOT, ...opts });
+  return buf ? buf.toString() : "";
 }
 function runSilent(cmd) {
   return execSync(cmd, { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] }).toString().trim();
+}
+
+/** Restore the bumped version when a later step blows up — keeps the local
+ *  package.json in sync with what's actually been published. The caller
+ *  hands us the pre-bump version snapshot; we rewrite the file in place. */
+function restoreVersion(pkgPath, pristineVersion) {
+  try {
+    const j = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    if (j.version !== pristineVersion) {
+      j.version = pristineVersion;
+      writeFileSync(pkgPath, JSON.stringify(j, null, 2) + "\n");
+      console.error(`  \x1b[90m↻ Reverted apps/desktop/package.json to ${pristineVersion}\x1b[0m`);
+    }
+  } catch {
+    console.error(`  \x1b[33m! Could not auto-revert version — restore manually: ${pristineVersion}\x1b[0m`);
+  }
 }
 
 // ── version arithmetic ─────────────────────────────────────────────────
@@ -122,43 +143,65 @@ if (!DRY_RUN) {
 }
 ok(`apps/desktop/package.json updated`);
 
-// ── DATA REBUILD ───────────────────────────────────────────────────────
-step(3, "Regenerate derived game data");
-run("node data/build.mjs");
+// Past this point a failure leaves the local package.json bumped but with
+// no matching artefact. We track when GitHub state becomes real (step 5
+// onwards) so the catch block only auto-reverts BEFORE that — once the
+// release exists on GitHub, reverting locally would just desync things.
+let releasedToGitHub = false;
+try {
+  // ── DATA REBUILD ─────────────────────────────────────────────────────
+  step(3, "Regenerate derived game data");
+  run("node data/build.mjs");
 
-// ── BUILD ──────────────────────────────────────────────────────────────
-step(4, "Build web + desktop TS");
-run("npm run desktop:build");
+  // ── BUILD ────────────────────────────────────────────────────────────
+  step(4, "Build web + desktop TS");
+  run("npm run desktop:build");
 
-// ── PUBLISH (electron-builder) ─────────────────────────────────────────
-step(5, "Build installer + upload to GitHub (draft)");
-// `electron-builder --publish always` reads `publish` block from apps/desktop
-// package.json (provider: github / Sevih / gear-solver). Default releaseType
-// is draft — we promote it in step 7.
-run("npm run publish -w @gear-solver/desktop");
+  // ── PUBLISH (electron-builder) ───────────────────────────────────────
+  step(5, "Build installer + upload to GitHub (draft)");
+  // `electron-builder --publish always` reads `publish` block from apps/desktop
+  // package.json (provider: github / Sevih / gear-solver). Default releaseType
+  // is draft — we promote it in step 7.
+  run("npm run publish -w @gear-solver/desktop");
+  releasedToGitHub = true;
 
-// ── COMMIT + PUSH ──────────────────────────────────────────────────────
-step(6, `Commit + tag ${tag} + push`);
-run(`git add apps/desktop/package.json`);
-const commitMsg = `chore: release ${tag}`;
-run(`git commit -m "${commitMsg}"`);
-run(`git tag ${tag}`);
-run(`git push --follow-tags origin ${branch}`);
+  // ── COMMIT + PUSH ────────────────────────────────────────────────────
+  step(6, `Commit + tag ${tag} + push`);
+  run(`git add apps/desktop/package.json`);
+  const commitMsg = `chore: release ${tag}`;
+  run(`git commit -m "${commitMsg}"`);
+  run(`git tag ${tag}`);
+  run(`git push --follow-tags origin ${branch}`);
 
-// ── UNDRAFT ────────────────────────────────────────────────────────────
-step(7, NO_UNDRAFT ? "Skip undraft (--no-undraft)" : "Promote draft → release");
-if (NO_UNDRAFT) {
-  skip("Draft left as-is — promote manually on GitHub when ready.");
-} else {
-  try { runSilent("gh --version"); }
-  catch {
-    skip("gh CLI not installed — promote manually at https://github.com/Sevih/gear-solver/releases");
-    process.exit(0);
+  // ── UNDRAFT ──────────────────────────────────────────────────────────
+  step(7, NO_UNDRAFT ? "Skip undraft (--no-undraft)" : "Promote draft → release");
+  if (NO_UNDRAFT) {
+    skip("Draft left as-is — promote manually on GitHub when ready.");
+  } else {
+    let hasGh = true;
+    try { runSilent("gh --version"); } catch { hasGh = false; }
+    if (!hasGh) {
+      skip("gh CLI not installed — promote manually at https://github.com/Sevih/gear-solver/releases");
+    } else {
+      // --latest flips the "Latest release" badge on GitHub, which is what
+      // electron-updater clients check via latest.yml.
+      run(`gh release edit ${tag} --draft=false --latest`);
+    }
   }
-  // --latest flips the "Latest release" badge on GitHub, which is what
-  // electron-updater clients check via latest.yml.
-  run(`gh release edit ${tag} --draft=false --latest`);
-}
 
-console.log(`\n\x1b[32m✓ Release ${tag} published.\x1b[0m`);
-console.log(`  https://github.com/Sevih/gear-solver/releases/tag/${tag}`);
+  console.log(`\n\x1b[32m✓ Release ${tag} published.\x1b[0m`);
+  console.log(`  https://github.com/Sevih/gear-solver/releases/tag/${tag}`);
+} catch (err) {
+  console.error(`\n\x1b[31m✗ Release pipeline aborted.\x1b[0m`);
+  if (err?.message) console.error(`  ${err.message.split("\n")[0]}`);
+  if (!DRY_RUN) {
+    if (releasedToGitHub) {
+      console.error(`  \x1b[33m! Release ${tag} already exists on GitHub — fix the issue and finish manually:\x1b[0m`);
+      console.error(`  \x1b[90m    git add apps/desktop/package.json && git commit -m "chore: release ${tag}" && git tag ${tag} && git push --follow-tags\x1b[0m`);
+      console.error(`  \x1b[90m    gh release edit ${tag} --draft=false --latest\x1b[0m`);
+    } else {
+      restoreVersion(DESKTOP_PKG, fromVersion);
+    }
+  }
+  process.exit(1);
+}
