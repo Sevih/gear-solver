@@ -15,7 +15,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "data:build": "node data/build.mjs",
     "desktop:dev": "concurrently -k -n vite,electron -c cyan,yellow \"npm run dev -w @gear-solver/web\" \"wait-on http-get://localhost:5173 && npm run dev -w @gear-solver/desktop\"",
-    "desktop:build": "npm run build -w @gear-solver/web && npm run build -w @gear-solver/desktop"
+    "desktop:build": "npm run build -w @gear-solver/web && npm run build -w @gear-solver/desktop",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.0.1",
