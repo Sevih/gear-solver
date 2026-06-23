@@ -10,7 +10,7 @@ export function BuilderScreen() {
 
       <div className="mt-6 flex flex-1 items-center justify-center">
         <div
-          className="rounded-2xl border border-white/[0.08] bg-[oklch(0.21_0.018_270_/_0.7)] px-10 py-12 text-center shadow-[0_1px_0_oklch(1_0_0_/_0.04)_inset,0_24px_60px_-30px_rgb(0_0_0_/_0.7)]"
+          className="rounded-2xl border border-white/8 bg-bg-elev-2 px-10 py-12 text-center shadow-[0_1px_0_oklch(1_0_0/0.04)_inset,0_24px_60px_-30px_rgb(0_0_0/0.7)]"
         >
           <div
             className="mx-auto grid h-16 w-16 place-items-center rounded-2xl"

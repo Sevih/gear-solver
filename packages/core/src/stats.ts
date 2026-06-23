@@ -41,6 +41,11 @@ const GAME_STAT: Record<string, StatMeta> = {
   ST_E_CRI_DMG_REDUCE: { add: "critDmgReduce", rate: "critDmgReduce", addPercent: true },
   ST_HIT_AP: { add: "hitAp", rate: "hitAp", addPercent: false },
   ST_KILL_AP: { add: "killAp", rate: "killAp", addPercent: false },
+  // Set-bonus only stats — surfaced in sets.json, never on rolled subs.
+  // Lifesteal + Counterattack store raw ×10 (v=100 → 10%); ENTER_AP is flat.
+  ST_VAMPIRIC:      { add: "lifesteal", rate: "lifesteal", addPercent: true  },
+  ST_COUNTER_RATE:  { add: "counter",   rate: "counter",   addPercent: true  },
+  ST_ENTER_AP:      { add: "enterAp",   rate: "enterAp",   addPercent: false },
 };
 
 export interface ResolvedStat {

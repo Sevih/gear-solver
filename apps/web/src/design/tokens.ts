@@ -70,6 +70,11 @@ export const STAT: Record<string, StatTokens> = {
   critDmgReduce: { label: "CDR", longLabel: "Crit DMG Reduction", kind: "def", color: "#93c5fd", icon: "CM_Stat_Icon_ENEMY_CRITICAL_DMG_REDUCE" },
   hitAp:     { label: "HitAP", longLabel: "Hit AP",            kind: "util", color: "#22d3ee", icon: null },
   killAp:    { label: "KillAP",longLabel: "Kill AP",           kind: "util", color: "#22d3ee", icon: null },
+  // Set-bonus only stats — no in-game stat icon exists, fall back to the
+  // short label via StatIcon's text path.
+  lifesteal: { label: "LIFE",  longLabel: "Lifesteal",         kind: "util", color: "#fb7185", icon: null },
+  counter:   { label: "CTR",   longLabel: "Counterattack",     kind: "util", color: "#fca5a5", icon: null },
+  enterAp:   { label: "AP+",   longLabel: "Starting AP",       kind: "util", color: "#22d3ee", icon: null },
 };
 
 export interface SlotMeta {
@@ -80,15 +85,18 @@ export interface SlotMeta {
    *  Naming gotchas: boots ↔ "Shoes", talisman ↔ "Oopart". */
   icon: string;
 }
+// Display order: weapon → accessory → armor pieces (top-down: helmet, armor,
+// gloves, boots) → special gear (EE, then talisman). Mirrors the in-game
+// inventory tab ordering players are used to.
 export const SLOTS: SlotMeta[] = [
   { id: "weapon",    label: "Weapon",    short: "WPN", icon: "CM_Inven_Tab_Weapon" },
+  { id: "accessory", label: "Accessory", short: "ACC", icon: "CM_Inven_Tab_Accessory" },
   { id: "helmet",    label: "Helmet",    short: "HLM", icon: "CM_Inven_Tab_Helmet" },
   { id: "armor",     label: "Armor",     short: "ARM", icon: "CM_Inven_Tab_Armor" },
   { id: "gloves",    label: "Gloves",    short: "GLV", icon: "CM_Inven_Tab_Gloves" },
   { id: "boots",     label: "Boots",     short: "BTS", icon: "CM_Inven_Tab_Shoes" },
-  { id: "accessory", label: "Accessory", short: "ACC", icon: "CM_Inven_Tab_Accessory" },
-  { id: "talisman",  label: "Talisman",  short: "TAL", icon: "CM_Inven_Tab_Oopart" },
   { id: "exclusive", label: "Exclusive", short: "EE",  icon: "CM_Inven_Tab_Exclusive" },
+  { id: "talisman",  label: "Talisman",  short: "TAL", icon: "CM_Inven_Tab_Oopart" },
 ];
 export const SLOT_BY: Record<string, SlotMeta> = Object.fromEntries(SLOTS.map((s) => [s.id, s]));
 

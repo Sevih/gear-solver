@@ -81,8 +81,16 @@ export interface SetEffect {
 }
 export interface SetLevel {
   level: number;
+  /** Engine-facing resolved stat (kept for solver scoring). Null when the
+   *  set has no stat at this tier — e.g. Revenge has no 2-pc effect. */
   p2: SetEffect | null;
   p4: SetEffect | null;
+  /** UI-facing localized prose pulled from outerpedia-v2's curated
+   *  `data/equipment/sets.json` — canonical wording per tier (e.g.
+   *  "Attack +30%", "Increases damage dealt against targets inflicted with
+   *  Break by 35%"). Null when no curated string exists. */
+  p2_desc: string | null;
+  p4_desc: string | null;
 }
 export interface SetDef {
   name: string | null;

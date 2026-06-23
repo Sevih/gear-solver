@@ -51,7 +51,7 @@ export function LogView({ lines }: Props) {
   return (
     <div
       ref={ref}
-      className="max-h-48 overflow-y-auto rounded-md border border-white/[0.07] bg-black/40 p-2 font-mono text-[10.5px] leading-relaxed"
+      className="max-h-48 overflow-y-auto rounded-md border border-white/7 bg-black/40 p-2 font-mono text-[10.5px] leading-relaxed"
     >
       {lines.map((line, i) => (
         <div key={i} className={cx("whitespace-pre", lineTone(line))}>

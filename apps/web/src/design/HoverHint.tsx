@@ -85,7 +85,7 @@ export function HoverHint({ name, text, className }: HoverHintProps) {
       >
         <span
           aria-hidden
-          className="grid h-3 w-3 place-items-center rounded-full border border-zinc-500 text-[8px] font-bold leading-none text-zinc-400 transition-colors group-hover:border-zinc-300 group-hover:text-zinc-200 group-focus-visible:border-zinc-300 group-focus-visible:text-zinc-200"
+          className="grid h-3 w-3 place-items-center rounded-full border border-white/60 text-[8px] font-bold leading-none text-white transition-colors group-hover:border-white group-focus-visible:border-white"
         >
           ?
         </span>
@@ -101,7 +101,7 @@ export function HoverHint({ name, text, className }: HoverHintProps) {
             maxWidth: TOOLTIP_MAX_W,
             transform: "translate(-50%, -100%)",
           }}
-          className="pointer-events-none z-9999 whitespace-normal rounded-md border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] font-normal leading-snug tracking-normal text-zinc-200 normal-case shadow-lg shadow-black/40"
+          className="pointer-events-none z-9999 whitespace-normal rounded-md border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] font-normal leading-snug tracking-normal text-white normal-case shadow-lg shadow-black/40"
         >
           {text}
         </div>,

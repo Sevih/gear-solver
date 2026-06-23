@@ -14,7 +14,11 @@ export type StatType =
   | "dmgUp" | "dmgReduce"   // DMG_BOOST / DMG_REDUCE_RATE
   | "pen"                   // PIERCE_POWER_RATE
   | "critDmgReduce"         // E_CRI_DMG_REDUCE
-  | "hitAp" | "killAp";     // chain-point gain
+  | "hitAp" | "killAp"      // chain-point gain
+  // Set-bonus only stats (not rollable as gear subs):
+  | "lifesteal"             // ST_VAMPIRIC — Lifesteal Set
+  | "counter"               // ST_COUNTER_RATE — Counterattack Set
+  | "enterAp";              // ST_ENTER_AP — Bursting Set (starting AP)
 
 export type GearSlot =
   | "weapon" | "helmet" | "armor" | "gloves" | "boots"

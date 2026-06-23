@@ -56,7 +56,7 @@ export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = f
         "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium",
         armed ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
         : capturing ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-        : "border-white/[0.08] bg-white/[0.03] text-zinc-400",
+        : "border-white/8 bg-white/3 text-white",
       )}>
         {capturing
           ? <Spinner className="h-3 w-3 text-cyan-300" />
@@ -73,7 +73,7 @@ export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = f
           "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[11.5px] font-medium transition-colors",
           disable && "cursor-not-allowed opacity-50",
           armed
-            ? "border-white/[0.08] bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]"
+            ? "border-white/8 bg-white/3 text-white hover:bg-white/6"
             : "border-cyan-400/30 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
         )}
       >
@@ -84,7 +84,7 @@ export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = f
         onClick={onReload}
         disabled={disable}
         className={cx(
-          "inline-flex h-7 items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 text-[11.5px] text-zinc-300 transition-colors hover:bg-white/6 hover:text-zinc-100 active:scale-95",
+          "inline-flex h-7 items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 text-[11.5px] text-white transition-colors hover:bg-white/6 active:scale-95",
           disable && "cursor-not-allowed opacity-50",
         )}
       >
@@ -138,7 +138,7 @@ export function EmulatorBadge({ label, port }: EmulatorBadgeProps) {
         "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium",
         tone === "ready" && "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
         tone === "stopped" && "border-amber-400/30 bg-amber-500/10 text-amber-200",
-        tone === "missing" && "border-white/8 bg-white/3 text-zinc-500",
+        tone === "missing" && "border-white/8 bg-white/3 text-white/75",
       )}
     >
       <span className={cx(
@@ -173,16 +173,16 @@ interface GsHeaderProps {
 
 export function GsHeader({ active, onTabChange, capture, emulator, onSetup, version, gameVersion, counts }: GsHeaderProps) {
   return (
-    <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.06] bg-black/45 px-4 py-2.5 backdrop-blur-md">
+    <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/6 bg-black/45 px-4 py-2.5 backdrop-blur-md">
       <div className="flex items-center gap-4">
         <div className="leading-tight">
-          <div className="font-display text-[14px] font-semibold tracking-tight text-zinc-100">Gear Solver</div>
-          <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-300">
+          <div className="font-display text-[14px] font-semibold tracking-tight text-white">Gear Solver</div>
+          <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/80">
             Outerpedia · v{version}{gameVersion ? <> · game {gameVersion}</> : null}
           </div>
         </div>
 
-        <nav className="flex items-center gap-1 rounded-lg border border-white/[0.06] bg-black/30 p-0.5 text-[12.5px]">
+        <nav className="flex items-center gap-1 rounded-lg border border-white/6 bg-black/30 p-0.5 text-[12.5px]">
           {TABS.map((t) => {
             const count = counts[t];
             return (
@@ -192,15 +192,15 @@ export function GsHeader({ active, onTabChange, capture, emulator, onSetup, vers
                 className={cx(
                   "inline-flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition-colors",
                   t === active
-                    ? "bg-white/[0.07] text-zinc-100 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-                    : "text-zinc-400 hover:text-zinc-200",
+                    ? "bg-white/7 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+                    : "text-white hover:text-cyan-100",
                 )}
               >
                 {t}
                 {count != null && (
                   <span className={cx(
                     "rounded-sm px-1 font-mono text-[10px] tabular-nums",
-                    t === active ? "bg-cyan-500/15 text-cyan-200" : "bg-white/5 text-zinc-500",
+                    t === active ? "bg-cyan-500/15 text-cyan-200" : "bg-white/10 text-white",
                   )}>
                     {count}
                   </span>
@@ -216,7 +216,7 @@ export function GsHeader({ active, onTabChange, capture, emulator, onSetup, vers
         <button
           onClick={onSetup}
           title="Open the setup checklist (emulator, ADB, root)"
-          className="grid h-7 w-7 place-items-center rounded-md border border-white/8 bg-white/3 text-zinc-400 transition-colors hover:bg-white/6 hover:text-zinc-200 active:scale-95"
+          className="grid h-7 w-7 place-items-center rounded-md border border-white/8 bg-white/3 text-white transition-colors hover:bg-white/6 active:scale-95"
           aria-label="Setup"
         >
           {/* Sliders / settings icon — three horizontal lines with adjuster
@@ -247,7 +247,7 @@ export function CyanButton({
         "inline-flex items-center justify-center gap-1.5 rounded-md font-semibold transition-colors",
         size === "lg" ? "h-10 px-5 text-[13px]" : size === "sm" ? "h-7 px-2.5 text-[11.5px]" : "h-8 px-3.5 text-[12px]",
         disabled
-          ? "cursor-not-allowed border border-white/[0.06] bg-white/[0.02] text-zinc-600"
+          ? "cursor-not-allowed border border-white/6 bg-white/2 text-white/40"
           : "border border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 shadow-[0_0_18px_-6px_rgba(34,211,238,0.6)]",
         className,
       )}
@@ -268,8 +268,8 @@ export function GhostButton({
         "inline-flex h-7 items-center justify-center gap-1.5 rounded-md border px-2.5 text-[11.5px] transition-colors",
         disabled && "cursor-not-allowed opacity-50",
         active
-          ? "border-white/[0.12] bg-white/[0.07] text-zinc-100"
-          : "border-white/[0.07] bg-white/[0.03] text-zinc-300 hover:bg-white/[0.06]",
+          ? "border-white/12 bg-white/7 text-white"
+          : "border-white/7 bg-white/3 text-white hover:bg-white/6",
         className,
       )}
     >
@@ -281,7 +281,7 @@ export function GhostButton({
 export function GsLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">{children}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">{children}</span>
       {right}
     </div>
   );

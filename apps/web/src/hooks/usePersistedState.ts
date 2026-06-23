@@ -67,9 +67,13 @@ export function jsonWithSets<T>(setFields: (keyof T & string)[]): PersistedCodec
     },
     deserialize: (raw: string) => {
       const o = JSON.parse(raw) as Record<string, unknown>;
+      // Always materialize the declared Set fields, even when missing from
+      // storage — older sessions saved before a field was added would
+      // otherwise leave it `undefined`, blowing up downstream `.size`/`.has`
+      // accesses with `Cannot read properties of undefined`.
       for (const k of setFields) {
         const arr = o[k];
-        if (Array.isArray(arr)) o[k] = new Set(arr);
+        o[k] = Array.isArray(arr) ? new Set(arr) : new Set();
       }
       return o as T;
     },

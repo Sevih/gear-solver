@@ -223,10 +223,26 @@ for (const file of ["weapon", "accessory", "talisman", "ee"]) {
   }
 }
 const armorSetIcons = new Map();
+// outerpedia-v2 ships the canonical localized "effect" strings for each
+// armor 4-piece set per piece-count + tier (`effect_{2|4}_{1|4}` — _1 is the
+// 4★ tier in-game, _4 is the 6★ tier). Mirror those strings into the
+// derived sets.json so the inventory panel can render the in-game prose
+// ("Increases Attack proportional to missing Health") instead of having to
+// reverse-engineer a stat value from BuffTemplet — preserves the player's
+// mental model of the set effects.
+const armorSetEffects = new Map(); // setId -> { [`${pcs}_${tier}`]: string | null }
 const armorSetList = loadOuterpedia("data/equipment/sets.json");
 if (Array.isArray(armorSetList)) {
   for (const s of armorSetList) {
-    if (s && s.id != null && s.set_icon) armorSetIcons.set(String(s.id), s.set_icon);
+    if (!s || s.id == null) continue;
+    const id = String(s.id);
+    if (s.set_icon) armorSetIcons.set(id, s.set_icon);
+    armorSetEffects.set(id, {
+      "2_1": s.effect_2_1 ?? null,
+      "4_1": s.effect_4_1 ?? null,
+      "2_4": s.effect_2_4 ?? null,
+      "4_4": s.effect_4_4 ?? null,
+    });
   }
 }
 
@@ -338,9 +354,51 @@ const buffTemplet = load("BuffTemplet.json");
 // `_ADD` buff that only exists at one Level; for buffs with multiple level
 // rows (rare for EE passives) we conservatively pick the strongest.
 const buffByID = new Map();
+// Per-level lookup needed for set effect buffs whose value scales per set
+// tier (e.g. BID_ITEM_UO_SET_15 has Level 1 for 4★, Level 2 for 6★).
+const buffByIDLevel = new Map();
 for (const b of buffTemplet) {
   const cur = buffByID.get(b.BuffID);
   if (!cur || Number(b.Level) > Number(cur.Level)) buffByID.set(b.BuffID, b);
+  buffByIDLevel.set(`${b.BuffID}|${b.Level}`, b);
+}
+
+// Resolve a 2-pc / 4-pc set effect entry into a {st, ap, v} triple that the
+// UI can render via `resolveOption`. Fallback chain:
+//   1. Direct stat (StatType_XP ≠ ST_NONE) — the common case for Attack /
+//      Defense / Life / Effectiveness / Speed / Crit / Lifesteal sets.
+//   2. Linked buff (BuffID_XP) at the matching `Level`:
+//      2a. Buff carries a real StatType (BT_STAT_OWNER_LOST_HP_RATE on
+//          Revenge / Patience / Swiftness uses StatType=ATK/DEF/SPEED).
+//      2b. Buff Type implies a stat (BT_DMG / BT_DMG_TARGET_BREAK →
+//          DMG_BOOST; BT_DMG_REDUCE → DMG_REDUCE_RATE). Used by
+//          Pulverization / Weakness / Augmentation, whose effect mechanic
+//          is the buff Type itself.
+//   3. Otherwise null (e.g. Immunity's BT_IMMUNE — boolean effect with no
+//      numerical value, UI falls back to the set's prose description).
+const BUFF_TYPE_TO_STAT = {
+  BT_DMG: "ST_DMG_BOOST",
+  BT_DMG_TARGET_BREAK: "ST_DMG_BOOST",
+  BT_DMG_REDUCE: "ST_DMG_REDUCE_RATE",
+};
+function resolveSetEffectEntry(stat, ap, value, buffId, setLevel) {
+  if (stat && stat !== "ST_NONE") {
+    return { st: stat, ap, v: Number(value) };
+  }
+  if (!buffId) return null;
+  const b = buffByIDLevel.get(`${buffId}|${setLevel}`);
+  if (!b) return null;
+  if (b.StatType && b.StatType !== "ST_NONE") {
+    return { st: b.StatType, ap: b.ApplyingType, v: Number(b.Value) };
+  }
+  const mapped = BUFF_TYPE_TO_STAT[b.Type];
+  // BT_DMG_REDUCE on ENEMY_TEAM stores a negative value (enemy's reduction
+  // drops by 25% = player deals more). Surface the magnitude — the prose
+  // desc above explains the direction.
+  if (mapped && b.Value != null) {
+    return { st: mapped, ap: b.ApplyingType ?? "OAT_RATE", v: Math.abs(Number(b.Value)) };
+  }
+  return null;
 }
 // EE GroupIDs — used to gate the `eePassives` extraction below. For EE items
 // the first part of `UniqueOptionID` IS the GroupID (and matches the ItemID
@@ -354,14 +412,28 @@ for (const it of load("ItemTemplet.json")) {
 }
 const eePassives = {}; // GroupID -> [{ levelThreshold, st, ap, v }]
 for (const s of load("ItemSpecialOptionTemplet.json")) {
-  const g = (sets[s.GroupID] ??= { name: textItem.get(s.NameID) ?? null, desc: textItem.get(s.DescID) ?? null, levels: [] });
-  // desc is per-group not per-level; ??= keeps the first non-null we see
-  // (the lvl-1 row carries the canonical NameID/DescID per the agent's findings).
-  g.desc ??= textItem.get(s.DescID) ?? null;
+  // desc fallback chain: DescID (UO_SET_XX_DESC — often missing from TextItem,
+  // lives in TextSkill for some sets) → SimpleDescID (ST_Set_XX_DESC — the
+  // short human-readable summary that ALWAYS exists in TextItem, used for
+  // ST_NONE "effect" sets like Revenge / Patience whose mechanic isn't a
+  // direct stat). ??= keeps the first non-null per group.
+  const initialDesc = textItem.get(s.DescID) ?? textItem.get(s.SimpleDescID) ?? null;
+  const g = (sets[s.GroupID] ??= { name: textItem.get(s.NameID) ?? null, desc: initialDesc, levels: [] });
+  g.desc ??= initialDesc;
+  const setLevel = Number(s.Level);
+  // gear-solver `setLevel` 1 = 4★ tier (outerpedia `_1`), 2 = 6★ tier (`_4`).
+  const tierSuffix = setLevel === 2 ? "4" : "1";
+  const effects = armorSetEffects.get(s.GroupID);
   g.levels.push({
-    level: Number(s.Level),
-    p2: s.StatType_2P ? { st: s.StatType_2P, ap: s.ApplyingType_2P, v: Number(s.OptionValue_2P) } : null,
-    p4: s.StatType_4P ? { st: s.StatType_4P, ap: s.ApplyingType_4P, v: Number(s.OptionValue_4P) } : null,
+    level: setLevel,
+    // Engine-facing resolved stat (kept so the solver can score set bonuses
+    // numerically when needed). Null for effect sets like Revenge.
+    p2: resolveSetEffectEntry(s.StatType_2P, s.ApplyingType_2P, s.OptionValue_2P, s.BuffID_2P, setLevel),
+    p4: resolveSetEffectEntry(s.StatType_4P, s.ApplyingType_4P, s.OptionValue_4P, s.BuffID_4P, setLevel),
+    // UI-facing localized prose pulled from outerpedia-v2 (the source of
+    // truth for the curated player-facing wording per tier).
+    p2_desc: effects?.[`2_${tierSuffix}`] ?? null,
+    p4_desc: effects?.[`4_${tierSuffix}`] ?? null,
   });
   // Collect EVERY Singularity option (group 30000 / 31000) regardless of
   // whether it's combat-only — the UI needs them all to display the rolled

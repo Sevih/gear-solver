@@ -8,7 +8,7 @@ export function Pill({
   children, tone = "neutral", className,
 }: { children: ReactNode; tone?: "neutral" | "violet" | "amber" | "emerald" | "rose"; className?: string }) {
   const tones: Record<string, string> = {
-    neutral: "border-white/[0.07] bg-white/[0.04] text-zinc-300",
+    neutral: "border-white/7 bg-white/4 text-zinc-300",
     violet: "border-violet-400/30 bg-violet-500/15 text-violet-100",
     amber: "border-amber-400/25 bg-amber-500/10 text-amber-200",
     emerald: "border-emerald-400/25 bg-emerald-500/10 text-emerald-200",
@@ -84,7 +84,7 @@ export function SubstatChip({
 }: { stat: string; value: string | number; lv?: number; className?: string }) {
   return (
     <span className={cx(
-      "inline-flex items-center gap-1 rounded border border-white/[0.05] bg-black/25 px-1.5 py-0.5 font-mono text-[11.5px] tabular-nums",
+      "inline-flex items-center gap-1 rounded border border-white/5 bg-black/25 px-1.5 py-0.5 font-mono text-[11.5px] tabular-nums",
       className,
     )}>
       <StatIcon stat={stat} size={14} />

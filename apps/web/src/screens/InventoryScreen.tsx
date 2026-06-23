@@ -1,4 +1,5 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
 import { resolveOption } from "@gear-solver/core";
 import { cx } from "../design/cx.js";
@@ -21,17 +22,56 @@ function Search({ className = "h-3.5 w-3.5" }: { className?: string }) {
     </svg>
   );
 }
+// ── quality tiers (shared between filter panel + detail panel) ─────────
+// Kept here (above FilterState) so both the filter UI and the inline
+// per-item Quality bar in ItemDetail pull from the same table. Tier name
+// drives the i18n label, bar color, and filter pill color.
+export type QualityTier = "poor" | "decent" | "good" | "excellent" | "perfect";
+export const QUALITY_TIERS: QualityTier[] = ["poor", "decent", "good", "excellent", "perfect"];
+export const QUALITY_TONE: Record<QualityTier, { text: string; bar: string; label: string }> = {
+  poor:      { text: "text-white",      bar: "#a1a1aa", label: "Poor" },
+  decent:    { text: "text-sky-300",    bar: "#7dd3fc", label: "Decent" },
+  good:      { text: "text-emerald-300",bar: "#6ee7b7", label: "Good" },
+  excellent: { text: "text-violet-300", bar: "#c4b5fd", label: "Excellent" },
+  perfect:   { text: "text-amber-300",  bar: "#fbbf24", label: "Perfect" },
+};
+
+// Gear-rollable stat keys — everything in `STAT` minus the three set-only
+// stats (lifesteal / counter / enterAp) which never appear as a piece's
+// main or sub. Used to populate the Main / Sub filter pill lists and the
+// "sort by sub" dropdown.
+const GEAR_STATS: string[] = Object.keys(STAT).filter(
+  (k) => k !== "lifesteal" && k !== "counter" && k !== "enterAp",
+);
+
 // ── filter state ────────────────────────────────────────────────────────
 interface FilterState {
   slots: Set<SlotId>;
   rarities: Set<DesignRarity>;
   stars: Set<number>;
-  brk: Set<number>;
-  enhMin: number;
-  enhMax: number;
+  quality: Set<QualityTier>;
+  /** Selected main-stat keys — OR semantics (a piece passes if any of its
+   *  mains is in the set). Mains only ever have AND-impossible single-stat
+   *  semantics for gear (helmet has 1 main); talismans/EE expose multiple
+   *  mains but those still read better as OR (player asks "which pieces
+   *  give me HP% OR ATK%"). */
+  mains: Set<string>;
+  /** Selected sub-stat keys + the operator that joins them. OR matches if
+   *  ANY listed sub is on the piece; AND requires ALL listed subs. */
+  subs: Set<string>;
+  subMode: "or" | "and";
+  /** Selected armor 4-pc set IDs — OR semantics. Only matches armor pieces
+   *  that belong to one of the listed sets. */
+  armorSets: Set<string>;
+  /** Class-restricted pieces only — pills hold display class names
+   *  ("Striker", "Mage", "Ranger", "Defender", "Healer"). OR semantics.
+   *  Pieces without a classLimit (the vast majority of generic gear) fail
+   *  this filter the moment any chip is active. */
+  classes: Set<string>;
+  /** Equipped-piece visibility. `true` (default) shows them; `false` hides
+   *  them — exposed in the modal as an "Exclude equipped gear" checkbox
+   *  (inverted polarity to match the in-game wording). */
   showEquipped: boolean;
-  showFree: boolean;
-  showLocked: boolean;
   singularityOnly: boolean;
   query: string;
 }
@@ -41,32 +81,101 @@ function emptyFilters(): FilterState {
     slots: new Set(),
     rarities: new Set(),
     stars: new Set(),
-    brk: new Set(),
-    enhMin: 0,
-    enhMax: 15,
+    quality: new Set(),
+    mains: new Set(),
+    subs: new Set(),
+    subMode: "or",
+    armorSets: new Set(),
+    classes: new Set(),
     showEquipped: true,
-    showFree: true,
-    showLocked: true,
     singularityOnly: false,
     query: "",
   };
 }
 
-// Persistence codec for the inventory filter shape — wraps the four Set<>-typed
-// fields so they survive a JSON round-trip via localStorage.
-const FILTER_CODEC = jsonWithSets<FilterState>(["slots", "rarities", "stars", "brk"]);
+// Persistence codec for the inventory filter shape — wraps the Set<>-typed
+// fields so they survive a JSON round-trip via localStorage. The deserializer
+// overlays stored values on top of `emptyFilters()` so older sessions missing
+// newer non-Set fields (e.g. `subMode`) get the current defaults instead of
+// undefined.
+const _setCodec = jsonWithSets<FilterState>(["slots", "rarities", "stars", "quality", "mains", "subs", "armorSets", "classes"]);
+const FILTER_CODEC = {
+  serialize: _setCodec.serialize,
+  deserialize: (raw: string): FilterState => {
+    const parsed = _setCodec.deserialize!(raw) as Partial<FilterState>;
+    // Drop undefined entries so spread doesn't reintroduce them and unset
+    // the default for fields the storage simply didn't have at the time.
+    const clean = Object.fromEntries(
+      Object.entries(parsed).filter(([, v]) => v !== undefined),
+    ) as Partial<FilterState>;
+    return { ...emptyFilters(), ...clean };
+  },
+};
+const FILTERS_STORAGE_KEY = "gs.inv.filters.v3";
+
+// ── tab state ──────────────────────────────────────────────────────────
+// Three coarse buckets surfaced as sub-tabs above the grid. "Gear" covers
+// the rolled-substat slots (the gear-solver's bread and butter); "Special
+// Gear" isolates the gem-bearing slots (talisman + EE) whose detail view is
+// fundamentally different (gems vs subs, no Quality score, multi-tier
+// passives). "All" stays as a no-filter escape hatch.
+export type InvTab = "all" | "gear" | "special";
+const TAB_SLOTS: Record<InvTab, SlotId[]> = {
+  all:     ["weapon", "accessory", "helmet", "armor", "gloves", "boots", "exclusive", "talisman"],
+  gear:    ["weapon", "accessory", "helmet", "armor", "gloves", "boots"],
+  special: ["exclusive", "talisman"],
+};
+function matchesTab(p: UiPiece, tab: InvTab): boolean {
+  if (tab === "all") return true;
+  if (!p.slot) return false;
+  return TAB_SLOTS[tab].includes(p.slot);
+}
 
 function matchesFilters(p: UiPiece, f: FilterState): boolean {
   if (f.singularityOnly && !p.singularity) return false;
   if (f.slots.size > 0 && (!p.slot || !f.slots.has(p.slot))) return false;
   if (f.rarities.size > 0 && !f.rarities.has(p.rarity)) return false;
   if (f.stars.size > 0 && !f.stars.has(p.stars)) return false;
-  if (f.brk.size > 0 && !f.brk.has(p.bt)) return false;
-  if (p.enhance < f.enhMin || p.enhance > f.enhMax) return false;
-  const isEquipped = p.status === "equipped";
-  if (isEquipped && !f.showEquipped) return false;
-  if (!isEquipped && !f.showFree) return false;
-  if (p.locked && !f.showLocked) return false;
+  if (f.quality.size > 0) {
+    // Talisman / EE return null (no rolled subs to score) — they're
+    // excluded the moment a quality chip is active, since "Excellent" is
+    // meaningless for gem-bearing slots.
+    const q = computeQuality(p);
+    if (!q || !f.quality.has(q.tier)) return false;
+  }
+  if (f.mains.size > 0) {
+    // OR semantics — a piece passes if ANY of its main-stat keys is in the
+    // selection. Pieces with no mains (shouldn't happen for armor/weapon
+    // but defensively) never match.
+    if (!p.main.some((m) => f.mains.has(m.stat))) return false;
+  }
+  if (f.subs.size > 0) {
+    const pieceSubs = new Set(p.subs.map((s) => s.stat));
+    if (f.subMode === "and") {
+      // AND — every selected sub must appear on the piece (talisman/EE
+      // with no rolled subs always fails here, which is the right call).
+      for (const s of f.subs) if (!pieceSubs.has(s)) return false;
+    } else {
+      // OR — at least one selected sub must appear.
+      let any = false;
+      for (const s of f.subs) if (pieceSubs.has(s)) { any = true; break; }
+      if (!any) return false;
+    }
+  }
+  if (f.armorSets.size > 0) {
+    // Weapon / accessory / talisman / EE all return false here — armor sets
+    // only apply to the four armor slots that carry an `armorSetId`.
+    if (!p.armorSetId || !f.armorSets.has(p.armorSetId)) return false;
+  }
+  if (f.classes.size > 0) {
+    // Strict semantic: piece must be EXCLUSIVE to one of the selected
+    // classes. Unrestricted gear (classLimit === null) fails — keeps the
+    // filter focused on "show me my class-locked pieces".
+    if (!p.classLimit || !f.classes.has(p.classLimit)) return false;
+  }
+  // Equipped pieces hidden when the player ticked "Exclude equipped gear"
+  // in the modal — useful when looking for swappable inventory.
+  if (!f.showEquipped && p.status === "equipped") return false;
   if (f.query) {
     const q = f.query.toLowerCase();
     const hay = `${p.name} ${p.slot ?? ""} ${p.rarity} ${p.main.map((m) => m.label).join(" ")} ${p.subs.map((s) => s.stat).join(" ")}`.toLowerCase();
@@ -76,18 +185,6 @@ function matchesFilters(p: UiPiece, f: FilterState): boolean {
 }
 
 // ── filter pieces ───────────────────────────────────────────────────────
-function FilterGroup({ label, children, right }: { label: string; children: React.ReactNode; right?: React.ReactNode }) {
-  return (
-    <div className="border-t border-white/5 px-3 py-2.5 first:border-t-0">
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-zinc-500">{label}</span>
-        {right}
-      </div>
-      {children}
-    </div>
-  );
-}
-
 function FPill({
   children, active, color, className, onClick,
 }: { children: React.ReactNode; active?: boolean; color?: string; className?: string; onClick?: () => void }) {
@@ -96,7 +193,7 @@ function FPill({
       onClick={onClick}
       className={cx(
         "inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-[10.5px] font-medium transition-colors",
-        active ? "text-zinc-100" : "border-white/[0.07] bg-black/25 text-zinc-400 hover:bg-white/5",
+        active ? "text-white" : "border-white/7 bg-black/25 text-white hover:bg-white/5",
         className,
       )}
       style={active ? { borderColor: (color ?? "#22d3ee") + "66", background: (color ?? "#22d3ee") + "1f", color: color ?? "#a5f3fc" } : undefined}
@@ -130,172 +227,405 @@ function Checkbox({
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <div className="text-[11.5px] text-zinc-300">{label}</div>
-        {sub && <div className="text-[10px] text-zinc-500">{sub}</div>}
+        <div className="text-[11.5px] text-white">{label}</div>
+        {sub && <div className="text-[10px] text-white/60">{sub}</div>}
       </span>
     </button>
   );
 }
 
+/** Compact stat pill — icon + short label. Used by the Main / Sub filter
+ *  groups, which list every gear-rollable stat from the STAT token table. */
+function StatPillGrid({
+  stats, selected, onToggle,
+}: { stats: string[]; selected: Set<string>; onToggle: (s: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {stats.map((s) => {
+        const meta = STAT[s];
+        const active = selected.has(s);
+        return (
+          <button
+            key={s}
+            onClick={() => onToggle(s)}
+            title={meta?.longLabel ?? s}
+            className={cx(
+              "inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-[10.5px] font-medium transition-colors",
+              active
+                ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-200"
+                : "border-white/7 bg-black/25 text-white hover:bg-white/5",
+            )}
+          >
+            <StatIcon stat={s} size={12} />
+            {meta?.label ?? s.toUpperCase()}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Non-interactive "OR" badge — communicates that the selection uses OR
+ *  semantics (used on the Main filter where AND would be unsemantic since
+ *  each gear piece has only one main). */
+function ModeBadge({ mode }: { mode: "or" | "and" }) {
+  return (
+    <span className="rounded border border-white/10 bg-black/30 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-white/70">
+      {mode}
+    </span>
+  );
+}
+
+/** Two-button OR / AND toggle — used by the Sub filter group so the player
+ *  can switch between "any selected sub matches" and "all selected subs
+ *  must be present". */
+function ModeToggle({
+  mode, onChange,
+}: { mode: "or" | "and"; onChange: (m: "or" | "and") => void }) {
+  return (
+    <div className="inline-flex rounded border border-white/10 bg-black/30 p-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider">
+      {(["or", "and"] as const).map((m) => {
+        const active = mode === m;
+        return (
+          <button
+            key={m}
+            onClick={() => onChange(m)}
+            className={cx(
+              "rounded-sm px-1.5 py-0.5 transition-colors",
+              active ? "bg-cyan-500/20 text-cyan-200" : "text-white/70 hover:text-white",
+            )}
+          >
+            {m}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** How many filter dimensions are currently non-default — surfaced as a
  *  badge on the collapsed strip so the user knows whether collapsing hid
- *  anything load-bearing. */
+ *  anything load-bearing. Slots are NOT counted here: they live in their
+ *  own always-visible SlotBar above the grid, so collapsing the filter
+ *  panel never hides them. */
 function activeFilterCount(f: FilterState): number {
   let n = 0;
-  if (f.slots.size > 0) n++;
   if (f.rarities.size > 0) n++;
   if (f.stars.size > 0) n++;
-  if (f.brk.size > 0) n++;
-  if (f.enhMin !== 0 || f.enhMax !== 15) n++;
-  if (!f.showEquipped || !f.showFree || !f.showLocked) n++;
+  if (f.quality.size > 0) n++;
+  if (f.mains.size > 0) n++;
+  if (f.subs.size > 0) n++;
+  if (f.armorSets.size > 0) n++;
+  if (f.classes.size > 0) n++;
+  if (!f.showEquipped) n++;
   if (f.singularityOnly) n++;
   if (f.query.trim() !== "") n++;
   return n;
 }
 
-function FilterPanel({
-  f, setF, collapsed, onToggle,
-}: { f: FilterState; setF: (next: FilterState) => void; collapsed: boolean; onToggle: () => void }) {
+/** Top-right button that opens the game-style filter modal. Mirrors the
+ *  in-game CM_Btn_Filter icon and surfaces a small badge with the active
+ *  filter count so the player knows at a glance whether their view is
+ *  narrowed. */
+function FilterButton({
+  onClick, count,
+}: { onClick: () => void; count: number }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Filters"
+      className="relative inline-flex h-9 items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 text-[12px] font-medium text-white transition-colors hover:bg-white/6"
+    >
+      <img src="/img/ui/inven/CM_Btn_Filter.png" alt="" className="h-5 w-5" />
+      Filter
+      {count > 0 && (
+        <span className="grid h-4 min-w-4 place-items-center rounded-full bg-cyan-500/30 px-1 font-mono text-[10px] font-bold text-cyan-100">
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** Game-style filter modal — opens via the filter button, exposes every
+ *  filter dimension (Rarity, Stars, Quality, Main, Sub, Set, Status,
+ *  Singularity, Search) as multi-select pill groups. Draft state lives
+ *  locally so Cancel discards uncommitted changes; Apply pushes the draft
+ *  to the parent's FilterState and closes; Reset clears all dimensions
+ *  but leaves the modal open so the player can rebuild from scratch. */
+function FilterModal({
+  open, onClose, current, onApply,
+  availableMains, availableSubs, availableArmorSets, availableClasses,
+  availableStars, availableRarities, availableQualities,
+}: {
+  open: boolean;
+  onClose: () => void;
+  current: FilterState;
+  onApply: (next: FilterState) => void;
+  availableMains: Set<string>;
+  availableSubs: Set<string>;
+  availableArmorSets: Map<string, string>;
+  availableClasses: Set<string>;
+  /** Chips for these dimensions stay rendered but go grayed-out + non-
+   *  interactive when their value isn't present in the current scope. */
+  availableStars: Set<number>;
+  availableRarities: Set<DesignRarity>;
+  availableQualities: Set<QualityTier>;
+}) {
+  const [draft, setDraft] = useState<FilterState>(current);
+  // Re-seed draft from current whenever the modal transitions to open —
+  // ensures Cancel + reopen shows the persisted state, not a stale draft.
+  useEffect(() => { if (open) setDraft(current); }, [open, current]);
   const toggle = <T,>(s: Set<T>, v: T): Set<T> => {
     const n = new Set(s);
     if (n.has(v)) n.delete(v); else n.add(v);
     return n;
   };
-  if (collapsed) {
-    const active = activeFilterCount(f);
-    return (
-      <aside className="flex h-full w-10 shrink-0 flex-col items-center gap-2 rounded-xl border border-white/[0.07] bg-[oklch(0.19_0.016_270/0.7)] py-3 backdrop-blur-sm">
-        <button
-          onClick={onToggle}
-          title="Expand filters"
-          className="grid h-7 w-7 place-items-center rounded-md text-zinc-400 transition-colors hover:bg-white/6 hover:text-zinc-100"
-        >
-          <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 3 L5 7 L9 11" />
-          </svg>
-        </button>
-        <div className="vertical-text text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400" style={{ writingMode: "vertical-rl" }}>
-          Filters{active > 0 ? ` · ${active}` : ""}
-        </div>
-      </aside>
-    );
-  }
-  return (
-    <aside className="w-60 shrink-0 overflow-hidden rounded-xl border border-white/[0.07] bg-[oklch(0.19_0.016_270/0.7)] backdrop-blur-sm">
-      <div className="flex items-center justify-between border-b border-white/6 px-3 py-2.5">
-        <div className="flex items-center gap-2">
+  // Class restriction and Set Effect are mutually exclusive — a class-locked
+  // piece is a weapon / accessory (no armor set bonus), and an armor 4-pc
+  // piece is generic (no class lock). Whichever side has an active chip
+  // disables the other so the user can't build a selection that matches
+  // zero items by construction.
+  const classActive = draft.classes.size > 0;
+  const setsActive = draft.armorSets.size > 0;
+  if (!open) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-white/10 bg-bg-elev-2 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ── header: title + status toggles + close ── */}
+        {/* Singularity-only / Exclude-equipped live up here (not as a body
+            section) because they're meta toggles that the player will flip
+            independently of the per-dimension filters below — keeping them
+            visible at all times means the status of the current view is
+            always one glance away, no scrolling. */}
+        <div className="flex items-center gap-4 border-b border-white/8 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <img src="/img/ui/inven/CM_Btn_Filter.png" alt="" className="h-5 w-5" />
+            <span className="text-[13px] font-semibold text-white">Filters</span>
+          </div>
+          <div className="ml-8 flex flex-1 items-center gap-4">
+            <Checkbox label="Singularity only" checked={draft.singularityOnly} tone="violet" onChange={() => setDraft({ ...draft, singularityOnly: !draft.singularityOnly })} />
+            <Checkbox label="Exclude equipped gear" checked={!draft.showEquipped} onChange={() => setDraft({ ...draft, showEquipped: !draft.showEquipped })} />
+          </div>
           <button
-            onClick={onToggle}
-            title="Collapse filters"
-            className="grid h-5 w-5 place-items-center rounded text-zinc-500 hover:bg-white/6 hover:text-zinc-200"
+            onClick={onClose}
+            className="grid h-7 w-7 place-items-center rounded-md text-white hover:bg-white/6"
+            aria-label="Close"
           >
-            <svg viewBox="0 0 14 14" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 3 L9 7 L5 11" />
+            <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
+              <path d="M3 3 L11 11 M11 3 L3 11" />
             </svg>
           </button>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-300">Filters</span>
         </div>
-        <button onClick={() => setF(emptyFilters())} className="text-[10.5px] text-cyan-300 hover:text-cyan-200">Reset</button>
+
+        {/* ── body: scrollable sections ── */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {/* Star Level + Grade share a row — both are short pill lists,
+              stacking them wastes vertical space the heavier sections
+              (stats / sets) below could use. */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <ModalSection label="Star Level">
+                <div className="flex flex-wrap gap-1.5">
+                  <AllPill active={draft.stars.size === 0} onClick={() => setDraft({ ...draft, stars: new Set() })} />
+                  {[6, 5, 4, 3, 2, 1].map((n) => {
+                    const enabled = availableStars.has(n);
+                    return (
+                      <FPill
+                        key={n}
+                        active={draft.stars.has(n)}
+                        color="#facc15"
+                        className={cx("px-2", !enabled && "pointer-events-none opacity-30")}
+                        onClick={() => setDraft({ ...draft, stars: toggle(draft.stars, n) })}
+                      >
+                        {n}★
+                      </FPill>
+                    );
+                  })}
+                </div>
+              </ModalSection>
+            </div>
+            <div className="flex-1">
+              <ModalSection label="Grade">
+                <div className="flex flex-wrap gap-1.5">
+                  <AllPill active={draft.rarities.size === 0} onClick={() => setDraft({ ...draft, rarities: new Set() })} />
+                  {(Object.keys(RARITY) as DesignRarity[]).map((k) => {
+                    const enabled = availableRarities.has(k);
+                    return (
+                      <FPill
+                        key={k}
+                        active={draft.rarities.has(k)}
+                        color={RARITY[k].fg}
+                        className={cx(!enabled && "pointer-events-none opacity-30")}
+                        onClick={() => setDraft({ ...draft, rarities: toggle(draft.rarities, k) })}
+                      >
+                        {RARITY[k].label}
+                      </FPill>
+                    );
+                  })}
+                </div>
+              </ModalSection>
+            </div>
+          </div>
+
+          {/* Class restriction + Quality share a row — both are short and
+              the column layout reads cleaner stacked horizontally. When no
+              piece in the scope is class-locked the class column drops out
+              and Quality takes the full row. */}
+          <div className="flex gap-3">
+            {availableClasses.size > 0 && (
+              <div
+                className={cx("flex-1", setsActive && "pointer-events-none opacity-40")}
+                title={setsActive ? "Disabled while Set Effect is active — armor 4-pc pieces aren't class-locked." : undefined}
+              >
+                <ModalSection label="Class restriction" right={<ModeBadge mode="or" />}>
+                  <div className="flex flex-wrap gap-1.5">
+                    <AllPill active={draft.classes.size === 0} onClick={() => setDraft({ ...draft, classes: new Set() })} />
+                    {[...availableClasses].map((c) => (
+                      <FPill
+                        key={c}
+                        active={draft.classes.has(c)}
+                        onClick={() => setDraft({ ...draft, classes: toggle(draft.classes, c) })}
+                      >
+                        <img src={`/img/ui/class/CM_Class_${c}.webp`} alt="" className="h-3.5 w-3.5" />
+                        {c}
+                      </FPill>
+                    ))}
+                  </div>
+                </ModalSection>
+              </div>
+            )}
+            <div className="flex-1">
+              <ModalSection label="Quality">
+                <div className="flex flex-wrap gap-1.5">
+                  <AllPill active={draft.quality.size === 0} onClick={() => setDraft({ ...draft, quality: new Set() })} />
+                  {QUALITY_TIERS.map((q) => {
+                    const enabled = availableQualities.has(q);
+                    return (
+                      <FPill
+                        key={q}
+                        active={draft.quality.has(q)}
+                        color={QUALITY_TONE[q].bar}
+                        className={cx("px-2", !enabled && "pointer-events-none opacity-30")}
+                        onClick={() => setDraft({ ...draft, quality: toggle(draft.quality, q) })}
+                      >
+                        {QUALITY_TONE[q].label}
+                      </FPill>
+                    );
+                  })}
+                </div>
+              </ModalSection>
+            </div>
+          </div>
+
+          {availableMains.size > 0 && (
+            <ModalSection label="Primary Stat" right={<ModeBadge mode="or" />}>
+              <StatPillGrid
+                stats={GEAR_STATS.filter((s) => availableMains.has(s))}
+                selected={draft.mains}
+                onToggle={(s) => setDraft({ ...draft, mains: toggle(draft.mains, s) })}
+              />
+            </ModalSection>
+          )}
+
+          {availableSubs.size > 0 && (
+            <ModalSection
+              label="Secondary Stat"
+              right={<ModeToggle mode={draft.subMode} onChange={(m) => setDraft({ ...draft, subMode: m })} />}
+            >
+              <StatPillGrid
+                stats={GEAR_STATS.filter((s) => availableSubs.has(s))}
+                selected={draft.subs}
+                onToggle={(s) => setDraft({ ...draft, subs: toggle(draft.subs, s) })}
+              />
+            </ModalSection>
+          )}
+
+          {availableArmorSets.size > 0 && (
+            <div
+              className={cx(classActive && "pointer-events-none opacity-40")}
+              title={classActive ? "Disabled while Class restriction is active — class-locked pieces don't carry an armor 4-pc set." : undefined}
+            >
+              <ModalSection label="Set Effect" right={<ModeBadge mode="or" />}>
+                <div className="flex flex-wrap gap-1.5">
+                  <AllPill active={draft.armorSets.size === 0} onClick={() => setDraft({ ...draft, armorSets: new Set() })} />
+                  {[...availableArmorSets.entries()].map(([id, name]) => (
+                    <FPill
+                      key={id}
+                      active={draft.armorSets.has(id)}
+                      onClick={() => setDraft({ ...draft, armorSets: toggle(draft.armorSets, id) })}
+                    >
+                      {name}
+                    </FPill>
+                  ))}
+                </div>
+              </ModalSection>
+            </div>
+          )}
+
+        </div>
+
+        {/* ── footer: reset / cancel / apply ── */}
+        <div className="flex items-center justify-between border-t border-white/8 px-4 py-3">
+          <button
+            onClick={() => setDraft(emptyFilters())}
+            className="rounded-md border border-rose-400/40 bg-rose-500/15 px-3 py-1.5 text-[12px] font-semibold text-rose-100 hover:bg-rose-500/25"
+          >
+            Clear Filter
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="rounded-md border border-white/10 bg-white/3 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-white/6"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { onApply(draft); onClose(); }}
+              className="rounded-md border border-cyan-400/40 bg-cyan-500/20 px-4 py-1.5 text-[12px] font-semibold text-cyan-100 shadow-[0_0_18px_-6px_rgba(34,211,238,0.6)] hover:bg-cyan-500/30"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
       </div>
+    </div>,
+    document.body,
+  );
+}
 
-      <div className="px-3 py-2.5">
-        <div className="flex h-7 items-center gap-2 rounded-md border border-white/[0.07] bg-black/30 px-2">
-          <Search className="h-3.5 w-3.5 text-zinc-500" />
-          <input
-            value={f.query}
-            onChange={(e) => setF({ ...f, query: e.target.value })}
-            placeholder="Search item, set, stat…"
-            className="flex-1 bg-transparent text-[11.5px] text-zinc-200 outline-none placeholder:text-zinc-600"
-          />
-        </div>
+/** Section frame used inside the FilterModal — label + optional right slot
+ *  (for the per-section mode badge / toggle) above the controls. */
+function ModalSection({ label, children, right }: { label: string; children: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div className="rounded-md border border-white/7 bg-black/20 px-3 py-2.5">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/70">{label}</span>
+        {right}
       </div>
+      {children}
+    </div>
+  );
+}
 
-      <FilterGroup label="Slot">
-        <div className="flex flex-wrap gap-1">
-          {SLOTS.map((s) => (
-            <FPill key={s.id} active={f.slots.has(s.id)} onClick={() => setF({ ...f, slots: toggle(f.slots, s.id) })}>
-              <SlotIcon slot={s.id} size={14} />
-              {s.short}
-            </FPill>
-          ))}
-        </div>
-      </FilterGroup>
-
-      <FilterGroup label="Rarity">
-        <div className="flex flex-wrap gap-1">
-          {(Object.keys(RARITY) as DesignRarity[]).map((k) => (
-            <FPill
-              key={k}
-              active={f.rarities.has(k)}
-              color={RARITY[k].fg}
-              onClick={() => setF({ ...f, rarities: toggle(f.rarities, k) })}
-            >
-              {RARITY[k].label}
-            </FPill>
-          ))}
-        </div>
-      </FilterGroup>
-
-      <FilterGroup label="Stars">
-        <div className="flex gap-1">
-          {[1, 2, 3, 4, 5, 6].map((n) => (
-            <FPill
-              key={n}
-              active={f.stars.has(n)}
-              color="#facc15"
-              className="w-7 justify-center px-0"
-              onClick={() => setF({ ...f, stars: toggle(f.stars, n) })}
-            >
-              {n}
-            </FPill>
-          ))}
-        </div>
-      </FilterGroup>
-
-      <FilterGroup label="Enhance" right={<span className="font-mono text-[10px] text-cyan-300">+{f.enhMin} – +{f.enhMax}</span>}>
-        <div className="flex items-center gap-2">
-          <input
-            type="number" min={0} max={15} value={f.enhMin}
-            onChange={(e) => setF({ ...f, enhMin: Math.max(0, Math.min(15, Number(e.target.value))) })}
-            className="h-6 w-12 rounded border border-white/[0.07] bg-black/30 px-1 text-center font-mono text-[11px] text-zinc-200 outline-none"
-          />
-          <span className="text-zinc-600">–</span>
-          <input
-            type="number" min={0} max={15} value={f.enhMax}
-            onChange={(e) => setF({ ...f, enhMax: Math.max(0, Math.min(15, Number(e.target.value))) })}
-            className="h-6 w-12 rounded border border-white/[0.07] bg-black/30 px-1 text-center font-mono text-[11px] text-zinc-200 outline-none"
-          />
-        </div>
-      </FilterGroup>
-
-      <FilterGroup label="Breakthrough">
-        <div className="flex gap-1">
-          {[0, 1, 2, 3, 4].map((n) => (
-            <FPill
-              key={n}
-              active={f.brk.has(n)}
-              color="#fde68a"
-              className="px-2"
-              onClick={() => setF({ ...f, brk: toggle(f.brk, n) })}
-            >
-              T{n}
-            </FPill>
-          ))}
-        </div>
-      </FilterGroup>
-
-      <FilterGroup label="Status">
-        <div className="space-y-0.5">
-          <Checkbox label="Equipped" checked={f.showEquipped} tone="emerald" onChange={() => setF({ ...f, showEquipped: !f.showEquipped })} />
-          <Checkbox label="Free" checked={f.showFree} onChange={() => setF({ ...f, showFree: !f.showFree })} />
-          <Checkbox label="Locked" checked={f.showLocked} tone="violet" onChange={() => setF({ ...f, showLocked: !f.showLocked })} />
-        </div>
-      </FilterGroup>
-
-      <FilterGroup label="Singularity">
-        <Checkbox label="Ascended only" sub="Show only Singularity pieces" checked={f.singularityOnly} tone="violet" onChange={() => setF({ ...f, singularityOnly: !f.singularityOnly })} />
-      </FilterGroup>
-    </aside>
+/** "All" reset pill — appears at the head of each section and clears that
+ *  section's selection in one click. Active when no chip is selected. */
+function AllPill({ active, onClick }: { active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cx(
+        "inline-flex h-6 items-center rounded-md border px-2 text-[10.5px] font-semibold uppercase tracking-wider transition-colors",
+        active
+          ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-100"
+          : "border-white/10 bg-black/30 text-white hover:bg-white/5",
+      )}
+    >
+      All
+    </button>
   );
 }
 
@@ -371,20 +701,35 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect 
 });
 
 // ── sort header ─────────────────────────────────────────────────────────
-type SortKey = "stars" | "enhance" | "bt" | "name";
+// SortKey is a "fixed key" union for the four hardcoded buttons, plus a
+// template string for per-sub-stat sorts (`sub:critRate`, `sub:spd`, …).
+// The template covers any stat in the STAT token table — adding a new stat
+// type doesn't need a SortHeader change.
+type FixedSortKey = "stars" | "enhance" | "bt" | "name";
+type SortKey = FixedSortKey | `sub:${string}`;
 
 function SortHeader({
-  sort, dir, total, shown, onSort, limit, onLimitChange,
+  sort, dir, total, shown, onSort, onSubSort, limit, onLimitChange, availableSubs,
 }: {
   sort: SortKey; dir: "asc" | "desc"; total: number; shown: number;
-  onSort: (k: SortKey) => void; limit: number; onLimitChange: (n: number) => void;
+  onSort: (k: FixedSortKey) => void;
+  /** Pass a stat key to switch to `sub:${stat}` sort, or null to clear it
+   *  (reverts to the default `enhance` cascade). */
+  onSubSort: (stat: string | null) => void;
+  limit: number; onLimitChange: (n: number) => void;
+  /** Stats that appear on at least one sub in the current tab + slot
+   *  scope — narrows the dropdown so the user only picks actionable
+   *  sorts. */
+  availableSubs: Set<string>;
 }) {
-  const Th = ({ k, label }: { k: SortKey; label: string }) => (
+  const isSubSort = sort.startsWith("sub:");
+  const activeSubStat = isSubSort ? sort.slice(4) : "";
+  const Th = ({ k, label }: { k: FixedSortKey; label: string }) => (
     <button
       onClick={() => onSort(k)}
       className={cx(
         "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] transition-colors",
-        sort === k ? "text-cyan-200" : "text-zinc-500 hover:text-zinc-300",
+        sort === k ? "text-cyan-200" : "text-white hover:text-cyan-100",
       )}
     >
       {label}
@@ -393,19 +738,31 @@ function SortHeader({
   );
   return (
     <div className="flex items-center justify-between border-b border-white/6 px-1 pb-2">
-      <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+      <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
         Sort by
         <Th k="stars" label="★" />
         <Th k="enhance" label="Enhance" />
         <Th k="bt" label="Brk" />
         <Th k="name" label="Name" />
+        <span className={cx("ml-2 inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px]", isSubSort && "text-cyan-200")}>
+          Sub
+          <select
+            value={activeSubStat}
+            onChange={(e) => onSubSort(e.target.value || null)}
+            className="rounded border border-white/7 bg-black/30 px-1.5 py-0.5 font-mono text-[10.5px] text-white outline-none"
+          >
+            <option value="">—</option>
+            {GEAR_STATS.filter((s) => availableSubs.has(s)).map((s) => <option key={s} value={s}>{STAT[s]?.label ?? s}</option>)}
+          </select>
+          {isSubSort && <span className="text-[9px]">{dir === "desc" ? "▼" : "▲"}</span>}
+        </span>
       </div>
-      <div className="flex items-center gap-2 text-[11.5px] text-zinc-500">
+      <div className="flex items-center gap-2 text-[11.5px] text-white">
         <span className="font-mono">{total} pieces · {shown} shown</span>
         <select
           value={limit}
           onChange={(e) => onLimitChange(Number(e.target.value))}
-          className="rounded border border-white/[0.07] bg-black/30 px-1.5 py-0.5 font-mono text-[11px] text-zinc-300 outline-none"
+          className="rounded border border-white/7 bg-black/30 px-1.5 py-0.5 font-mono text-[11px] text-white outline-none"
         >
           {[50, 100, 200, 500].map((n) => <option key={n} value={n}>Limit {n}</option>)}
           <option value={1_000_000}>All</option>
@@ -415,12 +772,95 @@ function SortHeader({
   );
 }
 
+// ── tab + slot bar ──────────────────────────────────────────────────────
+/** Primary navigation strip — All / Gear / Special Gear. Counts come from
+ *  the raw inventory (NOT filtered) so the user can see how big each bucket
+ *  is before drilling in. Active tab gets the cyan underline familiar from
+ *  the rest of the app's surface. */
+function SubTabBar({
+  tab, setTab, counts,
+}: { tab: InvTab; setTab: (t: InvTab) => void; counts: Record<InvTab, number> }) {
+  const TABS: { id: InvTab; label: string }[] = [
+    { id: "all",     label: "All" },
+    { id: "gear",    label: "Gear" },
+    { id: "special", label: "Special Gear" },
+  ];
+  return (
+    <div className="flex items-center gap-1 border-b border-white/6">
+      {TABS.map((t) => {
+        const active = tab === t.id;
+        return (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={cx(
+              "relative px-3 py-2 text-[12px] font-semibold transition-colors",
+              active ? "text-cyan-200" : "text-white hover:text-cyan-100",
+            )}
+          >
+            {t.label}
+            <span
+              className={cx(
+                "ml-1.5 rounded-sm px-1.5 py-0.5 font-mono text-[10px]",
+                active ? "bg-cyan-500/15 text-cyan-200" : "bg-white/10 text-white",
+              )}
+            >
+              {counts[t.id]}
+            </span>
+            {active && <span className="absolute inset-x-0 -bottom-px h-0.5 bg-cyan-400" />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Sub-bar of slot chips — only renders the slots that belong to the
+ *  currently-active tab (e.g. Special Gear shows only Talisman + EE).
+ *  Clicking a chip toggles `f.slots`; the slot membership is pruned by the
+ *  parent when the tab changes so a stale chip can never persist. */
+function SlotBar({
+  tab, selected, onToggle,
+}: { tab: InvTab; selected: Set<SlotId>; onToggle: (s: SlotId) => void }) {
+  const slots = SLOTS.filter((s) => TAB_SLOTS[tab].includes(s.id));
+  return (
+    <div className="flex flex-wrap items-center gap-1 py-2">
+      {slots.map((s) => {
+        const active = selected.has(s.id);
+        return (
+          <button
+            key={s.id}
+            onClick={() => onToggle(s.id)}
+            className={cx(
+              "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium transition-colors",
+              active
+                ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-200"
+                : "border-white/7 bg-black/25 text-white hover:bg-white/10",
+            )}
+          >
+            <SlotIcon slot={s.id} size={14} />
+            {s.short}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── detail ──────────────────────────────────────────────────────────────
 /** Long-form label for a stat — falls back to the engine key uppercased
  *  when STAT doesn't know the type (talisman / EE mains that didn't make
  *  it into the table get a readable placeholder). */
 function statLong(key: string): string {
-  return STAT[key]?.longLabel ?? key.toUpperCase();
+  const meta = STAT[key];
+  if (!meta) return key.toUpperCase();
+  // atk/atkPct, hp/hpPct, def/defPct share the same `longLabel` ("Attack",
+  // "HP", "Defense"), which is ambiguous in dense substat rows ("Attack
+  // +16%" reads identically whether the underlying stat is flat or
+  // percent). Append `%` to the percent variants so the label disambiguates
+  // at a glance — same convention as the short labels (ATK vs ATK%).
+  if (key.endsWith("Pct")) return `${meta.longLabel}%`;
+  return meta.longLabel;
 }
 
 /** "Quality" score for an item — sum of every substat's total ticks
@@ -441,7 +881,6 @@ function statLong(key: string): string {
  *
  *  Tier (poor / decent / good / excellent / perfect) drives the bar
  *  color so the user gets a glance read. */
-type QualityTier = "poor" | "decent" | "good" | "excellent" | "perfect";
 function computeQuality(piece: UiPiece): {
   current: number; max: number; pct: number; tier: QualityTier;
 } | null {
@@ -464,14 +903,6 @@ function computeQuality(piece: UiPiece): {
   return { current, max, pct, tier };
 }
 
-const QUALITY_TONE: Record<QualityTier, { text: string; bar: string; label: string }> = {
-  poor:      { text: "text-zinc-400",   bar: "#52525b", label: "Poor" },
-  decent:    { text: "text-sky-300",    bar: "#7dd3fc", label: "Decent" },
-  good:      { text: "text-emerald-300",bar: "#6ee7b7", label: "Good" },
-  excellent: { text: "text-violet-300", bar: "#c4b5fd", label: "Excellent" },
-  perfect:   { text: "text-amber-300",  bar: "#fbbf24", label: "Perfect" },
-};
-
 /** Render a single substat row in the detail panel - matches the mockup
  *  layout: "LV {n}  [icon]  {long label}              {value}".
  *  When the sub has received any reforge proc the label expands to
@@ -485,20 +916,20 @@ function SubstatRow({ s, stars }: { s: UiPiece["subs"][number]; stars: number })
     <div
       className={cx(
         "flex items-center gap-2 font-mono text-[12px] tabular-nums",
-        isMax ? "text-amber-300" : "text-zinc-300",
+        isMax ? "text-amber-300" : "text-white",
       )}
     >
-      <span className={cx("shrink-0", isMax ? "text-amber-300" : "text-zinc-400")}>
+      <span className={cx("shrink-0", isMax ? "text-amber-300" : "text-white")}>
         LV {s.lv}
         {s.reforges > 0 && (
-          <span className={cx("ml-1", isMax ? "text-amber-400/80" : "text-zinc-500")}>
+          <span className={cx("ml-1", isMax ? "text-amber-400/80" : "text-white/70")}>
             ({s.lv - s.reforges} + {s.reforges})
           </span>
         )}
       </span>
       <StatIcon stat={s.stat} size={16} className="shrink-0" />
       <span className="flex-1">{statLong(s.stat)}</span>
-      <span className={cx("font-semibold", isMax ? "text-amber-200" : "text-zinc-100")}>
+      <span className={cx("font-semibold", isMax ? "text-amber-200" : "text-white")}>
         {sign}{s.value}
       </span>
     </div>
@@ -508,14 +939,20 @@ function SubstatRow({ s, stars }: { s: UiPiece["subs"][number]; stars: number })
 /** Pull the set-effect entry that matches the piece's star tier. Set bonuses
  *  scale with star level in Outerplane — a 5-star piece grants the level-5
  *  p2/p4 effect, a 6-star piece the level-6 one. */
-function pickSetLevel(game: GameData, setId: string, stars: number) {
+/** Pick which tier of a set's effect strings to display, driven by the
+ *  piece's breakthrough — set effects upgrade at max breakthrough (T4),
+ *  mirroring the in-game tooltip. Mapping:
+ *    bt === 4  → set level 2 (outerpedia `_4` strings — 6★ wording)
+ *    bt < 4    → set level 1 (outerpedia `_1` strings — 4★ wording)
+ *  Falls back to whichever level is actually emitted when only one exists. */
+function pickSetLevel(game: GameData, setId: string, bt: number) {
   const def = game.sets?.[setId];
   if (!def) return null;
   const wrap = (level: SetLevelEntry) => ({ name: def.name ?? null, desc: def.desc ?? null, level });
-  // Find exact match first; fall back to the highest available level
-  // (some sets only emit up to a certain tier).
-  const exact = def.levels.find((l) => l.level === stars);
+  const targetLevel = bt >= 4 ? 2 : 1;
+  const exact = def.levels.find((l) => l.level === targetLevel);
   if (exact) return wrap(exact);
+  // Only one tier emitted — use it as-is rather than show nothing.
   const sorted = [...def.levels].sort((a, b) => b.level - a.level);
   return sorted[0] ? wrap(sorted[0]) : null;
 }
@@ -542,16 +979,16 @@ function GemPanel({ slots }: { slots: NonNullable<UiPiece["gemSlots"]> }) {
                 alt=""
                 className="h-5 w-5 shrink-0 object-contain"
               />
-              <span className="shrink-0 text-zinc-400">Lv {s.gem.level}</span>
-              <span className="flex-1 text-zinc-300">{statLong(s.gem.stat)}</span>
-              <span className="shrink-0 text-zinc-100">{valueLabel}</span>
+              <span className="shrink-0 text-white/75">Lv {s.gem.level}</span>
+              <span className="flex-1 text-white">{statLong(s.gem.stat)}</span>
+              <span className="shrink-0 text-white">{valueLabel}</span>
             </div>
           );
         }
         return (
           <div
             key={i}
-            className="flex items-center gap-2 text-[12px] text-zinc-600"
+            className="flex items-center gap-2 text-[12px] text-white/40"
             title={s.unlocked ? "Empty gem slot" : "Locked — unlocks at enhance +5"}
           >
             <div className="grid h-5 w-5 shrink-0 place-items-center rounded-sm border border-dashed border-white/10 bg-white/2">
@@ -573,7 +1010,10 @@ function GemPanel({ slots }: { slots: NonNullable<UiPiece["gemSlots"]> }) {
 }
 
 /** Resolve a {st, ap, v} stat triple to a display row (icon + long label +
- *  signed value). Used for set p2/p4 effects + Singularity option entries. */
+ *  signed value). Used for set p2/p4 effects + Singularity option entries.
+ *  Returns null when the stat key isn't in GAME_STAT (e.g. ST_NONE on sets
+ *  whose effect lives only in `desc`) — callers must check beforehand if
+ *  they need to skip surrounding chrome too. */
 function ResolvedEffectRow({ st, ap, v }: { st: string; ap: string; v: number }) {
   const resolved = resolveOption({ st, ap, v }, 1);
   if (!resolved) return null;
@@ -582,8 +1022,26 @@ function ResolvedEffectRow({ st, ap, v }: { st: string; ap: string; v: number })
   return (
     <div className="flex items-center gap-2 font-mono text-[12px] tabular-nums">
       <StatIcon stat={resolved.stat} size={16} className="shrink-0" />
-      <span className="flex-1 text-zinc-300">{statLong(resolved.stat)}</span>
+      <span className="flex-1 text-white">{statLong(resolved.stat)}</span>
       <span className="text-emerald-200">{value}</span>
+    </div>
+  );
+}
+
+/** Render one piece of the 2-pc / 4-pc effect block. The label column is
+ *  always shown (user wants the structural 2pc/4pc rows visible regardless
+ *  of the set). The value column shows the canonical in-game prose pulled
+ *  from outerpedia-v2's curated `sets.json` ("Attack +30%" for stat sets,
+ *  "Increases damage dealt against targets inflicted with Break by 35%"
+ *  for effect sets). Falls back to an em dash for tiers that don't have an
+ *  effect at this piece-count (e.g. Revenge's 2-pc, Augmentation's 4-pc). */
+function SetEffectRow({ tag, desc }: { tag: "2-pc" | "4-pc"; desc: string | null | undefined }) {
+  return (
+    <div className="flex items-start gap-2 text-[11px]">
+      <span className="w-12 shrink-0 font-mono text-white/70">{tag}</span>
+      {desc
+        ? <span className="flex-1 text-white"><GameText text={desc} /></span>
+        : <span className="flex-1 text-white/50">—</span>}
     </div>
   );
 }
@@ -599,14 +1057,14 @@ function ItemDetail({
   if (!piece) {
     return (
       <aside className="flex h-full w-80 shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/6 bg-white/[0.012] px-6 py-8 text-center">
-        <div className="grid h-10 w-10 place-items-center rounded-md border border-white/6 bg-black/30 text-zinc-500">
+        <div className="grid h-10 w-10 place-items-center rounded-md border border-white/6 bg-black/30 text-white/70">
           <svg viewBox="0 0 14 14" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.4}>
             <rect x="2" y="2" width="10" height="10" rx="1.5" />
             <path d="M5 7 H9 M7 5 V9" strokeLinecap="round" />
           </svg>
         </div>
-        <div className="mt-3 text-[12px] font-medium text-zinc-300">No item selected</div>
-        <div className="mt-1 text-[11px] leading-snug text-zinc-500">Click a tile in the grid to inspect its main / substats / equipped character.</div>
+        <div className="mt-3 text-[12px] font-medium text-white">No item selected</div>
+        <div className="mt-1 text-[11px] leading-snug text-white/70">Click a tile in the grid to inspect its main / substats / equipped character.</div>
       </aside>
     );
   }
@@ -619,7 +1077,7 @@ function ItemDetail({
   // group, e.g. "5" on a weapon ≠ Effectiveness Set), NOT a 2-pc/4-pc group.
   // Don't fall back to `setId` here — it falsely matched armor-set IDs whose
   // numeric range collided with UniqueOptionIDs.
-  const setEntry = game && piece.armorSetId ? pickSetLevel(game, piece.armorSetId, piece.stars) : null;
+  const setEntry = game && piece.armorSetId ? pickSetLevel(game, piece.armorSetId, piece.bt) : null;
   // Class info line: "<Rarity> <Slot>[ <Class> Exclusive]".
   const classLine = piece.classLimit ? `${slot?.label ?? "Item"}    ${piece.classLimit} Exclusive` : slot?.label ?? "Item";
 
@@ -656,7 +1114,7 @@ function ItemDetail({
               <span style={{ color: rarity?.fg ?? "#e4e4e7" }} className="font-semibold">
                 {rarity?.label ?? piece.rarity}
               </span>
-              <span className="text-zinc-400">{classLine}</span>
+              <span className="text-white">{classLine}</span>
             </div>
           </div>
           {equippedChar && (
@@ -678,8 +1136,8 @@ function ItemDetail({
             {piece.main.map((m, i) => (
               <div key={i} className="flex items-center gap-2 font-mono text-[13px] tabular-nums">
                 <StatIcon stat={m.stat} size={18} className="shrink-0" />
-                <span className="flex-1 text-zinc-200">{m.name ?? statLong(m.stat)}</span>
-                <span className="font-semibold text-zinc-50">{m.value}</span>
+                <span className="flex-1 text-white">{m.name ?? statLong(m.stat)}</span>
+                <span className="font-semibold text-white">{m.value}</span>
               </div>
             ))}
           </div>
@@ -703,13 +1161,13 @@ function ItemDetail({
             <div className="space-y-1">
               <div className="flex items-center justify-between text-[11px]">
                 <HoverHint
-                  className="font-semibold uppercase tracking-wider text-zinc-400"
+                  className="font-semibold uppercase tracking-wider text-white"
                   name="Quality"
                   text="Sum of every substat tick (initial roll + reforge procs) vs the cap for the item's CURRENT investment: base 14 (4+4+3+3) plus 1 per reforge already spent. Singularity adds up to 3 extra reforges. So a pristine 6★ caps at 14; fully reforged 20; ascended + fully reforged 23."
                 />
                 <span className="font-mono tabular-nums">
                   <span className={cx("font-bold", tone.text)}>{q.current}</span>
-                  <span className="text-zinc-500"> / {q.max}</span>
+                  <span className="text-white/60"> / {q.max}</span>
                   <span className={cx("ml-2", tone.text)}>{tone.label}</span>
                 </span>
               </div>
@@ -752,7 +1210,7 @@ function ItemDetail({
                 {piece.effectIcon && (
                   <img src={`/img/ui/effect/${piece.effectIcon}.webp`} alt="" className="h-5 w-5 shrink-0" />
                 )}
-                <span className="font-mono text-[12px] font-semibold text-zinc-100">
+                <span className="font-mono text-[12px] font-semibold text-white">
                   {piece.multiTierPassive!.name ?? "Passive"}
                 </span>
               </div>
@@ -769,10 +1227,10 @@ function ItemDetail({
                         !t.active && "opacity-40",
                       )}
                     >
-                      <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                      <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-white/70">
                         {eyebrow}
                       </div>
-                      <GameText text={t.desc} className="text-[11px] leading-snug text-zinc-300" />
+                      <GameText text={t.desc} className="text-[11px] leading-snug text-white" />
                     </div>
                   );
                 })}
@@ -791,20 +1249,25 @@ function ItemDetail({
               {piece.effectIcon && (
                 <img src={`/img/ui/effect/${piece.effectIcon}.webp`} alt="" className="h-5 w-5 shrink-0" />
               )}
-              <span className="font-mono text-[12px] font-semibold text-zinc-100">
+              <span className="font-mono text-[12px] font-semibold text-white">
                 {piece.passive.name ?? "Passive"}
               </span>
-              <span className="ml-auto rounded-sm border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
+              <span className="ml-auto rounded-sm border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-white">
                 T{piece.bt}
               </span>
             </div>
-            <p className="rounded-md border border-white/6 bg-black/25 px-3 py-2 text-[11px] leading-snug text-zinc-300">
+            <p className="rounded-md border border-white/6 bg-black/25 px-3 py-2 text-[11px] leading-snug text-white">
               <GameText text={piece.passive.text} />
             </p>
           </div>
         )}
 
         {/* ── set effect (armor 4-piece or matching set group) ── */}
+        {/* Mirrors outerpedia-v2's SetCard layout: icon + name, then the
+            2-pc / 4-pc curated effect strings. Tier suffix is driven by
+            the piece's breakthrough (`bt === 4` → outerpedia `_4` wording,
+            else `_1`) — that's how the in-game tooltip upgrades when you
+            fully break a piece through. */}
         {setEntry && (
           <div className="pt-1">
             <div className="mb-2 flex items-center gap-2">
@@ -813,28 +1276,13 @@ function ItemDetail({
                 : piece.effectIcon
                   ? <img src={`/img/ui/effect/${piece.effectIcon}.webp`} alt="" className="h-5 w-5 shrink-0" />
                   : null}
-              <span className="font-mono text-[12px] font-semibold text-zinc-100">
-                Lv. {setEntry.level.level} {setEntry.name ?? "Set"}
+              <span className="font-mono text-[12px] font-semibold text-white">
+                {setEntry.name ?? "Set"}
               </span>
             </div>
-            {setEntry.desc && (
-              <p className="mb-2 text-[11px] leading-snug text-zinc-400">
-                <GameText text={setEntry.desc} />
-              </p>
-            )}
             <div className="space-y-1 rounded-md border border-white/6 bg-black/25 px-3 py-2">
-              {setEntry.level.p2 && (
-                <div className="flex items-center gap-2 text-[11px]">
-                  <span className="w-12 shrink-0 font-mono text-zinc-500">2-pc</span>
-                  <ResolvedEffectRow st={setEntry.level.p2.st} ap={setEntry.level.p2.ap} v={setEntry.level.p2.v} />
-                </div>
-              )}
-              {setEntry.level.p4 && (
-                <div className="flex items-center gap-2 text-[11px]">
-                  <span className="w-12 shrink-0 font-mono text-zinc-500">4-pc</span>
-                  <ResolvedEffectRow st={setEntry.level.p4.st} ap={setEntry.level.p4.ap} v={setEntry.level.p4.v} />
-                </div>
-              )}
+              <SetEffectRow tag="2-pc" desc={setEntry.level.p2_desc} />
+              <SetEffectRow tag="4-pc" desc={setEntry.level.p4_desc} />
             </div>
           </div>
         )}
@@ -851,7 +1299,7 @@ function ItemDetail({
             <div className="mb-2 text-[11px] font-semibold text-amber-200">
               Active Effect at +15 Enhancement
             </div>
-            <div className="space-y-1.5 text-[11px] leading-snug text-zinc-300">
+            <div className="space-y-1.5 text-[11px] leading-snug text-white">
               {piece.effects.map((e, i) => {
                 if (e.desc) return <GameText key={i} text={e.desc} className="block wrap-break-word" />;
                 const sign = e.value.startsWith("-") ? "" : "+";
@@ -859,7 +1307,7 @@ function ItemDetail({
                 return (
                   <div key={i} className="flex items-start gap-2 wrap-break-word">
                     <span className="min-w-0 flex-1">{label}</span>
-                    <span className="shrink-0 text-zinc-100">{sign}{e.value}</span>
+                    <span className="shrink-0 text-white">{sign}{e.value}</span>
                   </div>
                 );
               })}
@@ -881,14 +1329,44 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
   // Persist filters / sort / view so the page survives a reload (or tab swap).
   // `selectedId` stays ephemeral — re-opening the drawer to a random item after
   // a reload would be more annoying than useful.
-  const [f, setF] = usePersistedState<FilterState>("gs.inv.filters", emptyFilters, FILTER_CODEC);
+  const [f, setF] = usePersistedState<FilterState>(FILTERS_STORAGE_KEY, emptyFilters, FILTER_CODEC);
+  const [tab, setTabState] = usePersistedState<InvTab>("gs.inv.tab", "all");
   const [sort, setSort] = usePersistedState<SortKey>("gs.inv.sort", "enhance");
   const [dir, setDir] = usePersistedState<"asc" | "desc">("gs.inv.dir", "desc");
   const [limit, setLimit] = usePersistedState("gs.inv.limit", 100);
-  const [filtersCollapsed, setFiltersCollapsed] = usePersistedState<boolean>("gs.inv.filtersCollapsed", false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
 
   const ui = useMemo<UiPiece[]>(() => (inventory ? inventory.gear.map((g) => toUiPiece(g, game)) : []), [inventory, game]);
+
+  // Tab buckets — counted off the raw inventory so the badge stays meaningful
+  // when the user has narrowed the view with other filters.
+  const tabCounts = useMemo<Record<InvTab, number>>(() => ({
+    all:     ui.length,
+    gear:    ui.filter((p) => matchesTab(p, "gear")).length,
+    special: ui.filter((p) => matchesTab(p, "special")).length,
+  }), [ui]);
+
+  // Switching tab prunes any slot chip that doesn't belong to the new tab —
+  // otherwise a "weapon" chip selected on Gear would silently zero out the
+  // grid when the user switches to Special Gear.
+  const setTab = useCallback((next: InvTab) => {
+    setTabState(next);
+    setF((prev) => {
+      const allowed = new Set(TAB_SLOTS[next]);
+      const pruned = new Set([...prev.slots].filter((s) => allowed.has(s)));
+      if (pruned.size === prev.slots.size) return prev;
+      return { ...prev, slots: pruned };
+    });
+  }, [setTabState, setF]);
+
+  const toggleSlot = useCallback((s: SlotId) => {
+    setF((prev) => {
+      const next = new Set(prev.slots);
+      if (next.has(s)) next.delete(s); else next.add(s);
+      return { ...prev, slots: next };
+    });
+  }, [setF]);
 
   // Index characters by uid once — every gear row resolves its `equippedBy`
   // against this map (was a linear `.find` per row × 100+ rows × every
@@ -899,19 +1377,130 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
     return m;
   }, [inventory]);
 
-  const filtered = useMemo(() => ui.filter((p) => matchesFilters(p, f)), [ui, f]);
+  const filtered = useMemo(() => ui.filter((p) => matchesTab(p, tab) && matchesFilters(p, f)), [ui, tab, f]);
+
+  // Pieces matching the CURRENT tab + slot filter, ignoring the main/sub
+  // filter — used to compute which stat pills should appear in the Main /
+  // Sub filter groups + the Sub-sort dropdown. We deliberately scope BEFORE
+  // mains/subs so toggling a chip never makes the rest of the chips
+  // disappear (only the higher-level navigation does).
+  const scopedForStats = useMemo(() => ui.filter((p) => {
+    if (!matchesTab(p, tab)) return false;
+    if (f.slots.size > 0 && (!p.slot || !f.slots.has(p.slot))) return false;
+    return true;
+  }), [ui, tab, f.slots]);
+
+  const availableMains = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of scopedForStats) for (const m of p.main) s.add(m.stat);
+    return s;
+  }, [scopedForStats]);
+  const availableSubs = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of scopedForStats) for (const sub of p.subs) s.add(sub.stat);
+    return s;
+  }, [scopedForStats]);
+  // Armor 4-pc set IDs present in the scope, paired with their localized name
+  // (pulled from game.sets) for the pill labels.
+  const availableArmorSets = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of scopedForStats) {
+      if (!p.armorSetId) continue;
+      if (m.has(p.armorSetId)) continue;
+      const def = game?.sets?.[p.armorSetId];
+      m.set(p.armorSetId, def?.name ?? `Set #${p.armorSetId}`);
+    }
+    return m;
+  }, [scopedForStats, game]);
+  // Class-restricted pieces in the scope — class name set (no metadata
+  // needed, the FilterModal's class section already maps name → icon).
+  const availableClasses = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of scopedForStats) {
+      if (p.classLimit) s.add(p.classLimit);
+    }
+    return s;
+  }, [scopedForStats]);
+  // Star / Grade / Quality availability — pills outside this set render
+  // disabled in the modal so the player never picks a chip that's
+  // guaranteed to zero out the grid.
+  const availableStars = useMemo(() => {
+    const s = new Set<number>();
+    for (const p of scopedForStats) s.add(p.stars);
+    return s;
+  }, [scopedForStats]);
+  const availableRarities = useMemo(() => {
+    const s = new Set<DesignRarity>();
+    for (const p of scopedForStats) s.add(p.rarity);
+    return s;
+  }, [scopedForStats]);
+  const availableQualities = useMemo(() => {
+    const s = new Set<QualityTier>();
+    for (const p of scopedForStats) {
+      const q = computeQuality(p);
+      if (q) s.add(q.tier);
+    }
+    return s;
+  }, [scopedForStats]);
+
+  // Auto-prune any selection that becomes unavailable when the scope
+  // narrows, so a chip the user can no longer see can't silently zero out
+  // the grid. Runs whenever any availability set changes (tab / slot
+  // toggle, or the inventory itself when capture updates).
+  useEffect(() => {
+    setF((prev) => {
+      const nextMains = new Set([...prev.mains].filter((s) => availableMains.has(s)));
+      const nextSubs = new Set([...prev.subs].filter((s) => availableSubs.has(s)));
+      const nextArmorSets = new Set([...prev.armorSets].filter((id) => availableArmorSets.has(id)));
+      const nextClasses = new Set([...prev.classes].filter((c) => availableClasses.has(c)));
+      const nextStars = new Set([...prev.stars].filter((n) => availableStars.has(n)));
+      const nextRarities = new Set([...prev.rarities].filter((r) => availableRarities.has(r)));
+      const nextQuality = new Set([...prev.quality].filter((q) => availableQualities.has(q)));
+      if (nextMains.size === prev.mains.size
+        && nextSubs.size === prev.subs.size
+        && nextArmorSets.size === prev.armorSets.size
+        && nextClasses.size === prev.classes.size
+        && nextStars.size === prev.stars.size
+        && nextRarities.size === prev.rarities.size
+        && nextQuality.size === prev.quality.size) return prev;
+      return {
+        ...prev,
+        mains: nextMains, subs: nextSubs, armorSets: nextArmorSets, classes: nextClasses,
+        stars: nextStars, rarities: nextRarities, quality: nextQuality,
+      };
+    });
+  }, [availableMains, availableSubs, availableArmorSets, availableClasses, availableStars, availableRarities, availableQualities, setF]);
 
   const sorted = useMemo(() => {
     const out = [...filtered];
+    // Pre-parse the sub-sort target so we don't slice the string on every
+    // comparator call (sort runs O(n log n) times).
+    const subSortStat = sort.startsWith("sub:") ? sort.slice(4) : null;
+    const subValue = (p: UiPiece) => {
+      const s = p.subs.find((x) => x.stat === subSortStat);
+      // Pieces without the requested sub get a 0 floor so they sink to the
+      // bottom in desc (highest first) and float to the top in asc — same
+      // behaviour as a missing stat being "least invested".
+      return s ? parseFloat(s.value.replace(/%$/, "")) : 0;
+    };
     out.sort((a, b) => {
       let cmp = 0;
-      switch (sort) {
+      if (subSortStat) {
+        cmp = subValue(a) - subValue(b);
+      } else switch (sort) {
         case "stars": cmp = a.stars - b.stars; break;
-        case "enhance": cmp = a.enhance - b.enhance; break;
+        // Default sort cascade: enhance (+N) → reforge (x/9) → tier (x/4) —
+        // mirrors how the user mentally ranks an item (how much invested
+        // first, then how well-rolled, then how broken-through).
+        case "enhance":
+          cmp = a.enhance - b.enhance;
+          if (cmp === 0) cmp = a.reforge.n - b.reforge.n;
+          if (cmp === 0) cmp = a.bt - b.bt;
+          break;
         case "bt": cmp = a.bt - b.bt; break;
         case "name": cmp = a.name.localeCompare(b.name); break;
       }
-      // tiebreak: ascended first (purple > gold), then rarity weight
+      // Final tiebreak: ascended first (purple > gold).
       if (cmp === 0) cmp = Number(a.singularity) - Number(b.singularity);
       return dir === "desc" ? -cmp : cmp;
     });
@@ -928,19 +1517,34 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
     setSelectedId((cur) => (cur === id ? null : id));
   }, []);
 
-  function toggleSort(k: SortKey) {
+  function toggleSort(k: FixedSortKey) {
     if (sort === k) setDir(dir === "desc" ? "asc" : "desc");
     else { setSort(k); setDir("desc"); }
+  }
+
+  /** Sub-stat picker handler — empty value reverts to the default sort.
+   *  Picking a new stat starts at desc (highest tick value first), which
+   *  matches the dominant "show me my best-rolled X pieces" use case. */
+  function onSubSort(stat: string | null) {
+    if (!stat) {
+      setSort("enhance");
+      setDir("desc");
+      return;
+    }
+    const next: SortKey = `sub:${stat}`;
+    if (sort === next) setDir(dir === "desc" ? "asc" : "desc");
+    else { setSort(next); setDir("desc"); }
   }
 
   if (!inventory || ui.length === 0) {
     return <InventoryEmpty />;
   }
 
-  // 3-column layout: [ItemDetail (always shown, empty placeholder if no
-  // selection)] | [tiles grid + sort header] | [collapsible FilterPanel].
-  // The page-level title + subtitle were removed in favor of the tab badge
-  // up top — see `counts` in App.tsx.
+  // 2-column layout: [ItemDetail (always shown, empty placeholder if no
+  // selection)] | [tabs + slot bar + sort header + grid]. The old right-
+  // side FilterPanel was replaced by a game-style modal triggered from the
+  // SubTabBar's right slot — same source of truth (`f` + `setF`), just a
+  // different surface.
   return (
     <div className="flex h-full min-h-0 flex-1 gap-3 px-4 py-3">
       <ItemDetail
@@ -948,17 +1552,20 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
         equippedChar={selected?.equippedBy ? charsByUid.get(selected.equippedBy) ?? null : null}
         game={game}
       />
-      <div className="min-w-0 flex-1 flex-col flex">
+      <div className="min-w-0 flex-1 flex flex-col min-h-0">
+        <div className="flex items-center justify-between">
+          <SubTabBar tab={tab} setTab={setTab} counts={tabCounts} />
+          <FilterButton onClick={() => setFilterModalOpen(true)} count={activeFilterCount(f)} />
+        </div>
+        <SlotBar tab={tab} selected={f.slots} onToggle={toggleSlot} />
         <SortHeader
-          sort={sort} dir={dir} total={ui.length} shown={view.length}
-          onSort={toggleSort} limit={limit} onLimitChange={setLimit}
+          sort={sort} dir={dir} total={sorted.length} shown={view.length}
+          onSort={toggleSort} onSubSort={onSubSort} limit={limit} onLimitChange={setLimit}
+          availableSubs={availableSubs}
         />
-        <div
-          className="mt-2 grid gap-1 overflow-y-auto pr-1 grid-cols-[repeat(auto-fill,minmax(96px,1fr))]"
-          style={{ maxHeight: "calc(100vh - 180px)" }}
-        >
+        <div className="mt-2 flex-1 min-h-0 grid gap-1 overflow-y-auto pr-1 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] content-start">
           {view.length === 0
-            ? <div className="col-span-full rounded-lg border border-white/5 bg-white/[0.012] px-6 py-12 text-center text-[13px] text-zinc-500">No piece matches the current filters.</div>
+            ? <div className="col-span-full rounded-lg border border-white/5 bg-white/[0.012] px-6 py-12 text-center text-[13px] text-white">No piece matches the current filters.</div>
             : view.map((p) => {
               const equippedChar = p.equippedBy ? charsByUid.get(p.equippedBy) ?? null : null;
               return (
@@ -973,11 +1580,18 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
             })}
         </div>
       </div>
-      <FilterPanel
-        f={f}
-        setF={setF}
-        collapsed={filtersCollapsed}
-        onToggle={() => setFiltersCollapsed(!filtersCollapsed)}
+      <FilterModal
+        open={filterModalOpen}
+        onClose={() => setFilterModalOpen(false)}
+        current={f}
+        onApply={setF}
+        availableMains={availableMains}
+        availableSubs={availableSubs}
+        availableArmorSets={availableArmorSets}
+        availableClasses={availableClasses}
+        availableStars={availableStars}
+        availableRarities={availableRarities}
+        availableQualities={availableQualities}
       />
     </div>
   );
@@ -994,9 +1608,9 @@ function InventoryEmpty() {
           <path d="M4 7 V17 L12 21 L20 17 V7 L12 3 Z M4 7 L12 11 L20 7 M12 11 V21" />
         </svg>
       </div>
-      <h2 className="font-display text-[18px] font-semibold text-zinc-100">No capture yet</h2>
-      <p className="max-w-sm text-[12.5px] leading-relaxed text-zinc-500">
-        Run the capture pipeline to import your gear and heroes from the Outerplane client. The Arm capture button up top arms mitmproxy and waits for the game to send <span className="font-mono text-zinc-400">/user/item</span>.
+      <h2 className="font-display text-[18px] font-semibold text-white">No capture yet</h2>
+      <p className="max-w-sm text-[12.5px] leading-relaxed text-white/85">
+        Run the capture pipeline to import your gear and heroes from the Outerplane client. The Arm capture button up top arms mitmproxy and waits for the game to send <span className="font-mono text-white">/user/item</span>.
       </p>
     </div>
   );

@@ -428,7 +428,7 @@ function FilterBar({ f, setF }: { f: RosterFilters; setF: (next: RosterFilters) 
   return (
     <div className="flex flex-wrap items-center gap-3 px-6 pt-2 text-[11.5px]">
       <span className="font-mono uppercase tracking-wider text-zinc-500">Filter</span>
-      <div className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/[0.07] bg-black/30 px-2">
+      <div className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/7 bg-black/30 px-2">
         <svg viewBox="0 0 14 14" className="h-3.5 w-3.5 text-zinc-500" fill="none" stroke="currentColor" strokeWidth={1.4}>
           <circle cx={6} cy={6} r={4} />
           <path d="M9 9 L12 12" strokeLinecap="round" />
@@ -450,7 +450,7 @@ function FilterBar({ f, setF }: { f: RosterFilters; setF: (next: RosterFilters) 
               title={el.label}
               className={cx(
                 "inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
-                active ? "border-cyan-400/40 bg-cyan-500/10" : "border-white/[0.07] bg-black/25 opacity-55 hover:opacity-100",
+                active ? "border-cyan-400/40 bg-cyan-500/10" : "border-white/7 bg-black/25 opacity-55 hover:opacity-100",
               )}
             >
               <img
@@ -474,7 +474,7 @@ function FilterBar({ f, setF }: { f: RosterFilters; setF: (next: RosterFilters) 
               title={cl.label}
               className={cx(
                 "inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
-                active ? "border-cyan-400/40 bg-cyan-500/10" : "border-white/[0.07] bg-black/25 opacity-55 hover:opacity-100",
+                active ? "border-cyan-400/40 bg-cyan-500/10" : "border-white/7 bg-black/25 opacity-55 hover:opacity-100",
               )}
             >
               <img
@@ -503,7 +503,7 @@ function FilterBar({ f, setF }: { f: RosterFilters; setF: (next: RosterFilters) 
           "inline-flex h-7 items-center gap-1.5 rounded-md border bg-black/30 px-2 text-[11px]",
           f.locks === "drift" ? "border-rose-400/50 text-rose-300"
             : f.locks === "locked" ? "border-amber-400/40 text-amber-300"
-            : "border-white/[0.07] text-zinc-400 hover:text-zinc-200",
+            : "border-white/7 text-zinc-400 hover:text-zinc-200",
         )}
       >
         <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
@@ -725,7 +725,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game }: 
 
   return (
     <div
-      className="relative rounded-xl border border-white/[0.07] bg-bg-elev-2 p-3 backdrop-blur-sm shadow-[0_1px_0_oklch(1_0_0/0.04)_inset,0_24px_60px_-30px_rgb(0_0_0/0.7)]"
+      className="relative rounded-xl border border-white/7 bg-bg-elev-2 p-3 backdrop-blur-sm shadow-[0_1px_0_oklch(1_0_0/0.04)_inset,0_24px_60px_-30px_rgb(0_0_0/0.7)]"
       // CSS-native virtualization — the roster grid renders up to 121 cards
       // and each one has 8 gear slot icons + a portrait + stat block. The
       // browser skips layout/paint for offscreen cards (intrinsic size
@@ -769,7 +769,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game }: 
                   "grid h-6 w-6 place-items-center rounded-md border bg-black/40 hover:bg-black/60",
                   hasAnyLock
                     ? (hasDrift ? "border-rose-400/50 text-rose-300" : "border-amber-400/40 text-amber-300")
-                    : "border-white/[0.07] text-zinc-400 hover:text-zinc-200",
+                    : "border-white/7 text-zinc-400 hover:text-zinc-200",
                 )}
               >
                 <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
@@ -792,7 +792,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game }: 
                 type="button"
                 title="Copy stat-debug dump to clipboard"
                 onClick={copyDump}
-                className="grid h-6 w-6 place-items-center rounded-md border border-white/[0.07] bg-black/40 text-zinc-400 hover:bg-black/60 hover:text-zinc-200"
+                className="grid h-6 w-6 place-items-center rounded-md border border-white/7 bg-black/40 text-zinc-400 hover:bg-black/60 hover:text-zinc-200"
               >
                 <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
                   <rect x={3} y={3} width={8} height={9} rx={1.2} />
