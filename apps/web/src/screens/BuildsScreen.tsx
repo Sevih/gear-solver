@@ -1,9 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Character, GameData, GearPiece, Inventory, NoGearStats, StatScaling, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
 import { cx } from "../design/cx.js";
 import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
-import { CyanButton, GsLabel } from "../design/Shell.js";
+import { CyanButton } from "../design/Shell.js";
 import { CharacterPortrait, SlotMini, StatIcon } from "../design/EquipmentIcon.js";
 import { Pill } from "../design/Chips.js";
 import { TOKENS, toDesignSlot, type SlotId } from "../design/tokens.js";
@@ -24,6 +24,9 @@ export interface FinalStats {
   atk: number; hp: number; def: number; spd: number;
   crc: number; chd: number; eff: number; res: number;
   dmgUp: number; dmgRed: number; pen: number;
+  /** Critical Damage Reduction — gear-only (no character baseline). Summed
+   *  from `critDmgReduce` substats / mains, displayed as a percent. */
+  critDmgRed: number;
 }
 
 const round1 = (x: number) => Math.round(x * 10) / 10;
@@ -157,7 +160,7 @@ function computeSetBonuses(
  *    `SetItemOptionsValue` (sum_rate compound layer).
  *  - `buffPct` (IOT_BUFF mains — talisman / EE) → `BuffValueRate` via
  *    `SetBuffPremiumValue` (outermost amplifier alongside Skill_22 / Skill_8). */
-const PERCENT_STATS = new Set(["critRate", "critDmg", "dmgUp", "dmgReduce", "pen"]);
+const PERCENT_STATS = new Set(["critRate", "critDmg", "critDmgReduce", "dmgUp", "dmgReduce", "pen"]);
 function aggregateGearBuckets(pieces: GearPiece[], game: GameData | null): {
   flat: Record<string, number>; pct: Record<string, number>; buffPct: Record<string, number>;
 } {
@@ -227,6 +230,10 @@ function computeFinalStats(
     dmgUp: round1(baseline.dmgInc + (pct.dmgUp ?? 0) + (flat.dmgUp ?? 0) + (buffPct.dmgUp ?? 0)),
     dmgRed: round1(baseline.dmgRed + (pct.dmgReduce ?? 0) + (flat.dmgReduce ?? 0) + (buffPct.dmgReduce ?? 0)),
     pen:    round1(baseline.pen    + (pct.pen ?? 0) + (flat.pen ?? 0) + (buffPct.pen ?? 0)),
+    // Crit Dmg Red — no character baseline, gear-only (substat / set bonus).
+    // Both flat and pct share the same `critDmgReduce` bucket key via
+    // ST_E_CRI_DMG_REDUCE in stats.ts.
+    critDmgRed: round1((pct.critDmgReduce ?? 0) + (flat.critDmgReduce ?? 0) + (buffPct.critDmgReduce ?? 0)),
   };
 }
 
@@ -306,28 +313,48 @@ function buildStatsDump(
  *  NoGearStats; the delta `final - baseline` is the gear contribution shown
  *  in parens beside the total. Stats with no base (dmgUp/pen) are hidden
  *  when both total and gear are zero. */
-const FINAL_ROWS: Array<{
+interface StatRowConfig {
   key: keyof FinalStats;
-  baselineKey: keyof NoGearStats;
+  /** Matching field on NoGearStats — omitted for stats with no character
+   *  baseline (e.g. `critDmgRed` is gear-only). Treated as 0 in that case. */
+  baselineKey?: keyof NoGearStats;
   iconKey: string;
   percent: boolean;
-  hideIfZero?: boolean;
-}> = [
-  { key: "atk", baselineKey: "atk", iconKey: "atk", percent: false },
-  { key: "def", baselineKey: "def", iconKey: "def", percent: false },
-  { key: "hp",  baselineKey: "hp",  iconKey: "hp",  percent: false },
-  { key: "spd", baselineKey: "spd", iconKey: "spd", percent: false },
-  { key: "crc", baselineKey: "chc", iconKey: "critRate", percent: true },
-  { key: "chd", baselineKey: "chd", iconKey: "critDmg",  percent: true },
-  // EFF / RES — in-game character sheet displays them as integers (Effectiveness 203,
-  // Resilience 191), not percentages. Gear contributions on EFF/RES (substat 5%,
-  // accessory main 21) are points on the same integer scale, summed plainly.
-  { key: "eff", baselineKey: "eff", iconKey: "eff",    percent: false },
-  { key: "res", baselineKey: "res", iconKey: "effRes", percent: false },
-  { key: "dmgUp",  baselineKey: "dmgInc", iconKey: "dmgUp",     percent: true, hideIfZero: true },
-  { key: "dmgRed", baselineKey: "dmgRed", iconKey: "dmgReduce", percent: true, hideIfZero: true },
-  { key: "pen",    baselineKey: "pen",    iconKey: "pen",       percent: true, hideIfZero: true },
+}
+
+/** Stat readout, column-major: each entry is one visual column rendered in
+ *  order. Bottom of a column is left blank when shorter than the others.
+ *  Order chosen to keep visually-grouped stats together (offense / crit /
+ *  utility / debuff). */
+const STAT_COLUMNS: ReadonlyArray<ReadonlyArray<StatRowConfig>> = [
+  [
+    { key: "atk", baselineKey: "atk", iconKey: "atk", percent: false },
+    { key: "def", baselineKey: "def", iconKey: "def", percent: false },
+    { key: "hp",  baselineKey: "hp",  iconKey: "hp",  percent: false },
+    { key: "spd", baselineKey: "spd", iconKey: "spd", percent: false },
+  ],
+  [
+    { key: "crc",        baselineKey: "chc", iconKey: "critRate",     percent: true },
+    { key: "chd",        baselineKey: "chd", iconKey: "critDmg",      percent: true },
+    { key: "critDmgRed",                     iconKey: "critDmgReduce", percent: true },
+  ],
+  [
+    { key: "pen",    baselineKey: "pen",    iconKey: "pen",       percent: true },
+    { key: "dmgUp",  baselineKey: "dmgInc", iconKey: "dmgUp",     percent: true },
+    { key: "dmgRed", baselineKey: "dmgRed", iconKey: "dmgReduce", percent: true },
+  ],
+  // EFF / RES — in-game character sheet displays them as integers (Effectiveness
+  // 203, Resilience 191), not percentages. Gear contributions on EFF/RES are
+  // points on the same integer scale, summed plainly.
+  [
+    { key: "eff", baselineKey: "eff", iconKey: "eff",    percent: false },
+    { key: "res", baselineKey: "res", iconKey: "effRes", percent: false },
+  ],
 ];
+
+/** Flattened row list — used everywhere a single iterable is needed (locks,
+ *  iteration outside the rendering path). Keep in sync with STAT_COLUMNS. */
+const FINAL_ROWS: ReadonlyArray<StatRowConfig> = STAT_COLUMNS.flat();
 
 function StatBlock({ stats, baseline, locked, onToggleLock }: {
   stats: FinalStats;
@@ -341,49 +368,76 @@ function StatBlock({ stats, baseline, locked, onToggleLock }: {
   onToggleLock?: (key: keyof FinalStats) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[12px] tabular-nums">
-      {FINAL_ROWS.map((row) => {
-        const v = stats[row.key];
-        const delta = round1(v - baseline[row.baselineKey]);
-        if (row.hideIfZero && !v && !delta) return null;
-        const unit = row.percent ? "%" : "";
-        const lockedV = locked?.[row.key];
-        const drift = lockedV != null ? round1(v - lockedV) : 0;
-        const isLocked = lockedV != null;
-        const isDrift = isLocked && drift !== 0;
-        const valColor = isDrift ? "text-rose-400" : isLocked ? "text-amber-300" : "text-zinc-50";
-        return (
-          <button
-            key={row.key}
-            type="button"
-            onClick={() => onToggleLock?.(row.key)}
-            title={isLocked
-              ? (isDrift ? `Drift from locked ${lockedV}${unit} — click to UNLOCK` : `Locked ✓ at ${lockedV}${unit} — click to UNLOCK`)
-              : "Click to lock this stat as the regression baseline"}
-            className="group flex items-center gap-1 rounded px-1 py-0.5 -mx-1 text-left hover:bg-white/4"
-          >
-            <StatIcon stat={row.iconKey} size={14} />
-            <span className={valColor}>{v}{unit}</span>
-            {delta !== 0 && (
-              <span className="text-[10.5px]" style={{ color: TOKENS.gold }}>
-                ({delta > 0 ? "+" : ""}{delta}{unit})
-              </span>
-            )}
-            {isDrift && (
-              <span className="text-[10.5px] text-rose-400">
-                Δ{drift > 0 ? "+" : ""}{drift}
-              </span>
-            )}
-            {isLocked && !isDrift && (
-              <svg viewBox="0 0 14 14" className="h-2.5 w-2.5 text-amber-300/70" fill="none" stroke="currentColor" strokeWidth={1.6}>
-                <rect x={3.5} y={7} width={7} height={5} rx={0.8} />
-                <path d="M5 7 V5 a2 2 0 0 1 4 0 V7" />
-              </svg>
-            )}
-          </button>
-        );
-      })}
+    <div className="grid grid-cols-4 gap-x-3 font-mono text-[12px] tabular-nums">
+      {STAT_COLUMNS.map((col, ci) => (
+        <div key={ci} className="flex flex-col gap-1">
+          {col.map((row) => (
+            <StatCell key={row.key} row={row} stats={stats} baseline={baseline} locked={locked} onToggleLock={onToggleLock} />
+          ))}
+        </div>
+      ))}
     </div>
+  );
+}
+
+function StatCell({ row, stats, baseline, locked, onToggleLock }: {
+  row: StatRowConfig;
+  stats: FinalStats;
+  baseline: NoGearStats;
+  locked?: Partial<FinalStats> | null;
+  onToggleLock?: (key: keyof FinalStats) => void;
+}) {
+  const v = stats[row.key];
+  // `baselineKey` is optional for gear-only stats (e.g. critDmgRed) — fall
+  // back to 0 so the +delta display still makes sense.
+  const base = row.baselineKey != null ? baseline[row.baselineKey] : 0;
+  const delta = round1(v - base);
+  const unit = row.percent ? "%" : "";
+  const lockedV = locked?.[row.key];
+  const drift = lockedV != null ? round1(v - lockedV) : 0;
+  const isLocked = lockedV != null;
+  const isDrift = isLocked && drift !== 0;
+  const valColor = isDrift ? "text-rose-400" : isLocked ? "text-amber-300" : "text-white";
+  const interactive = !!onToggleLock;
+  // Read-only mode (no onToggleLock) renders a plain div so the cursor /
+  // hover affordance doesn't lie about being interactive.
+  const Wrapper = interactive ? "button" : "div";
+  const wrapperProps = interactive
+    ? {
+        type: "button" as const,
+        onClick: () => onToggleLock(row.key),
+        title: isLocked
+          ? (isDrift ? `Drift from locked ${lockedV}${unit} — click to UNLOCK` : `Locked ✓ at ${lockedV}${unit} — click to UNLOCK`)
+          : "Click to lock this stat as the regression baseline",
+      }
+    : {};
+  return (
+    <Wrapper
+      {...wrapperProps}
+      className={cx(
+        "group flex items-center gap-1 rounded px-1 py-0.5 -mx-1 text-left",
+        interactive && "hover:bg-white/4",
+      )}
+    >
+      <StatIcon stat={row.iconKey} size={14} />
+      <span className={valColor}>{v}{unit}</span>
+      {delta !== 0 && (
+        <span className="text-[10.5px]" style={{ color: TOKENS.gold }}>
+          ({delta > 0 ? "+" : ""}{delta}{unit})
+        </span>
+      )}
+      {isDrift && (
+        <span className="text-[10.5px] text-rose-400">
+          Δ{drift > 0 ? "+" : ""}{drift}
+        </span>
+      )}
+      {isLocked && !isDrift && (
+        <svg viewBox="0 0 14 14" className="h-2.5 w-2.5 text-amber-300/70" fill="none" stroke="currentColor" strokeWidth={1.6}>
+          <rect x={3.5} y={7} width={7} height={5} rx={0.8} />
+          <path d="M5 7 V5 a2 2 0 0 1 4 0 V7" />
+        </svg>
+      )}
+    </Wrapper>
   );
 }
 
@@ -419,14 +473,14 @@ interface RosterFilters {
 // the jsonWithSets codec to survive a JSON round-trip via localStorage.
 const ROSTER_FILTER_CODEC = jsonWithSets<RosterFilters>(["elements", "classes"]);
 
-function FilterBar({ f, setF }: { f: RosterFilters; setF: (next: RosterFilters) => void }) {
+function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next: RosterFilters) => void; debug: boolean; trailing?: ReactNode }) {
   const toggle = (s: Set<string>, v: string): Set<string> => {
     const n = new Set(s);
     if (n.has(v)) n.delete(v); else n.add(v);
     return n;
   };
   return (
-    <div className="flex flex-wrap items-center gap-3 px-6 pt-2 text-[11.5px]">
+    <div className="flex flex-wrap items-center gap-3 px-6 pt-4 text-[11.5px]">
       <span className="font-mono uppercase tracking-wider text-zinc-500">Filter</span>
       <div className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/7 bg-black/30 px-2">
         <svg viewBox="0 0 14 14" className="h-3.5 w-3.5 text-zinc-500" fill="none" stroke="currentColor" strokeWidth={1.4}>
@@ -488,39 +542,42 @@ function FilterBar({ f, setF }: { f: RosterFilters; setF: (next: RosterFilters) 
           );
         })}
       </div>
-      <button
-        type="button"
-        onClick={() => {
-          const next: LockMode = f.locks === "all" ? "locked" : f.locks === "locked" ? "drift" : "all";
-          setF({ ...f, locks: next });
-        }}
-        title={f.locks === "all"
-          ? "Show all heroes (click to filter to LOCKED only)"
-          : f.locks === "locked"
-            ? "Showing heroes with locked stats — click to filter to DRIFT only"
-            : "Showing heroes with a DRIFTED locked stat — click to reset"}
-        className={cx(
-          "inline-flex h-7 items-center gap-1.5 rounded-md border bg-black/30 px-2 text-[11px]",
-          f.locks === "drift" ? "border-rose-400/50 text-rose-300"
-            : f.locks === "locked" ? "border-amber-400/40 text-amber-300"
-            : "border-white/7 text-zinc-400 hover:text-zinc-200",
-        )}
-      >
-        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
-          {f.locks === "all" ? (
-            <><rect x={3} y={6.5} width={8} height={6} rx={1} /><path d="M5 6.5 V4 a2 2 0 0 1 4 0" /></>
-          ) : (
-            <><rect x={3} y={6.5} width={8} height={6} rx={1} /><path d="M5 6.5 V4 a2 2 0 0 1 4 0 V6.5" /></>
+      {debug && (
+        <button
+          type="button"
+          onClick={() => {
+            const next: LockMode = f.locks === "all" ? "locked" : f.locks === "locked" ? "drift" : "all";
+            setF({ ...f, locks: next });
+          }}
+          title={f.locks === "all"
+            ? "Show all heroes (click to filter to LOCKED only)"
+            : f.locks === "locked"
+              ? "Showing heroes with locked stats — click to filter to DRIFT only"
+              : "Showing heroes with a DRIFTED locked stat — click to reset"}
+          className={cx(
+            "inline-flex h-7 items-center gap-1.5 rounded-md border bg-black/30 px-2 text-[11px]",
+            f.locks === "drift" ? "border-rose-400/50 text-rose-300"
+              : f.locks === "locked" ? "border-amber-400/40 text-amber-300"
+              : "border-white/7 text-zinc-400 hover:text-zinc-200",
           )}
-        </svg>
-        <span>{f.locks === "all" ? "All" : f.locks === "locked" ? "Locked" : "Drift"}</span>
-      </button>
-      {(f.query || f.elements.size || f.classes.size || f.locks !== "all") ? (
+        >
+          <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
+            {f.locks === "all" ? (
+              <><rect x={3} y={6.5} width={8} height={6} rx={1} /><path d="M5 6.5 V4 a2 2 0 0 1 4 0" /></>
+            ) : (
+              <><rect x={3} y={6.5} width={8} height={6} rx={1} /><path d="M5 6.5 V4 a2 2 0 0 1 4 0 V6.5" /></>
+            )}
+          </svg>
+          <span>{f.locks === "all" ? "All" : f.locks === "locked" ? "Locked" : "Drift"}</span>
+        </button>
+      )}
+      {(f.query || f.elements.size || f.classes.size || (debug && f.locks !== "all")) ? (
         <button
           onClick={() => setF({ query: "", elements: new Set(), classes: new Set(), locks: "all" })}
           className="ml-1 text-[11px] text-cyan-300 hover:text-cyan-200"
         >Reset</button>
       ) : null}
+      {trailing && <div className="ml-auto">{trailing}</div>}
     </div>
   );
 }
@@ -638,6 +695,53 @@ interface ComposedEntry {
   displayCharId: number;
   /** "Core Fusion X" / "Nickname X" / "X" — final string for the card title. */
   displayName: string;
+  /** Decoded preset name when this hero's equipped gear (all slots EXCEPT
+   *  the EE / exclusive piece) matches a saved preset 1:1. Null otherwise.
+   *  EE is excluded because the in-game preset editor lets you swap EE
+   *  independently — same preset, different EE is still the same preset. */
+  presetName: string | null;
+}
+
+/** One auto-generated suggestion / observation about a hero's current build.
+ *  `tone` drives the badge color (warn = orange, info = neutral, tip = cyan).
+ *  Computed deterministically in `computeAdvice` from the composed entry —
+ *  add new rules there. */
+export interface AdviceItem {
+  tone: "warn" | "info" | "tip";
+  text: string;
+}
+
+/** Slots whose presence is required before any advice is meaningful. EE and
+ *  Talisman are intentionally excluded — they're optional bolt-ons and don't
+ *  participate in any of the rules. */
+const ADVICE_REQUIRED_SLOTS: ReadonlyArray<SlotId> = [
+  "weapon", "accessory", "helmet", "armor", "gloves", "boots",
+];
+
+/** Auto-detect notable conditions on a build (missing pieces, broken sets,
+ *  off-stat mains, …). Stub for now — return [] until we wire actual rules
+ *  in. Keep pure: no IO, no Date, deterministic in `entry`.
+ *
+ *  Gated on the 6 main-gear slots being filled (weapon + accessory + 4 armor
+ *  pieces) — a half-equipped hero produces noisy / misleading suggestions, so
+ *  we stay silent until the build is complete. */
+function computeAdvice(entry: ComposedEntry): AdviceItem[] {
+  for (const slot of ADVICE_REQUIRED_SLOTS) {
+    if (!entry.equipped.has(slot)) return [];
+  }
+  return [];
+}
+
+/** Build a sorted, comma-joined UID key for a set of gear pieces, EE pieces
+ *  excluded. Same routine on both sides (preset vs hero) guarantees the
+ *  comparison is order-independent and EE-agnostic. */
+function presetSignature(uids: Iterable<string>, slotByUid: Map<string, GearPiece["slot"]>): string {
+  const out: string[] = [];
+  for (const u of uids) {
+    if (slotByUid.get(u) === "exclusive") continue;
+    out.push(u);
+  }
+  return out.sort().join(",");
 }
 
 interface BuildCardProps {
@@ -650,6 +754,66 @@ interface BuildCardProps {
    *  form so it never has to read `locks` from props. */
   setLocks: SetLocks;
   game: GameData | null;
+  /** When false, hide the stat-lock buttons + drift indicators + copy-dump
+   *  button (debug-only tooling). */
+  debug: boolean;
+  /** Persisted free-form note for this char (empty string when none). */
+  note: string;
+  /** Stable per-char updater for the note text. Empty `value` clears the
+   *  entry instead of storing "". */
+  onChangeNote: (uid: string, value: string) => void;
+}
+
+const NOTE_MAX = 200;
+
+/** Free-form per-hero note. Capped at NOTE_MAX chars — the textarea hard-stops
+ *  via maxLength but we also show a small counter that goes amber past 90%.
+ *  Width tracks content via `field-sizing-content` (clamped via min/max-w) so
+ *  empty notes don't reserve a fat column. The character counter is only
+ *  shown while focused so it doesn't artificially bloat the column width. */
+function NoteField({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  const remaining = NOTE_MAX - value.length;
+  const tight = remaining <= NOTE_MAX * 0.1;
+  const [focused, setFocused] = useState(false);
+  return (
+    <div className="flex flex-col gap-0.5">
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value.slice(0, NOTE_MAX))}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        maxLength={NOTE_MAX}
+        placeholder="Notes…"
+        className="field-sizing-content min-w-20 max-w-60 resize-none rounded-md border border-white/8 bg-black/30 px-2 py-1 text-[11px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
+      />
+      {focused && (
+        <div className={cx("text-right font-mono text-[9.5px]", tight ? "text-amber-300" : "text-white/40")}>
+          {value.length}/{NOTE_MAX}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Vertical list of auto-detected build observations. Width follows content —
+ *  no fixed reservation, so empty advice collapses to nothing. */
+function AdviceList({ items }: { items: AdviceItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="flex max-w-48 flex-col gap-0.5">
+      {items.map((a, i) => {
+        const cls =
+          a.tone === "warn" ? "border-amber-400/40 bg-amber-500/10 text-amber-100"
+          : a.tone === "tip" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100"
+          : "border-white/10 bg-white/4 text-white";
+        return (
+          <div key={i} className={cx("rounded-md border px-1.5 py-0.5 text-[10.5px] leading-tight", cls)}>
+            {a.text}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /** Per-character build card. Memoized — re-renders only when its `entry` or
@@ -657,9 +821,15 @@ interface BuildCardProps {
  *  lock toggles, so unaffected cards skip the render entirely). All handlers
  *  use the functional updater form of `setLocks` so they never depend on
  *  the current `locks` map and stay referentially stable. */
-const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game }: BuildCardProps) {
-  const { char, equipped, stats, baseline, scaling, rawPieces, level, bp, meta, displayCharId, displayName } = entry;
-  const locked = lockEntry?.stats ?? null;
+const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, debug, note, onChangeNote }: BuildCardProps) {
+  const { char, equipped, stats, baseline, scaling, rawPieces, level, bp, meta, displayCharId, displayName, presetName } = entry;
+  // Auto-detected observations — recomputed only when the entry identity
+  // changes (composedRoster ref stays stable across filter/lock toggles).
+  const advice = useMemo(() => computeAdvice(entry), [entry]);
+  // Lock plumbing is debug-only — collapse everything to a no-lock state when
+  // the debug toggle is off so the StatBlock renders plain values without
+  // amber/rose tints or Δ badges.
+  const locked = debug ? (lockEntry?.stats ?? null) : null;
   const lockedKeys = locked ? Object.keys(locked) as (keyof FinalStats)[] : [];
   const hasAnyLock = lockedKeys.length > 0;
   const hasDrift = stats && hasAnyLock
@@ -725,110 +895,119 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game }: 
 
   return (
     <div
-      className="relative rounded-xl border border-white/7 bg-bg-elev-2 p-3 backdrop-blur-sm shadow-[0_1px_0_oklch(1_0_0/0.04)_inset,0_24px_60px_-30px_rgb(0_0_0/0.7)]"
-      // CSS-native virtualization — the roster grid renders up to 121 cards
-      // and each one has 8 gear slot icons + a portrait + stat block. The
-      // browser skips layout/paint for offscreen cards (intrinsic size
-      // measured from a typical fully-populated card).
-      style={{ contentVisibility: "auto", containIntrinsicSize: "0 360px" }}
+      className="relative flex items-center gap-4 rounded-xl border border-white/7 bg-bg-elev-2 px-3 py-2.5 backdrop-blur-sm"
+      // Each row is much shorter than the old card — keep CSS-native
+      // virtualization but match the smaller intrinsic height so the browser
+      // can skip layout/paint for offscreen rows without over-reserving space.
+      style={{ contentVisibility: "auto", containIntrinsicSize: "0 96px" }}
     >
-      <div className="flex items-start gap-3">
-        <div className="flex flex-col items-center gap-1.5">
-          <CharacterPortrait
-            charId={displayCharId}
-            name={displayName}
-            cls={meta?.cls}
-            element={meta?.element}
-            level={level}
-            transStar={char.stars}
-            basicStar={meta?.star ?? null}
-            size={80}
-          />
-          <div className="flex gap-1">
-            {stats && hasDrift && (
-              <button
-                type="button"
-                title="Accept current values for all drifted stats (refresh their locks)"
-                onClick={acceptDrift}
-                className="grid h-6 w-6 place-items-center rounded-md border border-emerald-400/40 bg-black/40 text-emerald-300 hover:bg-black/60"
-              >
-                <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6}>
-                  <path d="M3 7 L6 10 L11 4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            )}
-            {stats && (
-              <button
-                type="button"
-                title={hasAnyLock
-                  ? (hasDrift ? `Drift on ${driftCount}/${lockedKeys.length} locked — click to UNLOCK ALL`
-                              : `Locked ${lockedKeys.length} stat${lockedKeys.length === 1 ? "" : "s"} ✓ — click to UNLOCK ALL`)
-                  : "Lock ALL stats as the regression baseline (click a single stat to lock just that one)"}
-                onClick={toggleAllLocks}
-                className={cx(
-                  "grid h-6 w-6 place-items-center rounded-md border bg-black/40 hover:bg-black/60",
-                  hasAnyLock
-                    ? (hasDrift ? "border-rose-400/50 text-rose-300" : "border-amber-400/40 text-amber-300")
-                    : "border-white/7 text-zinc-400 hover:text-zinc-200",
-                )}
-              >
-                <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
-                  {hasAnyLock ? (
-                    <>
-                      <rect x={3} y={6.5} width={8} height={6} rx={1} />
-                      <path d="M5 6.5 V4 a2 2 0 0 1 4 0 V6.5" />
-                    </>
-                  ) : (
-                    <>
-                      <rect x={3} y={6.5} width={8} height={6} rx={1} />
-                      <path d="M5 6.5 V4 a2 2 0 0 1 4 0" />
-                    </>
-                  )}
-                </svg>
-              </button>
-            )}
-            {scaling && (
-              <button
-                type="button"
-                title="Copy stat-debug dump to clipboard"
-                onClick={copyDump}
-                className="grid h-6 w-6 place-items-center rounded-md border border-white/7 bg-black/40 text-zinc-400 hover:bg-black/60 hover:text-zinc-200"
-              >
-                <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
-                  <rect x={3} y={3} width={8} height={9} rx={1.2} />
-                  <path d="M5 3 V2 a1 1 0 0 1 1-1 h2 a1 1 0 0 1 1 1 V3" />
-                </svg>
-              </button>
-            )}
+      <div className="flex shrink-0 flex-col items-center gap-1">
+        <CharacterPortrait
+          charId={displayCharId}
+          name={displayName}
+          cls={meta?.cls}
+          element={meta?.element}
+          level={level}
+          transStar={char.stars}
+          basicStar={meta?.star ?? null}
+          size={72}
+        />
+        {bp != null && (
+          <div
+            className="rounded-md border border-cyan-400/30 bg-cyan-500/6 px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-cyan-200"
+            title={`Combat Power: ${bp.toLocaleString()}`}
+          >
+            <span className="text-[8.5px] uppercase tracking-wider text-cyan-400/80">CP</span>{" "}
+            {bp.toLocaleString()}
           </div>
-          {bp != null && (
-            <div
-              className="mt-0.5 rounded-md border border-cyan-400/30 bg-cyan-500/6 px-2 py-0.5 font-mono text-[11px] tabular-nums text-cyan-200"
-              title={`Combat Power: ${bp.toLocaleString()}`}
-            >
-              <span className="text-[9.5px] uppercase tracking-wider text-cyan-400/80">CP</span>{" "}
-              {bp.toLocaleString()}
-            </div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          {stats && baseline && <StatBlock stats={stats} baseline={baseline} locked={locked} onToggleLock={toggleStatLock} />}
-        </div>
+        )}
+        {presetName && (
+          <div
+            className="max-w-22 truncate rounded-md border border-white/12 bg-white/4 px-1.5 py-0.5 text-center text-[10px] text-white"
+            title={`Saved preset: ${presetName}`}
+          >
+            {presetName}
+          </div>
+        )}
       </div>
 
-      <div className="mt-3">
-        <GsLabel>Gear equipped</GsLabel>
-        <div className="mt-1.5 grid grid-cols-4 gap-2">
+      <div className="shrink-0">
+        <div className="grid grid-cols-4 grid-rows-2 gap-1.5">
           {BUILD_SLOT_ORDER.map((id) => {
             const p = equipped.get(id);
-            return (
-              <SlotMini key={id} slot={id} piece={p?.iconPiece ?? null} size={64} />
-            );
+            return <SlotMini key={id} slot={id} piece={p?.iconPiece ?? null} size={55} />;
           })}
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-end">
+      <div className="min-w-0 flex-1">
+        {stats && baseline && <StatBlock stats={stats} baseline={baseline} locked={locked} onToggleLock={debug ? toggleStatLock : undefined} />}
+      </div>
+
+      <div className="shrink-0">
+        <NoteField value={note} onChange={(v) => onChangeNote(char.uid, v)} />
+      </div>
+
+      <div className="shrink-0">
+        <AdviceList items={advice} />
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1.5">
+        {debug && stats && hasDrift && (
+          <button
+            type="button"
+            title="Accept current values for all drifted stats (refresh their locks)"
+            onClick={acceptDrift}
+            className="grid h-6 w-6 place-items-center rounded-md border border-emerald-400/40 bg-black/40 text-emerald-300 hover:bg-black/60"
+          >
+            <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6}>
+              <path d="M3 7 L6 10 L11 4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+        {debug && stats && (
+          <button
+            type="button"
+            title={hasAnyLock
+              ? (hasDrift ? `Drift on ${driftCount}/${lockedKeys.length} locked — click to UNLOCK ALL`
+                          : `Locked ${lockedKeys.length} stat${lockedKeys.length === 1 ? "" : "s"} ✓ — click to UNLOCK ALL`)
+              : "Lock ALL stats as the regression baseline (click a single stat to lock just that one)"}
+            onClick={toggleAllLocks}
+            className={cx(
+              "grid h-6 w-6 place-items-center rounded-md border bg-black/40 hover:bg-black/60",
+              hasAnyLock
+                ? (hasDrift ? "border-rose-400/50 text-rose-300" : "border-amber-400/40 text-amber-300")
+                : "border-white/7 text-white hover:text-white",
+            )}
+          >
+            <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
+              {hasAnyLock ? (
+                <>
+                  <rect x={3} y={6.5} width={8} height={6} rx={1} />
+                  <path d="M5 6.5 V4 a2 2 0 0 1 4 0 V6.5" />
+                </>
+              ) : (
+                <>
+                  <rect x={3} y={6.5} width={8} height={6} rx={1} />
+                  <path d="M5 6.5 V4 a2 2 0 0 1 4 0" />
+                </>
+              )}
+            </svg>
+          </button>
+        )}
+        {debug && scaling && (
+          <button
+            type="button"
+            title="Copy stat-debug dump to clipboard"
+            onClick={copyDump}
+            className="grid h-6 w-6 place-items-center rounded-md border border-white/7 bg-black/40 text-white hover:bg-black/60"
+          >
+            <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
+              <rect x={3} y={3} width={8} height={9} rx={1.2} />
+              <path d="M5 3 V2 a1 1 0 0 1 1-1 h2 a1 1 0 0 1 1 1 V3" />
+            </svg>
+          </button>
+        )}
         <CyanButton size="sm">Optimize →</CyanButton>
       </div>
     </div>
@@ -844,9 +1023,12 @@ interface BuildsScreenProps {
   /** Resolved codex level 0..11 from the captured `/archive/info` reward
    *  count. Null falls back to the composer's default (currently max). */
   userCodexLevel: number | null;
+  /** When true, surface the stat-lock / drift / copy-dump UI used for
+   *  stat-formula regression work. Default off — Settings → Debug. */
+  debug: boolean;
 }
 
-export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }: BuildsScreenProps) {
+export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, debug }: BuildsScreenProps) {
   // Roster filter state — name search + element/class multi-toggles. Empty
   // sets mean "no filter on this axis".
   const [filtersRaw, setFilters] = usePersistedState<RosterFilters>(
@@ -863,6 +1045,24 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
   );
 
   const [lockedStats, setLockedStats] = useStatLocks();
+  // Per-character notes (UID → free-form text, max 200 chars). Persisted in
+  // localStorage; survives reloads and re-captures. Initial shape is an empty
+  // object — characters without an entry render an empty textarea.
+  const [notes, setNotes] = usePersistedState<Record<string, string>>("gs.builds.notes", () => ({}));
+  const setNote = useCallback((uid: string, value: string) => {
+    setNotes((prev) => {
+      // Treat an empty string as "no note" — drop the entry so localStorage
+      // doesn't accumulate dead keys for chars whose notes were cleared.
+      if (!value) {
+        if (!(uid in prev)) return prev;
+        const next = { ...prev };
+        delete next[uid];
+        return next;
+      }
+      if (prev[uid] === value) return prev;
+      return { ...prev, [uid]: value };
+    });
+  }, [setNotes]);
 
   // STEP A — heavy compose pass: runs only when inventory / game / geas /
   // codex change. Lock toggles & filter typing do NOT recompute this.
@@ -872,7 +1072,9 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
     // stat aggregation) and the slot-keyed UiPiece map (for the slot grid).
     const rawByChar = new Map<string, GearPiece[]>();
     const gearByChar = new Map<string, Map<SlotId, ReturnType<typeof toUiPiece>>>();
+    const slotByUid = new Map<string, GearPiece["slot"]>();
     for (const g of inventory.gear) {
+      slotByUid.set(g.uid, g.slot);
       if (!g.equippedBy) continue;
       const slot = toDesignSlot(g.slot);
       if (!slot) continue;
@@ -882,6 +1084,13 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
       let raws = rawByChar.get(g.equippedBy);
       if (!raws) { raws = []; rawByChar.set(g.equippedBy, raws); }
       raws.push(g);
+    }
+    // Index presets by their EE-excluded UID signature so each hero can be
+    // matched in O(1) instead of scanning the preset list per char.
+    const presetByKey = new Map<string, string>();
+    for (const p of inventory.presets) {
+      const key = presetSignature(p.itemUids, slotByUid);
+      if (key) presetByKey.set(key, p.name);
     }
     return inventory.characters.map((c): ComposedEntry => {
       const meta = metaOf(c, game);
@@ -924,12 +1133,14 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
             fused: c.fusionCharId !== 0,
           })
         : null;
+      const heroKey = presetSignature(raws.map((p) => p.uid), slotByUid);
+      const presetName = heroKey ? presetByKey.get(heroKey) ?? null : null;
       return {
         char: c, equipped, count: equipped.size, stats,
         baseline: composed?.intrinsicStats ?? null,
         scaling: composed?.scaling ?? null,
         rawPieces: raws, level, bp,
-        meta, displayCharId, displayName,
+        meta, displayCharId, displayName, presetName,
       };
     });
   }, [inventory, game, userGeasLevels, userCodexLevel]);
@@ -950,7 +1161,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
           const hay = `${fusionTag} ${meta?.nickname ?? ""} ${char.name ?? ""} ${char.charId}`.toLowerCase();
           if (!hay.includes(q)) return false;
         }
-        if (filters.locks === "all") return true;
+        if (!debug || filters.locks === "all") return true;
         const lockedSnap = lockedStats[char.uid]?.stats;
         const lockedKs = lockedSnap ? Object.keys(lockedSnap) as (keyof FinalStats)[] : [];
         if (filters.locks === "locked") return lockedKs.length > 0;
@@ -958,8 +1169,15 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
         if (!stats || lockedKs.length === 0) return false;
         return lockedKs.some((k) => round1(stats[k] - (lockedSnap![k] ?? 0)) !== 0);
       })
-      .sort((a, b) => (b.count - a.count) || (b.char.stars - a.char.stars));
-  }, [composedRoster, filters, lockedStats]);
+      .sort((a, b) => {
+        // CP desc as primary. Heroes with no resolved BP (game data missing
+        // for their charId, missing TransStar row, …) sink to the bottom.
+        const ap = a.bp ?? -Infinity;
+        const bp_ = b.bp ?? -Infinity;
+        if (bp_ !== ap) return bp_ - ap;
+        return (b.count - a.count) || (b.char.stars - a.char.stars);
+      });
+  }, [composedRoster, filters, lockedStats, debug]);
 
   if (!inventory) {
     return <Empty title="No capture yet" subtitle="Arm capture and import your roster to see equipped builds here." />;
@@ -967,17 +1185,14 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-baseline justify-between px-6 pt-4">
-        <div className="flex items-baseline gap-3">
-          <h1 className="font-display text-[22px] font-semibold tracking-tight text-zinc-50">Builds</h1>
-          <span className="text-[13px] text-zinc-500">Your roster with currently equipped gear. Click Optimize to send to Builder.</span>
-        </div>
-        <Pill tone="emerald">{roster.length} heroes</Pill>
-      </div>
+      <FilterBar
+        f={filters}
+        setF={setFilters}
+        debug={debug}
+        trailing={<Pill tone="emerald">{roster.length} heroes</Pill>}
+      />
 
-      <FilterBar f={filters} setF={setFilters} />
-
-      <div className="grid auto-rows-min gap-3 overflow-y-auto px-6 pb-6 pt-3 md:grid-cols-2 lg:grid-cols-3" style={{ maxHeight: "calc(100vh - 130px)" }}>
+      <div className="flex flex-col gap-2 overflow-y-auto px-6 pb-6 pt-3" style={{ maxHeight: "calc(100vh - 130px)" }}>
         {roster.map((entry) => (
           <BuildCard
             key={entry.char.uid}
@@ -985,6 +1200,9 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel }
             lockEntry={lockedStats[entry.char.uid] ?? null}
             setLocks={setLockedStats}
             game={game}
+            debug={debug}
+            note={notes[entry.char.uid] ?? ""}
+            onChangeNote={setNote}
           />
         ))}
       </div>

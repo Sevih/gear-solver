@@ -67,9 +67,13 @@ interface Props {
   onResetOnboarding: () => void;
   /** Refresh the inventory after a destructive action (wipe captured). */
   onAfterWipe?: () => void;
+  /** Current state of the developer-only stat-lock toggle (Builds tab). */
+  debugStatLocks: boolean;
+  /** Flip the stat-lock debug toggle on/off. */
+  onToggleDebugStatLocks: () => void;
 }
 
-export function SettingsModal({ open, onClose, onReady, onResetOnboarding, onAfterWipe }: Props) {
+export function SettingsModal({ open, onClose, onReady, onResetOnboarding, onAfterWipe, debugStatLocks, onToggleDebugStatLocks }: Props) {
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -168,6 +172,16 @@ export function SettingsModal({ open, onClose, onReady, onResetOnboarding, onAft
               onClick={() => void wipeCaptured(onAfterWipe)}
             />
           </div>
+
+          <SectionHeader title="Debug" />
+          <div className="space-y-2 px-5 py-3">
+            <ToggleAction
+              label="Stat lock & drift tooling (Builds)"
+              description="Reveal the per-stat lock buttons, drift indicators and copy-dump button on Builds cards. Used for stat-formula regression work — off by default."
+              checked={debugStatLocks}
+              onToggle={onToggleDebugStatLocks}
+            />
+          </div>
         </div>
 
         <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-white/6 bg-white/2 px-5 py-3">
@@ -244,6 +258,41 @@ function DataAction({ label, description, onClick, tone = "default" }: DataActio
         )}
       >
         {tone === "danger" ? "Wipe" : "Reset"}
+      </button>
+    </div>
+  );
+}
+
+interface ToggleActionProps {
+  label: string;
+  description: string;
+  checked: boolean;
+  onToggle: () => void;
+}
+
+function ToggleAction({ label, description, checked, onToggle }: ToggleActionProps) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-white/6 bg-white/2 px-3 py-2">
+      <div className="min-w-0">
+        <div className="text-[12.5px] font-medium text-white">{label}</div>
+        <div className="text-[11px] leading-snug text-zinc-400">{description}</div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={onToggle}
+        className={cx(
+          "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors",
+          checked ? "border-cyan-400/40 bg-cyan-500/30" : "border-white/8 bg-white/6",
+        )}
+      >
+        <span
+          className={cx(
+            "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform",
+            checked ? "translate-x-4.5" : "translate-x-0.5",
+          )}
+        />
       </button>
     </div>
   );

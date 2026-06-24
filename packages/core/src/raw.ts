@@ -40,9 +40,21 @@ export interface RawItem {
   SubOptionList: RawSubOption[];
 }
 
+/** One saved equipment preset (PresetList entry in /user/item). `Name` is
+ *  base64-encoded UTF-8; `ItemUIDList` is always length 8 covering every gear
+ *  slot incl. the EE (Exclusive), in the order Weapon, Accessory, Helmet,
+ *  Armor, Gloves, Boots, EE, Talisman. */
+export interface RawPreset {
+  PresetType: number;
+  Num: number;
+  Name: string;
+  ItemUIDList: number[];
+  Favorites: number;
+}
+
 export interface RawUserItem {
   ItemList: RawItem[];
-  PresetList?: unknown[];
+  PresetList?: RawPreset[];
   PresetOrderList?: unknown[];
   ItemConvertOptionInfo?: unknown;
 }

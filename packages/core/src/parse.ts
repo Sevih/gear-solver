@@ -3,7 +3,7 @@
  * domain model (types.ts). Stat values are fully resolved here.
  */
 import type { RawItem, RawUserItem, RawUserCharacter } from "./raw.js";
-import type { Character, GearPiece, Inventory, RolledStat, Rarity, GearSlot } from "./types.js";
+import type { Character, GearPiece, Inventory, Preset, RolledStat, Rarity, GearSlot } from "./types.js";
 import type { EnhanceData, EquipmentDef, GameData } from "./gamedata.js";
 import { resolveOption, resolveStat } from "./stats.js";
 
@@ -234,5 +234,23 @@ export function parseInventory(
     },
     fusionCharId: Number((c as { FusionCharID?: unknown }).FusionCharID ?? 0) || 0,
   }));
-  return { gear, characters };
+  const presets: Preset[] = (userItem.PresetList ?? []).map((p) => ({
+    num: p.Num,
+    name: decodeBase64Utf8(p.Name),
+    itemUids: p.ItemUIDList.map(String),
+  }));
+  return { gear, characters, presets };
+}
+
+/** Decode a base64 string to UTF-8. Falls back to the raw input on malformed
+ *  payloads so a single bad preset name doesn't blow up the whole import. */
+function decodeBase64Utf8(b64: string): string {
+  try {
+    if (typeof Buffer !== "undefined") return Buffer.from(b64, "base64").toString("utf-8");
+    const bin = atob(b64);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch {
+    return b64;
+  }
 }

@@ -131,7 +131,17 @@ export interface Character {
   fusionCharId: number;
 }
 
+/** Saved equipment preset (PresetList from /user/item). Name is decoded from
+ *  the base64-encoded wire format; `itemUids` keeps the raw 8-slot order from
+ *  the game so consumers can match against equipped gear without re-sorting. */
+export interface Preset {
+  num: number;
+  name: string;
+  itemUids: string[];
+}
+
 export interface Inventory {
   gear: GearPiece[];
   characters: Character[];
+  presets: Preset[];
 }
