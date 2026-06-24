@@ -1,5 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
 import { resolveOption } from "@gear-solver/core";
 import { cx } from "../design/cx.js";
@@ -700,23 +701,114 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect 
   );
 });
 
+// ── virtualized grid ────────────────────────────────────────────────────
+/** Row-virtualized tile grid built on @tanstack/react-virtual. Columns are
+ *  derived from the live container width (ResizeObserver) so the grid
+ *  reflows when the side panels open/close or the window resizes. Only the
+ *  visible rows + a small overscan window are mounted as React subtrees,
+ *  which keeps DOM/JS footprint flat regardless of inventory size — the
+ *  legacy non-virtualized grid mounted every GearTile up-front, which
+ *  ballooned past 2k mounted components on heavy inventories. */
+const TILE_SIZE = 96;
+const TILE_GAP = 4;
+function VirtualGearGrid({
+  items, selectedId, onSelect, charsByUid,
+}: {
+  items: UiPiece[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  charsByUid: Map<string, Character>;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  // ResizeObserver keeps `width` synced to the scroll container. We can't
+  // rely on a one-shot measurement because layout shifts (filter modal
+  // open/close, devtools dock toggle, …) all change available space.
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    const obs = new ResizeObserver(([entry]) => {
+      if (entry) setWidth(entry.contentRect.width);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // Column math: same packing logic as the old `repeat(auto-fill, minmax(96px, 1fr))`.
+  // Min 1 column so the math doesn't blow up before the first ResizeObserver
+  // callback fires (width=0 at first paint).
+  const cols = Math.max(1, Math.floor((width + TILE_GAP) / (TILE_SIZE + TILE_GAP)));
+  const rowCount = Math.ceil(items.length / cols);
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => TILE_SIZE + TILE_GAP,
+    overscan: 4,
+  });
+
+  return (
+    <div ref={parentRef} className="mt-2 flex-1 min-h-0 overflow-y-auto pr-1">
+      {items.length === 0 ? (
+        <div className="rounded-lg border border-white/5 bg-white/[0.012] px-6 py-12 text-center text-[13px] text-white">
+          No piece matches the current filters.
+        </div>
+      ) : (
+        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}>
+          {virtualizer.getVirtualItems().map((vrow) => {
+            const start = vrow.index * cols;
+            const rowItems = items.slice(start, start + cols);
+            return (
+              <div
+                key={vrow.key}
+                style={{
+                  position: "absolute",
+                  top: vrow.start,
+                  left: 0,
+                  width: "100%",
+                  height: vrow.size,
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                  gap: `${TILE_GAP}px`,
+                }}
+              >
+                {rowItems.map((p) => {
+                  const ec = p.equippedBy ? charsByUid.get(p.equippedBy) ?? null : null;
+                  return (
+                    <GearTile
+                      key={p.id}
+                      piece={p}
+                      equippedChar={ec}
+                      active={p.id === selectedId}
+                      onSelect={onSelect}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── sort header ─────────────────────────────────────────────────────────
-// SortKey is a "fixed key" union for the four hardcoded buttons, plus a
+// SortKey is a "fixed key" union for the three hardcoded buttons, plus a
 // template string for per-sub-stat sorts (`sub:critRate`, `sub:spd`, …).
 // The template covers any stat in the STAT token table — adding a new stat
 // type doesn't need a SortHeader change.
-type FixedSortKey = "stars" | "enhance" | "bt" | "name";
+type FixedSortKey = "stars" | "enhance" | "bt";
 type SortKey = FixedSortKey | `sub:${string}`;
 
 function SortHeader({
-  sort, dir, total, shown, onSort, onSubSort, limit, onLimitChange, availableSubs,
+  sort, dir, total, onSort, onSubSort, availableSubs,
 }: {
-  sort: SortKey; dir: "asc" | "desc"; total: number; shown: number;
+  sort: SortKey; dir: "asc" | "desc"; total: number;
   onSort: (k: FixedSortKey) => void;
   /** Pass a stat key to switch to `sub:${stat}` sort, or null to clear it
    *  (reverts to the default `enhance` cascade). */
   onSubSort: (stat: string | null) => void;
-  limit: number; onLimitChange: (n: number) => void;
   /** Stats that appear on at least one sub in the current tab + slot
    *  scope — narrows the dropdown so the user only picks actionable
    *  sorts. */
@@ -743,7 +835,6 @@ function SortHeader({
         <Th k="stars" label="★" />
         <Th k="enhance" label="Enhance" />
         <Th k="bt" label="Brk" />
-        <Th k="name" label="Name" />
         <span className={cx("ml-2 inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px]", isSubSort && "text-cyan-200")}>
           Sub
           <select
@@ -757,17 +848,7 @@ function SortHeader({
           {isSubSort && <span className="text-[9px]">{dir === "desc" ? "▼" : "▲"}</span>}
         </span>
       </div>
-      <div className="flex items-center gap-2 text-[11.5px] text-white">
-        <span className="font-mono">{total} pieces · {shown} shown</span>
-        <select
-          value={limit}
-          onChange={(e) => onLimitChange(Number(e.target.value))}
-          className="rounded border border-white/7 bg-black/30 px-1.5 py-0.5 font-mono text-[11px] text-white outline-none"
-        >
-          {[50, 100, 200, 500].map((n) => <option key={n} value={n}>Limit {n}</option>)}
-          <option value={1_000_000}>All</option>
-        </select>
-      </div>
+      <span className="font-mono text-[11.5px] text-white">{total} pieces</span>
     </div>
   );
 }
@@ -919,7 +1000,10 @@ function SubstatRow({ s, stars }: { s: UiPiece["subs"][number]; stars: number })
         isMax ? "text-amber-300" : "text-white",
       )}
     >
-      <span className={cx("shrink-0", isMax ? "text-amber-300" : "text-white")}>
+      {/* Fixed-width LV column so rows with reforges ("LV 6 (3 + 3)") and
+          rows without ("LV 3") stay vertically aligned at the stat icon.
+          88px fits the widest legitimate format at font-mono 12px. */}
+      <span className={cx("w-22 shrink-0", isMax ? "text-amber-300" : "text-white")}>
         LV {s.lv}
         {s.reforges > 0 && (
           <span className={cx("ml-1", isMax ? "text-amber-400/80" : "text-white/70")}>
@@ -1333,7 +1417,6 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
   const [tab, setTabState] = usePersistedState<InvTab>("gs.inv.tab", "all");
   const [sort, setSort] = usePersistedState<SortKey>("gs.inv.sort", "enhance");
   const [dir, setDir] = usePersistedState<"asc" | "desc">("gs.inv.dir", "desc");
-  const [limit, setLimit] = usePersistedState("gs.inv.limit", 100);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
 
@@ -1498,7 +1581,6 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
           if (cmp === 0) cmp = a.bt - b.bt;
           break;
         case "bt": cmp = a.bt - b.bt; break;
-        case "name": cmp = a.name.localeCompare(b.name); break;
       }
       // Final tiebreak: ascended first (purple > gold).
       if (cmp === 0) cmp = Number(a.singularity) - Number(b.singularity);
@@ -1507,7 +1589,6 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
     return out;
   }, [filtered, sort, dir]);
 
-  const view = sorted.slice(0, limit);
   const selected = selectedId ? sorted.find((p) => p.id === selectedId) ?? null : null;
 
   // Stable click handler — toggles the selection so a second click clears
@@ -1559,26 +1640,16 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
         </div>
         <SlotBar tab={tab} selected={f.slots} onToggle={toggleSlot} />
         <SortHeader
-          sort={sort} dir={dir} total={sorted.length} shown={view.length}
-          onSort={toggleSort} onSubSort={onSubSort} limit={limit} onLimitChange={setLimit}
+          sort={sort} dir={dir} total={sorted.length}
+          onSort={toggleSort} onSubSort={onSubSort}
           availableSubs={availableSubs}
         />
-        <div className="mt-2 flex-1 min-h-0 grid gap-1 overflow-y-auto pr-1 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] content-start">
-          {view.length === 0
-            ? <div className="col-span-full rounded-lg border border-white/5 bg-white/[0.012] px-6 py-12 text-center text-[13px] text-white">No piece matches the current filters.</div>
-            : view.map((p) => {
-              const equippedChar = p.equippedBy ? charsByUid.get(p.equippedBy) ?? null : null;
-              return (
-                <GearTile
-                  key={p.id}
-                  piece={p}
-                  equippedChar={equippedChar}
-                  active={p.id === selectedId}
-                  onSelect={onSelect}
-                />
-              );
-            })}
-        </div>
+        <VirtualGearGrid
+          items={sorted}
+          selectedId={selectedId}
+          onSelect={onSelect}
+          charsByUid={charsByUid}
+        />
       </div>
       <FilterModal
         open={filterModalOpen}

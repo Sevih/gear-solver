@@ -19,10 +19,12 @@
  *   5. electron-builder --publish always → uploads installer + latest.yml
  *      to a DRAFT release on GitHub (provider config in apps/desktop pkg)
  *   6. git add + commit "chore: release vX.Y.Z" + tag + push (--follow-tags)
- *   7. Promote the draft to a live release via gh (skip with --no-undraft)
+ *   7. Promote the draft to a live release via gh + post auto-generated
+ *      notes built from the `${prevTag}..HEAD~1` commit log (skip with
+ *      --no-undraft, which leaves the draft body empty for manual editing)
  */
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -118,6 +120,17 @@ ok(gitStatus ? "Working tree dirty (--force in effect)" : "Working tree clean");
 const branch = runSilent("git rev-parse --abbrev-ref HEAD");
 ok(`On branch ${branch}`);
 
+// Snapshot the previous release tag NOW (before we create the new one) so
+// step 7 can build release notes from the commit range. `--match v*` skips
+// any non-release tags that might have been created manually.
+let prevTag = null;
+try {
+  prevTag = runSilent("git describe --tags --abbrev=0 --match v*");
+  ok(`Previous release: ${prevTag}`);
+} catch {
+  skip("No previous release tag — notes will cover full history");
+}
+
 // ── BUMP ───────────────────────────────────────────────────────────────
 const pkgJson = JSON.parse(readFileSync(DESKTOP_PKG, "utf-8"));
 const fromVersion = pkgJson.version;
@@ -173,8 +186,8 @@ try {
   run(`git tag ${tag}`);
   run(`git push --follow-tags origin ${branch}`);
 
-  // ── UNDRAFT ──────────────────────────────────────────────────────────
-  step(7, NO_UNDRAFT ? "Skip undraft (--no-undraft)" : "Promote draft → release");
+  // ── UNDRAFT + RELEASE NOTES ──────────────────────────────────────────
+  step(7, NO_UNDRAFT ? "Skip undraft (--no-undraft)" : "Promote draft → release + write notes");
   if (NO_UNDRAFT) {
     skip("Draft left as-is — promote manually on GitHub when ready.");
   } else {
@@ -183,9 +196,43 @@ try {
     if (!hasGh) {
       skip("gh CLI not installed — promote manually at https://github.com/Sevih/gear-solver/releases");
     } else {
-      // --latest flips the "Latest release" badge on GitHub, which is what
-      // electron-updater clients check via latest.yml.
-      run(`gh release edit ${tag} --draft=false --latest`);
+      // Generate release notes from the commit range. `HEAD~1` excludes the
+      // `chore: release ${tag}` commit we just made — that's plumbing, not
+      // a user-visible change. Falls back to the whole history when there's
+      // no previous tag (first release).
+      const range = prevTag ? `${prevTag}..HEAD~1` : "HEAD~1";
+      let notesBody = "";
+      try {
+        const log = runSilent(`git log ${range} --pretty=format:%s`);
+        const lines = log.split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .filter((l) => !/^chore: release/i.test(l))            // shouldn't appear, defensive
+          .filter((l) => !/^Merge (branch|pull request)/i.test(l)) // drop merge noise
+          .map((l) => `- ${l.replace(/\s*\[no-discord\]\s*$/i, "")}`); // strip outerpedia tag
+        if (lines.length > 0) {
+          notesBody = `## What's new in ${tag}\n\n${lines.join("\n")}\n`;
+          if (prevTag) {
+            notesBody += `\n**Full changelog:** https://github.com/Sevih/gear-solver/compare/${prevTag}...${tag}\n`;
+          }
+        }
+      } catch (err) {
+        console.error(`  \x1b[33m! Couldn't gather commit log: ${err?.message ?? err}\x1b[0m`);
+      }
+      const NOTES_FILE = join(ROOT, ".release-notes.tmp.md");
+      const hasNotes = notesBody.length > 0;
+      if (hasNotes) {
+        writeFileSync(NOTES_FILE, notesBody, "utf-8");
+        // --notes-file dodges shell escaping of multi-line / quoted content.
+        run(`gh release edit ${tag} --draft=false --latest --notes-file ${NOTES_FILE}`);
+        try { unlinkSync(NOTES_FILE); } catch { /* best-effort cleanup */ }
+        ok(`Release notes posted (${notesBody.split("\n").length - 4} commits)`);
+      } else {
+        // No commits in range → just flip the draft. The user can fill the
+        // body in manually if they want.
+        run(`gh release edit ${tag} --draft=false --latest`);
+        skip("Empty commit range — release published without auto-notes");
+      }
     }
   }
 
