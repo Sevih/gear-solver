@@ -7,7 +7,7 @@
 
 ## Contexte
 
-**gear-solver** est une web app locale qui :
+**gear-solver** est une app Electron desktop locale qui :
 
 1. Capture le gear et les héros depuis le client Outerplane (jeu mobile gacha).
 2. Affiche l'inventaire complet (gear + persos) avec stats résolues.

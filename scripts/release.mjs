@@ -224,7 +224,7 @@ try {
       if (hasNotes) {
         writeFileSync(NOTES_FILE, notesBody, "utf-8");
         // --notes-file dodges shell escaping of multi-line / quoted content.
-        run(`gh release edit ${tag} --draft=false --latest --notes-file ${NOTES_FILE}`);
+        run(`gh release edit ${tag} --draft=false --latest --notes-file "${NOTES_FILE}"`);
         try { unlinkSync(NOTES_FILE); } catch { /* best-effort cleanup */ }
         ok(`Release notes posted (${notesBody.split("\n").length - 4} commits)`);
       } else {
