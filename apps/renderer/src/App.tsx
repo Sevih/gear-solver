@@ -193,7 +193,7 @@ export function App() {
         <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-500">Loading {tab.toLowerCase()}…</div>}>
           {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} />}
           {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} debug={debugStatLocks} />}
-          {tab === "Builder" && <BuilderScreen />}
+          {tab === "Builder" && <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} />}
         </Suspense>
       </main>
 

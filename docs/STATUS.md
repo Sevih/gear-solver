@@ -1,6 +1,6 @@
 # STATUS — où on en est / comment reprendre
 
-Dernière mise à jour : 2026-06-12. Ce fichier est le point d'entrée pour reprendre le
+Dernière mise à jour : 2026-06-24. Ce fichier est le point d'entrée pour reprendre le
 projet à froid. Les détails sont dans les autres docs (liens en bas).
 
 ## But du projet
@@ -31,9 +31,16 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      `OptionID`→stat, `CharID`→perso. Échelle stats validée vs jeu (% stockés ×10).
    - Tests verts : `npm test`.
 
-4. **App web** (`apps/web/`, Vite + React)
+4. **Renderer** (`apps/renderer/`, Vite + React, embarqué dans Electron)
    - **Auto-import** : au démarrage, charge `data/derived` + `tools/capture/out` (servis en
      direct par un middleware Vite) et affiche l'inventaire parsé. Fallback fichier manuel.
+   - **Onglet Inventory** : table + filtres + détail pièce (mains, subs, ticks, reforge,
+     breakthrough, singularity), score par pièce, indicateur de qualité.
+   - **Onglet Builds** : carte par héros avec stats composées (`composeBuild` mirror
+     in-game CalcFinalStat), comparaison vs locks régression (`data/stat-locks.json`).
+   - **Onglet Builder** : optimiseur de gear Fribbels-style. Voir [docs/solver.md](solver.md)
+     pour le détail. Worker pool en renderer, partition embarrassingly parallel, gem
+     sub-solver, modes SOLVE (par Score pondéré) et SOLVE CP (par Combat Power).
 
 ## Comment lancer
 
@@ -63,18 +70,16 @@ npm run data:build       # régénère data/derived depuis data/game
 
 ## Ce qui RESTE (voir docs/roadmap.md pour le détail)
 
-- **M3** Inventaire UX : tri/filtre, détail pièce, score par pièce.
-- **M4** Modèle de stats complet : scaling du **main stat** (enhancement +0→+15, breakthrough
-  +5%/palier, singularity), **bonus de set**, **stats de base persos** → totaux réels.
-- **M5** Solveur : recherche combinatoire élaguée dans un Web Worker (`solver.ts` est un stub).
-- **M6** Solveur UX : panneau par héros (poids, contraintes min/max, sets requis), résultats.
-- **M7** Persistance locale, build prod des données, option desktop Tauri.
-- **UI design** : reporté (à faire quand on attaque M3/M6).
+- **Polish solver** : cancel mid-solve (yield via `MessageChannel`), Upg column,
+  Exclude-equipped multi-select, reforge simulation.
+- **Action buttons** (BuilderScreen sidebar) : Equip / Save Build / … non câblés.
+- **Persistance locale** : sauvegarde de builds, presets de filtres par héros.
+- **Desktop wrapper** : packaging Electron (déjà initié, à finir).
 
 ## Carte du repo
 
 ```
-apps/web/         UI React + Vite (auto-import + aperçu inventaire)
+apps/renderer/    UI React + Vite (renderer process Electron)
 packages/core/    moteur : raw.ts, types.ts, gamedata.ts, stats.ts, parse.ts, score.ts, solver.ts
 tools/capture/    pipeline de capture (capture.ps1, disarm.ps1, addon.py, scripts/)
 data/game/        tables brutes du jeu (copie)
@@ -89,4 +94,7 @@ docs/             architecture.md, data-schema.md, roadmap.md, STATUS.md (ce fic
 - [docs/roadmap.md](roadmap.md) — plan détaillé + garde-fous
 - [docs/architecture.md](architecture.md) — découpage des couches
 - [docs/data-schema.md](data-schema.md) — schéma des données capturées + mappings
+- [docs/reference.md](reference.md) — **doc dense unifiée** : traitements (capture→parse→compose→solve), calculs (CalcFinalStat, CP, ratings, score, gems, reforge), sources (tables jeu, locks, RVAs, conventions stat)
+- [docs/solver.md](solver.md) — solver Builder : pipeline, panneaux UI, optimisations, limites
+- [docs/todo.md](todo.md) — backlog actionnable (polish solver, persistence, validation, hygiene)
 - [tools/capture/README.md](../tools/capture/README.md) — pipeline de capture en détail

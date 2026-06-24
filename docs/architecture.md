@@ -5,7 +5,7 @@
 Three independent layers, connected by plain JSON:
 
 ```
- LDPlayer (game)  ──HTTPS──▶  tools/capture (mitmproxy + PS)  ──JSON──▶  packages/core  ──▶  apps/web
+ LDPlayer (game)  ──HTTPS──▶  tools/capture (mitmproxy + PS)  ──JSON──▶  packages/core  ──▶  apps/renderer
    account data                 decrypts & writes out/*.json        parse + score + solve     UI
 ```
 
@@ -14,8 +14,11 @@ Three independent layers, connected by plain JSON:
 - **packages/core** — pure TypeScript, no DOM, no Node APIs. The brain: wire types,
   parser (wire → domain model), stat resolution, scoring, combination solver. Reusable
   from a Web Worker, a CLI, or a future desktop wrapper.
-- **apps/web** — Vite + React. Loads the JSON, drives the engine, renders results.
-  Heavy solves run in a Web Worker importing `@gear-solver/core`.
+- **apps/renderer** — Vite + React. Loads the JSON, drives the engine, renders results.
+  Heavy solves fan out across a **pool of Web Workers** (size ≈ `hardwareConcurrency - 1`,
+  capped at 8) that import the pure engine modules in `apps/renderer/src/lib/solver/`.
+  See [solver.md](solver.md) for the solver pipeline + UI panels, and
+  [reference.md](reference.md) for the full formula + data-pipeline reference.
 
 ## Why this split
 
@@ -30,17 +33,24 @@ Three independent layers, connected by plain JSON:
 ```
 RawUserItem (raw.ts)
    └─ parseInventory() ──▶ Inventory { gear: GearPiece[], characters: Character[] }  (types.ts)
-                              ├─ stat resolution via stats.ts (OptionID → value)   [PARTIAL]
-                              └─ equipment meta via EquipmentLookup (Outerpedia DB) [TODO]
+                              ├─ stat resolution via stats.ts (OptionID → value)
+                              └─ equipment meta via gamedata.ts (slot/set/rarity/main/passive)
 
-Inventory + weights/constraints
-   └─ solve() (solver.ts) ──▶ SolveResult { builds: BuildResult[] }                 [STUB]
+Inventory + filters + hero
+   └─ apps/renderer/src/lib/solver/orchestrator.ts (main thread, fan-out)
+        └─ apps/renderer/src/workers/solver.worker.ts × W (fan-in top-K → merged top-N)
+             └─ apps/renderer/src/lib/solver/engine.ts (pure compute: prepareContext + solveChunk + finalizeBuilds)
+                  ├─ composeBuild.ts (computeFinalStats, mirror in-game CalcFinalStat)
+                  ├─ solver/cp.ts (calcBattlePower, mirror in-game CalcBattlePower)
+                  ├─ solver/ratings.ts (8 cheap ratings + Score)
+                  └─ solver/gems.ts (gem sub-solver greedy)
 ```
 
 ## Open dependencies
 
-- **Stat map** (`stats.ts`): OptionID → stat + per-tick value. Datamine task.
-- **Equipment DB** (`EquipmentLookup`): ItemID → slot/set/rarity/main stat. Comes from
-  the Outerpedia equipment dataset the maintainer already owns.
-- **Solver hot loop**: start with a straightforward pruned search in a Worker; only reach
-  for flattened arrays / WASM if the search space demands it.
+- **Engine vs UI boundary** : engine modules under `apps/renderer/src/lib/solver/` are pure
+  TS (no React, no DOM) so the worker bundle stays light and the modules are testable
+  standalone. `composeBuild.ts` lives one folder up because it's shared between BuildsScreen
+  and the solver.
+- **Stat regression locks** : `data/stat-locks.json` snapshots per-hero final stats — any
+  change to `compose-stats.ts` / `composeBuild.ts` must keep these green.

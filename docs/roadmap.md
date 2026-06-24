@@ -16,40 +16,50 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   CharID→character. Engine parses a real inventory with resolved stats.
 - **M2 — Auto-import.** Web app loads game data + latest capture automatically (Vite
   middleware serves `data/derived` and `tools/capture/out`).
+- **M3 — Inventory UX.** Table, filters, per-piece detail (main/subs/ticks/reforge/BT/singularity),
+  substat score per piece.
+- **M4 — Stat model.** Main stat scaling (+0..+15, BT, singularity), set bonuses, character
+  base + evo + class passive + Skill_8 + geas + codex compound — validated against
+  `data/stat-locks.json` regression snapshots.
+- **M5 — Solver core.** See entry below.
+- **M6 — Solver UX.** See entry below.
 
 ## Next
 
-### M3 — Inventory UX (read-only)
-- Gear table: sort/filter by slot, set, rarity, stat, equipped/locked.
-- Per-piece detail (main, subs with ticks, reforge, breakthrough, singularity).
-- Substat score per piece (weighted), gear-quality indicator.
-- *Exit criteria:* you can browse and rank your whole inventory.
+### M6.5 — Solver polish
+- **Cancel mid-solve** : yield via `MessageChannel` toutes les ~50 ms pour que le
+  bouton Cancel interrompe vraiment la boucle synchrone (sinon : attend la fin
+  du chunk courant, 2-5 s typique).
+- **Action buttons** sidebar : Equip / Save Build / Remove Build / Select All / Deselect All — placeholders aujourd'hui.
+- **Exclude-equipped multi-select** : la liste `excludedHeroes` existe dans le
+  reducer mais aucun UI n'écrit dedans.
+- **Upg column** dans la table : nombre de slots améliorés vs build actuel.
+- **Reforge simulation** optionnelle (toggle "Use reforged stats" est visuel).
 
-### M4 — Stat model completeness
-- Resolve **main stat** scaling with enhancement (`ItemEnchantTemplet`) + breakthrough
-  (`ItemBreakLimitTemplet`, +5%/tier) + singularity.
-- Resolve **set bonuses** (`sets.json`) and surface set names/effects.
-- Character **base stats** (`CharacterTemplet`/`CharacterEvolutionStatTemplet`) so a build's
-  totals are the real in-game numbers.
-- *Exit criteria:* a built hero's displayed totals match the game.
-
-### M5 — Solver core
-- Implement the pruned cartesian search in `solver.ts`: candidate prefilter per slot
-  (main stat, required set, top-% substats), incremental stat accumulation, set bitmask,
-  min/max constraints, top-N by score.
-- Run it in a **Web Worker**; report evaluated/pruned counts and timing.
-- *Exit criteria:* solve a real hero in <1s for a reasonable filtered space.
-
-### M6 — Solver UX
-- Per-hero panel: pick hero, set weights, min/max constraints, required sets, locked pieces.
-- Results table: build totals, score, set icons, swap-from-current diff; apply/compare.
-- Save/load build presets per hero.
-- *Exit criteria:* end-to-end "pick hero → get ranked builds → compare".
-
-### M7 — Polish & sharing
+### M7 — Persistence & sharing
 - Persist inventory locally (IndexedDB); manual JSON import/export.
+- Filter presets per hero (save/load).
 - Production build path for `data` (bake derived + a chosen snapshot).
 - Optional: package as Tauri desktop if a native capture button is wanted.
+
+---
+
+## Reference — solver internals (M5/M6 delivered)
+
+### M5 — Solver core ✅
+- Pruned cartesian search in a **Web Worker pool** (≤ 8 workers, embarrassingly parallel
+  partition on the largest slot). Per-slot prefilter (main, effect, sets-excluded), Top-%
+  substat prune, mid-tree set-feasibility prune, fixed-size top-K min-heap.
+- Gem sub-solver greedy with pre-aggregated `{flat, pct}` delta per `talismanSlots` variant.
+- Two modes: **SOLVE** (priority-weighted Score, CP computed lazily for top-N),
+  **SOLVE CP** (CP in-loop as sort key).
+- *Détails complets* : [docs/solver.md](solver.md).
+
+### M6 — Solver UX ✅
+- BuilderScreen (Fribbels-style dense layout) : 9 panneaux du haut, table résultats
+  avec heatmap, bottom gear band 8 slots, footer fixé avec compteurs P/S/Results.
+- État centralisé via `useReducer(SolverFilters)` — 11 actions, tous les inputs contrôlés.
+- Boutons SOLVE / SOLVE CP / Cancel / Reset filters branchés sur l'orchestrator.
 
 ---
 

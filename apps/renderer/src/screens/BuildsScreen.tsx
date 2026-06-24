@@ -1,6 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Character, GameData, GearPiece, Inventory, NoGearStats, StatScaling, UserGeasLevels } from "@gear-solver/core";
+import type { Character, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
+import { aggregateGearBuckets, computeFinalStats, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
+import { calcBattlePower } from "../lib/solver/cp.js";
 import { cx } from "../design/cx.js";
 import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
 import { CyanButton } from "../design/Shell.js";
@@ -16,253 +18,18 @@ const BUILD_SLOT_ORDER: SlotId[] = [
   "accessory", "talisman", "gloves", "boots",
 ];
 
-/** Final stat readout displayed on the build card — character no-gear baseline
- *  composed with gear contributions. ATK / DEF / HP go through the compound
- *  formula (transcend × pctBonuses stack multiplicatively); the rest are pure
- *  additive sums of the no-gear baseline and the gear contribution. */
-export interface FinalStats {
-  atk: number; hp: number; def: number; spd: number;
-  crc: number; chd: number; eff: number; res: number;
-  dmgUp: number; dmgRed: number; pen: number;
-  /** Critical Damage Reduction — gear-only (no character baseline). Summed
-   *  from `critDmgReduce` substats / mains, displayed as a percent. */
-  critDmgRed: number;
-}
+/** Local alias re-exported for parts of BuildsScreen that previously read
+ *  `FinalStats` from this module. The single source of truth now lives in
+ *  `../lib/composeBuild.ts`. */
+export type { FinalStats } from "../lib/composeBuild.js";
 
 const round1 = (x: number) => Math.round(x * 10) / 10;
-
-/** Plug gear flat + gear % into the in-game CalcFinalStat formula. Mirrors
- *  CFormula::CalcFinalStat from libil2cpp.so 1.4.9 (RVA 0x2C59E48):
- *    sum_flat = baseValue + evoValue + awakValue
- *    sum_rate = awakRate + transcendRate + gearRate                 (per-mille)
- *    part1    = floor(sum_flat × (1000 + sum_rate) / 1000)
- *    combined = part1 + gearFlat
- *    part2    = floor(combined × (1000 + buffRate) / 1000)
- *    codex    = floor(baseValue × archiveRate / 1000)
- *    final    = max(0, part2 + codex)
- *  All `*Pct` inputs in StatScaling are DISPLAY units (10 = 10%); we ×10 to
- *  reach per-mille for the in-game arithmetic. Truncation matches the ARM64
- *  signed-magic-divide (asr-then-add) — Math.trunc reproduces it for both
- *  positive and negative intermediates. */
-function composeMultStat(sc: StatScaling, gearFlat: number, gearPct: number, gearBuffPct: number): number {
-  const sumFlat = sc.baseValue + sc.evoValue + sc.awakValue;
-  const sumRate = sc.awakPct * 10 + sc.transcendPct * 10 + gearPct * 10;
-  const part1 = Math.trunc(sumFlat * (1000 + sumRate) / 1000);
-  const combined = part1 + gearFlat + sc.buffValue;
-  const part2 = Math.trunc(combined * (1000 + (sc.buffPct + gearBuffPct) * 10) / 1000);
-  const codex = Math.trunc(sc.baseValue * sc.codexPct / 100);
-  return Math.max(0, part2 + codex);
-}
-
-/** Compute the in-game Combat Power (BP / BattlePower) for a fully composed
- *  character. Reverse-engineered from CalcBattlePower in libil2cpp.so (1.4.9
- *  build), validated 0-diff on 5 chars covering LB0/1/2/3.
- *
- *  Stat conventions (critical):
- *   - CRC is CAPPED at 100% before entering the formula
- *   - CRC/CHD/PEN/DMGup/DMGRed/ECDR are × 10 raw internally — these inputs
- *     here are the DISPLAYED (percent) values, multiplied to raw inside.
- *   - EFF/RES use the displayed integer directly.
- *
- *  See memory/game_combat_power_formula.md for the full derivation. */
-function calcBattlePower(args: {
-  stats: FinalStats;
-  showUIStar: number;
-  starPlus: number;
-  skills: { first: number; second: number; ultimate: number; chainPassive: number };
-  ee: GearPiece | null;
-  ooparts: GearPiece | null;
-  fused: boolean;
-}): number {
-  const { stats: s, showUIStar, starPlus, skills, ee, ooparts, fused } = args;
-  const crcRaw = Math.min(s.crc * 10, 1000); // cap at 100%
-  const chdRaw = s.chd * 10;
-  const penRaw = s.pen * 10;
-  const dmgupRaw = s.dmgUp * 10;
-  const dmgredRaw = s.dmgRed * 10;
-  const ecdrRaw = 0; // not exposed in FinalStats; non-buffed chars have 0
-  const sumCd = dmgupRaw + chdRaw;
-  let critF: number;
-  if (sumCd < 2001) {
-    critF = sumCd / 1000;
-  } else {
-    const x = Math.min((sumCd - 2000) / 2500, 1.0);
-    critF = 2.0 * (1 - (1 - x) ** 2) + 2.5;
-  }
-  const crcF  = (crcRaw + 1000) / 1000;
-  const penF  = (penRaw * 1.5 + 1000) / 1000;
-  const spdF  = 1 + s.spd / 50;
-  const effF  = 1.7 * s.eff / (s.eff + 130);
-  const hdF   = 44000 / (s.hp + s.def + 44000);
-  const defF  = hdF * 0.15 + 1.05;
-  const resR  = 1 + 0.25 * s.res / (s.res + 200);
-  const defR  = 1 + 0.25 * (ecdrRaw + dmgredRaw) / ((ecdrRaw + dmgredRaw) + 200);
-  const chain = (1 + effF) * crcF * critF * penF * spdF;
-  const atkPart = 0.125 * s.atk * (1 + chain);
-  const defPart = (s.hp + s.def) * defF * defR * resR;
-  const starBonus = showUIStar * 500 + starPlus * 120;
-  const skillSum = (skills.first - 4) + skills.second + skills.ultimate + skills.chainPassive;
-  const eeBp = ee ? ee.enhanceLevel * 100 + 300 : 0;
-  const ooBp = ooparts ? ooparts.enhanceLevel * 100 + (ooparts.star ?? 0) * 50 : 0;
-  const fusionBp = fused ? 5000 : 0;
-  return Math.floor(atkPart + defPart + starBonus + skillSum * 100 + eeBp + ooBp + fusionBp);
-}
-
-/** Aggregate active 2pc / 4pc armor-set bonuses into one list of stat options.
- *  Pieces are grouped by `armorSetId` (1..21 for helmet/armor/gloves/boots).
- *  - 2+ pieces → grant the `p2` bonus.
- *  - 4 pieces  → ALSO grant the `p4` bonus (cumulative on top of p2).
- *  - Lv 2 row applies when every contributing piece is at bt 4 (unique-tier
- *    set), else Lv 1 (lower-tier — only 4pc unlocks a bonus there).
- *  Combat-only sets (Counterattack, Lifesteal, Bursting, Revenge, Immunity,
- *  Weakness, Augmentation, …) carry their effects as buffs/dmg, not
- *  BT_STAT_PREMIUM — their entries in `sets` are `ST_NONE` and are skipped. */
-function computeSetBonuses(
-  pieces: GearPiece[],
-  sets: GameData["sets"] | null,
-): Array<{ st: string; ap: string; v: number }> {
-  if (!sets) return [];
-  // Single pass over pieces: bump (count, bt4Count) per armor set id. Lv-row
-  // resolution (`useLv2 = all pieces are bt4`) happens in the second pass
-  // over the counts map — both are O(armor-pieces + active-sets) instead of
-  // the old O(armor-pieces × 2 + setLevels × active-sets) `.find(...)` scan.
-  type Bucket = { count: number; bt4Count: number };
-  const counts = new Map<string, Bucket>();
-  for (const p of pieces) {
-    if (!p.armorSetId) continue;
-    let b = counts.get(p.armorSetId);
-    if (!b) { b = { count: 0, bt4Count: 0 }; counts.set(p.armorSetId, b); }
-    b.count++;
-    if (p.breakthrough >= 4) b.bt4Count++;
-  }
-  const out: Array<{ st: string; ap: string; v: number }> = [];
-  for (const [setId, b] of counts) {
-    if (b.count < 2) continue;
-    const def = sets[setId];
-    if (!def) continue;
-    const targetLevel = b.bt4Count >= b.count ? 2 : 1;
-    let lvRow = null;
-    for (const l of def.levels) { if (l.level === targetLevel) { lvRow = l; break; } }
-    if (!lvRow) continue;
-    const { p2, p4 } = lvRow;
-    if (p2 && p2.st !== "ST_NONE" && p2.v != null) out.push({ st: p2.st, ap: p2.ap, v: p2.v });
-    if (b.count >= 4 && p4 && p4.st !== "ST_NONE" && p4.v != null) out.push({ st: p4.st, ap: p4.ap, v: p4.v });
-  }
-  return out;
-}
-
-/** Aggregate gear pieces (mains, subs, set bonuses) into flat/pct/buffPct buckets
- *  keyed by engine stat key. Shared between `computeFinalStats` and `buildStatsDump`
- *  so the debug copy stays 1:1 with what the engine actually consumed.
- *
- *  Three-way split mirrors the in-game CalcFinalStat input separation:
- *  - `flat` / `pct` (IOT_STAT-typed contributions) → `ItemOptionValue` / Rate via
- *    `SetItemOptionsValue` (sum_rate compound layer).
- *  - `buffPct` (IOT_BUFF mains — talisman / EE) → `BuffValueRate` via
- *    `SetBuffPremiumValue` (outermost amplifier alongside Skill_22 / Skill_8). */
-const PERCENT_STATS = new Set(["critRate", "critDmg", "critDmgReduce", "dmgUp", "dmgReduce", "pen"]);
-function aggregateGearBuckets(pieces: GearPiece[], game: GameData | null): {
-  flat: Record<string, number>; pct: Record<string, number>; buffPct: Record<string, number>;
-} {
-  const flat: Record<string, number> = {};
-  const pct: Record<string, number> = {};
-  const buffPct: Record<string, number> = {};
-  for (const p of pieces) {
-    // Mains always count. IOT_BUFF mains (talisman / EE / singularity) route
-    // to `buffPct` via `fromBuff`. The historical "skip EE main entirely"
-    // shortcut was wrong for the unconditional `_CORE` variants (4/29 EE
-    // main buffs) and especially for EE level-gated passives (Caren EE
-    // +20% DEF at +10) — both are valid sheet contributions and reach us
-    // via `main[]` with `fromBuff: true`. Conditional EE mains (element-
-    // gated debuffs that don't show on the sheet) are filtered out at
-    // build time in `data/build.mjs`.
-    for (const s of p.main) {
-      // Combat-only rolls (e.g. Singularity DMG_BOOST gated by
-      // TARGET_HAS_BUFF) are real on the gear but don't show on the
-      // character sheet — skip them for stat aggregation.
-      if (s.combatOnly) continue;
-      const target = s.fromBuff ? buffPct : (s.percent ? pct : flat);
-      target[s.stat] = (target[s.stat] ?? 0) + s.value;
-    }
-    for (const s of p.subs) {
-      const target = s.percent ? pct : flat;
-      target[s.stat] = (target[s.stat] ?? 0) + s.value;
-    }
-  }
-  for (const b of computeSetBonuses(pieces, game?.sets ?? null)) {
-    const isRate = b.ap === "OAT_RATE";
-    const statKey = setBonusStatKey(b.st, isRate);
-    if (!statKey) continue;
-    const value = (isRate || PERCENT_STATS.has(statKey)) ? b.v / 10 : b.v;
-    const bucket = (isRate || PERCENT_STATS.has(statKey)) ? pct : flat;
-    bucket[statKey] = (bucket[statKey] ?? 0) + value;
-  }
-  return { flat, pct, buffPct };
-}
-
-function computeFinalStats(
-  baseline: NoGearStats,
-  scaling: ScalingMap,
-  pieces: GearPiece[],
-  game: GameData | null,
-): FinalStats {
-  const { flat, pct, buffPct } = aggregateGearBuckets(pieces, game);
-  return {
-    atk: composeMultStat(scaling.atk, flat.atk ?? 0, pct.atkPct ?? 0, buffPct.atkPct ?? 0),
-    def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0, buffPct.defPct ?? 0),
-    hp:  composeMultStat(scaling.hp,  flat.hp  ?? 0, pct.hpPct  ?? 0, buffPct.hpPct  ?? 0),
-    // SPD set bonus arrives as `pct.spd` (a %-of-baseline multiplier — Speed
-    // Set 2pc gives +13% SPD which lands as floor(baseline_spd × 0.13) on
-    // top of the flat sub adds). Verified against M.S.Ame: 158 × 0.13 = 20.
-    spd: baseline.spd + (flat.spd ?? 0) + (buffPct.spd ?? 0) + Math.floor(baseline.spd * (pct.spd ?? 0) / 100),
-    // Non-compound stats — plain additive: gear pct/flat + ooparts/EE main
-    // (IOT_BUFF → buffPct). Sum_rate and BuffRate are typically zero on
-    // these axes, so CalcFinalStat collapses to a simple sum.
-    crc: round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0)),
-    chd: round1(baseline.chd + (pct.critDmg  ?? 0) + (buffPct.critDmg  ?? 0)),
-    // EFF / RES go through the full CalcFinalStat path: gear OAT_RATE subs
-    // amplify sum_rate, talisman/EE/core-fusion OAT_RATE land in BuffRate.
-    // Validated on G.Beth (in-game 636 EFF) and Notia core (255 EFF, +50%
-    // rate baseline 120). Pre-baked flat approximation diverges whenever
-    // `combined` ≠ `baseForRate`.
-    eff: composeMultStat(scaling.eff, flat.eff    ?? 0, pct.eff    ?? 0, buffPct.eff    ?? 0),
-    res: composeMultStat(scaling.res, flat.effRes ?? 0, pct.effRes ?? 0, buffPct.effRes ?? 0),
-    dmgUp: round1(baseline.dmgInc + (pct.dmgUp ?? 0) + (flat.dmgUp ?? 0) + (buffPct.dmgUp ?? 0)),
-    dmgRed: round1(baseline.dmgRed + (pct.dmgReduce ?? 0) + (flat.dmgReduce ?? 0) + (buffPct.dmgReduce ?? 0)),
-    pen:    round1(baseline.pen    + (pct.pen ?? 0) + (flat.pen ?? 0) + (buffPct.pen ?? 0)),
-    // Crit Dmg Red — no character baseline, gear-only (substat / set bonus).
-    // Both flat and pct share the same `critDmgReduce` bucket key via
-    // ST_E_CRI_DMG_REDUCE in stats.ts.
-    critDmgRed: round1((pct.critDmgReduce ?? 0) + (flat.critDmgReduce ?? 0) + (buffPct.critDmgReduce ?? 0)),
-  };
-}
-
-/** Map an ST_xxx stat type + OAT_RATE flag to the engine bucket key. Mirrors
- *  the GAME_STAT table in core/stats.ts; kept local to avoid pulling it into
- *  the design layer. Two static maps (rate / add) keep `setBonusStatKey` a
- *  pure `Record.get`-shaped call instead of a switch chain. */
-const SET_BONUS_KEY_RATE: Record<string, string> = {
-  ST_ATK: "atkPct", ST_DEF: "defPct", ST_HP: "hpPct",
-  ST_SPEED: "spd", ST_CRITICAL_RATE: "critRate", ST_CRITICAL_DMG_RATE: "critDmg",
-  ST_DMG_BOOST: "dmgUp", ST_DMG_REDUCE_RATE: "dmgReduce",
-  ST_BUFF_CHANCE: "eff", ST_BUFF_RESIST: "effRes", ST_PIERCE_POWER_RATE: "pen",
-};
-const SET_BONUS_KEY_ADD: Record<string, string> = {
-  ST_ATK: "atk", ST_DEF: "def", ST_HP: "hp",
-  ST_SPEED: "spd", ST_CRITICAL_RATE: "critRate", ST_CRITICAL_DMG_RATE: "critDmg",
-  ST_DMG_BOOST: "dmgUp", ST_DMG_REDUCE_RATE: "dmgReduce",
-  ST_BUFF_CHANCE: "eff", ST_BUFF_RESIST: "effRes", ST_PIERCE_POWER_RATE: "pen",
-};
-function setBonusStatKey(st: string, isRate: boolean): string | null {
-  return (isRate ? SET_BONUS_KEY_RATE : SET_BONUS_KEY_ADD)[st] ?? null;
-}
 
 /** Per-stat-axis dump spec — pairs the engine stat key with its `*Pct` /
  *  flat bucket name in the aggregated gear maps. EFF/RES use unsuffixed
  *  flat/pct keys (gear EFF subs land in `flat.eff` / `pct.eff`) which
  *  differs from ATK/DEF/HP (suffixed `*Pct`). */
 type ScalingAxis = "atk" | "def" | "hp" | "eff" | "res";
-type ScalingMap = Record<ScalingAxis, StatScaling>;
 const DUMP_AXES: ReadonlyArray<{ key: ScalingAxis; flatKey: string; pctKey: string }> = [
   { key: "atk", flatKey: "atk", pctKey: "atkPct" },
   { key: "def", flatKey: "def", pctKey: "defPct" },
@@ -879,7 +646,6 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
       }
       const snap: Partial<FinalStats> = {};
       for (const row of FINAL_ROWS) {
-        if (row.hideIfZero && !stats[row.key]) continue;
         snap[row.key] = stats[row.key];
       }
       return { ...prev, [uid]: wrapEntry(snap) };

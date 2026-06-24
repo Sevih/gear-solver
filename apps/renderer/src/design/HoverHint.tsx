@@ -90,7 +90,7 @@ export function HoverHint({ name, text, className }: HoverHintProps) {
           ?
         </span>
       </span>
-      {open && pos && typeof document !== "undefined" && createPortal(
+      {open && pos && createPortal(
         <div
           id="hover-hint"
           role="tooltip"

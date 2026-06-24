@@ -1,53 +1,92 @@
 # Data schema (captured)
 
-Decoded from the Outerplane game server (`glb-game…:38001`). Capture/decode details:
-[tools/capture/README.md](../tools/capture/README.md). All bodies are
-`{"msg":"<hex>"}` → hex → repeating-XOR (`ASLDKGFJASPODIFJSOWEI`) → UTF-8 JSON.
+Décodage des réponses du serveur Outerplane (`glb-game…:38001`).
+Pipeline de capture/déchiffrement : [tools/capture/README.md](../tools/capture/README.md).
+Toutes les réponses : `{"msg":"<hex>"}` → hex → repeating-XOR
+(`ASLDKGFJASPODIFJSOWEI`) → UTF-8 JSON.
 
-## `/user/item` → `ItemList[]` (gear & items)
+Pour le **mapping OptionID/ItemID/CharID → tables dérivées** et les
+**formules** qui consomment ces données : [reference.md](reference.md).
 
-| field | meaning |
-|-------|---------|
-| `ItemUID` | unique instance id (string) |
-| `CharUID` | equipped character UID; `"0"` = unequipped |
-| `ItemID` | template id → **Outerpedia equipment DB** (slot, set, rarity, base main stat) |
-| `BreakLimitLevel` | breakthrough tier T0–T4 |
-| `SmeltingCount` | reforge count |
+---
+
+## `/user/item` → `ItemList[]`
+
+| Champ | Sémantique |
+|-------|------------|
+| `ItemUID` | id d'instance unique (string) |
+| `CharUID` | UID du héros équipé ; `"0"` = libre |
+| `ItemID` | template id → `data/derived/equipment.json` (slot, set, rarity, image, effectIcon, classLimit) |
+| `BreakLimitLevel` | breakthrough T0–T4 |
+| `SmeltingCount` | nombre de reforges déjà spent |
 | `SingularityLevel` / `Step` / `OptionID` | Singularity Ascension (+11→+15) |
-| `IsLock` | 1 = locked |
-| `OptionList[]` | main stat option id(s) — encoding TBD |
-| `SubOptionList[]` | substats: `{ OptionID, Level, BaseLevel }` |
+| `IsLock` | 1 = pièce verrouillée |
+| `Exp` | XP cumulée — résolue en `enhanceLevel` via la courbe `ItemEnchantTemplet` |
+| `OptionList[]` | OptionIDs du main stat (1-2 entrées) |
+| `SubOptionList[]` | substats : `{OptionID, Level, BaseLevel}` |
 
-A row is **gear** iff `SubOptionList` is non-empty (stackables have it empty).
+**Gear vs item stackable** : `isGear(item, game)` retourne vrai ssi
+`game.equipment[ItemID]` existe (i.e. la template est connue comme une
+pièce d'équipement). Les stackables (orbes / matériaux) sont droppés.
 
-### Substats
+### Substats / gems
 
-- `Level` = total ticks (yellow initial + orange reforge).
-- `BaseLevel` = initial yellow ticks. **Reforge ticks = Level − BaseLevel.**
-- Value = ticks × per-tick value (per-tick TBD).
-- Observed `OptionID`s: **160001–160013** (13 stat types). A trailing `{OptionID:0}` line
-  is padding and is dropped.
+- `Level` = total ticks ; in-game on affiche `LV (Level + 1)`.
+- `BaseLevel` = initial yellow ticks. **Reforge ticks = `Level − BaseLevel`.**
+- Valeur résolue = `(Level + 1) × per-tick value` (de `ItemOptionTemplet.v`,
+  divisé par 10 si percent display).
+- `OptionID = 0` = padding (skippé).
+- **Pour Talisman/EE** : `SubOptionList[i]` = OptionID du gem socketé au
+  slot `i`. Convention `gemSlots: number[]` length 5 (`0` = empty slot,
+  5e gated par `enhanceLevel ≥ 5` en jeu).
 
-### Main stat (`OptionList`) — encoding to decode
+### Main stat
 
-Observed combos and frequency from one account:
-`(5024,5048)`, `(0,0)`, `(4024,0)`, `(3024,0)`, `(6024,6048)`, `(24,94)`, `(24,95)`, `(24,96)`.
-Hypothesis: `<statClass>024` / `<statClass>048` encode stat type + tier; `(24, 94|95|96)`
-a different family. **TODO: confirm.**
+`OptionList[]` carries 1-2 OptionIDs. Résolu via `resolveStat(optionId, 1, game.options)` :
+- IOT_STAT (option directe) → flat ou percent selon `ap` (OAT_ADD vs OAT_RATE)
+  et la stat (CRC/CHD/DMG sont percent même en OAT_ADD).
+- IOT_BUFF (Talisman) → indirection via `BuffTemplet[buffId][enhanceLevel]`
+  pour avoir le row matching le niveau de la pièce.
+- Singularity (`SingularityOptionID`) → ajouté en `fromBuff: true, source: "singularity"`.
+- EE level-gated passives (`game.eePassives[ItemID]`) → ajoutés quand
+  `enhanceLevel >= levelThreshold`, `source: "eePassive"`.
 
-## `/user/character` → `CharList[]` (+ `SlotList`, `CharPieceList`, `DeckList`)
+Scaling main pour pièces non-talisman : voir [reference.md §1.3](reference.md#13-parse-packagescoresrcparsets).
 
-Per character: `CharUID`, `CharID`, `TransStar` (stars), `CostumeID`, skill levels
-(`First`/`Second`/`Ultimate`/`ChainPassive`), `TrustExp`, `LevelMaxStep`, `IsLock`.
-`SlotList` likely maps character → equipped item UIDs (**shape TBD — datamine**).
+---
 
-## Other endpoints
+## `/user/character` → `CharList[]`
 
-`/user/asset` (currencies), `/user/info`, `/user/lobby`, `/user/etc`, `/item/customInfo`.
+Par character : `CharUID, CharID, TransStar (stars), CostumeID, LevelMaxStep,
+IsLock, Exp, FusionCharID`. Skills sous `Skills`:
+`{First, Second, Ultimate, ChainPassive}`.
 
-## OPEN TASK — `OptionID` → stat table
+**Slots équipés** : `SlotList` mappe `CharUID → ItemUIDList[8]` dans le
+même fichier (8 slots = weapon, helmet, armor, gloves, boots, accessory,
+ooparts, exclusive).
 
-Cross-check captured items against the in-game display to fill `stats.ts`. Reference point:
-the equipped weapon "Surefire Greatsword [Singularity]" displayed
-**ATK 61.8% / Crit Chance 12% / Crit DMG 24% / DMG Increase 8% / Speed 9**, whose
-`SubOptionList` OptionIDs give the mapping anchor.
+**Presets** : `PresetList` — array de `{Name (base64), ItemUIDList[8]}`.
+Les noms sont base64-encoded UTF-8. Détecté à la lecture (Cf.
+`decodeBase64Utf8` dans parse.ts).
+
+---
+
+## Autres endpoints captés
+
+`/user/asset` (currencies), `/user/info`, `/user/lobby`, `/user/etc`,
+`/item/customInfo`, `/archive/info` (codex level), `/gift/info` (geas
+node levels par account).
+
+---
+
+## Cycle de re-capture après patch jeu
+
+1. `data/sync.ps1` re-copie `data/game/*.json` depuis le checkout outerpedia-v2.
+2. `npm run data:build` régénère `data/derived/*.json` consommés par le moteur.
+3. Re-capture le compte si la version a changé (`tools/capture/capture.ps1`).
+4. Tests verts (`npm test --workspaces`).
+5. Re-validate les stat-locks via le toggle debug de l'app, refresh des
+   snapshots dans `data/stat-locks.json` si nécessaire.
+
+Stale-detection est manuelle pour l'instant (cf.
+[todo.md](todo.md) "Snapshot data versioning").

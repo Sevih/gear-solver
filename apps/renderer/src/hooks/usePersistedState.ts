@@ -26,7 +26,7 @@ export function usePersistedState<T>(
 
   const [value, setValue] = useState<T>(() => {
     try {
-      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
+      const raw = localStorage.getItem(key);
       if (raw != null) {
         const des = codecRef.current?.deserialize ?? (JSON.parse as (s: string) => T);
         return des(raw);
@@ -40,9 +40,9 @@ export function usePersistedState<T>(
   useEffect(() => {
     try {
       const ser = codecRef.current?.serialize ?? (JSON.stringify as (v: T) => string);
-      if (typeof localStorage !== "undefined") localStorage.setItem(key, ser(value));
+      localStorage.setItem(key, ser(value));
     } catch {
-      // localStorage full / disabled — silently skip persistence
+      // localStorage quota exceeded — silently skip persistence
     }
   }, [key, value]);
 

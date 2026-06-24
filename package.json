@@ -9,13 +9,13 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @gear-solver/web",
-    "build": "npm run build -w @gear-solver/core && npm run build -w @gear-solver/web",
-    "test": "npm run test -w @gear-solver/core",
+    "dev": "npm run dev -w @gear-solver/renderer",
+    "build": "npm run build -w @gear-solver/core && npm run build -w @gear-solver/renderer",
+    "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "data:build": "node data/build.mjs",
-    "desktop:dev": "concurrently -k -n vite,electron -c cyan,yellow \"npm run dev -w @gear-solver/web\" \"wait-on http-get://localhost:5173 && npm run dev -w @gear-solver/desktop\"",
-    "desktop:build": "npm run build -w @gear-solver/web && npm run build -w @gear-solver/desktop",
+    "desktop:dev": "concurrently -k -n vite,electron -c cyan,yellow \"npm run dev -w @gear-solver/renderer\" \"wait-on http-get://localhost:5173 && npm run dev -w @gear-solver/desktop\"",
+    "desktop:build": "npm run build -w @gear-solver/renderer && npm run build -w @gear-solver/desktop",
     "release": "node scripts/release.mjs"
   },
   "devDependencies": {

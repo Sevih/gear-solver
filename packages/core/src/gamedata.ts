@@ -184,9 +184,9 @@ export type GemsTable = Record<string, GemDef>;
  *     show on the character sheet but DO appear as the rolled effect on
  *     the gear — collected here so the inventory UI can display them.
  *
- *  Math-side aggregators (`composeCharStats`, `score.sumTotals`,
- *  `aggregateGearBuckets`) MUST skip `combatOnly: true` entries; the engine
- *  forwards the flag through `RolledStat.combatOnly` from `parse.ts`.
+ *  Math-side aggregators (`composeCharStats`, `aggregateGearBuckets`)
+ *  MUST skip `combatOnly: true` entries; the engine forwards the flag
+ *  through `RolledStat.combatOnly` from `parse.ts`.
  *
  *  Shape extends `StatOption` so `resolveOption` consumes it directly.
  *  `name` carries the in-game narrative label (e.g. "DMG Increase to

@@ -5,10 +5,10 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "moduleResolution": "Bundler",
     "noEmit": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "vitest/globals"],
     "paths": {
       "@gear-solver/core": ["../../packages/core/src/index.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "test"]
 }

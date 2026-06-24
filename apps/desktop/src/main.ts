@@ -9,7 +9,7 @@
  *   Vite is no longer running, so we boot an in-process HTTP server
  *   (see server.ts) that mirrors every endpoint the renderer expects —
  *   `/api/capture/*`, `/gamedata/*`, `/captured/*`, `/img/*` (redirected to
- *   outerpedia.com), plus serving the built `apps/web/dist`. The window is
+ *   outerpedia.com), plus serving the built `apps/renderer/dist`. The window is
  *   then loaded against that local server's ephemeral 127.0.0.1 port.
  */
 import { app, BrowserWindow, dialog } from "electron";

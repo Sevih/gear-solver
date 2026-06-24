@@ -5,7 +5,7 @@
  *
  * Layout assumptions:
  *  - Dev: the compiled main lives at `apps/desktop/dist/main.js`; all repo
- *    artefacts (data/derived, tools/capture, apps/web/dist, the outerpedia
+ *    artefacts (data/derived, tools/capture, apps/renderer/dist, the outerpedia
  *    image checkout) live at known offsets relative to the repo root.
  *  - Prod: `electron-builder` copies the bundled trees under
  *    `process.resourcesPath` (see the `extraResources` mapping in this
@@ -45,9 +45,9 @@ export const CAPTURE_OUT = IS_DEV
   ? join(CAPTURE_DIR, "out")
   : join(app.getPath("userData"), "capture-out");
 
-/** Built renderer (apps/web/dist) — served by the embedded HTTP server in
+/** Built renderer (apps/renderer/dist) — served by the embedded HTTP server in
  *  prod; ignored in dev where Vite serves the same files with HMR. */
-export const WEB_DIST = IS_DEV ? join(REPO_ROOT, "apps", "web", "dist") : join(RES, "web", "dist");
+export const RENDERER_DIST = IS_DEV ? join(REPO_ROOT, "apps", "renderer", "dist") : join(RES, "renderer", "dist");
 
 /** Bundled adb.exe (+ AdbWinApi.dll / AdbWinUsbApi.dll alongside). The dev
  *  fallback points at the LDPlayer-installed copy — the bundled tree only

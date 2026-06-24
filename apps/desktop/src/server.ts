@@ -1,6 +1,6 @@
 /**
  * In-process HTTP server that hosts everything the renderer needs:
- *  - Built `apps/web/dist/*` at `/`
+ *  - Built `apps/renderer/dist/*` at `/`
  *  - `/gamedata/*`  → DERIVED game data (data/derived in dev, bundled tree in prod)
  *  - `/captured/*`  → captured account JSON (tools/capture/out in dev, userData in prod)
  *  - `/img/*`       → either the local outerpedia-v2 checkout (dev) or a 302 to
@@ -8,7 +8,7 @@
  *  - `/api/capture/{run,disarm,status}` → wraps the PowerShell pipeline
  *  - `/api/stat-locks` GET/POST → stat regression locks
  *
- * Mirrors the Vite-middleware behavior (apps/web/vite.config.ts) so the
+ * Mirrors the Vite-middleware behavior (apps/renderer/vite.config.ts) so the
  * renderer code is identical across `npm run desktop:dev` (Vite) and a
  * packaged build (this server). ETag-based revalidation on data files keeps
  * the renderer fast after the first hit; images use a 1-day max-age.
@@ -36,10 +36,10 @@ import {
   DERIVED,
   IS_DEV,
   STAT_LOCKS,
-  WEB_DIST,
+  RENDERER_DIST,
   findOuterpediaImagesDev,
 } from "./paths.js";
-import { detectEmulators, pickEmulator, pickPort, preflight, type DetectedEmulator } from "./emulator-detect.js";
+import { detectEmulators, pickEmulator, pickPort, preflight } from "./emulator-detect.js";
 
 /** Public outerpedia.com image base — used in prod only to short-circuit
  *  every `/img/*` request to the publicly hosted asset. Override at runtime
@@ -100,7 +100,7 @@ function tryMount(req: IncomingMessage, res: ServerResponse, url: string, prefix
 }
 
 /** Spawn a PowerShell script and stream its stdout/stderr verbatim. The
- *  client (apps/web/src/capture.ts) consumes lines and looks for the
+ *  client (apps/renderer/src/capture.ts) consumes lines and looks for the
  *  `__EXIT__:<code>` sentinel that we emit when the child exits. We listen
  *  on 'exit' rather than 'close' because capture.ps1 grandchildren mitmdump
  *  via Start-Process — inherited pipe handles would otherwise keep 'close'
@@ -322,12 +322,12 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   // SPA fallback: any unknown path serves index.html so client-side state
   // (currently tab name in usePersistedState) survives a hard reload.
   const stripped = url === "/" ? "/index.html" : url;
-  const file = normalize(join(WEB_DIST, stripped));
-  if (file.startsWith(WEB_DIST) && existsSync(file) && statSync(file).isFile()) {
+  const file = normalize(join(RENDERER_DIST, stripped));
+  if (file.startsWith(RENDERER_DIST) && existsSync(file) && statSync(file).isFile()) {
     serveStatic(req, res, file, "etag");
     return;
   }
-  serveStatic(req, res, join(WEB_DIST, "index.html"), "etag");
+  serveStatic(req, res, join(RENDERER_DIST, "index.html"), "etag");
 }
 
 /** Tear the capture pipeline down synchronously, if it's still armed. Used

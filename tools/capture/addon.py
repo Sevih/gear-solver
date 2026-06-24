@@ -29,7 +29,7 @@ WANT = {
     "/user/etc": "user_etc",
     "/item/customInfo": "item_customInfo",
     # Codex (Hero Archive) + Geas (Gift tree) per-account progression — drives
-    # the no-gear baseline composer in apps/web's BuildsScreen.
+    # the no-gear baseline composer in apps/renderer's BuildsScreen.
     "/archive/info": "user_archive",
     "/gift/info": "user_gift",
 }

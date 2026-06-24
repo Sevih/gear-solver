@@ -2,7 +2,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
-import { resolveOption } from "@gear-solver/core";
 import { cx } from "../design/cx.js";
 import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
 import { CharFace, EquipmentIcon, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
@@ -14,15 +13,6 @@ import { toUiPiece, type UiPiece } from "../design/adapter.js";
 import { GameText } from "../design/GameText.js";
 import { HoverHint } from "../design/HoverHint.js";
 
-// ── tiny atoms ──────────────────────────────────────────────────────────
-function Search({ className = "h-3.5 w-3.5" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 14 14" className={className} fill="none" stroke="currentColor" strokeWidth={1.4}>
-      <circle cx={6} cy={6} r={4} />
-      <path d="M9 9 L12 12" strokeLinecap="round" />
-    </svg>
-  );
-}
 // ── quality tiers (shared between filter panel + detail panel) ─────────
 // Kept here (above FilterState) so both the filter UI and the inline
 // per-item Quality bar in ItemDetail pull from the same table. Tier name
@@ -1093,25 +1083,6 @@ function GemPanel({ slots }: { slots: NonNullable<UiPiece["gemSlots"]> }) {
   );
 }
 
-/** Resolve a {st, ap, v} stat triple to a display row (icon + long label +
- *  signed value). Used for set p2/p4 effects + Singularity option entries.
- *  Returns null when the stat key isn't in GAME_STAT (e.g. ST_NONE on sets
- *  whose effect lives only in `desc`) — callers must check beforehand if
- *  they need to skip surrounding chrome too. */
-function ResolvedEffectRow({ st, ap, v }: { st: string; ap: string; v: number }) {
-  const resolved = resolveOption({ st, ap, v }, 1);
-  if (!resolved) return null;
-  const sign = resolved.value < 0 ? "" : "+";
-  const value = resolved.percent ? `${sign}${resolved.value}%` : `${sign}${resolved.value}`;
-  return (
-    <div className="flex items-center gap-2 font-mono text-[12px] tabular-nums">
-      <StatIcon stat={resolved.stat} size={16} className="shrink-0" />
-      <span className="flex-1 text-white">{statLong(resolved.stat)}</span>
-      <span className="text-emerald-200">{value}</span>
-    </div>
-  );
-}
-
 /** Render one piece of the 2-pc / 4-pc effect block. The label column is
  *  always shown (user wants the structural 2pc/4pc rows visible regardless
  *  of the set). The value column shows the canonical in-game prose pulled
@@ -1282,7 +1253,7 @@ function ItemDetail({
         {piece.multiTierPassive && (() => {
           const tiers = piece.multiTierPassive.tiers;
           const upgrade = tiers.find((t, i) => i > 0 && !t.isAdd);
-          const visible = tiers.filter((t, i) => {
+          const visible = tiers.filter((_t, i) => {
             if (!upgrade) return true;
             // Only hide the base, and only once the upgrade is actually live.
             if (i === 0 && upgrade.active) return false;

@@ -242,14 +242,20 @@ export function parseInventory(
   return { gear, characters, presets };
 }
 
-/** Decode a base64 string to UTF-8. Falls back to the raw input on malformed
- *  payloads so a single bad preset name doesn't blow up the whole import. */
+/** Decode a base64 string to UTF-8 using `atob` + `TextDecoder` — both are
+ *  globals in Node 20+ (the project's `engines.node`) and in Electron's
+ *  Chromium renderer. Core's tsconfig omits the DOM lib (runtime-agnostic
+ *  by design), so we access them via a typed `globalThis` view instead of
+ *  forcing every consumer to include lib.dom. */
 function decodeBase64Utf8(b64: string): string {
+  const g = globalThis as unknown as {
+    atob: (s: string) => string;
+    TextDecoder: new (label?: string) => { decode(input: Uint8Array): string };
+  };
   try {
-    if (typeof Buffer !== "undefined") return Buffer.from(b64, "base64").toString("utf-8");
-    const bin = atob(b64);
-    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-    return new TextDecoder("utf-8").decode(bytes);
+    const bin = g.atob(b64);
+    const bytes = Uint8Array.from(bin, (c: string) => c.charCodeAt(0));
+    return new g.TextDecoder("utf-8").decode(bytes);
   } catch {
     return b64;
   }
