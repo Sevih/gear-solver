@@ -167,8 +167,11 @@ function matchesFilters(p: UiPiece, f: FilterState): boolean {
   // Equipped pieces hidden when the player ticked "Exclude equipped gear"
   // in the modal — useful when looking for swappable inventory.
   if (!f.showEquipped && p.status === "equipped") return false;
-  if (f.query) {
-    const q = f.query.toLowerCase();
+  // Trim before testing so a whitespace-only query is a no-op here too —
+  // otherwise it filters the grid while `activeFilterCount` (which trims)
+  // shows no active filter, an invisible mismatch.
+  const q = f.query.trim().toLowerCase();
+  if (q) {
     const hay = `${p.name} ${p.slot ?? ""} ${p.rarity} ${p.main.map((m) => m.label).join(" ")} ${p.subs.map((s) => s.stat).join(" ")}`.toLowerCase();
     if (!hay.includes(q)) return false;
   }
@@ -414,6 +417,34 @@ function FilterModal({
 
         {/* ── body: scrollable sections ── */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {/* Search — matches name / slot / rarity / main / sub labels (the
+              same `hay` matchesFilters builds). Reintroduced here after the
+              old top-bar field was dropped: `query` still lived in the state +
+              codec + matchers, so without an input a stale persisted value
+              filtered the grid with no way to clear it. */}
+          <ModalSection label="Search">
+            <div className="relative">
+              <input
+                type="text"
+                value={draft.query}
+                onChange={(e) => setDraft({ ...draft, query: e.target.value })}
+                placeholder="Name, slot, rarity, stat…"
+                className="w-full rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 pr-7 text-[12px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
+              />
+              {draft.query && (
+                <button
+                  type="button"
+                  onClick={() => setDraft({ ...draft, query: "" })}
+                  aria-label="Clear search"
+                  className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-white/50 hover:bg-white/8 hover:text-white"
+                >
+                  <svg viewBox="0 0 14 14" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
+                    <path d="M3 3 L11 11 M11 3 L3 11" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </ModalSection>
           {/* Star Level + Grade share a row — both are short pill lists,
               stacking them wastes vertical space the heavier sections
               (stats / sets) below could use. */}

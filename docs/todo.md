@@ -172,14 +172,11 @@
 
 > 1660 lignes. Audit `InventoryScreen.tsx`.
 
-- [ ] 🔴 **Filtre `query` = code mort qui agit encore** — `query` vit dans le state, le
-      codec de persistance (`gs.inv.filters.v3`), `matchesFilters` (~L170) et
-      `activeFilterCount` (~L313), **mais aucun champ de recherche ne l'alimente** (disparu
-      à la migration FilterPanel → modal). Conséquences : une vieille valeur localStorage
-      filtre la grille sans moyen UI de la retirer ; `matchesFilters` teste `if (f.query)`
-      alors qu'`activeFilterCount` teste `.trim() !== ""` → une query d'espaces filtre mais
-      n'incrémente pas le badge. Reco : réintroduire le champ recherche dans la modal (le
-      `hay` L172 est déjà construit) plutôt que supprimer `query`.
+- [x] 🔴 **Filtre `query` = code mort qui agit encore** — ✅ corrigé : champ recherche
+      réintroduit en tête du body de `FilterModal` (lié à `draft.query` + bouton clear),
+      utilise le `hay` existant. Incohérence réglée : `matchesFilters` trim désormais la
+      query (`if (q)` après `.trim()`) comme `activeFilterCount` → une query d'espaces ne
+      filtre plus en douce. `InventoryScreen.tsx`.
 - [ ] 🟡 **`FilterModal` ne ferme pas avec Échap + pas de focus trap/autofocus** (~L382-384) —
       ferme au clic backdrop + croix uniquement, incohérent avec le travail Esc sur les
       comboboxes (commit `a40932c`).
