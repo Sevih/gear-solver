@@ -529,6 +529,8 @@ interface BuildCardProps {
   /** Stable per-char updater for the note text. Empty `value` clears the
    *  entry instead of storing "". */
   onChangeNote: (uid: string, value: string) => void;
+  /** Jump to the Builder tab with this card's hero preselected. */
+  onOptimize: (heroUid: string) => void;
 }
 
 const NOTE_MAX = 200;
@@ -588,7 +590,7 @@ function AdviceList({ items }: { items: AdviceItem[] }) {
  *  lock toggles, so unaffected cards skip the render entirely). All handlers
  *  use the functional updater form of `setLocks` so they never depend on
  *  the current `locks` map and stay referentially stable. */
-const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, debug, note, onChangeNote }: BuildCardProps) {
+const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, debug, note, onChangeNote, onOptimize }: BuildCardProps) {
   const { char, equipped, stats, baseline, scaling, rawPieces, level, bp, meta, displayCharId, displayName, presetName } = entry;
   // Auto-detected observations — recomputed only when the entry identity
   // changes (composedRoster ref stays stable across filter/lock toggles).
@@ -774,7 +776,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
             </svg>
           </button>
         )}
-        <CyanButton size="sm">Optimize →</CyanButton>
+        <CyanButton size="sm" onClick={() => onOptimize(char.uid)}>Optimize →</CyanButton>
       </div>
     </div>
   );
@@ -792,9 +794,12 @@ interface BuildsScreenProps {
   /** When true, surface the stat-lock / drift / copy-dump UI used for
    *  stat-formula regression work. Default off — Settings → Debug. */
   debug: boolean;
+  /** Jump to the Builder tab with this hero preselected — wired to each
+   *  card's "Optimize →" button. */
+  onOptimize: (heroUid: string) => void;
 }
 
-export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, debug }: BuildsScreenProps) {
+export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, debug, onOptimize }: BuildsScreenProps) {
   // Roster filter state — name search + element/class multi-toggles. Empty
   // sets mean "no filter on this axis".
   const [filtersRaw, setFilters] = usePersistedState<RosterFilters>(
@@ -969,6 +974,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
             debug={debug}
             note={notes[entry.char.uid] ?? ""}
             onChangeNote={setNote}
+            onOptimize={onOptimize}
           />
         ))}
       </div>

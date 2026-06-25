@@ -45,6 +45,12 @@ interface BuilderScreenProps {
   userGeasLevels: UserGeasLevels | null;
   /** Resolved codex level 0..11 — composer fallback if null. */
   userCodexLevel: number | null;
+  /** Hero UID to preselect on mount — set when the user clicks "Optimize →"
+   *  on the Builds tab. Read once via the `selectedUid` initializer. */
+  initialHeroUid?: string | null;
+  /** Called once on mount after consuming `initialHeroUid`, so the parent can
+   *  clear it (a later plain visit to the Builder shouldn't re-preselect). */
+  onInitialHeroConsumed?: () => void;
 }
 
 /** Composed snapshot for the selected hero — drives the Stats panel readout
@@ -327,8 +333,14 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel }: BuilderScreenProps) {
-  const [selectedUid, setSelectedUid] = useState<string | null>(null);
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, initialHeroUid, onInitialHeroConsumed }: BuilderScreenProps) {
+  const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
+  // Consume the preselect once on mount so the parent can clear it (the
+  // initializer above already captured the value into `selectedUid`).
+  useEffect(() => {
+    if (initialHeroUid) onInitialHeroConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [filters, dispatch] = useReducer(solverFiltersReducer, INITIAL_FILTERS);
 
   // Solver state — orchestrator stays alive for the screen's lifetime so

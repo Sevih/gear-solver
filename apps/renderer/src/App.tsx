@@ -46,6 +46,10 @@ export function App() {
   // tab is a regression-debug aid for stat-formula work, not a normal user
   // feature. Toggling on in Settings reveals the lock buttons + drift badges.
   const [debugStatLocks, setDebugStatLocks] = usePersistedState<boolean>("gs.debug.statLocks", false);
+  // Hero to preselect when the Builder tab opens — set by the Builds tab's
+  // "Optimize →" button, consumed (and cleared) by BuilderScreen on mount so
+  // a later normal visit to the Builder doesn't re-preselect a stale hero.
+  const [builderHero, setBuilderHero] = useState<string | null>(null);
 
   async function refreshInventory(label: string) {
     const r = await autoImport();
@@ -192,8 +196,8 @@ export function App() {
       <main className="min-h-[calc(100vh-60px)]">
         <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-500">Loading {tab.toLowerCase()}…</div>}>
           {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} />}
-          {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} debug={debugStatLocks} />}
-          {tab === "Builder" && <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} />}
+          {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} />}
+          {tab === "Builder" && <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} />}
         </Suspense>
       </main>
 

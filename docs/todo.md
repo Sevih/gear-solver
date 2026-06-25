@@ -128,10 +128,12 @@
 > Roster équipé/composé (≠ "Saved builds" du Builder, qui vivent dans `savedBuilds.ts`).
 > Toute l'UI stat-lock/drift/copy-dump est `debug`-only (`gs.debug.statLocks`).
 
-- [ ] 🔴 **Bouton « Optimize → » non câblé** — `<CyanButton size="sm">Optimize →</CyanButton>`
-      sans `onClick`, présent sur chaque carte. Fix : basculer vers la tab Builder en
-      présélectionnant le héros (`setTab("Builder")` + `selectedUid`) → remonter un callback
-      depuis `App.tsx`. `BuildsScreen.tsx:777`, `BuilderScreen.tsx:350+`.
+- [x] 🔴 **Bouton « Optimize → » non câblé** — ✅ corrigé : `App` tient `builderHero`,
+      passe `onOptimize(uid)` à `BuildsScreen` (→ `BuildCard` → bouton) qui fait
+      `setBuilderHero(uid) + setTab("Builder")`. `BuilderScreen` reçoit `initialHeroUid`
+      (init de `selectedUid`) et `onInitialHeroConsumed` (clear au mount pour ne pas
+      re-présélectionner lors d'une visite normale). `App.tsx`, `BuildsScreen.tsx`,
+      `BuilderScreen.tsx`.
 - [ ] 🔴 **`computeAdvice` est un stub (toujours `[]`)** — toute l'infra
       `AdviceItem`/`AdviceList`/`ADVICE_REQUIRED_SLOTS` est branchée mais ne produit rien.
       Décision : implémenter de vraies règles (set cassé, main off-stat, pièce manquante…)
