@@ -699,13 +699,22 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
         )}
       </div>
 
-      <div className="shrink-0">
-        <div className="grid grid-cols-4 grid-rows-2 gap-1.5">
+      <div className="relative shrink-0">
+        <div className={cx("grid grid-cols-4 grid-rows-2 gap-1.5", equipped.size === 0 && "opacity-40")}>
           {BUILD_SLOT_ORDER.map((id) => {
             const p = equipped.get(id);
             return <SlotMini key={id} slot={id} piece={p?.iconPiece ?? null} size={55} />;
           })}
         </div>
+        {equipped.size === 0 && (
+          // Roster lists every hero, so unequipped ones show an empty grid —
+          // label it instead of leaving a silent blank.
+          <div className="pointer-events-none absolute inset-0 grid place-items-center">
+            <span className="rounded-md border border-white/12 bg-black/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/70">
+              No gear
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="min-w-0 flex-1">
@@ -950,6 +959,12 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
       });
   }, [composedRoster, filters, lockedStats, debug]);
 
+  // Heroes in the current (filtered) view with at least one piece equipped —
+  // matches the tab badge's semantics (App counts distinct equipped chars).
+  // Surfacing both reconciles the two numbers: the badge is "equipped", the
+  // roster lists everyone, so the pill spells out "N equipped · M total".
+  const equippedCount = useMemo(() => roster.reduce((n, e) => n + (e.count > 0 ? 1 : 0), 0), [roster]);
+
   if (!inventory) {
     return <Empty title="No capture yet" subtitle="Arm capture and import your roster to see equipped builds here." />;
   }
@@ -960,7 +975,13 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
         f={filters}
         setF={setFilters}
         debug={debug}
-        trailing={<Pill tone="emerald">{roster.length} heroes</Pill>}
+        trailing={
+          <Pill tone="emerald">
+            <span title="Heroes with at least one piece equipped (matches the tab badge) · total heroes shown">
+              {equippedCount} equipped · {roster.length} total
+            </span>
+          </Pill>
+        }
       />
 
       <div className="flex flex-col gap-2 overflow-y-auto px-6 pb-6 pt-3" style={{ maxHeight: "calc(100vh - 130px)" }}>

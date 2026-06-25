@@ -139,14 +139,12 @@
       Décision : implémenter de vraies règles (set cassé, main off-stat, pièce manquante…)
       ou retirer le code mort. La fonction doit rester pure (no IO/Date, déterministe).
       `BuildsScreen.tsx:488-500`.
-- [ ] 🔴 **Incohérence roster complet vs équipés** *(fusionne builds #3 + #4)* — le badge
-      d'onglet = nb de héros **équipés** (`App.tsx:136`), la pill `{roster.length} heroes`
-      = **tous** les persos (`BuildsScreen.tsx:861,958`). Deux nombres pour la même tab +
-      des héros sans gear affichés avec une grille vide. Et `composeCharStats` +
-      `computeFinalStats` + `calcBattlePower` tournent pour **tous**, y compris sans gear.
-      Décision à trancher : la tab liste-t-elle tout le roster ou seulement les builds
-      équipés ? Si "équipés" → filtrer "au moins une pièce équipée" avant le compose
-      (règle le compteur ET la perf). `BuildsScreen.tsx:861-911`.
+- [x] 🔴 **Incohérence roster complet vs équipés** — ✅ décision : **garder tout le roster**.
+      Pill réconciliée → « N equipped · M total » (`equippedCount` = héros avec ≥1 pièce,
+      même sémantique que le badge d'onglet) + tooltip explicatif. Cartes sans gear :
+      grille dimmée (`opacity-40`) + label « No gear » au lieu d'une grille vide muette.
+      `BuildsScreen.tsx`. *(NB : compose/CP tourne toujours pour tous — perf non
+      adressée par choix « tout le roster » ; à profiler si besoin.)*
 - [ ] 🟠 **`useStatLocks` fetch/persist même hors debug** — `fetch("/api/stat-locks")` au
       montage + listener `beforeunload` alors que l'UI de lock est `debug`-only. Fix :
       gater le hook sur `debug`. `BuildsScreen.tsx:408-428`.
