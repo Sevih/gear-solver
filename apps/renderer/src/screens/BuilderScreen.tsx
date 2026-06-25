@@ -374,9 +374,19 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
   }, []);
 
   const startSolve = (mode: SolveMode) => {
-    if (!inventory || !game || !selectedUid) return;
+    // The SOLVE button is only gated on `selectedUid`, so it can be clicked
+    // while game data is still loading — surface that instead of bailing
+    // silently (user otherwise gets no feedback at all).
+    if (!selectedUid) return;
+    if (!inventory || !game) {
+      setSolveError("Game data is still loading — try again in a moment.");
+      return;
+    }
     const selected = inventory.characters.find((c) => c.uid === selectedUid);
-    if (!selected) return;
+    if (!selected) {
+      setSolveError("Selected hero was not found in the captured roster.");
+      return;
+    }
     if (!orchestratorRef.current) {
       orchestratorRef.current = new SolverOrchestrator({
         onProgress: (p) => setSolveProgress({ permutations: p.permutations, searched: p.searched, poolSizes: p.poolSizes ?? null }),
@@ -424,6 +434,19 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
 
   const selectedBuild = selectedBuildIdx != null ? solveResults[selectedBuildIdx] ?? null : null;
 
+  // When a solve yields no builds, an empty per-slot pool is almost always
+  // the cause (filters too strict, or the hero owns no piece for that slot).
+  // Surface exactly which slots collapsed to 0 so "0 builds" isn't a silent
+  // dead-end. Derived from the last solve's pool sizes (null until a solve
+  // runs → falls back to the generic "pick a hero" hint).
+  const emptyReason = useMemo(() => {
+    const ps = solveProgress.poolSizes;
+    if (!ps) return null;
+    const dead = Object.keys(ps).filter((s) => (ps[s]?.hit ?? 0) === 0);
+    if (dead.length === 0) return null;
+    return dead.map((s) => `${SLOT_BY[s]?.label ?? s}: 0 pieces after filters`).join(" · ");
+  }, [solveProgress.poolSizes]);
+
   // Saved-builds handlers — `selectedUid` gates everything; the UI hides /
   // disables the controls when no hero is picked so we don't have to thread
   // null-checks past these helpers' callers.
@@ -458,6 +481,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
     // Push the saved build to the results table (visual confirmation) AND
     // select it so the BottomGearBand renders its 8 pieces. Replaces the
     // last solve's results — user can re-solve to get them back.
+    // Clear any stale solve error so the red banner from a previous failed
+    // solve doesn't linger over a freshly restored build.
+    setSolveError(null);
     setSolveResults([b.build]);
     setSelectedBuildIdx(0);
     setLastSolveMode(b.mode);
@@ -585,6 +611,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
           onSelect={setSelectedBuildIdx}
           solving={solving}
           error={solveError}
+          emptyReason={emptyReason}
         />
         <RightSidebar
           canSave={selectedBuild != null}
@@ -1890,13 +1917,16 @@ function EffectBadge({ state }: { state: ChipState }) {
  * Middle area — results table + right sidebar
  * ───────────────────────────────────────────────────────────────────────── */
 function ResultsTable({
-  builds, selectedIdx, onSelect, solving, error,
+  builds, selectedIdx, onSelect, solving, error, emptyReason,
 }: {
   builds: SolveBuild[];
   selectedIdx: number | null;
   onSelect: (i: number | null) => void;
   solving: boolean;
   error: string | null;
+  /** Why the last solve returned nothing (e.g. a slot pool collapsed to 0
+   *  after filters). Null → show the generic "pick a hero" hint instead. */
+  emptyReason: string | null;
 }) {
   // Per-column min/max for the heatmap — recomputed when builds change.
   // Stats and ratings are computed once; reused across every row.
@@ -1979,8 +2009,15 @@ function ResultsTable({
             {builds.length === 0 && !solving && !error && (
               // 1 sets + 8 stats + N ratings + score + upg + actions.
               // Derived rather than hardcoded — TABLE_RATINGS can change.
-              <tr><td colSpan={1 + 8 + TABLE_RATINGS.length + 3} className="px-3 py-12 text-center text-[11px] italic text-white/40">
-                Pick a hero and click SOLVE to populate the results.
+              <tr><td colSpan={1 + 8 + TABLE_RATINGS.length + 3} className="px-3 py-12 text-center text-[11px] italic">
+                {emptyReason ? (
+                  <span className="text-amber-300/80">
+                    No builds — a slot has no pieces left after filtering.<br />
+                    <span className="not-italic font-mono text-[10.5px]">{emptyReason}</span>
+                  </span>
+                ) : (
+                  <span className="text-white/40">Pick a hero and click SOLVE to populate the results.</span>
+                )}
               </td></tr>
             )}
             {sortedBuilds.map((b) => {

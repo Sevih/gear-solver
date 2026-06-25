@@ -75,15 +75,14 @@
       somme des substats affichés ne matche pas les `finalStats` projetés. Piste : badge
       "(projeté/reforgé)" ou propager les pièces reforgées jusqu'au bandeau.
       `engine.ts:232-236,363`, `BuilderScreen.tsx:2336`.
-- [ ] 🔴 **Échecs silencieux (pas de feedback)** —
-      - `startSolve` fait `return` sans feedback si `game == null` (bouton SOLVE gardé
-        seulement sur `selectedUid`) → clic pendant le chargement data = rien.
-        `BuilderScreen.tsx:376-377,1014`.
-      - Filtres infaisables (pool d'un slot = 0) → 0 build sans explication. Ajouter
-        « slot X : 0 pièce après filtres ».
-- [ ] 🔴 **`restoreBuild` ne reset pas `solveError`** — le bandeau d'erreur rouge
-      persiste quand on clique un build sauvegardé après un solve échoué. Fix :
-      `setSolveError(null)` dans `restoreBuild`. `BuilderScreen.tsx:457-464`.
+- [x] 🔴 **Échecs silencieux (pas de feedback)** — ✅ corrigé :
+      - `startSolve` pose un `solveError` (« Game data is still loading… » / hero introuvable)
+        au lieu de `return` muet.
+      - État vide du `ResultsTable` : nouveau `emptyReason` dérivé de `poolSizes` →
+        liste les slots tombés à 0 après filtres (« Weapon: 0 pieces after filters »).
+        `BuilderScreen.tsx` (`startSolve`, `emptyReason`, `ResultsTable`).
+- [x] 🔴 **`restoreBuild` ne reset pas `solveError`** — ✅ corrigé :
+      `setSolveError(null)` ajouté en tête de `restoreBuild`. `BuilderScreen.tsx`.
 - [ ] 🟠 **Table de résultats non virtualisée** — `topN = 1000` par défaut, `ResultsTable`
       rend toutes les lignes (~1000 × ~20 cellules ≈ 20k nœuds DOM), `ResultRow` non-`memo`
       avec `onClick` recréé ×1000 à chaque tri/sélection. L'Inventory est virtualisé →
