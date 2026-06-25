@@ -444,6 +444,20 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
 
   // --- bundled data mounts ---
   if (tryMount(req, res, url, "/gamedata/", DERIVED, "etag")) return;
+  // A missing captured JSON is a normal state (the user may never have hit an
+  // optional endpoint like `/archive/info`); the renderer reads null as
+  // "absent". Serve 200 null instead of letting tryMount 404 — otherwise it's
+  // a red console error on every load.
+  if (url.startsWith("/captured/") && url.endsWith(".json")) {
+    const rel = decodeURIComponent(url.slice("/captured/".length).split("?")[0]!);
+    const file = normalize(join(CAPTURE_OUT, rel));
+    if (file.startsWith(CAPTURE_OUT) && !existsSync(file)) {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.end("null");
+      return;
+    }
+  }
   if (tryMount(req, res, url, "/captured/", CAPTURE_OUT, "etag")) return;
 
   // --- renderer (built Vite dist) ---

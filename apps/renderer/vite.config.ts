@@ -214,7 +214,20 @@ function localData(): Plugin {
           if (!url.startsWith(prefix)) continue;
           const rel = decodeURIComponent(url.slice(prefix.length));
           const file = normalize(join(dir, rel));
-          if (!file.startsWith(dir) || !existsSync(file)) {
+          if (!file.startsWith(dir)) {
+            res.statusCode = 404;
+            return res.end("not found");
+          }
+          if (!existsSync(file)) {
+            // A missing captured file is a normal state (e.g. the user never
+            // hit `/archive/info`, so user_archive.json was never written) —
+            // the renderer treats null as "absent". Serve 200 null instead of
+            // 404 so it doesn't show up as a red console error.
+            if (prefix === "/captured/" && extname(file).toLowerCase() === ".json") {
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "application/json");
+              return res.end("null");
+            }
             res.statusCode = 404;
             return res.end("not found");
           }
