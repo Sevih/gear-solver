@@ -23,24 +23,31 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   `data/stat-locks.json` regression snapshots.
 - **M5 — Solver core.** See entry below.
 - **M6 — Solver UX.** See entry below.
+- **M6.5 — Solver polish.** Cancel mid-solve (`MessageChannel` yield), Upg column
+  (calculée, triable, filtrable), Exclude-equipped multi-select, reforge simulation
+  (`simulateReforges`, projetée jusqu'au bottom band), allocation de gemmes recommandée.
+- **M7 (partiel) — Persistence.** Save/Remove build par héros + Filter presets par héros,
+  en **localStorage** (`lib/storage/`). Bouton Optimize → (Builds → Builder).
+- **Desktop Electron.** `apps/desktop` (main + serveur local + détection émulateur) —
+  fonctionnel en dev.
 
 ## Next
 
-### M6.5 — Solver polish
-- **Cancel mid-solve** : yield via `MessageChannel` toutes les ~50 ms pour que le
-  bouton Cancel interrompe vraiment la boucle synchrone (sinon : attend la fin
-  du chunk courant, 2-5 s typique).
-- **Action buttons** sidebar : Equip / Save Build / Remove Build / Select All / Deselect All — placeholders aujourd'hui.
-- **Exclude-equipped multi-select** : la liste `excludedHeroes` existe dans le
-  reducer mais aucun UI n'écrit dedans.
-- **Upg column** dans la table : nombre de slots améliorés vs build actuel.
-- **Reforge simulation** optionnelle (toggle "Use reforged stats" est visuel).
+### M7 (reste) — Persistence & sharing
+- **JSON import/export** des builds/presets (partage / backup) — pas encore implémenté.
+- **Versioning du snapshot `data/`** pour invalider les caches localStorage après un patch.
+- **Production build path** pour `data` (bake derived + snapshot dans le bundle prod).
 
-### M7 — Persistence & sharing
-- Persist inventory locally (IndexedDB); manual JSON import/export.
-- Filter presets per hero (save/load).
-- Production build path for `data` (bake derived + a chosen snapshot).
-- Optional: package as Tauri desktop if a native capture button is wanted.
+### M8 — Packaging desktop
+- Finaliser l'electron build (bake `data/derived` dans `resources`), bouton de capture
+  natif via IPC, **auto-update** (`electron-updater`).
+
+### Perf hot-path (au fil du profilage)
+- Accumulateur de buckets incrémental (`aggregateGearBuckets` re-somme tout par combo).
+- Virtualisation de la table de résultats (topN=1000).
+
+> Equip / Unequip **vers le jeu** : hors scope tant qu'aucune API jeu n'existe (le pipeline
+> de capture est read-only).
 
 ---
 
@@ -58,7 +65,7 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 ### M6 — Solver UX ✅
 - BuilderScreen (Fribbels-style dense layout) : 9 panneaux du haut, table résultats
   avec heatmap, bottom gear band 8 slots, footer fixé avec compteurs P/S/Results.
-- État centralisé via `useReducer(SolverFilters)` — 11 actions, tous les inputs contrôlés.
+- État centralisé via `useReducer(SolverFilters)` — 13 actions, tous les inputs contrôlés.
 - Boutons SOLVE / SOLVE CP / Cancel / Reset filters branchés sur l'orchestrator.
 
 ---
