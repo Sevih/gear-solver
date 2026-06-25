@@ -34,7 +34,8 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 ## Next
 
 ### M7 (reste) — Persistence & sharing
-- **JSON import/export** des builds/presets (partage / backup) — pas encore implémenté.
+- **JSON import/export** des builds/presets (partage / backup) — ✅ **livré**
+  (`lib/storage/transfer.ts` + section Backup dans Settings + 8 tests).
 - **Versioning du snapshot `data/`** pour invalider les caches localStorage après un patch.
 - **Production build path** pour `data` (bake derived + snapshot dans le bundle prod).
 
@@ -45,8 +46,10 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   validé, auto-update testé contre une release signée + feed.
 
 ### Perf hot-path (au fil du profilage)
-- Accumulateur de buckets incrémental (`aggregateGearBuckets` re-somme tout par combo).
-- Virtualisation de la table de résultats (topN=1000).
+- Accumulateur de buckets incrémental (`aggregateGearBuckets` re-somme tout par combo) —
+  hoist des set bonuses **livré**, re-sum par talisman encore déféré.
+- Virtualisation de la table de résultats (topN=1000) — ✅ **livrée**
+  (`@tanstack/react-virtual` + `memo(ResultRow)`).
 
 > Equip / Unequip **vers le jeu** : hors scope tant qu'aucune API jeu n'existe (le pipeline
 > de capture est read-only).

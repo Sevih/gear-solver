@@ -59,6 +59,109 @@
 
 ---
 
+## Sets — généraliser `setPicks` en plans OR (`SetPlan[]`)
+
+> 🟠 Le modèle actuel (`setPicks: Record<setId, "req-2pc"|"req-4pc"|"excluded">`) **ANDe** tous les
+> sets requis : impossible d'exprimer « 4pc A **ou** 4pc B », ni « 2pc fixe + 2pc parmi N ». Or c'est
+> exactement ce que les recos décrivent (`Set: [[…],[…]]`) et ce qu'on veut pouvoir saisir à la main.
+> La généralisation est une seule abstraction qui couvre tous les cas.
+
+**Modèle** :
+```
+SetRequirement = SetPlan[]            // OR : valide si AU MOINS un plan est satisfait
+SetPlan        = { setId, count }[]   // AND : toutes les conditions du plan tiennent
+```
+Build valide ⟺ `∃ plan, ∀ (setId,count) du plan : setCount[setId] ≥ count`. Les 3 formes d'authoring
+ne sont que des raccourcis qui se compilent vers cette liste :
+- **N set 4** (un 4pc parmi N) → `[{A:4}]`, `[{B:4}]`, `[{C:4}]`
+- **N set 2** (2pc+2pc, 2 distincts parmi N) → toutes les paires `[{A:2},{B:2}]`, `[{A:2},{C:2}]`…
+- **1 set 2 fixe + N mix** → `[{F:2},{X:2}]`, `[{F:2},{Y:2}]`…
+
+Taille bornée (N ≤ ~5, armure = 4 slots → `C(5,2)=10` plans max) : zéro risque combinatoire.
+`excluded` reste **orthogonal** (un `Set<setId>` filtré en dur sur le pool, inchangé).
+
+- [ ] **Contrat** (`solver/types.ts`) — remplacer/doubler `setPicks` par `setPlans: SetPlan[]`
+      (+ `excludedSets: setId[]` à part). Le moteur consomme la forme **déjà expandée** en plans
+      explicites (UI/traducteur font l'expansion des raccourcis → moteur bête).
+- [ ] **Moteur** (`engine.ts`) — contenu, `setCount` est déjà traqué pendant l'énumération armure :
+  - **Validation au leaf** (après `boots`) : `plans.some(p => p.every(({setId,count}) => (setCount.get(setId) ?? 0) >= count))`.
+  - **Prune mid-tree** (`checkSetsFeasible`) : un plan est faisable à profondeur D si
+    `Σ max(0, count − setCount[setId]) ≤ remainingSlots` ; prune le sous-arbre **seulement si AUCUN
+    plan n'est faisable** (`!plans.some(planFeasible)`). Toujours correct, à peine moins agressif.
+  - Conserver la protection top-% des pièces appartenant à un set requis (étendre `requiredSetIds`
+    = union des `setId` de tous les plans).
+- [ ] **UI Sets** (`BuilderScreen.tsx`) — **le vrai coût** : passer du chip 4-états/set à un éditeur
+      de groupes OR (« 4pc parmi… », « 2pc fixe + 2pc parmi… »). À designer. **Non bloquant pour
+      l'import** : « Get preset » écrit `setPlans` directement sans cette UI → l'éditeur manuel peut
+      venir après.
+- [ ] **Tests** — équivalence sur les cas mono-plan (doit matcher l'ancien comportement req-2pc/4pc),
+      + un cas OR (`[{A:4}]` ou `[{B:2},{C:2}]`) vérifiant que le prune ne tue pas les combos valides.
+
+---
+
+## Get Preset — import des recos outerpedia dans le Builder
+
+> Bouton « Get preset » dans le Builder : interroge l'API reco d'outerpedia pour le héros
+> sélectionné et pré-règle les `SolverFilters` (mains / sets / effets arme-accessoire / priorité
+> substats). **Le côté outerpedia est FAIT** — l'API renvoie déjà les identifiants partagés ;
+> il ne reste que le câblage côté gear-solver.
+
+### Contrat API (déjà livré côté outerpedia)
+
+`GET /api/reco/:id` où `:id` = `CharacterTemplet.ID` = **`hero.charId`** du solver (même espace d'ID,
+aucun mapping à faire). `getRecoStatPriorities` joint les recos contre le même dataset jeu que le
+solver et renvoie, par build nommé :
+
+```jsonc
+"Weapon": [{ "name": "Surefire Greatsword", "itemId": 754,  "effectIcon": "TI_Icon_UO_Weapon_11",    "mainStat": ["atkPct"] }],
+"Amulet": [{ "name": "Death's Hold",        "itemId": 1760, "effectIcon": "TI_Icon_UO_Accessary_01", "mainStat": ["pen","critDmg"] }],
+"Set":    [[{ "name": "Speed", "setId": "13", "count": 4 }]],
+"SubstatPrio": [["atk"],["critRate"],["critDmg"],["spd"],["dmgUp"]]
+```
+
+Alignements garantis : `itemId` = `GearPiece.itemId` · `setId` = `armorSetId` du solver · clés stats =
+**clés moteur canoniques** (`atkPct`, `pen`, `critDmg`, `critRate`, `dmgUp`…) dérivées du `GAME_STAT`
+du solver, pas une heuristique. Couverture vérifiée : 89/89 recos, 1002 items, 354 sets, 0 non-matché.
+`itemId`/`setId` peuvent valoir `null` si un nom diverge un jour → le traducteur doit le détecter et
+le **logger** (pas filtrer silencieusement).
+
+### À faire (gear-solver)
+
+- [ ] **Proxy Electron** (`apps/desktop/src/server.ts`) — relayer `GET /api/reco/:id` vers l'API
+      outerpedia (choix retenu : proxy plutôt qu'ouvrir CORS sur outerpedia). Gérer base URL
+      configurable (prod = outerpedia.com) + timeout + erreur réseau remontée à l'UI. En dev,
+      le middleware Vite devra exposer la même route (cf. `data.ts` qui ne fetch que du local).
+- [ ] **Fetch côté renderer** — fonction `fetchReco(charId): Promise<StructuredCharacterReco | null>`
+      (à côté de `data.ts`). Pas de parsing : l'API renvoie déjà du structuré.
+- [ ] **Traducteur `reco → Partial<SolverFilters>`** (nouveau module, le cœur). Par build :
+  - **mains** : `Weapon[].mainStat` / `Amulet[].mainStat` → `mainPicks.weapon` / `mainPicks.accessory`.
+    Les clés sont **déjà** des clés moteur (`atkPct`, `pen`, `critDmg`) → assignation directe, pas de
+    table. Plusieurs alternatives = OR-list (le `mainPicks` est déjà un OR au niveau slot).
+  - **effets arme/accessoire** : `Weapon[].effectIcon` / `Amulet[].effectIcon` →
+    `weaponEffectPicks[icon]="required"` / `accessoryEffectPicks[icon]="required"`. Le moteur traite
+    `required` comme un **OR** au niveau slot (`engine.ts` `requiredEffects.has(icon)`), donc les
+    amulettes alternatives (Death's Hold **ou** Clock Up) sont exprimables telles quelles. ✅
+  - **sets** : `Set[[…],[…]]` mappe **1:1** sur le nouveau modèle `SetPlan[]` (cf. tâche dédiée
+    ci-dessous) — chaque combo de la reco EST un plan (`[{setId,count}]`), la liste des combos = le OR.
+    Plus d'aplatissement, plus de perte d'alternatives. **Dépend de** la généralisation `setPicks → setPlans`.
+    L'import écrit directement `setPlans` (il n'a pas besoin de l'éditeur UI). `setId: null` → skip + warn.
+  - **priorité substats** : `SubstatPrio` (tiers de clés moteur) → `priority: Record<key, number>`.
+    Deux transformations : (1) clé moteur → clé priorité via `STAT_TO_PRIORITY` (`critRate`→`crc`,
+    `critDmg`→`chd`, `effRes`→`res`, `dmgReduce`→`dmgRed`…), (2) rang du tier → poids décroissant dans
+    l'échelle -1..3 du solver (ex. tier 0 → 3, 1 → 2, 2+ → 1). Clamp à la borne basse.
+  - **`itemId`/`setId` null** → skip l'entrée + `console.warn` (mismatch nom à corriger côté data),
+    ne pas planter le preset entier.
+- [ ] **Bouton + UI** (`BuilderScreen.tsx`) — « Get preset » près du sélecteur de héros, lit
+      `hero.charId`. Un reco a **plusieurs builds nommés** (`"Speed"`, `"DPS"`…) → petit picker de build
+      (ou 1er par défaut). États loading / réseau-KO / 404 (pas de reco pour ce héros) à afficher.
+- [ ] **Application au reducer** — `dispatch({ type: "loadPreset", filters })` existe déjà et remplace
+      tout l'état. Si on veut **préserver** les `options`/exclusions courantes, ajouter une action
+      `mergePreset` plutôt qu'un remplacement total.
+- [ ] **Ignoré volontairement** : `Talisman` (presets `$CPdps`…) — le solver optimise déjà les gems,
+      pas de filtre « talisman par nom ». L'afficher en note au mieux, ne pas le câbler aux filtres.
+
+---
+
 ## Tab Builds (`BuildsScreen.tsx`)
 
 - [ ] 🟡 **`SlotMini` non cliquable** — aucun moyen d'inspecter une pièce depuis la tab

@@ -511,8 +511,9 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 7 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
 | `apps/renderer/test/solver.test.ts`     | 62 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR) |
+| `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidélité, maps vides), import merge (dédup par `id`, collision garde l'existant), replace (overwrite), validation du bundle (kind/version/maps) |
 
-Run : `npm test --workspaces --if-present`.
+Run : `npm test --workspaces --if-present`. **Total : 77 tests** (7 parse + 62 + 8 transfer).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 

@@ -82,14 +82,15 @@ npm run data:build       # régénère data/derived depuis data/game
 > Le polish solver, la persistance (Save build / Filter presets) et le wrapper Electron
 > de base sont **livrés** (voir « Ce qui est FAIT »). Reste :
 
-- **Perf hot-path** : accumulateur de buckets incrémental, virtualisation de la table
-  de résultats (topN=1000).
+- **Perf hot-path** : accumulateur de buckets incrémental (re-sum par talisman encore
+  déféré ; le hoist des set bonuses + la virtualisation de la table sont **livrés**).
 - **Packaging desktop (M7+)** : le plumbing existe (electron-builder `extraResources`,
   `setupAutoUpdate`) ; reste à **vérifier sur un vrai build packagé** (bake `data/`,
   installeur, auto-update contre une release signée + feed).
 - **Equip / Unequip vers le jeu** : nécessite une API jeu inexistante (retiré de l'UI ;
   à reprendre si le pipeline de capture peut envoyer des commandes).
-- **JSON import/export** des builds/presets + versioning du snapshot `data/`.
+- **Versioning du snapshot `data/`** (le JSON import/export des builds/presets est **livré** —
+  `transfer.ts` + section Backup dans Settings + 8 tests).
 - **Robustesse/sécu desktop** : cleanup process orphelins, gardes Host/Origin (cf. todo).
 
 ## Carte du repo
