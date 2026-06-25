@@ -66,22 +66,26 @@ const DR_FLOOR = 0.3;
  *  allocations besides the return object. */
 export function computeCheapRatings(s: FinalStats): CheapRatings {
   const hps = s.hp * s.spd;
-  // EHP — in-game defense mitigation is `1000/(DEF+1000)`, so `HP/mit =
-  // HP × (1 + DEF/1000)`. The old `HP × (DEF/300 + 1)` over-credited DEF
-  // by ~3.3× (DEF=3000 gave EHP_factor=11 vs the real 4.0).
-  const ehp = s.hp * (1 + s.def / 1000);
+  // EHP — combines DEF mitigation with the defender's DMGReduceRate
+  // contribution to the DR rate per §3.2 (`rate -= defender.DMGReduceRate;
+  // rate = Max(rate, 300)`). Inverting the rate gives the EHP multiplier:
+  // a defender with 50% dmgRed effectively doubles their EHP. The DR_FLOOR
+  // mirror means dmgRed past ~70% stops contributing (rate clamps to 300).
+  const dmgRedTaken = Math.max(DR_FLOOR, 1 - s.dmgRed / 100);
+  const ehp = s.hp * (1 + s.def / 1000) / dmgRedTaken;
   const ehps = ehp * s.spd;
-  // CRC capped at 100% in-game — overflow is wasted. Damage-mod buffs
-  // (dmgUp / dmgRed) get folded into the same DR rate per §3.2 of
-  // binary-formulas-1.4.9.md (`rate += DMGBoost; rate -= DMGReduce`).
+  // CRC capped at 100% in-game — overflow is wasted. dmgUp (attacker's
+  // DMGBoost) folds into the DR rate per §3.2 — dmgRed is the *defender's*
+  // stat, so it doesn't reduce a build's own offensive output, only its
+  // EHP intake (above). This was the subtle bug in the first pass.
   const pCrit = Math.min(s.crc, 100) / 100;
   const chdMult = s.chd / 100;
-  const dmgMod = (s.dmgUp - s.dmgRed) / 100;
+  const dmgUpMod = s.dmgUp / 100;
   // E[DR] / 1000 — normal hit = 1.0, crit = CHD/100, weighted by pCrit.
-  // Then +dmgUp/100 and -dmgRed/100 from the damage-mod buff chain.
-  const drFactor = Math.max(DR_FLOOR, 1 + pCrit * (chdMult - 1) + dmgMod);
+  // Then +dmgUp/100 from the attacker's DMGBoost buff chain.
+  const drFactor = Math.max(DR_FLOOR, 1 + pCrit * (chdMult - 1) + dmgUpMod);
   // Same but assuming 100% CHC (the "I have raid crit buffs" comparison).
-  const mcdFactor = Math.max(DR_FLOOR, chdMult + dmgMod);
+  const mcdFactor = Math.max(DR_FLOOR, chdMult + dmgUpMod);
   // Penetration multiplier vs the TARGET_DEF enemy. PPR caps at 100% per
   // §1.2: `min(PPR, 1000)`; we model PEN past 100% as "no extra credit"
   // (the flat PiercePower stat is rare on builds and ignored here).

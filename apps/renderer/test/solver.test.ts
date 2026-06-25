@@ -413,20 +413,30 @@ describe("computeCheapRatings", () => {
     expect(computeCheapRatings(fs).dmg).toBe(1000); // drFactor = 1.0
   });
 
-  it("dmgUp / dmgRed fold into the DR rate (per binary-formulas §3.2)", () => {
+  it("dmgUp folds into the DR rate (per §3.2 attacker's DMGBoost)", () => {
     // ATK 1000, CHC 0, CHD 100 (irrelevant — no crit), dmgUp 20 → drFactor =
-    // 1 + 0 + 0.20 = 1.20 → dmg = 1200. dmgRed 30 → drFactor = 1 − 0.30 = 0.7.
+    // 1 + 0 + 0.20 = 1.20 → dmg = 1200.
     const base = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
       eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
     expect(computeCheapRatings({ ...base, dmgUp: 20 }).dmg).toBeCloseTo(1200);
-    expect(computeCheapRatings({ ...base, dmgRed: 30 }).dmg).toBeCloseTo(700);
   });
 
-  it("DR_FLOOR clamps at 30% — large negative damage-mod doesn't zero out the rating", () => {
-    // §3.2: `rate = Max(rate, 300)`. A defender with dmgRed=200 would push
-    // drFactor below 0, the floor keeps it at 0.3 (matches in-game cap).
+  it("dmgRed is a DEFENDER stat — doesn't reduce a build's own offensive output", () => {
+    // Subtle bug in the v1 ratings rewrite: dmgRed got subtracted from the
+    // attacker's drFactor, as if a build's own DEF-stat would shrink its
+    // damage. dmgRed only matters when the build TAKES damage (→ ehp).
+    const base = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    expect(computeCheapRatings({ ...base, dmgRed: 0 }).dmg).toBe(
+      computeCheapRatings({ ...base, dmgRed: 50 }).dmg,
+    );
+  });
+
+  it("DR_FLOOR clamps at 30% — DR rate / dmgRed never zeros the rating", () => {
+    // §3.2: `rate = Max(rate, 300)`. Pushed via a deeply negative dmgUp
+    // (synthetic case — in normal builds dmgUp is ≥ 0).
     const fs = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 200, pen: 0, critDmgRed: 0 };
+      eff: 0, res: 0, dmgUp: -200, dmgRed: 0, pen: 0, critDmgRed: 0 };
     expect(computeCheapRatings(fs).dmg).toBeCloseTo(300); // 1000 × 0.3
   });
 
@@ -465,6 +475,17 @@ describe("computeCheapRatings", () => {
     const fs = { atk: 0, def: 600, hp: 10000, spd: 100, crc: 0, chd: 100,
       eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
     expect(computeCheapRatings(fs).ehp).toBe(16000);
+  });
+
+  it("EHP includes dmgRed as a defender-side multiplier: HP × DEF_factor / max(0.3, 1 − dmgRed/100)", () => {
+    // dmgRed reduces incoming DR rate per §3.2 (`rate -= DMGReduceRate;
+    // rate = Max(rate, 300)`). 50% dmgRed → take 50% damage → EHP × 2.0.
+    // 100%+ dmgRed clamps at the floor → take 30% damage → EHP × 3.33.
+    const base = { atk: 0, def: 0, hp: 10000, spd: 100, crc: 0, chd: 100,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    expect(computeCheapRatings(base).ehp).toBe(10000); // 1× factor at dmgRed=0
+    expect(computeCheapRatings({ ...base, dmgRed: 50 }).ehp).toBeCloseTo(20000);
+    expect(computeCheapRatings({ ...base, dmgRed: 100 }).ehp).toBeCloseTo(10000 / 0.3); // floored
   });
 });
 

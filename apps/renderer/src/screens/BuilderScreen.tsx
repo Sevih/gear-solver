@@ -101,9 +101,9 @@ const SOLVER_STATS: ReadonlyArray<{ key: string; iconKey: string; label: string;
 const SOLVER_RATINGS: ReadonlyArray<{ key: string; label: string; formula: string; desc: string; hideInTable?: boolean }> = [
   { key: "cp",   label: "Cp",   formula: "in-game CalcBattlePower",         desc: "Combat Power as shown on the unit page (no skill enhances)." },
   { key: "hps",  label: "HpS",  formula: "HP × SPD",                        desc: "HP × Speed composite — fast-and-bulky proxy." },
-  { key: "ehp",  label: "Ehp",  formula: "HP × (1 + DEF/1000)",             desc: "Effective HP vs the in-game defense mitigation 1000/(DEF+1000)." },
+  { key: "ehp",  label: "Ehp",  formula: "HP × (1 + DEF/1000) / max(0.3, 1 − dmgRed/100)", desc: "Effective HP — combines the in-game DEF mitigation 1000/(DEF+1000) with the build's own dmgRed (defender-side reduction)." },
   { key: "ehps", label: "EhpS", formula: "EHP × SPD",                       desc: "EHP × Speed — tanky-and-fast." },
-  { key: "dmg",  label: "Dmg",  formula: "ATK × E[DR] × penMult(2000)",     desc: "Expected damage per hit vs DEF=2000 — weights crit (1 + pCrit×(CHD/100−1)), dmgUp/dmgRed, and PEN." },
+  { key: "dmg",  label: "Dmg",  formula: "ATK × E[DR] × penMult(2000)",     desc: "Expected damage per hit vs DEF=2000 — weights crit (1 + pCrit×(CHD/100−1)), attacker's dmgUp, and PEN. dmgRed doesn't reduce a build's own offensive output (defender stat)." },
   { key: "dmgs", label: "DmgS", formula: "Dmg × SPD",                       desc: "DPS — Dmg × speed." },
   { key: "mcd",  label: "Mcd",  formula: "ATK × (CHD/100 + dmgMod) × penMult(2000)", desc: "Max crit damage vs DEF=2000 — assumes 100% CHC (raid-buff scenario).", hideInTable: true },
   { key: "mcds", label: "McdS", formula: "Mcd × SPD",                       desc: "Max DPS — Mcd × speed.",            hideInTable: true },

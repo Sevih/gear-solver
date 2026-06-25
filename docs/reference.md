@@ -228,12 +228,21 @@ réduites à un contexte build-trait (pas de defender connu côté solveur).
 ```
 pCrit    = min(CRC, 100) / 100
 chdMult  = CHD / 100
-dmgMod   = (dmgUp − dmgRed) / 100         ← rate += DMGBoost; rate -= DMGReduce (§3.2)
-drFactor = max(0.3, 1 + pCrit × (chdMult − 1) + dmgMod)   ← E[DR]/1000, floor 30% (§3.2 cap)
-mcdFactor= max(0.3, chdMult + dmgMod)                     ← suppose pCrit = 1
+dmgUpMod = dmgUp / 100                     ← rate += attacker.DMGBoost (§3.2)
+drFactor = max(0.3, 1 + pCrit × (chdMult − 1) + dmgUpMod)   ← E[DR]/1000, floor 30% (§3.2 cap)
+mcdFactor= max(0.3, chdMult + dmgUpMod)                     ← suppose pCrit = 1
 penPct   = min(PEN, 100) / 100             ← PPR cappe à 100% (§1.2)
 effDef   = TARGET_DEF × (1 − penPct)
-penMult  = (TARGET_DEF + 1000) / (effDef + 1000)          ← ratio mitigation
+penMult  = (TARGET_DEF + 1000) / (effDef + 1000)            ← ratio mitigation
+```
+
+**Côté défensif** (`ehp`) — `dmgRed` est une stat **defender** (`rate -=
+defender.DMGReduceRate` §3.2), pas attaquant. Elle réduit le damage que MON
+build SUBIT, pas celui qu'il INFLIGE :
+
+```
+dmgTaken = max(0.3, 1 − dmgRed/100)        ← inverse du DR rate, floor 30%
+ehp      = HP × (1 + DEF/1000) / dmgTaken  ← combine mit DEF + dmgRed defender
 ```
 
 **`TARGET_DEF = 2000`** — constante. Référence DEF cible : PvE midgame
@@ -244,7 +253,7 @@ ranke pareil pour n'importe quel `TARGET_DEF`.
 | Rating | Formula                                | Sémantique                              |
 |--------|----------------------------------------|-----------------------------------------|
 | `hps`  | `HP × SPD`                             | Bulky-and-fast composite (proxy)        |
-| `ehp`  | `HP × (1 + DEF/1000)`                  | Effective HP — match exact la mitigation `1000/(DEF+1000)` |
+| `ehp`  | `HP × (1 + DEF/1000) / dmgTaken`       | Effective HP — mit DEF + dmgRed defender |
 | `ehps` | `EHP × SPD`                            | Tanky-and-fast                          |
 | `dmg`  | `ATK × drFactor × penMult`             | Expected damage par hit vs DEF=2000     |
 | `dmgs` | `dmg × SPD`                            | DPS                                     |
