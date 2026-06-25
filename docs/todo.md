@@ -30,12 +30,11 @@
       Garde-fou régression : lire `data/stat-locks.json` avant de toucher
       `compose-stats.ts`/`composeMultStat` (memory `project_gear_solver_stat_locks`).
       `engine.ts:678-689`, `composeBuild.ts:115-156`.
-- [ ] 🟠 **Workers en idle quand un pool est petit** — `chunkCount = workers.length`
-      (jusqu'à 8) mais `partition()` découpe le plus gros pool ; si ce pool a 3 pièces
-      et qu'il y a 8 workers, les workers 3..7 reçoivent une slice vide. Fix :
-      `chunkCount = Math.min(workers.length, maxPoolHit)` (l'orchestrateur connaît déjà
-      `precomputed.poolSizes`), ne poster qu'aux `chunkCount` premiers workers.
-      `orchestrator.ts:98,136-141`, `engine.ts:811-818` (`pickPartitionSlot`).
+- [x] 🟠 **Workers en idle quand un pool est petit** — ✅ corrigé : `chunkCount =
+      clamp(1, workers.length, maxPoolHit)` calculé depuis `precomputed.poolSizes` (max hit
+      des slots partitionnables, ooparts↔`talisman`). Garde-fou : nouveau champ
+      `activeChunks` + flush sur `workersDone === activeChunks` (sinon attente infinie de
+      workers jamais sollicités). `orchestrator.ts`.
 - [ ] 🟡 **Footgun : filtres silencieux sur clé inconnue** — `passesSpecs` fait
       `if (typeof v !== "number") continue;` → une clé mal orthographiée (`critRate`
       au lieu de `crc`) laisse tout passer = filtre no-op invisible si UI et

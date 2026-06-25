@@ -49,6 +49,12 @@ export class SolverOrchestrator {
   private stats: Array<{ permutations: number; searched: number }> = [];
   private buf: SolveBuild[] = [];
   private workersDone = 0;
+  /** Number of workers actually dispatched this solve. Can be < the pool size
+   *  when the partitioned pool has fewer items than workers — posting to more
+   *  workers than there are items just hands the surplus empty slices. The
+   *  flush gate compares against THIS, not `workers.length`, or it would wait
+   *  forever for results from workers that were never sent a chunk. */
+  private activeChunks = 0;
   private active = false;
   private mode: SolveMode = "score";
   private topN = 1000;
@@ -95,7 +101,6 @@ export class SolverOrchestrator {
     this.poolSizes = undefined;
     this.stats = this.workers.map(() => ({ permutations: 0, searched: 0 }));
     const topK = args.topK ?? 1000;
-    const chunkCount = this.workers.length;
     // Build the precompute ONCE on the main thread — broadcast to every
     // worker via `precomputed`. Without this, each worker repeats the same
     // composeCharStats + per-slot filter + simulateReforges + topPctPrune +
@@ -105,6 +110,9 @@ export class SolverOrchestrator {
     //
     // `seedReq` mirrors the per-worker SolveRequest except for chunk fields
     // (precomputeContext ignores those — they only matter inside solveChunk).
+    // `chunkCount` here is a placeholder — precomputeContext ignores chunk
+    // fields, and the real value depends on the partitioned pool size, which
+    // we only know once `precomputed.poolSizes` is in hand (below).
     const seedReq: SolveRequest = {
       type: "solve",
       solveId: this.solveId,
@@ -118,7 +126,7 @@ export class SolverOrchestrator {
       filters: args.filters,
       topK,
       chunkIndex: 0,
-      chunkCount,
+      chunkCount: this.workers.length,
     };
     let precomputed;
     try {
@@ -133,10 +141,23 @@ export class SolverOrchestrator {
     // window at solve start).
     this.poolSizes = precomputed.poolSizes;
     this.cb.onProgress({ permutations: 0, searched: 0, poolSizes: this.poolSizes });
+    // Cap the worker count to the partitioned pool size. `solveChunk` splits
+    // the largest pool (pickPartitionSlot), so a pool of N items can keep at
+    // most N workers busy — any extra worker gets an empty slice and burns a
+    // postMessage + precompute clone for zero work. The largest pool size is
+    // the max hit across the partitionable slots (EE is never partitioned).
+    const ps = precomputed.poolSizes;
+    const maxPoolHit = Math.max(
+      ps.weapon?.hit ?? 0, ps.helmet?.hit ?? 0, ps.armor?.hit ?? 0,
+      ps.gloves?.hit ?? 0, ps.boots?.hit ?? 0, ps.accessory?.hit ?? 0,
+      ps.talisman?.hit ?? 0, // engine keys the ooparts pool as "talisman"
+    );
+    const chunkCount = Math.max(1, Math.min(this.workers.length, maxPoolHit));
+    this.activeChunks = chunkCount;
     for (let i = 0; i < chunkCount; i++) {
       const w = this.workers[i];
       if (!w) continue;
-      const req: SolveRequest = { ...seedReq, chunkIndex: i, precomputed };
+      const req: SolveRequest = { ...seedReq, chunkIndex: i, chunkCount, precomputed };
       w.postMessage(req);
     }
   }
@@ -193,7 +214,7 @@ export class SolverOrchestrator {
       this.stats[workerIdx] = { permutations: ev.permutations, searched: ev.searched };
       this.buf.push(...ev.builds);
       this.workersDone++;
-      if (this.workersDone === this.workers.length) this.flush();
+      if (this.workersDone === this.activeChunks) this.flush();
     } else if (ev.type === "error") {
       this.cb.onError(ev.message);
       this.cancel();
