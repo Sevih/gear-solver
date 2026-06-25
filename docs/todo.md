@@ -90,9 +90,12 @@ Taille bornée (N ≤ ~5, armure = 4 slots → `C(5,2)=10` plans max) : zéro ri
     have) ≤ remainingSlots`, prune **seulement si AUCUN plan n'est faisable**. La somme par plan est
     en fait **plus stricte** que l'ancien check par-set indépendant (résultats identiques, prune plus tôt).
   - Protection top-% : `requiredSetIds = planSetIds(setPlans)` (union des `setId` de tous les plans).
-- [ ] **UI Sets** (`BuilderScreen.tsx`) — **le vrai coût, reste à faire** : passer du chip 4-états/set
-      à un éditeur de groupes OR. **Non bloquant** : les chips actuels sont traduits via `setPicksToPlans`
-      (sets requis = 1 plan AND → parité exacte), et « Get preset » écrira `setPlans` directement.
+- [x] **UI Sets** (`BuilderScreen.tsx`) — ✅ fait : `SetsPanel` v2 avec mode **Require/Exclude** +
+      **onglets de plans** (Plan 1 | Plan 2 | + OR). En Require, la grille de chips édite le plan
+      actif (cycle off→2pc→4pc→off via `nextPlanCount`), un résumé « Match: A ×4 OR B ×2+C ×2 »
+      affiche la contrainte complète. Exclude = liste de bannissement globale orthogonale. L'état
+      reducer passe à `setPlans: SetPlan[]` + `excludedSets: string[]` ; les plans vides sont droppés
+      à la sérialisation moteur ; presets legacy (`setPicks`) migrés via `setPicksToPlans` au load.
 - [x] **Tests** — ✅ fait (`test/setPlans.test.ts`, 13 tests) : expansion des chips, `planSetIds`,
       `planFeasible` (somme multi-cond), `setsFeasible` OR + leaf-validation à `remaining 0`, parité
       mono-plan req-4pc.

@@ -8,6 +8,7 @@
  * non-JSON-safe field; we round-trip via array.
  */
 import type { SolverFilters } from "../../screens/BuilderScreen.js";
+import { setPicksToPlans } from "../solver/setPlans.js";
 
 export interface FilterPreset {
   id: string;
@@ -35,8 +36,20 @@ function toSerialized(p: FilterPreset): SerializedPreset {
 }
 
 function fromSerialized(s: SerializedPreset): FilterPreset {
-  const ex = Array.isArray(s.filters.excludedHeroes) ? s.filters.excludedHeroes : [];
-  return { ...s, filters: { ...s.filters, excludedHeroes: new Set(ex) } };
+  const f = s.filters;
+  const ex = Array.isArray(f.excludedHeroes) ? f.excludedHeroes : [];
+  // Backward-compat: presets saved before the SetPlan migration carry the old
+  // `setPicks` map and no `setPlans`/`excludedSets`. Translate them through the
+  // same expander the live UI used, so an old preset keeps its set constraints.
+  let setPlans = Array.isArray(f.setPlans) && f.setPlans.length > 0 ? f.setPlans : null;
+  let excludedSets = Array.isArray(f.excludedSets) ? f.excludedSets : null;
+  if (setPlans == null || excludedSets == null) {
+    const legacy = (f as { setPicks?: Parameters<typeof setPicksToPlans>[0] }).setPicks;
+    const migrated = legacy ? setPicksToPlans(legacy) : { setPlans: [], excludedSets: [] };
+    setPlans ??= migrated.setPlans.length > 0 ? migrated.setPlans : [[]];
+    excludedSets ??= migrated.excludedSets;
+  }
+  return { ...s, filters: { ...f, excludedHeroes: new Set(ex), setPlans, excludedSets } };
 }
 
 export function loadFilterPresets(): FilterPresetsMap {

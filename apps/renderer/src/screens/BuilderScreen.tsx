@@ -29,8 +29,7 @@ import { toIconPiece, toUiPiece } from "../design/adapter.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { simulateReforges } from "../lib/solver/engine.js";
 import { SolverOrchestrator } from "../lib/solver/orchestrator.js";
-import { setPicksToPlans } from "../lib/solver/setPlans.js";
-import type { PoolSizes, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
+import type { PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
 import {
   addSavedBuild, loadSavedBuilds, persistSavedBuilds, removeSavedBuild,
   type SavedBuild, type SavedBuildsMap,
@@ -227,7 +226,12 @@ export interface SolverFilters {
   topPct: number;
   /** Per-slot OR-list of acceptable main stats. Empty inner = any main allowed. */
   mainPicks: Record<string, Record<string, boolean>>;
-  setPicks: Record<string, SetChipState>;
+  /** Set requirements as an OR-list of AND-plans (a build matches if ANY plan
+   *  holds). The editor keeps at least one (possibly empty) plan so there's
+   *  always a tab to edit; empty plans are dropped before the engine sees them. */
+  setPlans: SetPlan[];
+  /** Set ids hard-excluded from every build — orthogonal to `setPlans`. */
+  excludedSets: string[];
   weaponEffectPicks: Record<string, ChipState>;
   accessoryEffectPicks: Record<string, ChipState>;
 }
@@ -240,7 +244,8 @@ const INITIAL_FILTERS: SolverFilters = {
   priority: {},
   topPct: 100,
   mainPicks: {},
-  setPicks: {},
+  setPlans: [[]],
+  excludedSets: [],
   weaponEffectPicks: {},
   accessoryEffectPicks: {},
 };
@@ -253,7 +258,15 @@ type SolverAction =
   | { type: "setPriority"; stat: string; value: number }
   | { type: "setTopPct"; value: number }
   | { type: "toggleMainPick"; slot: SlotId; stat: string }
-  | { type: "cycleSetPick"; setId: string; reach: SetChipReach }
+  /** Cycle a set's piece-count within one plan: off → 2pc → 4pc → off
+   *  (skipping any step the inventory can't form). */
+  | { type: "cycleSetInPlan"; planIdx: number; setId: string; reach: SetChipReach }
+  /** Append a new empty OR-alternative plan. */
+  | { type: "addPlan" }
+  /** Remove a plan by index (keeps at least one). */
+  | { type: "removePlan"; planIdx: number }
+  /** Toggle a set in/out of the hard-excluded list. */
+  | { type: "toggleExcludedSet"; setId: string }
   | { type: "cycleEffectPick"; group: "weapon" | "accessory"; icon: string }
   | { type: "clearPriority" }
   | { type: "resetAll" }
@@ -304,13 +317,32 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
       else next[action.stat] = true;
       return { ...state, mainPicks: { ...state.mainPicks, [action.slot]: next } };
     }
-    case "cycleSetPick": {
-      const cur = state.setPicks[action.setId] ?? "off";
-      const nxt = nextSetChipState(cur, action.reach);
-      const next = { ...state.setPicks };
-      if (nxt === "off") delete next[action.setId];
-      else next[action.setId] = nxt;
-      return { ...state, setPicks: next };
+    case "cycleSetInPlan": {
+      const plans = state.setPlans.length > 0 ? state.setPlans : [[]];
+      const plan = plans[action.planIdx] ?? [];
+      const curCount = plan.find((c) => c.setId === action.setId)?.count ?? 0;
+      const nextCount = nextPlanCount(curCount, action.reach);
+      // Rebuild the plan: drop the set, then re-add at the new count (unless off).
+      const rebuilt = plan.filter((c) => c.setId !== action.setId);
+      if (nextCount !== 0) rebuilt.push({ setId: action.setId, count: nextCount });
+      const nextPlans = plans.map((p, i) => (i === action.planIdx ? rebuilt : p));
+      return { ...state, setPlans: nextPlans };
+    }
+    case "addPlan":
+      return { ...state, setPlans: [...state.setPlans, []] };
+    case "removePlan": {
+      const filtered = state.setPlans.filter((_, i) => i !== action.planIdx);
+      // Always keep at least one (empty) plan so the editor has a tab.
+      return { ...state, setPlans: filtered.length > 0 ? filtered : [[]] };
+    }
+    case "toggleExcludedSet": {
+      const has = state.excludedSets.includes(action.setId);
+      return {
+        ...state,
+        excludedSets: has
+          ? state.excludedSets.filter((id) => id !== action.setId)
+          : [...state.excludedSets, action.setId],
+      };
     }
     case "cycleEffectPick": {
       const key = action.group === "weapon" ? "weaponEffectPicks" : "accessoryEffectPicks";
@@ -439,10 +471,12 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       priority: filters.priority,
       topPct: filters.topPct,
       mainPicks: filters.mainPicks,
-      // Expand the 4-state per-set chips into the engine's OR-of-AND plans +
-      // excluded list. The current UI ANDs all required sets → one plan; the
-      // OR editor (and the preset importer) will emit multi-plan forms later.
-      ...setPicksToPlans(filters.setPicks),
+      // Drop empty plans before the engine sees them — an empty plan has no
+      // conds, so `every` is vacuously true and it would nullify the whole OR
+      // (everything matches). The editor keeps an empty plan around only so a
+      // tab exists to fill in.
+      setPlans: filters.setPlans.filter((p) => p.length > 0),
+      excludedSets: filters.excludedSets,
       weaponEffectPicks: filters.weaponEffectPicks as SolveFilters["weaponEffectPicks"],
       accessoryEffectPicks: filters.accessoryEffectPicks as SolveFilters["accessoryEffectPicks"],
     };
@@ -1000,7 +1034,7 @@ function TopPanelBand({
       <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} />
       <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
       <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} dispatch={dispatch} />
-      <SetsPanel sets={armorSets} picks={filters.setPicks} dispatch={dispatch} />
+      <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />
       <WeaponsAccessoriesPanel
         weapons={weaponEffects}
         accessories={accessoryEffects}
@@ -1730,37 +1764,148 @@ function MainStatChip({ entry, picked, onClick }: { entry: MainStatEntry; picked
  * Sets panel — required / piece-count requirements + exclude lists
  * ───────────────────────────────────────────────────────────────────────── */
 function SetsPanel({
-  sets, picks, dispatch,
+  sets, setPlans, excludedSets, dispatch,
 }: {
   sets: ArmorSetEntry[];
-  picks: Record<string, SetChipState>;
+  setPlans: SetPlan[];
+  excludedSets: string[];
   dispatch: Dispatch<SolverAction>;
 }) {
+  // Two authoring modes share the one icon grid: "require" edits the active
+  // plan (a build matches if ANY plan holds), "exclude" toggles the global
+  // ban list (orthogonal to plans).
+  const [mode, setMode] = useState<"require" | "exclude">("require");
+  const [activePlan, setActivePlan] = useState(0);
+  const plans = setPlans.length > 0 ? setPlans : [[]];
+  const active = Math.min(activePlan, plans.length - 1);
+  const activeConds = plans[active] ?? [];
+  const excluded = useMemo(() => new Set(excludedSets), [excludedSets]);
+  const nameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of sets) m.set(s.id, s.name);
+    return m;
+  }, [sets]);
+
+  const chipState = (s: ArmorSetEntry): SetChipState => {
+    if (mode === "exclude") return excluded.has(s.id) ? "excluded" : "off";
+    const c = activeConds.find((x) => x.setId === s.id)?.count ?? 0;
+    return c === 4 ? "req-4pc" : c === 2 ? "req-2pc" : "off";
+  };
+  const onChip = (s: ArmorSetEntry) => {
+    if (mode === "exclude") { dispatch({ type: "toggleExcludedSet", setId: s.id }); return; }
+    dispatch({
+      type: "cycleSetInPlan", planIdx: active, setId: s.id,
+      reach: { has2pc: s.has2pc, has4pc: s.has4pc, canForm2pc: s.canForm2pc, canForm4pc: s.canForm4pc },
+    });
+  };
+
+  // Read-only summary of the whole OR constraint (only non-empty plans).
+  const summary = plans
+    .filter((p) => p.length > 0)
+    .map((p) => p.map((c) => `${nameById.get(c.setId) ?? c.setId} ×${c.count}`).join(" + "))
+    .join("  OR  ");
+
+  const hint = mode === "require"
+    ? "Each plan is an AND group (e.g. 2pc A + 2pc B). A build matches if ANY plan holds. Click a set to cycle off → 2pc → 4pc → off in the active plan; + OR adds an alternative. Skips steps the inventory can't form."
+    : "Click a set to exclude it from every build (orthogonal to the require plans). Click again to clear.";
+
   return (
-    <Panel
-      title="Sets"
-      hint="Click cycles a set: off → 2pc → 4pc → excluded → off. The cycle skips any step the inventory can't form (need ≥2 pieces across 2 slots for 2pc, ≥4 across 4 slots for 4pc). Sets with no reachable bonus are dropped entirely. Score uses T4 effect values."
-      width="w-60"
-    >
+    <Panel title="Sets" hint={hint} width="w-60">
+      <div className="mb-2 inline-flex rounded-md border border-white/10 bg-white/2 p-0.5 text-[10.5px]">
+        {(["require", "exclude"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={cx(
+              "rounded px-2 py-0.5 capitalize transition-colors",
+              mode === m ? "bg-cyan-500/20 text-cyan-100" : "text-white/50 hover:text-white/80",
+            )}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+
+      {mode === "require" && (
+        <div className="mb-2 flex flex-wrap items-center gap-1">
+          {plans.map((p, i) => (
+            <PlanTab
+              key={i}
+              label={`Plan ${i + 1}`}
+              count={p.length}
+              active={i === active}
+              onSelect={() => setActivePlan(i)}
+              onRemove={plans.length > 1 ? () => {
+                dispatch({ type: "removePlan", planIdx: i });
+                setActivePlan((a) => (a >= i && a > 0 ? a - 1 : a));
+              } : undefined}
+            />
+          ))}
+          <button
+            type="button"
+            onClick={() => { dispatch({ type: "addPlan" }); setActivePlan(plans.length); }}
+            className="rounded border border-white/10 bg-white/2 px-1.5 py-0.5 text-[10.5px] text-white/60 hover:bg-white/8 hover:text-white"
+            title="Add an OR-alternative group"
+          >
+            + OR
+          </button>
+        </div>
+      )}
+
       {sets.length === 0 ? (
         <div className="text-[11px] italic text-white/40">No forms-anything set in inventory</div>
       ) : (
         <div className="flex flex-wrap gap-1">
           {sets.map((s) => (
-            <SetIconChip
-              key={s.id}
-              set={s}
-              state={picks[s.id] ?? "off"}
-              onClick={() => dispatch({
-                type: "cycleSetPick",
-                setId: s.id,
-                reach: { has2pc: s.has2pc, has4pc: s.has4pc, canForm2pc: s.canForm2pc, canForm4pc: s.canForm4pc },
-              })}
-            />
+            <SetIconChip key={s.id} set={s} state={chipState(s)} mode={mode} onClick={() => onChip(s)} />
           ))}
         </div>
       )}
+
+      {mode === "require" && summary && (
+        <div className="mt-2 text-[10px] leading-snug text-white/55">
+          <span className="text-white/40">Match: </span>{summary}
+        </div>
+      )}
     </Panel>
+  );
+}
+
+/** One OR-alternative tab. Shows the plan label + a cond count badge; the ✕
+ *  (when removable) deletes the plan. Clicking the body selects it for editing. */
+function PlanTab({
+  label, count, active, onSelect, onRemove,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onSelect: () => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10.5px] transition-colors",
+        active ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-100" : "border-white/10 bg-white/2 text-white/55 hover:text-white/85",
+      )}
+    >
+      <button type="button" onClick={onSelect} className="flex items-center gap-1">
+        {label}
+        {count > 0 && <span className="rounded-sm bg-white/10 px-1 text-[9px] tabular-nums">{count}</span>}
+      </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-white/40 hover:text-rose-300"
+          title="Remove this group"
+          aria-label={`Remove ${label}`}
+        >
+          ✕
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -1836,9 +1981,10 @@ function EffectGroup({
  * the chip through its valid states; the surrounding panel owns the state
  * map. Two state machines:
  *  - effect chips:   off → required → excluded → off
- *  - set chips:      off → req-2pc → req-4pc → excluded → off
+ *  - set chips (require mode): off → req-2pc → req-4pc → off in the active plan
+ *  - set chips (exclude mode): off → excluded → off (global ban list)
  *                    (each step the inventory/set can't form is skipped —
- *                    cf. `nextSetChipState` + the Sets panel hint)
+ *                    cf. `nextPlanCount` + the Sets panel hint)
  * ───────────────────────────────────────────────────────────────────────── */
 type ChipState = "off" | "required" | "excluded";
 type SetChipState = "off" | "req-4pc" | "req-2pc" | "excluded";
@@ -1849,20 +1995,15 @@ function nextChipState(s: ChipState | undefined): ChipState {
   return "required";
 }
 
-/** Cycle a set chip through the states actually reachable for that set.
- *  Reachability blends two axes:
- *   - does the set HAVE the bonus at all? (`has2pc` / `has4pc` on the T4 row)
- *   - can the inventory FORM it? (`canForm2pc` / `canForm4pc`)
- *  Only states that pass both gates appear in the cycle. We never reach
- *  an "off" set without at least one usable state — the catalog drops
- *  fully-unusable sets upstream. */
-function nextSetChipState(s: SetChipState | undefined, reach: SetChipReach): SetChipState {
-  const can2pc = reach.has2pc && reach.canForm2pc;
-  const can4pc = reach.has4pc && reach.canForm4pc;
-  if (s === undefined || s === "off") return can2pc ? "req-2pc" : "req-4pc";
-  if (s === "req-2pc") return can4pc ? "req-4pc" : "excluded";
-  if (s === "req-4pc") return "excluded";
-  return "off"; // excluded
+/** Cycle a set's piece-count within a plan: 0 → 2 → 4 → 0, skipping any step
+ *  the inventory can't form (need ≥2/≥4 pieces). Mirrors `nextSetChipState`
+ *  minus the `excluded` state (exclusion is a separate, global toggle now). */
+function nextPlanCount(cur: number, reach: SetChipReach): number {
+  const can2 = reach.has2pc && reach.canForm2pc;
+  const can4 = reach.has4pc && reach.canForm4pc;
+  if (cur === 0) return can2 ? 2 : can4 ? 4 : 0;
+  if (cur === 2) return can4 ? 4 : 0;
+  return 0; // was 4
 }
 
 /** State-driven chip styling — cyan for required, rose for excluded, dim
@@ -1875,16 +2016,17 @@ function chipClasses(picked: boolean, excluded: boolean): string {
 
 /** Armor-set chip — icon + piece-count badge (2 / 4 when required, ✕ when
  *  excluded). The cycle skips `req-2pc` for sets without a real 2pc effect. */
-function SetIconChip({ set, state, onClick }: { set: ArmorSetEntry; state: SetChipState; onClick: () => void }) {
+function SetIconChip({ set, state, mode, onClick }: { set: ArmorSetEntry; state: SetChipState; mode: "require" | "exclude"; onClick: () => void }) {
   const picked = state === "req-2pc" || state === "req-4pc";
   const excluded = state === "excluded";
   const can2pc = set.has2pc && set.canForm2pc;
   const can4pc = set.has4pc && set.canForm4pc;
   const stateLabel =
-    state === "off" ? (can2pc ? "click to require 2pc" : "click to require 4pc")
-    : state === "req-2pc" ? (can4pc ? "required 2pc (click to switch to 4pc)" : "required 2pc (click to exclude)")
-    : state === "req-4pc" ? "required 4pc (click to exclude)"
-    : "excluded (click to clear)";
+    mode === "exclude"
+      ? (state === "excluded" ? "excluded (click to clear)" : "click to exclude")
+    : state === "off" ? (can2pc ? "click to require 2pc" : "click to require 4pc")
+    : state === "req-2pc" ? (can4pc ? "required 2pc (click to switch to 4pc)" : "required 2pc (click to clear)")
+    : "required 4pc (click to clear)";
   return (
     <RichTooltip content={<SetTooltipBody set={set} stateLabel={stateLabel} />}>
       <button
