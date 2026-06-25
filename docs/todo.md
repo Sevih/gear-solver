@@ -53,8 +53,9 @@
       `role=combobox/listbox/option` + `aria-activedescendant` + scroll-into-view de l'option
       surlignée ; inputs filtres `type=number` ne changent plus à la molette (`onWheel`→blur).
       `BuilderScreen.tsx`. *(ExcludeHeroesPicker — multi-select — laissé en clic/Esc.)*
-- [ ] ⚪ **Heatmap des résultats : gradient interpolé** — actuellement bands fixes
-      (0.25/0.45/0.55/0.75), plus joli avec un vrai gradient (lerp HSL).
+- [x] ⚪ **Heatmap des résultats : gradient interpolé** — ✅ fait : `heatStyle` remplace les bands
+      Tailwind par un `backgroundColor` rgba interpolé (rose→transparent→emerald, alpha ∝ distance
+      à la médiane, pic `HEAT_MAX_ALPHA`) → dégradé continu sans paliers visibles. `BuilderScreen.tsx`.
 
 ---
 

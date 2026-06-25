@@ -14,7 +14,7 @@
  * Every input is visual placeholder — state lives only where needed to
  * demonstrate behavior (hero combobox open/close, picker selection).
  */
-import { memo, useEffect, useMemo, useReducer, useRef, useState, type Dispatch, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, expToLevel, resolveStat } from "@gear-solver/core";
@@ -2247,7 +2247,7 @@ const ResultRow = memo(function ResultRow({
       {statCols.map((s) => {
         const v = (build.finalStats as unknown as Record<string, number>)[s.key];
         return (
-          <td key={s.key} className={cx("px-1.5 py-1 text-right text-white", heatCellNew(v, ranges.stat[s.key]))}>
+          <td key={s.key} style={heatStyle(v, ranges.stat[s.key])} className="px-1.5 py-1 text-right text-white">
             {fmt(v, s.unit)}
           </td>
         );
@@ -2255,12 +2255,12 @@ const ResultRow = memo(function ResultRow({
       {TABLE_RATINGS.map((r) => {
         const v = r.key === "cp" ? build.cp : (build.ratings as unknown as Record<string, number>)[r.key];
         return (
-          <td key={r.key} className={cx("px-1.5 py-1 text-right text-white", heatCellNew(v, ranges.rating[r.key]))}>
+          <td key={r.key} style={heatStyle(v, ranges.rating[r.key])} className="px-1.5 py-1 text-right text-white">
             {fmt(v, "")}
           </td>
         );
       })}
-      <td className={cx("px-1.5 py-1 text-right font-semibold text-amber-200", heatCellNew(build.score, ranges.score))}>
+      <td style={heatStyle(build.score, ranges.score)} className="px-1.5 py-1 text-right font-semibold text-amber-200">
         {build.score}
       </td>
       <td className="px-1.5 py-1 text-right text-white/70" title={`${build.upg} slot(s) differ from current loadout`}>
@@ -2274,7 +2274,7 @@ const ResultRow = memo(function ResultRow({
 });
 
 /** Display rounding: integer at |v| ≥ 100, else one decimal. Shared by `fmt`
- *  (the printed value) and `heatCellNew` (the shade) so a cell is never tinted
+ *  (the printed value) and `heatStyle` (the shade) so a cell is never tinted
  *  on a precision the user can't see — two cells printing the same number get
  *  the same colour. */
 function roundDisplay(v: number): number {
@@ -2286,18 +2286,24 @@ function fmt(v: number | null | undefined, unit: string): string {
   return `${roundDisplay(v)}${unit}`;
 }
 
-/** Continuous heatmap from rose (worst column value) to emerald (best),
- *  with neutral midline. Falls back to no shading when the column is flat
- *  (min === max) or the value is missing. Shades on the *displayed* (rounded)
- *  value so identically-printed cells never differ in tint. */
-function heatCellNew(v: number | null | undefined, range: { min: number; max: number } | undefined): string {
-  if (v == null || !range || !isFinite(range.min) || range.min === range.max) return "";
-  const t = (roundDisplay(v) - range.min) / (range.max - range.min);
-  if (t > 0.75) return "bg-emerald-500/20";
-  if (t > 0.55) return "bg-emerald-500/10";
-  if (t < 0.25) return "bg-rose-500/15";
-  if (t < 0.45) return "bg-rose-500/6";
-  return "";
+/** Continuous heatmap from rose (worst column value) through a transparent
+ *  midline to emerald (best). Returns an inline `backgroundColor` rather than
+ *  discrete Tailwind bands so the shade interpolates smoothly (no visible
+ *  steps between adjacent rows). No style when the column is flat (min === max)
+ *  or the value is missing. Shades on the *displayed* (rounded) value so
+ *  identically-printed cells never differ in tint. */
+const HEAT_EMERALD = [16, 185, 129] as const; // emerald-500
+const HEAT_ROSE = [244, 63, 94] as const;     // rose-500
+const HEAT_MAX_ALPHA = 0.22;                  // peak tint at the column extremes
+function heatStyle(v: number | null | undefined, range: { min: number; max: number } | undefined): CSSProperties | undefined {
+  if (v == null || !range || !isFinite(range.min) || range.min === range.max) return undefined;
+  const tRaw = (roundDisplay(v) - range.min) / (range.max - range.min);
+  const t = tRaw < 0 ? 0 : tRaw > 1 ? 1 : tRaw;
+  const d = (t - 0.5) * 2; // -1 (worst) .. +1 (best); 0 at the midline
+  const alpha = Math.abs(d) * HEAT_MAX_ALPHA;
+  if (alpha < 0.01) return undefined; // mid-band → no tint (keeps the row clean)
+  const [r, g, b] = d >= 0 ? HEAT_EMERALD : HEAT_ROSE;
+  return { backgroundColor: `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})` };
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
