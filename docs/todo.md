@@ -48,7 +48,8 @@
 - [n/a] Gems déjà présentes affichées → `GemRecommendation` ne montre déjà QUE les gems proposées (+ badge swap).
 - [x] 🟢 **Bouton « Filter »** — re-filtre client-side des résultats stockés par les bandes stat/rating sans
       re-solve (instantané après le 1er calcul) ; sélection/gear band indexent la vue filtrée, ✕ pour annuler (`44170ae`).
-- [ ] 🟢 **Filtre qualité** — exclure les pièces selon leur quality (Poor/…) du pool de solve.
+- [x] 🟢 **Filtre qualité** — select « Min quality » (Options) qui exclut du pool les pièces sous le tier choisi ;
+      seuils partagés via `lib/quality.ts` (plus de divergence avec l'Inventory) (`d06f06f`).
 - [x] 🟡 **Abréviations stats** — labels alignés sur `outerpedia-v2/data/stats.json` (CHC/CHD/CDMG RED%/PEN%/DMG UP%/…)
       + **en-têtes du tableau en icônes** (plus de texte). `CDR` ambigu (= Cooldown pour l'user) → `CDMG RED%`.
       (CDR avait été retirée à tort sur un malentendu d'abréviation → restaurée.)
