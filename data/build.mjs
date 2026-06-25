@@ -854,6 +854,24 @@ save("codex-curve.json", ingredientsResult.codexByLevel);
 // ~122 entries (243 → 121, characters.json 1.5 MB → 800 KB) without
 // touching any runtime lookup — verified against the captured
 // user_character: zero captured CharID/FusionCharID fails this test.
+// Per-character damage-scaling stat, sourced from outerpedia's damage-calc
+// derived JSON (`scalings.main` ∈ ATK/DEF/HP). We only emit non-ATK (the
+// ~106-char ATK majority defaults to "atk" at the consumer). Main stat only —
+// secondary additive scalings (e.g. D.Stella's HP) need the BuffTemplet ratio
+// and aren't modeled yet.
+const SCALING_MAIN_TO_KEY = { DEF: "def", HP: "hp" }; // ATK omitted (default)
+function readDmgStat(charId) {
+  if (!OUTERPEDIA) return null;
+  const f = join(OUTERPEDIA, "public", "damage-calc", "chars", `${charId}.json`);
+  if (!existsSync(f)) return null;
+  try {
+    const main = JSON.parse(readFileSync(f, "utf-8"))?.scalings?.main;
+    return SCALING_MAIN_TO_KEY[main] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const characters = {};
 for (const c of load("CharacterTemplet.json")) {
   if (c.Type !== "CT_PC") continue;
@@ -866,6 +884,7 @@ for (const c of load("CharacterTemplet.json")) {
   // a literal "Core Fusion" prefix — their in-game NickName text (e.g.
   // "Eye of the Snowy Mountains") is flavor, not the variant identifier.
   const nickname = showNickName.has(c.ID) ? (textChar.get(c.NickNameID) ?? null) : null;
+  const dmgStat = readDmgStat(c.ID);
   characters[c.ID] = {
     name: textChar.get(c.NameID) ?? null,
     nickname,
@@ -874,6 +893,7 @@ for (const c of load("CharacterTemplet.json")) {
     star: Number(c.BasicStar) || null,
     ingredients: ing ?? null,
     recommendSetId: c.RecommandSetOptionID && c.RecommandSetOptionID !== "0" ? c.RecommandSetOptionID : null,
+    ...(dmgStat ? { dmgStat } : {}),
   };
 }
 save("characters.json", characters);

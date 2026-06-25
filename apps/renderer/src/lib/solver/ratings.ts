@@ -63,8 +63,14 @@ const TARGET_DEF = 2000;
 const DR_FLOOR = 0.3;
 
 /** Compute every cheap rating in one pass. Inlined branches and no
- *  allocations besides the return object. */
-export function computeCheapRatings(s: FinalStats): CheapRatings {
+ *  allocations besides the return object.
+ *
+ *  `dmgStat` is the character's damage-scaling stat — "atk" for the majority,
+ *  "def" (Caren) or "hp" (HP-scalers) for the exceptions. The offensive
+ *  ratings `dmg`/`dmgs`/`mcd`/`mcds` score against it instead of ATK so an
+ *  off-ATK hero's "dmg" column is meaningful. `dmgh` stays the explicit
+ *  HP-scaling reference column regardless. */
+export function computeCheapRatings(s: FinalStats, dmgStat: "atk" | "def" | "hp" = "atk"): CheapRatings {
   const hps = s.hp * s.spd;
   // EHP — combines DEF mitigation with the defender's DMGReduceRate
   // contribution to the DR rate per §3.2 (`rate -= defender.DMGReduceRate;
@@ -92,9 +98,13 @@ export function computeCheapRatings(s: FinalStats): CheapRatings {
   const penPct = Math.min(s.pen, 100) / 100;
   const effTargetDef = TARGET_DEF * (1 - penPct);
   const penMult = (TARGET_DEF + 1000) / (effTargetDef + 1000);
-  const dmg = s.atk * drFactor * penMult;
+  // Offensive ratings scale off the hero's actual damage stat (ATK by default;
+  // DEF / HP for the off-ATK exceptions). `dmgh` keeps using HP as a fixed
+  // HP-scaling reference column.
+  const dmgBase = dmgStat === "def" ? s.def : dmgStat === "hp" ? s.hp : s.atk;
+  const dmg = dmgBase * drFactor * penMult;
   const dmgs = dmg * s.spd;
-  const mcd = s.atk * mcdFactor * penMult;
+  const mcd = dmgBase * mcdFactor * penMult;
   const mcds = mcd * s.spd;
   const dmgh = s.hp * drFactor * penMult;
   return { hps, ehp, ehps, dmg, dmgs, mcd, mcds, dmgh };

@@ -24,11 +24,15 @@
       flottante ≠ inverse exact) et aucun test stat-locks automatisé ne rattrape une dérive
       ULP via `Math.trunc` dans `composeMultStat`. À faire en préservant l'ordre exact
       (prefix `[0..5]` → talisman → EE/override/sets) avec un test d'équivalence dédié.
-- [ ] 🔴 **Stat de dégats** - quelle stat doit etre utilisé.
-      actuellement la formule de degat utilise uniquement Atk mais certains perso
-      utilise une autre stat a la place de l'attaque voir une stat en plus d'une autre (exemple caren utilise la def et pas l'atk, D.Stella utilise Atk+Hp)
-      => explorer fichier du jeu pour trouver logique et ratio 
-      => integrer ça dans le solver
+- [~] 🔴 **Stat de dégats** — stat principale **faite**, secondaires en reste.
+      ✅ **Principale** : `build.mjs` lit `scalings.main` (outerpedia damage-calc) → émet `dmgStat`
+      (`def`/`hp`, ATK omis par défaut) sur `characters.json` ; `CharacterDef.dmgStat` ; précalculé
+      dans le contexte solver et passé à `computeCheapRatings(fs, dmgStat)` → `dmg/dmgs/mcd/mcds`
+      scalent sur la bonne stat (Caren→DEF, HP-scalers→HP ; 15 persos non-ATK). Labels colonne
+      `Dmg`/`DmgH` corrigés. Test dédié (101 tests).
+      - [ ] **Secondaires avec ratio** (ex. D.Stella ATK+HP×ratio) : `scalings.secondaries` ne porte
+        pas le ratio chiffré → il faut l'extraire de `BuffTemplet` (`BT_DMG_OWNER_STAT` Value) côté
+        pipeline, puis ajouter une composante additive dans `computeCheapRatings`. Non fait.
 - [x] 🔴 **Overcap critique** — ✅ fait : le Score et les ratings cappaient déjà CHC à 100 %, mais
       l'**allocateur de gemmes** notait chaque gemme isolément (précalcul global, CHC-aveugle) →
       empilait des gemmes crit au-delà de 100 %. Fix = **alloc gemmes par combo** consciente du cap

@@ -472,6 +472,22 @@ describe("computeCheapRatings", () => {
     expect(r.mcd).toBe(2000);
   });
 
+  it("offensive ratings scale off the hero's damage stat (atk default, def/hp override)", () => {
+    // Distinct atk/def/hp so the chosen base stat is unambiguous. CHC 0, CHD
+    // 100, no dmgUp/pen → drFactor = mcdFactor = 1, penMult = 1, so each rating
+    // equals the chosen base stat directly.
+    const fs = { atk: 1000, def: 500, hp: 8000, spd: 100, crc: 0, chd: 100,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    expect(computeCheapRatings(fs).dmg).toBe(1000);          // default atk
+    expect(computeCheapRatings(fs, "atk").dmg).toBe(1000);
+    expect(computeCheapRatings(fs, "def").dmg).toBe(500);    // Caren-style
+    expect(computeCheapRatings(fs, "hp").dmg).toBe(8000);    // HP-scaler
+    // dmgh stays the fixed HP-scaling reference regardless of dmgStat.
+    expect(computeCheapRatings(fs, "def").dmgh).toBe(8000);
+    // mcds derives from the same base stat (× spd, mcdFactor = chd/100 = 1).
+    expect(computeCheapRatings(fs, "def").mcds).toBe(50000); // 500 × 100
+  });
+
   it("CHC=0 still produces damage (every hit is a non-crit at ×1.0)", () => {
     // Pre-fix bug: ATK × 0 × anything = 0 → builds with no CHC ranked at
     // dmg=0 in the table, masking real damage potential.

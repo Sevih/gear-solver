@@ -114,11 +114,11 @@ const SOLVER_RATINGS: ReadonlyArray<{ key: string; label: string; formula: strin
   { key: "hps",  label: "HpS",  formula: "HP × SPD",                        desc: "HP × Speed composite — fast-and-bulky proxy." },
   { key: "ehp",  label: "Ehp",  formula: "HP × (1 + DEF/1000) / max(0.3, 1 − dmgRed/100)", desc: "Effective HP — combines the in-game DEF mitigation 1000/(DEF+1000) with the build's own dmgRed (defender-side reduction)." },
   { key: "ehps", label: "EhpS", formula: "EHP × SPD",                       desc: "EHP × Speed — tanky-and-fast." },
-  { key: "dmg",  label: "Dmg",  formula: "ATK × E[DR] × penMult(2000)",     desc: "Expected damage per hit vs DEF=2000 — weights crit (1 + pCrit×(CHD/100−1)), attacker's dmgUp, and PEN. dmgRed doesn't reduce a build's own offensive output (defender stat)." },
+  { key: "dmg",  label: "Dmg",  formula: "DmgStat × E[DR] × penMult(2000)", desc: "Expected damage per hit vs DEF=2000 — scales off the hero's damage stat (ATK by default; DEF/HP for off-ATK heroes), weighting crit (1 + pCrit×(CHD/100−1)), attacker's dmgUp, and PEN. dmgRed doesn't reduce a build's own offensive output (defender stat)." },
   { key: "dmgs", label: "DmgS", formula: "Dmg × SPD",                       desc: "DPS — Dmg × speed." },
   { key: "mcd",  label: "Mcd",  formula: "ATK × (CHD/100 + dmgMod) × penMult(2000)", desc: "Max crit damage vs DEF=2000 — assumes 100% CHC (raid-buff scenario).", hideInTable: true },
   { key: "mcds", label: "McdS", formula: "Mcd × SPD",                       desc: "Max DPS — Mcd × speed.",            hideInTable: true },
-  { key: "dmgh", label: "DmgH", formula: "HP × E[DR] × penMult(2000)",      desc: "Expected damage for HP-scaling kits (Aer S3, Caren …) vs DEF=2000.", hideInTable: true },
+  { key: "dmgh", label: "DmgH", formula: "HP × E[DR] × penMult(2000)",      desc: "Expected damage for HP-scaling kits vs DEF=2000 — fixed HP reference column (the Dmg column already scales off the hero's actual stat).", hideInTable: true },
 ];
 
 /** Ratings actually rendered in the results table — filters out the
