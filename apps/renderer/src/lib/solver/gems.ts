@@ -40,7 +40,10 @@ export function buildGemPool(inv: Inventory, opts: GemPoolOptions): Map<number, 
   for (const g of inv.gear) {
     if (g.slot !== "ooparts" && g.slot !== "exclusive") continue;
     if (!opts.includeEquippedOnOthers && g.equippedBy && g.equippedBy !== opts.heroUid) continue;
-    if (g.equippedBy && opts.excludedHeroes.has(g.equippedBy)) continue;
+    // Selected hero is exempt from the excluded-hero check — see engine.ts
+    // `allow()` rationale. The user might tick himself in the picker; that
+    // shouldn't drop his own Talisman/EE gems from the pool.
+    if (g.equippedBy && g.equippedBy !== opts.heroUid && opts.excludedHeroes.has(g.equippedBy)) continue;
     for (const id of g.gemSlots ?? []) {
       if (!id) continue;
       pool.set(id, (pool.get(id) ?? 0) + 1);

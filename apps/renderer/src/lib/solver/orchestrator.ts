@@ -117,14 +117,24 @@ export class SolverOrchestrator {
     }
   }
 
-  /** User-initiated cancel — tells every worker to bail at the next tick.
-   *  Workers respond with their partial top-K via the standard `result`
-   *  message; we let the normal flow merge them and `flush()` then. This
-   *  way no in-flight work is wasted (a previous design flushed eagerly
-   *  with `buf=[]` and dropped everything cancelled workers had found). */
+  /** User-initiated cancel — release the UI immediately and bail every
+   *  worker. The earlier design relied on workers posting their partial
+   *  top-K back via the standard `result` message, but with generation
+   *  tracking a cancelled worker bails WITHOUT posting (its `result` would
+   *  carry a now-stale solveId anyway) — so `workersDone` never reached
+   *  `workers.length` and `flush()` never fired. The UI stayed in the
+   *  "Solving…" state forever, with SOLVE buttons disabled.
+   *
+   *  Fix: tell the workers to bail (free their CPU), bump `solveId` to
+   *  drop any in-flight output from the cancelled run, then immediately
+   *  flush whatever finished workers already merged into `this.buf`
+   *  (typically empty — most cancels happen mid-loop — but non-empty if a
+   *  fast worker finished while a slow one was still searching). */
   cancel(): void {
     if (!this.active) return;
     for (const w of this.workers) w.postMessage({ type: "cancel" });
+    this.solveId++; // any future output from these workers is now stale
+    this.flush();
   }
 
   /** Hard supersede (new solve clobbers an in-flight one). Drops the buf

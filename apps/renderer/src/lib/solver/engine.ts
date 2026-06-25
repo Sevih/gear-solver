@@ -140,7 +140,12 @@ export function prepareContext(req: SolveRequest): SolveContext {
   const allow = (g: GearPiece, slot: string): boolean => {
     if (g.slot !== slot) return false;
     if (!filters.options.includeEquippedOnOthers && g.equippedBy && g.equippedBy !== heroUid) return false;
-    if (g.equippedBy && excludedSet.has(g.equippedBy)) return false;
+    // Exempt the selected hero from the excluded-heroes check — the picker
+    // lists every character so the user CAN tick himself, but doing so would
+    // drop his own currently-equipped gear from the pool (contradicts the
+    // documented invariant "selected hero's own gear is always in"). The
+    // gem pool gets the same exemption via its own `heroUid` opt.
+    if (g.equippedBy && g.equippedBy !== heroUid && excludedSet.has(g.equippedBy)) return false;
     if (filters.options.onlyMaxed && g.enhanceLevel < 15) return false;
     if (heroClass && g.classLimit && g.classLimit !== heroClass) return false;
     // Main stat picks (per design slot — only weapon/accessory/talisman in UI).

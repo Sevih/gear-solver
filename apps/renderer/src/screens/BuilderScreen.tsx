@@ -547,6 +547,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
         selectedUid={selectedUid}
         onSelect={setSelectedUid}
         composition={composition}
+        projectedStats={selectedBuild?.finalStats ?? null}
         armorSets={armorSetCatalog}
         weaponEffects={weaponEffectCatalog}
         accessoryEffects={accessoryEffectCatalog}
@@ -803,7 +804,7 @@ function mainStatCatalogFromInventory(
  * Top band — 8 panels in a horizontal row (overflows on small widths)
  * ───────────────────────────────────────────────────────────────────────── */
 function TopPanelBand({
-  heroes, game, selectedUid, onSelect, composition,
+  heroes, game, selectedUid, onSelect, composition, projectedStats,
   armorSets, weaponEffects, accessoryEffects, mainStatCatalogs,
   filters, dispatch,
   solving, canSolve, onSolve, onCancelSolve,
@@ -813,6 +814,9 @@ function TopPanelBand({
   selectedUid: string | null;
   onSelect: (uid: string | null) => void;
   composition: SelectedComposition | null;
+  /** finalStats from the selected build in the results table, or null when
+   *  no row is selected — drives the right column of `StatsPanel`. */
+  projectedStats: FinalStats | null;
   armorSets: ArmorSetEntry[];
   weaponEffects: EffectEntry[];
   accessoryEffects: EffectEntry[];
@@ -837,7 +841,7 @@ function TopPanelBand({
         onSolve={onSolve}
         onCancelSolve={onCancelSolve}
       />
-      <StatsPanel stats={composition?.current ?? null} />
+      <StatsPanel stats={composition?.current ?? null} projected={projectedStats} />
       <OptionsPanel
         options={filters.options}
         excludedHeroes={filters.excludedHeroes}
@@ -1060,28 +1064,43 @@ function HeroOption({
 /* ─────────────────────────────────────────────────────────────────────────
  * Stats panel — current → new, side by side
  * ───────────────────────────────────────────────────────────────────────── */
-function StatsPanel({ stats }: { stats: FinalStats | null }) {
+function StatsPanel({ stats, projected }: { stats: FinalStats | null; projected: FinalStats | null }) {
   return (
     <Panel title="Stats" hint="Current stats on the left, projected stats from the selected build on the right." width="w-44">
       <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-1.5 gap-y-0.5 font-mono text-[10.5px] tabular-nums">
         {SOLVER_STATS.map((s) => (
-          <StatsPanelRow key={s.key} stat={s} stats={stats} />
+          <StatsPanelRow key={s.key} stat={s} stats={stats} projected={projected} />
         ))}
       </div>
     </Panel>
   );
 }
 
-function StatsPanelRow({ stat, stats }: { stat: typeof SOLVER_STATS[number]; stats: FinalStats | null }) {
-  const v = stats ? stats[stat.key as keyof FinalStats] : null;
+function StatsPanelRow({
+  stat, stats, projected,
+}: { stat: typeof SOLVER_STATS[number]; stats: FinalStats | null; projected: FinalStats | null }) {
+  const cur = stats ? stats[stat.key as keyof FinalStats] : null;
+  const proj = projected ? projected[stat.key as keyof FinalStats] : null;
+  // Color the projected column by delta vs current so the user sees at a
+  // glance which axes improve / regress on the selected build.
+  let projTone = "text-cyan-300/40";
+  if (proj != null && cur != null) {
+    if (proj > cur) projTone = "text-emerald-300";
+    else if (proj < cur) projTone = "text-rose-300";
+    else projTone = "text-white/60";
+  } else if (proj != null) {
+    projTone = "text-cyan-300";
+  }
   return (
     <>
       <StatIcon stat={stat.iconKey} size={12} />
-      <span className={cx("text-right", v != null ? "text-white" : "text-white/30")}>
-        {v != null ? `${v}${stat.unit}` : "—"}
+      <span className={cx("text-right", cur != null ? "text-white" : "text-white/30")}>
+        {cur != null ? `${cur}${stat.unit}` : "—"}
       </span>
       <span className="text-white/40">▸</span>
-      <span className="text-right text-cyan-300/40">—</span>
+      <span className={cx("text-right", projTone)}>
+        {proj != null ? `${proj}${stat.unit}` : "—"}
+      </span>
     </>
   );
 }
@@ -1805,9 +1824,16 @@ function ResultsTable({
     const sign = sortDir === "desc" ? -1 : 1;
     return [...builds].sort((a, b) => sign * (get(a) - get(b)));
   }, [builds, sortKey, sortDir]);
-  // selectedIdx points into the ORIGINAL builds order — we map through to
-  // keep the highlight on the same row after a re-sort. New click events
-  // are emitted with the original index too so other state stays consistent.
+  // Map each build to its index in the original `builds` array — used as
+  // both the row key and the click payload (selectedIdx points into the
+  // ORIGINAL order so it survives a re-sort). Replaces a previous
+  // `builds.indexOf(b)` in the render loop that was O(n²) — ~1M ops per
+  // re-render at the default topN=1000 (every hover, every sort).
+  const buildIndexOf = useMemo(() => {
+    const m = new Map<SolveBuild, number>();
+    for (let i = 0; i < builds.length; i++) m.set(builds[i]!, i);
+    return m;
+  }, [builds]);
   const selectedBuildRef = selectedIdx != null ? builds[selectedIdx] : null;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/8 bg-bg-elev-2">
@@ -1853,15 +1879,18 @@ function ResultsTable({
                 Pick a hero and click SOLVE to populate the results.
               </td></tr>
             )}
-            {sortedBuilds.map((b) => (
-              <ResultRow
-                key={builds.indexOf(b)}
-                build={b}
-                selected={b === selectedBuildRef}
-                ranges={ranges}
-                onClick={() => onSelect(builds.indexOf(b))}
-              />
-            ))}
+            {sortedBuilds.map((b) => {
+              const idx = buildIndexOf.get(b) ?? 0;
+              return (
+                <ResultRow
+                  key={idx}
+                  build={b}
+                  selected={b === selectedBuildRef}
+                  ranges={ranges}
+                  onClick={() => onSelect(idx)}
+                />
+              );
+            })}
           </tbody>
         </table>
       </div>

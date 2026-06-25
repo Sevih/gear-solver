@@ -160,6 +160,22 @@ describe("buildGemPool", () => {
     expect(pool.get(15004)).toBe(1); // hero-b included (not excluded)
     expect(pool.get(15037)).toBeUndefined(); // hero-c excluded
   });
+
+  it("selected hero is exempt from excludedHeroes — own gems always kept", () => {
+    // The ExcludeHeroesPicker lists every character (including the selected
+    // hero), so the user can tick himself. The gear pool's `allow()` exempts
+    // him; the gem pool must mirror that or the solver becomes inconsistent.
+    const mine = { ...talismanWithGems([15001, 15004]), uid: "t-mine", equippedBy: "hero-a" };
+    const inv = { gear: [mine], characters: [], presets: [] } as Inventory;
+    const opts = {
+      heroUid: "hero-a",
+      includeEquippedOnOthers: true,
+      excludedHeroes: new Set(["hero-a"]), // user ticked himself by mistake
+    };
+    const pool = buildGemPool(inv, opts);
+    expect(pool.get(15001)).toBe(1);
+    expect(pool.get(15004)).toBe(1);
+  });
 });
 
 describe("scoreGemPool", () => {
