@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Component, lazy, Suspense, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
 import type { GameData, Inventory, RawUserItem, RawUserCharacter, UserGeasLevels } from "@gear-solver/core";
 import { autoImport, parseFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
@@ -18,6 +18,37 @@ import { usePersistedState } from "./hooks/usePersistedState.js";
 const InventoryScreen = lazy(() => import("./screens/InventoryScreen.js").then((m) => ({ default: m.InventoryScreen })));
 const BuildsScreen = lazy(() => import("./screens/BuildsScreen.js").then((m) => ({ default: m.BuildsScreen })));
 const BuilderScreen = lazy(() => import("./screens/BuilderScreen.js").then((m) => ({ default: m.BuilderScreen })));
+
+/** Per-screen error boundary — a throw in a `useMemo`/render (e.g. a bad
+ *  filter combo or stale persisted state) used to blank the whole app with
+ *  no message. This catches it, shows the error + a Retry, and keeps the
+ *  shell (header/tabs) alive. Reset by remounting on tab change (`key={tab}`)
+ *  so navigating away recovers automatically. */
+class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  override state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  override componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[screen crash]", error, info.componentStack);
+  }
+  override render() {
+    if (this.state.error) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center">
+          <h2 className="font-display text-[16px] font-semibold text-rose-300">Something broke on this screen</h2>
+          <p className="max-w-md font-mono text-[11.5px] leading-relaxed text-zinc-400">{this.state.error.message}</p>
+          <button
+            type="button"
+            onClick={() => this.setState({ error: null })}
+            className="rounded-md border border-cyan-400/40 bg-cyan-500/15 px-3 py-1 text-[12px] text-cyan-100 hover:bg-cyan-500/25"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Resolved-at-build-time site version (set in next.config / vite env).
 const APP_VERSION =
@@ -194,11 +225,15 @@ export function App() {
       )}
 
       <main className="min-h-[calc(100vh-60px)]">
-        <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-500">Loading {tab.toLowerCase()}…</div>}>
-          {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} />}
-          {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} />}
-          {tab === "Builder" && <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} />}
-        </Suspense>
+        {/* key={tab} remounts the boundary on tab switch so a crash on one
+            screen doesn't persist after navigating away. */}
+        <ScreenErrorBoundary key={tab}>
+          <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-500">Loading {tab.toLowerCase()}…</div>}>
+            {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} />}
+            {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} />}
+            {tab === "Builder" && <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} />}
+          </Suspense>
+        </ScreenErrorBoundary>
       </main>
 
       {!inv && (
