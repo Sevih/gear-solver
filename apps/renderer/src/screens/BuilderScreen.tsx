@@ -26,6 +26,7 @@ import { RichTooltip } from "../design/RichTooltip.js";
 import { SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toIconPiece, toUiPiece } from "../design/adapter.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
+import { simulateReforges } from "../lib/solver/engine.js";
 import { SolverOrchestrator } from "../lib/solver/orchestrator.js";
 import type { PoolSizes, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
 import {
@@ -333,6 +334,19 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
   // Solver state — orchestrator stays alive for the screen's lifetime so
   // the worker pool isn't torn down between solves. Lazy-init on first SOLVE.
   const orchestratorRef = useRef<SolverOrchestrator | null>(null);
+  /** Reforge context of the most recent solve — snapshotted at solve start so
+   *  the async `onResult` reads the run's own value (not a later filter edit).
+   *  The bottom gear band re-runs the deterministic `simulateReforges` with
+   *  this priority to display the same projected substats the engine scored. */
+  const solveReforgeRef = useRef<{ useReforged: boolean; priority: Record<string, number> }>(
+    { useReforged: false, priority: {} },
+  );
+  /** Reforge context tied to whatever currently populates `solveResults` —
+   *  set from `solveReforgeRef` on a live solve, or from the saved build's
+   *  stored context on restore. Drives the bottom band's projection. */
+  const [resultsReforge, setResultsReforge] = useState<{ useReforged: boolean; priority: Record<string, number> }>(
+    { useReforged: false, priority: {} },
+  );
   const [solving, setSolving] = useState(false);
   const [solveProgress, setSolveProgress] = useState<{ permutations: number; searched: number; poolSizes: PoolSizes | null }>(
     { permutations: 0, searched: 0, poolSizes: null },
@@ -390,7 +404,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
     if (!orchestratorRef.current) {
       orchestratorRef.current = new SolverOrchestrator({
         onProgress: (p) => setSolveProgress({ permutations: p.permutations, searched: p.searched, poolSizes: p.poolSizes ?? null }),
-        onResult:   (builds) => { setSolveResults(builds); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setSolving(false); },
+        onResult:   (builds) => { setSolveResults(builds); setResultsReforge(solveReforgeRef.current); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setSolving(false); },
         onError:    (msg) => { setSolveError(msg); setSolving(false); },
       });
     }
@@ -400,6 +414,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
     setSelectedBuildIdx(null);
     setSolveProgress({ permutations: 0, searched: 0, poolSizes: null });
     setLastSolveMode(mode);
+    // Snapshot the reforge context for this run (shallow-copy the priority so
+    // a later filter edit can't mutate what `onResult` reads).
+    solveReforgeRef.current = { useReforged: filters.options.useReforged, priority: { ...filters.priority } };
     const serializedFilters: SolveFilters = {
       options: filters.options,
       excludedHeroes: Array.from(filters.excludedHeroes),
@@ -463,6 +480,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
           heroUid: selectedUid,
           mode: lastSolveMode,
           build: selectedBuild,
+          reforge: resultsReforge,
           createdAt: Date.now(),
         };
         const next = addSavedBuild(savedBuildsMap, entry);
@@ -485,6 +503,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
     // solve doesn't linger over a freshly restored build.
     setSolveError(null);
     setSolveResults([b.build]);
+    // Restore the build's reforge context so the bottom band projects the
+    // same substats it was solved with (pre-field builds → no projection).
+    setResultsReforge(b.reforge ?? { useReforged: false, priority: {} });
     setSelectedBuildIdx(0);
     setLastSolveMode(b.mode);
   };
@@ -626,7 +647,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
           onRemovePreset={removePresetById}
         />
       </div>
-      <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} />
+      <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} />
       {/* Fixed at the viewport bottom — escapes the flex layout via
        *  position:fixed, so the rest of the screen sees an extra
        *  `pb-9` reservation instead of laying out for it. */}
@@ -2345,24 +2366,34 @@ function FilterBig({ label, value, title }: { label: string; value: number; titl
  * Bottom gear band — one card per main slot for the selected result
  * ───────────────────────────────────────────────────────────────────────── */
 function BottomGearBand({
-  build, pieceByUid, game,
+  build, pieceByUid, game, reforge,
 }: {
   build: SolveBuild | null;
   pieceByUid: Map<string, GearPiece>;
   game: GameData | null;
+  /** Reforge context the displayed build was solved with — when
+   *  `useReforged`, each card re-runs the deterministic `simulateReforges`
+   *  so its substats match the build's projected `finalStats` instead of the
+   *  pieces' current rolls (the engine scored the reforged clones). */
+  reforge: { useReforged: boolean; priority: Record<string, number> };
 }) {
-  // Map engine slot → piece UID for the selected build. The result's
-  // `pieceUids` array carries slot order (engine names) but here we re-key
-  // by GearSlot to render the design slot icons.
+  // Map engine slot → display piece for the selected build. The result's
+  // `pieceUids` carries slot order (engine names); we re-key by GearSlot and,
+  // when reforge projection is on, swap in the simulated max-roll clone.
+  // `simulateReforges` self-filters (returns the original for Talisman/EE or
+  // when there's nothing left to reforge), so identity inequality is a
+  // reliable "was projected" signal for the badge.
   const pieceBySlot = useMemo(() => {
-    const map = new Map<string, GearPiece>();
+    const map = new Map<string, { piece: GearPiece; reforged: boolean }>();
     if (!build) return map;
     for (const uid of build.pieceUids) {
-      const p = pieceByUid.get(uid);
-      if (p?.slot) map.set(p.slot, p);
+      const original = pieceByUid.get(uid);
+      if (!original?.slot) continue;
+      const piece = reforge.useReforged ? simulateReforges(original, reforge.priority) : original;
+      map.set(original.slot, { piece, reforged: piece !== original });
     }
     return map;
-  }, [build, pieceByUid]);
+  }, [build, pieceByUid, reforge]);
 
   return (
     <div className="flex shrink-0 flex-wrap gap-2">
@@ -2370,7 +2401,8 @@ function BottomGearBand({
         // RESULT_GEAR_SLOTS uses design names — convert "talisman" back to
         // the engine "ooparts" lookup key.
         const engineSlot = slot === "talisman" ? "ooparts" : slot;
-        const piece = pieceBySlot.get(engineSlot) ?? null;
+        const entry = pieceBySlot.get(engineSlot) ?? null;
+        const piece = entry?.piece ?? null;
         // Only Talisman / EE carry gems — surface the build's recommended
         // gem allocation there so the displayed stats (computed WITH those
         // gems in SOLVE CP) are reachable, not silently mismatched against
@@ -2380,7 +2412,7 @@ function BottomGearBand({
           : slot === "exclusive"
             ? build?.gemAllocation.ee
             : undefined;
-        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} />;
+        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} />;
       })}
     </div>
   );
@@ -2397,13 +2429,16 @@ const SLOT_MAIN_PLACEHOLDER: Record<string, string> = {
 /** Compact mirror of the Inventory tab's `ItemDetail` panel — same section
  *  flow (header / icon+label / main stat / substats). Renders em-dash
  *  placeholders when no piece is wired (no build selected yet). */
-function GearCard({ slot, piece, game, recommendedGems }: {
+function GearCard({ slot, piece, game, recommendedGems, reforged }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
   /** Build's recommended gem allocation for this slot (Talisman/EE only),
    *  OptionIDs with 0 = empty. Undefined for non-gem slots. */
   recommendedGems?: number[];
+  /** True when `piece.subs` are projected (max-roll reforge), not the
+   *  current rolls — flags the substat list with a "reforged" badge. */
+  reforged?: boolean;
 }) {
   const slotMeta = SLOT_BY[slot];
   const def = piece && game ? game.equipment[String(piece.itemId)] : null;
@@ -2441,6 +2476,14 @@ function GearCard({ slot, piece, game, recommendedGems }: {
         </span>
       </div>
 
+      {reforged && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/60">Substats</span>
+          <span className="rounded border border-cyan-400/40 bg-cyan-500/15 px-1 py-px text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
+            reforged
+          </span>
+        </div>
+      )}
       <div className="space-y-1 font-mono text-[10.5px] tabular-nums">
         {piece && piece.subs.length > 0 ? piece.subs.map((s, i) => (
           <div key={i} className="flex items-center gap-1.5 text-white/80">

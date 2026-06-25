@@ -69,12 +69,12 @@
       reco diffère des gemmes socketées actuelles (rien affiché si allocation vide =
       gemmes conservées, ex. SOLVE sans priorité). Les stats affichées (calculées AVEC
       ces gemmes en SOLVE CP) sont donc atteignables. `BuilderScreen.tsx`.
-- [ ] 🔴 **Le bandeau du bas ignore les stats reforgées** — avec *Use reforged stats*,
-      l'engine clone les pièces avec subs gonflés et calcule `finalStats` dessus, mais
-      `BottomGearBand` relit `pieceByUid` → la pièce **originale** non reforgée → la
-      somme des substats affichés ne matche pas les `finalStats` projetés. Piste : badge
-      "(projeté/reforgé)" ou propager les pièces reforgées jusqu'au bandeau.
-      `engine.ts:232-236,363`, `BuilderScreen.tsx:2336`.
+- [x] 🔴 **Le bandeau du bas ignore les stats reforgées** — ✅ corrigé : `simulateReforges`
+      étant pur/déterministe, `BottomGearBand` re-simule côté main thread avec le contexte
+      solve-time (`useReforged` + `priority`, snapshotté au solve via `solveReforgeRef`,
+      propagé aux résultats live ET aux builds restaurés via un champ `reforge` optionnel
+      sur `SavedBuild`) → substats affichés = projection scorée par l'engine. Badge **reforged**
+      sur les cartes dont les subs sont projetés. `BuilderScreen.tsx`, `savedBuilds.ts`.
 - [x] 🔴 **Échecs silencieux (pas de feedback)** — ✅ corrigé :
       - `startSolve` pose un `solveError` (« Game data is still loading… » / hero introuvable)
         au lieu de `return` muet.

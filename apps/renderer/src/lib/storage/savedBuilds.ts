@@ -20,6 +20,11 @@ export interface SavedBuild {
   mode: SolveMode;
   /** Verbatim solver output (uids + finalStats + ratings + gems). */
   build: SolveBuild;
+  /** Reforge context the build was solved with — needed to reproduce the
+   *  bottom gear band's projected (max-roll) substats on restore. Optional
+   *  for backward compat: builds saved before this field fall back to
+   *  showing the pieces' current rolls (their pre-existing behavior). */
+  reforge?: { useReforged: boolean; priority: Record<string, number> };
   /** Wall-clock ms — sort key for newest-first display. */
   createdAt: number;
 }
