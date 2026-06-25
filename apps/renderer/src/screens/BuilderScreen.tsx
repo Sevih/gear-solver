@@ -350,6 +350,15 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
   const [savedBuildsMap, setSavedBuildsMap] = useState<SavedBuildsMap>(() => loadSavedBuilds());
   const [filterPresetsMap, setFilterPresetsMap] = useState<FilterPresetsMap>(() => loadFilterPresets());
 
+  // In-app name prompt (replaces window.prompt which blocked the renderer
+  // thread and didn't match the rest of the UI's styling). `pending` carries
+  // the action to run once the user confirms the name.
+  const [namePrompt, setNamePrompt] = useState<{
+    title: string;
+    placeholder: string;
+    onConfirm: (name: string) => void;
+  } | null>(null);
+
   // Build inventory uid→piece lookup once per inventory change — bottom
   // gear band needs full piece data to render and the results table only
   // carries UIDs (saves bytes through postMessage).
@@ -420,19 +429,24 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
   // null-checks past these helpers' callers.
   const saveCurrentBuild = () => {
     if (!selectedBuild || !selectedUid) return;
-    const name = window.prompt("Build name", `Build ${(savedBuildsMap[selectedUid]?.length ?? 0) + 1}`);
-    if (!name) return;
-    const entry: SavedBuild = {
-      id: crypto.randomUUID(),
-      name: name.trim() || "Untitled",
-      heroUid: selectedUid,
-      mode: lastSolveMode,
-      build: selectedBuild,
-      createdAt: Date.now(),
-    };
-    const next = addSavedBuild(savedBuildsMap, entry);
-    setSavedBuildsMap(next);
-    persistSavedBuilds(next);
+    const placeholder = `Build ${(savedBuildsMap[selectedUid]?.length ?? 0) + 1}`;
+    setNamePrompt({
+      title: "Save build",
+      placeholder,
+      onConfirm: (name) => {
+        const entry: SavedBuild = {
+          id: crypto.randomUUID(),
+          name: name.trim() || placeholder,
+          heroUid: selectedUid,
+          mode: lastSolveMode,
+          build: selectedBuild,
+          createdAt: Date.now(),
+        };
+        const next = addSavedBuild(savedBuildsMap, entry);
+        setSavedBuildsMap(next);
+        persistSavedBuilds(next);
+      },
+    });
   };
   const removeBuildById = (id: string) => {
     if (!selectedUid) return;
@@ -452,20 +466,25 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
   // Filter-preset handlers.
   const saveCurrentPreset = () => {
     if (!selectedUid) return;
-    const name = window.prompt("Preset name", `Preset ${(filterPresetsMap[selectedUid]?.length ?? 0) + 1}`);
-    if (!name) return;
-    const entry: FilterPreset = {
-      id: crypto.randomUUID(),
-      name: name.trim() || "Untitled",
-      heroUid: selectedUid,
-      // Deep-copy via JSON round-trip + Set re-materialization so a later
-      // edit to the live `filters` doesn't mutate the stored snapshot.
-      filters: { ...filters, excludedHeroes: new Set(filters.excludedHeroes) },
-      createdAt: Date.now(),
-    };
-    const next = addFilterPreset(filterPresetsMap, entry);
-    setFilterPresetsMap(next);
-    persistFilterPresets(next);
+    const placeholder = `Preset ${(filterPresetsMap[selectedUid]?.length ?? 0) + 1}`;
+    setNamePrompt({
+      title: "Save preset",
+      placeholder,
+      onConfirm: (name) => {
+        const entry: FilterPreset = {
+          id: crypto.randomUUID(),
+          name: name.trim() || placeholder,
+          heroUid: selectedUid,
+          // Deep-copy via JSON round-trip + Set re-materialization so a later
+          // edit to the live `filters` doesn't mutate the stored snapshot.
+          filters: { ...filters, excludedHeroes: new Set(filters.excludedHeroes) },
+          createdAt: Date.now(),
+        };
+        const next = addFilterPreset(filterPresetsMap, entry);
+        setFilterPresetsMap(next);
+        persistFilterPresets(next);
+      },
+    });
   };
   const loadPreset = (p: FilterPreset) => {
     dispatch({ type: "loadPreset", filters: { ...p.filters, excludedHeroes: new Set(p.filters.excludedHeroes) } });
@@ -591,6 +610,66 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel 
         resultCount={solveResults.length}
         solving={solving}
       />
+      <PromptDialog
+        prompt={namePrompt}
+        onClose={() => setNamePrompt(null)}
+      />
+    </div>
+  );
+}
+
+/** Minimal modal prompt replacing `window.prompt`. Esc cancels, Enter
+ *  submits, click outside cancels. Single text field; submits the trimmed
+ *  value (or the placeholder when blank). Stays in DOM and renders nothing
+ *  when `prompt` is null — no Portal needed (parent screen is full-bleed
+ *  inside the app shell). */
+function PromptDialog({
+  prompt, onClose,
+}: {
+  prompt: { title: string; placeholder: string; onConfirm: (name: string) => void } | null;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState("");
+  useEffect(() => {
+    if (prompt) setValue("");
+  }, [prompt]);
+  if (!prompt) return null;
+  const submit = () => {
+    prompt.onConfirm(value.trim() || prompt.placeholder);
+    onClose();
+  };
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60" onClick={onClose}>
+      <div
+        className="w-80 rounded-lg border border-white/10 bg-zinc-900 p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-white/70">{prompt.title}</div>
+        <input
+          type="text"
+          value={value}
+          autoFocus
+          placeholder={prompt.placeholder}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+            else if (e.key === "Escape") onClose();
+          }}
+          className="w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-[12px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
+        />
+        <div className="mt-3 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded border border-white/8 px-3 py-1 text-[11px] text-white/70 hover:bg-white/6"
+          >Cancel</button>
+          <button
+            type="button"
+            onClick={submit}
+            className="rounded border border-cyan-400/40 bg-cyan-500/15 px-3 py-1 text-[11px] text-cyan-100 hover:bg-cyan-500/25"
+          >Save</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -963,8 +1042,18 @@ function ActionButton({
   );
 }
 
+/** Hero search haystack — shared between `HeroSelect` and
+ *  `ExcludeHeroesPicker`. Same matching the Builds tab uses: display name +
+ *  raw name + nickname + charId, plus a "core fusion" tag for fused chars
+ *  so the user can find them by typing "core" or "fusion". */
+function heroSearchHaystack(c: Character, game: GameData | null): string {
+  const meta = game?.characters[String(c.charId)] ?? null;
+  const fusionTag = c.fusionCharId !== 0 ? "core fusion" : "";
+  return `${fusionTag} ${displayNameOf(c, meta)} ${meta?.nickname ?? ""} ${c.name ?? ""} ${c.charId}`.toLowerCase();
+}
+
 /** Searchable hero combobox (kept compact for the Hero panel — input fits
- *  inside w-44 with room for the portrait below). */
+ *  inside w-44 with room for the portrait below). Escape closes the popup. */
 function HeroSelect({
   heroes, game, value, onChange,
 }: {
@@ -989,15 +1078,7 @@ function HeroSelect({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return heroes;
-    return heroes.filter((c) => {
-      const meta = game?.characters[String(c.charId)] ?? null;
-      // Same haystack the Builds tab uses: full display name + raw name +
-      // nickname + charId, plus a "core fusion" tag for fused chars so the
-      // user can find them by typing "core" or "fusion".
-      const fusionTag = c.fusionCharId !== 0 ? "core fusion" : "";
-      const hay = `${fusionTag} ${displayNameOf(c, meta)} ${meta?.nickname ?? ""} ${c.name ?? ""} ${c.charId}`.toLowerCase();
-      return hay.includes(q);
-    });
+    return heroes.filter((c) => heroSearchHaystack(c, game).includes(q));
   }, [heroes, game, query]);
   const display = open ? query : selectedName;
   return (
@@ -1007,6 +1088,7 @@ function HeroSelect({
         value={display}
         onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
         onFocus={() => { setOpen(true); setQuery(""); }}
+        onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
         placeholder={selectedName || "Search hero…"}
         className="w-full rounded-md border border-white/8 bg-black/30 px-2 py-1 text-[11.5px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
       />
@@ -1181,42 +1263,43 @@ function ExcludeHeroesPicker({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return heroes;
-    return heroes.filter((c) => {
-      const meta = game?.characters[String(c.charId)] ?? null;
-      const fusionTag = c.fusionCharId !== 0 ? "core fusion" : "";
-      const hay = `${fusionTag} ${displayNameOf(c, meta)} ${meta?.nickname ?? ""} ${c.name ?? ""} ${c.charId}`.toLowerCase();
-      return hay.includes(q);
-    });
+    return heroes.filter((c) => heroSearchHaystack(c, game).includes(q));
   }, [heroes, game, query]);
   return (
-    <div ref={wrapRef} className="relative">
+    // Two sibling buttons inside a flex wrapper instead of a nested
+    // <span role="button"> inside the toggle <button> — the previous shape
+    // was invalid HTML and not keyboard-reachable for the clear action.
+    <div
+      ref={wrapRef}
+      className="relative flex w-full items-center gap-0 rounded-md border border-white/8 bg-black/30 text-[11px] text-white/70 hover:bg-white/6"
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-1.5 rounded-md border border-white/8 bg-black/30 px-2 py-1 text-[11px] text-white/70 hover:bg-white/6"
+        className="flex flex-1 items-center justify-between gap-1.5 px-2 py-1 text-left focus:outline-none"
         title="Drop gear currently equipped on these heroes from the solver's candidate pool."
       >
         <span className="truncate">
           {excluded.size === 0 ? "Exclude equipped" : `Excluded: ${excluded.size}`}
         </span>
-        <div className="flex shrink-0 items-center gap-1">
-          {excluded.size > 0 && (
-            <span
-              role="button"
-              onClick={(e) => { e.stopPropagation(); onClear(); }}
-              className="text-white/40 hover:text-rose-300"
-              title="Clear all"
-            >✕</span>
-          )}
-          <span className="text-white/30">▾</span>
-        </div>
+        <span className="text-white/30">▾</span>
       </button>
+      {excluded.size > 0 && (
+        <button
+          type="button"
+          onClick={() => onClear()}
+          className="px-1.5 py-1 text-white/40 hover:text-rose-300 focus:outline-none"
+          title="Clear all"
+          aria-label="Clear all excluded heroes"
+        >✕</button>
+      )}
       {open && (
         <div className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-72 flex-col overflow-hidden rounded-md border border-white/10 bg-zinc-900 shadow-lg">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
             autoFocus
             placeholder="Search hero…"
             className="shrink-0 border-b border-white/8 bg-black/30 px-2 py-1 text-[11px] text-white placeholder:text-white/30 focus:outline-none"
@@ -1287,31 +1370,50 @@ function FilterRow({
   onMin: (v: number | undefined) => void;
   onMax: (v: number | undefined) => void;
 }) {
+  // Inverted bound (min > max) silently returns zero builds — surface it as
+  // a rose tint on both inputs so the user sees the misconfig at a glance.
+  const inverted = minValue != null && maxValue != null && minValue > maxValue;
   return (
     <>
       <div className="flex w-12 items-center gap-1 text-[10.5px] text-white/70">
         {iconKey && <StatIcon stat={iconKey} size={12} />}
         {label && <span className="truncate">{label}</span>}
       </div>
-      <FilterInput value={minValue} onChange={onMin} />
-      <FilterInput value={maxValue} onChange={onMax} />
+      <FilterInput value={minValue} onChange={onMin} invalid={inverted} title={inverted ? "Min > Max — no build can match." : undefined} />
+      <FilterInput value={maxValue} onChange={onMax} invalid={inverted} title={inverted ? "Min > Max — no build can match." : undefined} />
     </>
   );
 }
 
-function FilterInput({ value, onChange }: { value: number | undefined; onChange: (v: number | undefined) => void }) {
+function FilterInput({
+  value, onChange, invalid, title,
+}: {
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
+  invalid?: boolean;
+  title?: string;
+}) {
   return (
     <input
       type="number"
       min={0}
       value={value ?? ""}
+      title={title}
       onChange={(e) => {
         const t = e.target.value;
         if (t === "") { onChange(undefined); return; }
         const n = Number(t);
-        if (Number.isFinite(n)) onChange(n);
+        // Reject negatives — `min={0}` only constrains the spinner buttons,
+        // not direct keyboard input. Filter ranges are unsigned by spec.
+        if (!Number.isFinite(n) || n < 0) return;
+        onChange(n);
       }}
-      className="min-w-0 rounded border border-white/8 bg-black/30 px-1 py-0.5 text-right text-[10.5px] font-mono tabular-nums text-white focus:border-cyan-400/40 focus:outline-none"
+      className={cx(
+        "min-w-0 rounded border bg-black/30 px-1 py-0.5 text-right text-[10.5px] font-mono tabular-nums text-white focus:outline-none",
+        invalid
+          ? "border-rose-400/60 focus:border-rose-300"
+          : "border-white/8 focus:border-cyan-400/40",
+      )}
     />
   );
 }
@@ -1875,7 +1977,9 @@ function ResultsTable({
           </thead>
           <tbody>
             {builds.length === 0 && !solving && !error && (
-              <tr><td colSpan={21} className="px-3 py-12 text-center text-[11px] italic text-white/40">
+              // 1 sets + 8 stats + N ratings + score + upg + actions.
+              // Derived rather than hardcoded — TABLE_RATINGS can change.
+              <tr><td colSpan={1 + 8 + TABLE_RATINGS.length + 3} className="px-3 py-12 text-center text-[11px] italic text-white/40">
                 Pick a hero and click SOLVE to populate the results.
               </td></tr>
             )}
@@ -2273,9 +2377,6 @@ function GearCard({ slot, piece, game }: { slot: SlotId; piece: GearPiece | null
             {piece ? `+${piece.enhanceLevel}${piece.ascended ? " · ascended" : ""}` : "—"}
           </div>
           <div className="text-white">{slotMeta?.label ?? slot}</div>
-        </div>
-        <div className="grid h-7 w-7 place-items-center rounded-full bg-white/4 text-[10px] text-white/40">
-          {piece?.enhanceLevel ?? "?"}
         </div>
       </div>
 
