@@ -305,10 +305,11 @@
 
 ## Hygiene
 
-- [ ] **Pre-existing TODOs dans le code** :
-  - [ ] `docs/data-schema.md:36` — "TODO: confirm" sur un champ. Vérifier et trancher.
-  - [ ] `tools/capture/README.md:66` — TODO sur le mapping OptionID → stat, normalement déjà
-        fait via `data/derived/options.json`. Maj du README.
+- [x] **Pre-existing TODOs dans le code** — ✅ traités :
+  - `docs/data-schema.md` — le "TODO: confirm" n'existe plus (faux positif d'audit) ;
+    la section substats a été réalignée sur `parse.ts` (Level = procs au-dessus du tick initial).
+  - `tools/capture/README.md` — TODO OptionID→stat **résolu** dans le README (le mapping est
+    fait via `options.json` / `resolveStat`), + même mislabel « Level (total ticks) » corrigé.
 
 ---
 

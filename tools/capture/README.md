@@ -58,14 +58,15 @@ SmeltingCount        reforge count
 SingularityLevel/Step/OptionID   Singularity Ascension (+11→+15)
 IsLock               locked flag
 OptionList[]         main stat option id(s)
-SubOptionList[]      substats: { OptionID, Level (total ticks), BaseLevel (initial yellow ticks) }
-                     orange/reforge ticks = Level - BaseLevel
+SubOptionList[]      substats: { OptionID, Level (procs above the initial tick), BaseLevel (initial yellow ticks) }
+                     total ticks = Level + 1 (in-game shows LV (Level + 1)) ; reforge ticks = Level - BaseLevel
 ```
 - Substat `OptionID`s observed: `160001`–`160013` (13 stat types).
 - Main-stat `OptionList` patterns: `(5024,5048)`, `(4024,0)`, `(3024,0)`, `(6024,6048)`, `(24,94/95/96)` …
-- **TODO:** map `OptionID` → stat name + per-tick value (datamine the equipment DB / cross-check
-  against in-game display, e.g. the equipped weapon read ATK 61.8% / Crit Chance 12% / Crit DMG 24% /
-  DMG Increase 8% / Speed 9).
+- `OptionID` → stat name + per-tick value mapping is **done**: `data/build.mjs` distills it
+  into `data/derived/options.json`, consumed at runtime via `resolveStat(optionId, ticks, game.options)`.
+  Cross-checked against in-game display (e.g. a weapon read ATK 61.8% / Crit Chance 12% / Crit
+  DMG 24% / DMG Increase 8% / Speed 9).
 
 ## Environment
 
