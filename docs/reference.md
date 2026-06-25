@@ -40,18 +40,18 @@ Le jeu copie ses tables brutes dans `data/game/*.json` (18 fichiers).
 | `ItemOptionTemplet.json`             | `options.json`            | OptionID → StatOption (`{st, ap, v}`) OU IOT_BUFF reference |
 | `BuffTemplet.json`                   | `buffs.json`              | BuffID → array of StatOption (per enhanceLevel)        |
 | `SetTemplet.json` + curated          | `sets.json`               | setId → levels[] → {p2, p4, p2_desc, p4_desc, name}    |
-| `EquipmentEffectTemplet.json`        | `equipmentPassives.json`  | ItemID → {name, textByTier[1..4]}                      |
-| `MultiTierPassiveTemplet.json`       | `multiTierPassives.json`  | ItemID → list of tier passives                         |
+| `EquipmentEffectTemplet.json`        | `equipment-passives.json` | ItemID → {name, textByTier[1..4]}                      |
+| `MultiTierPassiveTemplet.json`       | `multi-tier-passives.json`| ItemID → list of tier passives                         |
 | `EquipmentEffectTemplet.json` (sub)  | `gems.json`               | OptionID 15001..15054 → {type, level, st, ap, v}       |
-| `SingularityOptionTemplet.json`      | `singularityOptions.json` | OptionID → {st, ap, v, name, desc, combatOnly}         |
-| `EquipmentEffectTemplet.json` (EE)   | `eePassives.json`         | ItemID → list of {st, ap, v, levelThreshold}           |
+| `SingularityOptionTemplet.json`      | `singularity-options.json`| OptionID → {st, ap, v, name, desc, combatOnly}         |
+| `EquipmentEffectTemplet.json` (EE)   | `ee-passives.json`        | ItemID → list of {st, ap, v, levelThreshold}           |
 | `CharacterTemplet.json` etc.         | `characters.json`         | charId → {ingredients, cls, element, star, …}          |
-| `ItemEnchantTemplet.json`            | (intégré dans `equipment`)| enhanceFactor, tierFactor, expCurves, singularity      |
-| `ExpCharacterTemplet.json`           | `expCharacter.json`       | array idx 1..120 → cumulative XP                       |
-| `CharacterMaxLevelTemplet.json`      | `charLevelMax.json`       | `${star}|${step}` → {maxLevel, statModifierAfter100}   |
-| `ArchiveBonusTemplet.json`           | `codexCurve.json`         | array idx 0..11 → {atkPct, defPct, hpPct}              |
-| `ArchiveTemplet.json`                | `archiveBonus.json`       | curve archive reward → level                           |
-| `TrustExpTemplet.json` + buffs       | `trustCharacter.json`, `trustBuffs.json` | trust system data                       |
+| `ItemEnchantTemplet.json` + `SingularityEquipEnchantTemplet.json` | `enhance.json` | enhanceFactor, tierFactor, expCurves, singularity (fichier standalone) |
+| `ExpCharacterTemplet.json`           | `exp-character.json`      | array idx 1..120 → cumulative XP                       |
+| `CharacterMaxLevelTemplet.json`      | `char-level-max.json`     | `${star}|${step}` → {maxLevel, statModifierAfter100}   |
+| `ArchiveBonusTemplet.json`           | `archive-bonus.json`      | `CompleteCount` → codex level (1..11)                  |
+| `CharacterArchiveStatTemplet.json` (via `computeCharacterIngredients`) | `codex-curve.json` | codex level idx 0..11 → {atkPct, defPct, hpPct} |
+| `TrustExpTemplet.json` + buffs       | `trust-character.json`, `trust-buffs.json` | trust system data                       |
 
 Re-générer après un patch jeu : `npm run data:build` (ou `data/sync.ps1`
 si on doit aussi recopier depuis Outerpedia).
