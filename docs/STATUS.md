@@ -1,6 +1,6 @@
 # STATUS — où on en est / comment reprendre
 
-Dernière mise à jour : 2026-06-24. Ce fichier est le point d'entrée pour reprendre le
+Dernière mise à jour : 2026-06-25. Ce fichier est le point d'entrée pour reprendre le
 projet à froid. Les détails sont dans les autres docs (liens en bas).
 
 ## But du projet
@@ -41,6 +41,14 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
    - **Onglet Builder** : optimiseur de gear Fribbels-style. Voir [docs/solver.md](solver.md)
      pour le détail. Worker pool en renderer, partition embarrassingly parallel, gem
      sub-solver, modes SOLVE (par Score pondéré) et SOLVE CP (par Combat Power).
+     **Câblé end-to-end** : cancel mid-solve (`MessageChannel` yield), colonne Upg
+     (calculée, triable, filtrable), Exclude-equipped multi-select, simulation de reforge,
+     allocation de gemmes recommandée, Save/Remove build + Filter presets par héros
+     (localStorage), bouton Optimize → depuis l'onglet Builds.
+
+5. **Desktop Electron** (`apps/desktop/`) — `main.ts` + serveur local (`server.ts`) +
+   détection d'émulateur, capture native via IPC. App fonctionnelle en dev ; le
+   **packaging** prod (bake `data/`, electron build, auto-update) reste en cours (cf. todo M7+).
 
 ## Comment lancer
 
@@ -68,24 +76,35 @@ npm run data:build       # régénère data/derived depuis data/game
 - **`data/derived` est généré** : ne pas l'éditer à la main, modifier `data/build.mjs`.
 - **Commentaires TS** : éviter `*/` littéral dans un bloc `/** */` (ça ferme le commentaire).
 
-## Ce qui RESTE (voir docs/roadmap.md pour le détail)
+## Ce qui RESTE (voir docs/roadmap.md + docs/todo.md pour le détail)
 
-- **Polish solver** : cancel mid-solve (yield via `MessageChannel`), Upg column,
-  Exclude-equipped multi-select, reforge simulation.
-- **Action buttons** (BuilderScreen sidebar) : Equip / Save Build / … non câblés.
-- **Persistance locale** : sauvegarde de builds, presets de filtres par héros.
-- **Desktop wrapper** : packaging Electron (déjà initié, à finir).
+> Le polish solver, la persistance (Save build / Filter presets) et le wrapper Electron
+> de base sont **livrés** (voir « Ce qui est FAIT »). Reste :
+
+- **Perf hot-path** : accumulateur de buckets incrémental, virtualisation de la table
+  de résultats (topN=1000).
+- **Packaging desktop (M7+)** : bake `data/` dans le bundle prod, finaliser l'electron
+  build, auto-update (`electron-updater`).
+- **Equip / Unequip vers le jeu** : nécessite une API jeu inexistante (retiré de l'UI ;
+  à reprendre si le pipeline de capture peut envoyer des commandes).
+- **JSON import/export** des builds/presets + versioning du snapshot `data/`.
+- **Robustesse/sécu desktop** : cleanup process orphelins, gardes Host/Origin (cf. todo).
 
 ## Carte du repo
 
 ```
-apps/renderer/    UI React + Vite (renderer process Electron)
-packages/core/    moteur : raw.ts, types.ts, gamedata.ts, stats.ts, parse.ts, score.ts, solver.ts
+apps/renderer/    UI React + Vite (renderer process Electron) ; le SOLVER vit ici
+                  (src/lib/solver/: engine.ts, orchestrator.ts, gems.ts, worker)
+apps/desktop/     Electron : main.ts, server.ts (serveur local), emulator-detect.ts
+packages/core/    moteur stats : raw.ts, types.ts, gamedata.ts, stats.ts, parse.ts,
+                  compose-stats.ts, index.ts  (les anciens stubs solver.ts/score.ts
+                  ont été supprimés)
 tools/capture/    pipeline de capture (capture.ps1, disarm.ps1, addon.py, scripts/)
 data/game/        tables brutes du jeu (copie)
-data/derived/     tables distillées (générées) — consommées par le moteur
+data/derived/     tables distillées (générées, kebab-case) — consommées par le moteur
 data/build.mjs    distillation ; data/sync.ps1 resync depuis Outerpedia
-docs/             architecture.md, data-schema.md, roadmap.md, STATUS.md (ce fichier)
+docs/             architecture.md, data-schema.md, reference.md, roadmap.md, solver.md,
+                  todo.md, STATUS.md (ce fichier)
 ```
 
 ## Docs liées
