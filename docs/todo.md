@@ -56,7 +56,8 @@
       colonne filtrée = forcée visible) (`c8808d4`).
 - [x] 🟡 **Tooltips en-têtes** — nom complet + définition (TextSystem `SYS_DESC_*`) au survol (`5fa5037`).
 - [x] 🔴 **Colonne Set cassée** — rendait `—`, jamais implémentée → set tags par build (icône + tier 2/4) (`500fb26`).
-- [ ] 🟡 **Colonnes arme + accessoire** — ajouter au tableau les effets d'arme et d'accessoire portés par chaque build.
+- [x] 🟡 **Colonnes arme + accessoire** — effets d'arme/accessoire par build (icône + nom au survol), toggleables
+      via le menu Columns (`a08f9b6`).
 - [ ] 🟠 **Solve sous-utilise le CPU** — pendant un solve, CPU ~25% max mais temp 70-80° : le pool de workers ne
       sature pas les cœurs. Investiguer la parallélisation (taille du pool, découpe des chunks, idle workers).
 - [ ] 🟡 **Reforge / upgrade dans la gear band** — représenter les pièces qui **nécessitent une upgrade** + les
