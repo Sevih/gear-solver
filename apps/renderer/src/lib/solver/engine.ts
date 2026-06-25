@@ -221,13 +221,21 @@ export function prepareContext(req: SolveRequest): SolveContext {
     exclusive: { hit: ee ? 1 : 0,             of: countAll("exclusive") },
   };
 
-  // Gem pool — full inventory union, scored once. The scoring uses
-  // `priority`, so when priority is uniformly zero every score collapses
-  // to 0 → no gems would be allocated and the override would fabricate
-  // empty Talisman/EE pieces. We detect that case and skip the override
-  // entirely (fallback: Talisman/EE's own socketed subs contribute).
+  // Gem pool — full inventory union, scored once. Scoring depends on
+  // `priority`; when uniformly zero, scores collapse to 0 and the
+  // allocator yields `null` → solver falls back to the Talisman/EE's
+  // own socketed subs (good for SOLVE mode without explicit intent).
+  //
+  // SOLVE CP mode opts out of that fallback (`allowZeroPriority`) and
+  // ranks gems by raw `value / norm` instead — "maximize CP" implies
+  // "use the best gems available"; preserving currently-socketed gems
+  // would silently disable gem optimization for the typical CP usage
+  // (user clicks SOLVE CP without touching the priority panel, expects
+  // the solver to recommend the strongest gems for the new build).
   const gemPool = buildGemPool(inv);
-  const scoredGems = scoreGemPool(gemPool, filters.priority, game);
+  const scoredGems = scoreGemPool(gemPool, filters.priority, game, {
+    allowZeroPriority: req.mode === "cp",
+  });
   const eeSlotCount = gemSlotsOf(ee);
   // Pre-aggregate gem contribution per talismanSlots variant — at most
   // two variants (4 and 5) cover every talisman in the inventory.

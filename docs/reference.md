@@ -286,11 +286,19 @@ Trié desc.
 `{flat, pct}` directement consommable par `aggregateGearBuckets`. Évite N×10
 appels `resolveStat` dans le hot loop.
 
-**Fallback** : quand priority est uniformément zéro, aucun gem score positif
-→ `aggregateGemDelta` retourne `null` → le solver passe `undefined` à
-`computeFinalStats` → fallback sur les `subs` des pieces (= gems
-actuellement socketés). Préserve la stat in-game-équivalente quand le
-joueur n'a pas exprimé d'intention.
+**Fallback selon le mode** :
+- **SOLVE** + priority vide → tous les scores collapsent à 0 →
+  `aggregateGemDelta` retourne `null` → `computeFinalStats` sans override →
+  fallback sur les `subs` des pieces (= gems actuellement socketés).
+  Préserve la stat in-game-équivalente quand le joueur n'a pas exprimé d'intention.
+- **SOLVE CP** + priority vide → `scoreGemPool` reçoit `allowZeroPriority: true`
+  → bascule sur `score = value / ROLL_NORMS[engine_key]` (magnitude per-roll
+  brute). Le greedy pick alors les meilleurs gems indépendamment des stats.
+  Nécessaire parce que "max CP" sous-entend "use the best gems available" —
+  préserver les gems actuels désactiverait silencieusement l'optimisation
+  gem pour le cas d'usage typique du mode CP.
+- **N'importe quel mode** + priority non-vide → `priority × value / norm`
+  pour les deux modes (la priorité utilisateur domine, le flag CP est ignoré).
 
 ### 2.8 Top-% prune (`engine.ts::topPctPrune`)
 

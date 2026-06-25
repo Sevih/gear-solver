@@ -163,6 +163,33 @@ describe("scoreGemPool", () => {
     expect(scored).toHaveLength(3);
     expect(scored.every((g) => g.id === 15037)).toBe(true);
   });
+
+  it("priority empty → all scores collapse to 0 (default — SOLVE-mode semantics)", () => {
+    const pool = new Map([[15037, 1], [15049, 1], [15053, 1]]);
+    const scored = scoreGemPool(pool, {}, game);
+    expect(scored.every((g) => g.score === 0)).toBe(true);
+  });
+
+  it("priority empty + allowZeroPriority=true → raw value/norm scoring (SOLVE CP fallback)", () => {
+    // SOLVE CP without explicit priority: gems must still be optimized.
+    // Score = value / ROLL_NORMS[stat], so high-tier gems beat low-tier
+    // ones within each axis (allocator picks Lv5 over Lv1 for the same
+    // ATK% axis, etc).
+    const pool = new Map([[15001, 1], [15037, 1], [15049, 1], [15053, 1]]);
+    const scored = scoreGemPool(pool, {}, game, { allowZeroPriority: true });
+    expect(scored.every((g) => g.score > 0)).toBe(true);
+    const atkLv5 = scored.find((g) => g.id === 15037)!;
+    const atkLv1 = scored.find((g) => g.id === 15001)!;
+    expect(atkLv5.score).toBeGreaterThan(atkLv1.score);
+  });
+
+  it("allowZeroPriority ignored when priority is non-empty (priority dominates)", () => {
+    // Even with the opt-in flag, gems still ranked by priority × value/norm
+    // when priority has any non-zero entry — no surprise raw-value fallback.
+    const pool = new Map([[15053, 1]]); // DMG+ Lv6 — would top raw scoring
+    const scored = scoreGemPool(pool, { atk: 3 }, game, { allowZeroPriority: true });
+    expect(scored[0]!.score).toBe(0); // priority.dmgUp undefined → 0
+  });
 });
 
 describe("allocateGems", () => {
@@ -223,6 +250,17 @@ describe("aggregateGemDelta", () => {
     }));
     const delta = aggregateGemDelta(scored, 2, 1); // cap = 3
     expect(delta!.pct.dmgUp).toBe(12); // 3 × 4
+  });
+
+  it("end-to-end: SOLVE CP without priority yields a non-null delta (no silent skip)", () => {
+    // Pre-fix bug: SOLVE CP without priority → all gem scores = 0 → delta
+    // = null → solver kept currently-socketed gems → "max CP" actually
+    // optimized everything EXCEPT gems. This test guards the fix path.
+    const pool = new Map([[15053, 1], [15037, 1]]);
+    const scored = scoreGemPool(pool, {}, game, { allowZeroPriority: true });
+    const delta = aggregateGemDelta(scored, 5, 5);
+    expect(delta).not.toBeNull();
+    expect(Object.keys(delta!.pct).length).toBeGreaterThan(0);
   });
 });
 
