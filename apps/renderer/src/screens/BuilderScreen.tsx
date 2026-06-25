@@ -649,6 +649,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           solving={solving}
           error={solveError}
           emptyReason={emptyReason}
+          statFilters={filters.statFilters}
         />
         <RightSidebar
           canSave={selectedBuild != null}
@@ -1988,7 +1989,7 @@ function EffectBadge({ state }: { state: ChipState }) {
  * Middle area — results table + right sidebar
  * ───────────────────────────────────────────────────────────────────────── */
 function ResultsTable({
-  builds, selectedIdx, onSelect, solving, error, emptyReason,
+  builds, selectedIdx, onSelect, solving, error, emptyReason, statFilters,
 }: {
   builds: SolveBuild[];
   selectedIdx: number | null;
@@ -1998,10 +1999,26 @@ function ResultsTable({
   /** Why the last solve returned nothing (e.g. a slot pool collapsed to 0
    *  after filters). Null → show the generic "pick a hero" hint instead. */
   emptyReason: string | null;
+  /** Active stat bands — the table always shows the first 8 stat columns;
+   *  any of the remaining stats (dmgUp/dmgRed/eff/res) that carry a live
+   *  min/max band get appended so you never filter on an invisible column. */
+  statFilters: Record<string, MinMax>;
 }) {
-  // Per-column min/max for the heatmap — recomputed when builds change.
-  // Stats and ratings are computed once; reused across every row.
-  const ranges = useMemo(() => computeColumnRanges(builds), [builds]);
+  // Visible stat columns = the always-on first 8, plus any of the optional
+  // tail stats the user is actively filtering on. Without this, a band on
+  // e.g. `eff` would silently prune builds with no column to show why.
+  const statCols = useMemo(() => {
+    const base = SOLVER_STATS.slice(0, 8);
+    const extras = SOLVER_STATS.slice(8).filter((s) => {
+      const b = statFilters[s.key];
+      return b != null && (b.min != null || b.max != null);
+    });
+    return [...base, ...extras];
+  }, [statFilters]);
+  // Per-column min/max for the heatmap — recomputed when builds (or the set
+  // of visible stat columns) change. Stats and ratings computed once; reused
+  // across every row.
+  const ranges = useMemo(() => computeColumnRanges(builds, statCols), [builds, statCols]);
   // Sort state — column key + direction. Default null = solver's native
   // order (Score desc in SOLVE, CP desc in SOLVE CP). Click cycles
   // null → desc → asc → null per column; clicking a different column resets.
@@ -2055,7 +2072,7 @@ function ResultsTable({
   const totalSize = rowVirtualizer.getTotalSize();
   const padTop = virtualRows.length > 0 ? virtualRows[0]!.start : 0;
   const padBottom = virtualRows.length > 0 ? totalSize - virtualRows[virtualRows.length - 1]!.end : 0;
-  const colSpan = 1 + 8 + TABLE_RATINGS.length + 3;
+  const colSpan = 1 + statCols.length + TABLE_RATINGS.length + 3;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/8 bg-bg-elev-2">
       <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-3 py-1.5">
@@ -2075,7 +2092,7 @@ function ResultsTable({
           <thead className="sticky top-0 z-10 bg-bg-elev-2 text-white/70">
             <tr className="border-b border-white/8">
               <th className="px-1.5 py-1 text-left text-[9.5px] font-semibold uppercase tracking-wider">sets</th>
-              {SOLVER_STATS.slice(0, 8).map((s) => (
+              {statCols.map((s) => (
                 <SortHeader key={s.key} colKey={s.key} title={s.label} sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
                   {s.label.toLowerCase()}
                 </SortHeader>
@@ -2096,7 +2113,7 @@ function ResultsTable({
           </thead>
           <tbody>
             {builds.length === 0 && !solving && !error && (
-              // colSpan = 1 sets + 8 stats + N ratings + score + upg + actions.
+              // colSpan = 1 sets + statCols + N ratings + score + upg + actions.
               <tr><td colSpan={colSpan} className="px-3 py-12 text-center text-[11px] italic">
                 {emptyReason ? (
                   <span className="text-amber-300/80">
@@ -2120,6 +2137,7 @@ function ResultsTable({
                   build={b}
                   selected={b === selectedBuildRef}
                   ranges={ranges}
+                  statCols={statCols}
                   index={idx}
                   onSelect={onSelect}
                 />
@@ -2169,12 +2187,12 @@ interface ColumnRanges {
   rating: Record<string, { min: number; max: number }>;
   score: { min: number; max: number };
 }
-function computeColumnRanges(builds: SolveBuild[]): ColumnRanges {
+function computeColumnRanges(builds: SolveBuild[], statCols: ReadonlyArray<typeof SOLVER_STATS[number]>): ColumnRanges {
   const stat: ColumnRanges["stat"] = {};
   const rating: ColumnRanges["rating"] = {};
   let scoreMin = Infinity, scoreMax = -Infinity;
   for (const b of builds) {
-    for (const s of SOLVER_STATS.slice(0, 8)) {
+    for (const s of statCols) {
       const v = (b.finalStats as unknown as Record<string, number>)[s.key];
       if (typeof v !== "number") continue;
       const cur = stat[s.key] ?? { min: Infinity, max: -Infinity };
@@ -2205,11 +2223,14 @@ const RESULT_ROW_H = 26;
  *  useState setter, `ranges` is memoized, `build` refs are stable. The click
  *  handler is bound to the stable `index` here rather than passed pre-closed. */
 const ResultRow = memo(function ResultRow({
-  build, selected, ranges, index, onSelect,
+  build, selected, ranges, statCols, index, onSelect,
 }: {
   build: SolveBuild;
   selected?: boolean;
   ranges: ColumnRanges;
+  /** Stat columns to render — stable (memoized) reference from ResultsTable
+   *  so it doesn't defeat the row memo on hover/sort. */
+  statCols: ReadonlyArray<typeof SOLVER_STATS[number]>;
   index: number;
   onSelect: (i: number) => void;
 }) {
@@ -2223,7 +2244,7 @@ const ResultRow = memo(function ResultRow({
       )}
     >
       <td className="px-1.5 py-1 text-left text-white/40">—</td>
-      {SOLVER_STATS.slice(0, 8).map((s) => {
+      {statCols.map((s) => {
         const v = (build.finalStats as unknown as Record<string, number>)[s.key];
         return (
           <td key={s.key} className={cx("px-1.5 py-1 text-right text-white", heatCellNew(v, ranges.stat[s.key]))}>
