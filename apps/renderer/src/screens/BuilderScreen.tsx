@@ -1105,7 +1105,7 @@ function OptionsPanel({
         <ToggleRow label="Use reforged stats" hint="Predict orange-tick reforges on +15 gear." checked={options.useReforged} onChange={set("useReforged")} />
         <ToggleRow label="Only maxed gear" hint="+15 pieces that can't enhance further." checked={options.onlyMaxed} onChange={set("onlyMaxed")} />
         <ToggleRow label="Equipped items" hint="Include gear equipped on other heroes (own hero always in)." checked={options.includeEquippedOnOthers} onChange={set("includeEquippedOnOthers")} />
-        <ToggleRow label="Keep current" hint="Lock current gear; only fill empty slots." checked={options.keepCurrent} onChange={set("keepCurrent")} />
+        <ToggleRow label="Keep current" hint="Lock current pieces (only fill empty slots). Gems are still re-allocated — useful for 'keep my gear, tell me which gems to socket'." checked={options.keepCurrent} onChange={set("keepCurrent")} />
       </div>
       <div className="mt-2">
         <ExcludeHeroesPicker

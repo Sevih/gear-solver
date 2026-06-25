@@ -55,7 +55,12 @@ export function calcBattlePower(args: CpArgs): number {
   const atkPart = 0.125 * s.atk * (1 + chain);
   const defPart = (s.hp + s.def) * defF * defR * resR;
   const starBonus = showUIStar * 500 + starPlus * 120;
-  const skillSum = (skills.first - 4) + skills.second + skills.ultimate + skills.chainPassive;
+  // S1 baseline is 4 in-game (always-on starter level) → `first - 4` is the
+  // user-leveled delta. Clamped at 0 defensively: in normal captures
+  // `first` is always ≥ 4, but a partial capture or a parser regression
+  // returning 0 would otherwise subtract 400 CP silently.
+  const firstDelta = Math.max(0, skills.first - 4);
+  const skillSum = firstDelta + skills.second + skills.ultimate + skills.chainPassive;
   const eeBp = ee ? ee.enhanceLevel * 100 + 300 : 0;
   const ooBp = ooparts ? ooparts.enhanceLevel * 100 + (ooparts.star ?? 0) * 50 : 0;
   const fusionBp = fused ? 5000 : 0;

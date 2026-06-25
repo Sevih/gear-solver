@@ -196,13 +196,18 @@ chain   = (1 + effF) × crcF × critF × penF × spdF
 atkPart = 0.125 × ATK × (1 + chain)
 defPart = (HP + DEF) × defF × defR × resR
 starBonus = showUIStar × 500 + starPlus × 120
-skillSum  = (first − 4) + second + ultimate + chainPassive
+skillSum  = max(0, first − 4) + second + ultimate + chainPassive
 eeBp      = ee ? ee.enhanceLevel × 100 + 300 : 0
 ooBp      = ooparts ? ooparts.enhanceLevel × 100 + (ooparts.star ?? 0) × 50 : 0
 fusionBp  = fused ? 5000 : 0
 
 CP = floor(atkPart + defPart + starBonus + skillSum × 100 + eeBp + ooBp + fusionBp)
 ```
+
+**`max(0, first − 4)`** : clamp défensif. S1 démarre à 4 in-game (toujours-on),
+donc `first - 4` représente la délta utilisateur. Une capture normale a
+`first ≥ 4`, mais un parse glitch retournant 0 soustrairait 400 CP en
+silence — le clamp empêche ça.
 
 ### 2.3 Cheap ratings (`ratings.ts::computeCheapRatings`)
 
@@ -340,13 +345,23 @@ rejette ooparts/exclusive en early-return.
 
 Énorme gain sur les recherches `req-4pc Sharp` quand peu de helmets Sharp.
 
-### 2.11 Combat Power filter (SOLVE mode)
+### 2.11 Combat Power + Upg filters (deferred to finalize)
 
-CP est trop cher à calculer dans le hot loop SOLVE (~20× cheap rating).
-- **SOLVE CP mode** : CP calculé in-loop, filtre appliqué tout de suite.
-- **SOLVE mode** : CP non calculé in-loop → filtre user `ratingFilters.cp`
-  appliqué dans `finalizeBuilds` après calcul lazy du top-N (peut réduire
-  la liste finale en-dessous de topN).
+CP est trop cher à calculer dans le hot loop SOLVE (~20× cheap rating)
+et `upg` dépend du current loadout du héros (uniquement disponible côté
+`finalizeBuilds` via `ctx.req.inventory`). Les deux filters sont donc
+appliqués dans `finalizeBuilds` (helper `inMinMax`) :
+
+- **CP / SOLVE CP** : CP calculé in-loop, filtre `ratingFilters.cp`
+  appliqué tout de suite.
+- **CP / SOLVE** : CP non calculé in-loop → filtre `ratingFilters.cp`
+  appliqué dans `finalizeBuilds` après calcul lazy du top-N (peut
+  réduire la liste finale en-dessous de topN).
+- **Upg** : `upg` (nombre de slots différents du current loadout) calculé
+  dans `finalizeBuilds`, filtre `ratingFilters.upg` appliqué immédiatement
+  après. `compileFilterSpecs` skip `cp` et `upg` au moment de la
+  compilation pour éviter qu'ils soient évalués dans le hot loop avec des
+  valeurs encore nulles.
 
 ### 2.12 Top-K min-heap (`engine.ts::TopKHeap`)
 

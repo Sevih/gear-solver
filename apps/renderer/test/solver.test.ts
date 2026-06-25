@@ -20,6 +20,7 @@ import type { GameData, GearPiece, Inventory, RolledStat, StatType } from "@gear
 import { aggregateGearBuckets, type GemOverride } from "../src/lib/composeBuild.js";
 import { simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
 import type { SolveBuild } from "../src/lib/solver/types.js";
+import { calcBattlePower } from "../src/lib/solver/cp.js";
 import { aggregateGemDelta, allocateGems, buildGemPool, gemSlotsOf, scoreGemPool } from "../src/lib/solver/gems.js";
 import { computeCheapRatings, computeScore, STAT_NORMS, STAT_TO_PRIORITY } from "../src/lib/solver/ratings.js";
 
@@ -549,5 +550,39 @@ describe("STAT_TO_PRIORITY", () => {
       const mapped = STAT_TO_PRIORITY[userKey] ?? userKey;
       expect(STAT_NORMS[mapped]).toBeDefined();
     }
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * CP — defensive clamps in the in-game CalcBattlePower mirror.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+describe("calcBattlePower", () => {
+  const baseStats = {
+    atk: 1000, def: 500, hp: 10000, spd: 100,
+    crc: 50, chd: 150, eff: 100, res: 100,
+    dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0,
+  };
+  const args = (skills: { first: number; second: number; ultimate: number; chainPassive: number }) => ({
+    stats: baseStats,
+    showUIStar: 0, starPlus: 0,
+    skills,
+    ee: null, ooparts: null,
+    fused: false,
+  });
+
+  it("clamps skills.first below 4 to zero — never subtracts CP", () => {
+    // Pre-clamp bug: skills.first=0 would compute (0-4)=-4 → -400 CP
+    // contribution. Captures should never produce first<4 (S1 starts at 4
+    // in-game) but a parse regression could; we guard against it.
+    const cpBaseline = calcBattlePower(args({ first: 4, second: 0, ultimate: 0, chainPassive: 0 }));
+    const cpZero = calcBattlePower(args({ first: 0, second: 0, ultimate: 0, chainPassive: 0 }));
+    expect(cpZero).toBe(cpBaseline);
+  });
+
+  it("higher skills.first still contributes positively", () => {
+    const cp4 = calcBattlePower(args({ first: 4, second: 0, ultimate: 0, chainPassive: 0 }));
+    const cp10 = calcBattlePower(args({ first: 10, second: 0, ultimate: 0, chainPassive: 0 }));
+    expect(cp10).toBe(cp4 + 600); // (10-4) × 100
   });
 });

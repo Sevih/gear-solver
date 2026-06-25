@@ -632,7 +632,7 @@ export async function solveChunk(
                     ooparts: talisman,
                     fused: starMeta.fused,
                   });
-                  if (cpFilter && !cpInRange(cp, cpFilter)) continue;
+                  if (cpFilter && !inMinMax(cp, cpFilter)) continue;
                 }
 
                 searched++;
@@ -684,7 +684,11 @@ export function finalizeBuilds(ctx: SolveContext, builds: SolveBuild[], mode: So
   for (const g of req.inventory.gear) {
     if (g.equippedBy === req.heroUid) equippedUids.add(g.uid);
   }
+  // CP and upg both compiled out of the hot-loop FilterSpecs — they can't
+  // be applied during enumeration (cp is null in SOLVE mode, upg needs the
+  // hero's current loadout). We apply them here once we have both values.
   const cpFilter = req.filters.ratingFilters.cp;
+  const upgFilter = req.filters.ratingFilters.upg;
   const out: SolveBuild[] = [];
   for (const b of builds) {
     let cp = b.cp;
@@ -701,11 +705,12 @@ export function finalizeBuilds(ctx: SolveContext, builds: SolveBuild[], mode: So
         fused: starMeta.fused,
       });
     }
-    if (cp != null && cpFilter && !cpInRange(cp, cpFilter)) continue;
+    if (cp != null && cpFilter && !inMinMax(cp, cpFilter)) continue;
     let upg = 0;
     for (let i = 0; i < b.pieceUids.length; i++) {
       if (!equippedUids.has(b.pieceUids[i]!)) upg++;
     }
+    if (upgFilter && !inMinMax(upg, upgFilter)) continue;
     out.push({ ...b, cp, upg });
   }
   return out;
@@ -794,9 +799,11 @@ function passesRatingSpecs(ratings: CheapRatings, score: number, specs: FilterSp
   return true;
 }
 
-function cpInRange(cp: number, f: { min?: number; max?: number } | undefined): boolean {
+/** Shared `min ≤ v ≤ max` predicate for the CP and upg filters which are
+ *  applied at finalize-time (not via the in-loop FilterSpec path). */
+function inMinMax(v: number, f: { min?: number; max?: number } | undefined): boolean {
   if (!f) return true;
-  if (f.min != null && cp < f.min) return false;
-  if (f.max != null && cp > f.max) return false;
+  if (f.min != null && v < f.min) return false;
+  if (f.max != null && v > f.max) return false;
   return true;
 }
