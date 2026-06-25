@@ -33,6 +33,7 @@ import type { PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "..
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
 import { fetchReco } from "../lib/reco/fetchReco.js";
 import { usePersistedState } from "../hooks/usePersistedState.js";
+import { QUALITY_TIERS, QUALITY_LABEL, type QualityTier } from "../lib/quality.js";
 import {
   addSavedBuild, loadSavedBuilds, persistSavedBuilds, removeSavedBuild,
   type SavedBuild, type SavedBuildsMap,
@@ -267,6 +268,9 @@ export interface SolverFilters {
   excludedSets: string[];
   weaponEffectPicks: Record<string, ChipState>;
   accessoryEffectPicks: Record<string, ChipState>;
+  /** Minimum gear quality tier admitted into the solve pool. Null = no gate.
+   *  Talisman / EE have no quality and are always kept. */
+  minQuality: QualityTier | null;
 }
 
 const INITIAL_FILTERS: SolverFilters = {
@@ -281,10 +285,12 @@ const INITIAL_FILTERS: SolverFilters = {
   excludedSets: [],
   weaponEffectPicks: {},
   accessoryEffectPicks: {},
+  minQuality: null,
 };
 
 type SolverAction =
   | { type: "setOption"; key: keyof SolverOptions; value: boolean }
+  | { type: "setMinQuality"; value: QualityTier | null }
   | { type: "toggleHeroExcluded"; uid: string }
   | { type: "setStatFilter"; stat: string; bound: "min" | "max"; value: number | undefined }
   | { type: "setRatingFilter"; rating: string; bound: "min" | "max"; value: number | undefined }
@@ -319,6 +325,8 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
   switch (action.type) {
     case "setOption":
       return { ...state, options: { ...state.options, [action.key]: action.value } };
+    case "setMinQuality":
+      return { ...state, minQuality: action.value };
     case "toggleHeroExcluded": {
       const next = new Set(state.excludedHeroes);
       if (next.has(action.uid)) next.delete(action.uid); else next.add(action.uid);
@@ -568,6 +576,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       excludedSets: filters.excludedSets,
       weaponEffectPicks: filters.weaponEffectPicks as SolveFilters["weaponEffectPicks"],
       accessoryEffectPicks: filters.accessoryEffectPicks as SolveFilters["accessoryEffectPicks"],
+      minQuality: filters.minQuality,
     };
     orchestratorRef.current.solve({
       mode,
@@ -1226,6 +1235,7 @@ function BuilderToolbar({
   const optionCount =
     (filters.options.includeEquippedOnOthers ? 0 : 1) +
     (filters.options.keepCurrent ? 1 : 0) +
+    (filters.minQuality ? 1 : 0) +
     filters.excludedHeroes.size;
 
   return (
@@ -1302,7 +1312,7 @@ function BuilderToolbar({
       />
       <ToolbarDivider />
       <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
-        <OptionsPanel options={filters.options} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
+        <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
       </PopoverButton>
       <PopoverButton label="Stat filters" count={statCount} openKey={openKey} myKey="stat" onToggle={toggle} onClose={close}>
         <StatFiltersPanel filters={filters.statFilters} dispatch={dispatch} />
@@ -1670,9 +1680,10 @@ function StatsPanelRow({
  * Options panel — pool / steal toggles + exclude-heroes multi-pill
  * ───────────────────────────────────────────────────────────────────────── */
 function OptionsPanel({
-  options, excludedHeroes, heroes, game, dispatch,
+  options, minQuality, excludedHeroes, heroes, game, dispatch,
 }: {
   options: SolverOptions;
+  minQuality: QualityTier | null;
   excludedHeroes: ReadonlySet<string>;
   heroes: Inventory["characters"];
   game: GameData | null;
@@ -1685,6 +1696,19 @@ function OptionsPanel({
         <ToggleRow label="Equipped items" hint="Include gear equipped on other heroes (own hero always in)." checked={options.includeEquippedOnOthers} onChange={set("includeEquippedOnOthers")} />
         <ToggleRow label="Keep current" hint="Lock current pieces (only fill empty slots). Gems are still re-allocated — useful for 'keep my gear, tell me which gems to socket'." checked={options.keepCurrent} onChange={set("keepCurrent")} />
       </div>
+      <label className="mt-2 flex items-center justify-between gap-2" title="Drop gear below this rolled-substat quality from the pool. Talisman / EE have no quality and are always kept.">
+        <span className="text-[11px] text-white/80">Min quality</span>
+        <select
+          value={minQuality ?? ""}
+          onChange={(e) => dispatch({ type: "setMinQuality", value: (e.target.value || null) as QualityTier | null })}
+          className="rounded-md border border-white/8 bg-black/30 px-1.5 py-0.5 text-[11px] text-white focus:border-cyan-400/40 focus:outline-none"
+        >
+          <option value="">Any</option>
+          {QUALITY_TIERS.map((q) => (
+            <option key={q} value={q}>{QUALITY_LABEL[q]}</option>
+          ))}
+        </select>
+      </label>
       <div className="mt-2">
         <ExcludeHeroesPicker
           excluded={excludedHeroes}

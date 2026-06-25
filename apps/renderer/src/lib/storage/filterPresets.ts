@@ -69,6 +69,8 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
       excludedSets,
       weaponEffectPicks: sanitizeEffects(f.weaponEffectPicks),
       accessoryEffectPicks: sanitizeEffects(f.accessoryEffectPicks),
+      // Field added after some presets were saved — default to no quality gate.
+      minQuality: f.minQuality ?? null,
     },
   };
 }

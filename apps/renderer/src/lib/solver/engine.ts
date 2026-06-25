@@ -28,6 +28,7 @@ import { aggregateGemDelta, allocateGems, allocateGemsCapped, buildGemPool, CRC_
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
 import { planSetIds, setsFeasible } from "./setPlans.js";
+import { gearPieceQualityTier, QUALITY_TIERS, type QualityTier } from "../quality.js";
 
 /** Map engine GearSlot → design SlotId used by the BuilderScreen's
  *  mainPicks / effect chip maps. Only `ooparts` differs (UI calls it
@@ -162,6 +163,13 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     Object.entries(filters.accessoryEffectPicks).filter(([, v]) => v === "excluded").map(([k]) => k),
   );
 
+  // Quality gate — drop pieces whose rolled-substat quality is below the
+  // chosen tier. `minQualityRank < 0` (unset / unknown) disables the check.
+  // Talisman / EE return a null tier and are never gated.
+  const minQualityRank = filters.minQuality
+    ? QUALITY_TIERS.indexOf(filters.minQuality as QualityTier)
+    : -1;
+
   // Per-slot filter helper. Returns true if the piece is allowed in this slot.
   const allow = (g: GearPiece, slot: string): boolean => {
     if (g.slot !== slot) return false;
@@ -173,6 +181,11 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     // gem pool gets the same exemption via its own `heroUid` opt.
     if (g.equippedBy && g.equippedBy !== heroUid && excludedSet.has(g.equippedBy)) return false;
     if (filters.options.onlyMaxed && g.enhanceLevel < 15) return false;
+    // Quality gate — only on slots that have a quality tier (null → keep).
+    if (minQualityRank >= 0) {
+      const tier = gearPieceQualityTier(g);
+      if (tier && QUALITY_TIERS.indexOf(tier) < minQualityRank) return false;
+    }
     if (heroClass && g.classLimit && g.classLimit !== heroClass) return false;
     // Main stat picks (per design slot — only weapon/accessory/talisman in UI).
     const dslot = engineToDesign(slot);

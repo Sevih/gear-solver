@@ -14,11 +14,10 @@ import { GameText } from "../design/GameText.js";
 import { HoverHint } from "../design/HoverHint.js";
 
 // ── quality tiers (shared between filter panel + detail panel) ─────────
-// Kept here (above FilterState) so both the filter UI and the inline
-// per-item Quality bar in ItemDetail pull from the same table. Tier name
-// drives the i18n label, bar color, and filter pill color.
-export type QualityTier = "poor" | "decent" | "good" | "excellent" | "perfect";
-export const QUALITY_TIERS: QualityTier[] = ["poor", "decent", "good", "excellent", "perfect"];
+// Tier type + the score→tier thresholds live in lib/quality.ts (single source
+// of truth, also used by the Builder's solve-pool quality filter). QUALITY_TONE
+// stays here — it's UI-only (bar color + filter pill).
+import { QUALITY_TIERS, qualityTierFromScore, type QualityTier } from "../lib/quality.js";
 export const QUALITY_TONE: Record<QualityTier, { text: string; bar: string; label: string }> = {
   poor:      { text: "text-white",      bar: "#a1a1aa", label: "Poor" },
   decent:    { text: "text-sky-300",    bar: "#7dd3fc", label: "Decent" },
@@ -1006,11 +1005,8 @@ function computeQuality(piece: UiPiece): {
   // Each one bumps the achievable tick pool by 1.
   const max = 14 + piece.reforge.n;
   const pct = Math.min(100, Math.round((current / max) * 100));
-  const tier: QualityTier =
-    pct >= 100 ? "perfect" :
-    pct >= 85  ? "excellent" :
-    pct >= 70  ? "good" :
-    pct >= 50  ? "decent" : "poor";
+  // Thresholds shared with the Builder's quality filter (lib/quality.ts).
+  const tier = qualityTierFromScore(current, max);
   return { current, max, pct, tier };
 }
 

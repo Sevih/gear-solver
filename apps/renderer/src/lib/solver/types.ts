@@ -58,6 +58,11 @@ export interface SolveFilters {
   excludedSets: string[];
   weaponEffectPicks: Record<string, EffectConstraint>;
   accessoryEffectPicks: Record<string, EffectConstraint>;
+  /** Minimum gear quality tier to admit into the pool (rollable-sub slots
+   *  only; Talisman / EE have no quality and are always kept). Null = no
+   *  quality gate. One of "poor" | "decent" | "good" | "excellent" |
+   *  "perfect" — pieces below it are dropped before the cartesian loop. */
+  minQuality: string | null;
 }
 
 /** Solve request — main thread → worker. Each worker in the pool gets one
