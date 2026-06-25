@@ -29,7 +29,8 @@ export interface SavedBuild {
   createdAt: number;
 }
 
-const KEY = "gs.solver.savedBuilds";
+export const SAVED_BUILDS_KEY = "gs.solver.savedBuilds";
+const KEY = SAVED_BUILDS_KEY;
 
 export type SavedBuildsMap = Record<string, SavedBuild[]>;
 

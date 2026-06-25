@@ -17,7 +17,8 @@ export interface FilterPreset {
   createdAt: number;
 }
 
-const KEY = "gs.solver.filterPresets";
+export const FILTER_PRESETS_KEY = "gs.solver.filterPresets";
+const KEY = FILTER_PRESETS_KEY;
 
 export type FilterPresetsMap = Record<string, FilterPreset[]>;
 

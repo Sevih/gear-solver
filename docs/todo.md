@@ -101,8 +101,11 @@
 
 ## Persistence (M7)
 
-- [ ] **JSON import/export** — bouton Settings pour exporter `{savedBuilds, filterPresets}` en
-      JSON et réimporter (partage entre devices / backup).
+- [x] **JSON import/export** — ✅ fait : section « Backup » dans Settings (export download
+      `gear-solver-backup-YYYY-MM-DD.json` + import file-picker en mode **merge** dédupé par `id`).
+      Module pur `lib/storage/transfer.ts` (`buildBackup`/`applyBackup`) opérant au niveau JSON
+      brut → pas de re-conversion `Set` des presets ; clés `SAVED_BUILDS_KEY`/`FILTER_PRESETS_KEY`
+      exportées comme source unique ; validation kind/version + 8 tests (`transfer.test.ts`).
 - [ ] **Snapshot `data/` versioning** — chaque rebuild de `data/derived` devrait stamper un
       hash/timestamp pour invalider les caches localStorage après un patch jeu (les SavedBuild
       référencent des `pieceUids` qui peuvent disparaître).

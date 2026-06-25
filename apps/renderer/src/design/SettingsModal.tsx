@@ -9,9 +9,10 @@
  *  - Data — destructive actions: wipe captured snapshots, reset the
  *    onboarding flag so the modal re-pops on next launch.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cx } from "./cx.js";
 import { Spinner } from "./Shell.js";
+import { applyBackup, buildBackup } from "../lib/storage/transfer.js";
 
 export type CheckId = "emulator-installed" | "emulator-running" | "adb-connection" | "root-toggle";
 
@@ -76,6 +77,7 @@ interface Props {
 export function SettingsModal({ open, onClose, onReady, onResetOnboarding, onAfterWipe, debugStatLocks, onToggleDebugStatLocks }: Props) {
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   async function probe() {
     setLoading(true);
@@ -173,6 +175,29 @@ export function SettingsModal({ open, onClose, onReady, onResetOnboarding, onAft
             />
           </div>
 
+          <SectionHeader title="Backup" />
+          <div className="space-y-2 px-5 py-3">
+            <DataAction
+              label="Export builds & presets"
+              description="Download your saved builds and filter presets as a JSON file (backup / move to another device). Captured gear is not included — re-capture it there."
+              actionLabel="Export"
+              onClick={exportBackupFile}
+            />
+            <DataAction
+              label="Import builds & presets"
+              description="Merge a previously exported JSON file into your current builds & presets (entries already present are kept). Reopen the Builder tab to see them."
+              actionLabel="Import"
+              onClick={() => importInputRef.current?.click()}
+            />
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => void importBackupFile(e.target.files?.[0] ?? null, () => { if (importInputRef.current) importInputRef.current.value = ""; })}
+            />
+          </div>
+
           <SectionHeader title="Debug" />
           <div className="space-y-2 px-5 py-3">
             <ToggleAction
@@ -239,9 +264,11 @@ interface DataActionProps {
   description: string;
   onClick: () => void;
   tone?: "default" | "danger";
+  /** Button caption — defaults to "Wipe" (danger) / "Reset" (default). */
+  actionLabel?: string;
 }
 
-function DataAction({ label, description, onClick, tone = "default" }: DataActionProps) {
+function DataAction({ label, description, onClick, tone = "default", actionLabel }: DataActionProps) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border border-white/6 bg-white/2 px-3 py-2">
       <div className="min-w-0">
@@ -257,7 +284,7 @@ function DataAction({ label, description, onClick, tone = "default" }: DataActio
             : "border-white/8 bg-white/3 text-zinc-200 hover:bg-white/6",
         )}
       >
-        {tone === "danger" ? "Wipe" : "Reset"}
+        {actionLabel ?? (tone === "danger" ? "Wipe" : "Reset")}
       </button>
     </div>
   );
@@ -296,6 +323,48 @@ function ToggleAction({ label, description, checked, onToggle }: ToggleActionPro
       </button>
     </div>
   );
+}
+
+/** Snapshot saved builds + filter presets and trigger a browser download.
+ *  Filename carries the date so multiple backups don't collide. */
+function exportBackupFile(): void {
+  try {
+    const now = Date.now();
+    const bundle = buildBackup(now);
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date(now).toISOString().slice(0, 10); // YYYY-MM-DD
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `gear-solver-backup-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revoke on the next tick so the click has consumed the URL.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  } catch (err) {
+    window.alert(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/** Read a user-picked JSON file, merge it into localStorage, and report the
+ *  count. Always clears the input (via `done`) so re-picking the same file
+ *  fires `onChange` again. */
+async function importBackupFile(file: File | null, done: () => void): Promise<void> {
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text()) as unknown;
+    const { builds, presets } = applyBackup(parsed, "merge");
+    if (builds === 0 && presets === 0) {
+      window.alert("Nothing new to import — every build and preset in this file is already present.");
+    } else {
+      window.alert(`Imported ${builds} build${builds === 1 ? "" : "s"} and ${presets} preset${presets === 1 ? "" : "s"}.\n\nReopen the Builder tab to see them.`);
+    }
+  } catch (err) {
+    window.alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    done();
+  }
 }
 
 /** POST /api/capture/wipe + refresh inventory. Confirms via native dialog
