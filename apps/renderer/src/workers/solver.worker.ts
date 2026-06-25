@@ -5,6 +5,27 @@
  *
  * Imports kept React-free so the worker bundle stays light — the engine
  * pulls only `@gear-solver/core` + the pure compose/ratings/CP libs.
+ *
+ * GENERATION TRACKING — correctness invariant:
+ *
+ *   Re-submitting a solve while one is in flight (user clicks SOLVE again,
+ *   or toggles SOLVE → SOLVE CP) used to corrupt the orchestrator's buf:
+ *   the old `runSolve` coroutine was suspended on `await yieldToEvents()`
+ *   and the new request reset a shared `cancelled` flag → old coroutine
+ *   would resume and post a stale result tagged to the new run.
+ *
+ *   Now: every `solve` / `cancel` bumps `currentGen`. Each `runSolve` captures
+ *   its own generation at start and bails (without posting) if it ever
+ *   sees `currentGen` advance. The yield MessageChannel is created PER-RUN
+ *   so the old run's pending resolver is never overwritten by the new run.
+ *
+ * MessageChannel-based yield — cheapest macrotask round-trip available in
+ * a Web Worker. Each `yieldToEvents()` call queues a `postMessage` on
+ * port2; the worker's event loop drains any pending tasks (notably any
+ * queued `cancel`/`solve` from the main thread) before firing
+ * port1.onmessage, which resolves the pending Promise. Total round-trip
+ * is well under 1ms. (Why not setTimeout(0)? Workers throttle setTimeout
+ * to ~4ms minimum, giving ~9.6s of pure throttle for 10M permutations.)
  */
 import type { SolveRequest, WorkerInput, WorkerOutput } from "../lib/solver/types.js";
 import { finalizeBuilds, prepareContext, solveChunk } from "../lib/solver/engine.js";
@@ -15,51 +36,47 @@ interface WorkerCtx {
 }
 const ctx = self as unknown as WorkerCtx;
 
-let cancelled = false;
-
-// MessageChannel-based yield — cheapest macrotask round-trip available in
-// a Web Worker. Each `yieldToEvents()` call queues a `postMessage` on
-// port2; the worker's event loop drains any pending tasks (notably any
-// queued `cancel` from the main thread) before firing port1.onmessage,
-// which resolves the pending Promise. Total round-trip is well under 1ms.
-//
-// Why not setTimeout(0)? Browsers throttle setTimeout to ~4ms minimum in
-// workers (and even longer when backgrounded). For 10M permutations / 4096
-// ticks = 2440 yields, that's 9.6s of pure throttle — unusable. MessageChannel
-// has no throttle, giving ~250ms total overhead for the same.
-const yieldChannel = new MessageChannel();
-let pendingYieldResolve: (() => void) | null = null;
-yieldChannel.port1.onmessage = () => {
-  const r = pendingYieldResolve;
-  pendingYieldResolve = null;
-  r?.();
-};
-function yieldToEvents(): Promise<void> {
-  return new Promise((resolve) => {
-    pendingYieldResolve = resolve;
-    yieldChannel.port2.postMessage(null);
-  });
-}
+/** Monotonically incremented on every `solve` / `cancel`. Any `runSolve`
+ *  whose captured generation no longer matches must bail without posting. */
+let currentGen = 0;
 
 ctx.onmessage = (e) => {
   const msg = e.data;
   if (msg.type === "cancel") {
-    cancelled = true;
+    currentGen++;
     return;
   }
   if (msg.type === "solve") {
-    cancelled = false;
-    void runSolve(msg);
+    currentGen++;
+    void runSolve(msg, currentGen);
   }
 };
 
-async function runSolve(req: SolveRequest): Promise<void> {
+async function runSolve(req: SolveRequest, myGen: number): Promise<void> {
+  // Per-run MessageChannel — replaces a previous module-scoped
+  // `pendingYieldResolve` that two concurrent runs would clobber, leaving
+  // one of them stuck on an unresolved promise (memory leak + the chain
+  // race the orchestrator could not recover from).
+  const yieldChannel = new MessageChannel();
+  let pendingResolve: (() => void) | null = null;
+  yieldChannel.port1.onmessage = () => {
+    const r = pendingResolve;
+    pendingResolve = null;
+    r?.();
+  };
+  const yieldToEvents = (): Promise<void> => new Promise<void>((resolve) => {
+    pendingResolve = resolve;
+    yieldChannel.port2.postMessage(null);
+  });
+  const isStale = (): boolean => myGen !== currentGen;
+
   try {
     const solveCtx = prepareContext(req);
+    if (isStale()) return;
 
-    // Emit pool sizes immediately so the footer fills in even when the
-    // cartesian takes seconds to first tick.
-    post({ type: "progress", permutations: 0, searched: 0, poolSizes: solveCtx.poolSizes });
+    // Pool sizes piggy-back on the first progress message so the footer
+    // fills in immediately even when the cartesian takes seconds to first tick.
+    post({ type: "progress", solveId: req.solveId, permutations: 0, searched: 0, poolSizes: solveCtx.poolSizes });
 
     let lastTick = perfNow();
     const tickIntervalMs = 100;
@@ -70,28 +87,36 @@ async function runSolve(req: SolveRequest): Promise<void> {
       req.chunkCount,
       req.topK,
       {
-        shouldContinue: () => !cancelled,
+        shouldContinue: () => !isStale(),
         onTick: (p, s) => {
+          if (isStale()) return;
           const now = perfNow();
           if (now - lastTick < tickIntervalMs) return;
           lastTick = now;
-          post({ type: "progress", permutations: p, searched: s });
+          post({ type: "progress", solveId: req.solveId, permutations: p, searched: s });
         },
         yieldToEvents,
         tickEvery: 4096,
       },
     );
 
-    // On cancel: still send our partial heap. `finalizeBuilds` is fine to
-    // call on partial data — it just fills CP / applies CP filter on what
-    // we have. The orchestrator merges into the global top-N, so cancelled
-    // workers contribute whatever they got to before bailing instead of
-    // being wasted (the previous "return empty on cancel" silently dropped
-    // work that had already been done).
+    if (isStale()) return;
+    // `finalizeBuilds` is fine to call on partial data — it just fills CP /
+    // applies CP filter on what we have. If we got cancelled mid-loop, we
+    // still post what survived (the orchestrator will drop it via solveId
+    // mismatch if the cancel was a supersede, or merge it as the partial
+    // top-N if it was a user cancel between solves).
     const finalBuilds = finalizeBuilds(solveCtx, rawBuilds, req.mode);
-    post({ type: "result", builds: finalBuilds, permutations, searched });
+    post({ type: "result", solveId: req.solveId, builds: finalBuilds, permutations, searched });
   } catch (err) {
-    post({ type: "error", message: err instanceof Error ? err.message : String(err) });
+    if (isStale()) return;
+    post({ type: "error", solveId: req.solveId, message: err instanceof Error ? err.message : String(err) });
+  } finally {
+    // Release the channel ports. With no live references the GC would
+    // collect them anyway, but `close()` is a defensive signal that any
+    // queued port message will be dropped immediately.
+    yieldChannel.port1.close();
+    yieldChannel.port2.close();
   }
 }
 

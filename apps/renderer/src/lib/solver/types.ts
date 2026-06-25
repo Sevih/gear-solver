@@ -50,6 +50,12 @@ export interface SolveFilters {
  *  of these, differing only in `chunkIndex` (its partition of the first slot). */
 export interface SolveRequest {
   type: "solve";
+  /** Monotonic id per solve round (assigned by the orchestrator). The worker
+   *  echoes it on every output so the orchestrator can drop stale messages
+   *  from a superseded run. The worker also uses it internally to detect
+   *  that its own coroutine has been replaced by a newer `solve`/`cancel`
+   *  and bail out instead of posting. */
+  solveId: number;
   mode: SolveMode;
   heroUid: string;
   inventory: Inventory;
@@ -71,6 +77,8 @@ export interface SolveRequest {
   chunkCount: number;
 }
 
+/** Bumps the worker's generation counter — any in-flight `runSolve` whose
+ *  captured generation no longer matches bails out instead of posting. */
 export interface CancelMessage {
   type: "cancel";
 }
@@ -111,6 +119,8 @@ export type PoolSizes = Record<string, { hit: number; of: number }>;
  *  messages without double-counting. */
 export interface SolveProgress {
   type: "progress";
+  /** Echoed from the originating `SolveRequest` for stale-message filtering. */
+  solveId: number;
   /** Cumulative permutations explored by this worker so far. */
   permutations: number;
   /** Cumulative permutations that survived all filters and got scored. */
@@ -123,6 +133,7 @@ export interface SolveProgress {
 /** Final result message — fires once per worker when its chunk completes. */
 export interface SolveResult {
   type: "result";
+  solveId: number;
   builds: SolveBuild[];
   permutations: number;
   searched: number;
@@ -130,6 +141,7 @@ export interface SolveResult {
 
 export interface SolveError {
   type: "error";
+  solveId: number;
   message: string;
 }
 

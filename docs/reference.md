@@ -336,6 +336,28 @@ Fixed-capacity min-heap keyed par `score` (SOLVE) ou `cp` (SOLVE CP).
 `push()` drop le min si full+meilleur. `toSorted()` retourne un sorted desc.
 `null cp` ranke comme `-Infinity` → jamais dans le top.
 
+### 2.13 Generation tracking (`solver.worker.ts` + `orchestrator.ts`)
+
+Évite la corruption à la re-soumission d'un solve (utilisateur reclique
+SOLVE, ou passe SOLVE → SOLVE CP pendant qu'un calcul tourne).
+
+- **Orchestrator** : `solveId` monotone incrémenté à chaque `solve()`,
+  embarqué dans `SolveRequest` puis échoé par tous les `WorkerOutput`
+  (`progress`/`result`/`error`). `handle()` drop tout event dont
+  `solveId !== currentSolveId`.
+- **Worker** : `currentGen` monotone, incrémenté à chaque message
+  `solve`/`cancel`. Chaque `runSolve(req, myGen)` capture `myGen`,
+  vérifie `myGen === currentGen` avant chaque post (progress / result /
+  error). Si stale, bail sans poster.
+- **MessageChannel par run** : chaque `runSolve` crée son propre
+  MessageChannel + `pendingResolve` local. Empêche deux runs concurrents
+  de s'écraser mutuellement le resolver (sinon : OLD's resolver perdu →
+  await jamais résolu → coroutine + son `solveCtx` leak).
+
+Sans ces 3 garde-fous, OLD's stale `result` arrivait après que
+l'orchestrator ait remis `active = true` pour NEW → builds mélangés
+dans `buf`, `workersDone` incrémenté à tort, flush prématuré.
+
 ---
 
 ## 3. Sources & validation

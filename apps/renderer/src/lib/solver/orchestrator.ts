@@ -54,6 +54,11 @@ export class SolverOrchestrator {
   /** Pool sizes — captured from the first worker's first progress event
    *  (every worker computes the same per-slot pre-filter result). */
   private poolSizes: PoolSizes | undefined;
+  /** Monotonically incremented per `solve()`. Echoed by workers on every
+   *  output; messages tagged with a stale solveId are dropped. Without this,
+   *  a stale `result` from a superseded run would slip into the new `buf`
+   *  and trip `flush()` prematurely with mixed builds + half-zero stats. */
+  private solveId = 0;
 
   constructor(cb: OrchestratorCallbacks) {
     this.cb = cb;
@@ -74,10 +79,13 @@ export class SolverOrchestrator {
     }
   }
 
-  /** Kick off a new solve. Supersedes any in-flight run. */
+  /** Kick off a new solve. Supersedes any in-flight run by bumping the
+   *  `solveId` — any output still in flight from the previous run will fail
+   *  the id check in `handle()` and be dropped. */
   solve(args: SolveArgs): void {
     if (this.active) this.cancelInternal();
     this.ensurePool();
+    this.solveId++;
     this.active = true;
     this.mode = args.mode;
     this.topN = args.topN ?? 1000;
@@ -92,6 +100,7 @@ export class SolverOrchestrator {
       if (!w) continue;
       const req: SolveRequest = {
         type: "solve",
+        solveId: this.solveId,
         mode: args.mode,
         heroUid: args.heroUid,
         inventory: args.inventory,
@@ -134,7 +143,10 @@ export class SolverOrchestrator {
   }
 
   private handle(workerIdx: number, ev: WorkerOutput): void {
-    if (!this.active) return;
+    // Drop stale outputs from a superseded run. Without this, an old
+    // `result` arriving after we've kicked off a new solve would corrupt
+    // the new buf (mixed builds, partial workersDone, premature flush).
+    if (!this.active || ev.solveId !== this.solveId) return;
     if (ev.type === "progress") {
       this.stats[workerIdx] = { permutations: ev.permutations, searched: ev.searched };
       if (ev.poolSizes && !this.poolSizes) this.poolSizes = ev.poolSizes;
