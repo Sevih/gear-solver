@@ -81,6 +81,7 @@ interface Props {
 export function SettingsModal({ open, onClose, onReady, onResetOnboarding, onAfterWipe, debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver }: Props) {
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   async function probe() {
@@ -166,6 +167,13 @@ export function SettingsModal({ open, onClose, onReady, onResetOnboarding, onAft
 
           <SectionHeader title="Data" />
           <div className="space-y-2 px-5 py-3">
+            <DataAction
+              label="Sync game data"
+              description="Refresh the raw tables from the local outerpedia checkout and rebuild the derived data (run after a game patch). Auto-runs at launch when the source is newer."
+              actionLabel={syncing ? "Syncing…" : "Sync"}
+              disabled={syncing}
+              onClick={() => void runDataSync(setSyncing)}
+            />
             <DataAction
               label="Reset onboarding prompt"
               description="Show this Settings modal automatically on next launch."
@@ -276,9 +284,10 @@ interface DataActionProps {
   tone?: "default" | "danger";
   /** Button caption — defaults to "Wipe" (danger) / "Reset" (default). */
   actionLabel?: string;
+  disabled?: boolean;
 }
 
-function DataAction({ label, description, onClick, tone = "default", actionLabel }: DataActionProps) {
+function DataAction({ label, description, onClick, tone = "default", actionLabel, disabled }: DataActionProps) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border border-white/6 bg-white/2 px-3 py-2">
       <div className="min-w-0">
@@ -287,8 +296,10 @@ function DataAction({ label, description, onClick, tone = "default", actionLabel
       </div>
       <button
         onClick={onClick}
+        disabled={disabled}
         className={cx(
           "shrink-0 inline-flex h-7 items-center rounded-md border px-2.5 text-[11.5px] font-medium transition-colors active:scale-95",
+          disabled && "cursor-wait opacity-60",
           tone === "danger"
             ? "border-rose-400/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20"
             : "border-white/8 bg-white/3 text-zinc-200 hover:bg-white/6",
@@ -374,6 +385,29 @@ async function importBackupFile(file: File | null, done: () => void): Promise<vo
     window.alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     done();
+  }
+}
+
+/** POST /api/data/sync — copy raw tables from outerpedia + rebuild derived.
+ *  Reloads the window on a real sync so the renderer picks up the fresh data.
+ *  "unavailable" (packaged build / no checkout) is surfaced, not an error. */
+async function runDataSync(setSyncing: (b: boolean) => void): Promise<void> {
+  setSyncing(true);
+  try {
+    const r = await fetch("/api/data/sync", { method: "POST" });
+    const data = (await r.json()) as { status: string; message: string };
+    if (data.status === "synced") {
+      window.alert(`Game data synced — ${data.message}. Reloading to apply.`);
+      window.location.reload();
+      return;
+    }
+    if (data.status === "fresh") window.alert("Game data is already up to date.");
+    else if (data.status === "unavailable") window.alert(`Sync unavailable: ${data.message}`);
+    else window.alert(`Sync failed: ${data.message}`);
+  } catch (err) {
+    window.alert(`Sync failed: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    setSyncing(false);
   }
 }
 

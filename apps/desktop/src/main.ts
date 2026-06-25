@@ -20,6 +20,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { disarmIfArmed, startServer } from "./server.js";
 import { dlog, dwarn } from "./log.js";
+import { syncGameData } from "./data-sync.js";
+import { DERIVED, REPO_ROOT } from "./paths.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -115,6 +117,13 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     dlog("server", `app ready — ${IS_DEV ? "dev (Vite)" : "prod (embedded server)"}`);
+    // Auto-refresh game data from the outerpedia checkout (dev only, staleness-
+    // guarded — instant when nothing changed). Awaited before the window so the
+    // renderer loads the fresh derived tables; never fatal.
+    if (IS_DEV) {
+      const r = await syncGameData({ repoRoot: REPO_ROOT, derivedDir: DERIVED, force: false }).catch(() => null);
+      if (r) dlog("server", `data sync: ${r.status} — ${r.message}`);
+    }
     await createWindow();
     setupAutoUpdate();
   }).catch((err: unknown) => {

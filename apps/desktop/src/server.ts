@@ -34,6 +34,7 @@ import {
   CAPTURE_DIR,
   CAPTURE_OUT,
   DERIVED,
+  REPO_ROOT,
   IS_DEV,
   STAT_LOCKS,
   RENDERER_DIST,
@@ -42,6 +43,7 @@ import {
 import { detectEmulators, pickEmulator, pickPort, preflight } from "./emulator-detect.js";
 import { dlog, dwarn } from "./log.js";
 import { proxyReco } from "./reco-proxy.js";
+import { syncGameData } from "./data-sync.js";
 
 /** Public outerpedia.com image base — used in prod only to short-circuit
  *  every `/img/*` request to the publicly hosted asset. Override at runtime
@@ -291,6 +293,14 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   }
   if (url === "/api/capture/status" && req.method === "GET") {
     return captureStatus(res);
+  }
+  // Manual "Sync game data" — copy raw tables from outerpedia + rebuild derived.
+  if (url === "/api/data/sync" && req.method === "POST") {
+    dlog("server", "manual data sync requested");
+    syncGameData({ repoRoot: REPO_ROOT, derivedDir: DERIVED, force: true })
+      .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
+      .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
+    return;
   }
   // Build-reco proxy → outerpedia API (Get Preset). GET only, numeric id.
   if (url.startsWith("/api/reco/") && req.method === "GET") {

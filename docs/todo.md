@@ -240,6 +240,17 @@ le **logger** (pas filtrer silencieusement).
 
 ## Persistence (M7)
 
+- [x] **Sync data au lancement (+ bouton)** — ✅ fait : `apps/desktop/src/data-sync.ts` (`syncGameData`,
+      électron-free, param-driven) porte `data/sync.ps1` en Node — copie les 29 tables depuis le
+      checkout outerpedia (`data/admin/json2`) → `data/game/`, puis lance `data/build.mjs` (via
+      `ELECTRON_RUN_AS_NODE`). **Auto au démarrage** desktop (dev only, gardé par fraîcheur : compare
+      mtime des sources json2 + `damage-calc/buffs` vs `characters.json`, instantané si rien n'a changé)
+      dans `main.ts` ; **bouton manuel** « Sync game data » dans Settings → `POST /api/data/sync` (force),
+      câblé dans le serveur prod (`server.ts`) ET le middleware Vite (`vite.config.ts`). Reload du
+      renderer après un sync réel. No-op propre (« unavailable ») en build packagé / sans checkout.
+- [ ] **Snapshot `data/` versioning** — chaque rebuild de `data/derived` devrait stamper un
+      hash/timestamp pour invalider les caches localStorage après un patch jeu (les SavedBuild
+      référencent des `pieceUids` qui peuvent disparaître).
 - [x] **JSON import/export** — ✅ fait : section « Backup » dans Settings (export download
       `gear-solver-backup-YYYY-MM-DD.json` + import file-picker en mode **merge** dédupé par `id`).
       Module pur `lib/storage/transfer.ts` (`buildBackup`/`applyBackup`) opérant au niveau JSON

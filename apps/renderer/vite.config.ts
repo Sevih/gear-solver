@@ -8,6 +8,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, extname, join, normalize } from "node:path";
 import { detectEmulators, pickEmulator, pickPort, preflight } from "../desktop/src/emulator-detect.js";
 import { proxyReco } from "../desktop/src/reco-proxy.js";
+import { syncGameData } from "../desktop/src/data-sync.js";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const DERIVED = join(root, "data", "derived");
@@ -129,6 +130,13 @@ function localData(): Plugin {
           return;
         }
         if (url === "/api/capture/status" && req.method === "GET") return captureStatus(res);
+        // Manual "Sync game data" — copy raw tables from outerpedia + rebuild.
+        if (url === "/api/data/sync" && req.method === "POST") {
+          syncGameData({ repoRoot: root, derivedDir: DERIVED, force: true })
+            .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
+            .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
+          return;
+        }
         // Build-reco proxy → outerpedia API (Get Preset). Same route as the
         // Electron prod server so the renderer's fetchReco works in both.
         if (url.startsWith("/api/reco/") && req.method === "GET") {
