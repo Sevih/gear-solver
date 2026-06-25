@@ -448,6 +448,29 @@ describe("simulateReforges", () => {
     expect(p.subs[0]!.ticks).toBe(4); // untouched
     expect(p.subs[0]!.value).toBe(12);
   });
+
+  it("REJECTS talisman pieces — their `subs` are gems, not reforgeable rolls", () => {
+    // Pre-fix bug: simulateReforges would bump gem values (a mechanic that
+    // doesn't exist in-game), then SOLVE + priority-vide path read those
+    // inflated gems as the talisman's actual stat contribution → wrong CP.
+    const tali: GearPiece = {
+      ...piece(6, 0, [{ stat: "atkPct", value: 2.4, percent: true, ticks: 1 }]),
+      slot: "ooparts",
+    };
+    const out = simulateReforges(tali, { atk: 3 });
+    expect(out).toBe(tali); // same reference — no work done
+    expect(out.subs[0]!.value).toBe(2.4); // unchanged
+  });
+
+  it("REJECTS EE (exclusive) pieces for the same reason", () => {
+    const ee: GearPiece = {
+      ...piece(6, 0, [{ stat: "critRate", value: 3, percent: true, ticks: 1 }]),
+      slot: "exclusive",
+    };
+    const out = simulateReforges(ee, { crc: 3 });
+    expect(out).toBe(ee);
+    expect(out.subs[0]!.value).toBe(3);
+  });
 });
 
 /* ─────────────────────────────────────────────────────────────────────────

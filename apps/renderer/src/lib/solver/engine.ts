@@ -191,8 +191,18 @@ export function prepareContext(req: SolveRequest): SolveContext {
   // each piece with its remaining reforge attempts greedily allocated to
   // the highest-priority substats. Happens BEFORE topPctPrune so the prune
   // ranks pieces by their best-case reforged value, not their current state.
+  //
+  // ooparts (Talisman) and exclusive (EE) are deliberately excluded —
+  // their `subs` array is actually the gem-slot list (the parser stuffs
+  // `SubOptionList[i]` resolved gems into `subs`), and gems aren't
+  // reforgeable in-game (you swap them via the gem allocator instead).
+  // Running `simulateReforges` on them would inflate gem values, which
+  // surfaces as wrong CP/stats whenever the gem-override path is bypassed
+  // (i.e. SOLVE mode without explicit priority — the fallback that reads
+  // talisman subs directly). `simulateReforges` itself also rejects these
+  // slots defensively in case a future caller forgets to filter here.
   if (filters.options.useReforged) {
-    for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const) {
+    for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const) {
       pools[slot] = pools[slot].map((p) => simulateReforges(p, filters.priority));
     }
   }
@@ -297,10 +307,17 @@ const REFORGE_PER_SUB_CAP = 6;
  *  When priority is uniformly zero, the greedy tie-break falls to raw
  *  per-tick value (maximizes total stat output regardless of axis).
  *
+ *  REJECTS Talisman / EE pieces — their `subs` array is the gem-slot list
+ *  (the parser stores resolved gems there, not rolled substats), and gems
+ *  aren't reforgeable in-game (you swap them via the gem allocator). The
+ *  caller in `prepareContext` already filters these slots out; this check
+ *  is defense-in-depth so a future caller can't silently inflate gem values.
+ *
  *  This is intentionally a HEURISTIC — the real game lets you re-roll
  *  individual ticks (orange) but we assume monotonic additions only. Good
  *  enough for "what's the best this piece can become?" previews. */
 export function simulateReforges(piece: GearPiece, priority: Record<string, number>): GearPiece {
+  if (piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
   const remaining = Math.max(0, (piece.star ?? 0) - piece.reforgeCount);
   if (remaining === 0 || piece.subs.length === 0) return piece;
   const subs: RolledStat[] = piece.subs.map((s) => ({ ...s }));

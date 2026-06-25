@@ -320,6 +320,16 @@ les reforges restantes greedy par `priority × per-tick value`. Cap à
 Mutations contenues sur un clone — l'inventaire original n'est jamais
 modifié.
 
+**Slot Talisman (ooparts) et EE (exclusive) explicitement exclus** : leur
+`subs` est en réalité la liste des gems socketés (le parser stocke
+`SubOptionList[i]` résolu en gem dans `subs`). Les gems ne sont pas
+"reforgeable" in-game — on les swap via le gem allocator, on n'ajoute pas
+de ticks dessus. Si on appliquait `simulateReforges` à un talisman, on
+gonflerait les valeurs des gems → CP/stats faux quand le gemOverride est
+null (cas SOLVE + priority vide). Double garde-fou : le caller
+(`prepareContext`) filtre la liste des slots, ET `simulateReforges`
+rejette ooparts/exclusive en early-return.
+
 ### 2.10 Mid-tree set pruning (`engine.ts::solveChunk`)
 
 À chaque depth `D` de la boucle armor (helmet=1, armor=2, gloves=3, boots=4) :
