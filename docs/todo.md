@@ -52,13 +52,14 @@
 - [ ] 🟢 **Filtre qualité** — exclure les pièces selon leur quality (Poor/…) du pool de solve.
 - [ ] 🟡 **Colonnes table** — défauts douteux (CDR n'est pas vraiment une stat à montrer) ; utiliser les **icônes**
       de stats plutôt que des labels texte ; permettre de **masquer/afficher** des colonnes (lisibilité).
-- [ ] 🔴 **Colonne Set cassée** — la cellule « sets » rend juste `—` ([BuilderScreen.tsx] `ResultRow`). Câbler les
-      vrais set tags du build. + ajouter colonnes **arme** et **accessoire** (effets) au tableau.
+- [x] 🔴 **Colonne Set cassée** — rendait `—`, jamais implémentée → set tags par build (icône + tier 2/4) (`500fb26`).
+- [ ] 🟡 **Colonnes arme + accessoire** — ajouter au tableau les effets d'arme et d'accessoire portés par chaque build.
 - [ ] 🟠 **Solve sous-utilise le CPU** — pendant un solve, CPU ~25% max mais temp 70-80° : le pool de workers ne
       sature pas les cœurs. Investiguer la parallélisation (taille du pool, découpe des chunks, idle workers).
 - [ ] 🟡 **Reforge / upgrade dans la gear band** — représenter les pièces qui **nécessitent une upgrade** + les
-      **ticks extrapolés**. Deux modes de reforge : (a) +10 T4 → 6 ticks, (b) +15 T4 → 9 ticks ; la présentation
-      des cartes diffère selon le mode.
+      **ticks extrapolés**. **3 modes globaux** (s'appliquent à tout le solver, remplacent le bool `useReforged`) :
+      **classic** = +10 T4 / 6 ticks · **ascended** = +15 T4 / 9 ticks · **disable**. La présentation des cartes
+      diffère selon le mode (badge upgrade + ticks projetés).
 
 ### Features
 - [ ] **Settings — options globales** — panneau pour worker count override · topK/topN · heatmap on/off
