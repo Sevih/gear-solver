@@ -46,14 +46,15 @@
 - [x] Main-stat de l'EE masquée dans la gear band (fixe ATK%, une seule option) (`a4108db`).
 - [n/a] Top% « perdu » → en fait toujours là, dans le popover **Priority** (sa place logique). À surfacer si besoin.
 - [n/a] Gems déjà présentes affichées → `GemRecommendation` ne montre déjà QUE les gems proposées (+ badge swap).
-- [ ] 🟢 **Bouton « Filter »** — après un solve, filtrer les résultats **stockés** côté client par les bandes
-      stat/rating (sans relancer le solve). Gain de temps énorme après le 1er calcul. (Stocker `solveResults`
-      bruts + appliquer un prédicat des `statFilters`/`ratingFilters` à l'affichage.)
+- [x] 🟢 **Bouton « Filter »** — re-filtre client-side des résultats stockés par les bandes stat/rating sans
+      re-solve (instantané après le 1er calcul) ; sélection/gear band indexent la vue filtrée, ✕ pour annuler (`44170ae`).
 - [ ] 🟢 **Filtre qualité** — exclure les pièces selon leur quality (Poor/…) du pool de solve.
 - [x] 🟡 **Abréviations stats** — labels alignés sur `outerpedia-v2/data/stats.json` (CHC/CHD/CDMG RED%/PEN%/DMG UP%/…)
       + **en-têtes du tableau en icônes** (plus de texte). `CDR` ambigu (= Cooldown pour l'user) → `CDMG RED%`.
       (CDR avait été retirée à tort sur un malentendu d'abréviation → restaurée.)
-- [ ] 🟡 **Colonnes table (suite)** — permettre de **masquer/afficher** des colonnes (lisibilité).
+- [x] 🟡 **Show/hide colonnes** — menu « Columns » dans le header (stats/ratings/score/upg, persistant ;
+      colonne filtrée = forcée visible) (`c8808d4`).
+- [x] 🟡 **Tooltips en-têtes** — nom complet + définition (TextSystem `SYS_DESC_*`) au survol (`5fa5037`).
 - [x] 🔴 **Colonne Set cassée** — rendait `—`, jamais implémentée → set tags par build (icône + tier 2/4) (`500fb26`).
 - [ ] 🟡 **Colonnes arme + accessoire** — ajouter au tableau les effets d'arme et d'accessoire portés par chaque build.
 - [ ] 🟠 **Solve sous-utilise le CPU** — pendant un solve, CPU ~25% max mais temp 70-80° : le pool de workers ne
