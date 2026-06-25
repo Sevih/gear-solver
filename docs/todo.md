@@ -21,7 +21,8 @@
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings` · **Pré-filtrage armor** par
       set requis (restreindre les pools armor au set quand un seul req-4pc actif).
-
+- [ ] **gems strategy** prevoir certaines stats a maxer sur les gems "un genre de prio" exemple pour un personnage 
+      qui a atk>spd>chc>chd>dmg up et bien les gems serviront dabord a maxer le chc (logique si on veux le cap crit sur un dps) puis on max la stat qui rapportera le plus de EHP/DMG
 ### 🟡/⚪ UX-cohérence & nits
 - [ ] 🟡 **`SlotMini` non cliquable (Builds)** — aucun moyen d'inspecter une pièce depuis la tab Builds
       (tooltip/clic), contrairement à l'Inventory.
@@ -38,6 +39,26 @@
       avec badges de comptage ; table quasi pleine largeur + colonne droite stats→projetées + library). Brief :
       [docs/design/builder-redesign-brief.md](design/builder-redesign-brief.md). Toute la logique (reducer/solve/persistance)
       préservée — seul le layout a changé.
+
+### Builder — suites du review post-direction-B
+- [x] Toggles Reforged/Maxed dupliqués (inline + popover Options) → retirés du popover (`a4108db`).
+- [x] Popovers + header de table semi-transparents (`bg-elev-2` = 70% alpha) → backing opaque `bg-elev-1` (`a4108db`).
+- [x] Main-stat de l'EE masquée dans la gear band (fixe ATK%, une seule option) (`a4108db`).
+- [n/a] Top% « perdu » → en fait toujours là, dans le popover **Priority** (sa place logique). À surfacer si besoin.
+- [n/a] Gems déjà présentes affichées → `GemRecommendation` ne montre déjà QUE les gems proposées (+ badge swap).
+- [ ] 🟢 **Bouton « Filter »** — après un solve, filtrer les résultats **stockés** côté client par les bandes
+      stat/rating (sans relancer le solve). Gain de temps énorme après le 1er calcul. (Stocker `solveResults`
+      bruts + appliquer un prédicat des `statFilters`/`ratingFilters` à l'affichage.)
+- [ ] 🟢 **Filtre qualité** — exclure les pièces selon leur quality (Poor/…) du pool de solve.
+- [ ] 🟡 **Colonnes table** — défauts douteux (CDR n'est pas vraiment une stat à montrer) ; utiliser les **icônes**
+      de stats plutôt que des labels texte ; permettre de **masquer/afficher** des colonnes (lisibilité).
+- [ ] 🔴 **Colonne Set cassée** — la cellule « sets » rend juste `—` ([BuilderScreen.tsx] `ResultRow`). Câbler les
+      vrais set tags du build. + ajouter colonnes **arme** et **accessoire** (effets) au tableau.
+- [ ] 🟠 **Solve sous-utilise le CPU** — pendant un solve, CPU ~25% max mais temp 70-80° : le pool de workers ne
+      sature pas les cœurs. Investiguer la parallélisation (taille du pool, découpe des chunks, idle workers).
+- [ ] 🟡 **Reforge / upgrade dans la gear band** — représenter les pièces qui **nécessitent une upgrade** + les
+      **ticks extrapolés**. Deux modes de reforge : (a) +10 T4 → 6 ticks, (b) +15 T4 → 9 ticks ; la présentation
+      des cartes diffère selon le mode.
 
 ### Features
 - [ ] **Settings — options globales** — panneau pour worker count override · topK/topN · heatmap on/off
