@@ -125,8 +125,10 @@
 
 - [ ] **Settings** — panneau pour les debug toggles + options globales (worker count override,
       topK/topN, heatmap on/off).
-- [ ] **Empty state** plus accueillant pour Inventory/Builds quand la capture vient d'être faite
-      mais qu'il n'y a pas encore de personnages.
+- [x] **Empty state** plus accueillant — ✅ fait (Builds) : roster vide → message dédié
+      « No characters captured yet » (gear importé mais pas de roster → jouer jusqu'au lobby +
+      reload) vs « No hero matches the current filters » quand c'est un filtre. `BuildsScreen.tsx`.
+      *(Inventory garde « No piece matches… » — acceptable.)*
 - [x] **Error boundary** React global — ✅ fait : `ScreenErrorBoundary` (class component) enveloppe
       la zone main dans `App.tsx`, `key={tab}` reset au changement d'onglet + bouton Retry. Un throw
       en render/`useMemo` affiche l'erreur au lieu de blanker l'app, la coquille (header/tabs) survit.

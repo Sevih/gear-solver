@@ -1050,19 +1050,32 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
           space left by the FilterBar and stays correct when the status bar
           (dynamic) appears/disappears. */}
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-6 pb-6 pt-3">
-        {roster.map((entry) => (
-          <BuildCard
-            key={entry.char.uid}
-            entry={entry}
-            lockEntry={lockedStats[entry.char.uid] ?? null}
-            setLocks={setLockedStats}
-            game={game}
-            debug={debug}
-            note={notes[entry.char.uid] ?? ""}
-            onChangeNote={setNote}
-            onOptimize={onOptimize}
-          />
-        ))}
+        {roster.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center">
+            {inventory.characters.length === 0 ? (
+              <>
+                <span className="font-display text-[14px] font-semibold text-white">No characters captured yet</span>
+                <span className="max-w-sm text-[12px] text-white/50">Your gear imported, but no roster. Play to the lobby and reload so the character list is captured too.</span>
+              </>
+            ) : (
+              <span className="text-[12px] italic text-white/40">No hero matches the current filters.</span>
+            )}
+          </div>
+        ) : (
+          roster.map((entry) => (
+            <BuildCard
+              key={entry.char.uid}
+              entry={entry}
+              lockEntry={lockedStats[entry.char.uid] ?? null}
+              setLocks={setLockedStats}
+              game={game}
+              debug={debug}
+              note={notes[entry.char.uid] ?? ""}
+              onChangeNote={setNote}
+              onOptimize={onOptimize}
+            />
+          ))
+        )}
       </div>
     </div>
   );
