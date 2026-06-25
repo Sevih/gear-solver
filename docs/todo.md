@@ -62,13 +62,13 @@
 > App Electron desktop → la contrainte responsive-mobile du projet ne s'applique pas
 > ici (sauf fenêtre réduite, cf. #footer).
 
-- [ ] 🔴 **L'allocation de gemmes recommandée n'est jamais affichée** —
-      `SolveBuild.gemAllocation` est calculée par build mais aucun composant ne la
-      consomme. En mode SOLVE CP le solver réalloue les gemmes (`allowZeroPriority`)
-      mais `BottomGearBand` n'affiche que les subs socketées actuelles → le gain de CP
-      affiché est visuellement inatteignable. Piste : badge "gem swap" + liste
-      OptionIDs→labels dans le `GearCard` Talisman/EE. `engine.ts:724`,
-      `types.ts:103-104`, `BuilderScreen.tsx:2310,2391-2404`.
+- [x] 🔴 **L'allocation de gemmes recommandée n'est jamais affichée** — ✅ corrigé :
+      `BottomGearBand` propage `build.gemAllocation.talisman`/`.ee` aux `GearCard`
+      Talisman/EE ; nouveau composant `GemRecommendation` résout les OptionIDs via
+      `resolveStat(id, 1, game.options)` → liste stat/valeur + badge **swap** quand la
+      reco diffère des gemmes socketées actuelles (rien affiché si allocation vide =
+      gemmes conservées, ex. SOLVE sans priorité). Les stats affichées (calculées AVEC
+      ces gemmes en SOLVE CP) sont donc atteignables. `BuilderScreen.tsx`.
 - [ ] 🔴 **Le bandeau du bas ignore les stats reforgées** — avec *Use reforged stats*,
       l'engine clone les pièces avec subs gonflés et calcule `finalStats` dessus, mais
       `BottomGearBand` relit `pieceByUid` → la pièce **originale** non reforgée → la

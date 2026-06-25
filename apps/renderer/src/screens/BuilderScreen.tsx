@@ -16,7 +16,7 @@
  */
 import { useEffect, useMemo, useReducer, useRef, useState, type Dispatch, type ReactNode } from "react";
 import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
-import { composeCharStats, expToLevel } from "@gear-solver/core";
+import { composeCharStats, expToLevel, resolveStat } from "@gear-solver/core";
 import { CharacterPortrait, SlotIcon, SlotMini, StatIcon } from "../design/EquipmentIcon.js";
 import { Pill } from "../design/Chips.js";
 import { cx } from "../design/cx.js";
@@ -2371,7 +2371,16 @@ function BottomGearBand({
         // the engine "ooparts" lookup key.
         const engineSlot = slot === "talisman" ? "ooparts" : slot;
         const piece = pieceBySlot.get(engineSlot) ?? null;
-        return <GearCard key={slot} slot={slot} piece={piece} game={game} />;
+        // Only Talisman / EE carry gems — surface the build's recommended
+        // gem allocation there so the displayed stats (computed WITH those
+        // gems in SOLVE CP) are reachable, not silently mismatched against
+        // the piece's currently-socketed gems.
+        const recommendedGems = slot === "talisman"
+          ? build?.gemAllocation.talisman
+          : slot === "exclusive"
+            ? build?.gemAllocation.ee
+            : undefined;
+        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} />;
       })}
     </div>
   );
@@ -2388,7 +2397,14 @@ const SLOT_MAIN_PLACEHOLDER: Record<string, string> = {
 /** Compact mirror of the Inventory tab's `ItemDetail` panel — same section
  *  flow (header / icon+label / main stat / substats). Renders em-dash
  *  placeholders when no piece is wired (no build selected yet). */
-function GearCard({ slot, piece, game }: { slot: SlotId; piece: GearPiece | null; game: GameData | null }) {
+function GearCard({ slot, piece, game, recommendedGems }: {
+  slot: SlotId;
+  piece: GearPiece | null;
+  game: GameData | null;
+  /** Build's recommended gem allocation for this slot (Talisman/EE only),
+   *  OptionIDs with 0 = empty. Undefined for non-gem slots. */
+  recommendedGems?: number[];
+}) {
   const slotMeta = SLOT_BY[slot];
   const def = piece && game ? game.equipment[String(piece.itemId)] : null;
   const name = piece ? (def?.name ?? piece.name ?? `Item ${piece.itemId}`) : null;
@@ -2438,6 +2454,59 @@ function GearCard({ slot, piece, game }: { slot: SlotId; piece: GearPiece | null
         )) : (
           <div className="text-[10.5px] italic text-white/30">—</div>
         )}
+      </div>
+
+      {piece && game && recommendedGems && (
+        <GemRecommendation recommended={recommendedGems} piece={piece} game={game} />
+      )}
+    </div>
+  );
+}
+
+/** Recommended gem allocation for a Talisman / EE card. The solver scores
+ *  the player's whole gem pool and proposes the K best for this build —
+ *  surfaced here so the displayed stats (computed WITH these gems in SOLVE
+ *  CP) are actually reachable. A "swap" badge flags when the recommendation
+ *  differs from the piece's currently-socketed gems; renders nothing when
+ *  the solver kept the current gems (all-zero allocation, e.g. SOLVE with
+ *  no priority). */
+function GemRecommendation({ recommended, piece, game }: {
+  recommended: number[];
+  piece: GearPiece;
+  game: GameData;
+}) {
+  const recIds = recommended.filter((id) => id > 0);
+  if (recIds.length === 0) return null; // no reallocation — current gems kept
+  const currentIds = (piece.gemSlots ?? []).filter((id) => id > 0);
+  // Multiset equality (slot order is irrelevant — gems are interchangeable).
+  const sortedEq = (a: number[], b: number[]): boolean => {
+    if (a.length !== b.length) return false;
+    const sa = [...a].sort((x, y) => x - y);
+    const sb = [...b].sort((x, y) => x - y);
+    return sa.every((v, i) => v === sb[i]);
+  };
+  const isSwap = !sortedEq(recIds, currentIds);
+  const gems = recIds
+    .map((id) => resolveStat(id, 1, game.options))
+    .filter((r): r is NonNullable<typeof r> => r != null);
+  return (
+    <div className="space-y-1 border-t border-white/8 pt-2">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/60">Gems</span>
+        {isSwap && (
+          <span className="rounded border border-amber-400/40 bg-amber-500/15 px-1 py-px text-[9px] font-semibold uppercase tracking-wider text-amber-300">
+            swap
+          </span>
+        )}
+      </div>
+      <div className="space-y-1 font-mono text-[10.5px] tabular-nums">
+        {gems.map((g, i) => (
+          <div key={i} className="flex items-center gap-1.5 text-white/80">
+            <StatIcon stat={g.stat} size={12} className="shrink-0" />
+            <span className="flex-1 truncate text-white/80">{STAT[g.stat]?.longLabel ?? g.stat}</span>
+            <span className="text-white">{g.value}{g.percent ? "%" : ""}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
