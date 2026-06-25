@@ -416,6 +416,33 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
   }
 }
 
+/** Client-side equivalent of the solver's stat/rating band check — used by the
+ *  post-solve "Filter" action to narrow the already-computed result set without
+ *  re-running the solve. Stat keys read off `finalStats`, ratings off `ratings`
+ *  (with cp/score/upg pulled from the build's own fields). */
+function buildPassesFilters(
+  b: SolveBuild,
+  statFilters: Record<string, MinMax>,
+  ratingFilters: Record<string, MinMax>,
+): boolean {
+  const inBand = (v: unknown, band: MinMax): boolean => {
+    if (typeof v !== "number") return true; // missing stat → don't exclude
+    if (band.min != null && v < band.min) return false;
+    if (band.max != null && v > band.max) return false;
+    return true;
+  };
+  const fs = b.finalStats as unknown as Record<string, number>;
+  for (const [k, band] of Object.entries(statFilters)) {
+    if (!inBand(fs[k], band)) return false;
+  }
+  const ratings = b.ratings as unknown as Record<string, number>;
+  for (const [k, band] of Object.entries(ratingFilters)) {
+    const v = k === "cp" ? b.cp : k === "score" ? b.score : k === "upg" ? b.upg : ratings[k];
+    if (!inBand(v, band)) return false;
+  }
+  return true;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
@@ -456,6 +483,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const [solveResults, setSolveResults] = useState<SolveBuild[]>([]);
   const [solveError, setSolveError] = useState<string | null>(null);
   const [selectedBuildIdx, setSelectedBuildIdx] = useState<number | null>(null);
+  /** Post-solve client filter — a snapshot of the stat/rating bands applied to
+   *  the STORED results (no re-solve). Null = show every stored build. Set by
+   *  the toolbar's "Filter" button; cleared whenever a fresh result set lands
+   *  (a new solve already applied the bands server-side). */
+  const [displayFilter, setDisplayFilter] = useState<{ statFilters: Record<string, MinMax>; ratingFilters: Record<string, MinMax> } | null>(null);
   /** Track the mode used for the last solve — surfaces on Save Build so we
    *  preserve "this build came from SOLVE CP" vs "from SOLVE". */
   const [lastSolveMode, setLastSolveMode] = useState<SolveMode>("score");
@@ -506,7 +538,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     if (!orchestratorRef.current) {
       orchestratorRef.current = new SolverOrchestrator({
         onProgress: (p) => setSolveProgress({ permutations: p.permutations, searched: p.searched, poolSizes: p.poolSizes ?? null }),
-        onResult:   (builds) => { setSolveResults(builds); setResultsReforge(solveReforgeRef.current); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setSolving(false); },
+        onResult:   (builds) => { setSolveResults(builds); setResultsReforge(solveReforgeRef.current); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); },
         onError:    (msg) => { setSolveError(msg); setSolving(false); },
       });
     }
@@ -514,6 +546,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setSolveError(null);
     setSolveResults([]);
     setSelectedBuildIdx(null);
+    setDisplayFilter(null);
     setSolveProgress({ permutations: 0, searched: 0, poolSizes: null });
     setLastSolveMode(mode);
     // Snapshot the reforge context for this run (shallow-copy the priority so
@@ -555,7 +588,26 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
 
   const cancelSolve = () => orchestratorRef.current?.cancel();
 
-  const selectedBuild = selectedBuildIdx != null ? solveResults[selectedBuildIdx] ?? null : null;
+  // Results actually shown — the stored set, optionally narrowed by the
+  // post-solve client filter (no re-solve). Selection + gear band index into
+  // THIS array, so a Filter that drops rows doesn't desync the selection.
+  const displayedResults = useMemo(
+    () => (displayFilter
+      ? solveResults.filter((b) => buildPassesFilters(b, displayFilter.statFilters, displayFilter.ratingFilters))
+      : solveResults),
+    [solveResults, displayFilter],
+  );
+  // Apply the current stat/rating bands to the stored results without
+  // re-solving. Re-anchors the selection to the new top row.
+  const applyClientFilter = () => {
+    setDisplayFilter({ statFilters: filters.statFilters, ratingFilters: filters.ratingFilters });
+    setSelectedBuildIdx(solveResults.length > 0 ? 0 : null);
+  };
+  /** Whether any stat/rating band is set — gates the Filter button (nothing to
+   *  apply otherwise). */
+  const hasAnyBand = Object.keys(filters.statFilters).length > 0 || Object.keys(filters.ratingFilters).length > 0;
+
+  const selectedBuild = selectedBuildIdx != null ? displayedResults[selectedBuildIdx] ?? null : null;
 
   // When a solve yields no builds, an empty per-slot pool is almost always
   // the cause (filters too strict, or the hero owns no piece for that slot).
@@ -609,6 +661,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     // solve doesn't linger over a freshly restored build.
     setSolveError(null);
     setSolveResults([b.build]);
+    setDisplayFilter(null); // a single restored build is never client-filtered
     // Restore the build's reforge context so the bottom band projects the
     // same substats it was solved with (pre-field builds → no projection).
     setResultsReforge(b.reforge ?? { useReforged: false, priority: {} });
@@ -769,6 +822,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         canSolve={selectedUid != null}
         onSolve={startSolve}
         onCancelSolve={cancelSolve}
+        canFilter={solveResults.length > 0 && hasAnyBand}
+        filterActive={displayFilter != null}
+        onFilter={applyClientFilter}
+        onClearFilter={() => setDisplayFilter(null)}
       />
       <div
         className="flex min-h-0 flex-1 gap-2"
@@ -779,7 +836,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         style={{ maxHeight: resultRows * RESULT_ROW_H + 46 }}
       >
         <ResultsTable
-          builds={solveResults}
+          builds={displayedResults}
           selectedIdx={selectedBuildIdx}
           onSelect={setSelectedBuildIdx}
           solving={solving}
@@ -832,7 +889,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         permutations={solveProgress.permutations}
         searched={solveProgress.searched}
         poolSizes={solveProgress.poolSizes}
-        resultCount={solveResults.length}
+        resultCount={displayedResults.length}
         solving={solving}
       />
       <PromptDialog
@@ -1127,6 +1184,7 @@ function BuilderToolbar({
   armorSets, weaponEffects, accessoryEffects, mainStatCatalogs,
   filters, dispatch,
   solving, canSolve, onSolve, onCancelSolve,
+  canFilter, filterActive, onFilter, onClearFilter,
 }: {
   heroes: Inventory["characters"];
   game: GameData | null;
@@ -1142,6 +1200,12 @@ function BuilderToolbar({
   canSolve: boolean;
   onSolve: (mode: SolveMode) => void;
   onCancelSolve: () => void;
+  /** Whether the post-solve Filter action can run (results stored + a band set). */
+  canFilter: boolean;
+  /** Whether a client filter is currently narrowing the stored results. */
+  filterActive: boolean;
+  onFilter: () => void;
+  onClearFilter: () => void;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const close = () => setOpenKey(null);
@@ -1198,6 +1262,32 @@ function BuilderToolbar({
       >
         Solve CP
       </button>
+      {/* Post-solve client filter: re-applies the stat/rating bands to the
+       *  stored results without re-solving (instant after the first solve). */}
+      <button
+        type="button"
+        onClick={onFilter}
+        disabled={!canFilter || solving}
+        title="Filter the existing results by the stat/rating bands — no re-solve (instant after the first optimization)."
+        className={cx(
+          "h-9 shrink-0 rounded-lg border px-3.5 text-[11px] font-semibold uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+          filterActive
+            ? "border-amber-400/50 bg-amber-400/12 text-amber-200 hover:bg-amber-400/20"
+            : "border-white/12 bg-white/4 text-white/70 hover:text-white",
+        )}
+      >
+        Filter
+      </button>
+      {filterActive && (
+        <button
+          type="button"
+          onClick={onClearFilter}
+          title="Show all stored results again."
+          className="h-9 shrink-0 rounded-lg px-1 text-[11px] text-white/45 hover:text-white/80"
+        >
+          ✕
+        </button>
+      )}
       <ToolbarDivider />
       <ToolbarToggle
         label="Reforged"
