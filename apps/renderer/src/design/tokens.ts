@@ -67,7 +67,7 @@ export const STAT: Record<string, StatTokens> = {
   dmgUp:     { label: "DMG+",  longLabel: "DMG Increase",      kind: "off",  color: "#fb923c", icon: "CM_Stat_Icon_DMG_INCREASE" },
   dmgReduce: { label: "DMG-",  longLabel: "DMG Reduction",     kind: "def",  color: "#93c5fd", icon: "CM_Stat_Icon_ENEMY_DMG_REDUCE" },
   pen:       { label: "PEN",   longLabel: "Penetration",       kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_PIERCE_POWER" },
-  critDmgReduce: { label: "CDR", longLabel: "Crit DMG Reduction", kind: "def", color: "#93c5fd", icon: "CM_Stat_Icon_ENEMY_CRITICAL_DMG_REDUCE" },
+  critDmgReduce: { label: "CDMG RED%", longLabel: "Crit DMG Reduction", kind: "def", color: "#93c5fd", icon: "CM_Stat_Icon_ENEMY_CRITICAL_DMG_REDUCE" },
   hitAp:     { label: "HitAP", longLabel: "Hit AP",            kind: "util", color: "#22d3ee", icon: null },
   killAp:    { label: "KillAP",longLabel: "Kill AP",           kind: "util", color: "#22d3ee", icon: null },
   // Set-bonus only stats — no in-game stat icon exists, fall back to the

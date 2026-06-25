@@ -86,19 +86,23 @@ const RESULT_GEAR_SLOTS: SlotId[] = [
 /** Compact main-stat-axis labels rendered in the Stats / Stat filters /
  *  Substat priority panels (and across as table columns). Ordered to match
  *  the Builds tab's StatBlock column reading so muscle memory transfers. */
+// Labels are the in-game stat abbreviations (source of truth:
+// outerpedia-v2/data/stats.json) — used as the column-header tooltips and any
+// text fallback. The table headers themselves render the stat icon, not the
+// text, so a long label like "CDMG RED%" never crowds the column.
 const SOLVER_STATS: ReadonlyArray<{ key: string; iconKey: string; label: string; unit: string }> = [
-  { key: "atk",        iconKey: "atk",           label: "Atk",  unit: "" },
-  { key: "def",        iconKey: "def",           label: "Def",  unit: "" },
-  { key: "hp",         iconKey: "hp",            label: "Hp",   unit: "" },
-  { key: "spd",        iconKey: "spd",           label: "Spd",  unit: "" },
-  { key: "crc",        iconKey: "critRate",      label: "Cr",   unit: "%" },
-  { key: "chd",        iconKey: "critDmg",       label: "Cd",   unit: "%" },
-  { key: "critDmgRed", iconKey: "critDmgReduce", label: "Cdr",  unit: "%" },
-  { key: "pen",        iconKey: "pen",           label: "Pen",  unit: "%" },
-  { key: "dmgUp",      iconKey: "dmgUp",         label: "D↑",   unit: "%" },
-  { key: "dmgRed",     iconKey: "dmgReduce",     label: "D↓",   unit: "%" },
-  { key: "eff",        iconKey: "eff",           label: "Eff",  unit: "" },
-  { key: "res",        iconKey: "effRes",        label: "Res",  unit: "" },
+  { key: "atk",        iconKey: "atk",           label: "ATK",       unit: "" },
+  { key: "def",        iconKey: "def",           label: "DEF",       unit: "" },
+  { key: "hp",         iconKey: "hp",            label: "HP",        unit: "" },
+  { key: "spd",        iconKey: "spd",           label: "SPD",       unit: "" },
+  { key: "crc",        iconKey: "critRate",      label: "CHC",       unit: "%" },
+  { key: "chd",        iconKey: "critDmg",       label: "CHD",       unit: "%" },
+  { key: "critDmgRed", iconKey: "critDmgReduce", label: "CDMG RED%", unit: "%" },
+  { key: "pen",        iconKey: "pen",           label: "PEN%",      unit: "%" },
+  { key: "dmgUp",      iconKey: "dmgUp",         label: "DMG UP%",   unit: "%" },
+  { key: "dmgRed",     iconKey: "dmgReduce",     label: "DMG RED%",  unit: "%" },
+  { key: "eff",        iconKey: "eff",           label: "EFF",       unit: "" },
+  { key: "res",        iconKey: "effRes",        label: "RES",       unit: "" },
 ];
 
 /** Calculated ratings — visible only in the Rating filters panel and as
@@ -163,10 +167,10 @@ const STAT_LABEL: Record<string, string> = {
   spd: "SPD",
   critRate: "CHC",
   critDmg:  "CHD",
-  critDmgReduce: "CDR",
-  pen:    "PEN",
-  dmgUp:  "DMG↑",
-  dmgReduce: "DMG↓",
+  critDmgReduce: "CDMG RED%",
+  pen:    "PEN%",
+  dmgUp:  "DMG UP%",
+  dmgReduce: "DMG RED%",
   eff:    "EFF",
   effRes: "RES",
   hitAp:  "HitAP",
@@ -2379,8 +2383,8 @@ function ResultsTable({
    *  after filters). Null → show the generic "pick a hero" hint instead. */
   emptyReason: string | null;
   /** Active stat bands — the table always shows the first 8 stat columns;
-   *  any of the remaining stats (dmgUp/dmgRed/eff/res) that carry a live
-   *  min/max band get appended so you never filter on an invisible column. */
+   *  any of the remaining stats (dmgRed/eff/res) that carry a live min/max
+   *  band get appended so you never filter on an invisible column. */
   statFilters: Record<string, MinMax>;
   /** Viewport height in rows (the parent caps the row's maxHeight to match);
    *  the slider in the header drives it so the bottom gear band stays visible. */
@@ -2525,7 +2529,7 @@ function ResultsTable({
               <th className="px-1.5 py-1 text-left text-[9.5px] font-semibold uppercase tracking-wider">sets</th>
               {statCols.map((s) => (
                 <SortHeader key={s.key} colKey={s.key} title={s.label} sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
-                  {s.label.toLowerCase()}
+                  <StatIcon stat={s.iconKey} size={14} className="inline-block align-middle" />
                 </SortHeader>
               ))}
               {TABLE_RATINGS.map((r) => (

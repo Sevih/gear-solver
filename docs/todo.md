@@ -50,8 +50,10 @@
       stat/rating (sans relancer le solve). Gain de temps énorme après le 1er calcul. (Stocker `solveResults`
       bruts + appliquer un prédicat des `statFilters`/`ratingFilters` à l'affichage.)
 - [ ] 🟢 **Filtre qualité** — exclure les pièces selon leur quality (Poor/…) du pool de solve.
-- [ ] 🟡 **Colonnes table** — défauts douteux (CDR n'est pas vraiment une stat à montrer) ; utiliser les **icônes**
-      de stats plutôt que des labels texte ; permettre de **masquer/afficher** des colonnes (lisibilité).
+- [x] 🟡 **Abréviations stats** — labels alignés sur `outerpedia-v2/data/stats.json` (CHC/CHD/CDMG RED%/PEN%/DMG UP%/…)
+      + **en-têtes du tableau en icônes** (plus de texte). `CDR` ambigu (= Cooldown pour l'user) → `CDMG RED%`.
+      (CDR avait été retirée à tort sur un malentendu d'abréviation → restaurée.)
+- [ ] 🟡 **Colonnes table (suite)** — permettre de **masquer/afficher** des colonnes (lisibilité).
 - [x] 🔴 **Colonne Set cassée** — rendait `—`, jamais implémentée → set tags par build (icône + tier 2/4) (`500fb26`).
 - [ ] 🟡 **Colonnes arme + accessoire** — ajouter au tableau les effets d'arme et d'accessoire portés par chaque build.
 - [ ] 🟠 **Solve sous-utilise le CPU** — pendant un solve, CPU ~25% max mais temp 70-80° : le pool de workers ne
