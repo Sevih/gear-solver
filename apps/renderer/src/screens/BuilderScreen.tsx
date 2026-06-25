@@ -1302,7 +1302,7 @@ function PopoverButton({
         <span className="text-[8px] text-white/40">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
-        <div className={cx("absolute top-[calc(100%+8px)] z-40 rounded-lg shadow-2xl shadow-black/60", align === "right" ? "right-0" : "left-0")}>
+        <div className={cx("absolute top-[calc(100%+8px)] z-40 rounded-lg bg-bg-elev-1 shadow-2xl shadow-black/70", align === "right" ? "right-0" : "left-0")}>
           {children}
         </div>
       )}
@@ -1557,10 +1557,8 @@ function OptionsPanel({
 }) {
   const set = (key: keyof SolverOptions) => (v: boolean) => dispatch({ type: "setOption", key, value: v });
   return (
-    <Panel title="Options" hint="Pool toggles. Equipped items + Exclude equipped together drive what gear the solver may touch." width="w-44">
+    <Panel title="Options" hint="Pool toggles. Equipped items + Exclude equipped together drive what gear the solver may touch. (Reforged / Maxed-only live as quick toggles in the toolbar.)" width="w-52">
       <div className="space-y-0.5">
-        <ToggleRow label="Use reforged stats" hint="Predict orange-tick reforges on +15 gear." checked={options.useReforged} onChange={set("useReforged")} />
-        <ToggleRow label="Only maxed gear" hint="+15 pieces that can't enhance further." checked={options.onlyMaxed} onChange={set("onlyMaxed")} />
         <ToggleRow label="Equipped items" hint="Include gear equipped on other heroes (own hero always in)." checked={options.includeEquippedOnOthers} onChange={set("includeEquippedOnOthers")} />
         <ToggleRow label="Keep current" hint="Lock current pieces (only fill empty slots). Gems are still re-allocated — useful for 'keep my gear, tell me which gems to socket'." checked={options.keepCurrent} onChange={set("keepCurrent")} />
       </div>
@@ -2485,7 +2483,7 @@ function ResultsTable({
       )}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse font-mono text-[10.5px] tabular-nums">
-          <thead className="sticky top-0 z-10 bg-bg-elev-2 text-white/70">
+          <thead className="sticky top-0 z-10 bg-bg-elev-1 text-white/70 [&_th]:bg-bg-elev-1">
             <tr className="border-b border-white/8">
               <th className="px-1.5 py-1 text-left text-[9.5px] font-semibold uppercase tracking-wider">sets</th>
               {statCols.map((s) => (
@@ -3056,13 +3054,17 @@ function GearCard({ slot, piece, game, recommendedGems, reforged }: {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 font-mono text-[12px] tabular-nums">
-        <StatIcon stat={mainStatKey} size={16} className="shrink-0" />
-        <span className="flex-1 text-white">{mainStatMeta?.longLabel ?? mainStatKey}</span>
-        <span className={cx("font-semibold", mainStat ? "text-white" : "text-white/40")}>
-          {mainStat ? `${mainStat.value}${mainStat.percent ? "%" : ""}` : "—"}
-        </span>
-      </div>
+      {/* The EE's main stat is fixed (ATK% — only one option exists), so it's
+       *  pure noise on the card; skip it for the exclusive slot. */}
+      {slot !== "exclusive" && (
+        <div className="flex items-center gap-2 font-mono text-[12px] tabular-nums">
+          <StatIcon stat={mainStatKey} size={16} className="shrink-0" />
+          <span className="flex-1 text-white">{mainStatMeta?.longLabel ?? mainStatKey}</span>
+          <span className={cx("font-semibold", mainStat ? "text-white" : "text-white/40")}>
+            {mainStat ? `${mainStat.value}${mainStat.percent ? "%" : ""}` : "—"}
+          </span>
+        </div>
+      )}
 
       {reforged && (
         <div className="flex items-center gap-1.5">
