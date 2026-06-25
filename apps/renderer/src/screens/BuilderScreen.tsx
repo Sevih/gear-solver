@@ -14,7 +14,8 @@
  * Every input is visual placeholder — state lives only where needed to
  * demonstrate behavior (hero combobox open/close, picker selection).
  */
-import { useEffect, useMemo, useReducer, useRef, useState, type Dispatch, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useReducer, useRef, useState, type Dispatch, type ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, expToLevel, resolveStat } from "@gear-solver/core";
 import { CharacterPortrait, SlotIcon, SlotMini, StatIcon } from "../design/EquipmentIcon.js";
@@ -2000,6 +2001,24 @@ function ResultsTable({
     return m;
   }, [builds]);
   const selectedBuildRef = selectedIdx != null ? builds[selectedIdx] : null;
+
+  // Row virtualization — at the default topN=1000 the old table mounted ~1000
+  // rows × ~20 cells (~20k DOM nodes) and re-rendered every one on hover/sort.
+  // Now only the visible window (+overscan) is mounted; two spacer rows
+  // reserve the scroll height so the sticky thead and scrollbar stay correct.
+  // Fixed row height (forced on each ResultRow) → estimate == actual, no drift.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: sortedBuilds.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => RESULT_ROW_H,
+    overscan: 12,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const totalSize = rowVirtualizer.getTotalSize();
+  const padTop = virtualRows.length > 0 ? virtualRows[0]!.start : 0;
+  const padBottom = virtualRows.length > 0 ? totalSize - virtualRows[virtualRows.length - 1]!.end : 0;
+  const colSpan = 1 + 8 + TABLE_RATINGS.length + 3;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/8 bg-bg-elev-2">
       <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-3 py-1.5">
@@ -2014,7 +2033,7 @@ function ResultsTable({
       {error && (
         <div className="border-b border-rose-400/30 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-200">{error}</div>
       )}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse font-mono text-[10.5px] tabular-nums">
           <thead className="sticky top-0 z-10 bg-bg-elev-2 text-white/70">
             <tr className="border-b border-white/8">
@@ -2040,9 +2059,8 @@ function ResultsTable({
           </thead>
           <tbody>
             {builds.length === 0 && !solving && !error && (
-              // 1 sets + 8 stats + N ratings + score + upg + actions.
-              // Derived rather than hardcoded — TABLE_RATINGS can change.
-              <tr><td colSpan={1 + 8 + TABLE_RATINGS.length + 3} className="px-3 py-12 text-center text-[11px] italic">
+              // colSpan = 1 sets + 8 stats + N ratings + score + upg + actions.
+              <tr><td colSpan={colSpan} className="px-3 py-12 text-center text-[11px] italic">
                 {emptyReason ? (
                   <span className="text-amber-300/80">
                     No builds — a slot has no pieces left after filtering.<br />
@@ -2053,7 +2071,11 @@ function ResultsTable({
                 )}
               </td></tr>
             )}
-            {sortedBuilds.map((b) => {
+            {/* Spacer rows reserve the offscreen scroll height above/below the
+                rendered window so the scrollbar + sticky thead stay accurate. */}
+            {padTop > 0 && <tr style={{ height: padTop }}><td colSpan={colSpan} /></tr>}
+            {virtualRows.map((vr) => {
+              const b = sortedBuilds[vr.index]!;
               const idx = buildIndexOf.get(b) ?? 0;
               return (
                 <ResultRow
@@ -2061,10 +2083,12 @@ function ResultsTable({
                   build={b}
                   selected={b === selectedBuildRef}
                   ranges={ranges}
-                  onClick={() => onSelect(idx)}
+                  index={idx}
+                  onSelect={onSelect}
                 />
               );
             })}
+            {padBottom > 0 && <tr style={{ height: padBottom }}><td colSpan={colSpan} /></tr>}
           </tbody>
         </table>
       </div>
@@ -2135,17 +2159,27 @@ function computeColumnRanges(builds: SolveBuild[]): ColumnRanges {
   return { stat, rating, score: { min: scoreMin, max: scoreMax } };
 }
 
-function ResultRow({
-  build, selected, ranges, onClick,
+/** Fixed result-row height (px) — forced on each row so the virtualizer's
+ *  size estimate equals the actual height (zero scroll drift). */
+const RESULT_ROW_H = 26;
+
+/** Memoized so a hover/sort/selection change only re-renders the rows whose
+ *  props actually changed. Requires stable props: `onSelect` is the parent's
+ *  useState setter, `ranges` is memoized, `build` refs are stable. The click
+ *  handler is bound to the stable `index` here rather than passed pre-closed. */
+const ResultRow = memo(function ResultRow({
+  build, selected, ranges, index, onSelect,
 }: {
   build: SolveBuild;
   selected?: boolean;
   ranges: ColumnRanges;
-  onClick: () => void;
+  index: number;
+  onSelect: (i: number) => void;
 }) {
   return (
     <tr
-      onClick={onClick}
+      onClick={() => onSelect(index)}
+      style={{ height: RESULT_ROW_H }}
       className={cx(
         "cursor-pointer border-b border-white/4 hover:bg-white/4",
         selected && "bg-rose-900/30 hover:bg-rose-900/40",
@@ -2179,7 +2213,7 @@ function ResultRow({
       </td>
     </tr>
   );
-}
+});
 
 function fmt(v: number | null | undefined, unit: string): string {
   if (v == null) return "—";

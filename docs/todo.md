@@ -82,12 +82,12 @@
         `BuilderScreen.tsx` (`startSolve`, `emptyReason`, `ResultsTable`).
 - [x] 🔴 **`restoreBuild` ne reset pas `solveError`** — ✅ corrigé :
       `setSolveError(null)` ajouté en tête de `restoreBuild`. `BuilderScreen.tsx`.
-- [ ] 🟠 **Table de résultats non virtualisée** — `topN = 1000` par défaut, `ResultsTable`
-      rend toutes les lignes (~1000 × ~20 cellules ≈ 20k nœuds DOM), `ResultRow` non-`memo`
-      avec `onClick` recréé ×1000 à chaque tri/sélection. L'Inventory est virtualisé →
-      incohérent. Fix : `memo(ResultRow)` + handler stable + virtualiser le tbody
-      (`react-virtual`/`react-window` déjà utilisés ailleurs). À défaut, cap d'affichage
-      (~200) avec "voir plus". `orchestrator.ts:40-42`, `BuilderScreen.tsx:1933,1986-1998`.
+- [x] 🟠 **Table de résultats non virtualisée** — ✅ corrigé : tbody virtualisé via
+      `@tanstack/react-virtual` (même lib que l'Inventory) en technique spacer-rows (garde
+      `<table>` + thead sticky) ; seule la fenêtre visible (+overscan 12) est montée.
+      `ResultRow` passé en `memo` avec handler stable (`index` + `onSelect` au lieu d'un
+      `onClick` pré-fermé) → hover/tri/sélection ne re-rend que les lignes changées. Hauteur
+      de ligne forcée (`RESULT_ROW_H`) = estimate exact, zéro drift de scroll. `BuilderScreen.tsx`.
 - [ ] 🟠 **Listeners `mousedown` document dupliqués** — `HeroSelect` et
       `ExcludeHeroesPicker` attachent chacun un listener global et sont ~90% identiques.
       Fix : hook partagé `useClickOutside`. `BuilderScreen.tsx:1068-1075,1255-1262`.
