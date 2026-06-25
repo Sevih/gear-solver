@@ -6,49 +6,93 @@
  * The 8 ratings + Score are surfaced in the Builder's results table and as
  * filter axes in the Rating filters panel. CP lives in `./cp.ts` because
  * it needs hero skills + EE/Talisman piece metadata, so it's much heavier.
+ *
+ * **Damage formulas** follow `docs/damage-calc/binary-formulas-1.4.9.md`
+ * (`CFormula.<CalcDamage>g__CalcDamage|17_0`) reduced to a build-trait
+ * scoring context:
+ *
+ *   E[damage per hit] ∝ Stat × E[DR]/1000 × penMult
+ *   E[DR]   = 1000 + pCrit × (CHD×10 − 1000) + DMGBoost − DMGReduce  (clamped ≥ 300)
+ *   penMult = (TARGET_DEF + 1000) / (TARGET_DEF × (1 − PEN/100) + 1000)
+ *
+ * The previous formula `ATK × CHC × CHD` had no physical meaning — it
+ * implicitly assumed non-crits did zero damage, ranking a CHD=300 / CHC=0
+ * build as "dmg = 0" instead of `ATK × 1.0`. PEN was ignored entirely.
  */
 import type { FinalStats } from "../composeBuild.js";
 
 export interface CheapRatings {
-  /** HP × SPD — bulky-and-fast composite. */
+  /** HP × SPD — bulky-and-fast composite (proxy, not a damage formula). */
   hps: number;
-  /** Effective HP — HP × (DEF/300 + 1). Linear defense scaling chosen for
-   *  filter-readability; CP's HD formula is more curve-y but harder to
-   *  compare across builds at a glance. */
+  /** Effective HP — `HP × (1 + DEF/1000)`. Matches the in-game defense
+   *  mitigation `1000/(DEF+1000)` exactly (defender side, no penetration). */
   ehp: number;
   /** EHP × SPD — tanky-and-fast composite. */
   ehps: number;
-  /** Average damage — ATK × CHC × CHD (CHC/CHD in decimal form). */
+  /** Expected damage per ATK-scaling hit vs a `TARGET_DEF` enemy.
+   *  Includes crit weighting (pCrit × CHD term), `dmgUp − dmgRed`, and the
+   *  penetration multiplier against TARGET_DEF=2000. */
   dmg: number;
   /** DPS — Dmg × SPD. */
   dmgs: number;
-  /** Max crit damage — ATK × CHD (assumes 100% CHC, useful for crit caps). */
+  /** Max crit damage — assumes 100% CHC. Useful for setups with raid buffs
+   *  that push CHC to 100% (the typical "crit cap" comparison). */
   mcd: number;
   /** Max DPS — Mcd × SPD. */
   mcds: number;
-  /** Bruiser burst — HP × CHD (for HP-scaling kits). */
+  /** Expected damage per HP-scaling hit (Aer's S3, Caren's heal-as-damage,
+   *  etc.) vs a `TARGET_DEF` enemy. Same crit/PEN math as `dmg`, just HP
+   *  instead of ATK. */
   dmgh: number;
 }
+
+/** Reference enemy DEF the offensive ratings (`dmg`, `dmgs`, `mcd`, `mcds`,
+ *  `dmgh`) score against. PvE midgame bosses sit in the 1500-3000 range;
+ *  2000 is a pragmatic middle that makes the PEN multiplier behave
+ *  intuitively (PEN 50% → ×1.5, PEN 100% → ×3.0).
+ *
+ *  Constant rather than configurable for now — change it in one place if
+ *  ranking against very tanky / very squishy targets becomes a real need.
+ *  Note that this only shifts the relative weight of PEN vs other stats;
+ *  builds with no PEN see the same ranking across any TARGET_DEF. */
+const TARGET_DEF = 2000;
+
+/** Hit-rate floor mirrored from `CheckDamageRate` (§3.2: `rate = Max(rate, 300)`).
+ *  Means a build can never score below 30% of its uncrit damage even with
+ *  large defender DMGReduce stacks. */
+const DR_FLOOR = 0.3;
 
 /** Compute every cheap rating in one pass. Inlined branches and no
  *  allocations besides the return object. */
 export function computeCheapRatings(s: FinalStats): CheapRatings {
   const hps = s.hp * s.spd;
-  const ehp = s.hp * (s.def / 300 + 1);
+  // EHP — in-game defense mitigation is `1000/(DEF+1000)`, so `HP/mit =
+  // HP × (1 + DEF/1000)`. The old `HP × (DEF/300 + 1)` over-credited DEF
+  // by ~3.3× (DEF=3000 gave EHP_factor=11 vs the real 4.0).
+  const ehp = s.hp * (1 + s.def / 1000);
   const ehps = ehp * s.spd;
-  // CRC / CHD come out of the composer as displayed percent (35 = 35%) — the
-  // damage products want decimal form. CRC is capped at 100% in-game: anything
-  // beyond is wasted. Clamping here (not on FinalStats.crc, which is shown
-  // raw in the UI so the user sees the overflow) keeps `dmg` / `dmgs` from
-  // crediting non-existent crit rate, which would also bias the rating
-  // filters and the score.
-  const crcDec = Math.min(s.crc, 100) / 100;
-  const chdDec = s.chd / 100;
-  const dmg = s.atk * crcDec * chdDec;
+  // CRC capped at 100% in-game — overflow is wasted. Damage-mod buffs
+  // (dmgUp / dmgRed) get folded into the same DR rate per §3.2 of
+  // binary-formulas-1.4.9.md (`rate += DMGBoost; rate -= DMGReduce`).
+  const pCrit = Math.min(s.crc, 100) / 100;
+  const chdMult = s.chd / 100;
+  const dmgMod = (s.dmgUp - s.dmgRed) / 100;
+  // E[DR] / 1000 — normal hit = 1.0, crit = CHD/100, weighted by pCrit.
+  // Then +dmgUp/100 and -dmgRed/100 from the damage-mod buff chain.
+  const drFactor = Math.max(DR_FLOOR, 1 + pCrit * (chdMult - 1) + dmgMod);
+  // Same but assuming 100% CHC (the "I have raid crit buffs" comparison).
+  const mcdFactor = Math.max(DR_FLOOR, chdMult + dmgMod);
+  // Penetration multiplier vs the TARGET_DEF enemy. PPR caps at 100% per
+  // §1.2: `min(PPR, 1000)`; we model PEN past 100% as "no extra credit"
+  // (the flat PiercePower stat is rare on builds and ignored here).
+  const penPct = Math.min(s.pen, 100) / 100;
+  const effTargetDef = TARGET_DEF * (1 - penPct);
+  const penMult = (TARGET_DEF + 1000) / (effTargetDef + 1000);
+  const dmg = s.atk * drFactor * penMult;
   const dmgs = dmg * s.spd;
-  const mcd = s.atk * chdDec;
+  const mcd = s.atk * mcdFactor * penMult;
   const mcds = mcd * s.spd;
-  const dmgh = s.hp * chdDec;
+  const dmgh = s.hp * drFactor * penMult;
   return { hps, ehp, ehps, dmg, dmgs, mcd, mcds, dmgh };
 }
 

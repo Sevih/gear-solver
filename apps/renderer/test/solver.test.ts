@@ -391,20 +391,80 @@ describe("aggregateGearBuckets — gem override equivalence", () => {
  * ───────────────────────────────────────────────────────────────────────── */
 
 describe("computeCheapRatings", () => {
-  it("expects FinalStats.crc/chd in DISPLAY percent (35 = 35%), NOT decimal", () => {
-    // ATK 1000, CHC 50 (= 50%), CHD 200 (= 200%) → dmg = 1000 × 0.5 × 2.0 = 1000
+  it("expected damage = ATK × (1 + pCrit × (CHD/100 − 1)) — weighted crit, not assume-100%", () => {
+    // Pre-fix bug: dmg = ATK × pCrit × CHD/100, which implicitly priced
+    // non-crits at 0. Now: ATK 1000, CHC 50%, CHD 200% →
+    //   pCrit = 0.5, chdMult = 2.0, drFactor = 1 + 0.5 × (2 − 1) = 1.5
+    //   penMult = 1 (PEN=0), dmg = 1000 × 1.5 × 1 = 1500
     const fs = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 50, chd: 200,
       eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
     const r = computeCheapRatings(fs);
-    expect(r.dmg).toBe(1000);          // 1000 × 0.5 × 2.0
-    expect(r.dmgs).toBe(100000);       // dmg × spd
-    expect(r.mcd).toBe(2000);          // 1000 × 2.0 (assumes 100% CHC)
+    expect(r.dmg).toBe(1500);
+    expect(r.dmgs).toBe(150000); // dmg × spd
+    // Max crit damage assumes 100% CHC: ATK × CHD/100 = 1000 × 2.0 = 2000.
+    expect(r.mcd).toBe(2000);
   });
 
-  it("EHP uses linear DEF scaling: HP × (DEF/300 + 1)", () => {
+  it("CHC=0 still produces damage (every hit is a non-crit at ×1.0)", () => {
+    // Pre-fix bug: ATK × 0 × anything = 0 → builds with no CHC ranked at
+    // dmg=0 in the table, masking real damage potential.
+    const fs = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 300,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    expect(computeCheapRatings(fs).dmg).toBe(1000); // drFactor = 1.0
+  });
+
+  it("dmgUp / dmgRed fold into the DR rate (per binary-formulas §3.2)", () => {
+    // ATK 1000, CHC 0, CHD 100 (irrelevant — no crit), dmgUp 20 → drFactor =
+    // 1 + 0 + 0.20 = 1.20 → dmg = 1200. dmgRed 30 → drFactor = 1 − 0.30 = 0.7.
+    const base = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    expect(computeCheapRatings({ ...base, dmgUp: 20 }).dmg).toBeCloseTo(1200);
+    expect(computeCheapRatings({ ...base, dmgRed: 30 }).dmg).toBeCloseTo(700);
+  });
+
+  it("DR_FLOOR clamps at 30% — large negative damage-mod doesn't zero out the rating", () => {
+    // §3.2: `rate = Max(rate, 300)`. A defender with dmgRed=200 would push
+    // drFactor below 0, the floor keeps it at 0.3 (matches in-game cap).
+    const fs = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 200, pen: 0, critDmgRed: 0 };
+    expect(computeCheapRatings(fs).dmg).toBeCloseTo(300); // 1000 × 0.3
+  });
+
+  it("PEN multiplier vs TARGET_DEF=2000 — PEN 50% → ×1.5, PEN 100% → ×3.0", () => {
+    // Without PEN, mit = 1000/(2000+1000) = 0.333. PEN 100% drops effDef to
+    // 0 → mit = 1.0, ratio = 3.0. PEN 50% → effDef = 1000, mit = 0.5,
+    // ratio = 1.5. Critical: pre-fix the rating ignored PEN entirely.
+    const base = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const noPen = computeCheapRatings(base).dmg;
+    expect(computeCheapRatings({ ...base, pen: 50 }).dmg).toBeCloseTo(noPen * 1.5);
+    expect(computeCheapRatings({ ...base, pen: 100 }).dmg).toBeCloseTo(noPen * 3.0);
+  });
+
+  it("PEN > 100% wasted (PPR caps at 100% per §1.2)", () => {
+    const base = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    expect(computeCheapRatings({ ...base, pen: 100 }).dmg).toBe(
+      computeCheapRatings({ ...base, pen: 130 }).dmg,
+    );
+  });
+
+  it("dmgh applies the same crit + PEN math as dmg, but scaled on HP", () => {
+    // HP-scaling skills (Aer S3, Caren heal-as-damage) still hit DEF and
+    // benefit from PEN; only the source stat changes.
+    const fs = { atk: 0, def: 0, hp: 10000, spd: 100, crc: 50, chd: 200,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 50, critDmgRed: 0 };
+    // drFactor = 1 + 0.5 × (2 − 1) = 1.5, penMult = 1.5, dmgh = 10000 × 1.5 × 1.5 = 22500
+    expect(computeCheapRatings(fs).dmgh).toBeCloseTo(22500);
+  });
+
+  it("EHP matches the in-game mitigation: HP × (1 + DEF/1000)", () => {
+    // Pre-fix bug: `DEF/300 + 1` over-credited DEF by ~3.3×. At DEF=600
+    // the OLD rating produced 30000 (factor 3.0); the IN-GAME factor is
+    // 1.6 → 16000.
     const fs = { atk: 0, def: 600, hp: 10000, spd: 100, crc: 0, chd: 100,
       eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
-    expect(computeCheapRatings(fs).ehp).toBe(30000); // 10000 × (600/300 + 1) = 10000 × 3
+    expect(computeCheapRatings(fs).ehp).toBe(16000);
   });
 });
 

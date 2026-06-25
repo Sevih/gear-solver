@@ -218,26 +218,55 @@ ignorait la contribution ECDR).
 ### 2.3 Cheap ratings (`ratings.ts::computeCheapRatings`)
 
 Produits purs de `FinalStats`, ~10 ns/call. Aucune dépendance externe.
+**Formules alignées sur la math reverse-engineered de
+[`docs/damage-calc/binary-formulas-1.4.9.md`](../../outerpedia-v2/docs/damage-calc/binary-formulas-1.4.9.md)**
+(adresses `CFormula.<CalcDamage>g__CalcDamage|17_0` + `CheckDamageRate`),
+réduites à un contexte build-trait (pas de defender connu côté solveur).
 
-| Rating | Formula                          | Sémantique                              |
-|--------|----------------------------------|-----------------------------------------|
-| `hps`  | `HP × SPD`                       | Bulky-and-fast composite                |
-| `ehp`  | `HP × (DEF/300 + 1)`             | Effective HP, scaling linéaire DEF      |
-| `ehps` | `EHP × SPD`                      | Tanky-and-fast                          |
-| `dmg`  | `ATK × (CRC/100) × (CHD/100)`    | Crit-weighted average damage            |
-| `dmgs` | `dmg × SPD`                      | DPS                                     |
-| `mcd`  | `ATK × (CHD/100)`                | Max crit dmg (suppose 100% CHC)         |
-| `mcds` | `mcd × SPD`                      | Max DPS                                 |
-| `dmgh` | `HP × (CHD/100)`                 | Bruiser burst (HP-scaling)              |
+**Pipeline damage (extrait du doc §1 + §3) appliqué aux ratings offensifs** :
 
-Conventions : `CRC` et `CHD` sont en **DISPLAY percent** (35 = 35%), donc
-on divise par 100 pour avoir décimal dans les produits. **CRC est cappée à
-100%** dans `dmg`/`dmgs`/`mcd` (`Math.min(s.crc, 100) / 100`) — l'overflow
-est wasted in-game, ne pas le créditer dans les ratings. La valeur brute
-reste dans `FinalStats.crc` pour l'affichage UI.
+```
+pCrit    = min(CRC, 100) / 100
+chdMult  = CHD / 100
+dmgMod   = (dmgUp − dmgRed) / 100         ← rate += DMGBoost; rate -= DMGReduce (§3.2)
+drFactor = max(0.3, 1 + pCrit × (chdMult − 1) + dmgMod)   ← E[DR]/1000, floor 30% (§3.2 cap)
+mcdFactor= max(0.3, chdMult + dmgMod)                     ← suppose pCrit = 1
+penPct   = min(PEN, 100) / 100             ← PPR cappe à 100% (§1.2)
+effDef   = TARGET_DEF × (1 − penPct)
+penMult  = (TARGET_DEF + 1000) / (effDef + 1000)          ← ratio mitigation
+```
 
-EHP utilise le scaling DEF linéaire `HP × (DEF/300 + 1)`, plus lisible
-pour filtrer que la formule HD non-linéaire du CP.
+**`TARGET_DEF = 2000`** — constante. Référence DEF cible : PvE midgame
+boss. Avec cette valeur PEN 50% → ×1.5, PEN 100% → ×3.0. Le choix shifte
+seulement le poids relatif du PEN vs autres stats ; un build sans PEN
+ranke pareil pour n'importe quel `TARGET_DEF`.
+
+| Rating | Formula                                | Sémantique                              |
+|--------|----------------------------------------|-----------------------------------------|
+| `hps`  | `HP × SPD`                             | Bulky-and-fast composite (proxy)        |
+| `ehp`  | `HP × (1 + DEF/1000)`                  | Effective HP — match exact la mitigation `1000/(DEF+1000)` |
+| `ehps` | `EHP × SPD`                            | Tanky-and-fast                          |
+| `dmg`  | `ATK × drFactor × penMult`             | Expected damage par hit vs DEF=2000     |
+| `dmgs` | `dmg × SPD`                            | DPS                                     |
+| `mcd`  | `ATK × mcdFactor × penMult`            | Max crit (assume 100% CHC, raid-buffs)  |
+| `mcds` | `mcd × SPD`                            | Max DPS                                 |
+| `dmgh` | `HP × drFactor × penMult`              | Damage HP-scaling (Aer S3, Caren, …)    |
+
+Conventions :
+- `CRC` et `CHD` sont en **DISPLAY percent** (35 = 35%) ; le diviseur /100 les
+  rend décimaux pour les produits.
+- **CRC cappée à 100%** in-game — overflow wasted. La valeur brute reste
+  dans `FinalStats.crc` pour l'affichage UI.
+- **PEN cappée à 100%** — `PPR` (PiercePowerRate) cappe à 1000‰ in-game (§1.2).
+  Le `PiercePower` flat n'est pas modélisé (rare sur les builds).
+- **Plancher 30% du DR** — `CheckDamageRate` clampe `rate = Max(rate, 300)`
+  (§3.2), empêche les ratings dmg/dmgh de descendre à 0 sur stacks
+  de defender DMGReduce extrêmes.
+
+**Pas inclus** dans les ratings (defender-dependent, hors scope build-trait) :
+Element (×0.8/×1.0/×1.2), Mark (×1.15), EnemyCriticalDamageReduce, MISS
+multiplier, `FinalDamageReduce` buff chain. Le PEN est l'exception : modélisé
+contre un `TARGET_DEF` constant pour permettre le ranking PEN-vs-autres-stats.
 
 ### 2.4 Score (`ratings.ts::computeScore`)
 
