@@ -30,6 +30,8 @@ import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { simulateReforges } from "../lib/solver/engine.js";
 import { SolverOrchestrator } from "../lib/solver/orchestrator.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
+import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
+import { fetchReco } from "../lib/reco/fetchReco.js";
 import {
   addSavedBuild, loadSavedBuilds, persistSavedBuilds, removeSavedBuild,
   type SavedBuild, type SavedBuildsMap,
@@ -274,6 +276,11 @@ type SolverAction =
    *  Keeps the reducer as the single mutation point so React batches
    *  the rerender as a single update. */
   | { type: "loadPreset"; filters: SolverFilters }
+  /** Overlay an imported reco onto the current state — replaces the gear-shape
+   *  fields (effects / sets / priority) and the weapon+accessory mains, but
+   *  keeps options, excluded heroes, stat/rating bands, topPct and any other
+   *  slot's main picks. */
+  | { type: "mergePreset"; patch: RecoFilterPatch }
   /** Reset the excluded-heroes list (action button on the multi-select). */
   | { type: "clearExcludedHeroes" };
 
@@ -359,6 +366,20 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
       return INITIAL_FILTERS;
     case "loadPreset":
       return action.filters;
+    case "mergePreset": {
+      const p = action.patch;
+      return {
+        ...state,
+        // Overlay per-slot so a talisman main the user set survives (the reco
+        // only ever specifies weapon + accessory mains).
+        mainPicks: { ...state.mainPicks, ...p.mainPicks },
+        // The reco fully specifies these — replace wholesale.
+        weaponEffectPicks: { ...p.weaponEffectPicks },
+        accessoryEffectPicks: { ...p.accessoryEffectPicks },
+        setPlans: p.setPlans.length > 0 ? p.setPlans : [[]],
+        priority: { ...p.priority },
+      };
+    }
     case "clearExcludedHeroes":
       return { ...state, excludedHeroes: new Set() };
   }
@@ -604,6 +625,40 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     return selectedUid ? inventory.characters.find((c) => c.uid === selectedUid) ?? null : null;
   }, [inventory, selectedUid]);
 
+  // "Get preset" — fetch this hero's outerpedia build reco and overlay it on
+  // the current filters (mergePreset). Multiple named builds → a small picker.
+  const [recoBusy, setRecoBusy] = useState(false);
+  const [recoStatus, setRecoStatus] = useState<{ tone: "ok" | "warn" | "error"; text: string } | null>(null);
+  const [recoPicker, setRecoPicker] = useState<StructuredCharacterReco | null>(null);
+  // Clear stale reco feedback when the hero changes.
+  useEffect(() => { setRecoStatus(null); setRecoPicker(null); }, [selectedUid]);
+
+  const applyRecoBuild = (name: string, build: StructuredRecoBuild) => {
+    const { patch, warnings } = translateRecoBuild(build);
+    dispatch({ type: "mergePreset", patch });
+    setRecoPicker(null);
+    setRecoStatus(
+      warnings.length > 0
+        ? { tone: "warn", text: `Applied "${name}" — ${warnings.length} note${warnings.length === 1 ? "" : "s"}: ${warnings[0]}` }
+        : { tone: "ok", text: `Applied "${name}".` },
+    );
+  };
+
+  const getPreset = async () => {
+    if (!selected) return;
+    setRecoBusy(true);
+    setRecoStatus(null);
+    setRecoPicker(null);
+    const r = await fetchReco(selected.charId);
+    setRecoBusy(false);
+    if (r.status === "none") { setRecoStatus({ tone: "warn", text: "No build reco for this hero yet." }); return; }
+    if (r.status === "error") { setRecoStatus({ tone: "error", text: `Reco fetch failed: ${r.message}` }); return; }
+    const names = Object.keys(r.reco.builds);
+    const only = names[0];
+    if (names.length === 1 && only) { applyRecoBuild(only, r.reco.builds[only]!); return; }
+    setRecoPicker(r.reco); // multiple builds → let the user pick which one
+  };
+
   /** Compose the picked hero's full stats (gear included) via the shared
    *  composeBuild helpers. Same pipeline the Builds tab uses — so a hero's
    *  Current column here matches their card there. */
@@ -693,6 +748,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           canSavePreset={selectedUid != null}
           onSaveBuild={saveCurrentBuild}
           onSavePreset={saveCurrentPreset}
+          canGetPreset={selectedUid != null}
+          onGetPreset={() => void getPreset()}
+          recoBusy={recoBusy}
+          recoStatus={recoStatus}
           savedBuilds={savedBuildsForHero}
           onRestoreBuild={restoreBuild}
           onRemoveBuild={removeBuildById}
@@ -700,6 +759,13 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           onLoadPreset={loadPreset}
           onRemovePreset={removePresetById}
         />
+        {recoPicker && (
+          <RecoBuildPicker
+            reco={recoPicker}
+            onPick={applyRecoBuild}
+            onClose={() => setRecoPicker(null)}
+          />
+        )}
       </div>
       <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} />
       {/* Fixed at the viewport bottom — escapes the flex layout via
@@ -2451,12 +2517,68 @@ function heatStyle(v: number | null | undefined, range: { min: number; max: numb
   return { backgroundColor: `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})` };
 }
 
+/** Modal shown when a reco carries more than one named build — lets the user
+ *  pick which one to apply. Single-build recos skip this and apply directly. */
+function RecoBuildPicker({ reco, onPick, onClose }: {
+  reco: StructuredCharacterReco;
+  onPick: (name: string, build: StructuredRecoBuild) => void;
+  onClose: () => void;
+}) {
+  const names = Object.keys(reco.builds);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const summarize = (b: StructuredRecoBuild): string => {
+    const parts: string[] = [];
+    if (b.Weapon?.length) parts.push("weapon");
+    if (b.Amulet?.length) parts.push("amulet");
+    const setN = (b.Set ?? []).length;
+    if (setN) parts.push(`${setN} set alt${setN > 1 ? "s" : ""}`);
+    const prioN = (b.SubstatPrio ?? []).length;
+    if (prioN) parts.push(`${prioN}-tier prio`);
+    return parts.join(" · ") || "empty build";
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)]" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-1.5 flex items-center justify-between">
+          <h3 className="font-display text-[13px] font-semibold text-white">Choose a build</h3>
+          <button type="button" onClick={onClose} className="text-white/40 hover:text-white" aria-label="Close">✕</button>
+        </div>
+        <p className="mb-3 text-[11px] leading-snug text-white/50">
+          This hero has multiple recommended builds. Pick one to apply its mains, sets, effects and substat priority.
+        </p>
+        <ul className="flex flex-col gap-1.5">
+          {names.map((name) => {
+            const b = reco.builds[name]!;
+            return (
+              <li key={name}>
+                <button
+                  type="button"
+                  onClick={() => onPick(name, b)}
+                  className="w-full rounded-md border border-white/10 bg-white/2 px-3 py-2 text-left transition-colors hover:border-cyan-400/40 hover:bg-cyan-500/10"
+                >
+                  <div className="text-[12.5px] font-medium text-white">{name}</div>
+                  <div className="text-[10.5px] text-white/50">{summarize(b)}</div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
  * Right sidebar — Save build / save preset actions + per-hero library
  * ───────────────────────────────────────────────────────────────────────── */
 function RightSidebar({
   canSave, canSavePreset,
   onSaveBuild, onSavePreset,
+  canGetPreset, onGetPreset, recoBusy, recoStatus,
   savedBuilds, onRestoreBuild, onRemoveBuild,
   presets, onLoadPreset, onRemovePreset,
 }: {
@@ -2464,6 +2586,11 @@ function RightSidebar({
   canSavePreset: boolean;
   onSaveBuild: () => void;
   onSavePreset: () => void;
+  canGetPreset: boolean;
+  onGetPreset: () => void;
+  recoBusy: boolean;
+  /** Inline result of the last Get-preset attempt (error / none / warnings). */
+  recoStatus: { tone: "ok" | "warn" | "error"; text: string } | null;
   savedBuilds: ReadonlyArray<SavedBuild>;
   onRestoreBuild: (b: SavedBuild) => void;
   onRemoveBuild: (id: string) => void;
@@ -2473,11 +2600,24 @@ function RightSidebar({
 }) {
   return (
     <aside className="flex w-56 shrink-0 flex-col gap-2">
-      <Panel title="Library" hint="Save the currently selected build / current filter setup for this hero. Per-hero, persisted in localStorage." width="w-full">
+      <Panel title="Library" hint="Get preset pulls the outerpedia build reco for this hero (mains / sets / effects / substat priority). Save build / preset bookmark your current setup. Per-hero, persisted in localStorage." width="w-full">
         <div className="grid grid-cols-1 gap-1">
-          <ActionButton tone="primary" disabled={!canSave} onClick={onSaveBuild}>Save build</ActionButton>
+          <ActionButton tone="primary" disabled={!canGetPreset || recoBusy} onClick={onGetPreset}>
+            {recoBusy ? "Fetching…" : "Get preset"}
+          </ActionButton>
+          <ActionButton disabled={!canSave} onClick={onSaveBuild}>Save build</ActionButton>
           <ActionButton disabled={!canSavePreset} onClick={onSavePreset}>Save filter preset</ActionButton>
         </div>
+        {recoStatus && (
+          <div className={cx(
+            "mt-1.5 text-[10px] leading-snug",
+            recoStatus.tone === "ok" && "text-emerald-300/80",
+            recoStatus.tone === "warn" && "text-amber-300/80",
+            recoStatus.tone === "error" && "text-rose-300/80",
+          )}>
+            {recoStatus.text}
+          </div>
+        )}
       </Panel>
 
       <Panel title="Saved builds" hint="Click a build to load it into the table + bottom band. The trash icon removes it permanently." width="w-full">

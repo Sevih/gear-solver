@@ -7,6 +7,7 @@ import { createReadStream, existsSync, readFileSync, readdirSync, rmSync, statSy
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, extname, join, normalize } from "node:path";
 import { detectEmulators, pickEmulator, pickPort, preflight } from "../desktop/src/emulator-detect.js";
+import { proxyReco } from "../desktop/src/reco-proxy.js";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const DERIVED = join(root, "data", "derived");
@@ -128,6 +129,12 @@ function localData(): Plugin {
           return;
         }
         if (url === "/api/capture/status" && req.method === "GET") return captureStatus(res);
+        // Build-reco proxy → outerpedia API (Get Preset). Same route as the
+        // Electron prod server so the renderer's fetchReco works in both.
+        if (url.startsWith("/api/reco/") && req.method === "GET") {
+          void proxyReco(url.slice("/api/reco/".length), res);
+          return;
+        }
         if (url === "/api/capture/wipe" && req.method === "POST") {
           res.setHeader("Content-Type", "application/json");
           if (existsSync(join(CAPTURED, ".mitm.pid"))) {

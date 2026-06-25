@@ -41,6 +41,7 @@ import {
 } from "./paths.js";
 import { detectEmulators, pickEmulator, pickPort, preflight } from "./emulator-detect.js";
 import { dlog, dwarn } from "./log.js";
+import { proxyReco } from "./reco-proxy.js";
 
 /** Public outerpedia.com image base — used in prod only to short-circuit
  *  every `/img/*` request to the publicly hosted asset. Override at runtime
@@ -290,6 +291,13 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   }
   if (url === "/api/capture/status" && req.method === "GET") {
     return captureStatus(res);
+  }
+  // Build-reco proxy → outerpedia API (Get Preset). GET only, numeric id.
+  if (url.startsWith("/api/reco/") && req.method === "GET") {
+    const id = url.slice("/api/reco/".length);
+    dlog("server", `proxying reco ${id}`);
+    void proxyReco(id, res);
+    return;
   }
   // Settings → Data → "Wipe captured data". Deletes the user_*.json /
   // item_customInfo.json snapshots so the renderer reverts to its empty

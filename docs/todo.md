@@ -130,13 +130,13 @@ le **logger** (pas filtrer silencieusement).
 
 ### À faire (gear-solver)
 
-- [ ] **Proxy Electron** (`apps/desktop/src/server.ts`) — relayer `GET /api/reco/:id` vers l'API
-      outerpedia (choix retenu : proxy plutôt qu'ouvrir CORS sur outerpedia). Gérer base URL
-      configurable (prod = outerpedia.com) + timeout + erreur réseau remontée à l'UI. En dev,
-      le middleware Vite devra exposer la même route (cf. `data.ts` qui ne fetch que du local).
-- [ ] **Fetch côté renderer** — fonction `fetchReco(charId): Promise<StructuredCharacterReco | null>`
-      (à côté de `data.ts`). Pas de parsing : l'API renvoie déjà du structuré.
-- [ ] **Traducteur `reco → Partial<SolverFilters>`** (nouveau module, le cœur). Par build :
+- [x] **Proxy Electron** — ✅ fait : `apps/desktop/src/reco-proxy.ts` (`proxyReco`) relaie
+      `GET /api/reco/:id` → `OUTERPEDIA_API_BASE` (def. outerpedia.com), id numérique validé,
+      timeout 8 s, status amont relayé verbatim (404 distinct), 502 sur échec transport. Branché
+      dans `server.ts` (prod) **et** le middleware `vite.config.ts` (dev) → même route partout.
+- [x] **Fetch côté renderer** — ✅ fait : `lib/reco/fetchReco.ts` → union discriminée
+      `{ok|none|error}` (404 = pas de reco, distinct d'un échec réseau).
+- [x] **Traducteur `reco → RecoFilterPatch`** — ✅ fait (`lib/reco/translateReco.ts`, 10 tests). Par build :
   - **mains** : `Weapon[].mainStat` / `Amulet[].mainStat` → `mainPicks.weapon` / `mainPicks.accessory`.
     Les clés sont **déjà** des clés moteur (`atkPct`, `pen`, `critDmg`) → assignation directe, pas de
     table. Plusieurs alternatives = OR-list (le `mainPicks` est déjà un OR au niveau slot).
@@ -154,14 +154,15 @@ le **logger** (pas filtrer silencieusement).
     l'échelle -1..3 du solver (ex. tier 0 → 3, 1 → 2, 2+ → 1). Clamp à la borne basse.
   - **`itemId`/`setId` null** → skip l'entrée + `console.warn` (mismatch nom à corriger côté data),
     ne pas planter le preset entier.
-- [ ] **Bouton + UI** (`BuilderScreen.tsx`) — « Get preset » près du sélecteur de héros, lit
-      `hero.charId`. Un reco a **plusieurs builds nommés** (`"Speed"`, `"DPS"`…) → petit picker de build
-      (ou 1er par défaut). États loading / réseau-KO / 404 (pas de reco pour ce héros) à afficher.
-- [ ] **Application au reducer** — `dispatch({ type: "loadPreset", filters })` existe déjà et remplace
-      tout l'état. Si on veut **préserver** les `options`/exclusions courantes, ajouter une action
-      `mergePreset` plutôt qu'un remplacement total.
-- [ ] **Ignoré volontairement** : `Talisman` (presets `$CPdps`…) — le solver optimise déjà les gems,
-      pas de filtre « talisman par nom ». L'afficher en note au mieux, ne pas le câbler aux filtres.
+- [x] **Bouton + UI** — ✅ fait : « Get preset » dans le panneau Library (`RightSidebar`), lit
+      `selected.charId`. État busy (« Fetching… »), ligne de statut (ok/warn/error) avec les warnings
+      du traducteur, et `RecoBuildPicker` (modal Esc-dismiss) quand le reco a plusieurs builds nommés
+      (1 seul → appliqué direct).
+- [x] **Application au reducer** — ✅ fait : action `mergePreset` qui **overlay** le patch (mains
+      weapon/accessory par-slot, effets/sets/priorité remplacés) en **préservant** options, héros exclus,
+      stat/rating bands et topPct. `loadPreset` (remplacement total) reste pour les presets sauvés.
+- [x] **Ignoré volontairement** : `Talisman` — non câblé (le solver optimise déjà les gems). Le
+      traducteur ne touche pas au talisman, conforme.
 
 ---
 
