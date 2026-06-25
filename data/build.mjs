@@ -472,21 +472,33 @@ for (const s of load("ItemSpecialOptionTemplet.json")) {
   // `BID_CEQUIP_2000089` at Lv1 are `BT_STAT` `SKILL_START` `TurnDuration=1`
   // — they fail this gate). The `Level` field is the EE enhance-level
   // threshold to unlock (1 = always when equipped, 10 = unlocks at +10).
+  // An EE row can list MULTIPLE comma-separated BuffIDs. The classic shape is
+  // a self buff + the same buff to same-class allies — e.g. Eris (2000117):
+  //   BID_CEQUIP_2000117_1 = +50% CHD to SELF (TargetType ME, Cond NONE)
+  //   BID_CEQUIP_2000117_2 = +50% CHD to MY_TEAM_WITHOUT_ME of OWNER_CLASS
+  // We split and evaluate each against the self-passive gate below. The old
+  // whole-string `buffByID.get(s.BuffID)` failed the lookup for ANY comma row,
+  // silently dropping the SELF passive too — so Eris' +50% CHD (which in-game
+  // shows on her own sheet, since she IS that class) never reached the
+  // character sheet or the solver. 7 EEs were affected.
   if (s.BuffID && eeGroupIds.has(s.GroupID)) {
-    const buff = buffByID.get(s.BuffID);
-    const ok = buff
-      && buff.Type === "BT_STAT_PREMIUM"
-      && buff.TargetType === "ME"
-      && buff.BuffCreateType === "PASSIVE"
-      && (buff.BuffConditionType ?? "NONE") === "NONE"
-      && buff.TurnDuration === "-1";
-    if (ok) {
-      (eePassives[s.GroupID] ??= []).push({
-        levelThreshold: Number(s.Level),
-        st: buff.StatType,
-        ap: buff.ApplyingType,
-        v: Number(buff.Value),
-      });
+    for (const bid of String(s.BuffID).split(",")) {
+      if (!bid) continue;
+      const buff = buffByID.get(bid);
+      const ok = buff
+        && buff.Type === "BT_STAT_PREMIUM"
+        && buff.TargetType === "ME"
+        && buff.BuffCreateType === "PASSIVE"
+        && (buff.BuffConditionType ?? "NONE") === "NONE"
+        && buff.TurnDuration === "-1";
+      if (ok) {
+        (eePassives[s.GroupID] ??= []).push({
+          levelThreshold: Number(s.Level),
+          st: buff.StatType,
+          ap: buff.ApplyingType,
+          v: Number(buff.Value),
+        });
+      }
     }
   }
 }
