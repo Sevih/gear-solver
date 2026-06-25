@@ -59,12 +59,19 @@ export function calcBattlePower(args: CpArgs): number {
   const atkPart = 0.125 * s.atk * (1 + chain);
   const defPart = (s.hp + s.def) * defF * defR * resR;
   const starBonus = showUIStar * 500 + starPlus * 120;
-  // S1 baseline is 4 in-game (always-on starter level) → `first - 4` is the
-  // user-leveled delta. Clamped at 0 defensively: in normal captures
-  // `first` is always ≥ 4, but a partial capture or a parser regression
-  // returning 0 would otherwise subtract 400 CP silently.
-  const firstDelta = Math.max(0, skills.first - 4);
-  const skillSum = firstDelta + skills.second + skills.ultimate + skills.chainPassive;
+  // Each skill contributes (level − 1) × 100 to CP. All four skills start at
+  // Lv1 in-game and max at Lv5, so a fresh character (every skill Lv1) adds 0.
+  // Verified on Flamberge (6★ lv5): S1 Lv1/2/3 → in-game CP 6085/6185/6285
+  // (+100 per level from Lv1), and her all-Lv1 sheet decomposes exactly onto
+  // 6085 only when skillSum = 0. S1 is symmetric with the other three — an
+  // earlier `max(0, first-4)` wrongly assumed a Lv4 baseline (the all-Lv1 case
+  // was never exercised). Clamped ≥0 so a partial capture (level 0) can't
+  // subtract CP.
+  const skillSum =
+      Math.max(0, skills.first - 1)
+    + Math.max(0, skills.second - 1)
+    + Math.max(0, skills.ultimate - 1)
+    + Math.max(0, skills.chainPassive - 1);
   const eeBp = ee ? ee.enhanceLevel * 100 + 300 : 0;
   const ooBp = ooparts ? ooparts.enhanceLevel * 100 + (ooparts.star ?? 0) * 50 : 0;
   const fusionBp = fused ? 5000 : 0;

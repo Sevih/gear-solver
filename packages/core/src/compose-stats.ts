@@ -166,19 +166,41 @@ function pickSkillBlock(table: Record<string, StatBlock>, lv: number | undefined
   return max > 0 ? (table[String(max)] ?? ZERO) : ZERO;
 }
 
-/** Sum every evolution row with EvolutionLevel ≤ min(targetStar, evoCap).
- *  Evolutions Lv 2..6 unlock via TransStar progression; Lv 7..9 are gated by
- *  the Limit-Break step (LB1 → 7, LB2 → 8, LB3 → 9), so `evoCap = 6 + LB`.
- *  Verified against in-game Sterope (LB 0 → 2..6) and Luna (LB 3 → 2..9). */
+/** Character level at which each EvolutionLevel row unlocks in-game.
+ *  Evos 2..6 every 20 levels (20/40/60/80/100); 7/8/9 at the Limit-Break
+ *  level caps 105/110/120 (NOT linear — LB3 jumps 110→120, skipping 115 —
+ *  so a table, not a formula). Reaching those caps already requires the
+ *  matching LB, so this level gate subsumes the LB gate for 7..9. Unknown
+ *  rows fall back to lv120 (never unlocked below max). */
+const EVO_UNLOCK_LEVEL: Record<number, number> = {
+  2: 20, 3: 40, 4: 60, 5: 80, 6: 100, 7: 105, 8: 110, 9: 120,
+};
+function evoUnlockLevel(evoLevel: number): number {
+  return EVO_UNLOCK_LEVEL[evoLevel] ?? 120;
+}
+
+/** Sum every evolution row that is BOTH unlocked by progression
+ *  (EvolutionLevel ≤ min(targetStar, evoCap)) AND reached by the captured
+ *  character `level` (`level ≥ evoUnlockLevel(row)`). The level gate is what
+ *  the in-game sheet actually enforces: a transcended-but-underleveled hero
+ *  (e.g. 6★ at lv5) shows NO evo bonuses until it hits lv20/40/… Previously
+ *  only the star/LB cap was checked, so such heroes were over-credited every
+ *  evo flat (def/hp/eff/spd) — the validation chars were all max-level, which
+ *  masked the gap. Evos Lv 2..6 unlock via TransStar; Lv 7..9 via the LB step
+ *  (LB1 → 7, LB2 → 8, LB3 → 9), so `evoCap = 6 + LB`.
+ *  Verified against in-game Sterope (LB 0 → 2..6) and Luna (LB 3 → 2..9),
+ *  plus Flamberge (6★ lv5 → none). */
 function sumEvoUpTo(
   evoByLevel: CharacterIngredients["evoByLevel"],
   targetStar: number,
   evoCap: number,
+  level: number,
 ): StatBlock {
   const cap = Math.min(targetStar, evoCap);
   let acc: StatBlock = { ...ZERO };
   for (const k of Object.keys(evoByLevel)) {
-    if (Number(k) <= cap) acc = addBlock(acc, evoByLevel[k]!);
+    const e = Number(k);
+    if (e <= cap && level >= evoUnlockLevel(e)) acc = addBlock(acc, evoByLevel[k]!);
   }
   return acc;
 }
@@ -297,7 +319,11 @@ export function composeCharStats(
     : maxTranscendStar(ingredients.transcendByStar);
 
   const levelMaxStep = Math.max(0, Math.min(3, options.levelMaxStep ?? 3));
-  const evo = sumEvoUpTo(ingredients.evoByLevel, transStar, 6 + levelMaxStep);
+  // Captured level — also gates which evolution rows are unlocked (see
+  // `sumEvoUpTo`), so it must be resolved before the evo sum, not just for
+  // the base-stat interpolation below.
+  const level = options.level ?? 100;
+  const evo = sumEvoUpTo(ingredients.evoByLevel, transStar, 6 + levelMaxStep, level);
   const transRow = ingredients.transcendByStar[String(transStar)]
     ?? { atkPct: 0, defPct: 0, hpPct: 0, skillLevel: 0 };
   const codexRow = codexCurve[codexLevel] ?? { atkPct: 0, defPct: 0, hpPct: 0 };
@@ -322,7 +348,7 @@ export function composeCharStats(
 
   // Resolve every base stat at the captured level (with LB modifier above
   // lv 100). Stats where min == max stay constant — baseAtLevel returns max.
-  const level = options.level ?? 100;
+  // (`level` resolved above — it also gates the evolution rows.)
   const modifier = options.levelMaxModifier ?? 0;
   const baseAtk = baseAtLevel(ingredients.base.atk, level, modifier);
   const baseDef = baseAtLevel(ingredients.base.def, level, modifier);

@@ -709,19 +709,23 @@ describe("calcBattlePower", () => {
     fused: false,
   });
 
-  it("clamps skills.first below 4 to zero — never subtracts CP", () => {
-    // Pre-clamp bug: skills.first=0 would compute (0-4)=-4 → -400 CP
-    // contribution. Captures should never produce first<4 (S1 starts at 4
-    // in-game) but a parse regression could; we guard against it.
-    const cpBaseline = calcBattlePower(args({ first: 4, second: 0, ultimate: 0, chainPassive: 0 }));
+  it("all skills at Lv1 contribute no CP; first=0 is clamped, never negative", () => {
+    // Every skill starts at Lv1 in-game and counts as (level − 1) × 100, so a
+    // fresh all-Lv1 character adds 0 skill CP (verified on Flamberge: all-Lv1
+    // → in-game 6085 with skillSum 0). A parse glitch giving first=0 must clamp
+    // to 0, not subtract 100.
+    const cpAllLv1 = calcBattlePower(args({ first: 1, second: 1, ultimate: 1, chainPassive: 1 }));
     const cpZero = calcBattlePower(args({ first: 0, second: 0, ultimate: 0, chainPassive: 0 }));
-    expect(cpZero).toBe(cpBaseline);
+    expect(cpAllLv1).toBe(cpZero);
   });
 
-  it("higher skills.first still contributes positively", () => {
-    const cp4 = calcBattlePower(args({ first: 4, second: 0, ultimate: 0, chainPassive: 0 }));
-    const cp10 = calcBattlePower(args({ first: 10, second: 0, ultimate: 0, chainPassive: 0 }));
-    expect(cp10).toBe(cp4 + 600); // (10-4) × 100
+  it("each skill level above 1 adds 100 CP (symmetric across all four)", () => {
+    // Flamberge: S1 Lv1/2/3 → CP 6085/6185/6285 (+100 per level from Lv1).
+    const base = calcBattlePower(args({ first: 1, second: 1, ultimate: 1, chainPassive: 1 }));
+    const s1Lv3 = calcBattlePower(args({ first: 3, second: 1, ultimate: 1, chainPassive: 1 }));
+    expect(s1Lv3).toBe(base + 200); // (3−1) × 100
+    const allLv5 = calcBattlePower(args({ first: 5, second: 5, ultimate: 5, chainPassive: 5 }));
+    expect(allLv5).toBe(base + 1600); // 4 × (5−1) × 100
   });
 
   it("critDmgRed (ECDR) contributes to the defR multiplier", () => {

@@ -196,7 +196,7 @@ chain   = (1 + effF) × crcF × critF × penF × spdF
 atkPart = 0.125 × ATK × (1 + chain)
 defPart = (HP + DEF) × defF × defR × resR
 starBonus = showUIStar × 500 + starPlus × 120
-skillSum  = max(0, first − 4) + second + ultimate + chainPassive
+skillSum  = Σ max(0, level − 1) over {first, second, ultimate, chainPassive}
 eeBp      = ee ? ee.enhanceLevel × 100 + 300 : 0
 ooBp      = ooparts ? ooparts.enhanceLevel × 100 + (ooparts.star ?? 0) × 50 : 0
 fusionBp  = fused ? 5000 : 0
@@ -204,10 +204,12 @@ fusionBp  = fused ? 5000 : 0
 CP = floor(atkPart + defPart + starBonus + skillSum × 100 + eeBp + ooBp + fusionBp)
 ```
 
-**`max(0, first − 4)`** : clamp défensif. S1 démarre à 4 in-game (toujours-on),
-donc `first - 4` représente la délta utilisateur. Une capture normale a
-`first ≥ 4`, mais un parse glitch retournant 0 soustrairait 400 CP en
-silence — le clamp empêche ça.
+**`max(0, level − 1)` par skill** : les 4 skills débutent à Lv1 in-game (max
+Lv5), donc chacun compte `(niveau − 1) × 100` et un perso tout-Lv1 ajoute 0.
+Vérifié sur Flamberge (6★ lv5) : S1 Lv1/2/3 → CP in-game 6085/6185/6285, et sa
+fiche tout-Lv1 ne retombe sur 6085 que si `skillSum = 0`. Le clamp ≥0 protège
+d'une capture partielle (niveau 0). (Ancienne formule `max(0, first − 4)` :
+supposait à tort un baseline Lv4 pour S1 — le cas tout-Lv1 n'était jamais testé.)
 
 **ECDR (`critDmgRed`)** : exposé dans `FinalStats.critDmgRed` (sommé depuis
 les substats / mains `critDmgReduce` via `composeBuild`). Convention ×10
