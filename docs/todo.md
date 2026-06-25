@@ -24,7 +24,26 @@
       flottante ≠ inverse exact) et aucun test stat-locks automatisé ne rattrape une dérive
       ULP via `Math.trunc` dans `composeMultStat`. À faire en préservant l'ordre exact
       (prefix `[0..5]` → talisman → EE/override/sets) avec un test d'équivalence dédié.
-
+- [ ] 🔴 **Stat de dégats** - quelle stat doit etre utilisé.
+      actuellement la formule de degat utilise uniquement Atk mais certains perso
+      utilise une autre stat a la place de l'attaque voir une stat en plus d'une autre (exemple caren utilise la def et pas l'atk, D.Stella utilise Atk+Hp)
+      => explorer fichier du jeu pour trouver logique et ratio 
+      => integrer ça dans le solver
+- [ ] 🔴 **Overcap critique** - monter au dessus de 100% ne sert a rien.
+      dans l'etat le solver monte bien trop au dessus de 100% de chc. une tolerance
+      peut etre appliquer genre on evite de monte au dessus de 105% mais surtout
+      il continue de mettre des gems chance critique meme si on a deja atteint 100%
+- [x] 🔴 **Detection des items dispo** — ✅ fait : le catalogue d'effets Weapons & accessories
+      groupait par `effectIcon`, or des effets **différents** partagent une icône (les 5 Recklessness
+      partagent `TI_Icon_UO_Weapon_25`) → ils étaient fusionnés en un chip et le filtre matchait les
+      mauvais. Basculé catalogue + moteur (`allow`) + chips d'effet sur **`EquipmentDef.setId`**
+      (= `UniqueOptionID`, identité d'effet unique), l'icône ne servant plus qu'à l'affichage.
+      `effectCatalogFromInventory`, `cycleEffectPick` (clé `key`), `engine.ts` `allow`. Get Preset :
+      le traducteur résout `itemId → setId` localement via `game.equipment` (resolver passé à
+      `translateRecoBuild`) → **pas besoin de toucher l'API outerpedia**. Presets legacy (clés-icônes)
+      nettoyés au load (`filterPresets`) pour éviter un pool vide silencieux.
+      *(API outerpedia : enrichir avec l'id unique reste un nice-to-have, non bloquant.)*
+- [ ] 🟠 Solver CP met beaucoup trop de temps => comment ameliorer ça
 ### Perf solver (optionnel, seulement si profilage le justifie)
 
 - [ ] **Profiler un vrai solve** (Chrome DevTools Performance) sur un inventaire moyen

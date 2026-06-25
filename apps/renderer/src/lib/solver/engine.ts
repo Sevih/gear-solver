@@ -177,14 +177,17 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
         .map((m) => m.stat);
       if (!stats.some((s) => mainPicks[s])) return false;
     }
-    // Effect picks — weapon / accessory only.
+    // Effect picks — weapon / accessory only. Keyed on `setId` (the unique
+    // UniqueOptionID effect identity), NOT `effectIcon` — distinct effects can
+    // share an icon (the Recklessness family), which would make an icon filter
+    // match the wrong variants.
     if (slot === "weapon" || slot === "accessory") {
       const def = game.equipment[String(g.itemId)];
-      const icon = def?.effectIcon ?? null;
+      const effKey = def?.setId ?? null;
       const excludedEffects = slot === "weapon" ? excludedWeaponEffects : excludedAccessoryEffects;
       const requiredEffects = slot === "weapon" ? requiredWeaponEffects : requiredAccessoryEffects;
-      if (icon && excludedEffects.has(icon)) return false;
-      if (requiredEffects.size > 0 && (!icon || !requiredEffects.has(icon))) return false;
+      if (effKey && excludedEffects.has(effKey)) return false;
+      if (requiredEffects.size > 0 && (!effKey || !requiredEffects.has(effKey))) return false;
     }
     // Excluded sets — drop the piece outright.
     if (g.armorSetId && excludedSets.has(g.armorSetId)) return false;

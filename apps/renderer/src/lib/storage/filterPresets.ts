@@ -49,7 +49,28 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
     setPlans ??= migrated.setPlans.length > 0 ? migrated.setPlans : [[]];
     excludedSets ??= migrated.excludedSets;
   }
-  return { ...s, filters: { ...f, excludedHeroes: new Set(ex), setPlans, excludedSets } };
+  // Effect picks switched from icon-keyed to setId-keyed (numeric UniqueOptionID).
+  // A legacy preset's icon keys ("TI_Icon_…") would now match no piece and turn
+  // a "required" effect filter into an empty pool (silent "no builds"). Drop any
+  // non-numeric (legacy) effect key rather than break the solve.
+  const sanitizeEffects = (m: Record<string, unknown> | undefined): Record<string, "required" | "excluded"> => {
+    const out: Record<string, "required" | "excluded"> = {};
+    for (const [k, v] of Object.entries(m ?? {})) {
+      if (/^\d+$/.test(k) && (v === "required" || v === "excluded")) out[k] = v;
+    }
+    return out;
+  };
+  return {
+    ...s,
+    filters: {
+      ...f,
+      excludedHeroes: new Set(ex),
+      setPlans,
+      excludedSets,
+      weaponEffectPicks: sanitizeEffects(f.weaponEffectPicks),
+      accessoryEffectPicks: sanitizeEffects(f.accessoryEffectPicks),
+    },
+  };
 }
 
 export function loadFilterPresets(): FilterPresetsMap {

@@ -270,7 +270,7 @@ type SolverAction =
   | { type: "removePlan"; planIdx: number }
   /** Toggle a set in/out of the hard-excluded list. */
   | { type: "toggleExcludedSet"; setId: string }
-  | { type: "cycleEffectPick"; group: "weapon" | "accessory"; icon: string }
+  | { type: "cycleEffectPick"; group: "weapon" | "accessory"; key: string }
   | { type: "clearPriority" }
   | { type: "resetAll" }
   /** Replace the entire filter state — used to apply a saved preset.
@@ -353,13 +353,13 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
       };
     }
     case "cycleEffectPick": {
-      const key = action.group === "weapon" ? "weaponEffectPicks" : "accessoryEffectPicks";
-      const cur = state[key][action.icon] ?? "off";
+      const mapKey = action.group === "weapon" ? "weaponEffectPicks" : "accessoryEffectPicks";
+      const cur = state[mapKey][action.key] ?? "off";
       const nxt = nextChipState(cur);
-      const map = { ...state[key] };
-      if (nxt === "off") delete map[action.icon];
-      else map[action.icon] = nxt;
-      return { ...state, [key]: map };
+      const map = { ...state[mapKey] };
+      if (nxt === "off") delete map[action.key];
+      else map[action.key] = nxt;
+      return { ...state, [mapKey]: map };
     }
     case "clearPriority":
       return { ...state, priority: {} };
@@ -639,7 +639,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   useEffect(() => { setRecoStatus(null); setRecoPicker(null); }, [selectedUid]);
 
   const applyRecoBuild = (name: string, build: StructuredRecoBuild) => {
-    const { patch, warnings } = translateRecoBuild(build);
+    // Resolve each recommended item to its unique effect key (setId) via the
+    // loaded game data — the reco only carries effectIcon, which isn't unique.
+    const resolveEffectKey = (itemId: number | null) =>
+      itemId != null && game ? game.equipment[String(itemId)]?.setId ?? null : null;
+    const { patch, warnings } = translateRecoBuild(build, resolveEffectKey);
     dispatch({ type: "mergePreset", patch });
     setRecoPicker(null);
     setRecoStatus(
@@ -885,14 +889,21 @@ interface ArmorSetEntry {
   desc4pc: string | null;
 }
 interface EffectEntry {
+  /** Unique effect identity = `EquipmentDef.setId` (the game's UniqueOptionID).
+   *  This is the filter/dedup key — NOT the icon. Several distinct effects
+   *  (e.g. the five Recklessness variants) share one icon, so keying on the
+   *  icon collapsed them into one chip and the filter matched all five. */
+  key: string;
+  /** Icon filename for display only — `/img/ui/effect/<icon>.webp`. May be
+   *  shared across different effects; never used as an identity. */
   icon: string;
   /** Effect display name — pulled from `game.equipmentPassives[itemId].name`
    *  (the canonical effect title like "Destruction"), with a fallback to
-   *  the equipment item name and finally the icon filename. */
+   *  the equipment item name and finally the effect key. */
   name: string;
   /** Localized T4 effect description (`textByTier[4]`). Same passive applies
-   *  to every item sharing this `effectIcon`, so any sample is canonical.
-   *  Null when no passive is resolved (data gap). */
+   *  to every item sharing this `key` (same UniqueOptionID), so any sample is
+   *  canonical. Null when no passive is resolved (data gap). */
   descT4: string | null;
   /** Number of owned weapons / accessories rolling this effect (≥ 1). */
   owned: number;
@@ -973,7 +984,10 @@ function effectCatalogFromInventory(
   heroClass: string | null,
 ): EffectEntry[] {
   if (!game || !inventory) return [];
-  const map = new Map<string, { name: string; descT4: string | null; owned: number }>();
+  // Key on the effect IDENTITY (`setId` = UniqueOptionID), not the icon — the
+  // icon is shared across distinct effects (the Recklessness family), so icon-
+  // keying collapsed five effects into one chip. Store the icon for display.
+  const map = new Map<string, { icon: string; name: string; descT4: string | null; owned: number }>();
   for (const g of inventory.gear) {
     // Use the design SlotId so the comparison is symmetric with the rest
     // of the panels (weapon/accessory happen to match the engine name 1:1
@@ -982,20 +996,20 @@ function effectCatalogFromInventory(
     if (toDesignSlot(g.slot) !== slot) continue;
     if (heroClass && g.classLimit && g.classLimit !== heroClass) continue;
     const def = game.equipment[String(g.itemId)];
-    if (!def?.effectIcon) continue;
-    const existing = map.get(def.effectIcon);
+    if (!def?.setId) continue; // no unique-option effect → not filterable
+    const existing = map.get(def.setId);
     if (existing) { existing.owned++; continue; }
-    // First-seen icon: snapshot the effect title + T4 text from this
-    // item's passive. Items sharing an icon carry the same passive, so a
-    // single sample is canonical. textByTier[4] = T4 (build pipeline
-    // already substituted Value/Rate/Turn placeholders).
+    // First-seen effect: snapshot its title + T4 text from this item's passive.
+    // Items sharing a `setId` (UniqueOptionID) carry the same passive, so a
+    // single sample is canonical. textByTier[4] = T4 (build pipeline already
+    // substituted Value/Rate/Turn placeholders).
     const passive = game.equipmentPassives[String(g.itemId)];
-    const name = passive?.name ?? def.name ?? def.effectIcon;
+    const name = passive?.name ?? def.name ?? def.setId;
     const descT4 = passive?.textByTier?.[4] ?? null;
-    map.set(def.effectIcon, { name, descT4, owned: 1 });
+    map.set(def.setId, { icon: def.effectIcon ?? "", name, descT4, owned: 1 });
   }
   return Array.from(map.entries())
-    .map(([icon, { name, descT4, owned }]) => ({ icon, name, descT4, owned }))
+    .map(([key, { icon, name, descT4, owned }]) => ({ key, icon, name, descT4, owned }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -2024,13 +2038,13 @@ function WeaponsAccessoriesPanel({
           title="Weapons"
           effects={weapons}
           picks={weaponPicks}
-          onCycle={(icon) => dispatch({ type: "cycleEffectPick", group: "weapon", icon })}
+          onCycle={(key) => dispatch({ type: "cycleEffectPick", group: "weapon", key })}
         />
         <EffectGroup
           title="Accessories"
           effects={accessories}
           picks={accPicks}
-          onCycle={(icon) => dispatch({ type: "cycleEffectPick", group: "accessory", icon })}
+          onCycle={(key) => dispatch({ type: "cycleEffectPick", group: "accessory", key })}
         />
       </div>
     </Panel>
@@ -2043,7 +2057,7 @@ function EffectGroup({
   title: string;
   effects: EffectEntry[];
   picks: Record<string, ChipState>;
-  onCycle: (icon: string) => void;
+  onCycle: (key: string) => void;
 }) {
   return (
     <div>
@@ -2054,10 +2068,10 @@ function EffectGroup({
         <div className="flex flex-wrap gap-1">
           {effects.map((e) => (
             <EffectIconChip
-              key={e.icon}
+              key={e.key}
               effect={e}
-              state={picks[e.icon] ?? "off"}
-              onClick={() => onCycle(e.icon)}
+              state={picks[e.key] ?? "off"}
+              onClick={() => onCycle(e.key)}
             />
           ))}
         </div>

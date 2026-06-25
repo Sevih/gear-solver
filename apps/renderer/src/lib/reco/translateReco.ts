@@ -4,10 +4,15 @@
  * Builder reducer can overlay onto its current filter state ("Get preset").
  *
  * The API already emits engine-canonical identifiers (itemId = GearPiece.itemId,
- * setId = armorSetId, stat keys = engine keys, effectIcon = equipment.effectIcon),
- * so there is NO name/heuristic matching here — only structural mapping. Any
- * unresolved id (itemId/setId null) or unknown stat key is skipped and reported
- * in `warnings`, never silently dropped (per the contract note).
+ * setId = armorSetId, stat keys = engine keys), so there is NO name/heuristic
+ * matching here — only structural mapping. Any unresolved id (itemId/setId null)
+ * or unknown stat key is skipped and reported in `warnings`, never silently
+ * dropped (per the contract note).
+ *
+ * Effect picks key on the EFFECT IDENTITY (`EquipmentDef.setId` = UniqueOptionID),
+ * not the reco's `effectIcon` — distinct effects share icons. The caller passes a
+ * `resolveEffectKey(itemId)` that maps the recommended item to its setId via the
+ * loaded game data; an item that can't be resolved is skipped + warned.
  *
  * Pure / dependency-light so it unit-tests in isolation.
  */
@@ -83,12 +88,23 @@ function mainPicksForSlot(refs: RecoGearStat[] | undefined): Record<string, bool
   return out;
 }
 
-/** Required effect icons for a slot (OR-list). Null icons are skipped + warned. */
-function effectPicks(refs: RecoGearStat[] | undefined, slot: string, warnings: string[]): Record<string, "required"> {
+/** Resolve a recommended item to its unique effect key (`setId`) via the loaded
+ *  game data. Null when the item id is missing or has no unique-option effect. */
+export type ResolveEffectKey = (itemId: number | null) => string | null;
+
+/** Required effect keys for a slot (OR-list), resolved from each piece's
+ *  itemId → setId. Unresolvable pieces are skipped + warned. */
+function effectPicks(
+  refs: RecoGearStat[] | undefined,
+  slot: string,
+  warnings: string[],
+  resolveEffectKey: ResolveEffectKey,
+): Record<string, "required"> {
   const out: Record<string, "required"> = {};
   for (const ref of refs ?? []) {
-    if (ref.effectIcon) out[ref.effectIcon] = "required";
-    else warnings.push(`${slot}: "${ref.name}" has no effect icon — skipped its effect filter.`);
+    const key = resolveEffectKey(ref.itemId);
+    if (key) out[key] = "required";
+    else warnings.push(`${slot}: "${ref.name}" — couldn't resolve its effect — skipped its effect filter.`);
   }
   return out;
 }
@@ -100,7 +116,7 @@ function effectPicks(refs: RecoGearStat[] | undefined, slot: string, warnings: s
  * dropped whole (a partial plan would silently weaken the constraint) and
  * warned — never reduced to its resolvable conds.
  */
-export function translateRecoBuild(build: StructuredRecoBuild): RecoTranslation {
+export function translateRecoBuild(build: StructuredRecoBuild, resolveEffectKey: ResolveEffectKey): RecoTranslation {
   const warnings: string[] = [];
 
   const mainPicks: Record<string, Record<string, boolean>> = {};
@@ -109,8 +125,8 @@ export function translateRecoBuild(build: StructuredRecoBuild): RecoTranslation 
   if (Object.keys(weaponMains).length > 0) mainPicks.weapon = weaponMains;
   if (Object.keys(accessoryMains).length > 0) mainPicks.accessory = accessoryMains;
 
-  const weaponEffectPicks = effectPicks(build.Weapon, "Weapon", warnings);
-  const accessoryEffectPicks = effectPicks(build.Amulet, "Amulet", warnings);
+  const weaponEffectPicks = effectPicks(build.Weapon, "Weapon", warnings, resolveEffectKey);
+  const accessoryEffectPicks = effectPicks(build.Amulet, "Amulet", warnings, resolveEffectKey);
 
   const setPlans: SetPlan[] = [];
   for (const combo of build.Set ?? []) {
