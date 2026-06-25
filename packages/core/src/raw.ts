@@ -11,7 +11,8 @@
 export interface RawSubOption {
   /** Stat type id, observed 160001–160013. See stats.ts OPTION_STATS. */
   OptionID: number;
-  /** Total ticks (yellow initial + orange reforge). */
+  /** Procs ABOVE the initial rolled tick — total ticks = Level + 1 (in-game
+   *  shows `LV (Level + 1)`). See parse.ts for the validated derivation. */
   Level: number;
   /** Initial (yellow) ticks at roll time. Reforge ticks = Level - BaseLevel. */
   BaseLevel: number;

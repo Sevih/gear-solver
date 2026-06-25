@@ -31,7 +31,9 @@ pièce d'équipement). Les stackables (orbes / matériaux) sont droppés.
 
 ### Substats / gems
 
-- `Level` = total ticks ; in-game on affiche `LV (Level + 1)`.
+- `Level` = nombre de procs **au-dessus** du tick initial ; total ticks = `Level + 1`,
+  affiché in-game `LV (Level + 1)` (validé : Surefire +15 `L3` → `LV4` = 4 ticks ;
+  Fine Sword +0 `L0` → `LV1` = 1 tick — cf. `parse.ts` `totalTicks = Level + 1`).
 - `BaseLevel` = initial yellow ticks. **Reforge ticks = `Level − BaseLevel`.**
 - Valeur résolue = `(Level + 1) × per-tick value` (de `ItemOptionTemplet.v`,
   divisé par 10 si percent display).
@@ -58,16 +60,18 @@ Scaling main pour pièces non-talisman : voir [reference.md §1.3](reference.md#
 ## `/user/character` → `CharList[]`
 
 Par character : `CharUID, CharID, TransStar (stars), CostumeID, LevelMaxStep,
-IsLock, Exp, FusionCharID`. Skills sous `Skills`:
-`{First, Second, Ultimate, ChainPassive}`.
+IsLock, Exp, FusionCharID`. Les niveaux de skill sont des **champs plats au
+top-level** : `First, Second, Ultimate, ChainPassive` (pas de wrapper `Skills`,
+cf. `parse.ts` qui lit `c.First` … `c.ChainPassive`).
 
-**Slots équipés** : `SlotList` mappe `CharUID → ItemUIDList[8]` dans le
-même fichier (8 slots = weapon, helmet, armor, gloves, boots, accessory,
-ooparts, exclusive).
+**Slots équipés** : `SlotList` existe dans le payload mais sa **shape est TBD
+(non datae)** et n'est **jamais lue** — l'« équipé-par » est dérivé directement
+du `CharUID` de chaque item (`parse.ts` : `equippedBy = CharUID === "0" ? null : CharUID`).
 
-**Presets** : `PresetList` — array de `{Name (base64), ItemUIDList[8]}`.
-Les noms sont base64-encoded UTF-8. Détecté à la lecture (Cf.
-`decodeBase64Utf8` dans parse.ts).
+**Presets** : `PresetList` vit dans **`/user/item`** (pas `/user/character`) —
+array de `{Name (base64), ItemUIDList[8]}`. Ordre des 8 slots (cf. `raw.ts`
+`RawPreset`) : Weapon, Accessory, Helmet, Armor, Gloves, Boots, EE, Talisman.
+Les noms sont base64-encoded UTF-8 (Cf. `decodeBase64Utf8` dans parse.ts).
 
 ---
 
