@@ -758,6 +758,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           statFilters={filters.statFilters}
           rows={resultRows}
           onRowsChange={setResultRows}
+          pieceByUid={pieceByUid}
+          armorSets={armorSetCatalog}
         />
         {/* Right column — projected stats over the library. Direction B keeps
          *  this thin so the results table dominates the width. */}
@@ -2366,6 +2368,7 @@ function EffectBadge({ state }: { state: ChipState }) {
  * ───────────────────────────────────────────────────────────────────────── */
 function ResultsTable({
   builds, selectedIdx, onSelect, solving, error, emptyReason, statFilters, rows, onRowsChange,
+  pieceByUid, armorSets,
 }: {
   builds: SolveBuild[];
   selectedIdx: number | null;
@@ -2383,7 +2386,41 @@ function ResultsTable({
    *  the slider in the header drives it so the bottom gear band stays visible. */
   rows: number;
   onRowsChange: (n: number) => void;
+  /** Inventory uid→piece lookup — drives the per-build Set column (the build
+   *  only carries piece UIDs; set composition is derived from their armor
+   *  set ids). */
+  pieceByUid: Map<string, GearPiece>;
+  /** Owned armor sets — used as the setId→{name,icon} lookup for the Set cell. */
+  armorSets: ArmorSetEntry[];
 }) {
+  // setId → display meta, for the per-build Set tags.
+  const armorSetById = useMemo(() => {
+    const m = new Map<string, ArmorSetEntry>();
+    for (const s of armorSets) m.set(s.id, s);
+    return m;
+  }, [armorSets]);
+  // Per-build active set tags: tally each build's pieces by armor set id, keep
+  // sets with ≥2 pieces, and render the bonus tier (4 when ≥4 pieces, else 2).
+  // Memoized on the result set so 1000 rows don't recompute on every hover.
+  const setTagsByBuild = useMemo(() => {
+    const m = new Map<SolveBuild, SetTag[]>();
+    for (const b of builds) {
+      const counts = new Map<string, number>();
+      for (const uid of b.pieceUids) {
+        const sid = pieceByUid.get(uid)?.armorSetId;
+        if (sid) counts.set(sid, (counts.get(sid) ?? 0) + 1);
+      }
+      const tags: SetTag[] = [];
+      for (const [sid, n] of counts) {
+        if (n < 2) continue;
+        const meta = armorSetById.get(sid);
+        if (meta) tags.push({ icon: meta.icon, name: meta.name, count: n >= 4 ? 4 : 2 });
+      }
+      tags.sort((a, z) => z.count - a.count); // 4pc before 2pc
+      if (tags.length > 0) m.set(b, tags);
+    }
+    return m;
+  }, [builds, pieceByUid, armorSetById]);
   // Visible stat columns = the always-on first 8, plus any of the optional
   // tail stats the user is actively filtering on. Without this, a band on
   // e.g. `eff` would silently prune builds with no column to show why.
@@ -2532,6 +2569,7 @@ function ResultsTable({
                   selected={b === selectedBuildRef}
                   ranges={ranges}
                   statCols={statCols}
+                  setTags={setTagsByBuild.get(b)}
                   index={idx}
                   onSelect={onSelect}
                 />
@@ -2612,12 +2650,15 @@ function computeColumnRanges(builds: SolveBuild[], statCols: ReadonlyArray<typeo
  *  size estimate equals the actual height (zero scroll drift). */
 const RESULT_ROW_H = 26;
 
+/** One active armor-set bonus on a build — icon + bonus tier (2 or 4). */
+interface SetTag { icon: string; name: string; count: 2 | 4 }
+
 /** Memoized so a hover/sort/selection change only re-renders the rows whose
  *  props actually changed. Requires stable props: `onSelect` is the parent's
  *  useState setter, `ranges` is memoized, `build` refs are stable. The click
  *  handler is bound to the stable `index` here rather than passed pre-closed. */
 const ResultRow = memo(function ResultRow({
-  build, selected, ranges, statCols, index, onSelect,
+  build, selected, ranges, statCols, setTags, index, onSelect,
 }: {
   build: SolveBuild;
   selected?: boolean;
@@ -2625,6 +2666,10 @@ const ResultRow = memo(function ResultRow({
   /** Stat columns to render — stable (memoized) reference from ResultsTable
    *  so it doesn't defeat the row memo on hover/sort. */
   statCols: ReadonlyArray<typeof SOLVER_STATS[number]>;
+  /** Active set bonuses for this build (icon + tier), or undefined for none.
+   *  Stable reference (from ResultsTable's memoized map) so it doesn't defeat
+   *  the row memo. */
+  setTags: SetTag[] | undefined;
   index: number;
   onSelect: (i: number) => void;
 }) {
@@ -2637,7 +2682,20 @@ const ResultRow = memo(function ResultRow({
         selected && "bg-rose-900/30 hover:bg-rose-900/40",
       )}
     >
-      <td className="px-1.5 py-1 text-left text-white/40">—</td>
+      <td className="px-1.5 py-1 text-left">
+        {setTags && setTags.length > 0 ? (
+          <div className="flex items-center gap-1">
+            {setTags.map((t, i) => (
+              <span key={i} className="inline-flex items-center gap-0.5" title={`${t.name} ·${t.count}pc`}>
+                <img src={`/img/ui/effect/${t.icon}.webp`} alt={t.name} className="h-3.5 w-3.5 object-contain" />
+                <span className="text-[9px] text-white/60">{t.count}</span>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="text-white/30">—</span>
+        )}
+      </td>
       {statCols.map((s) => {
         const v = (build.finalStats as unknown as Record<string, number>)[s.key];
         return (
