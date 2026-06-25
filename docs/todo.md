@@ -15,8 +15,9 @@
       (warn-once via Set) appelé dans la branche clé-inconnue de `passesSpecs`/`passesRatingSpecs`
       → surface un mismatch UI/engine au lieu d'un filtre no-op silencieux. Zéro coût hot-loop
       pour les clés valides. `engine.ts`.
-- [ ] **CP fallback `chainPassive`** — déjà plumbé via `userSkills` ; vérifier qu'on
-      lit la bonne colonne depuis l'inventaire capturé (`c.skills.chainPassive`).
+- [x] **CP fallback `chainPassive`** — ✅ vérifié (aucun changement) : `RawCharacter.ChainPassive`
+      → `parse.ts` `skills.chainPassive` → `cp.ts` `skillSum += max(0, chainPassive-1)` → BP.
+      Lu de la bonne colonne, utilisé par solver (BuilderScreen) ET Builds (`c.skills`).
 - [ ] 🟠 **Accumulateur de buckets — partie re-sum déférée** — le hoist des set bonuses
       est fait (cf. Livré) ; reste le re-sum des 6+EE pièces par talisman. Gain marginal,
       et **risque d'ordre flottant** : `incSet/decSet` casserait la bit-identité (soustraction
