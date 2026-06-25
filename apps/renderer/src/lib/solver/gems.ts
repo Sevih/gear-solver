@@ -157,6 +157,66 @@ export function allocateGems(
   return { talisman, ee };
 }
 
+/** CHC% (crit rate) at/above which crit-rate gems are wasted — in-game CHC
+ *  caps at 100%. Crit gems come in 3% steps, so we accept gems while CHC is
+ *  still below 100 (the one that crosses 100 is kept, overshooting to ~102 at
+ *  most) and skip any further crit gem. This guarantees CHC reaches 100 without
+ *  burning slots that could hold ATK/CHD/SPD. */
+export const CRC_GEM_CAP = 100;
+/** Engine stat key for a crit-rate gem — the only capped allocation axis. */
+const CRC_GEM_STAT = "critRate";
+/** Max CHC a capped allocation can produce (cap + one 3% overshoot). A combo
+ *  whose crc-blind compose exceeds this provably wasted ≥1 crit gem → the only
+ *  trigger for the per-combo reallocation. */
+export const CRC_OVERSHOOT_CEIL = 102;
+
+export interface CappedAllocation {
+  alloc: { talisman: number[]; ee: number[] };
+  /** Bucketed delta for `computeFinalStats`, or null when no gem was picked. */
+  delta: { flat: Record<string, number>; pct: Record<string, number> } | null;
+}
+
+/**
+ * Per-combo gem allocation that respects the CHC cap. Identical to the greedy
+ * `allocateGems` + `aggregateGemDelta` pair, except a crit-rate gem is SKIPPED
+ * once the running CHC (`preGemCrc` + crit gems accepted so far) has reached
+ * `CRC_GEM_CAP` — its slot goes to the next-best non-crit gem instead.
+ *
+ * `preGemCrc` is the combo's CHC WITHOUT gems. Returns both the {talisman, ee}
+ * id arrays (for display) and the bucketed delta (for compose), derived from
+ * the very same picked gems so they can't drift.
+ */
+export function allocateGemsCapped(
+  scored: ScoredGem[],
+  talismanSlots: number,
+  eeSlots: number,
+  preGemCrc: number,
+): CappedAllocation {
+  const talisman: number[] = [];
+  const ee: number[] = [];
+  const flat: Record<string, number> = {};
+  const pct: Record<string, number> = {};
+  const total = talismanSlots + eeSlots;
+  let crc = preGemCrc;
+  let picked = 0;
+  for (let i = 0; i < scored.length && picked < total; i++) {
+    const g = scored[i];
+    if (!g || g.score <= 0) break;
+    // Already at the cap → this crit gem is wasted; keep scanning for a useful
+    // non-crit one rather than spending the slot.
+    if (g.stat === CRC_GEM_STAT && crc >= CRC_GEM_CAP) continue;
+    if (talisman.length < talismanSlots) talisman.push(g.id);
+    else ee.push(g.id);
+    const bucket = g.percent ? pct : flat;
+    bucket[g.stat] = (bucket[g.stat] ?? 0) + g.value;
+    if (g.stat === CRC_GEM_STAT) crc += g.value;
+    picked++;
+  }
+  while (talisman.length < talismanSlots) talisman.push(0);
+  while (ee.length < eeSlots) ee.push(0);
+  return { alloc: { talisman, ee }, delta: picked > 0 ? { flat, pct } : null };
+}
+
 /** Pre-aggregate a gem allocation into a `{flat, pct}` bucket delta the
  *  composer can merge in O(stats) per combo instead of O(gems × resolveStat).
  *  Called once per `(talismanSlots, eeSlots)` variant in `prepareContext`

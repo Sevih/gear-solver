@@ -24,7 +24,7 @@ import {
   type ScalingMap,
 } from "../composeBuild.js";
 import { calcBattlePower } from "./cp.js";
-import { aggregateGemDelta, allocateGems, buildGemPool, gemSlotsOf, scoreGemPool, type ScoredGem } from "./gems.js";
+import { aggregateGemDelta, allocateGems, allocateGemsCapped, buildGemPool, CRC_OVERSHOOT_CEIL, gemSlotsOf, scoreGemPool, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
 import { planSetIds, setsFeasible } from "./setPlans.js";
@@ -557,7 +557,9 @@ export async function solveChunk(
   options: SolveChunkOptions = {},
 ): Promise<SolveChunkResult> {
   const { req, pools, baseline, scaling, ee, gemDeltaByTalismanSlots, gemAllocByTalismanSlots,
-          setPlans, skills, starMeta } = ctx;
+          scoredGems, setPlans, skills, starMeta } = ctx;
+  // EE gem-slot count is constant per solve (same EE piece across every combo).
+  const eeSlots = gemSlotsOf(ee);
   const { mode, filters, game } = req;
   const heap = new TopKHeap(topK, mode);
   const tickEvery = options.tickEvery ?? 4096;
@@ -700,7 +702,24 @@ export async function solveChunk(
                 // gems via their `subs` (correct in-game-equivalent stats).
                 const talismanSlots = talisman.enhanceLevel >= 5 ? 5 : 4;
                 const gemDelta = gemDeltaByTalismanSlots.get(talismanSlots) ?? null;
-                const fs = computeFinalStats(baseline, scaling, pieces, game, gemDelta ?? undefined, setBonuses);
+                let gemAlloc = gemAllocByTalismanSlots.get(talismanSlots) ?? { talisman: [], ee: [] };
+                let fs = computeFinalStats(baseline, scaling, pieces, game, gemDelta ?? undefined, setBonuses);
+
+                // Crit-cap correction (slow path). The precomputed gem alloc is
+                // CHC-blind, so on a high-base-CHC combo it can stack crit gems
+                // past the 100% cap. `fs.crc > 102` ⟺ at least one crit gem was
+                // placed past the cap (the capped max is one 3% overshoot);
+                // gated on the default alloc actually using crit gems so a combo
+                // that's already >102 from gear alone (nothing to swap) stays on
+                // the fast path. When triggered, reallocate for this combo's
+                // pre-gem CHC and recompose — wasted crit gems become useful
+                // non-crit ones. Untriggered combos pay zero extra cost.
+                const defaultCrcGem = gemDelta?.pct?.critRate ?? 0;
+                if (fs.crc > CRC_OVERSHOOT_CEIL && defaultCrcGem > 0) {
+                  const capped = allocateGemsCapped(scoredGems, talismanSlots, eeSlots, fs.crc - defaultCrcGem);
+                  fs = computeFinalStats(baseline, scaling, pieces, game, capped.delta ?? undefined, setBonuses);
+                  gemAlloc = capped.alloc;
+                }
 
                 if (!passesSpecs(fs, statFilterSpecs)) continue;
 
@@ -753,7 +772,7 @@ export async function solveChunk(
                      pieces[4]!.uid, pieces[5]!.uid, pieces[6]!.uid];
                 heap.push({
                   pieceUids,
-                  gemAllocation: gemAllocByTalismanSlots.get(talismanSlots) ?? { talisman: [], ee: [] },
+                  gemAllocation: gemAlloc,
                   finalStats: fs,
                   ratings,
                   score,

@@ -29,10 +29,15 @@
       utilise une autre stat a la place de l'attaque voir une stat en plus d'une autre (exemple caren utilise la def et pas l'atk, D.Stella utilise Atk+Hp)
       => explorer fichier du jeu pour trouver logique et ratio 
       => integrer ça dans le solver
-- [ ] 🔴 **Overcap critique** - monter au dessus de 100% ne sert a rien.
-      dans l'etat le solver monte bien trop au dessus de 100% de chc. une tolerance
-      peut etre appliquer genre on evite de monte au dessus de 105% mais surtout
-      il continue de mettre des gems chance critique meme si on a deja atteint 100%
+- [x] 🔴 **Overcap critique** — ✅ fait : le Score et les ratings cappaient déjà CHC à 100 %, mais
+      l'**allocateur de gemmes** notait chaque gemme isolément (précalcul global, CHC-aveugle) →
+      empilait des gemmes crit au-delà de 100 %. Fix = **alloc gemmes par combo** consciente du cap
+      (décision : exacte) : `allocateGemsCapped` (pur, 7 tests) saute toute gemme crit une fois
+      CHC ≥ 100 % (la gemme qui franchit 100 est gardée → overshoot ≤ 102 avec des gemmes 3 %, pour
+      **garantir** 100 %). Hot-loop **fast/slow-path** : compose avec le delta par défaut (0 surcoût) ;
+      slow-path (ré-alloc + re-compose) **uniquement** si `fs.crc > 102` ET le delta par défaut
+      contenait des gemmes crit (= preuve exacte qu'≥1 gemme crit a dépassé le cap). Fast-path
+      bit-identique à l'avant. `gems.ts`, `engine.ts`.
 - [x] 🔴 **Detection des items dispo** — ✅ fait : le catalogue d'effets Weapons & accessories
       groupait par `effectIcon`, or des effets **différents** partagent une icône (les 5 Recklessness
       partagent `TI_Icon_UO_Weapon_25`) → ils étaient fusionnés en un chip et le filtre matchait les
