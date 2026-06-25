@@ -19,6 +19,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { disarmIfArmed, startServer } from "./server.js";
+import { dlog, dwarn } from "./log.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -60,7 +61,7 @@ function setupAutoUpdate(): void {
   });
   autoUpdater.on("error", (err) => {
     // Don't block app launch on update check failures (offline, GH down, …).
-    console.warn("auto-update error:", err.message);
+    dwarn("server", "auto-update error:", err.message);
   });
   // Fire-and-forget — promise rejection already handled by the 'error' event.
   void autoUpdater.checkForUpdates();
@@ -113,6 +114,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
+    dlog("server", `app ready — ${IS_DEV ? "dev (Vite)" : "prod (embedded server)"}`);
     await createWindow();
     setupAutoUpdate();
   }).catch((err: unknown) => {
@@ -143,6 +145,7 @@ app.on("before-quit", (event) => {
   if (cleaningUp) return;
   event.preventDefault();
   cleaningUp = true;
+  dlog("capture", "before-quit: disarming pipeline + closing server");
   // Safety net: never let a hung disarm wedge the quit. If teardown hasn't
   // finished within the cap, force-exit (disarm.ps1 is itself bounded at 15 s).
   const force = setTimeout(() => app.exit(0), 16_000);

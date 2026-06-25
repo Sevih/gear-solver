@@ -144,16 +144,20 @@
 
 ## Observabilité / debug
 
-- [~] **Logging & debug un peu partout** — infra + solver + Settings **faits** ; capture/desktop reste.
-  - ✅ **Logger** `lib/log.ts` : `debug(flag, …)` / `debugEnabled(flag)` gatés `gs.debug.*` (même
-    pattern que `statLocks`), no-op zéro-coût quand off, taggé+coloré par flag.
+- [x] **Logging & debug un peu partout** — ✅ fait (renderer + desktop).
+  - ✅ **Logger renderer** `lib/log.ts` : `debug(flag, …)` / `debugEnabled(flag)` gatés `gs.debug.*`
+    (même pattern que `statLocks`), no-op zéro-coût quand off, taggé+coloré par flag.
   - ✅ **Solver** : `orchestrator.ts` logge le fan-out (pool, `chunkCount`, `maxPoolHit`, topK/topN,
     poolSizes) + la fin (merged/returned, durée ms, perm/searched par worker). Garde-fou
     `debugEnabled` avant de construire le tableau par-worker.
   - ✅ **Settings** : toggle « Solver fan-out logging » (`gs.debug.solver`) à côté du stat-lock.
   - ✅ **Footgun filtres** : `warnUnknownFilterKey` (cf. Solver, déjà livré).
-  - [ ] **Capture / desktop** : lifecycle serveur, armed/disarm, erreurs I/O et process orphelins —
-    process Electron (Node), canal de log distinct, **pas encore arrosé**.
+  - ✅ **Capture / desktop** `apps/desktop/src/log.ts` : `dlog/dwarn` gatés sur l'env `GS_DEBUG`
+    (`*`/`1`=tout, ou liste `capture,server`) — pas de localStorage en process Node. `dwarn` est
+    **toujours-on** pour les échecs jusque-là avalés (stream I/O, fallback orphelin). Arrosé :
+    lifecycle serveur (listen/EADDRINUSE fallback), spawn/exit capture, kill d'arbre orphelin
+    (`taskkill /T`), `.mitm.pid` périmé, wipe (refus 409 / N supprimés), disarm au quit + timeout,
+    app-ready + before-quit (main.ts), auto-update routé via `dwarn`.
 
 ---
 

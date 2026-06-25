@@ -40,6 +40,7 @@ import {
   findOuterpediaImagesDev,
 } from "./paths.js";
 import { detectEmulators, pickEmulator, pickPort, preflight } from "./emulator-detect.js";
+import { dlog, dwarn } from "./log.js";
 
 /** Public outerpedia.com image base — used in prod only to short-circuit
  *  every `/img/*` request to the publicly hosted asset. Override at runtime
@@ -90,7 +91,10 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, file: string, ca
   // when another process touches the file) would otherwise emit an
   // unhandled 'error' on the stream and crash the whole server process.
   const stream = createReadStream(file);
-  stream.on("error", () => {
+  stream.on("error", (err) => {
+    // Surface the swallowed read failure (EBUSY / vanished file) — without
+    // this the client just gets a bare 500 and the cause is invisible.
+    dwarn("server", `stream error on ${file}:`, (err as Error).message);
     if (!res.headersSent) res.statusCode = 500;
     res.end();
   });
@@ -129,16 +133,21 @@ function streamPs(res: ServerResponse, script: string, extraArgs: string[] = [])
     ["-ExecutionPolicy", "Bypass", "-NoLogo", "-NonInteractive", "-File", script, ...extraArgs],
     { cwd: CAPTURE_DIR, windowsHide: true },
   );
+  dlog("capture", `spawn ${script} pid=${child.pid ?? "?"}`, extraArgs);
   child.stdout.setEncoding("utf-8");
   child.stderr.setEncoding("utf-8");
   child.stdout.on("data", (c: string) => res.write(c));
   child.stderr.on("data", (c: string) => res.write(c));
-  child.on("error", (err) => { res.write(`\n[spawn error] ${err.message}\n__EXIT__:1\n`); res.end(); });
+  child.on("error", (err) => {
+    dwarn("capture", `spawn error on ${script}:`, err.message);
+    res.write(`\n[spawn error] ${err.message}\n__EXIT__:1\n`); res.end();
+  });
 
   let ended = false;
   child.on("exit", (code) => {
     if (ended) return;
     ended = true;
+    dlog("capture", `${script} exited code=${code ?? 1}`);
     res.write(`\n__EXIT__:${code ?? 1}\n`);
     res.end();
   });
@@ -152,9 +161,11 @@ function streamPs(res: ServerResponse, script: string, extraArgs: string[] = [])
   res.on("close", () => {
     if (child.killed || child.exitCode != null) return;
     if (child.pid == null) { child.kill(); return; }
+    dlog("capture", `client disconnect mid-run — killing process tree pid=${child.pid}`);
     try {
       spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
-    } catch {
+    } catch (err) {
+      dwarn("capture", "taskkill /T failed, falling back to child.kill():", (err as Error).message);
       child.kill();
     }
   });
@@ -179,6 +190,7 @@ function isArmed(): boolean {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "EPERM") return true; // alive, just not ours
     // ESRCH → process gone. Drop the stale pid file so we don't wedge here.
+    dlog("capture", `stale .mitm.pid (pid ${pid} gone) — cleaning up`);
     try { rmSync(pidFile, { force: true }); } catch { /* best-effort */ }
     return false;
   }
@@ -286,6 +298,7 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   if (url === "/api/capture/wipe" && req.method === "POST") {
     res.setHeader("Content-Type", "application/json");
     if (isArmed()) {
+      dlog("capture", "wipe refused — pipeline still armed (409)");
       res.statusCode = 409;
       res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
       return;
@@ -299,10 +312,12 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
         }
       }
     } catch (err) {
+      dwarn("capture", "wipe failed:", (err as Error).message);
       res.statusCode = 500;
       res.end(JSON.stringify({ error: (err as Error).message }));
       return;
     }
+    dlog("capture", `wiped ${removed} captured file(s)`);
     res.end(JSON.stringify({ removed }));
     return;
   }
@@ -438,6 +453,7 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
 export async function disarmIfArmed(): Promise<boolean> {
   const pidFile = join(CAPTURE_OUT, ".mitm.pid");
   if (!existsSync(pidFile)) return false;
+  dlog("capture", "armed at quit — running disarm.ps1");
   const args = await captureScriptArgs();
   // Async spawn (not spawnSync) so the caller's `await` yields to the event
   // loop instead of freezing it — `before-quit` runs this and a blocking
@@ -447,7 +463,11 @@ export async function disarmIfArmed(): Promise<boolean> {
       "-ExecutionPolicy", "Bypass", "-NoLogo", "-NonInteractive",
       "-File", join(CAPTURE_DIR, "disarm.ps1"), ...args,
     ], { cwd: CAPTURE_DIR, windowsHide: true, stdio: "ignore" });
-    const timer = setTimeout(() => { try { child.kill(); } catch { /* already gone */ } resolve(); }, 15_000);
+    const timer = setTimeout(() => {
+      dwarn("capture", "disarm.ps1 exceeded 15s — killing it");
+      try { child.kill(); } catch { /* already gone */ }
+      resolve();
+    }, 15_000);
     child.on("exit", () => { clearTimeout(timer); resolve(); });
     child.on("error", () => { clearTimeout(timer); resolve(); });
   });
@@ -473,16 +493,20 @@ export function startServer(): Promise<{ port: number; server: Server }> {
       server.removeAllListeners("error");
       const onError = (err: NodeJS.ErrnoException) => {
         if (!isFallback && err.code === "EADDRINUSE") {
+          dlog("server", `port ${port} in use — falling back to an ephemeral port`);
           tryListen(0, true);
         } else {
+          dwarn("server", "listen failed:", err.message);
           reject(err);
         }
       };
       server.on("error", onError);
       server.listen(port, "127.0.0.1", () => {
         const addr = server.address();
-        if (addr && typeof addr === "object") resolve({ port: addr.port, server });
-        else reject(new Error("failed to bind"));
+        if (addr && typeof addr === "object") {
+          dlog("server", `listening on 127.0.0.1:${addr.port}${isFallback ? " (fallback)" : ""}`);
+          resolve({ port: addr.port, server });
+        } else reject(new Error("failed to bind"));
       });
     };
     tryListen(PREFERRED_PORT, false);
