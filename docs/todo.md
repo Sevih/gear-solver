@@ -176,13 +176,13 @@
       utilise le `hay` existant. Incohérence réglée : `matchesFilters` trim désormais la
       query (`if (q)` après `.trim()`) comme `activeFilterCount` → une query d'espaces ne
       filtre plus en douce. `InventoryScreen.tsx`.
-- [ ] 🟡 **`FilterModal` ne ferme pas avec Échap + pas de focus trap/autofocus** (~L382-384) —
-      ferme au clic backdrop + croix uniquement, incohérent avec le travail Esc sur les
-      comboboxes (commit `a40932c`).
-- [ ] 🟡 **Sélection dérivée de `sorted` et non de `ui`** (~L1563) — sélectionner une pièce
-      puis appliquer un filtre qui la masque vide silencieusement le panneau de détail alors
-      que `selectedId` reste actif. Dériver de `ui` garderait le détail. (Accessoirement :
-      `.find()` O(n) non mémoïsé par render.)
+- [x] 🟡 **`FilterModal` ne ferme pas avec Échap + pas de focus trap/autofocus** — ✅ corrigé :
+      effet keydown `Escape → onClose` (cohérent avec les comboboxes) + `autoFocus` sur le champ
+      recherche. (Focus-trap complet non fait — autofocus + Esc couvrent l'essentiel UX.)
+      `InventoryScreen.tsx`.
+- [x] 🟡 **Sélection dérivée de `sorted` et non de `ui`** — ✅ corrigé : `selected` dérivé de
+      `ui` (liste complète) via une Map `uiById` mémoïsée → garde le détail même si un filtre
+      masque la pièce, et drop le `.find()` O(n) par render. `InventoryScreen.tsx`.
 - [ ] **À vérifier EN JEU — Cap de Quality ne scale pas avec les étoiles** —
       `computeQuality` (~L968) fixe `max = 14 + reforge.n` (14 = spread 4+4+3+3 d'une 6★),
       mais `SubstatRow` (~L984) considère `isMax = s.lv >= stars` → une pièce 5★ plafonne ses

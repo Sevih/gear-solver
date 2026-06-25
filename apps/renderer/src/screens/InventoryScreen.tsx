@@ -370,6 +370,14 @@ function FilterModal({
   // Re-seed draft from current whenever the modal transitions to open —
   // ensures Cancel + reopen shows the persisted state, not a stale draft.
   useEffect(() => { if (open) setDraft(current); }, [open, current]);
+  // Close on Escape — matches the Esc behavior of the comboboxes (commit
+  // a40932c). The modal already closes on backdrop click + the X button.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   const toggle = <T,>(s: Set<T>, v: T): Set<T> => {
     const n = new Set(s);
     if (n.has(v)) n.delete(v); else n.add(v);
@@ -426,6 +434,7 @@ function FilterModal({
             <div className="relative">
               <input
                 type="text"
+                autoFocus
                 value={draft.query}
                 onChange={(e) => setDraft({ ...draft, query: e.target.value })}
                 placeholder="Name, slot, rarity, stat…"
@@ -1591,7 +1600,16 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
     return out;
   }, [filtered, sort, dir]);
 
-  const selected = selectedId ? sorted.find((p) => p.id === selectedId) ?? null : null;
+  // Derive from `ui` (the full list), NOT `sorted` — a filter that hides the
+  // selected piece shouldn't silently blank its detail panel while
+  // `selectedId` is still active. The memoized uid→piece map also drops the
+  // per-render O(n) `.find`.
+  const uiById = useMemo(() => {
+    const m = new Map<string, UiPiece>();
+    for (const p of ui) m.set(p.id, p);
+    return m;
+  }, [ui]);
+  const selected = selectedId ? uiById.get(selectedId) ?? null : null;
 
   // Stable click handler — toggles the selection so a second click clears
   // the detail panel. Stays referentially stable across renders so memoized
