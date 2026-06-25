@@ -2396,6 +2396,82 @@ function EffectBadge({ state }: { state: ChipState }) {
 /* ─────────────────────────────────────────────────────────────────────────
  * Middle area — results table + right sidebar
  * ───────────────────────────────────────────────────────────────────────── */
+/** Header dropdown to show/hide result columns. Stats default to the first 8
+ *  visible, ratings + Score + Upg default on; a column targeted by an active
+ *  stat filter is force-shown (locked) so you can't hide what you're filtering
+ *  on. Preferences persist via the parent's `colPrefs`. */
+function ColumnsMenu({
+  statFilters, colPrefs, onToggle, onReset,
+}: {
+  statFilters: Record<string, MinMax>;
+  colPrefs: Record<string, boolean>;
+  onToggle: (key: string, def: boolean) => void;
+  onReset: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+  const items: Array<{ key: string; label: string; iconKey: string | null; def: boolean; forced: boolean }> = [
+    ...SOLVER_STATS.map((s, i) => {
+      const b = statFilters[s.key];
+      return { key: s.key, label: s.label, iconKey: s.iconKey, def: i < 8, forced: b != null && (b.min != null || b.max != null) };
+    }),
+    ...TABLE_RATINGS.map((r) => ({ key: r.key, label: r.label, iconKey: null, def: true, forced: false })),
+    { key: "score", label: "Score", iconKey: null, def: true, forced: false },
+    { key: "upg", label: "Upg", iconKey: null, def: true, forced: false },
+  ];
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex items-center gap-1 rounded border border-white/10 bg-white/4 px-2 py-0.5 text-[9.5px] uppercase tracking-wider text-white/60 hover:text-white"
+      >
+        columns <span className="text-[8px]">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-44 rounded-lg border border-white/10 bg-bg-elev-1 p-2 shadow-2xl shadow-black/70">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-white/45">Visible columns</span>
+            <button type="button" onClick={onReset} className="text-[10px] text-cyan-300 hover:text-cyan-200">reset</button>
+          </div>
+          <div className="max-h-72 overflow-y-auto">
+            {items.map((it) => {
+              const checked = it.forced || (colPrefs[it.key] ?? it.def);
+              return (
+                <label
+                  key={it.key}
+                  title={it.forced ? "Forced visible — an active filter targets this column." : undefined}
+                  className={cx(
+                    "flex items-center gap-2 rounded px-1 py-0.5 text-[11px]",
+                    it.forced ? "opacity-60" : "cursor-pointer hover:bg-white/5",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={it.forced}
+                    onChange={() => onToggle(it.key, it.def)}
+                    className="h-3 w-3 shrink-0 accent-cyan-400"
+                  />
+                  {it.iconKey && <StatIcon stat={it.iconKey} size={12} />}
+                  <span className="truncate text-white/80">{it.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ResultsTable({
   builds, selectedIdx, onSelect, solving, error, emptyReason, statFilters, rows, onRowsChange,
   pieceByUid, armorSets,
@@ -2451,17 +2527,25 @@ function ResultsTable({
     }
     return m;
   }, [builds, pieceByUid, armorSetById]);
-  // Visible stat columns = the always-on first 8, plus any of the optional
-  // tail stats the user is actively filtering on. Without this, a band on
-  // e.g. `eff` would silently prune builds with no column to show why.
-  const statCols = useMemo(() => {
-    const base = SOLVER_STATS.slice(0, 8);
-    const extras = SOLVER_STATS.slice(8).filter((s) => {
+  // Column visibility — persisted per-key overrides (key → shown). Stats
+  // default to the first 8 visible; ratings + Score + Upg default visible. A
+  // stat with an active filter band is force-shown regardless so you never
+  // filter on a hidden column. The "Columns" menu in the header toggles these.
+  const [colPrefs, setColPrefs] = usePersistedState<Record<string, boolean>>("gs.builder.cols", {});
+  const statCols = useMemo(
+    () => SOLVER_STATS.filter((s, i) => {
       const b = statFilters[s.key];
-      return b != null && (b.min != null || b.max != null);
-    });
-    return [...base, ...extras];
-  }, [statFilters]);
+      const filtered = b != null && (b.min != null || b.max != null);
+      return filtered || (colPrefs[s.key] ?? i < 8);
+    }),
+    [statFilters, colPrefs],
+  );
+  const ratingCols = useMemo(
+    () => TABLE_RATINGS.filter((r) => colPrefs[r.key] ?? true),
+    [colPrefs],
+  );
+  const showScore = colPrefs["score"] ?? true;
+  const showUpg = colPrefs["upg"] ?? true;
   // Per-column min/max for the heatmap — recomputed when builds (or the set
   // of visible stat columns) change. Stats and ratings computed once; reused
   // across every row.
@@ -2519,7 +2603,7 @@ function ResultsTable({
   const totalSize = rowVirtualizer.getTotalSize();
   const padTop = virtualRows.length > 0 ? virtualRows[0]!.start : 0;
   const padBottom = virtualRows.length > 0 ? totalSize - virtualRows[virtualRows.length - 1]!.end : 0;
-  const colSpan = 1 + statCols.length + TABLE_RATINGS.length + 3;
+  const colSpan = 1 + statCols.length + ratingCols.length + (showScore ? 1 : 0) + (showUpg ? 1 : 0) + 1;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/8 bg-bg-elev-2">
       <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-3 py-1.5">
@@ -2542,6 +2626,12 @@ function ResultsTable({
               className="w-20 accent-cyan-400"
             />
           </label>
+          <ColumnsMenu
+            statFilters={statFilters}
+            colPrefs={colPrefs}
+            onToggle={(key, def) => setColPrefs((p) => ({ ...p, [key]: !(p[key] ?? def) }))}
+            onReset={() => setColPrefs({})}
+          />
           <Pill tone={error ? "rose" : "emerald"}>{builds.length} builds</Pill>
         </div>
       </div>
@@ -2558,17 +2648,21 @@ function ResultsTable({
                   <StatIcon stat={s.iconKey} size={14} title={null} className="inline-block align-middle" />
                 </SortHeader>
               ))}
-              {TABLE_RATINGS.map((r) => (
+              {ratingCols.map((r) => (
                 <SortHeader key={r.key} colKey={r.key} title={r.desc} sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
                   {r.label.toLowerCase()}
                 </SortHeader>
               ))}
-              <SortHeader colKey="score" title="Aggregate priority-weighted score" sortKey={sortKey} sortDir={sortDir} onClick={cycleSort} className="text-amber-300">
-                score
-              </SortHeader>
-              <SortHeader colKey="upg" title="Number of slots that differ from the hero's current loadout" sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
-                upg
-              </SortHeader>
+              {showScore && (
+                <SortHeader colKey="score" title="Aggregate priority-weighted score" sortKey={sortKey} sortDir={sortDir} onClick={cycleSort} className="text-amber-300">
+                  score
+                </SortHeader>
+              )}
+              {showUpg && (
+                <SortHeader colKey="upg" title="Number of slots that differ from the hero's current loadout" sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
+                  upg
+                </SortHeader>
+              )}
               <th className="px-1.5 py-1 text-right text-[9.5px] uppercase tracking-wider">actions</th>
             </tr>
           </thead>
@@ -2599,6 +2693,9 @@ function ResultsTable({
                   selected={b === selectedBuildRef}
                   ranges={ranges}
                   statCols={statCols}
+                  ratingCols={ratingCols}
+                  showScore={showScore}
+                  showUpg={showUpg}
                   setTags={setTagsByBuild.get(b)}
                   index={idx}
                   onSelect={onSelect}
@@ -2688,7 +2785,7 @@ interface SetTag { icon: string; name: string; count: 2 | 4 }
  *  useState setter, `ranges` is memoized, `build` refs are stable. The click
  *  handler is bound to the stable `index` here rather than passed pre-closed. */
 const ResultRow = memo(function ResultRow({
-  build, selected, ranges, statCols, setTags, index, onSelect,
+  build, selected, ranges, statCols, ratingCols, showScore, showUpg, setTags, index, onSelect,
 }: {
   build: SolveBuild;
   selected?: boolean;
@@ -2696,6 +2793,10 @@ const ResultRow = memo(function ResultRow({
   /** Stat columns to render — stable (memoized) reference from ResultsTable
    *  so it doesn't defeat the row memo on hover/sort. */
   statCols: ReadonlyArray<typeof SOLVER_STATS[number]>;
+  /** Visible rating columns — stable (memoized) reference, same rationale. */
+  ratingCols: ReadonlyArray<typeof TABLE_RATINGS[number]>;
+  showScore: boolean;
+  showUpg: boolean;
   /** Active set bonuses for this build (icon + tier), or undefined for none.
    *  Stable reference (from ResultsTable's memoized map) so it doesn't defeat
    *  the row memo. */
@@ -2734,7 +2835,7 @@ const ResultRow = memo(function ResultRow({
           </td>
         );
       })}
-      {TABLE_RATINGS.map((r) => {
+      {ratingCols.map((r) => {
         const v = r.key === "cp" ? build.cp : (build.ratings as unknown as Record<string, number>)[r.key];
         return (
           <td key={r.key} style={heatStyle(v, ranges.rating[r.key])} className="px-1.5 py-1 text-right text-white">
@@ -2742,12 +2843,16 @@ const ResultRow = memo(function ResultRow({
           </td>
         );
       })}
-      <td style={heatStyle(build.score, ranges.score)} className="px-1.5 py-1 text-right font-semibold text-amber-200">
-        {build.score}
-      </td>
-      <td className="px-1.5 py-1 text-right text-white/70" title={`${build.upg} slot(s) differ from current loadout`}>
-        {build.upg}
-      </td>
+      {showScore && (
+        <td style={heatStyle(build.score, ranges.score)} className="px-1.5 py-1 text-right font-semibold text-amber-200">
+          {build.score}
+        </td>
+      )}
+      {showUpg && (
+        <td className="px-1.5 py-1 text-right text-white/70" title={`${build.upg} slot(s) differ from current loadout`}>
+          {build.upg}
+        </td>
+      )}
       <td className="px-1.5 py-1 text-right text-white/70">
         {selected && <span title="Selected">★</span>}
       </td>
