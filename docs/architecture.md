@@ -2,30 +2,35 @@
 
 ## Overview
 
-Three independent layers, connected by plain JSON:
+Four layers, connected by plain JSON:
 
 ```
- LDPlayer (game)  ──HTTPS──▶  tools/capture (mitmproxy + PS)  ──JSON──▶  packages/core  ──▶  apps/renderer
-   account data                 decrypts & writes out/*.json        parse + score + solve     UI
+ LDPlayer (game) ─HTTPS─▶ tools/capture (mitmproxy + PS) ─JSON─▶ packages/core ─▶ apps/renderer ◀─hosts─ apps/desktop
+   account data            decrypts & writes out/*.json       parse + score + solve     UI         Electron shell
 ```
 
 - **tools/capture** — external, runs only when you want to (re)import. Produces
   `out/user_item.json`, `user_character.json`, etc. Not coupled to the app.
 - **packages/core** — pure TypeScript, no DOM, no Node APIs. The brain: wire types,
-  parser (wire → domain model), stat resolution, scoring, combination solver. Reusable
-  from a Web Worker, a CLI, or a future desktop wrapper.
+  parser (wire → domain model), stat resolution, character stat composition. Reusable
+  from a Web Worker, a CLI, or the desktop shell. (The combination solver itself lives
+  in `apps/renderer/src/lib/solver/`, not in core.)
 - **apps/renderer** — Vite + React. Loads the JSON, drives the engine, renders results.
   Heavy solves fan out across a **pool of Web Workers** (size ≈ `hardwareConcurrency - 1`,
   capped at 8) that import the pure engine modules in `apps/renderer/src/lib/solver/`.
   See [solver.md](solver.md) for the solver pipeline + UI panels, and
   [reference.md](reference.md) for the full formula + data-pipeline reference.
+- **apps/desktop** — Electron shell that hosts the renderer. `main.ts` boots a local
+  server (`server.ts`) that serves `data/derived` + the capture output and exposes the
+  capture/emulator IPC; in dev the Vite middleware covers the same role. Packaging
+  (bundled `data/`, auto-update) is still in progress.
 
 ## Why this split
 
 - The risky/fragile part (capture) is isolated; if the game changes its protocol only
   `tools/capture` is affected.
-- The engine is testable in isolation and portable (could back a Tauri desktop build
-  later without rewrite).
+- The engine is testable in isolation and portable — it already backs both the web
+  renderer and the Electron desktop shell without a rewrite.
 - The UI stays thin.
 
 ## Data flow inside core
