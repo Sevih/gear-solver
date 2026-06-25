@@ -6,12 +6,19 @@ import { SLOT_BY, STAT, type DesignRarity, type SlotId } from "./tokens.js";
  *  label when no icon is registered for the key. Use `aria-label` (tooltip) so
  *  the icon-only display still announces the stat to screen readers. */
 export function StatIcon({
-  stat, size = 14, className,
-}: { stat: string; size?: number; className?: string }) {
+  stat, size = 14, className, title,
+}: {
+  stat: string; size?: number; className?: string;
+  /** Override the hover tooltip. Defaults to the stat's short label; pass
+   *  `null` to omit the attribute entirely so a parent element's `title`
+   *  (e.g. a fuller column-header description) shows through instead. */
+  title?: string | null;
+}) {
   const meta = STAT[stat];
+  const tip = title === null ? undefined : (title ?? meta?.label);
   if (!meta?.icon) {
     return (
-      <span className={cx("font-mono uppercase tracking-wider text-zinc-500", className)} style={{ fontSize: Math.max(9, Math.round(size * 0.7)) }}>
+      <span className={cx("font-mono uppercase tracking-wider text-zinc-500", className)} title={tip} style={{ fontSize: Math.max(9, Math.round(size * 0.7)) }}>
         {meta?.label ?? stat.toUpperCase()}
       </span>
     );
@@ -20,7 +27,7 @@ export function StatIcon({
     <img
       src={`/img/ui/effect/${meta.icon}.webp`}
       alt={meta.label}
-      title={meta.label}
+      title={tip}
       className={cx("shrink-0 object-contain", className)}
       style={{ width: size, height: size }}
       loading="lazy"

@@ -191,6 +191,32 @@ function statIconKeyFor(key: string): string {
   return key;
 }
 
+/** Full name + in-game definition per result-table stat, for the column-header
+ *  tooltip (so a hover explains the stat instead of just repeating the icon).
+ *  Definitions are condensed from the game's `TextSystem` (`SYS_DESC_*` /
+ *  `SYS_STAT_DESC_*` keys) — the same source the in-game stat info panel uses. */
+const STAT_TOOLTIP: Record<string, { full: string; desc: string }> = {
+  atk:        { full: "Attack",                desc: "The higher your Attack, the more damage you deal to enemies." },
+  def:        { full: "Defense",               desc: "The higher your Defense, the less damage you take from enemies." },
+  hp:         { full: "Health",                desc: "You're defeated once your Health falls to zero." },
+  spd:        { full: "Speed",                 desc: "The higher your Speed, the more often you can act." },
+  crc:        { full: "Crit Chance",           desc: "Chance for an attack to land a critical hit (dealing Crit Damage)." },
+  chd:        { full: "Crit Damage",           desc: "Increases damage dealt on critical hits." },
+  critDmgRed: { full: "Crit Damage Reduction", desc: "Reduces crit damage taken when hit (caps at 70% combined with Damage Reduction)." },
+  pen:        { full: "Penetration",           desc: "Ignores a portion of the target's Defense when attacking." },
+  dmgUp:      { full: "Damage Increase",       desc: "Increases damage dealt when attacking." },
+  dmgRed:     { full: "Damage Reduction",      desc: "Reduces damage taken when hit." },
+  eff:        { full: "Effectiveness",         desc: "The higher it is, the lower the target's chance to resist your debuffs." },
+  res:        { full: "Resilience",            desc: "The higher it is, the higher your chance to resist debuffs." },
+};
+
+/** Column-header tooltip text: "Full Name — definition", falling back to the
+ *  abbreviation when a stat has no curated entry. */
+function statHeaderTooltip(key: string, label: string): string {
+  const t = STAT_TOOLTIP[key];
+  return t ? `${t.full} — ${t.desc}` : label;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
  * Solver filters — one reducer drives every panel. Lifting state up here
  * means we can hand the whole shape to the worker on SOLVE, and that the
@@ -2528,8 +2554,8 @@ function ResultsTable({
             <tr className="border-b border-white/8">
               <th className="px-1.5 py-1 text-left text-[9.5px] font-semibold uppercase tracking-wider">sets</th>
               {statCols.map((s) => (
-                <SortHeader key={s.key} colKey={s.key} title={s.label} sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
-                  <StatIcon stat={s.iconKey} size={14} className="inline-block align-middle" />
+                <SortHeader key={s.key} colKey={s.key} title={statHeaderTooltip(s.key, s.label)} sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
+                  <StatIcon stat={s.iconKey} size={14} title={null} className="inline-block align-middle" />
                 </SortHeader>
               ))}
               {TABLE_RATINGS.map((r) => (
