@@ -153,17 +153,16 @@
 - [x] 🟠 **Re-sort du roster à chaque toggle de lock** — ✅ corrigé : dep `lockedStats` du
       `useMemo` remplacée par `locksDep = (debug && locks !== "all") ? lockedStats : null` →
       un toggle de lock en filtre « all » ne re-trie plus. `BuildsScreen.tsx`.
-- [ ] 🟡 **Carte non responsive** — `flex items-center gap-4` avec 6 sections `shrink-0`,
-      aucun `flex-wrap` → déborde horizontalement sur fenêtre étroite. `BuildsScreen.tsx:663`.
-- [ ] 🟡 **`maxHeight: calc(100vh - 130px)` en dur** — le parent est déjà
-      `flex h-full min-h-0 flex-col` → le scroll-container devrait être `flex-1 min-h-0`.
-      Le `130px` magique se désaligne quand la barre de statut (dynamique) apparaît/disparaît.
-      `BuildsScreen.tsx:961`.
+- [x] 🟡 **Carte non responsive** — ✅ corrigé : `flex-wrap` + `gap-x-4 gap-y-2` sur la carte
+      → les sections wrappent au lieu de déborder sur fenêtre étroite. `BuildsScreen.tsx`.
+- [x] 🟡 **`maxHeight: calc(100vh - 130px)` en dur** — ✅ corrigé : scroll-container en
+      `flex-1 min-h-0` (le parent est déjà `flex h-full min-h-0 flex-col`), plus de magic number.
+      `BuildsScreen.tsx`.
 - [ ] 🟡 **`SlotMini` non cliquable** — aucun moyen d'inspecter une pièce depuis la tab
       Builds (tooltip/clic), contrairement à l'Inventory. `BuildsScreen.tsx:704`.
-- [ ] ⚪ **Nettoyage** — `round1` dupliqué (`BuildsScreen.tsx:26` + `composeBuild.ts:40`,
-      à factoriser) · `NoteField` double cap (`slice(0, NOTE_MAX)` + `maxLength`,
-      `:549-552`) · boutons filtres sans `type="button"` (`:268`, `:292`).
+- [x] ⚪ **Nettoyage** — ✅ corrigé : `round1` exporté depuis `composeBuild` (dédup) ·
+      `NoteField` cap unique (`maxLength`, slice redondant retiré) · `type="button"` ajouté
+      aux boutons filtres element/class/clear. `BuildsScreen.tsx`, `composeBuild.ts`.
 
 ---
 

@@ -37,7 +37,9 @@ export interface FinalStatsBaseline {
   dmgRed: number;
 }
 
-const round1 = (x: number) => Math.round(x * 10) / 10;
+/** Round to 1 decimal place — the display granularity for percent stats
+ *  (CHC/CHD/DMG±/…). Shared with BuildsScreen's drift comparison. */
+export const round1 = (x: number) => Math.round(x * 10) / 10;
 
 /** Plug gear flat + gear % into the in-game CalcFinalStat formula. */
 export function composeMultStat(sc: StatScaling, gearFlat: number, gearPct: number, gearBuffPct: number): number {

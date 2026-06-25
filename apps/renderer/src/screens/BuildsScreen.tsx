@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Character, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
-import { aggregateGearBuckets, computeFinalStats, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
+import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { cx } from "../design/cx.js";
 import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
@@ -22,8 +22,6 @@ const BUILD_SLOT_ORDER: SlotId[] = [
  *  `FinalStats` from this module. The single source of truth now lives in
  *  `../lib/composeBuild.ts`. */
 export type { FinalStats } from "../lib/composeBuild.js";
-
-const round1 = (x: number) => Math.round(x * 10) / 10;
 
 /** Per-stat-axis dump spec — pairs the engine stat key with its `*Pct` /
  *  flat bucket name in the aggregated gear maps. EFF/RES use unsuffixed
@@ -267,6 +265,7 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
           return (
             <button
               key={el.id}
+              type="button"
               onClick={() => setF({ ...f, elements: toggle(f.elements, el.id) })}
               title={el.label}
               className={cx(
@@ -291,6 +290,7 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
           return (
             <button
               key={cl.id}
+              type="button"
               onClick={() => setF({ ...f, classes: toggle(f.classes, cl.id) })}
               title={cl.label}
               className={cx(
@@ -340,6 +340,7 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
       )}
       {(f.query || f.elements.size || f.classes.size || (debug && f.locks !== "all")) ? (
         <button
+          type="button"
           onClick={() => setF({ query: "", elements: new Set(), classes: new Set(), locks: "all" })}
           className="ml-1 text-[11px] text-cyan-300 hover:text-cyan-200"
         >Reset</button>
@@ -599,7 +600,7 @@ function NoteField({ value, onChange }: { value: string; onChange: (next: string
     <div className="flex flex-col gap-0.5">
       <textarea
         value={value}
-        onChange={(e) => onChange(e.target.value.slice(0, NOTE_MAX))}
+        onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         maxLength={NOTE_MAX}
@@ -714,7 +715,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
 
   return (
     <div
-      className="relative flex items-center gap-4 rounded-xl border border-white/7 bg-bg-elev-2 px-3 py-2.5 backdrop-blur-sm"
+      className="relative flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-white/7 bg-bg-elev-2 px-3 py-2.5 backdrop-blur-sm"
       // Each row is much shorter than the old card — keep CSS-native
       // virtualization but match the smaller intrinsic height so the browser
       // can skip layout/paint for offscreen rows without over-reserving space.
@@ -1044,7 +1045,11 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
         }
       />
 
-      <div className="flex flex-col gap-2 overflow-y-auto px-6 pb-6 pt-3" style={{ maxHeight: "calc(100vh - 130px)" }}>
+      {/* flex-1 min-h-0 instead of a magic `calc(100vh - 130px)` — the parent
+          is already a full-height flex column, so the scroll area fills the
+          space left by the FilterBar and stays correct when the status bar
+          (dynamic) appears/disappears. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-6 pb-6 pt-3">
         {roster.map((entry) => (
           <BuildCard
             key={entry.char.uid}
