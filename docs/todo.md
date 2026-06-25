@@ -144,15 +144,16 @@
 
 ## Observabilité / debug
 
-- [ ] **Logging & debug un peu partout** — le logging est quasi absent côté renderer et le
-      solver/capture/desktop tournent en boîte noire. Mettre en place un logger léger gaté sur
-      les flags `gs.debug.*` (même pattern que `gs.debug.statLocks`) plutôt que des `console.log`
-      sauvages, et l'arroser aux points chauds :
-  - Solver : fan-out orchestrateur (tailles de pools, `chunkCount`, workers utilisés),
-    résultats par worker, compteurs de prune/combos visités, durée de solve.
-  - Capture / desktop : lifecycle serveur, armed/disarm, erreurs I/O et process orphelins.
-  - Footgun filtres : `console.warn` en dev sur clé de filtre inconnue (recoupe le 🟡 Solver).
-  - Brancher l'activation sur le **panneau Settings** des debug toggles.
+- [~] **Logging & debug un peu partout** — infra + solver + Settings **faits** ; capture/desktop reste.
+  - ✅ **Logger** `lib/log.ts` : `debug(flag, …)` / `debugEnabled(flag)` gatés `gs.debug.*` (même
+    pattern que `statLocks`), no-op zéro-coût quand off, taggé+coloré par flag.
+  - ✅ **Solver** : `orchestrator.ts` logge le fan-out (pool, `chunkCount`, `maxPoolHit`, topK/topN,
+    poolSizes) + la fin (merged/returned, durée ms, perm/searched par worker). Garde-fou
+    `debugEnabled` avant de construire le tableau par-worker.
+  - ✅ **Settings** : toggle « Solver fan-out logging » (`gs.debug.solver`) à côté du stat-lock.
+  - ✅ **Footgun filtres** : `warnUnknownFilterKey` (cf. Solver, déjà livré).
+  - [ ] **Capture / desktop** : lifecycle serveur, armed/disarm, erreurs I/O et process orphelins —
+    process Electron (Node), canal de log distinct, **pas encore arrosé**.
 
 ---
 

@@ -10,6 +10,7 @@
  */
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import SolverWorker from "../../workers/solver.worker.ts?worker";
+import { debug, debugEnabled } from "../log.js";
 import { precomputeContext } from "./engine.js";
 import type {
   PoolSizes,
@@ -66,6 +67,9 @@ export class SolverOrchestrator {
    *  a stale `result` from a superseded run would slip into the new `buf`
    *  and trip `flush()` prematurely with mixed builds + half-zero stats. */
   private solveId = 0;
+  /** Wall-clock (performance.now) at the current solve's fan-out — paired with
+   *  flush() to log solve duration when `gs.debug.solver` is on. */
+  private startedAt = 0;
 
   constructor(cb: OrchestratorCallbacks) {
     this.cb = cb;
@@ -154,6 +158,12 @@ export class SolverOrchestrator {
     );
     const chunkCount = Math.max(1, Math.min(this.workers.length, maxPoolHit));
     this.activeChunks = chunkCount;
+    this.startedAt = performance.now();
+    debug("solver", "fan-out", {
+      hero: args.heroUid, mode: args.mode, solveId: this.solveId,
+      pool: this.workers.length, chunks: chunkCount, maxPoolHit,
+      topK, topN: this.topN, poolSizes: this.poolSizes,
+    });
     for (let i = 0; i < chunkCount; i++) {
       const w = this.workers[i];
       if (!w) continue;
@@ -239,7 +249,17 @@ export class SolverOrchestrator {
       ? (a: SolveBuild, b: SolveBuild) => (b.cp ?? 0) - (a.cp ?? 0)
       : (a: SolveBuild, b: SolveBuild) => b.score - a.score;
     this.buf.sort(cmp);
-    this.cb.onResult(this.buf.slice(0, this.topN));
+    const merged = this.buf.length;
+    const out = this.buf.slice(0, this.topN);
+    if (debugEnabled("solver")) {
+      debug("solver", "done", {
+        merged, returned: out.length,
+        ms: Math.round(performance.now() - this.startedAt),
+        permutations: this.totalPerm(), searched: this.totalSearched(),
+        perWorker: this.stats.map((s, i) => ({ w: i, perm: s.permutations, searched: s.searched })),
+      });
+    }
+    this.cb.onResult(out);
     this.active = false;
   }
 }

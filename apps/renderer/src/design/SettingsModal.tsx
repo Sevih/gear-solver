@@ -72,9 +72,13 @@ interface Props {
   debugStatLocks: boolean;
   /** Flip the stat-lock debug toggle on/off. */
   onToggleDebugStatLocks: () => void;
+  /** Current state of the solver fan-out logging toggle (`gs.debug.solver`). */
+  debugSolver: boolean;
+  /** Flip the solver logging toggle on/off. */
+  onToggleDebugSolver: () => void;
 }
 
-export function SettingsModal({ open, onClose, onReady, onResetOnboarding, onAfterWipe, debugStatLocks, onToggleDebugStatLocks }: Props) {
+export function SettingsModal({ open, onClose, onReady, onResetOnboarding, onAfterWipe, debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver }: Props) {
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [loading, setLoading] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -205,6 +209,12 @@ export function SettingsModal({ open, onClose, onReady, onResetOnboarding, onAft
               description="Reveal the per-stat lock buttons, drift indicators and copy-dump button on Builds cards. Used for stat-formula regression work — off by default."
               checked={debugStatLocks}
               onToggle={onToggleDebugStatLocks}
+            />
+            <ToggleAction
+              label="Solver fan-out logging"
+              description="Log the solver's fan-out (pool sizes, chunk count, workers) and per-solve merge/duration to the devtools console. Useful when profiling a slow solve — off by default."
+              checked={debugSolver}
+              onToggle={onToggleDebugSolver}
             />
           </div>
         </div>

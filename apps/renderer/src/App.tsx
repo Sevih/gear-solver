@@ -77,6 +77,10 @@ export function App() {
   // tab is a regression-debug aid for stat-formula work, not a normal user
   // feature. Toggling on in Settings reveals the lock buttons + drift badges.
   const [debugStatLocks, setDebugStatLocks] = usePersistedState<boolean>("gs.debug.statLocks", false);
+  // Mirrors `gs.debug.solver` read by lib/log.ts — flips the orchestrator's
+  // fan-out / merge / duration logging on. Persisted so it survives reloads
+  // while profiling a slow solve.
+  const [debugSolver, setDebugSolver] = usePersistedState<boolean>("gs.debug.solver", false);
   // Hero to preselect when the Builder tab opens — set by the Builds tab's
   // "Optimize →" button, consumed (and cleared) by BuilderScreen on mount so
   // a later normal visit to the Builder doesn't re-preselect a stale hero.
@@ -201,6 +205,8 @@ export function App() {
         onAfterWipe={() => void refreshInventory("Wiped captured data")}
         debugStatLocks={debugStatLocks}
         onToggleDebugStatLocks={() => setDebugStatLocks((v) => !v)}
+        debugSolver={debugSolver}
+        onToggleDebugSolver={() => setDebugSolver((v) => !v)}
       />
 
       {(status || log.length > 0) && (
