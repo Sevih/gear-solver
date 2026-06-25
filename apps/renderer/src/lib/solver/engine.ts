@@ -897,13 +897,25 @@ function compileFilterSpecs(filters: Record<string, { min?: number; max?: number
   return out;
 }
 
+/** A compiled filter key that resolves to no field on FinalStats / ratings is
+ *  a silent no-op — the UI and engine key sets have drifted (e.g. UI emits
+ *  `critRate` while FinalStats exposes `crc`). Warn ONCE per key so a real
+ *  mismatch surfaces in the console instead of "the filter just does nothing".
+ *  Guarded by the Set so the hot loop never pays for a known key. */
+const warnedFilterKeys = new Set<string>();
+function warnUnknownFilterKey(key: string, kind: "stat" | "rating"): void {
+  if (warnedFilterKeys.has(key)) return;
+  warnedFilterKeys.add(key);
+  console.warn(`[solver] unknown ${kind} filter key "${key}" — filter ignored (UI/engine key mismatch?)`);
+}
+
 function passesSpecs(fs: FinalStats, specs: FilterSpec[]): boolean {
   if (specs.length === 0) return true;
   const fsRec = fs as unknown as Record<string, number>;
   for (let i = 0; i < specs.length; i++) {
     const s = specs[i]!;
     const v = fsRec[s.key];
-    if (typeof v !== "number") continue;
+    if (typeof v !== "number") { warnUnknownFilterKey(s.key, "stat"); continue; }
     if (v < s.min || v > s.max) return false;
   }
   return true;
@@ -915,7 +927,7 @@ function passesRatingSpecs(ratings: CheapRatings, score: number, specs: FilterSp
   for (let i = 0; i < specs.length; i++) {
     const s = specs[i]!;
     const v = s.key === "score" ? score : rRec[s.key];
-    if (v == null) continue;
+    if (v == null) { warnUnknownFilterKey(s.key, "rating"); continue; }
     if (v < s.min || v > s.max) return false;
   }
   return true;

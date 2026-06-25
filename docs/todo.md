@@ -11,11 +11,10 @@
 
 ## Solver / engine
 
-- [ ] 🟡 **Footgun : filtres silencieux sur clé inconnue** — `passesSpecs` fait
-      `if (typeof v !== "number") continue;` → une clé mal orthographiée (`critRate`
-      au lieu de `crc`) laisse tout passer = filtre no-op invisible si UI et
-      `FinalStats` divergent un jour. Fix : `console.warn` en dev sur clé inconnue.
-      `engine.ts` (`passesSpecs`).
+- [x] 🟡 **Footgun : filtres silencieux sur clé inconnue** — ✅ fait : `warnUnknownFilterKey`
+      (warn-once via Set) appelé dans la branche clé-inconnue de `passesSpecs`/`passesRatingSpecs`
+      → surface un mismatch UI/engine au lieu d'un filtre no-op silencieux. Zéro coût hot-loop
+      pour les clés valides. `engine.ts`.
 - [ ] **CP fallback `chainPassive`** — déjà plumbé via `userSkills` ; vérifier qu'on
       lit la bonne colonne depuis l'inventaire capturé (`c.skills.chainPassive`).
 - [ ] 🟠 **Accumulateur de buckets — partie re-sum déférée** — le hoist des set bonuses
