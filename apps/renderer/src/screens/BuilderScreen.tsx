@@ -32,6 +32,7 @@ import { SolverOrchestrator } from "../lib/solver/orchestrator.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
 import { fetchReco } from "../lib/reco/fetchReco.js";
+import { usePersistedState } from "../hooks/usePersistedState.js";
 import {
   addSavedBuild, loadSavedBuilds, persistSavedBuilds, removeSavedBuild,
   type SavedBuild, type SavedBuildsMap,
@@ -390,6 +391,10 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
  * ───────────────────────────────────────────────────────────────────────── */
 export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, initialHeroUid, onInitialHeroConsumed }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
+  // Results table viewport height, in rows — capped so the bottom gear band
+  // stays visible instead of the table greedily eating all vertical space.
+  // Persisted so the user's preferred split survives reloads.
+  const [resultRows, setResultRows] = usePersistedState<number>("gs.builder.resultRows", 12);
   // Consume the preselect once on mount so the parent can clear it (the
   // initializer above already captured the value into `selectedUid`).
   useEffect(() => {
@@ -733,7 +738,14 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         onSolve={startSolve}
         onCancelSolve={cancelSolve}
       />
-      <div className="flex min-h-0 flex-1 gap-2">
+      <div
+        className="flex min-h-0 flex-1 gap-2"
+        // Cap the results row so the bottom gear band is always visible. flex-1
+        // still lets it SHRINK on short screens (the table scrolls); maxHeight
+        // stops it from growing past the chosen row count on tall ones, leaving
+        // the slack below the gear band instead of pushing the band off-screen.
+        style={{ maxHeight: resultRows * RESULT_ROW_H + 46 }}
+      >
         <ResultsTable
           builds={solveResults}
           selectedIdx={selectedBuildIdx}
@@ -742,6 +754,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           error={solveError}
           emptyReason={emptyReason}
           statFilters={filters.statFilters}
+          rows={resultRows}
+          onRowsChange={setResultRows}
         />
         <RightSidebar
           canSave={selectedBuild != null}
@@ -1675,10 +1689,15 @@ function SubstatPriorityPanel({
   topPct: number;
   dispatch: Dispatch<SolverAction>;
 }) {
+  // The Top-% prune is gated on having at least one non-zero priority (the
+  // engine skips it otherwise — scoring every piece 0 would prune arbitrarily).
+  // Surface that so a user lowering Top % with no priorities set isn't puzzled
+  // when nothing changes.
+  const hasPriority = Object.values(priority).some((v) => v !== 0);
   return (
     <Panel
       title="Substat priority"
-      hint="Score gear by Σ(max-rolls × priority); only keep the Top % per slot. Heuristic — too low a Top % drops optimal builds."
+      hint="Score gear by Σ(max-rolls × priority); only keep the Top % per slot. Heuristic — too low a Top % drops optimal builds. Top % needs at least one priority set to take effect."
       action={
         <button
           type="button"
@@ -1701,7 +1720,7 @@ function SubstatPriorityPanel({
           />
         ))}
       </div>
-      <div className="mt-2 flex items-center gap-2 border-t border-white/6 pt-2">
+      <div className={cx("mt-2 flex items-center gap-2 border-t border-white/6 pt-2", !hasPriority && "opacity-60")}>
         <span className="text-[10.5px] uppercase tracking-wider text-white/60">Top %</span>
         <input
           type="range"
@@ -1714,6 +1733,11 @@ function SubstatPriorityPanel({
         />
         <span className="w-7 text-right font-mono text-[11px] tabular-nums text-white">{topPct}</span>
       </div>
+      {topPct < 100 && !hasPriority && (
+        <div className="mt-1 text-[10px] leading-snug text-amber-300/80">
+          No effect yet — set a substat priority above for the Top % to filter.
+        </div>
+      )}
     </Panel>
   );
 }
@@ -2200,7 +2224,7 @@ function EffectBadge({ state }: { state: ChipState }) {
  * Middle area — results table + right sidebar
  * ───────────────────────────────────────────────────────────────────────── */
 function ResultsTable({
-  builds, selectedIdx, onSelect, solving, error, emptyReason, statFilters,
+  builds, selectedIdx, onSelect, solving, error, emptyReason, statFilters, rows, onRowsChange,
 }: {
   builds: SolveBuild[];
   selectedIdx: number | null;
@@ -2214,6 +2238,10 @@ function ResultsTable({
    *  any of the remaining stats (dmgUp/dmgRed/eff/res) that carry a live
    *  min/max band get appended so you never filter on an invisible column. */
   statFilters: Record<string, MinMax>;
+  /** Viewport height in rows (the parent caps the row's maxHeight to match);
+   *  the slider in the header drives it so the bottom gear band stays visible. */
+  rows: number;
+  onRowsChange: (n: number) => void;
 }) {
   // Visible stat columns = the always-on first 8, plus any of the optional
   // tail stats the user is actively filtering on. Without this, a band on
@@ -2293,7 +2321,21 @@ function ResultsTable({
             {solving ? "Solving…" : error ? "Solver error — see below." : "Click a row to reveal the equipment that produced it. Click a column header to sort."}
           </span>
         </div>
-        <Pill tone={error ? "rose" : "emerald"}>{builds.length} builds</Pill>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5" title="Results table height (rows visible before scrolling) — lower it to keep the gear cards below in view">
+            <span className="text-[9.5px] uppercase tracking-wider text-white/40">height</span>
+            <input
+              type="range"
+              min={5}
+              max={30}
+              step={1}
+              value={rows}
+              onChange={(e) => onRowsChange(Number(e.target.value))}
+              className="w-20 accent-cyan-400"
+            />
+          </label>
+          <Pill tone={error ? "rose" : "emerald"}>{builds.length} builds</Pill>
+        </div>
       </div>
       {error && (
         <div className="border-b border-rose-400/30 bg-rose-500/10 px-3 py-1.5 text-[11px] text-rose-200">{error}</div>
