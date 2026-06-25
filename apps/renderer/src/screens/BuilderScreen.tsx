@@ -847,6 +847,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           onRowsChange={setResultRows}
           pieceByUid={pieceByUid}
           armorSets={armorSetCatalog}
+          game={game}
         />
         {/* Right column — projected stats over the library. Direction B keeps
          *  this thin so the results table dominates the width. */}
@@ -2507,6 +2508,8 @@ function ColumnsMenu({
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
   const items: Array<{ key: string; label: string; iconKey: string | null; def: boolean; forced: boolean }> = [
+    { key: "wpn", label: "Weapon effect", iconKey: null, def: true, forced: false },
+    { key: "acc", label: "Accessory effect", iconKey: null, def: true, forced: false },
     ...SOLVER_STATS.map((s, i) => {
       const b = statFilters[s.key];
       return { key: s.key, label: s.label, iconKey: s.iconKey, def: i < 8, forced: b != null && (b.min != null || b.max != null) };
@@ -2564,7 +2567,7 @@ function ColumnsMenu({
 
 function ResultsTable({
   builds, selectedIdx, onSelect, solving, error, emptyReason, statFilters, rows, onRowsChange,
-  pieceByUid, armorSets,
+  pieceByUid, armorSets, game,
 }: {
   builds: SolveBuild[];
   selectedIdx: number | null;
@@ -2588,6 +2591,9 @@ function ResultsTable({
   pieceByUid: Map<string, GearPiece>;
   /** Owned armor sets — used as the setId→{name,icon} lookup for the Set cell. */
   armorSets: ArmorSetEntry[];
+  /** Game data — resolves a build's weapon/accessory pieces to their effect
+   *  (icon + name) for the Weapon/Accessory effect columns. */
+  game: GameData | null;
 }) {
   // setId → display meta, for the per-build Set tags.
   const armorSetById = useMemo(() => {
@@ -2595,6 +2601,32 @@ function ResultsTable({
     for (const s of armorSets) m.set(s.id, s);
     return m;
   }, [armorSets]);
+  // Per-build weapon + accessory effect chips (icon + name), resolved from the
+  // pieces' equipment defs. Memoized on the result set like the Set tags so the
+  // virtualized rows don't recompute on hover/sort.
+  const effectByBuild = useMemo(() => {
+    const m = new Map<SolveBuild, { weapon: EffectChip | null; accessory: EffectChip | null }>();
+    if (!game) return m;
+    const resolve = (uid: string | undefined): EffectChip | null => {
+      if (!uid) return null;
+      const piece = pieceByUid.get(uid);
+      if (!piece) return null;
+      const def = game.equipment[String(piece.itemId)];
+      if (!def?.setId) return null;
+      const name = game.equipmentPassives[String(piece.itemId)]?.name ?? def.name ?? def.setId;
+      return { icon: def.effectIcon ?? null, name };
+    };
+    for (const b of builds) {
+      let wUid: string | undefined, aUid: string | undefined;
+      for (const uid of b.pieceUids) {
+        const slot = pieceByUid.get(uid)?.slot;
+        if (slot === "weapon") wUid = uid;
+        else if (slot === "accessory") aUid = uid;
+      }
+      m.set(b, { weapon: resolve(wUid), accessory: resolve(aUid) });
+    }
+    return m;
+  }, [builds, pieceByUid, game]);
   // Per-build active set tags: tally each build's pieces by armor set id, keep
   // sets with ≥2 pieces, and render the bonus tier (4 when ≥4 pieces, else 2).
   // Memoized on the result set so 1000 rows don't recompute on every hover.
@@ -2636,6 +2668,8 @@ function ResultsTable({
   );
   const showScore = colPrefs["score"] ?? true;
   const showUpg = colPrefs["upg"] ?? true;
+  const showWpn = colPrefs["wpn"] ?? true;
+  const showAcc = colPrefs["acc"] ?? true;
   // Per-column min/max for the heatmap — recomputed when builds (or the set
   // of visible stat columns) change. Stats and ratings computed once; reused
   // across every row.
@@ -2693,7 +2727,7 @@ function ResultsTable({
   const totalSize = rowVirtualizer.getTotalSize();
   const padTop = virtualRows.length > 0 ? virtualRows[0]!.start : 0;
   const padBottom = virtualRows.length > 0 ? totalSize - virtualRows[virtualRows.length - 1]!.end : 0;
-  const colSpan = 1 + statCols.length + ratingCols.length + (showScore ? 1 : 0) + (showUpg ? 1 : 0) + 1;
+  const colSpan = 1 + (showWpn ? 1 : 0) + (showAcc ? 1 : 0) + statCols.length + ratingCols.length + (showScore ? 1 : 0) + (showUpg ? 1 : 0) + 1;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/8 bg-bg-elev-2">
       <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-3 py-1.5">
@@ -2733,6 +2767,8 @@ function ResultsTable({
           <thead className="sticky top-0 z-10 bg-bg-elev-1 text-white/70 [&_th]:bg-bg-elev-1">
             <tr className="border-b border-white/8">
               <th className="px-1.5 py-1 text-left text-[9.5px] font-semibold uppercase tracking-wider">sets</th>
+              {showWpn && <th className="px-1.5 py-1 text-left text-[9.5px] font-semibold uppercase tracking-wider" title="Weapon effect">wpn</th>}
+              {showAcc && <th className="px-1.5 py-1 text-left text-[9.5px] font-semibold uppercase tracking-wider" title="Accessory effect">acc</th>}
               {statCols.map((s) => (
                 <SortHeader key={s.key} colKey={s.key} title={statHeaderTooltip(s.key, s.label)} sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
                   <StatIcon stat={s.iconKey} size={14} title={null} className="inline-block align-middle" />
@@ -2786,6 +2822,9 @@ function ResultsTable({
                   ratingCols={ratingCols}
                   showScore={showScore}
                   showUpg={showUpg}
+                  showWpn={showWpn}
+                  showAcc={showAcc}
+                  effects={effectByBuild.get(b)}
                   setTags={setTagsByBuild.get(b)}
                   index={idx}
                   onSelect={onSelect}
@@ -2870,12 +2909,16 @@ const RESULT_ROW_H = 26;
 /** One active armor-set bonus on a build — icon + bonus tier (2 or 4). */
 interface SetTag { icon: string; name: string; count: 2 | 4 }
 
+/** A weapon/accessory effect chip on a build — icon (may be null → initials)
+ *  + effect name for the tooltip. */
+interface EffectChip { icon: string | null; name: string }
+
 /** Memoized so a hover/sort/selection change only re-renders the rows whose
  *  props actually changed. Requires stable props: `onSelect` is the parent's
  *  useState setter, `ranges` is memoized, `build` refs are stable. The click
  *  handler is bound to the stable `index` here rather than passed pre-closed. */
 const ResultRow = memo(function ResultRow({
-  build, selected, ranges, statCols, ratingCols, showScore, showUpg, setTags, index, onSelect,
+  build, selected, ranges, statCols, ratingCols, showScore, showUpg, showWpn, showAcc, effects, setTags, index, onSelect,
 }: {
   build: SolveBuild;
   selected?: boolean;
@@ -2887,6 +2930,10 @@ const ResultRow = memo(function ResultRow({
   ratingCols: ReadonlyArray<typeof TABLE_RATINGS[number]>;
   showScore: boolean;
   showUpg: boolean;
+  showWpn: boolean;
+  showAcc: boolean;
+  /** This build's weapon + accessory effect chips (stable memoized ref). */
+  effects: { weapon: EffectChip | null; accessory: EffectChip | null } | undefined;
   /** Active set bonuses for this build (icon + tier), or undefined for none.
    *  Stable reference (from ResultsTable's memoized map) so it doesn't defeat
    *  the row memo. */
@@ -2917,6 +2964,8 @@ const ResultRow = memo(function ResultRow({
           <span className="text-white/30">—</span>
         )}
       </td>
+      {showWpn && <EffectCell chip={effects?.weapon ?? null} />}
+      {showAcc && <EffectCell chip={effects?.accessory ?? null} />}
       {statCols.map((s) => {
         const v = (build.finalStats as unknown as Record<string, number>)[s.key];
         return (
@@ -2949,6 +2998,26 @@ const ResultRow = memo(function ResultRow({
     </tr>
   );
 });
+
+/** Single weapon/accessory effect cell — the effect icon (or initials when the
+ *  effect has no curated icon), with the effect name as the hover tooltip. */
+function EffectCell({ chip }: { chip: EffectChip | null }) {
+  return (
+    <td className="px-1.5 py-1 text-left">
+      {chip ? (
+        <span className="inline-flex items-center" title={chip.name}>
+          {chip.icon ? (
+            <img src={`/img/ui/effect/${chip.icon}.webp`} alt={chip.name} className="h-4 w-4 object-contain" />
+          ) : (
+            <span className="text-[9px] font-semibold uppercase text-white/60">{chip.name.slice(0, 2)}</span>
+          )}
+        </span>
+      ) : (
+        <span className="text-white/25">—</span>
+      )}
+    </td>
+  );
+}
 
 /** Display rounding: integer at |v| ≥ 100, else one decimal. Shared by `fmt`
  *  (the printed value) and `heatStyle` (the shade) so a cell is never tinted
