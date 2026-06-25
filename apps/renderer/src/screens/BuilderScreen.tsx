@@ -895,8 +895,9 @@ interface EffectEntry {
    *  icon collapsed them into one chip and the filter matched all five. */
   key: string;
   /** Icon filename for display only — `/img/ui/effect/<icon>.webp`. May be
-   *  shared across different effects; never used as an identity. */
-  icon: string;
+   *  shared across different effects; never used as an identity. Null when the
+   *  effect has no curated icon (→ the chip shows a text placeholder). */
+  icon: string | null;
   /** Effect display name — pulled from `game.equipmentPassives[itemId].name`
    *  (the canonical effect title like "Destruction"), with a fallback to
    *  the equipment item name and finally the effect key. */
@@ -987,7 +988,7 @@ function effectCatalogFromInventory(
   // Key on the effect IDENTITY (`setId` = UniqueOptionID), not the icon — the
   // icon is shared across distinct effects (the Recklessness family), so icon-
   // keying collapsed five effects into one chip. Store the icon for display.
-  const map = new Map<string, { icon: string; name: string; descT4: string | null; owned: number }>();
+  const map = new Map<string, { icon: string | null; name: string; descT4: string | null; owned: number }>();
   for (const g of inventory.gear) {
     // Use the design SlotId so the comparison is symmetric with the rest
     // of the panels (weapon/accessory happen to match the engine name 1:1
@@ -1006,7 +1007,7 @@ function effectCatalogFromInventory(
     const passive = game.equipmentPassives[String(g.itemId)];
     const name = passive?.name ?? def.name ?? def.setId;
     const descT4 = passive?.textByTier?.[4] ?? null;
-    map.set(def.setId, { icon: def.effectIcon ?? "", name, descT4, owned: 1 });
+    map.set(def.setId, { icon: def.effectIcon ?? null, name, descT4, owned: 1 });
   }
   return Array.from(map.entries())
     .map(([key, { icon, name, descT4, owned }]) => ({ key, icon, name, descT4, owned }))
@@ -2187,7 +2188,13 @@ function EffectIconChip({ effect, state, onClick }: { effect: EffectEntry; state
         onClick={onClick}
         className={cx("relative grid h-7 w-7 place-items-center rounded-md border transition-colors", chipClasses(state === "required", state === "excluded"))}
       >
-        <img src={`/img/ui/effect/${effect.icon}.webp`} alt={effect.name} className="pointer-events-none h-5 w-5 object-contain" />
+        {effect.icon ? (
+          <img src={`/img/ui/effect/${effect.icon}.webp`} alt={effect.name} className="pointer-events-none h-5 w-5 object-contain" />
+        ) : (
+          // No curated icon — show the effect's initials so the chip is still
+          // identifiable (and we don't request `/img/ui/effect/.webp` → 404).
+          <span className="pointer-events-none text-[9px] font-semibold uppercase text-white/70">{effect.name.slice(0, 2)}</span>
+        )}
         <EffectBadge state={state} />
       </button>
     </RichTooltip>
