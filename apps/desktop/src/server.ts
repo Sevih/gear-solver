@@ -86,7 +86,15 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, file: string, ca
     res.setHeader("ETag", etag);
     res.setHeader("Cache-Control", "no-cache");
   }
-  createReadStream(file).pipe(res);
+  // Guard the stream: an EBUSY / file-vanished mid-read (common on Windows
+  // when another process touches the file) would otherwise emit an
+  // unhandled 'error' on the stream and crash the whole server process.
+  const stream = createReadStream(file);
+  stream.on("error", () => {
+    if (!res.headersSent) res.statusCode = 500;
+    res.end();
+  });
+  stream.pipe(res);
 }
 
 /** Serve `/<prefix>/...` from a base dir, with path-traversal guard. */
@@ -135,7 +143,45 @@ function streamPs(res: ServerResponse, script: string, extraArgs: string[] = [])
     res.end();
   });
 
-  res.on("close", () => { if (!child.killed && child.exitCode == null) child.kill(); });
+  // On an abrupt client disconnect while the script is still running, kill the
+  // whole process TREE — `child.kill()` only signals powershell.exe, leaving
+  // the mitmdump it launched via Start-Process orphaned. `taskkill /T` walks
+  // the PID tree. (In the normal armed flow the child has already exited by
+  // the time 'close' fires, so this is a no-op and mitmdump survives as
+  // intended.) Falls back to child.kill() if taskkill is unavailable.
+  res.on("close", () => {
+    if (child.killed || child.exitCode != null) return;
+    if (child.pid == null) { child.kill(); return; }
+    try {
+      spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
+    } catch {
+      child.kill();
+    }
+  });
+}
+
+/** True iff the capture pipeline is genuinely armed: the `.mitm.pid` file
+ *  exists AND the recorded mitmdump process is still alive. If mitmdump
+ *  crashed outside a clean disarm the pid file lingers — left unchecked,
+ *  `armed` would stick at true forever (and `/wipe` would refuse with 409).
+ *  A dead pid is treated as not-armed and the stale file is cleaned up.
+ *  (`.mitm.pid` holds the bare process id, written by capture.ps1 via
+ *  `$proc.Id | Out-File`.) */
+function isArmed(): boolean {
+  const pidFile = join(CAPTURE_OUT, ".mitm.pid");
+  if (!existsSync(pidFile)) return false;
+  let pid = NaN;
+  try { pid = Number.parseInt(readFileSync(pidFile, "utf-8").trim(), 10); } catch { return true; }
+  if (!Number.isFinite(pid) || pid <= 0) return true; // unparseable — assume armed (conservative)
+  try {
+    process.kill(pid, 0); // signal 0 = liveness probe, never actually signals
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EPERM") return true; // alive, just not ours
+    // ESRCH → process gone. Drop the stale pid file so we don't wedge here.
+    try { rmSync(pidFile, { force: true }); } catch { /* best-effort */ }
+    return false;
+  }
 }
 
 /** GET /api/capture/status — mirrored from the Vite middleware. Used by the
@@ -143,11 +189,10 @@ function streamPs(res: ServerResponse, script: string, extraArgs: string[] = [])
 function captureStatus(res: ServerResponse): void {
   const itemPath = join(CAPTURE_OUT, "user_item.json");
   const sentinel = join(CAPTURE_OUT, ".captured");
-  const pidFile = join(CAPTURE_OUT, ".mitm.pid");
   const userItem = existsSync(itemPath) ? statSync(itemPath) : null;
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify({
-    armed: existsSync(pidFile),
+    armed: isArmed(),
     captured: existsSync(sentinel),
     userItemMtime: userItem ? userItem.mtimeMs : null,
   }));
@@ -214,7 +259,7 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   // next /user/* fetch would silently re-write what we just nuked.
   if (url === "/api/capture/wipe" && req.method === "POST") {
     res.setHeader("Content-Type", "application/json");
-    if (existsSync(join(CAPTURE_OUT, ".mitm.pid"))) {
+    if (isArmed()) {
       res.statusCode = 409;
       res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
       return;
@@ -344,10 +389,18 @@ export async function disarmIfArmed(): Promise<boolean> {
   const pidFile = join(CAPTURE_OUT, ".mitm.pid");
   if (!existsSync(pidFile)) return false;
   const args = await captureScriptArgs();
-  spawnSync("powershell.exe", [
-    "-ExecutionPolicy", "Bypass", "-NoLogo", "-NonInteractive",
-    "-File", join(CAPTURE_DIR, "disarm.ps1"), ...args,
-  ], { cwd: CAPTURE_DIR, windowsHide: true, timeout: 15_000, stdio: "ignore" });
+  // Async spawn (not spawnSync) so the caller's `await` yields to the event
+  // loop instead of freezing it — `before-quit` runs this and a blocking
+  // 15 s spawnSync would lock the UI thread for the whole teardown.
+  await new Promise<void>((resolve) => {
+    const child = spawn("powershell.exe", [
+      "-ExecutionPolicy", "Bypass", "-NoLogo", "-NonInteractive",
+      "-File", join(CAPTURE_DIR, "disarm.ps1"), ...args,
+    ], { cwd: CAPTURE_DIR, windowsHide: true, stdio: "ignore" });
+    const timer = setTimeout(() => { try { child.kill(); } catch { /* already gone */ } resolve(); }, 15_000);
+    child.on("exit", () => { clearTimeout(timer); resolve(); });
+    child.on("error", () => { clearTimeout(timer); resolve(); });
+  });
   return true;
 }
 

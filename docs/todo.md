@@ -207,22 +207,17 @@
 
 ### Robustesse démarrage + cleanup
 
-- [ ] 🟠 **mitmdump orphelin** — `child.kill()` ne tue que `powershell.exe` ; les process
-      lancés via `Start-Process` survivent. Fix : `taskkill /PID <pid> /T /F` sous Windows.
-      `server.ts:138`.
-- [ ] 🟠 **Écran noir silencieux** — `app.whenReady().then(async () => { await createWindow() })`
-      sans `.catch` : si `startServer` rejette (bind échoué `server.ts:369-385`) ou `loadURL`
-      échoue → unhandled rejection, fenêtre vide. Fix :
-      `.catch(e => { dialog.showErrorBox(...); app.quit() })`. `main.ts:115-118`.
-- [ ] 🟠 **Crash serveur sur I/O** — `createReadStream().pipe(res)` sans handler `error` → un
-      `EBUSY`/fichier disparu (fréquent Windows) tue le process serveur. Fix :
-      `stream.on("error", () => { if (!res.headersSent) res.statusCode = 500; res.end(); })`.
-      `server.ts:89`.
-- [ ] 🟠 **`.mitm.pid` orphelin** — si mitmdump crashe hors disarm, le fichier reste →
-      `armed:true` à vie et `/api/capture/wipe` refuse pour toujours (409). Fix : vérifier
-      `process.kill(pid, 0)` avant de conclure « armed », nettoyer si mort. `server.ts:150,217`.
-- [ ] 🟠 **Disarm bloquant 15 s** — `spawnSync` synchrone au `before-quit` gèle l'UI. Fix :
-      async non bloquant + `app.exit()` après délai max. `main.ts:136-146`, `server.ts:347-350`.
+- [x] 🟠 **mitmdump orphelin** — ✅ corrigé : `res.on("close")` fait `taskkill /PID <pid> /T /F`
+      (tue l'arbre, pas juste powershell), fallback `child.kill()`. No-op dans le flux armé
+      normal (child déjà sorti). `server.ts`.
+- [x] 🟠 **Écran noir silencieux** — ✅ corrigé : `.catch` sur `app.whenReady()` →
+      `dialog.showErrorBox(...) + app.quit()`. `main.ts`.
+- [x] 🟠 **Crash serveur sur I/O** — ✅ corrigé : `stream.on("error", …)` dans `serveStatic`
+      (500 si headers pas envoyés, sinon `res.end()`). `server.ts`.
+- [x] 🟠 **`.mitm.pid` orphelin** — ✅ corrigé : helper `isArmed()` lit le PID + `process.kill(pid, 0)`
+      (liveness) ; pid mort → fichier nettoyé + not-armed. Utilisé dans status ET wipe. `server.ts`.
+- [x] 🟠 **Disarm bloquant 15 s** — ✅ corrigé : `disarmIfArmed` passe en `spawn` async (timeout 15 s
+      interne) ; `before-quit` ajoute un force-`app.exit()` à 16 s. `main.ts`, `server.ts`.
 
 ### Sécurité (serveur 127.0.0.1, impact faible mais trivial à durcir)
 

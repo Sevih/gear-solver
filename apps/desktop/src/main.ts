@@ -115,6 +115,12 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     await createWindow();
     setupAutoUpdate();
+  }).catch((err: unknown) => {
+    // Without this, a failed startServer() bind or loadURL() rejects
+    // unhandled and the user is left staring at a blank window with no clue.
+    const msg = err instanceof Error ? err.message : String(err);
+    dialog.showErrorBox("Outerpedia Gear Solver — startup failed", msg);
+    app.quit();
   });
 
   app.on("window-all-closed", () => {
@@ -137,9 +143,13 @@ app.on("before-quit", (event) => {
   if (cleaningUp) return;
   event.preventDefault();
   cleaningUp = true;
+  // Safety net: never let a hung disarm wedge the quit. If teardown hasn't
+  // finished within the cap, force-exit (disarm.ps1 is itself bounded at 15 s).
+  const force = setTimeout(() => app.exit(0), 16_000);
   disarmIfArmed()
     .catch(() => {})
     .finally(() => {
+      clearTimeout(force);
       if (httpServer) { httpServer.close(); httpServer = null; }
       app.quit();
     });
