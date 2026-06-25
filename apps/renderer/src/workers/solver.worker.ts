@@ -71,12 +71,19 @@ async function runSolve(req: SolveRequest, myGen: number): Promise<void> {
   const isStale = (): boolean => myGen !== currentGen;
 
   try {
-    const solveCtx = prepareContext(req);
+    // Fast path: orchestrator did the precompute on the main thread and
+    // broadcast it via `req.precomputed`. Slow path (compat): no precompute,
+    // worker runs it itself — same code, just N× duplicated CPU. The pool
+    // sizes are already surfaced by the orchestrator on the fast path, so
+    // we skip the redundant initial progress event in that case.
+    const solveCtx = req.precomputed
+      ? { req, ...req.precomputed }
+      : prepareContext(req);
     if (isStale()) return;
 
-    // Pool sizes piggy-back on the first progress message so the footer
-    // fills in immediately even when the cartesian takes seconds to first tick.
-    post({ type: "progress", solveId: req.solveId, permutations: 0, searched: 0, poolSizes: solveCtx.poolSizes });
+    if (!req.precomputed) {
+      post({ type: "progress", solveId: req.solveId, permutations: 0, searched: 0, poolSizes: solveCtx.poolSizes });
+    }
 
     let lastTick = perfNow();
     const tickIntervalMs = 100;

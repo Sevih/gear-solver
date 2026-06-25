@@ -10,6 +10,7 @@
  */
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import SolverWorker from "../../workers/solver.worker.ts?worker";
+import { precomputeContext } from "./engine.js";
 import type {
   PoolSizes,
   SolveBuild,
@@ -95,24 +96,47 @@ export class SolverOrchestrator {
     this.stats = this.workers.map(() => ({ permutations: 0, searched: 0 }));
     const topK = args.topK ?? 1000;
     const chunkCount = this.workers.length;
+    // Build the precompute ONCE on the main thread — broadcast to every
+    // worker via `precomputed`. Without this, each worker repeats the same
+    // composeCharStats + per-slot filter + simulateReforges + topPctPrune +
+    // buildGemPool work (8× CPU on a 7-worker pool). The orchestrator pays
+    // one structured-clone cost when postMessage'ing the bundle to each
+    // worker; the engine work skipped is much heavier than the clone.
+    //
+    // `seedReq` mirrors the per-worker SolveRequest except for chunk fields
+    // (precomputeContext ignores those — they only matter inside solveChunk).
+    const seedReq: SolveRequest = {
+      type: "solve",
+      solveId: this.solveId,
+      mode: args.mode,
+      heroUid: args.heroUid,
+      inventory: args.inventory,
+      game: args.game,
+      userGeasLevels: args.userGeasLevels,
+      userCodexLevel: args.userCodexLevel,
+      userSkills: args.userSkills,
+      filters: args.filters,
+      topK,
+      chunkIndex: 0,
+      chunkCount,
+    };
+    let precomputed;
+    try {
+      precomputed = precomputeContext(seedReq);
+    } catch (err) {
+      this.active = false;
+      this.cb.onError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    // Surface pool sizes to the UI immediately — no need to wait for the
+    // first worker progress event (saves the perceptible "blank footer"
+    // window at solve start).
+    this.poolSizes = precomputed.poolSizes;
+    this.cb.onProgress({ permutations: 0, searched: 0, poolSizes: this.poolSizes });
     for (let i = 0; i < chunkCount; i++) {
       const w = this.workers[i];
       if (!w) continue;
-      const req: SolveRequest = {
-        type: "solve",
-        solveId: this.solveId,
-        mode: args.mode,
-        heroUid: args.heroUid,
-        inventory: args.inventory,
-        game: args.game,
-        userGeasLevels: args.userGeasLevels,
-        userCodexLevel: args.userCodexLevel,
-        userSkills: args.userSkills,
-        filters: args.filters,
-        topK,
-        chunkIndex: i,
-        chunkCount,
-      };
+      const req: SolveRequest = { ...seedReq, chunkIndex: i, precomputed };
       w.postMessage(req);
     }
   }

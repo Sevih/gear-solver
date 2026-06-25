@@ -4,6 +4,7 @@
  */
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import type { FinalStats } from "../composeBuild.js";
+import type { PrecomputedSolveContext } from "./engine.js";
 import type { CheapRatings } from "./ratings.js";
 
 /** Sort objective for the solver:
@@ -75,6 +76,11 @@ export interface SolveRequest {
   chunkIndex: number;
   /** Total workers in the pool (== chunkCount). */
   chunkCount: number;
+  /** Shared precompute (per-slot filtered pools, baseline, scoredGems, …)
+   *  built once by the orchestrator on the main thread and broadcast to
+   *  every worker. Absent → worker falls back to running `precomputeContext`
+   *  itself (compat for non-orchestrator callers). */
+  precomputed?: PrecomputedSolveContext;
 }
 
 /** Bumps the worker's generation counter — any in-flight `runSolve` whose

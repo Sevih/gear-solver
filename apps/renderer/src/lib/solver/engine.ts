@@ -40,8 +40,14 @@ function engineToDesign(slot: string): string {
  * scaling, per-slot filtered pools (drop ineligible pieces), scored gem pool.
  * ───────────────────────────────────────────────────────────────────────── */
 
-export interface SolveContext {
-  req: SolveRequest;
+/** Everything `solveChunk` / `finalizeBuilds` need that doesn't depend on
+ *  which chunk a worker is running. Computed once per solve (by the
+ *  orchestrator on the main thread) and broadcast to every worker via
+ *  `SolveRequest.precomputed`, so the same per-slot filter / reforge sim
+ *  / gem-pool work isn't re-done N times across the worker pool.
+ *
+ *  Structured-clone safe: only plain objects, arrays, `Map`s and `Set`s. */
+export interface PrecomputedSolveContext {
   baseline: FinalStatsBaseline;
   scaling: ScalingMap;
   /** Hero's own EE — solver doesn't enumerate EE pieces, just gem-fills this. */
@@ -84,9 +90,26 @@ export interface SolveContext {
   excludedAccessoryEffects: Set<string>;
 }
 
+/** Per-worker context — the precomputed bundle plus a back-pointer to the
+ *  worker's own `SolveRequest` (needed by `solveChunk`/`finalizeBuilds`
+ *  for chunk-specific fields like inventory + filters + mode). */
+export interface SolveContext extends PrecomputedSolveContext {
+  req: SolveRequest;
+}
+
 /** Build a SolveContext for one solve run. Throws if the hero isn't found
  *  or compose ingredients are missing. */
 export function prepareContext(req: SolveRequest): SolveContext {
+  return { req, ...precomputeContext(req) };
+}
+
+/** Chunk-independent half of `prepareContext`. The orchestrator calls this
+ *  once on the main thread and broadcasts the result via
+ *  `SolveRequest.precomputed`, so the 8-worker fan-out doesn't repeat the
+ *  same per-slot filter / reforge sim / gem-pool work N times. Workers fall
+ *  back to running it themselves if `precomputed` is missing (e.g. a future
+ *  caller that doesn't go through the orchestrator). */
+export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const { inventory: inv, game, filters, heroUid } = req;
   const hero = inv.characters.find((c) => c.uid === heroUid);
   if (!hero) throw new Error(`hero ${heroUid} not found in inventory`);
@@ -295,7 +318,6 @@ export function prepareContext(req: SolveRequest): SolveContext {
   };
 
   return {
-    req,
     baseline: composed.noGearStats,
     scaling: composed.scaling,
     ee,
