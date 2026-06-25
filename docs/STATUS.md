@@ -20,7 +20,7 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
    - `capture.ps1` fait tout et déchiffre en direct vers `tools/capture/out/*.json`.
 
 2. **Données statiques du jeu** (`data/`)
-   - `data/game/` : 18 tables Outerplane copiées (copie locale, pas de dépendance externe).
+   - `data/game/` : 29 tables Outerplane copiées (copie locale, pas de dépendance externe).
    - `data/build.mjs` → `data/derived/` : tables compactes (`options`, `equipment`, `sets`,
      `characters`) que le moteur consomme. Re-générable via `npm run data:build`.
    - `data/sync.ps1` : re-copie depuis Outerpedia + rebuild (à lancer après un patch du jeu).
@@ -48,7 +48,8 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
 
 5. **Desktop Electron** (`apps/desktop/`) — `main.ts` + serveur local (`server.ts`) +
    détection d'émulateur, capture native via IPC. App fonctionnelle en dev ; le
-   **packaging** prod (bake `data/`, electron build, auto-update) reste en cours (cf. todo M7+).
+   **packaging** prod (electron-builder `extraResources`, `setupAutoUpdate`) est **câblé mais
+   non vérifié end-to-end** sur un vrai build packagé (cf. todo M7+).
 
 ## Comment lancer
 
@@ -83,8 +84,9 @@ npm run data:build       # régénère data/derived depuis data/game
 
 - **Perf hot-path** : accumulateur de buckets incrémental, virtualisation de la table
   de résultats (topN=1000).
-- **Packaging desktop (M7+)** : bake `data/` dans le bundle prod, finaliser l'electron
-  build, auto-update (`electron-updater`).
+- **Packaging desktop (M7+)** : le plumbing existe (electron-builder `extraResources`,
+  `setupAutoUpdate`) ; reste à **vérifier sur un vrai build packagé** (bake `data/`,
+  installeur, auto-update contre une release signée + feed).
 - **Equip / Unequip vers le jeu** : nécessite une API jeu inexistante (retiré de l'UI ;
   à reprendre si le pipeline de capture peut envoyer des commandes).
 - **JSON import/export** des builds/presets + versioning du snapshot `data/`.

@@ -301,11 +301,15 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
    pour `setTimeout(0)` throttlé dans les workers). Cancel mid-solve se propage
    en ≤ tickEvery × t_combo ≈ 20-50ms.
 
-8. **`FilterSpec[]` compilé** — `Object.keys` + `for...in` remplacés par un
+9. **`FilterSpec[]` compilé** — `Object.keys` + `for...in` remplacés par un
    tableau plat itéré par index. Mineur mais cumulé sur des millions de combos.
 
-9. **Min-heap top-K** — `O(N log K)` au lieu de `O(N log N)` si on triait
-   l'ensemble. K=1000 → log K ≈ 10.
+10. **Set bonuses hoistés** — `computeSetBonuses` (rebuild de Map + lookups) est calculé
+    1× par combo accessory et passé à `aggregateGearBuckets`, pas recalculé par talisman.
+    Bit-identique (invariant sur la boucle talisman puisque le talisman n'a pas d'`armorSetId`).
+
+11. **Min-heap top-K** — `O(N log K)` au lieu de `O(N log N)` si on triait
+    l'ensemble. K=1000 → log K ≈ 10.
 
 ---
 
@@ -314,9 +318,10 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
 (rien de bloquant aujourd'hui — voir [todo.md](todo.md) pour le backlog.)
 - **Equip / Unequip vers le jeu** : absents — nécessitent une API jeu inexistante
   (le pipeline de capture est read-only pour l'instant).
-- **Perf hot-path** : `aggregateGearBuckets` re-somme les 8 pièces + recalcule les set
-  bonuses à chaque talisman ; un accumulateur incrémental est au backlog. La table de
-  résultats (topN=1000) n'est pas encore virtualisée.
+- **Perf hot-path** : le rebuild des set bonuses par talisman est hoisté (§7.10) et la
+  table de résultats est virtualisée (`@tanstack/react-virtual`). Reste que
+  `aggregateGearBuckets` re-somme les 6+EE pièces invariantes à chaque talisman — un
+  accumulateur incrémental (en préservant l'ordre flottant) est au backlog.
 - **Worker init = W × game/inventory** : chaque worker reçoit une copie par
   postMessage. Pour des inventaires énormes (>50 MB) ça pourrait pincer.
   Alternative future : SharedArrayBuffer (besoin COOP/COEP headers).

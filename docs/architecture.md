@@ -23,7 +23,8 @@ Four layers, connected by plain JSON:
 - **apps/desktop** — Electron shell that hosts the renderer. `main.ts` boots a local
   server (`server.ts`) that serves `data/derived` + the capture output and exposes the
   capture/emulator IPC; in dev the Vite middleware covers the same role. Packaging
-  (bundled `data/`, auto-update) is still in progress.
+  (electron-builder `extraResources` for `data/`, `setupAutoUpdate`) is wired but not
+  yet verified end-to-end on a real packaged build.
 
 ## Why this split
 

@@ -79,13 +79,21 @@
 
 ## Desktop / Electron — Packaging (M7+)
 
-- [ ] **Build prod du `data/`** — Vite middleware sert `data/derived` en dev ; pour le packaged
-      build il faut baker dans le bundle ou copier dans `apps/desktop/resources` (aujourd'hui :
-      marche en dev, casse en prod).
-- [ ] **Electron build** — finir le packaging (`apps/desktop` existe partiellement).
-- [ ] **Auto-update** — `electron-updater` (config + feed).
-- [ ] **Native capture button** — exposer `tools/capture/capture.ps1` via IPC Electron (déjà
-      fait en dev via Vite middleware) pour que le bouton marche sans `npm run dev`.
+> ⚠️ Le **plumbing est déjà écrit** (electron-builder `build`/`extraResources` dans
+> `apps/desktop/package.json`, résolution `process.resourcesPath` dans `paths.ts`,
+> `setupAutoUpdate()` dans `main.ts`, serveur local prod dans `server.ts`). Ce qui reste
+> n'est donc PAS l'implémentation mais la **vérification end-to-end sur un vrai build packagé** :
+
+- [ ] **Vérifier le bake prod du `data/`** — `extraResources` mappe `data/derived` →
+      `process.resourcesPath` ; à valider sur un `electron-builder` réel (le dev passe par le
+      Vite middleware, donc ce chemin n'a jamais tourné en packagé).
+- [ ] **Vérifier l'`electron build`** — `pack`/`dist` existent ; produire un installeur et
+      confirmer qu'il lance le serveur local + charge le renderer.
+- [ ] **Vérifier l'auto-update** — `setupAutoUpdate()` est câblé (update-available/downloaded
+      + `quitAndInstall`) mais **jamais testé contre une release signée + feed réels**.
+- [ ] **Native capture button en packagé** — le serveur local (`server.ts`) sert déjà
+      `/api/capture/*` en prod ; à confirmer que le bouton capture marche dans l'installeur
+      (sans `npm run dev`).
 
 ---
 

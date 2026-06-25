@@ -38,9 +38,11 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 - **Versioning du snapshot `data/`** pour invalider les caches localStorage après un patch.
 - **Production build path** pour `data` (bake derived + snapshot dans le bundle prod).
 
-### M8 — Packaging desktop
-- Finaliser l'electron build (bake `data/derived` dans `resources`), bouton de capture
-  natif via IPC, **auto-update** (`electron-updater`).
+### M8 — Packaging desktop (câblé, à vérifier)
+- Le plumbing est en place (electron-builder `extraResources` baking `data/derived` dans
+  `resources`, serveur local prod, `setupAutoUpdate` / `electron-updater`). Reste à le
+  **vérifier end-to-end sur un vrai build packagé** : installeur fonctionnel, bake `data/`
+  validé, auto-update testé contre une release signée + feed.
 
 ### Perf hot-path (au fil du profilage)
 - Accumulateur de buckets incrémental (`aggregateGearBuckets` re-somme tout par combo).

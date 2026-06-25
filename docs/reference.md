@@ -31,27 +31,29 @@ Fichiers : [capture.ps1](../tools/capture/capture.ps1),
 
 ### 1.2 Tables dérivées (`data/build.mjs` → `data/derived/`)
 
-Le jeu copie ses tables brutes dans `data/game/*.json` (18 fichiers).
-`data/build.mjs` les distille en tables compactes consommables :
+Le jeu copie ses tables brutes dans `data/game/*.json` (29 fichiers).
+`data/build.mjs` les distille en tables compactes consommables. La colonne
+Source liste la table `data/game/` réellement chargée par `build.mjs` (plusieurs
+cibles dérivent de la même table — `ItemSpecialOptionTemplet` notamment) :
 
 | Source `data/game/`                  | Cible `data/derived/`     | Contenu                                                |
 |--------------------------------------|---------------------------|--------------------------------------------------------|
 | `ItemTemplet.json`                   | `equipment.json`          | ItemID → slot/grade/star/setId/armorSetId/name/image/effectIcon/class |
 | `ItemOptionTemplet.json`             | `options.json`            | OptionID → StatOption (`{st, ap, v}`) OU IOT_BUFF reference |
 | `BuffTemplet.json`                   | `buffs.json`              | BuffID → array of StatOption (per enhanceLevel)        |
-| `SetTemplet.json` + curated          | `sets.json`               | setId → levels[] → {p2, p4, p2_desc, p4_desc, name}    |
-| `EquipmentEffectTemplet.json`        | `equipment-passives.json` | ItemID → {name, textByTier[1..4]}                      |
-| `MultiTierPassiveTemplet.json`       | `multi-tier-passives.json`| ItemID → list of tier passives                         |
-| `EquipmentEffectTemplet.json` (sub)  | `gems.json`               | OptionID 15001..15054 → {type, level, st, ap, v}       |
-| `SingularityOptionTemplet.json`      | `singularity-options.json`| OptionID → {st, ap, v, name, desc, combatOnly}         |
-| `EquipmentEffectTemplet.json` (EE)   | `ee-passives.json`        | ItemID → list of {st, ap, v, levelThreshold}           |
+| `ItemSpecialOptionTemplet.json` + curated (outerpedia) | `sets.json` | setId → levels[] → {p2, p4, p2_desc, p4_desc, name}  |
+| `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `equipment-passives.json` | ItemID → {name, textByTier[1..4]}            |
+| `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `multi-tier-passives.json`| ItemID → list of tier passives               |
+| `ItemOptionTemplet.json` (IDs 15001..15054) | `gems.json`        | OptionID → {type, level, st, ap, v}                    |
+| `ItemSpecialOptionTemplet.json` (groups 30000/31000) | `singularity-options.json`| OptionID → {st, ap, v, name, desc, combatOnly} |
+| `ItemSpecialOptionTemplet.json` (EE groups) | `ee-passives.json` | ItemID → list of {st, ap, v, levelThreshold}           |
 | `CharacterTemplet.json` etc.         | `characters.json`         | charId → {ingredients, cls, element, star, …}          |
 | `ItemEnchantTemplet.json` + `SingularityEquipEnchantTemplet.json` | `enhance.json` | enhanceFactor, tierFactor, expCurves, singularity (fichier standalone) |
 | `ExpCharacterTemplet.json`           | `exp-character.json`      | array idx 1..120 → cumulative XP                       |
 | `CharacterMaxLevelTemplet.json`      | `char-level-max.json`     | `${star}|${step}` → {maxLevel, statModifierAfter100}   |
 | `ArchiveBonusTemplet.json`           | `archive-bonus.json`      | `CompleteCount` → codex level (1..11)                  |
 | `CharacterArchiveStatTemplet.json` (via `computeCharacterIngredients`) | `codex-curve.json` | codex level idx 0..11 → {atkPct, defPct, hpPct} |
-| `TrustExpTemplet.json` + buffs       | `trust-character.json`, `trust-buffs.json` | trust system data                       |
+| `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data |
 
 Re-générer après un patch jeu : `npm run data:build` (ou `data/sync.ps1`
 si on doit aussi recopier depuis Outerpedia).
@@ -417,23 +419,25 @@ rejette ooparts/exclusive en early-return.
 
 Énorme gain sur les recherches `req-4pc Sharp` quand peu de helmets Sharp.
 
-### 2.11 Combat Power + Upg filters (deferred to finalize)
+### 2.11 Combat Power + Upg filters (appliqués in-loop quand posés)
 
-CP est trop cher à calculer dans le hot loop SOLVE (~20× cheap rating)
-et `upg` dépend du current loadout du héros (uniquement disponible côté
-`finalizeBuilds` via `ctx.req.inventory`). Les deux filters sont donc
-appliqués dans `finalizeBuilds` (helper `inMinMax`) :
+CP est cher (~20× cheap rating) et `upg` dépend du current loadout du héros,
+donc aucun des deux ne peut être un `FilterSpec` compilé du hot loop. MAIS
+quand un filtre `cp`/`upg` est **posé**, il est appliqué **dans la boucle**,
+y compris en SOLVE — sinon le heap se remplit du top-K **par score** puis
+`finalizeBuilds` retire a posteriori les builds hors-filtre, évinçant des
+builds valides classés juste hors top-K (perte de recall / sous-retour ; c'était
+le bug corrigé en `a6aa67b`, cf. solver.md §2/§5).
 
-- **CP / SOLVE CP** : CP calculé in-loop, filtre `ratingFilters.cp`
+- **CP / SOLVE CP** : CP calculé in-loop (sort key), filtre `ratingFilters.cp`
   appliqué tout de suite.
-- **CP / SOLVE** : CP non calculé in-loop → filtre `ratingFilters.cp`
-  appliqué dans `finalizeBuilds` après calcul lazy du top-N (peut
-  réduire la liste finale en-dessous de topN).
-- **Upg** : `upg` (nombre de slots différents du current loadout) calculé
-  dans `finalizeBuilds`, filtre `ratingFilters.upg` appliqué immédiatement
-  après. `compileFilterSpecs` skip `cp` et `upg` au moment de la
-  compilation pour éviter qu'ils soient évalués dans le hot loop avec des
-  valeurs encore nulles.
+- **CP / SOLVE** : si `cpFilter` est posé, CP est calculé in-loop et le filtre
+  rejette tôt ; sinon CP reste lazy (calculé pour le top-N à l'affichage seulement).
+- **Upg** : `equippedUids` est résolu en amont ; quand `upgFilter` est posé,
+  `upg` est calculé in-loop et filtré avant le push.
+- **Finalize** : `finalizeBuilds` (re)calcule CP/upg pour l'affichage et
+  ré-applique les filtres — devenus des **no-op idempotents** puisque déjà
+  appliqués in-loop. `compileFilterSpecs` skip `cp`/`upg` (gérés à part).
 
 ### 2.12 Top-K min-heap (`engine.ts::TopKHeap`)
 
@@ -487,7 +491,8 @@ fetch runtime). Re-copiées via `data/sync.ps1` depuis un checkout d'outerpedia-
 
 Snapshots per-character (charId × level × LB) avec final stats validés
 in-game. Fichier committable — la maintenance des formules doit garder
-ces locks verts. 8 héros couverts aujourd'hui :
+ces locks verts. 9 héros couverts aujourd'hui :
+- Flamberge (2000050)
 - Aer (2000055) lv100, no LB
 - Core Fusion Notia (2000056) lv100
 - Gnosis Beth (2000092) lv120 LB3
@@ -505,7 +510,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | Fichier | Couverture |
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 7 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
-| `apps/renderer/test/solver.test.ts`     | 50 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, cheap ratings (+ CRC clamp), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR) |
+| `apps/renderer/test/solver.test.ts`     | 62 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR) |
 
 Run : `npm test --workspaces --if-present`.
 
