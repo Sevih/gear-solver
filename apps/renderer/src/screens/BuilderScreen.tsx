@@ -1147,6 +1147,9 @@ function HeroSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // Keyboard-highlighted option index (distinct from the currently-selected
+  // `value`). Reset to the top whenever the list changes or the popup opens.
+  const [activeIdx, setActiveIdx] = useState(0);
   const wrapRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
   const selected = value ? heroes.find((c) => c.uid === value) ?? null : null;
   const selectedName = selected ? displayNameOf(selected, game?.characters[String(selected.charId)] ?? null) : "";
@@ -1155,15 +1158,32 @@ function HeroSelect({
     if (!q) return heroes;
     return heroes.filter((c) => heroSearchHaystack(c, game).includes(q));
   }, [heroes, game, query]);
+  useEffect(() => { setActiveIdx(0); }, [query, open]);
   const display = open ? query : selectedName;
+  const pick = (c: Character | undefined) => {
+    if (!c) return;
+    onChange(c.uid); setOpen(false); setQuery("");
+  };
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") { setOpen(false); return; }
+    if (!open) { if (e.key === "ArrowDown") setOpen(true); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, filtered.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); pick(filtered[activeIdx]); }
+  };
+  const activeId = open && filtered[activeIdx] ? `hero-opt-${filtered[activeIdx]!.uid}` : undefined;
   return (
     <div ref={wrapRef} className="relative">
       <input
         type="text"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls="hero-listbox"
+        aria-activedescendant={activeId}
         value={display}
         onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
         onFocus={() => { setOpen(true); setQuery(""); }}
-        onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+        onKeyDown={onKeyDown}
         placeholder={selectedName || "Search hero…"}
         className="w-full rounded-md border border-white/8 bg-black/30 px-2 py-1 text-[11.5px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
       />
@@ -1172,14 +1192,16 @@ function HeroSelect({
           {filtered.length === 0 ? (
             <div className="px-2 py-2 text-[11px] italic text-white/40">No hero matches</div>
           ) : (
-            <ul className="flex flex-col py-1">
-              {filtered.map((c) => (
+            <ul id="hero-listbox" role="listbox" className="flex flex-col py-1">
+              {filtered.map((c, i) => (
                 <HeroOption
                   key={c.uid}
+                  id={`hero-opt-${c.uid}`}
                   hero={c}
                   game={game}
                   active={c.uid === value}
-                  onPick={() => { onChange(c.uid); setOpen(false); setQuery(""); }}
+                  highlighted={i === activeIdx}
+                  onPick={() => pick(c)}
                 />
               ))}
             </ul>
@@ -1191,17 +1213,21 @@ function HeroSelect({
 }
 
 function HeroOption({
-  hero, game, active, onPick,
-}: { hero: Character; game: GameData | null; active: boolean; onPick: () => void }) {
+  id, hero, game, active, highlighted, onPick,
+}: { id: string; hero: Character; game: GameData | null; active: boolean; highlighted: boolean; onPick: () => void }) {
   const meta = game?.characters[String(hero.charId)] ?? null;
   const name = displayNameOf(hero, meta);
+  const ref = useRef<HTMLLIElement>(null);
+  // Keep the keyboard-highlighted option in view as the user arrows through.
+  useEffect(() => { if (highlighted) ref.current?.scrollIntoView({ block: "nearest" }); }, [highlighted]);
   return (
-    <li>
+    <li ref={ref} id={id} role="option" aria-selected={active}>
       <button
         type="button"
         onClick={onPick}
         className={cx(
           "flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-white/6",
+          highlighted && "bg-white/8",
           active && "bg-cyan-500/10",
         )}
       >
@@ -1466,6 +1492,9 @@ function FilterInput({
       min={0}
       value={value ?? ""}
       title={title}
+      // Prevent the scroll wheel from silently changing a focused filter value
+      // (a common type=number footgun) — blur instead so the page scrolls.
+      onWheel={(e) => e.currentTarget.blur()}
       onChange={(e) => {
         const t = e.target.value;
         if (t === "") { onChange(undefined); return; }

@@ -46,8 +46,10 @@
       une cellule peut être "plus verte" qu'une voisine de valeur affichée identique. Cosmétique.
 - [ ] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** alors que l'accessoire a un main
       user-sélectionnable → placeholder potentiellement faux quand aucun build sélectionné.
-- [ ] ⚪ **Accessibilité combobox** — pas de navigation clavier (flèches), pas de
-      `role="listbox"`/`aria-activedescendant` ; inputs `type=number` modifiables à la molette.
+- [x] ⚪ **Accessibilité combobox** — ✅ fait (HeroSelect) : navigation clavier (↑/↓ + Enter),
+      `role=combobox/listbox/option` + `aria-activedescendant` + scroll-into-view de l'option
+      surlignée ; inputs filtres `type=number` ne changent plus à la molette (`onWheel`→blur).
+      `BuilderScreen.tsx`. *(ExcludeHeroesPicker — multi-select — laissé en clic/Esc.)*
 - [ ] ⚪ **Heatmap des résultats : gradient interpolé** — actuellement bands fixes
       (0.25/0.45/0.55/0.75), plus joli avec un vrai gradient (lerp HSL).
 
