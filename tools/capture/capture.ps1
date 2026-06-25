@@ -198,6 +198,9 @@ $summary | Out-File -Encoding utf8 $tmp
 # expose). Swallow the failure - the .captured sentinel is what callers act
 # on, the summary is pure cosmetic.
 try { & python $tmp 2>$null } catch {}
-# No "pipeline stays armed" hint here: the Electron renderer fires an
-# auto-disarm immediately after we exit 0 (see App.tsx runCapture flow),
-# so by the time the user reads this log the pipeline is already down.
+# The renderer leaves the pipeline ARMED after exit 0 (see App.tsx
+# runCapture) so the user can open the Codex (Hero Archive) and Gift screens
+# in-game — those fire /archive/info + /gift/info (codex level + geas) that
+# the lobby auto-tap never reaches. The user clicks Disarm once done;
+# mitmdump is also torn down on app quit (disarmIfArmed on before-quit).
+Info "Inventory captured. Pipeline stays armed: open the Codex and Gift screens in-game to grab codex + geas, then click Disarm."

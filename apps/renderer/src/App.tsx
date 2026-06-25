@@ -133,19 +133,24 @@ export function App() {
       if (mode === "capture") {
         if (exitCode === 0) {
           await refreshInventory("Capture OK");
-          // Auto-disarm in the background so mitmdump + the device iptables
-          // redirect get torn down — otherwise mitmdump.exe stays alive after
-          // window close and locks the bundled binary for the next rebuild.
-          // Re-arm to capture supplementary endpoints (Codex, Awakening, …).
-          void (async () => {
-            try { await streamCapture("/api/capture/disarm", () => {}); } catch {}
-            void getCaptureStatus().then(setCapStatus);
-          })();
+          // Leave the pipeline ARMED. The lobby auto-tap only fetches
+          // /user/{info,asset,character,item} — it never opens the Codex
+          // (Hero Archive) or Gift screens, so /archive/info + /gift/info
+          // (codex level + geas) are missing. Keeping it armed lets the user
+          // open those two screens in-game; the endpoints then decode in the
+          // background and a Disarm picks them up. mitmdump is still torn
+          // down on app quit (disarmIfArmed on before-quit), so nothing leaks.
+          setStatus("Inventory captured — pipeline still armed. Open the Codex and Gift screens in-game to grab codex + geas, then click Disarm.");
+          void getCaptureStatus().then(setCapStatus);
         }
         else if (exitCode === 2) setStatus("Pipeline armed — play to the lobby, then reload.");
         else setStatus(`Capture failed (exit ${exitCode}) — see log.`);
       } else {
-        setStatus(exitCode === 0 ? "Pipeline disarmed." : `Disarm failed (exit ${exitCode}).`);
+        // Disarm tears down the pipeline; reload so any supplementary
+        // endpoints captured while armed (codex, geas) get ingested.
+        if (exitCode === 0) await refreshInventory("Pipeline disarmed");
+        else setStatus(`Disarm failed (exit ${exitCode}).`);
+        void getCaptureStatus().then(setCapStatus);
       }
     } catch (err) {
       setLog((l) => [...l, `[client] ${err instanceof Error ? err.message : String(err)}`]);
