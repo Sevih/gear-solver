@@ -29,6 +29,7 @@ import { toIconPiece, toUiPiece } from "../design/adapter.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { simulateReforges } from "../lib/solver/engine.js";
 import { SolverOrchestrator } from "../lib/solver/orchestrator.js";
+import { setPicksToPlans } from "../lib/solver/setPlans.js";
 import type { PoolSizes, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
 import {
   addSavedBuild, loadSavedBuilds, persistSavedBuilds, removeSavedBuild,
@@ -438,8 +439,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       priority: filters.priority,
       topPct: filters.topPct,
       mainPicks: filters.mainPicks,
-      // Reducer state uses the engine encoding 1:1, so the cast is safe.
-      setPicks: filters.setPicks as SolveFilters["setPicks"],
+      // Expand the 4-state per-set chips into the engine's OR-of-AND plans +
+      // excluded list. The current UI ANDs all required sets → one plan; the
+      // OR editor (and the preset importer) will emit multi-plan forms later.
+      ...setPicksToPlans(filters.setPicks),
       weaponEffectPicks: filters.weaponEffectPicks as SolveFilters["weaponEffectPicks"],
       accessoryEffectPicks: filters.accessoryEffectPicks as SolveFilters["accessoryEffectPicks"],
     };

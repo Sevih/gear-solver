@@ -80,22 +80,22 @@ ne sont que des raccourcis qui se compilent vers cette liste :
 Taille bornée (N ≤ ~5, armure = 4 slots → `C(5,2)=10` plans max) : zéro risque combinatoire.
 `excluded` reste **orthogonal** (un `Set<setId>` filtré en dur sur le pool, inchangé).
 
-- [ ] **Contrat** (`solver/types.ts`) — remplacer/doubler `setPicks` par `setPlans: SetPlan[]`
-      (+ `excludedSets: setId[]` à part). Le moteur consomme la forme **déjà expandée** en plans
-      explicites (UI/traducteur font l'expansion des raccourcis → moteur bête).
-- [ ] **Moteur** (`engine.ts`) — contenu, `setCount` est déjà traqué pendant l'énumération armure :
-  - **Validation au leaf** (après `boots`) : `plans.some(p => p.every(({setId,count}) => (setCount.get(setId) ?? 0) >= count))`.
-  - **Prune mid-tree** (`checkSetsFeasible`) : un plan est faisable à profondeur D si
-    `Σ max(0, count − setCount[setId]) ≤ remainingSlots` ; prune le sous-arbre **seulement si AUCUN
-    plan n'est faisable** (`!plans.some(planFeasible)`). Toujours correct, à peine moins agressif.
-  - Conserver la protection top-% des pièces appartenant à un set requis (étendre `requiredSetIds`
-    = union des `setId` de tous les plans).
-- [ ] **UI Sets** (`BuilderScreen.tsx`) — **le vrai coût** : passer du chip 4-états/set à un éditeur
-      de groupes OR (« 4pc parmi… », « 2pc fixe + 2pc parmi… »). À designer. **Non bloquant pour
-      l'import** : « Get preset » écrit `setPlans` directement sans cette UI → l'éditeur manuel peut
-      venir après.
-- [ ] **Tests** — équivalence sur les cas mono-plan (doit matcher l'ancien comportement req-2pc/4pc),
-      + un cas OR (`[{A:4}]` ou `[{B:2},{C:2}]`) vérifiant que le prune ne tue pas les combos valides.
+- [x] **Contrat** (`solver/types.ts`) — ✅ fait : `setPicks` remplacé par `setPlans: SetPlan[]`
+      (`SetPlan = SetCond[]`, OR-de-AND) + `excludedSets: string[]` à part. Le moteur consomme la
+      forme **déjà expandée** ; helpers purs dans `solver/setPlans.ts`.
+- [x] **Moteur** (`engine.ts`) — ✅ fait :
+  - **Validation au leaf** : couverte par `setsFeasible(setPlans, setCount, 0)` à la profondeur boots
+    (un plan « faisable avec 0 slot » ⟺ entièrement satisfait) — pas de check séparé.
+  - **Prune mid-tree** (`checkSetsFeasible` → `setsFeasible`) : `planFeasible` = `Σ max(0, count −
+    have) ≤ remainingSlots`, prune **seulement si AUCUN plan n'est faisable**. La somme par plan est
+    en fait **plus stricte** que l'ancien check par-set indépendant (résultats identiques, prune plus tôt).
+  - Protection top-% : `requiredSetIds = planSetIds(setPlans)` (union des `setId` de tous les plans).
+- [ ] **UI Sets** (`BuilderScreen.tsx`) — **le vrai coût, reste à faire** : passer du chip 4-états/set
+      à un éditeur de groupes OR. **Non bloquant** : les chips actuels sont traduits via `setPicksToPlans`
+      (sets requis = 1 plan AND → parité exacte), et « Get preset » écrira `setPlans` directement.
+- [x] **Tests** — ✅ fait (`test/setPlans.test.ts`, 13 tests) : expansion des chips, `planSetIds`,
+      `planFeasible` (somme multi-cond), `setsFeasible` OR + leaf-validation à `remaining 0`, parité
+      mono-plan req-4pc.
 
 ---
 

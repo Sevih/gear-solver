@@ -26,7 +26,8 @@ import {
 import { calcBattlePower } from "./cp.js";
 import { aggregateGemDelta, allocateGems, buildGemPool, gemSlotsOf, scoreGemPool, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
-import type { PoolSizes, SolveBuild, SolveMode, SolveRequest } from "./types.js";
+import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
+import { planSetIds, setsFeasible } from "./setPlans.js";
 
 /** Map engine GearSlot → design SlotId used by the BuilderScreen's
  *  mainPicks / effect chip maps. Only `ooparts` differs (UI calls it
@@ -79,10 +80,9 @@ export interface PrecomputedSolveContext {
   skills: { first: number; second: number; ultimate: number; chainPassive: number };
   /** Star metadata for the CP calc — captured once. */
   starMeta: { showUIStar: number; starPlus: number; fused: boolean };
-  /** Required-set ids (split by piece-count requirement). Used for branch-
-   *  and-prune in the armor cartesian. */
-  requiredSets2pc: string[];
-  requiredSets4pc: string[];
+  /** Set requirements as an OR-list of AND-plans. Used for branch-and-prune
+   *  in the armor cartesian (feasible = at least one plan still reachable). */
+  setPlans: SetPlan[];
   excludedSets: Set<string>;
   /** Required-effect icons per slot — when set, the slot's pool was already
    *  filtered to those icons in `buildPool`, but we still need the
@@ -134,15 +134,11 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const heroClass = meta.cls ?? null;
   const excludedSet = new Set(filters.excludedHeroes);
 
-  // Excluded sets and required sets pre-extracted for branch-and-prune.
-  const requiredSets2pc: string[] = [];
-  const requiredSets4pc: string[] = [];
-  const excludedSets = new Set<string>();
-  for (const [setId, state] of Object.entries(filters.setPicks)) {
-    if (state === "req-2pc") requiredSets2pc.push(setId);
-    else if (state === "req-4pc") requiredSets4pc.push(setId);
-    else if (state === "excluded") excludedSets.add(setId);
-  }
+  // Set requirements arrive already expanded into explicit plans (the UI /
+  // preset translator compiled the authoring shortcuts). The engine just
+  // evaluates them; `excludedSets` is an orthogonal hard pool filter.
+  const setPlans = filters.setPlans;
+  const excludedSets = new Set<string>(filters.excludedSets);
 
   // Effect picks → split into required (filter pool) vs excluded (filter
   // pool too — they shouldn't appear at all). `required` is OR-list at the
@@ -249,7 +245,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // ceil(N × pct/100) by the count of protected pieces — intentional.
   const hasPriority = Object.values(filters.priority).some((v) => v !== 0);
   if (hasPriority && filters.topPct < 100) {
-    const requiredSetIds = new Set<string>([...requiredSets2pc, ...requiredSets4pc]);
+    const requiredSetIds = planSetIds(setPlans);
     for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const) {
       pools[slot] = topPctPrunePreserving(pools[slot], filters.priority, filters.topPct, requiredSetIds);
     }
@@ -329,8 +325,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     gemAllocByTalismanSlots,
     skills,
     starMeta,
-    requiredSets2pc,
-    requiredSets4pc,
+    setPlans,
     excludedSets,
     excludedWeaponEffects,
     excludedAccessoryEffects,
@@ -559,7 +554,7 @@ export async function solveChunk(
   options: SolveChunkOptions = {},
 ): Promise<SolveChunkResult> {
   const { req, pools, baseline, scaling, ee, gemDeltaByTalismanSlots, gemAllocByTalismanSlots,
-          requiredSets2pc, requiredSets4pc, skills, starMeta } = ctx;
+          setPlans, skills, starMeta } = ctx;
   const { mode, filters, game } = req;
   const heap = new TopKHeap(topK, mode);
   const tickEvery = options.tickEvery ?? 4096;
@@ -617,20 +612,12 @@ export async function solveChunk(
   }
 
   // Required-set feasibility at each armor depth — used for mid-tree prune.
-  // At depth D (D armor slots iterated), remaining = 4 - D. For each
-  // required set id needing K more pieces, if K > remaining → infeasible,
-  // prune the rest of that subtree.
-  const checkSetsFeasible = (remainingSlots: number): boolean => {
-    for (const id of requiredSets4pc) {
-      const need = 4 - (setCount.get(id) ?? 0);
-      if (need > remainingSlots) return false;
-    }
-    for (const id of requiredSets2pc) {
-      const need = 2 - (setCount.get(id) ?? 0);
-      if (need > 0 && need > remainingSlots) return false;
-    }
-    return true;
-  };
+  // At depth D (D armor slots iterated), remaining = 4 - D. The subtree is
+  // pruned only when NO plan is still reachable (OR semantics). At remaining 0
+  // (boots leaf) this is exactly the build-valid test (a plan needing 0 more
+  // pieces is fully satisfied). See setPlans.ts `setsFeasible`.
+  const checkSetsFeasible = (remainingSlots: number): boolean =>
+    setsFeasible(setPlans, setCount, remainingSlots);
 
   let permutations = 0;
   let searched = 0;

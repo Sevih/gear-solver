@@ -13,9 +13,16 @@ import type { CheapRatings } from "./ratings.js";
  */
 export type SolveMode = "score" | "cp";
 
-/** Set chip state as understood by the solver — same encoding as the
- *  Builder's reducer. Omitted entry = no constraint. */
-export type SetConstraint = "req-2pc" | "req-4pc" | "excluded";
+/** One set requirement inside a plan: the build must equip at least `count`
+ *  pieces of `setId`. */
+export interface SetCond {
+  setId: string;
+  count: number;
+}
+
+/** A single AND-clause: every cond must hold simultaneously (e.g. a fixed
+ *  2pc + a 2pc from a pool → `[{A,2},{B,2}]`). */
+export type SetPlan = SetCond[];
 
 /** Effect chip state — same encoding as the Builder's reducer. */
 export type EffectConstraint = "required" | "excluded";
@@ -42,7 +49,13 @@ export interface SolveFilters {
   topPct: number;
   /** Per-slot OR-list of acceptable main stat engine keys. Empty inner = any. */
   mainPicks: Record<string, Record<string, boolean>>;
-  setPicks: Record<string, SetConstraint>;
+  /** Set requirements as an OR-list of AND-plans: the build is valid iff AT
+   *  LEAST ONE plan is fully satisfied. Empty = no set requirement. The UI /
+   *  preset translator expands its authoring shortcuts (4pc-among-N, 2pc+2pc,
+   *  fixed-2pc + mix) into this explicit form; the engine stays dumb. */
+  setPlans: SetPlan[];
+  /** Set ids hard-filtered out of the pool — orthogonal to `setPlans`. */
+  excludedSets: string[];
   weaponEffectPicks: Record<string, EffectConstraint>;
   accessoryEffectPicks: Record<string, EffectConstraint>;
 }
