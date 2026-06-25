@@ -93,9 +93,9 @@
       `ResultRow` passé en `memo` avec handler stable (`index` + `onSelect` au lieu d'un
       `onClick` pré-fermé) → hover/tri/sélection ne re-rend que les lignes changées. Hauteur
       de ligne forcée (`RESULT_ROW_H`) = estimate exact, zéro drift de scroll. `BuilderScreen.tsx`.
-- [ ] 🟠 **Listeners `mousedown` document dupliqués** — `HeroSelect` et
-      `ExcludeHeroesPicker` attachent chacun un listener global et sont ~90% identiques.
-      Fix : hook partagé `useClickOutside`. `BuilderScreen.tsx:1068-1075,1255-1262`.
+- [x] 🟠 **Listeners `mousedown` document dupliqués** — ✅ corrigé : hook partagé
+      `useClickOutside(active, onOutside)` (callback via ref → dep `active` seulement),
+      utilisé par `HeroSelect` et `ExcludeHeroesPicker`. `BuilderScreen.tsx`.
 - [x] 🟡 **Doc-comment du cycle des chips Sets périmé** — ✅ corrigé : commentaire aligné
       sur `off → req-2pc → req-4pc → excluded` (cf. `nextSetChipState` + hint). `BuilderScreen.tsx`.
 - [ ] 🟡 **Colonnes manquantes vs filtres** — la table n'affiche que
