@@ -19,17 +19,22 @@
       parmi les valides = exact, plus de sous-retour. Re-checks au finalize devenus
       no-op idempotents. (Meilleur que le « gonfler topK ×4 » probabiliste initialement
       envisagé.) `engine.ts` (`solveChunk` + `finalizeBuilds`).
-- [ ] 🟠 **Hot-path : buckets recalculés inutilement** — la boucle interne talismans
-      appelle `computeFinalStats` → `aggregateGearBuckets`, qui re-somme les 8 pièces
-      ET recalcule `computeSetBonuses` à chaque talisman, alors que les set bonuses
-      ne dépendent que des pièces porteuses d'`armorSetId` (jamais du talisman :
-      `armorSetId: null` pour les ooparts, `parse.ts:194`). Le sous-ensemble
-      `{weapon…accessory, EE}` + set bonuses est invariant sur toute la boucle.
-      Fix : accumulateur de buckets incrémental (modèle `setCount`/`incSet`/`decSet`
-      déjà à côté, `engine.ts:799-806`) → coût par combo O(8) → ~O(1).
-      Garde-fou régression : lire `data/stat-locks.json` avant de toucher
-      `compose-stats.ts`/`composeMultStat` (memory `project_gear_solver_stat_locks`).
-      `engine.ts:678-689`, `composeBuild.ts:115-156`.
+- [~] 🟠 **Hot-path : buckets recalculés inutilement** — ✅ **partie set-bonus faite**
+      (la plus lourde) : `computeSetBonuses` hoisté hors de la boucle talismans (calculé
+      1× par combo accessory, passé via le nouveau param `precomputedSetBonuses` de
+      `aggregateGearBuckets`/`computeFinalStats`). Les set bonuses ne dépendant que des
+      `armorSetId` d'armure (jamais du talisman), c'est **bit-identique** au recompute
+      in-loop (mêmes valeurs, même ordre). `computeSetBonuses` rendu tolérant aux trous
+      (`p?.armorSetId`) car appelé avant que le slot talisman soit rempli. **3 tests
+      d'équivalence ajoutés** comme garde-fou (pas de stat-locks automatisé existant).
+      `composeBuild.ts`, `engine.ts`, `solver.test.ts`.
+  - [ ] **Déféré (volontairement)** : le re-sum des 6+EE pièces par talisman. Gain marginal
+        (additions simples vs le rebuild de Map des set bonuses déjà réglé), et **risque
+        d'ordre flottant** : le modèle `incSet/decSet` casserait la bit-identité (soustraction
+        flottante ≠ inverse exact de l'addition) et il n'existe aucun test stat-locks
+        automatisé pour rattraper une dérive ULP via `Math.trunc` dans `composeMultStat`.
+        À faire en préservant l'ordre exact (prefix `[0..5]` puis talisman puis EE/override/sets)
+        avec un test d'équivalence dédié.
 - [x] 🟠 **Workers en idle quand un pool est petit** — ✅ corrigé : `chunkCount =
       clamp(1, workers.length, maxPoolHit)` calculé depuis `precomputed.poolSizes` (max hit
       des slots partitionnables, ooparts↔`talisman`). Garde-fou : nouveau champ

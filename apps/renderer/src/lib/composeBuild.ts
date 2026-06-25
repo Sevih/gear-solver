@@ -62,7 +62,9 @@ export function computeSetBonuses(
   type Bucket = { count: number; bt4Count: number };
   const counts = new Map<string, Bucket>();
   for (const p of pieces) {
-    if (!p.armorSetId) continue;
+    // `p?.` tolerates a sparse `pieces` array — the solver hoists this call
+    // out of its talisman loop, where the talisman slot may not be filled yet.
+    if (!p?.armorSetId) continue;
     let b = counts.get(p.armorSetId);
     if (!b) { b = { count: 0, bt4Count: 0 }; counts.set(p.armorSetId, b); }
     b.count++;
@@ -112,10 +114,19 @@ export interface GemOverride {
  *  any override the current gems contribute to the buckets automatically.
  *  When `gemOverride` is supplied, Talisman/EE subs are SKIPPED and the
  *  pre-aggregated deltas are added in their place. */
+/** Result of `computeSetBonuses` — the active 2pc/4pc bonus stat options. */
+export type SetBonusList = ReadonlyArray<{ st: string; ap: string; v: number }>;
+
 export function aggregateGearBuckets(
   pieces: GearPiece[],
   game: GameData | null,
   gemOverride?: GemOverride,
+  /** Pre-computed set bonuses (`computeSetBonuses` output) to skip the
+   *  per-call recompute. Set bonuses depend only on the armor pieces'
+   *  `armorSetId`, so the solver hoists this out of its talisman loop (the
+   *  talisman never carries a set). Omitted → computed internally, identical
+   *  result (the BuildsScreen / non-solver path stays unchanged). */
+  precomputedSetBonuses?: SetBonusList,
 ): {
   flat: Record<string, number>; pct: Record<string, number>; buffPct: Record<string, number>;
 } {
@@ -144,7 +155,8 @@ export function aggregateGearBuckets(
     for (const k in gemOverride.flat) flat[k] = (flat[k] ?? 0) + (gemOverride.flat[k] ?? 0);
     for (const k in gemOverride.pct) pct[k] = (pct[k] ?? 0) + (gemOverride.pct[k] ?? 0);
   }
-  for (const b of computeSetBonuses(pieces, game?.sets ?? null)) {
+  const setBonuses = precomputedSetBonuses ?? computeSetBonuses(pieces, game?.sets ?? null);
+  for (const b of setBonuses) {
     const isRate = b.ap === "OAT_RATE";
     const statKey = setBonusStatKey(b.st, isRate);
     if (!statKey) continue;
@@ -185,8 +197,11 @@ export function computeFinalStats(
   pieces: GearPiece[],
   game: GameData | null,
   gemOverride?: GemOverride,
+  /** Hoisted set-bonus list (see `aggregateGearBuckets`) — the solver passes
+   *  it so the per-talisman compose doesn't rebuild it. */
+  precomputedSetBonuses?: SetBonusList,
 ): FinalStats {
-  const { flat, pct, buffPct } = aggregateGearBuckets(pieces, game, gemOverride);
+  const { flat, pct, buffPct } = aggregateGearBuckets(pieces, game, gemOverride, precomputedSetBonuses);
   return {
     atk: composeMultStat(scaling.atk, flat.atk ?? 0, pct.atkPct ?? 0, buffPct.atkPct ?? 0),
     def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0, buffPct.defPct ?? 0),

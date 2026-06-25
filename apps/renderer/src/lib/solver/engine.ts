@@ -17,6 +17,7 @@ import type { GearPiece, RolledStat } from "@gear-solver/core";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
 import {
   computeFinalStats,
+  computeSetBonuses,
   type FinalStats,
   type FinalStatsBaseline,
   type GemOverride,
@@ -691,6 +692,13 @@ export async function solveChunk(
             for (const accessory of slotPools.accessory) {
               if (aborted) break;
               pieces[5] = accessory;
+              // Set bonuses depend only on the armor pieces' `armorSetId`
+              // (weapon/accessory/talisman/EE never carry one), so they're
+              // invariant across the talisman loop. Compute them ONCE here
+              // (all relevant pieces are now set) instead of rebuilding the
+              // map inside every per-talisman compose. Bit-identical to the
+              // in-loop recompute — same pieces, same output order.
+              const setBonuses = computeSetBonuses(pieces, game?.sets ?? null);
               for (const talisman of slotPools.ooparts) {
                 permutations++;
                 if (permutations % tickEvery === 0 && !(await tick())) break;
@@ -702,7 +710,7 @@ export async function solveChunk(
                 // gems via their `subs` (correct in-game-equivalent stats).
                 const talismanSlots = talisman.enhanceLevel >= 5 ? 5 : 4;
                 const gemDelta = gemDeltaByTalismanSlots.get(talismanSlots) ?? null;
-                const fs = computeFinalStats(baseline, scaling, pieces, game, gemDelta ?? undefined);
+                const fs = computeFinalStats(baseline, scaling, pieces, game, gemDelta ?? undefined, setBonuses);
 
                 if (!passesSpecs(fs, statFilterSpecs)) continue;
 

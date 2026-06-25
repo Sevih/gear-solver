@@ -17,7 +17,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, Inventory, RolledStat, StatType } from "@gear-solver/core";
-import { aggregateGearBuckets, type GemOverride } from "../src/lib/composeBuild.js";
+import { aggregateGearBuckets, computeSetBonuses, type GemOverride } from "../src/lib/composeBuild.js";
 import { simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
 import type { SolveBuild } from "../src/lib/solver/types.js";
 import { calcBattlePower } from "../src/lib/solver/cp.js";
@@ -383,6 +383,73 @@ describe("aggregateGearBuckets — gem override equivalence", () => {
     const out = aggregateGearBuckets([weapon], game, override);
     expect(out.pct.atkPct).toBe(5);
     expect(out.pct.critRate).toBe(100); // override layered on top
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * SET BONUSES — hoisting guard. The solver computes the set-bonus list ONCE
+ * outside its talisman loop and passes it to aggregateGearBuckets. These
+ * tests pin that the precomputed-list path is byte-for-byte equivalent to the
+ * internal recompute, and that computeSetBonuses tolerates the sparse pieces
+ * array the hoist hands it (talisman slot not yet filled).
+ * ───────────────────────────────────────────────────────────────────────── */
+describe("aggregateGearBuckets — precomputed set bonuses (hoist equivalence)", () => {
+  const gameWithSet = {
+    ...game,
+    sets: {
+      S1: {
+        name: "Sharp",
+        levels: [
+          { level: 1, p2: { st: "ST_ATK", ap: "OAT_RATE", v: 150 }, p4: { st: "ST_NONE", ap: "", v: null } },
+          { level: 2, p2: { st: "ST_ATK", ap: "OAT_RATE", v: 200 }, p4: { st: "ST_NONE", ap: "", v: null } },
+        ],
+      },
+    },
+  } as unknown as GameData;
+
+  const armor = (slot: string, setId: string | null): GearPiece => ({
+    uid: `p-${slot}-${setId}`, itemId: 1, slot: slot as GearPiece["slot"], setId: null, armorSetId: setId,
+    rarity: "unique", star: 6, name: "", classLimit: null,
+    breakthrough: 0, reforgeCount: 0, enhanceLevel: 15, singularityLevel: 0,
+    ascended: false, locked: false, equippedBy: null,
+    main: [{ stat: "atk", value: 50, percent: false }],
+    subs: [{ stat: "atkPct", value: 3, percent: true }, { stat: "critRate", value: 4, percent: true }],
+  });
+
+  it("precomputed set-bonus list == internal recompute (2pc active)", () => {
+    const pieces = [armor("helmet", "S1"), armor("armor", "S1"), talismanWithGems([15037])];
+    const internal = aggregateGearBuckets(pieces, gameWithSet);
+    const pre = computeSetBonuses(pieces, gameWithSet.sets);
+    const hoisted = aggregateGearBuckets(pieces, gameWithSet, undefined, pre);
+    expect(hoisted.flat).toEqual(internal.flat);
+    expect(hoisted.pct).toEqual(internal.pct);
+    expect(hoisted.buffPct).toEqual(internal.buffPct);
+    // sanity: the 2pc Sharp bonus actually landed — atkPct = 3 + 3 (piece subs)
+    // + 150/10 (set 2pc OAT_RATE) + 2.4 (talisman ATK% gem 15037) = 23.4
+    expect(internal.pct.atkPct).toBeCloseTo(23.4, 5);
+  });
+
+  it("equivalence holds with a gem override layered on too", () => {
+    const pieces = [armor("helmet", "S1"), armor("armor", "S1"), talismanWithGems([15037])];
+    const override: GemOverride = { flat: {}, pct: { atkPct: 2.4 } };
+    const pre = computeSetBonuses(pieces, gameWithSet.sets);
+    const internal = aggregateGearBuckets(pieces, gameWithSet, override);
+    const hoisted = aggregateGearBuckets(pieces, gameWithSet, override, pre);
+    expect(hoisted.flat).toEqual(internal.flat);
+    expect(hoisted.pct).toEqual(internal.pct);
+    expect(hoisted.buffPct).toEqual(internal.buffPct);
+  });
+
+  it("computeSetBonuses tolerates a sparse pieces array (hole at the talisman slot)", () => {
+    const sparse: GearPiece[] = new Array(3);
+    sparse[0] = armor("helmet", "S1");
+    sparse[1] = armor("armor", "S1");
+    // index 2 (talisman) is intentionally a hole — the solver hoists the call
+    // before that slot is filled on the first iteration.
+    expect(() => computeSetBonuses(sparse, gameWithSet.sets)).not.toThrow();
+    // Same output as the dense [helmet, armor] array (the hole adds nothing).
+    expect(computeSetBonuses(sparse, gameWithSet.sets))
+      .toEqual(computeSetBonuses([armor("helmet", "S1"), armor("armor", "S1")], gameWithSet.sets));
   });
 });
 
