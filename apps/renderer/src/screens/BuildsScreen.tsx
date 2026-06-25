@@ -485,18 +485,65 @@ const ADVICE_REQUIRED_SLOTS: ReadonlyArray<SlotId> = [
   "weapon", "accessory", "helmet", "armor", "gloves", "boots",
 ];
 
-/** Auto-detect notable conditions on a build (missing pieces, broken sets,
- *  off-stat mains, …). Stub for now — return [] until we wire actual rules
- *  in. Keep pure: no IO, no Date, deterministic in `entry`.
+/** Display labels for the main-gear slots used in advice messages. */
+const ADVICE_SLOT_LABEL: Record<string, string> = {
+  weapon: "Weapon", accessory: "Accessory", helmet: "Helmet",
+  armor: "Armor", gloves: "Gloves", boots: "Boots",
+};
+
+/** Auto-detect notable conditions on a build. Pure + deterministic in
+ *  (`entry`, `game`) — no IO, no Date. Rules are intentionally conservative:
+ *  only high-confidence, data-driven observations (nothing that would require
+ *  guessing intent, e.g. "off-stat main" on the variable slots).
  *
- *  Gated on the 6 main-gear slots being filled (weapon + accessory + 4 armor
- *  pieces) — a half-equipped hero produces noisy / misleading suggestions, so
- *  we stay silent until the build is complete. */
-function computeAdvice(entry: ComposedEntry): AdviceItem[] {
-  for (const slot of ADVICE_REQUIRED_SLOTS) {
-    if (!entry.equipped.has(slot)) return [];
+ *  Rules:
+ *   1. Missing main-gear pieces — flag the empty slots on a partially-equipped
+ *      hero. Fully-unequipped heroes are already labeled "No gear" on the
+ *      card, so they stay silent. When pieces are missing we stop there: the
+ *      armor layout isn't settled yet, so set advice would be noise.
+ *   2. Lone set piece — a single piece of an armor set grants no bonus (no
+ *      1pc tier exists in-game), so it's a wasted slot.
+ *   3. 3/4 of a 4pc-capable set — the 4th piece completes the 4pc bonus.
+ *
+ *  Set tiers are read from `game.sets` (the T4 `level === 2` row, same
+ *  derivation as the Builder's set catalog) — no assumed set sizes. */
+function computeAdvice(entry: ComposedEntry, game: GameData | null): AdviceItem[] {
+  const { equipped, rawPieces } = entry;
+  // No gear at all → the card's "No gear" label covers it; stay silent.
+  if (equipped.size === 0) return [];
+
+  const out: AdviceItem[] = [];
+
+  // Rule 1 — missing main-gear pieces.
+  const missing = ADVICE_REQUIRED_SLOTS.filter((s) => !equipped.has(s));
+  if (missing.length > 0) {
+    out.push({ tone: "warn", text: `Missing: ${missing.map((s) => ADVICE_SLOT_LABEL[s] ?? s).join(", ")}` });
+    return out; // armor layout incomplete — defer set rules
   }
-  return [];
+
+  // Rules 2 + 3 — armor-set composition. Each equipped slot holds at most one
+  // piece, so the per-set count equals the distinct-slot count the in-game
+  // 2pc/4pc gate uses.
+  if (game?.sets) {
+    const countBySet = new Map<string, number>();
+    for (const p of rawPieces) {
+      if (!p.armorSetId) continue;
+      countBySet.set(p.armorSetId, (countBySet.get(p.armorSetId) ?? 0) + 1);
+    }
+    for (const [setId, n] of countBySet) {
+      const def = game.sets[setId];
+      const name = def?.name ?? `Set ${setId}`;
+      const t4 = def?.levels.find((l) => l.level === 2);
+      const has4pc = !!(t4?.p4 && t4.p4.st !== "ST_NONE" && t4.p4.v != null);
+      if (n === 1) {
+        out.push({ tone: "warn", text: `${name}: 1 piece — no set bonus active` });
+      } else if (n === 3 && has4pc) {
+        out.push({ tone: "tip", text: `${name}: 3/4 — one more piece completes 4pc` });
+      }
+    }
+  }
+
+  return out;
 }
 
 /** Build a sorted, comma-joined UID key for a set of gear pieces, EE pieces
@@ -594,7 +641,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
   const { char, equipped, stats, baseline, scaling, rawPieces, level, bp, meta, displayCharId, displayName, presetName } = entry;
   // Auto-detected observations — recomputed only when the entry identity
   // changes (composedRoster ref stays stable across filter/lock toggles).
-  const advice = useMemo(() => computeAdvice(entry), [entry]);
+  const advice = useMemo(() => computeAdvice(entry, game), [entry, game]);
   // Lock plumbing is debug-only — collapse everything to a no-lock state when
   // the debug toggle is off so the StatBlock renders plain values without
   // amber/rose tints or Δ badges.

@@ -134,11 +134,14 @@
       (init de `selectedUid`) et `onInitialHeroConsumed` (clear au mount pour ne pas
       re-présélectionner lors d'une visite normale). `App.tsx`, `BuildsScreen.tsx`,
       `BuilderScreen.tsx`.
-- [ ] 🔴 **`computeAdvice` est un stub (toujours `[]`)** — toute l'infra
-      `AdviceItem`/`AdviceList`/`ADVICE_REQUIRED_SLOTS` est branchée mais ne produit rien.
-      Décision : implémenter de vraies règles (set cassé, main off-stat, pièce manquante…)
-      ou retirer le code mort. La fonction doit rester pure (no IO/Date, déterministe).
-      `BuildsScreen.tsx:488-500`.
+- [x] 🔴 **`computeAdvice` est un stub (toujours `[]`)** — ✅ décision : **vraies règles**.
+      Implémentées, pures/déterministes en (`entry`, `game`), data-driven depuis `game.sets`
+      (ligne T4 `level===2`, même dérivation que le catalogue Builder) : (1) pièces manquantes
+      → warn « Missing: … » (héros nu = silencieux, label « No gear » couvre) ; (2) pièce de
+      set isolée → warn « 1 piece — no set bonus » ; (3) 3/4 d'un set capable de 4pc → tip
+      « one more piece completes 4pc ». **« main off-stat » volontairement écarté** (les slots
+      à main fixe ne peuvent pas être faux, les slots variables sont subjectifs → présomption
+      de mécanique évitée). `BuildsScreen.tsx`.
 - [x] 🔴 **Incohérence roster complet vs équipés** — ✅ décision : **garder tout le roster**.
       Pill réconciliée → « N equipped · M total » (`equippedCount` = héros avec ≥1 pièce,
       même sémantique que le badge d'onglet) + tooltip explicatif. Cartes sans gear :
