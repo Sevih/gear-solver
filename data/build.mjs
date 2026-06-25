@@ -222,6 +222,17 @@ for (const file of ["weapon", "accessory", "talisman", "ee"]) {
     effectIcons.set(String(r.id), r.effect_icon);
   }
 }
+// Primary, complete source for the unique-option (weapon/accessory) effect
+// icon: `ItemSpecialOptionTemplet.IconName`, keyed by `GroupID` (= the item's
+// UniqueOptionID = our `setId`). The curated outerpedia map above only covered
+// ~129 items; ISO covers all 680 unique options and agrees 100% where both
+// exist. Keyed by the first row seen per group (IconName is constant across
+// the per-tier levels). The curated map stays a fallback.
+const isoIconByGroup = new Map();
+for (const s of load("ItemSpecialOptionTemplet.json")) {
+  const gid = String(s.GroupID ?? "");
+  if (gid && s.IconName && !isoIconByGroup.has(gid)) isoIconByGroup.set(gid, s.IconName);
+}
 const armorSetIcons = new Map();
 // outerpedia-v2 ships the canonical localized "effect" strings for each
 // armor 4-piece set per piece-count + tier (`effect_{2|4}_{1|4}` — _1 is the
@@ -277,7 +288,11 @@ for (const it of load("ItemTemplet.json")) {
     mainGroup: it.MainOptionGroupID ?? null,
     subGroup: it.SubOptionGroupID ?? null,
     image: it.IconName || null,
-    effectIcon: effectIcons.get(String(it.ID)) ?? null,
+    // ISO IconName (complete game source) first, curated outerpedia map as
+    // fallback. `setId` (UniqueOptionID) can be a CSV — the GroupID is its
+    // first part (cf. the ItemSpecialOption resolution below).
+    effectIcon: (it.UniqueOptionID ? isoIconByGroup.get(String(it.UniqueOptionID).split(",")[0]) : null)
+      ?? effectIcons.get(String(it.ID)) ?? null,
     armorSetIcon: armorSetId ? (armorSetIcons.get(armorSetId) ?? null) : null,
     class: CLASS_NAME[it.ClassLimit] ?? null,
   };
