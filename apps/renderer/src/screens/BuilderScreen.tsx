@@ -535,8 +535,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           id: crypto.randomUUID(),
           name: name.trim() || placeholder,
           heroUid: selectedUid,
-          // Deep-copy via JSON round-trip + Set re-materialization so a later
-          // edit to the live `filters` doesn't mutate the stored snapshot.
+          // Shallow snapshot: only `excludedHeroes` (a Set) is re-materialized;
+          // `statFilters` / `mainPicks` / `setPicks` stay shared references.
+          // Safe today because the reducer is immutable (every action returns
+          // fresh objects, never mutates in place) — revisit with a
+          // structuredClone if a future action ever edits state in place.
           filters: { ...filters, excludedHeroes: new Set(filters.excludedHeroes) },
           createdAt: Date.now(),
         };
@@ -1797,7 +1800,9 @@ function EffectGroup({
  * the chip through its valid states; the surrounding panel owns the state
  * map. Two state machines:
  *  - effect chips:   off → required → excluded → off
- *  - set chips:      off → req-4pc → (req-2pc when has2pc) → excluded → off
+ *  - set chips:      off → req-2pc → req-4pc → excluded → off
+ *                    (each step the inventory/set can't form is skipped —
+ *                    cf. `nextSetChipState` + the Sets panel hint)
  * ───────────────────────────────────────────────────────────────────────── */
 type ChipState = "off" | "required" | "excluded";
 type SetChipState = "off" | "req-4pc" | "req-2pc" | "excluded";

@@ -91,10 +91,8 @@
 - [ ] 🟠 **Listeners `mousedown` document dupliqués** — `HeroSelect` et
       `ExcludeHeroesPicker` attachent chacun un listener global et sont ~90% identiques.
       Fix : hook partagé `useClickOutside`. `BuilderScreen.tsx:1068-1075,1255-1262`.
-- [ ] 🟡 **Doc-comment du cycle des chips Sets périmé** — le commentaire décrit
-      `off → req-4pc → req-2pc → excluded` alors que le code fait
-      `off → req-2pc → req-4pc → excluded` (confirmé par le hint panel). Fix : corriger
-      le commentaire. `BuilderScreen.tsx:1739` (faux), `:1757-1764` (réel), `:1642` (hint).
+- [x] 🟡 **Doc-comment du cycle des chips Sets périmé** — ✅ corrigé : commentaire aligné
+      sur `off → req-2pc → req-4pc → excluded` (cf. `nextSetChipState` + hint). `BuilderScreen.tsx`.
 - [ ] 🟡 **Colonnes manquantes vs filtres** — la table n'affiche que
       `SOLVER_STATS.slice(0, 8)` : `dmgUp/dmgRed/eff/res` sont filtrables mais invisibles
       en colonne → on peut filtrer sur `eff` sans jamais voir sa valeur. À documenter ou
@@ -102,11 +100,9 @@
 - [ ] 🟡 **Footer fixe + `flex-wrap` peut recouvrir le bandeau gear** — `FilterFooter`
       est `position:fixed` avec réservation fixe `pb-9` ; sur fenêtre étroite les 8 chips
       wrappent sur 2 lignes et recouvrent le bandeau gear. `BuilderScreen.tsx:562,2261`.
-- [ ] 🟡 **`saveCurrentPreset` : commentaire mensonger sur le deep-copy** — dit
-      « Deep-copy via JSON round-trip » mais ne re-matérialise que le `Set` ;
-      `statFilters`/`mainPicks`/`setPicks` restent des références partagées. OK par chance
-      (reducer immutable) mais piège. Fix : corriger le commentaire OU vrai
-      `structuredClone`. `BuilderScreen.tsx:478-481`.
+- [x] 🟡 **`saveCurrentPreset` : commentaire mensonger sur le deep-copy** — ✅ corrigé :
+      commentaire dit maintenant la vérité (snapshot shallow, seul `excludedHeroes`
+      re-matérialisé, sûr car reducer immutable). `BuilderScreen.tsx`.
 - [ ] ⚪ **Heatmap colore sur `v` brut** alors que la cellule affiche `fmt(v)` arrondi →
       une cellule peut être "plus verte" qu'une voisine de valeur affichée identique.
       Cosmétique. `BuilderScreen.tsx:2114,2123`.
