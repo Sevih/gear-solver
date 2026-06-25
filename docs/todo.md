@@ -44,8 +44,9 @@
       porte dessus (`statCols` memoïsé passé à `computeColumnRanges` + `ResultRow`). On ne filtre
       plus jamais sur une colonne invisible ; coût nul tant qu'aucun de ces filtres n'est posé.
       `BuilderScreen.tsx`.
-- [ ] ⚪ **Heatmap colore sur `v` brut** alors que la cellule affiche `fmt(v)` arrondi →
-      une cellule peut être "plus verte" qu'une voisine de valeur affichée identique. Cosmétique.
+- [x] ⚪ **Heatmap colore sur `v` brut** — ✅ fait : `roundDisplay()` extrait et partagé par `fmt`
+      ET `heatCellNew` → la teinte se calcule sur la valeur **affichée** (arrondie), deux cellules
+      au même rendu ont la même couleur. `BuilderScreen.tsx`.
 - [ ] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** alors que l'accessoire a un main
       user-sélectionnable → placeholder potentiellement faux quand aucun build sélectionné.
 - [x] ⚪ **Accessibilité combobox** — ✅ fait (HeroSelect) : navigation clavier (↑/↓ + Enter),

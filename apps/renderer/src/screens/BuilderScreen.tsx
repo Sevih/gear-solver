@@ -2273,18 +2273,26 @@ const ResultRow = memo(function ResultRow({
   );
 });
 
+/** Display rounding: integer at |v| ≥ 100, else one decimal. Shared by `fmt`
+ *  (the printed value) and `heatCellNew` (the shade) so a cell is never tinted
+ *  on a precision the user can't see — two cells printing the same number get
+ *  the same colour. */
+function roundDisplay(v: number): number {
+  return Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 10) / 10;
+}
+
 function fmt(v: number | null | undefined, unit: string): string {
   if (v == null) return "—";
-  const rounded = Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 10) / 10;
-  return `${rounded}${unit}`;
+  return `${roundDisplay(v)}${unit}`;
 }
 
 /** Continuous heatmap from rose (worst column value) to emerald (best),
  *  with neutral midline. Falls back to no shading when the column is flat
- *  (min === max) or the value is missing. */
+ *  (min === max) or the value is missing. Shades on the *displayed* (rounded)
+ *  value so identically-printed cells never differ in tint. */
 function heatCellNew(v: number | null | undefined, range: { min: number; max: number } | undefined): string {
   if (v == null || !range || !isFinite(range.min) || range.min === range.max) return "";
-  const t = (v - range.min) / (range.max - range.min);
+  const t = (roundDisplay(v) - range.min) / (range.max - range.min);
   if (t > 0.75) return "bg-emerald-500/20";
   if (t > 0.55) return "bg-emerald-500/10";
   if (t < 0.25) return "bg-rose-500/15";
