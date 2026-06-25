@@ -102,9 +102,9 @@
       `SOLVER_STATS.slice(0, 8)` : `dmgUp/dmgRed/eff/res` sont filtrables mais invisibles
       en colonne → on peut filtrer sur `eff` sans jamais voir sa valeur. À documenter ou
       rendre togglable. `BuilderScreen.tsx:1959` (header), `:2085` (rows).
-- [ ] 🟡 **Footer fixe + `flex-wrap` peut recouvrir le bandeau gear** — `FilterFooter`
-      est `position:fixed` avec réservation fixe `pb-9` ; sur fenêtre étroite les 8 chips
-      wrappent sur 2 lignes et recouvrent le bandeau gear. `BuilderScreen.tsx:562,2261`.
+- [x] 🟡 **Footer fixe + `flex-wrap` peut recouvrir le bandeau gear** — ✅ corrigé :
+      `flex-nowrap` + `overflow-x-auto` → le footer reste sur une ligne (scroll horizontal sur
+      fenêtre étroite) et ne dépasse plus la réservation `pb-9`. `BuilderScreen.tsx`.
 - [x] 🟡 **`saveCurrentPreset` : commentaire mensonger sur le deep-copy** — ✅ corrigé :
       commentaire dit maintenant la vérité (snapshot shallow, seul `excludedHeroes`
       re-matérialisé, sûr car reducer immutable). `BuilderScreen.tsx`.

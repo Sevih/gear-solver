@@ -2370,7 +2370,7 @@ function FilterFooter({
   // eye-flow is identical across tabs.
   const slots: SlotId[] = ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "exclusive", "talisman"];
   return (
-    <footer className="fixed bottom-0 left-0 right-0 z-30 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/8 bg-bg-elev-2/95 px-3 py-1.5 font-mono text-[10.5px] tabular-nums backdrop-blur-sm">
+    <footer className="fixed bottom-0 left-0 right-0 z-30 flex flex-nowrap items-center gap-x-3 overflow-x-auto whitespace-nowrap border-t border-white/8 bg-bg-elev-2/95 px-3 py-1.5 font-mono text-[10.5px] tabular-nums backdrop-blur-sm">
       <HoverHint
         className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70"
         name="Filter"
