@@ -595,9 +595,25 @@ export async function solveChunk(
   // per combo — typically 0-3 specs).
   const statFilterSpecs = compileFilterSpecs(filters.statFilters);
   const ratingFilterSpecs = compileFilterSpecs(filters.ratingFilters);
-  // CP filter is separate so we can skip it cheaply in SOLVE mode (CP is null
-  // there until finalize) and apply it once at the right time.
+  // CP filter is separate so we can skip it cheaply in SOLVE mode when no CP
+  // filter is set (CP is null there until finalize). When a CP filter IS set
+  // we apply it in the loop even in score mode (see the hot-loop note): a
+  // filter deferred to finalize evicts valid builds that ranked just outside
+  // the top-K-by-score heap, silently under-returning the result set.
   const cpFilter = filters.ratingFilters.cp;
+  // Upg filter has the same recall hazard: it can't be a hot-loop FilterSpec
+  // (it needs the hero's current loadout), but deferring it to finalize drops
+  // heap survivors a posteriori, evicting valid builds that ranked just
+  // outside top-K. So when an upg filter is set we resolve the equipped set
+  // up front and apply the filter IN the loop, before the build competes for
+  // a heap slot.
+  const upgFilter = filters.ratingFilters.upg;
+  const equippedUids = new Set<string>();
+  if (upgFilter) {
+    for (const g of req.inventory.gear) {
+      if (g.equippedBy === req.heroUid) equippedUids.add(g.uid);
+    }
+  }
 
   // Required-set feasibility at each armor depth — used for mid-tree prune.
   // At depth D (D armor slots iterated), remaining = 4 - D. For each
@@ -695,10 +711,15 @@ export async function solveChunk(
 
                 if (!passesRatingSpecs(ratings, score, ratingFilterSpecs)) continue;
 
-                // CP: hot-path in SOLVE CP (it's the sort key); deferred to
-                // finalize in SOLVE mode (only needed for the top-N).
+                // CP: hot-path in SOLVE CP (it's the sort key). In SOLVE mode
+                // it's normally deferred to finalize (only needed for the
+                // top-N display), BUT when a CP filter is active we must
+                // compute + apply it here — deferring the filter to finalize
+                // would let the heap fill with top-K-by-score builds and then
+                // drop the ones failing CP, evicting CP-passing builds that
+                // ranked just outside top-K (recall loss / under-return).
                 let cp: number | null = null;
-                if (mode === "cp") {
+                if (mode === "cp" || cpFilter) {
                   cp = calcBattlePower({
                     stats: fs,
                     showUIStar: starMeta.showUIStar,
@@ -709,6 +730,19 @@ export async function solveChunk(
                     fused: starMeta.fused,
                   });
                   if (cpFilter && !inMinMax(cp, cpFilter)) continue;
+                }
+
+                // Upg filter applied in-loop (see equippedUids note above) so
+                // the heap only holds builds that satisfy it — finalize still
+                // recomputes upg for display, but the constraint is enforced
+                // here so valid builds aren't evicted by soon-to-be-dropped
+                // higher-ranked ones.
+                if (upgFilter) {
+                  let upg = 0;
+                  for (let i = 0; i < piecesLen; i++) {
+                    if (!equippedUids.has(pieces[i]!.uid)) upg++;
+                  }
+                  if (!inMinMax(upg, upgFilter)) continue;
                 }
 
                 searched++;
@@ -746,10 +780,14 @@ export async function solveChunk(
 }
 
 /** Post-process the top-K from `solveChunk`:
- *  - SOLVE mode : compute CP for each surviving build (skipped in the hot
- *    loop for cost), drop builds that fail the user's CP range filter.
- *  - All modes : compute `upg` (slot swap count vs current loadout) since
- *    we have inventory + hero context here, not at heap-push time. */
+ *  - SOLVE mode, no CP filter : compute CP for each surviving build for the
+ *    UI's CP column (skipped in the hot loop for cost). When a CP filter IS
+ *    active the build already carries its CP (computed + filtered in-loop),
+ *    so the re-check below is an idempotent no-op.
+ *  - All modes : compute `upg` (slot swap count vs current loadout) for
+ *    display — the upg filter, when set, is already enforced in-loop, so the
+ *    re-check is likewise a no-op (the recall hazard of an a-posteriori CP/upg
+ *    filter is handled by enforcing both in `solveChunk`, not here). */
 export function finalizeBuilds(ctx: SolveContext, builds: SolveBuild[], mode: SolveMode): SolveBuild[] {
   const { req, ee, skills, starMeta } = ctx;
   const byUid = new Map<string, GearPiece>();
