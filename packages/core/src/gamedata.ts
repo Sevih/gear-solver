@@ -325,9 +325,15 @@ export interface CharacterDef {
   /** Stat this character's skill damage scales off, when it's NOT ATK — the
    *  solver's offensive ratings (`dmg`/`dmgs`/`mcd`) score against it instead.
    *  e.g. Caren → "def", HP-scalers → "hp". Omitted (→ "atk") for the ~106
-   *  ATK-scaling majority. Sourced from outerpedia's damage-calc `scalings.main`.
-   *  Secondary additive scalings (D.Stella's HP component) are not modeled yet. */
+   *  ATK-scaling majority. Sourced from outerpedia's damage-calc per-char buffs
+   *  (`scaling_swap`). The swap's constant ratio is intentionally dropped — it
+   *  doesn't change same-hero build ranking. */
   dmgStat?: "def" | "hp";
+  /** Additive secondary damage scalings — the damage base gains `stat × ratio`
+   *  for each (e.g. D.Stella → [{stat:"hp", ratio:0.03}]). Unlike the main swap,
+   *  these DO shift ranking (they value a second stat). Only atk/def/hp are
+   *  modeled. From outerpedia's `scaling_add_*` buffs (permille → ratio). */
+  dmgSec?: Array<{ stat: "atk" | "def" | "hp"; ratio: number }>;
   /** Null only if calc-stats couldn't find a row (defensive fallback). */
   ingredients: CharacterIngredients | null;
 }

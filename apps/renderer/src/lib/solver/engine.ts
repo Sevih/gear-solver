@@ -83,6 +83,9 @@ export interface PrecomputedSolveContext {
   /** Hero's damage-scaling stat (atk default; def/hp for off-ATK heroes) —
    *  the offensive ratings score against it. Constant per solve. */
   dmgStat: "atk" | "def" | "hp";
+  /** Additive secondary damage scalings (stat × ratio) — undefined for the
+   *  pure-single-stat majority. Constant per solve. */
+  dmgSec?: ReadonlyArray<{ stat: "atk" | "def" | "hp"; ratio: number }>;
   /** Set requirements as an OR-list of AND-plans. Used for branch-and-prune
    *  in the armor cartesian (feasible = at least one plan still reachable). */
   setPlans: SetPlan[];
@@ -332,6 +335,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     skills,
     starMeta,
     dmgStat: meta.dmgStat ?? "atk",
+    dmgSec: meta.dmgSec,
     setPlans,
     excludedSets,
     excludedWeaponEffects,
@@ -561,7 +565,7 @@ export async function solveChunk(
   options: SolveChunkOptions = {},
 ): Promise<SolveChunkResult> {
   const { req, pools, baseline, scaling, ee, gemDeltaByTalismanSlots, gemAllocByTalismanSlots,
-          scoredGems, setPlans, skills, starMeta, dmgStat } = ctx;
+          scoredGems, setPlans, skills, starMeta, dmgStat, dmgSec } = ctx;
   // EE gem-slot count is constant per solve (same EE piece across every combo).
   const eeSlots = gemSlotsOf(ee);
   const { mode, filters, game } = req;
@@ -727,7 +731,7 @@ export async function solveChunk(
 
                 if (!passesSpecs(fs, statFilterSpecs)) continue;
 
-                const ratings = computeCheapRatings(fs, dmgStat);
+                const ratings = computeCheapRatings(fs, dmgStat, dmgSec);
                 const score = computeScore(fs, filters.priority);
 
                 if (!passesRatingSpecs(ratings, score, ratingFilterSpecs)) continue;

@@ -854,21 +854,42 @@ save("codex-curve.json", ingredientsResult.codexByLevel);
 // ~122 entries (243 → 121, characters.json 1.5 MB → 800 KB) without
 // touching any runtime lookup — verified against the captured
 // user_character: zero captured CharID/FusionCharID fails this test.
-// Per-character damage-scaling stat, sourced from outerpedia's damage-calc
-// derived JSON (`scalings.main` ∈ ATK/DEF/HP). We only emit non-ATK (the
-// ~106-char ATK majority defaults to "atk" at the consumer). Main stat only —
-// secondary additive scalings (e.g. D.Stella's HP) need the BuffTemplet ratio
-// and aren't modeled yet.
-const SCALING_MAIN_TO_KEY = { DEF: "def", HP: "hp" }; // ATK omitted (default)
-function readDmgStat(charId) {
-  if (!OUTERPEDIA) return null;
-  const f = join(OUTERPEDIA, "public", "damage-calc", "chars", `${charId}.json`);
-  if (!existsSync(f)) return null;
+// Per-character damage scaling, read from outerpedia's already-extracted
+// per-char buff file (`public/damage-calc/buffs/{id}.json`). Each scaling buff
+// carries the engine `statRef` + a permille `amount`:
+//   - `scaling_swap`      → the skill swaps ATK for this stat (Caren → DEF).
+//   - `scaling_add_*`      → an additive secondary component (D.Stella + HP×3%).
+// We emit `dmgStat` (the swapped MAIN, only when non-ATK — its ratio is a
+// constant that doesn't change same-hero ranking) and `dmgSec` (secondaries
+// with their ratio, which DO shift ranking). Only damage-relevant stats
+// (atk/def/hp) are kept — `scaling_add` is overloaded for non-damage effects
+// (SPEED / gold / buff-chance) which aren't part of the damage base.
+const SCALING_STAT_TO_KEY = { ST_ATTACK: "atk", ST_DEF: "def", ST_HP: "hp" };
+const DMG_SEC_STATS = new Set(["atk", "def", "hp"]);
+function readDmgScaling(charId) {
+  if (!OUTERPEDIA) return {};
+  const f = join(OUTERPEDIA, "public", "damage-calc", "buffs", `${charId}.json`);
+  if (!existsSync(f)) return {};
   try {
-    const main = JSON.parse(readFileSync(f, "utf-8"))?.scalings?.main;
-    return SCALING_MAIN_TO_KEY[main] ?? null;
+    const buffs = JSON.parse(readFileSync(f, "utf-8"))?.buffs ?? [];
+    let dmgStat = null;
+    const secMax = new Map(); // stat -> max ratio (S1/S2/S3 repeat the same scaling)
+    for (const b of buffs) {
+      const e = b?.effect;
+      const key = e && SCALING_STAT_TO_KEY[e.statRef];
+      if (!key) continue;
+      if (e.target === "scaling_swap") {
+        if (key !== "atk") dmgStat = key; // ATK swap never happens; default stays atk
+      } else if (e.target === "scaling_add_pct" || e.target === "scaling_add_flat") {
+        if (!DMG_SEC_STATS.has(key)) continue;
+        const ratio = Number(e.amount) / 1000;
+        if (ratio > 0) secMax.set(key, Math.max(secMax.get(key) ?? 0, ratio));
+      }
+    }
+    const dmgSec = secMax.size > 0 ? [...secMax].map(([stat, ratio]) => ({ stat, ratio })) : null;
+    return { dmgStat, dmgSec };
   } catch {
-    return null;
+    return {};
   }
 }
 
@@ -884,7 +905,7 @@ for (const c of load("CharacterTemplet.json")) {
   // a literal "Core Fusion" prefix — their in-game NickName text (e.g.
   // "Eye of the Snowy Mountains") is flavor, not the variant identifier.
   const nickname = showNickName.has(c.ID) ? (textChar.get(c.NickNameID) ?? null) : null;
-  const dmgStat = readDmgStat(c.ID);
+  const { dmgStat, dmgSec } = readDmgScaling(c.ID);
   characters[c.ID] = {
     name: textChar.get(c.NameID) ?? null,
     nickname,
@@ -894,6 +915,7 @@ for (const c of load("CharacterTemplet.json")) {
     ingredients: ing ?? null,
     recommendSetId: c.RecommandSetOptionID && c.RecommandSetOptionID !== "0" ? c.RecommandSetOptionID : null,
     ...(dmgStat ? { dmgStat } : {}),
+    ...(dmgSec ? { dmgSec } : {}),
   };
 }
 save("characters.json", characters);

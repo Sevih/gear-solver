@@ -24,15 +24,15 @@
       flottante ≠ inverse exact) et aucun test stat-locks automatisé ne rattrape une dérive
       ULP via `Math.trunc` dans `composeMultStat`. À faire en préservant l'ordre exact
       (prefix `[0..5]` → talisman → EE/override/sets) avec un test d'équivalence dédié.
-- [~] 🔴 **Stat de dégats** — stat principale **faite**, secondaires en reste.
-      ✅ **Principale** : `build.mjs` lit `scalings.main` (outerpedia damage-calc) → émet `dmgStat`
-      (`def`/`hp`, ATK omis par défaut) sur `characters.json` ; `CharacterDef.dmgStat` ; précalculé
-      dans le contexte solver et passé à `computeCheapRatings(fs, dmgStat)` → `dmg/dmgs/mcd/mcds`
-      scalent sur la bonne stat (Caren→DEF, HP-scalers→HP ; 15 persos non-ATK). Labels colonne
-      `Dmg`/`DmgH` corrigés. Test dédié (101 tests).
-      - [ ] **Secondaires avec ratio** (ex. D.Stella ATK+HP×ratio) : `scalings.secondaries` ne porte
-        pas le ratio chiffré → il faut l'extraire de `BuffTemplet` (`BT_DMG_OWNER_STAT` Value) côté
-        pipeline, puis ajouter une composante additive dans `computeCheapRatings`. Non fait.
+- [x] 🔴 **Stat de dégats** — ✅ fait (principale + secondaires).
+      Source : `public/damage-calc/buffs/{id}.json` d'outerpedia (buffs déjà extraits **avec ratio**) —
+      la re-dérivation locale depuis `BuffTemplet` est bloquée (les buffs intermédiaires `charId_slot_lvl`
+      ne sont pas dans le subset synchronisé). `build.mjs readDmgScaling` lit `scaling_swap` → `dmgStat`
+      (main `def`/`hp`, ATK par défaut ; son ratio constant ignoré car n'affecte pas le classement
+      même-héros) et `scaling_add_*` → `dmgSec` `[{stat, ratio}]` (filtré à atk/def/hp ; permille→ratio).
+      `computeCheapRatings(fs, dmgStat, dmgSec)` : base = `mainStat + Σ secStat×ratio` → Caren=DEF,
+      D.Stella=ATK+HP×0.03 (10 persos avec secondaires, 16 non-ATK). `CharacterDef.dmgStat`/`dmgSec`,
+      threadé dans le contexte solver. Labels `Dmg`/`DmgH` corrigés. 2 tests dédiés (102 tests).
 - [x] 🔴 **Overcap critique** — ✅ fait : le Score et les ratings cappaient déjà CHC à 100 %, mais
       l'**allocateur de gemmes** notait chaque gemme isolément (précalcul global, CHC-aveugle) →
       empilait des gemmes crit au-delà de 100 %. Fix = **alloc gemmes par combo** consciente du cap
