@@ -1,58 +1,34 @@
 # TODO — backlog gear-solver (consolidé)
 
-> Backlog opérationnel unique, issu de la fusion de 4 listes (backlog M6.5/M7 +
-> 3 audits du 2026-06-25 : global, tab Builder, tab Builds). Doublons supprimés.
-> Le détail des milestones livrées vit dans [roadmap.md](roadmap.md).
+> Backlog opérationnel unique. Le détail des items **livrés** vit dans
+> l'historique git + la section « Livré » en bas (et [roadmap.md](roadmap.md)).
+> Priorités : 🔴 casse la confiance / fonctionnel · 🟠 perf · 🟡 UX-cohérence · ⚪ nit.
 >
-> Refs `fichier:ligne` valables au commit `1aecb11` (vérifiées 2026-06-25).
-> Priorités héritées des audits : 🔴 casse la confiance / fonctionnel · 🟠 perf ·
-> 🟡 UX-cohérence · ⚪ nit.
+> État au 2026-06-25 : **tous les 🔴 sont faits**, la quasi-totalité des 🟠 aussi.
+> Ce qui reste ci-dessous = polish 🟡/⚪, features, gros chantiers, ou « à vérifier en jeu ».
 
 ---
 
-## Solver / engine — correctness & perf
+## Solver / engine
 
-- [x] 🔴 **Recall : SOLVE + filtre CP/upg peut perdre des builds** — ✅ corrigé :
-      les filtres CP et upg sont désormais appliqués **dans la boucle** de `solveChunk`
-      (CP calculé en mode score dès qu'un `cpFilter` est posé ; `equippedUids` résolu
-      en amont pour l'upg) → le heap ne contient que des builds valides, top-K-par-score
-      parmi les valides = exact, plus de sous-retour. Re-checks au finalize devenus
-      no-op idempotents. (Meilleur que le « gonfler topK ×4 » probabiliste initialement
-      envisagé.) `engine.ts` (`solveChunk` + `finalizeBuilds`).
-- [~] 🟠 **Hot-path : buckets recalculés inutilement** — ✅ **partie set-bonus faite**
-      (la plus lourde) : `computeSetBonuses` hoisté hors de la boucle talismans (calculé
-      1× par combo accessory, passé via le nouveau param `precomputedSetBonuses` de
-      `aggregateGearBuckets`/`computeFinalStats`). Les set bonuses ne dépendant que des
-      `armorSetId` d'armure (jamais du talisman), c'est **bit-identique** au recompute
-      in-loop (mêmes valeurs, même ordre). `computeSetBonuses` rendu tolérant aux trous
-      (`p?.armorSetId`) car appelé avant que le slot talisman soit rempli. **3 tests
-      d'équivalence ajoutés** comme garde-fou (pas de stat-locks automatisé existant).
-      `composeBuild.ts`, `engine.ts`, `solver.test.ts`.
-  - [ ] **Déféré (volontairement)** : le re-sum des 6+EE pièces par talisman. Gain marginal
-        (additions simples vs le rebuild de Map des set bonuses déjà réglé), et **risque
-        d'ordre flottant** : le modèle `incSet/decSet` casserait la bit-identité (soustraction
-        flottante ≠ inverse exact de l'addition) et il n'existe aucun test stat-locks
-        automatisé pour rattraper une dérive ULP via `Math.trunc` dans `composeMultStat`.
-        À faire en préservant l'ordre exact (prefix `[0..5]` puis talisman puis EE/override/sets)
-        avec un test d'équivalence dédié.
-- [x] 🟠 **Workers en idle quand un pool est petit** — ✅ corrigé : `chunkCount =
-      clamp(1, workers.length, maxPoolHit)` calculé depuis `precomputed.poolSizes` (max hit
-      des slots partitionnables, ooparts↔`talisman`). Garde-fou : nouveau champ
-      `activeChunks` + flush sur `workersDone === activeChunks` (sinon attente infinie de
-      workers jamais sollicités). `orchestrator.ts`.
 - [ ] 🟡 **Footgun : filtres silencieux sur clé inconnue** — `passesSpecs` fait
       `if (typeof v !== "number") continue;` → une clé mal orthographiée (`critRate`
       au lieu de `crc`) laisse tout passer = filtre no-op invisible si UI et
       `FinalStats` divergent un jour. Fix : `console.warn` en dev sur clé inconnue.
-      `engine.ts:854-864`.
+      `engine.ts` (`passesSpecs`).
 - [ ] **CP fallback `chainPassive`** — déjà plumbé via `userSkills` ; vérifier qu'on
       lit la bonne colonne depuis l'inventaire capturé (`c.skills.chainPassive`).
+- [ ] 🟠 **Accumulateur de buckets — partie re-sum déférée** — le hoist des set bonuses
+      est fait (cf. Livré) ; reste le re-sum des 6+EE pièces par talisman. Gain marginal,
+      et **risque d'ordre flottant** : `incSet/decSet` casserait la bit-identité (soustraction
+      flottante ≠ inverse exact) et aucun test stat-locks automatisé ne rattrape une dérive
+      ULP via `Math.trunc` dans `composeMultStat`. À faire en préservant l'ordre exact
+      (prefix `[0..5]` → talisman → EE/override/sets) avec un test d'équivalence dédié.
 
 ### Perf solver (optionnel, seulement si profilage le justifie)
 
 - [ ] **Profiler un vrai solve** (Chrome DevTools Performance) sur un inventaire moyen
-      pour valider les 2-5 s visés. (L'inline de `aggregateGearBuckets` dans le hot
-      loop est déjà couvert par le fix incrémental ci-dessus.)
+      pour valider les 2-5 s visés.
 - [ ] **SharedArrayBuffer** pour le flag `cancelled` — élimine la latence postMessage
       du cancel. Nécessite COOP/COEP headers (Vite + électron prod).
 - [ ] **Object pool** pour `FinalStats` + `CheapRatings` — éviter d'allouer × millions.
@@ -63,172 +39,45 @@
 
 ## Tab Builder (`BuilderScreen.tsx` + solver)
 
-> App Electron desktop → la contrainte responsive-mobile du projet ne s'applique pas
-> ici (sauf fenêtre réduite, cf. #footer).
-
-- [x] 🔴 **L'allocation de gemmes recommandée n'est jamais affichée** — ✅ corrigé :
-      `BottomGearBand` propage `build.gemAllocation.talisman`/`.ee` aux `GearCard`
-      Talisman/EE ; nouveau composant `GemRecommendation` résout les OptionIDs via
-      `resolveStat(id, 1, game.options)` → liste stat/valeur + badge **swap** quand la
-      reco diffère des gemmes socketées actuelles (rien affiché si allocation vide =
-      gemmes conservées, ex. SOLVE sans priorité). Les stats affichées (calculées AVEC
-      ces gemmes en SOLVE CP) sont donc atteignables. `BuilderScreen.tsx`.
-- [x] 🔴 **Le bandeau du bas ignore les stats reforgées** — ✅ corrigé : `simulateReforges`
-      étant pur/déterministe, `BottomGearBand` re-simule côté main thread avec le contexte
-      solve-time (`useReforged` + `priority`, snapshotté au solve via `solveReforgeRef`,
-      propagé aux résultats live ET aux builds restaurés via un champ `reforge` optionnel
-      sur `SavedBuild`) → substats affichés = projection scorée par l'engine. Badge **reforged**
-      sur les cartes dont les subs sont projetés. `BuilderScreen.tsx`, `savedBuilds.ts`.
-- [x] 🔴 **Échecs silencieux (pas de feedback)** — ✅ corrigé :
-      - `startSolve` pose un `solveError` (« Game data is still loading… » / hero introuvable)
-        au lieu de `return` muet.
-      - État vide du `ResultsTable` : nouveau `emptyReason` dérivé de `poolSizes` →
-        liste les slots tombés à 0 après filtres (« Weapon: 0 pieces after filters »).
-        `BuilderScreen.tsx` (`startSolve`, `emptyReason`, `ResultsTable`).
-- [x] 🔴 **`restoreBuild` ne reset pas `solveError`** — ✅ corrigé :
-      `setSolveError(null)` ajouté en tête de `restoreBuild`. `BuilderScreen.tsx`.
-- [x] 🟠 **Table de résultats non virtualisée** — ✅ corrigé : tbody virtualisé via
-      `@tanstack/react-virtual` (même lib que l'Inventory) en technique spacer-rows (garde
-      `<table>` + thead sticky) ; seule la fenêtre visible (+overscan 12) est montée.
-      `ResultRow` passé en `memo` avec handler stable (`index` + `onSelect` au lieu d'un
-      `onClick` pré-fermé) → hover/tri/sélection ne re-rend que les lignes changées. Hauteur
-      de ligne forcée (`RESULT_ROW_H`) = estimate exact, zéro drift de scroll. `BuilderScreen.tsx`.
-- [x] 🟠 **Listeners `mousedown` document dupliqués** — ✅ corrigé : hook partagé
-      `useClickOutside(active, onOutside)` (callback via ref → dep `active` seulement),
-      utilisé par `HeroSelect` et `ExcludeHeroesPicker`. `BuilderScreen.tsx`.
-- [x] 🟡 **Doc-comment du cycle des chips Sets périmé** — ✅ corrigé : commentaire aligné
-      sur `off → req-2pc → req-4pc → excluded` (cf. `nextSetChipState` + hint). `BuilderScreen.tsx`.
-- [ ] 🟡 **Colonnes manquantes vs filtres** — la table n'affiche que
-      `SOLVER_STATS.slice(0, 8)` : `dmgUp/dmgRed/eff/res` sont filtrables mais invisibles
-      en colonne → on peut filtrer sur `eff` sans jamais voir sa valeur. À documenter ou
-      rendre togglable. `BuilderScreen.tsx:1959` (header), `:2085` (rows).
-- [x] 🟡 **Footer fixe + `flex-wrap` peut recouvrir le bandeau gear** — ✅ corrigé :
-      `flex-nowrap` + `overflow-x-auto` → le footer reste sur une ligne (scroll horizontal sur
-      fenêtre étroite) et ne dépasse plus la réservation `pb-9`. `BuilderScreen.tsx`.
-- [x] 🟡 **`saveCurrentPreset` : commentaire mensonger sur le deep-copy** — ✅ corrigé :
-      commentaire dit maintenant la vérité (snapshot shallow, seul `excludedHeroes`
-      re-matérialisé, sûr car reducer immutable). `BuilderScreen.tsx`.
+- [ ] 🟡 **Colonnes manquantes vs filtres** — la table n'affiche que `SOLVER_STATS.slice(0, 8)` :
+      `dmgUp/dmgRed/eff/res` sont filtrables mais invisibles en colonne → on peut filtrer sur
+      `eff` sans jamais voir sa valeur. À documenter ou rendre togglable.
 - [ ] ⚪ **Heatmap colore sur `v` brut** alors que la cellule affiche `fmt(v)` arrondi →
-      une cellule peut être "plus verte" qu'une voisine de valeur affichée identique.
-      Cosmétique. `BuilderScreen.tsx:2114,2123`.
+      une cellule peut être "plus verte" qu'une voisine de valeur affichée identique. Cosmétique.
 - [ ] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** alors que l'accessoire a un main
       user-sélectionnable → placeholder potentiellement faux quand aucun build sélectionné.
-      `BuilderScreen.tsx:2345-2349`.
 - [ ] ⚪ **Accessibilité combobox** — pas de navigation clavier (flèches), pas de
-      `role="listbox"`/`aria-activedescendant` ; inputs `type=number` modifiables à la
-      molette par accident. `BuilderScreen.tsx:1086,1397`.
-- [ ] **Heatmap des résultats : gradient interpolé** — actuellement bands fixes
-      (0.25/0.45/0.55/0.75), plus joli avec un vrai gradient (lerp HSL). *(distinct du
-      nit ci-dessus : ici c'est l'esthétique des paliers, là c'est brut-vs-affiché.)*
+      `role="listbox"`/`aria-activedescendant` ; inputs `type=number` modifiables à la molette.
+- [ ] ⚪ **Heatmap des résultats : gradient interpolé** — actuellement bands fixes
+      (0.25/0.45/0.55/0.75), plus joli avec un vrai gradient (lerp HSL).
 
 ---
 
 ## Tab Builds (`BuildsScreen.tsx`)
 
-> Roster équipé/composé (≠ "Saved builds" du Builder, qui vivent dans `savedBuilds.ts`).
-> Toute l'UI stat-lock/drift/copy-dump est `debug`-only (`gs.debug.statLocks`).
-
-- [x] 🔴 **Bouton « Optimize → » non câblé** — ✅ corrigé : `App` tient `builderHero`,
-      passe `onOptimize(uid)` à `BuildsScreen` (→ `BuildCard` → bouton) qui fait
-      `setBuilderHero(uid) + setTab("Builder")`. `BuilderScreen` reçoit `initialHeroUid`
-      (init de `selectedUid`) et `onInitialHeroConsumed` (clear au mount pour ne pas
-      re-présélectionner lors d'une visite normale). `App.tsx`, `BuildsScreen.tsx`,
-      `BuilderScreen.tsx`.
-- [x] 🔴 **`computeAdvice` est un stub (toujours `[]`)** — ✅ décision : **vraies règles**.
-      Implémentées, pures/déterministes en (`entry`, `game`), data-driven depuis `game.sets`
-      (ligne T4 `level===2`, même dérivation que le catalogue Builder) : (1) pièces manquantes
-      → warn « Missing: … » (héros nu = silencieux, label « No gear » couvre) ; (2) pièce de
-      set isolée → warn « 1 piece — no set bonus » ; (3) 3/4 d'un set capable de 4pc → tip
-      « one more piece completes 4pc ». **« main off-stat » volontairement écarté** (les slots
-      à main fixe ne peuvent pas être faux, les slots variables sont subjectifs → présomption
-      de mécanique évitée). `BuildsScreen.tsx`.
-- [x] 🔴 **Incohérence roster complet vs équipés** — ✅ décision : **garder tout le roster**.
-      Pill réconciliée → « N equipped · M total » (`equippedCount` = héros avec ≥1 pièce,
-      même sémantique que le badge d'onglet) + tooltip explicatif. Cartes sans gear :
-      grille dimmée (`opacity-40`) + label « No gear » au lieu d'une grille vide muette.
-      `BuildsScreen.tsx`. *(NB : compose/CP tourne toujours pour tous — perf non
-      adressée par choix « tout le roster » ; à profiler si besoin.)*
-- [x] 🟠 **`useStatLocks` fetch/persist même hors debug** — ✅ corrigé : `useStatLocks(debug)`,
-      l'effet (fetch + listener `beforeunload`) court-circuite si `!enabled`. `BuildsScreen.tsx`.
-- [x] 🟠 **Re-sort du roster à chaque toggle de lock** — ✅ corrigé : dep `lockedStats` du
-      `useMemo` remplacée par `locksDep = (debug && locks !== "all") ? lockedStats : null` →
-      un toggle de lock en filtre « all » ne re-trie plus. `BuildsScreen.tsx`.
-- [x] 🟡 **Carte non responsive** — ✅ corrigé : `flex-wrap` + `gap-x-4 gap-y-2` sur la carte
-      → les sections wrappent au lieu de déborder sur fenêtre étroite. `BuildsScreen.tsx`.
-- [x] 🟡 **`maxHeight: calc(100vh - 130px)` en dur** — ✅ corrigé : scroll-container en
-      `flex-1 min-h-0` (le parent est déjà `flex h-full min-h-0 flex-col`), plus de magic number.
-      `BuildsScreen.tsx`.
 - [ ] 🟡 **`SlotMini` non cliquable** — aucun moyen d'inspecter une pièce depuis la tab
-      Builds (tooltip/clic), contrairement à l'Inventory. `BuildsScreen.tsx:704`.
-- [x] ⚪ **Nettoyage** — ✅ corrigé : `round1` exporté depuis `composeBuild` (dédup) ·
-      `NoteField` cap unique (`maxLength`, slice redondant retiré) · `type="button"` ajouté
-      aux boutons filtres element/class/clear. `BuildsScreen.tsx`, `composeBuild.ts`.
+      Builds (tooltip/clic), contrairement à l'Inventory.
 
 ---
 
 ## Tab Inventory (`InventoryScreen.tsx`)
 
-> 1660 lignes. Audit `InventoryScreen.tsx`.
-
-- [x] 🔴 **Filtre `query` = code mort qui agit encore** — ✅ corrigé : champ recherche
-      réintroduit en tête du body de `FilterModal` (lié à `draft.query` + bouton clear),
-      utilise le `hay` existant. Incohérence réglée : `matchesFilters` trim désormais la
-      query (`if (q)` après `.trim()`) comme `activeFilterCount` → une query d'espaces ne
-      filtre plus en douce. `InventoryScreen.tsx`.
-- [x] 🟡 **`FilterModal` ne ferme pas avec Échap + pas de focus trap/autofocus** — ✅ corrigé :
-      effet keydown `Escape → onClose` (cohérent avec les comboboxes) + `autoFocus` sur le champ
-      recherche. (Focus-trap complet non fait — autofocus + Esc couvrent l'essentiel UX.)
-      `InventoryScreen.tsx`.
-- [x] 🟡 **Sélection dérivée de `sorted` et non de `ui`** — ✅ corrigé : `selected` dérivé de
-      `ui` (liste complète) via une Map `uiById` mémoïsée → garde le détail même si un filtre
-      masque la pièce, et drop le `.find()` O(n) par render. `InventoryScreen.tsx`.
 - [ ] **À vérifier EN JEU — Cap de Quality ne scale pas avec les étoiles** —
-      `computeQuality` (~L968) fixe `max = 14 + reforge.n` (14 = spread 4+4+3+3 d'une 6★),
-      mais `SubstatRow` (~L984) considère `isMax = s.lv >= stars` → une pièce 5★ plafonne ses
-      subs plus bas → risque que les < 6★ soient classées "Poor"/"Decent" et écartées par le
-      filtre Quality. **Confirmer en jeu** si le cap doit dépendre de `stars` (ne pas présumer).
+      `computeQuality` fixe `max = 14 + reforge.n` (14 = spread 4+4+3+3 d'une 6★), mais
+      `SubstatRow` considère `isMax = s.lv >= stars` → une pièce 5★ plafonne ses subs plus bas
+      → risque que les < 6★ soient classées "Poor"/"Decent" et écartées par le filtre Quality.
+      **Confirmer en jeu** si le cap doit dépendre de `stars` (ne pas présumer).
 - [ ] ⚪ **Optims mineures (si profilage)** — `computeQuality` recalculé plusieurs fois par
       pièce (précalculable dans `toUiPiece`) · double virtualisation (`contentVisibility:auto`
-      redondant avec `react-virtual`, ~L663) · 7 `useMemo` d'availability (~L1447-1498)
-      fusionnables en une passe.
+      redondant avec `react-virtual`) · 7 `useMemo` d'availability fusionnables en une passe.
 
 > ✅ À NE PAS toucher : virtualisation par lignes + reflow `ResizeObserver`, indexation
-> `charsByUid` en `Map`, auto-prune des chips indisponibles (~L1504), `memo` sur `GearTile`
-> avec callback stable, re-seed du draft à l'ouverture de la modal.
+> `charsByUid` en `Map`, auto-prune des chips indisponibles, `memo` sur `GearTile` avec
+> callback stable, re-seed du draft à l'ouverture de la modal.
 
 ---
 
-## Desktop / Electron (`apps/desktop`)
-
-### Robustesse démarrage + cleanup
-
-- [x] 🟠 **mitmdump orphelin** — ✅ corrigé : `res.on("close")` fait `taskkill /PID <pid> /T /F`
-      (tue l'arbre, pas juste powershell), fallback `child.kill()`. No-op dans le flux armé
-      normal (child déjà sorti). `server.ts`.
-- [x] 🟠 **Écran noir silencieux** — ✅ corrigé : `.catch` sur `app.whenReady()` →
-      `dialog.showErrorBox(...) + app.quit()`. `main.ts`.
-- [x] 🟠 **Crash serveur sur I/O** — ✅ corrigé : `stream.on("error", …)` dans `serveStatic`
-      (500 si headers pas envoyés, sinon `res.end()`). `server.ts`.
-- [x] 🟠 **`.mitm.pid` orphelin** — ✅ corrigé : helper `isArmed()` lit le PID + `process.kill(pid, 0)`
-      (liveness) ; pid mort → fichier nettoyé + not-armed. Utilisé dans status ET wipe. `server.ts`.
-- [x] 🟠 **Disarm bloquant 15 s** — ✅ corrigé : `disarmIfArmed` passe en `spawn` async (timeout 15 s
-      interne) ; `before-quit` ajoute un force-`app.exit()` à 16 s. `main.ts`, `server.ts`.
-
-### Sécurité (serveur 127.0.0.1, impact faible mais trivial à durcir)
-
-- [x] 🟡 **Pas de garde `Host`/`Origin`** sur les POST mutateurs — ✅ corrigé : helper
-      `isLocalRequest` (Host + Origin doivent être loopback) + garde unique sur tout `POST`
-      en tête de `handle()` → bloque CSRF/DNS-rebinding. `server.ts`.
-- [x] 🟡 **Redirection `/img/*` non validée** — ✅ corrigé : path validé contre `^[\w./%-]*$`
-      avant interpolation dans `Location` (rejette `:` et CR/LF → pas de response-splitting /
-      open-redirect), 400 sinon. `server.ts`.
-- [x] 🟡 **Body `/api/stat-locks` sans limite** — ✅ corrigé : cap 1 Mo, `413` + `req.destroy()`
-      au-delà. `server.ts`.
-
-> ✅ Spawn ADB/PowerShell partout en mode array (pas `shell:true`) → pas d'injection shell.
-> Garder ainsi.
-
-### Packaging (M7+)
+## Desktop / Electron — Packaging (M7+)
 
 - [ ] **Build prod du `data/`** — Vite middleware sert `data/derived` en dev ; pour le packaged
       build il faut baker dans le bundle ou copier dans `apps/desktop/resources` (aujourd'hui :
@@ -275,51 +124,56 @@
 
 ## Observabilité / debug
 
-- [ ] **Logging & debug un peu partout** — aujourd'hui le logging est quasi absent côté
-      renderer (1 seul `console.*`) et le solver/capture/desktop tournent en boîte noire.
-      Mettre en place un logger léger gaté sur les flags `gs.debug.*` (même pattern que
-      `gs.debug.statLocks`, `App.tsx:48`) plutôt que des `console.log` sauvages, et l'arroser
-      aux points chauds :
+- [ ] **Logging & debug un peu partout** — le logging est quasi absent côté renderer et le
+      solver/capture/desktop tournent en boîte noire. Mettre en place un logger léger gaté sur
+      les flags `gs.debug.*` (même pattern que `gs.debug.statLocks`) plutôt que des `console.log`
+      sauvages, et l'arroser aux points chauds :
   - Solver : fan-out orchestrateur (tailles de pools, `chunkCount`, workers utilisés),
     résultats par worker, compteurs de prune/combos visités, durée de solve.
-  - Capture / desktop : lifecycle serveur (`server.ts`), armed/disarm, erreurs I/O et
-    process orphelins (recoupe les items "Robustesse démarrage").
-  - Échecs silencieux : matérialiser en log + UI les `return` muets (`game == null`,
-    pool de slot = 0, clé de filtre inconnue) — recoupe **Échecs silencieux** (Builder) et
-    **Footgun filtres** (Solver, `console.warn` en dev).
-  - Brancher l'activation sur le **panneau Settings** des debug toggles (cf. UX/UI global)
-    pour ne rien afficher en usage normal.
+  - Capture / desktop : lifecycle serveur, armed/disarm, erreurs I/O et process orphelins.
+  - Footgun filtres : `console.warn` en dev sur clé de filtre inconnue (recoupe le 🟡 Solver).
+  - Brancher l'activation sur le **panneau Settings** des debug toggles.
 
 ---
 
-## Hygiene
+## Livré
 
-- [x] **Pre-existing TODOs dans le code** — ✅ traités :
-  - `docs/data-schema.md` — le "TODO: confirm" n'existe plus (faux positif d'audit) ;
-    la section substats a été réalignée sur `parse.ts` (Level = procs au-dessus du tick initial).
-  - `tools/capture/README.md` — TODO OptionID→stat **résolu** dans le README (le mapping est
-    fait via `options.json` / `resolveStat`), + même mislabel « Level (total ticks) » corrigé.
+### Session 2026-06-25 (détail dans git)
 
----
+**🔴 Correctness solver/UI** — recall filtre CP/upg appliqué in-loop (`a6aa67b`) · échecs
+silencieux + `restoreBuild`/`solveError` (`2e6def2`) · allocation de gemmes affichée (`20d3ce9`) ·
+bandeau projette les stats reforgées + badge (`8b1df0e`).
 
-## Stratégie suggérée (ordre)
+**🔴 Trous Builds** — bouton Optimize → câblé (`6f0617b`) · cohérence roster « N equipped · M
+total » + label No gear (`b832c7b`) · `computeAdvice` règles data-driven (`7700456`).
 
-1. **Correctness solver/UI** d'abord (confiance dans les résultats) : recall CP filter, gem
-   allocation non affichée, bandeau qui ignore le reforge, `restoreBuild`/`solveError`.
-2. **Trous fonctionnels Builds** : câbler **Optimize →**, trancher roster complet vs équipés
-   (débloque la perf compose), décider du sort de `computeAdvice`.
-3. **Perf hot-path** : accumulateur de buckets incrémental, workers idle, virtualisation des
-   tables de résultats.
-4. **Robustesse desktop** + durcissement sécurité (cheap wins).
-5. **Le reste** (UX, a11y, hygiène, perf optionnelle) au fil de l'eau, profilage à l'appui.
+**🔴 Inventory** — champ recherche restauré + incohérence `query`/trim réglée (`51a489e`).
 
----
+**🟠 Perf solver** — workers idle cappés à la taille du pool (`35bf809`) · table de résultats
+virtualisée + `memo(ResultRow)` (`197fc61`) · hoist `computeSetBonuses` hors boucle talismans,
+bit-identique + 3 tests d'équivalence (`92e84ca`).
 
-## Livré (rappel — détail dans roadmap.md)
+**🟠 Desktop robustesse** — mitmdump orphelin (taskkill /T), écran noir silencieux, crash I/O
+serveur, `.mitm.pid` liveness, disarm non bloquant (`c0f039c`). **Sécu** — gardes Host/Origin sur
+les POST, validation redirect `/img/*`, cap body stat-locks (`9f8fefe`).
+
+**🟠 Perf Builds** — `useStatLocks` gaté sur debug + re-sort roster court-circuité (`87306fe`).
+
+**🟡/⚪ Polish** — `useClickOutside` partagé (`5f6bb79`) · Inventory modal Esc+autofocus, détail
+dérivé de `ui` (`4f0649a`) · Builds carte responsive + scroll `flex-1` + hygiène round1/NoteField/
+type=button (`611c49f`) · footer Builder sur une ligne (`8203c25`) · doc-comments sets/preset
+(`a46ba66`).
+
+**Data** — split des BuffID EE séparés par virgule : 7 self-passifs droppés récupérés, dont le
++50% CHD d'Eris (`a6dfb16`).
+
+**Docs** — passe de cohérence : data-schema, reference §1.2 (noms kebab-case + Archive),
+STATUS, solver.md, roadmap, architecture (Electron), capture README.
+
+### Antérieur (rappel — détail dans roadmap.md)
 
 Solver M6.5 : cancel mid-solve (MessageChannel-yield) · panneau Library (Save/Remove build) ·
-Exclude-equipped multi-select · colonne Upg · simulation de reforge (`simulateReforges`) ·
-tri de colonnes. — Persistence M7 : Save Build per hero (localStorage) · Filter presets per hero. —
-Tests : solver-side stat-lock (24 tests, a caught un bug `ROLL_NORMS`) · gem override math ·
-top-K heap (5 tests). — Hygiene : suppression des stubs morts `packages/core/src/solver.ts` et
-`score.ts`.
+Exclude-equipped multi-select · colonne Upg · simulation de reforge · tri de colonnes. —
+Persistence M7 : Save Build per hero (localStorage) · Filter presets per hero. — Tests :
+solver-side stat-lock · gem override math · top-K heap. — Hygiene : suppression des stubs morts
+`packages/core/src/solver.ts` et `score.ts`.
