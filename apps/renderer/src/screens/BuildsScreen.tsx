@@ -391,7 +391,7 @@ type SetLocks = (next: LocksMap | ((prev: LocksMap) => LocksMap)) => void;
  *  latest snapshot wins; if the user navigates away mid-flight the
  *  beforeunload flush below covers the in-flight pending write. */
 const PERSIST_DEBOUNCE_MS = 300;
-function useStatLocks(): readonly [LocksMap, SetLocks] {
+function useStatLocks(enabled: boolean): readonly [LocksMap, SetLocks] {
   const [locks, setLocksRaw] = useState<LocksMap>({});
   const pendingRef = useRef<{ snapshot: LocksMap | null; timer: ReturnType<typeof setTimeout> | null }>({ snapshot: null, timer: null });
 
@@ -406,6 +406,10 @@ function useStatLocks(): readonly [LocksMap, SetLocks] {
   }, []);
 
   useEffect(() => {
+    // Stat-lock tooling is debug-only — skip the mount fetch + beforeunload
+    // listener entirely when it's off (normal usage), so the Builds tab makes
+    // no /api/stat-locks request and registers no global handler.
+    if (!enabled) return;
     fetch("/api/stat-locks")
       .then((r) => r.ok ? r.json() : {})
       .then((data: Record<string, LockEntry | Partial<FinalStats>>) => {
@@ -425,7 +429,7 @@ function useStatLocks(): readonly [LocksMap, SetLocks] {
       window.removeEventListener("beforeunload", onUnload);
       flush();
     };
-  }, [flush]);
+  }, [flush, enabled]);
 
   const setLocks = useCallback<SetLocks>((nextOrFn) => {
     setLocksRaw((prev) => {
@@ -871,7 +875,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
     [filtersRaw],
   );
 
-  const [lockedStats, setLockedStats] = useStatLocks();
+  const [lockedStats, setLockedStats] = useStatLocks(debug);
   // Per-character notes (UID → free-form text, max 200 chars). Persisted in
   // localStorage; survives reloads and re-captures. Initial shape is an empty
   // object — characters without an entry render an empty textarea.
@@ -972,6 +976,12 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
     });
   }, [inventory, game, userGeasLevels, userCodexLevel]);
 
+  // Lock state only affects the roster when a lock-based filter is active.
+  // Gate it out of the memo deps when `locks === "all"` (or debug is off) so a
+  // lock toggle doesn't pointlessly re-filter + re-sort the whole roster to an
+  // identical result. When a lock filter IS active, this is `lockedStats`, so
+  // the memo still recomputes on every toggle as needed.
+  const locksDep = (debug && filters.locks !== "all") ? lockedStats : null;
   // Cheap filter/sort pass — runs on every filter or lock-state change but
   // never re-touches the compose pipeline above.
   const roster = useMemo<ComposedEntry[]>(() => {
@@ -1004,7 +1014,10 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
         if (bp_ !== ap) return bp_ - ap;
         return (b.count - a.count) || (b.char.stars - a.char.stars);
       });
-  }, [composedRoster, filters, lockedStats, debug]);
+    // `lockedStats` is read in the filter but intentionally gated via `locksDep`
+    // so an "all"-filter lock toggle doesn't recompute — see locksDep above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composedRoster, filters, locksDep, debug]);
 
   // Heroes in the current (filtered) view with at least one piece equipped —
   // matches the tab badge's semantics (App counts distinct equipped chars).

@@ -143,13 +143,11 @@
       grille dimmée (`opacity-40`) + label « No gear » au lieu d'une grille vide muette.
       `BuildsScreen.tsx`. *(NB : compose/CP tourne toujours pour tous — perf non
       adressée par choix « tout le roster » ; à profiler si besoin.)*
-- [ ] 🟠 **`useStatLocks` fetch/persist même hors debug** — `fetch("/api/stat-locks")` au
-      montage + listener `beforeunload` alors que l'UI de lock est `debug`-only. Fix :
-      gater le hook sur `debug`. `BuildsScreen.tsx:408-428`.
-- [ ] 🟠 **Re-sort du roster à chaque toggle de lock** — le `useMemo` `roster` dépend de
-      `lockedStats` → filtre+tri relancés à chaque clic de lock même quand
-      `filters.locks === "all"` (résultat identique). Fix : court-circuiter quand
-      `locks === "all"`. `BuildsScreen.tsx:916-946`.
+- [x] 🟠 **`useStatLocks` fetch/persist même hors debug** — ✅ corrigé : `useStatLocks(debug)`,
+      l'effet (fetch + listener `beforeunload`) court-circuite si `!enabled`. `BuildsScreen.tsx`.
+- [x] 🟠 **Re-sort du roster à chaque toggle de lock** — ✅ corrigé : dep `lockedStats` du
+      `useMemo` remplacée par `locksDep = (debug && locks !== "all") ? lockedStats : null` →
+      un toggle de lock en filtre « all » ne re-trie plus. `BuildsScreen.tsx`.
 - [ ] 🟡 **Carte non responsive** — `flex items-center gap-4` avec 6 sections `shrink-0`,
       aucun `flex-wrap` → déborde horizontalement sur fenêtre étroite. `BuildsScreen.tsx:663`.
 - [ ] 🟡 **`maxHeight: calc(100vh - 130px)` en dur** — le parent est déjà
