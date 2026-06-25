@@ -232,8 +232,34 @@ async function captureScriptArgs(): Promise<string[]> {
   ];
 }
 
+/** DNS-rebinding / CSRF guard for the mutating endpoints. A page served from
+ *  another origin but pointed at 127.0.0.1 still carries its own hostname in
+ *  the `Host` (and `Origin`) header, so requiring a loopback host blocks it
+ *  from POSTing to `/api/capture/*` or `/api/stat-locks`. Same-origin
+ *  requests from our own renderer always pass. */
+function isLocalRequest(req: IncomingMessage): boolean {
+  const host = (req.headers.host ?? "").split(":")[0];
+  if (host !== "127.0.0.1" && host !== "localhost") return false;
+  const origin = req.headers.origin;
+  if (origin) {
+    try {
+      const h = new URL(origin).hostname;
+      if (h !== "127.0.0.1" && h !== "localhost") return false;
+    } catch { return false; }
+  }
+  return true;
+}
+
 function handle(req: IncomingMessage, res: ServerResponse): void {
   const url = (req.url ?? "/").split("?")[0]!;
+
+  // Reject cross-origin mutations up front (every state-changing endpoint is
+  // a POST). GET asset/data routes stay open — they expose nothing sensitive.
+  if (req.method === "POST" && !isLocalRequest(req)) {
+    res.statusCode = 403;
+    res.end("forbidden: non-local origin");
+    return;
+  }
 
   // --- capture pipeline endpoints ---
   // captureScriptArgs is async (emulator detection probes TCP ports), so we
@@ -314,8 +340,23 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   }
   if (url === "/api/stat-locks" && req.method === "POST") {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
+    let size = 0;
+    let aborted = false;
+    const MAX_BODY = 1_000_000; // ~1 MB — stat-locks snapshots are a few KB
+    req.on("data", (c: Buffer) => {
+      if (aborted) return;
+      size += c.length;
+      if (size > MAX_BODY) {
+        aborted = true;
+        res.statusCode = 413;
+        res.end("payload too large");
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => {
+      if (aborted) return;
       try {
         const body = Buffer.concat(chunks).toString("utf-8");
         JSON.parse(body); // validate
@@ -353,6 +394,15 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
       // file not bundled — fall through to outerpedia.com 302
     }
     const path = url.slice("/img/".length);
+    // The path is interpolated into a Location header — reject anything
+    // outside safe URL-path chars so a CR/LF or `:` can't inject a header or
+    // swing the redirect off `OUTERPEDIA_IMAGE_BASE` (response-splitting /
+    // open-redirect). Encoded image paths only ever use these chars.
+    if (!/^[\w./%-]*$/.test(path)) {
+      res.statusCode = 400;
+      res.end("bad image path");
+      return;
+    }
     res.statusCode = 302;
     res.setHeader("Location", `${OUTERPEDIA_IMAGE_BASE}/${path}`);
     res.end();

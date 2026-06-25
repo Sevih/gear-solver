@@ -221,15 +221,14 @@
 
 ### Sécurité (serveur 127.0.0.1, impact faible mais trivial à durcir)
 
-- [ ] 🟡 **Pas de garde `Host`/`Origin`** sur les POST mutateurs — tout site ouvert localement
-      peut POST `/api/capture/run` ou `/wipe` (port fixe `17891`, CSRF/DNS-rebinding). Fix :
-      rejeter si `Host` ≠ `127.0.0.1:<port>` + header custom (soumis au preflight).
-      `server.ts:198-237`.
-- [ ] 🟡 **Redirection `/img/*` non validée** — path non décodé/normalisé →
-      response-splitting/open-redirect. Fix : borner à `[\w./-]`, strip `..` et CRLF.
-      `server.ts:310-313`.
-- [ ] 🟡 **Body `/api/stat-locks` sans limite** — cap à ~1 Mo, `res.destroy()` au-delà.
-      `server.ts:271-285`.
+- [x] 🟡 **Pas de garde `Host`/`Origin`** sur les POST mutateurs — ✅ corrigé : helper
+      `isLocalRequest` (Host + Origin doivent être loopback) + garde unique sur tout `POST`
+      en tête de `handle()` → bloque CSRF/DNS-rebinding. `server.ts`.
+- [x] 🟡 **Redirection `/img/*` non validée** — ✅ corrigé : path validé contre `^[\w./%-]*$`
+      avant interpolation dans `Location` (rejette `:` et CR/LF → pas de response-splitting /
+      open-redirect), 400 sinon. `server.ts`.
+- [x] 🟡 **Body `/api/stat-locks` sans limite** — ✅ corrigé : cap 1 Mo, `413` + `req.destroy()`
+      au-delà. `server.ts`.
 
 > ✅ Spawn ADB/PowerShell partout en mode array (pas `shell:true`) → pas d'injection shell.
 > Garder ainsi.
