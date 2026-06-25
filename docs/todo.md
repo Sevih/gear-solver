@@ -59,12 +59,16 @@
 - [x] 🔴 **Colonne Set cassée** — rendait `—`, jamais implémentée → set tags par build (icône + tier 2/4) (`500fb26`).
 - [x] 🟡 **Colonnes arme + accessoire** — effets d'arme/accessoire par build (icône + nom au survol), toggleables
       via le menu Columns (`a08f9b6`).
-- [ ] 🟠 **Solve sous-utilise le CPU** — pendant un solve, CPU ~25% max mais temp 70-80° : le pool de workers ne
-      sature pas les cœurs. Investiguer la parallélisation (taille du pool, découpe des chunks, idle workers).
+> **▶ Prochaine session** — les 2 items ci-dessous restent du review post-direction-B (tout le reste est livré).
+
 - [ ] 🟡 **Reforge / upgrade dans la gear band** — représenter les pièces qui **nécessitent une upgrade** + les
       **ticks extrapolés**. **3 modes globaux** (s'appliquent à tout le solver, remplacent le bool `useReforged`) :
       **classic** = +10 T4 / 6 ticks · **ascended** = +15 T4 / 9 ticks · **disable**. La présentation des cartes
       diffère selon le mode (badge upgrade + ticks projetés).
+      *Point de départ : cartographier `simulateReforges` + le flux `useReforged` (BuilderScreen `solveReforgeRef`/
+      `resultsReforge` + gear band) avant de coder l'enum 3 états.*
+- [ ] 🟠 **Solve sous-utilise le CPU** — pendant un solve, CPU ~25% max mais temp 70-80° : le pool de workers ne
+      sature pas les cœurs. Investiguer la parallélisation (taille du pool, découpe des chunks, idle workers).
 
 ### Features
 - [ ] **Settings — options globales** — panneau pour worker count override · topK/topN · heatmap on/off
