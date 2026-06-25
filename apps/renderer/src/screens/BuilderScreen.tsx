@@ -724,13 +724,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   }
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden p-2 pb-9">
-      <TopPanelBand
+      <BuilderToolbar
         heroes={inventory.characters}
         game={game}
         selectedUid={selectedUid}
         onSelect={setSelectedUid}
-        composition={composition}
-        projectedStats={selectedBuild?.finalStats ?? null}
         armorSets={armorSetCatalog}
         weaponEffects={weaponEffectCatalog}
         accessoryEffects={accessoryEffectCatalog}
@@ -761,22 +759,31 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           rows={resultRows}
           onRowsChange={setResultRows}
         />
-        <RightSidebar
-          canSave={selectedBuild != null}
-          canSavePreset={selectedUid != null}
-          onSaveBuild={saveCurrentBuild}
-          onSavePreset={saveCurrentPreset}
-          canGetPreset={selectedUid != null}
-          onGetPreset={() => void getPreset()}
-          recoBusy={recoBusy}
-          recoStatus={recoStatus}
-          savedBuilds={savedBuildsForHero}
-          onRestoreBuild={restoreBuild}
-          onRemoveBuild={removeBuildById}
-          presets={presetsForHero}
-          onLoadPreset={loadPreset}
-          onRemovePreset={removePresetById}
-        />
+        {/* Right column — projected stats over the library. Direction B keeps
+         *  this thin so the results table dominates the width. */}
+        <div className="flex w-72 shrink-0 flex-col gap-2 overflow-y-auto">
+          <StatsPanel
+            stats={composition?.current ?? null}
+            projected={selectedBuild?.finalStats ?? null}
+            width="w-full"
+          />
+          <RightSidebar
+            canSave={selectedBuild != null}
+            canSavePreset={selectedUid != null}
+            onSaveBuild={saveCurrentBuild}
+            onSavePreset={saveCurrentPreset}
+            canGetPreset={selectedUid != null}
+            onGetPreset={() => void getPreset()}
+            recoBusy={recoBusy}
+            recoStatus={recoStatus}
+            savedBuilds={savedBuildsForHero}
+            onRestoreBuild={restoreBuild}
+            onRemoveBuild={removeBuildById}
+            presets={presetsForHero}
+            onLoadPreset={loadPreset}
+            onRemovePreset={removePresetById}
+          />
+        </div>
         {recoPicker && (
           <RecoBuildPicker
             reco={recoPicker}
@@ -1077,10 +1084,14 @@ function mainStatCatalogFromInventory(
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Top band — 8 panels in a horizontal row (overflows on small widths)
+ * Builder toolbar — Direction B (toolbar + popovers). A slim top bar carries
+ * the always-needed controls (hero · Solve / Solve CP · two quick toggles);
+ * the heavier filters live behind labeled popovers with active-count badges,
+ * so the results table below can run near edge-to-edge. Each popover reuses
+ * the existing panel components verbatim — only the layout/chrome is new.
  * ───────────────────────────────────────────────────────────────────────── */
-function TopPanelBand({
-  heroes, game, selectedUid, onSelect, composition, projectedStats,
+function BuilderToolbar({
+  heroes, game, selectedUid, onSelect,
   armorSets, weaponEffects, accessoryEffects, mainStatCatalogs,
   filters, dispatch,
   solving, canSolve, onSolve, onCancelSolve,
@@ -1089,10 +1100,6 @@ function TopPanelBand({
   game: GameData | null;
   selectedUid: string | null;
   onSelect: (uid: string | null) => void;
-  composition: SelectedComposition | null;
-  /** finalStats from the selected build in the results table, or null when
-   *  no row is selected — drives the right column of `StatsPanel`. */
-  projectedStats: FinalStats | null;
   armorSets: ArmorSetEntry[];
   weaponEffects: EffectEntry[];
   accessoryEffects: EffectEntry[];
@@ -1104,39 +1111,201 @@ function TopPanelBand({
   onSolve: (mode: SolveMode) => void;
   onCancelSolve: () => void;
 }) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const close = () => setOpenKey(null);
+  const toggle = (k: string) => setOpenKey((cur) => (cur === k ? null : k));
+
+  // Active-count badges — how many constraints each popover currently holds,
+  // so the user can see what's set without opening every one.
+  const statCount = Object.keys(filters.statFilters).length;
+  const ratingCount = Object.keys(filters.ratingFilters).length;
+  const priorityCount = Object.keys(filters.priority).length;
+  const mainCount = Object.values(filters.mainPicks)
+    .reduce((n, m) => n + Object.values(m).filter(Boolean).length, 0);
+  const setCount = filters.setPlans.filter((p) => p.length > 0).length + filters.excludedSets.length;
+  const effectCount = Object.keys(filters.weaponEffectPicks).length + Object.keys(filters.accessoryEffectPicks).length;
+  // Options badge counts only the constraints NOT surfaced as inline toggles
+  // (include-equipped flipped off, keep-current on, plus each excluded hero).
+  const optionCount =
+    (filters.options.includeEquippedOnOthers ? 0 : 1) +
+    (filters.options.keepCurrent ? 1 : 0) +
+    filters.excludedHeroes.size;
+
   return (
-    <div className="flex shrink-0 flex-wrap gap-2 pb-1">
-      <HeroPanel
-        heroes={heroes}
-        game={game}
-        value={selectedUid}
-        onChange={onSelect}
-        onResetFilters={() => dispatch({ type: "resetAll" })}
-        solving={solving}
-        canSolve={canSolve}
-        onSolve={onSolve}
-        onCancelSolve={onCancelSolve}
+    <div className="relative flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-white/8 bg-bg-elev-2 px-2.5 py-2">
+      <div className="w-48 shrink-0">
+        <HeroSelect heroes={heroes} game={game} value={selectedUid} onChange={onSelect} />
+      </div>
+      {solving ? (
+        <button
+          type="button"
+          onClick={onCancelSolve}
+          className="h-9 shrink-0 rounded-lg border border-rose-400/40 bg-rose-500/10 px-5 text-[12px] font-bold uppercase tracking-wider text-rose-200 transition-colors hover:bg-rose-500/20"
+        >
+          Cancel
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onSolve("score")}
+          disabled={!canSolve}
+          style={{
+            background: "linear-gradient(180deg,#22d3ee,#0bb6d4)",
+            boxShadow: "0 0 0 1px rgba(34,211,238,0.5),0 6px 16px -6px rgba(34,211,238,0.6)",
+          }}
+          className="h-9 shrink-0 rounded-lg px-5 text-[12px] font-bold uppercase tracking-wider text-[#06262b] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Solve
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => onSolve("cp")}
+        disabled={!canSolve || solving}
+        className="h-9 shrink-0 rounded-lg border border-cyan-400/40 bg-cyan-400/8 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-cyan-300 transition-colors hover:bg-cyan-400/16 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Solve CP
+      </button>
+      <ToolbarDivider />
+      <ToolbarToggle
+        label="Reforged"
+        on={filters.options.useReforged}
+        onClick={() => dispatch({ type: "setOption", key: "useReforged", value: !filters.options.useReforged })}
       />
-      <StatsPanel stats={composition?.current ?? null} projected={projectedStats} />
-      <OptionsPanel
-        options={filters.options}
-        excludedHeroes={filters.excludedHeroes}
-        heroes={heroes}
-        game={game}
-        dispatch={dispatch}
+      <ToolbarToggle
+        label="Maxed only"
+        on={filters.options.onlyMaxed}
+        onClick={() => dispatch({ type: "setOption", key: "onlyMaxed", value: !filters.options.onlyMaxed })}
       />
-      <StatFiltersPanel filters={filters.statFilters} dispatch={dispatch} />
-      <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} />
-      <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
-      <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} dispatch={dispatch} />
-      <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />
-      <WeaponsAccessoriesPanel
-        weapons={weaponEffects}
-        accessories={accessoryEffects}
-        weaponPicks={filters.weaponEffectPicks}
-        accPicks={filters.accessoryEffectPicks}
-        dispatch={dispatch}
-      />
+      <ToolbarDivider />
+      <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
+        <OptionsPanel options={filters.options} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
+      </PopoverButton>
+      <PopoverButton label="Stat filters" count={statCount} openKey={openKey} myKey="stat" onToggle={toggle} onClose={close}>
+        <StatFiltersPanel filters={filters.statFilters} dispatch={dispatch} />
+      </PopoverButton>
+      <PopoverButton label="Ratings" count={ratingCount} openKey={openKey} myKey="rating" onToggle={toggle} onClose={close}>
+        <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} />
+      </PopoverButton>
+      <PopoverButton label="Priority" count={priorityCount} accent="violet" openKey={openKey} myKey="priority" onToggle={toggle} onClose={close}>
+        <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
+      </PopoverButton>
+      <PopoverButton label="Mains" count={mainCount} openKey={openKey} myKey="mains" onToggle={toggle} onClose={close}>
+        <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} dispatch={dispatch} />
+      </PopoverButton>
+      <PopoverButton label="Sets" count={setCount} accent="violet" align="right" openKey={openKey} myKey="sets" onToggle={toggle} onClose={close}>
+        <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />
+      </PopoverButton>
+      <PopoverButton label="Effects" count={effectCount} align="right" openKey={openKey} myKey="effects" onToggle={toggle} onClose={close}>
+        <WeaponsAccessoriesPanel
+          weapons={weaponEffects}
+          accessories={accessoryEffects}
+          weaponPicks={filters.weaponEffectPicks}
+          accPicks={filters.accessoryEffectPicks}
+          dispatch={dispatch}
+        />
+      </PopoverButton>
+      <button
+        type="button"
+        onClick={() => dispatch({ type: "resetAll" })}
+        className="ml-auto shrink-0 text-[11px] text-white/50 underline-offset-2 hover:text-white/80 hover:underline"
+      >
+        reset filters
+      </button>
+    </div>
+  );
+}
+
+/** Slim divider between toolbar groups. */
+function ToolbarDivider() {
+  return <span className="h-6 w-px shrink-0 bg-white/10" />;
+}
+
+/** Compact inline toggle pill (the two always-visible quick options). */
+function ToolbarToggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={cx(
+        "flex h-7 shrink-0 items-center gap-2 rounded-lg border px-2.5 text-[11px] transition-colors",
+        on ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-200" : "border-white/10 bg-white/4 text-white/70 hover:text-white",
+      )}
+    >
+      <span
+        className={cx(
+          "relative h-4 w-7 shrink-0 rounded-full border transition-colors",
+          on ? "border-cyan-400/55 bg-cyan-400/25" : "border-white/10 bg-zinc-700",
+        )}
+      >
+        <span
+          className={cx(
+            "absolute top-px h-3 w-3 rounded-full transition-all",
+            on ? "left-[13px] bg-cyan-300" : "left-px bg-zinc-400",
+          )}
+        />
+      </span>
+      {label}
+    </button>
+  );
+}
+
+/** Toolbar popover trigger — a labeled pill with an optional active-count
+ *  badge that floats its children (an existing filter panel) below on click.
+ *  Only one popover is open at a time (driven by the parent's `openKey`);
+ *  outside-click and Escape close it. `accent` tints the active state /
+ *  badge (cyan default, violet for priority/sets). `align="right"` anchors
+ *  the floating panel to the trigger's right edge so right-side popovers
+ *  don't overflow the viewport. */
+function PopoverButton({
+  label, count, accent = "cyan", align = "left", openKey, myKey, onToggle, onClose, children,
+}: {
+  label: string;
+  count: number;
+  accent?: "cyan" | "violet";
+  align?: "left" | "right";
+  openKey: string | null;
+  myKey: string;
+  onToggle: (k: string) => void;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const open = openKey === myKey;
+  const ref = useClickOutside<HTMLDivElement>(open, onClose);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  const activeTone = accent === "violet"
+    ? "border-violet-400/50 bg-violet-400/12 text-violet-200 shadow-[0_0_16px_-4px_rgba(157,81,255,0.5)]"
+    : "border-cyan-400/50 bg-cyan-400/12 text-cyan-200 shadow-[0_0_16px_-4px_rgba(34,211,238,0.5)]";
+  const badgeTone = accent === "violet" ? "bg-violet-400/25 text-violet-200" : "bg-cyan-400/20 text-cyan-200";
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => onToggle(myKey)}
+        aria-expanded={open}
+        className={cx(
+          "flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition-colors",
+          open ? activeTone : "border-white/10 bg-white/4 text-white/70 hover:text-white",
+        )}
+      >
+        {label}
+        {count > 0 && (
+          <span className={cx("rounded px-1.5 font-mono text-[9px] tabular-nums", badgeTone)}>{count}</span>
+        )}
+        <span className="text-[8px] text-white/40">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className={cx("absolute top-[calc(100%+8px)] z-40 rounded-lg shadow-2xl shadow-black/60", align === "right" ? "right-0" : "left-0")}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -1168,53 +1337,6 @@ function Panel({ title, hint, action, children, width }: {
       </header>
       <div className="mt-1.5">{children}</div>
     </section>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
- * Hero panel — picker + portrait + action buttons stack
- * ───────────────────────────────────────────────────────────────────────── */
-function HeroPanel({
-  heroes, game, value, onChange, onResetFilters,
-  solving, canSolve, onSolve, onCancelSolve,
-}: {
-  heroes: Inventory["characters"];
-  game: GameData | null;
-  value: string | null;
-  onChange: (uid: string | null) => void;
-  onResetFilters: () => void;
-  solving: boolean;
-  canSolve: boolean;
-  onSolve: (mode: SolveMode) => void;
-  onCancelSolve: () => void;
-}) {
-  const selected = value ? heroes.find((c) => c.uid === value) ?? null : null;
-  const meta = selected ? game?.characters[String(selected.charId)] ?? null : null;
-  return (
-    <Panel title="Hero" hint="Pick the hero to optimize gear for. The current snapshot is shown below." width="w-44">
-      <HeroSelect heroes={heroes} game={game} value={value} onChange={onChange} />
-      <div className="mt-2 flex flex-col items-center gap-1.5">
-        {selected ? (
-          <CharacterPortrait
-            charId={selected.charId}
-            name={displayNameOf(selected, meta)}
-            cls={meta?.cls}
-            element={meta?.element}
-            size={88}
-          />
-        ) : (
-          <div className="grid h-22 w-22 place-items-center rounded-md border border-dashed border-white/8 text-[10px] italic text-white/40">
-            no hero
-          </div>
-        )}
-        <div className="mt-1 grid w-full grid-cols-1 gap-0.5">
-          <ActionButton tone="primary" disabled={!canSolve || solving} onClick={() => onSolve("score")}>SOLVE</ActionButton>
-          <ActionButton disabled={!canSolve || solving} onClick={() => onSolve("cp")}>SOLVE CP</ActionButton>
-          <ActionButton disabled={!solving} onClick={onCancelSolve}>Cancel</ActionButton>
-          <ActionButton onClick={onResetFilters}>Reset filters</ActionButton>
-        </div>
-      </div>
-    </Panel>
   );
 }
 
@@ -1380,10 +1502,10 @@ function HeroOption({
 /* ─────────────────────────────────────────────────────────────────────────
  * Stats panel — current → new, side by side
  * ───────────────────────────────────────────────────────────────────────── */
-function StatsPanel({ stats, projected }: { stats: FinalStats | null; projected: FinalStats | null }) {
+function StatsPanel({ stats, projected, width = "w-44" }: { stats: FinalStats | null; projected: FinalStats | null; width?: string }) {
   return (
-    <Panel title="Stats" hint="Current stats on the left, projected stats from the selected build on the right." width="w-44">
-      <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-1.5 gap-y-0.5 font-mono text-[10.5px] tabular-nums">
+    <Panel title="Current → Projected" hint="Current stats on the left, projected stats from the selected build on the right." width={width}>
+      <div className="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr] items-center gap-x-1.5 gap-y-0.5 font-mono text-[10.5px] tabular-nums">
         {SOLVER_STATS.map((s) => (
           <StatsPanelRow key={s.key} stat={s} stats={stats} projected={projected} />
         ))}
@@ -2662,7 +2784,7 @@ function RightSidebar({
   onRemovePreset: (id: string) => void;
 }) {
   return (
-    <aside className="flex w-56 shrink-0 flex-col gap-2">
+    <aside className="flex w-full shrink-0 flex-col gap-2">
       <Panel title="Library" hint="Get preset pulls the outerpedia build reco for this hero (mains / sets / effects / substat priority). Save build / preset bookmark your current setup. Per-hero, persisted in localStorage." width="w-full">
         <div className="grid grid-cols-1 gap-1">
           <ActionButton tone="primary" disabled={!canGetPreset || recoBusy} onClick={onGetPreset}>

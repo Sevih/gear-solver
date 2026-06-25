@@ -33,9 +33,11 @@
       `react-virtual`) · 7 `useMemo` d'availability fusionnables en une passe.
 - [ ] 🟡 **`Advices tab builder`** — on considere Missing que si il a 1 EE + 3 autres piece (si il a juste 1EE 
       alors c'est pas du missing mais juste un truc dont on se fiche). Advice si un perso a plus de 102% de crit et a des gems CHC sur le talisman/EE.
-- [~] 🟡 **Apparence UX tab builder** — brief Claude Design **écrit** : [docs/design/builder-redesign-brief.md](design/builder-redesign-brief.md)
-      (toute la page, 2–3 directions distinctes, inventaire fonctionnel complet + identité visuelle).
-      Reste : le passer à Claude Design → choisir une direction → porter en React/Tailwind.
+- [x] 🟡 **Apparence UX tab builder** — direction **B (toolbar + popovers)** portée dans `BuilderScreen`
+      (toolbar : hero · Solve/Solve CP · toggles Reforged/Maxed · popovers Options/Stat/Ratings/Priority/Mains/Sets/Effects
+      avec badges de comptage ; table quasi pleine largeur + colonne droite stats→projetées + library). Brief :
+      [docs/design/builder-redesign-brief.md](design/builder-redesign-brief.md). Toute la logique (reducer/solve/persistance)
+      préservée — seul le layout a changé.
 
 ### Features
 - [ ] **Settings — options globales** — panneau pour worker count override · topK/topN · heatmap on/off
