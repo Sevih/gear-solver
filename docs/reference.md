@@ -209,6 +209,12 @@ donc `first - 4` représente la délta utilisateur. Une capture normale a
 `first ≥ 4`, mais un parse glitch retournant 0 soustrairait 400 CP en
 silence — le clamp empêche ça.
 
+**ECDR (`critDmgRed`)** : exposé dans `FinalStats.critDmgRed` (sommé depuis
+les substats / mains `critDmgReduce` via `composeBuild`). Convention ×10
+(comme les autres rate inputs), additionné à `dmgredRaw` dans `defR`. Un
+build qui stacke de la CDR voyait sa CP sous-estimée avant le fix (defR
+ignorait la contribution ECDR).
+
 ### 2.3 Cheap ratings (`ratings.ts::computeCheapRatings`)
 
 Produits purs de `FinalStats`, ~10 ns/call. Aucune dépendance externe.
@@ -225,7 +231,10 @@ Produits purs de `FinalStats`, ~10 ns/call. Aucune dépendance externe.
 | `dmgh` | `HP × (CHD/100)`                 | Bruiser burst (HP-scaling)              |
 
 Conventions : `CRC` et `CHD` sont en **DISPLAY percent** (35 = 35%), donc
-on divise par 100 pour avoir décimal dans les produits.
+on divise par 100 pour avoir décimal dans les produits. **CRC est cappée à
+100%** dans `dmg`/`dmgs`/`mcd` (`Math.min(s.crc, 100) / 100`) — l'overflow
+est wasted in-game, ne pas le créditer dans les ratings. La valeur brute
+reste dans `FinalStats.crc` pour l'affichage UI.
 
 EHP utilise le scaling DEF linéaire `HP × (DEF/300 + 1)`, plus lisible
 pour filtrer que la formule HD non-linéaire du CP.
@@ -233,7 +242,8 @@ pour filtrer que la formule HD non-linéaire du CP.
 ### 2.4 Score (`ratings.ts::computeScore`)
 
 ```
-Score = round(Σ over priority[key] × (finalStats[key] / STAT_NORMS[key]) × 100)
+Score = round(Σ over priority[key] × (effective(finalStats[key]) / STAT_NORMS[key]) × 100)
+  where effective(v) = key === "crc" ? min(v, 100) : v
 ```
 
 - `priority` : keyed par user keys (`atk`, `crc`, `chd`, …), valeurs `-1..3`.
@@ -242,6 +252,8 @@ Score = round(Σ over priority[key] × (finalStats[key] / STAT_NORMS[key]) × 10
   CHC en pourcents) comparables.
 - Échelle ×100 pour rendre les Scores lisibles (~50-500 typique).
 - Score négatif possible (priority -1 sur stat élevée).
+- **CRC clampée à 100%** : l'overflow ne compte pas dans le score (cohérent
+  avec le cap in-game et avec le clamp dans `computeCheapRatings`).
 
 ### 2.5 Per-roll scoring (`ROLL_NORMS`)
 
@@ -278,8 +290,14 @@ Valeurs routées vers `flat` ou `pct` via `setBonusStatKey(st, isRate)`.
 
 ### 2.7 Gem sub-solver (`gems.ts`)
 
-**Pool** : multiset des OptionIDs (15001..15054) socketés sur tous les
-Talisman + EE de l'inventaire.
+**Pool** : multiset des OptionIDs (15001..15054) socketés sur les Talisman
++ EE éligibles de l'inventaire. **Éligibilité miroir de la sélection des
+pièces** (`allow()` côté engine) : le gear du héros courant est toujours
+inclus ; le gear équipé sur un autre héros n'est compté que si
+`includeEquippedOnOthers` est on ; le gear sur un héros exclu n'est jamais
+compté. Sans ce gating, le solver pouvait proposer des gemmes qui exigent
+physiquement de désé­quiper le Talisman/EE d'un héros que l'utilisateur
+venait juste d'exclure.
 
 **Scoring** : `score = priority[user_key] × (value / ROLL_NORMS[engine_key])`.
 Trié desc.
@@ -316,11 +334,25 @@ Désactivé automatiquement quand `priority` est vide (rang arbitraire → on
 garde tout). Si actif avec topPct=30 sur 7 slots de 150 pièces chacun :
 `150^7 ≈ 10^15` → `45^7 ≈ 10^11` permutations (réduction 10⁴×).
 
+**Protection des sets requis** (`topPctPrunePreserving`) : les pièces
+appartenant à un set `req-2pc` ou `req-4pc` survivent toujours, même si
+leur score de priorité ne les classerait pas dans le top-%. Sans cette
+garde, une pièce low-priority membre d'un set requis serait éliminée du
+pool → `checkSetsFeasible` tuerait silencieusement chaque combo et
+l'utilisateur verrait "no builds" sans indice. Les pièces protégées
+s'ajoutent au top-% (déduplication par UID), donc le pool effectif peut
+légèrement dépasser `⌈N × pct/100⌉` — intentionnel.
+
 ### 2.9 Reforge simulation (`engine.ts::simulateReforges`)
 
-Pour chaque pièce avec `remaining = star - reforgeCount > 0`, distribue
-les reforges restantes greedy par `priority × per-tick value`. Cap à
-**LV6 ticks par sub** (observé en réel). Tie-break sur per-tick raw.
+Budget de reforges par pièce :
+- 1★→6★ non ascended : `star` reforges (1..6).
+- **6★ ascended (Singularity)** : `star + 3 = 9` reforges. Le +3 est
+  exclusif aux 6★ Singularity ; les autres rangs n'ont pas d'ascension.
+
+Pour chaque pièce avec `remaining = maxReforges - reforgeCount > 0`,
+distribue les reforges restantes greedy par `priority × per-tick value`.
+Cap à **LV6 ticks par sub** (observé en réel). Tie-break sur per-tick raw.
 
 Mutations contenues sur un clone — l'inventaire original n'est jamais
 modifié.
@@ -433,7 +465,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | Fichier | Couverture |
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 7 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
-| `apps/renderer/test/solver.test.ts`     | 35 tests — gem pool/score/alloc/delta, gem override equivalence, cheap ratings, score normalization, reforge sim, top-K heap, STAT_TO_PRIORITY mapping |
+| `apps/renderer/test/solver.test.ts`     | 50 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, cheap ratings (+ CRC clamp), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR) |
 
 Run : `npm test --workspaces --if-present`.
 

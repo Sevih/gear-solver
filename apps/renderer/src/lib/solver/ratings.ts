@@ -37,8 +37,12 @@ export function computeCheapRatings(s: FinalStats): CheapRatings {
   const ehp = s.hp * (s.def / 300 + 1);
   const ehps = ehp * s.spd;
   // CRC / CHD come out of the composer as displayed percent (35 = 35%) — the
-  // damage products want decimal form.
-  const crcDec = s.crc / 100;
+  // damage products want decimal form. CRC is capped at 100% in-game: anything
+  // beyond is wasted. Clamping here (not on FinalStats.crc, which is shown
+  // raw in the UI so the user sees the overflow) keeps `dmg` / `dmgs` from
+  // crediting non-existent crit rate, which would also bias the rating
+  // filters and the score.
+  const crcDec = Math.min(s.crc, 100) / 100;
   const chdDec = s.chd / 100;
   const dmg = s.atk * crcDec * chdDec;
   const dmgs = dmg * s.spd;
@@ -135,8 +139,12 @@ export function computeScore(s: FinalStats, priority: Record<string, number>): n
     if (!w) continue;
     const v = (s as unknown as Record<string, number>)[key];
     if (typeof v !== "number") continue;
+    // CRC overflow past 100% is wasted in-game — don't reward builds that
+    // stack +crc beyond the cap. STAT_NORMS[crc] = 100, so without this
+    // clamp a 115% CRC build scored +15% on its crc contribution.
+    const effective = key === "crc" ? Math.min(v, 100) : v;
     const norm = STAT_NORMS[key] ?? 100;
-    total += (v / norm) * w * 100;
+    total += (effective / norm) * w * 100;
   }
   return Math.round(total);
 }

@@ -210,10 +210,19 @@ export function prepareContext(req: SolveRequest): SolveContext {
   // Top-% per-slot prune. Only meaningful when the user set a non-zero
   // priority on at least one stat — otherwise every piece scores 0 and the
   // prune is arbitrary (we skip in that case).
+  //
+  // Required-set protection: pieces belonging to a `req-2pc` / `req-4pc`
+  // set are never elided by the prune, regardless of priority score. Without
+  // this guard, a low-priority-scoring piece could be dropped from the pool
+  // and `checkSetsFeasible` would silently return 0 results (the user sees
+  // "no builds" without a clue why). The protected pieces survive on top of
+  // the regular top-% selection, so the effective pool size may exceed
+  // ceil(N × pct/100) by the count of protected pieces — intentional.
   const hasPriority = Object.values(filters.priority).some((v) => v !== 0);
   if (hasPriority && filters.topPct < 100) {
+    const requiredSetIds = new Set<string>([...requiredSets2pc, ...requiredSets4pc]);
     for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const) {
-      pools[slot] = topPctPrune(pools[slot], filters.priority, filters.topPct);
+      pools[slot] = topPctPrunePreserving(pools[slot], filters.priority, filters.topPct, requiredSetIds);
     }
   }
 
@@ -242,7 +251,15 @@ export function prepareContext(req: SolveRequest): SolveContext {
   // would silently disable gem optimization for the typical CP usage
   // (user clicks SOLVE CP without touching the priority panel, expects
   // the solver to recommend the strongest gems for the new build).
-  const gemPool = buildGemPool(inv);
+  // Gem pool eligibility mirrors `allow()` for pieces: gear on other heroes
+  // only counts when `includeEquippedOnOthers` is on, and excluded heroes
+  // are skipped outright. Otherwise the solver could recommend gems that
+  // require unequipping a Talisman/EE on a hero the user just opted out of.
+  const gemPool = buildGemPool(inv, {
+    heroUid,
+    includeEquippedOnOthers: filters.options.includeEquippedOnOthers,
+    excludedHeroes: excludedSet,
+  });
   const scoredGems = scoreGemPool(gemPool, filters.priority, game, {
     allowZeroPriority: req.mode === "cp",
   });
@@ -318,7 +335,13 @@ const REFORGE_PER_SUB_CAP = 6;
  *  enough for "what's the best this piece can become?" previews. */
 export function simulateReforges(piece: GearPiece, priority: Record<string, number>): GearPiece {
   if (piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
-  const remaining = Math.max(0, (piece.star ?? 0) - piece.reforgeCount);
+  // In-game reforge budget: N reforges for 1★→6★ pieces. A 6★ ascended
+  // (Singularity) piece gets an additional +3 reforges → 9 total (the +3
+  // is exclusive to 6★ Singularity items; lower-star ascended doesn't exist
+  // since ascension is a 6★-only mechanic in this build).
+  const star = piece.star ?? 0;
+  const maxReforges = (star === 6 && piece.ascended) ? star + 3 : star;
+  const remaining = Math.max(0, maxReforges - piece.reforgeCount);
   if (remaining === 0 || piece.subs.length === 0) return piece;
   const subs: RolledStat[] = piece.subs.map((s) => ({ ...s }));
   // Pre-compute per-sub scoring data; mutated in the loop as ticks accumulate.
@@ -381,6 +404,32 @@ function topPctPrune(pieces: GearPiece[], priority: Record<string, number>, pct:
   scored.sort((a, b) => b.s - a.s);
   const keep = Math.max(1, Math.ceil(pieces.length * pct / 100));
   return scored.slice(0, keep).map((e) => e.p);
+}
+
+/** Variant of `topPctPrune` that always keeps pieces belonging to a required
+ *  set, even when their priority score doesn't make the top-%. Without this,
+ *  a `req-4pc` set with low-priority-scoring members would be pruned out and
+ *  `checkSetsFeasible` would silently kill every combo. The protected pieces
+ *  are added on top of the regular top-% slice (deduped), so the kept pool
+ *  may be slightly larger than `ceil(N × pct/100)`. */
+function topPctPrunePreserving(
+  pieces: GearPiece[],
+  priority: Record<string, number>,
+  pct: number,
+  requiredSetIds: Set<string>,
+): GearPiece[] {
+  if (pieces.length === 0 || requiredSetIds.size === 0) {
+    return topPctPrune(pieces, priority, pct);
+  }
+  const kept = topPctPrune(pieces, priority, pct);
+  const keptUids = new Set(kept.map((p) => p.uid));
+  for (const p of pieces) {
+    if (p.armorSetId && requiredSetIds.has(p.armorSetId) && !keptUids.has(p.uid)) {
+      kept.push(p);
+      keptUids.add(p.uid);
+    }
+  }
+  return kept;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

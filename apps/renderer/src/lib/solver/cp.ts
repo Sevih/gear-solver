@@ -34,7 +34,11 @@ export function calcBattlePower(args: CpArgs): number {
   const penRaw = s.pen * 10;
   const dmgupRaw = s.dmgUp * 10;
   const dmgredRaw = s.dmgRed * 10;
-  const ecdrRaw = 0; // not exposed in FinalStats; non-buffed chars have 0
+  // ECDR (Crit Damage Reduction) IS exposed in FinalStats: it's summed from
+  // `critDmgReduce` substats / mains in composeBuild. Same ×10 raw convention
+  // as the other rate inputs. Builds stacking CDR were previously undervalued
+  // (defR collapsed to the dmgredRaw-only contribution).
+  const ecdrRaw = s.critDmgRed * 10;
   const sumCd = dmgupRaw + chdRaw;
   let critF: number;
   if (sumCd < 2001) {

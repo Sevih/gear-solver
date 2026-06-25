@@ -19,12 +19,28 @@ import type { GameData, GearPiece, Inventory } from "@gear-solver/core";
 import { resolveStat } from "@gear-solver/core";
 import { ROLL_NORMS, STAT_TO_PRIORITY } from "./ratings.js";
 
+/** Eligibility filter for the gem pool. Mirrors the piece-pool rule used by
+ *  the engine's `allow()`: gear of the current hero is always in; gear
+ *  equipped on other heroes is only counted when `includeEquippedOnOthers`
+ *  is on; gear equipped on an explicitly-excluded hero is never counted. */
+export interface GemPoolOptions {
+  heroUid: string;
+  includeEquippedOnOthers: boolean;
+  excludedHeroes: Set<string>;
+}
+
 /** Multiset of OptionIDs the player can re-socket. Pool = union of every
- *  gem currently sitting on a Talisman / EE in the inventory. */
-export function buildGemPool(inv: Inventory): Map<number, number> {
+ *  gem currently sitting on a Talisman / EE in the inventory, gated by the
+ *  same eligibility rule the engine applies to the piece pools. Without the
+ *  gate, the solver could propose to socket gems that physically require
+ *  unequipping another hero's Talisman/EE even when the user explicitly
+ *  unticked "Include gear equipped on other heroes". */
+export function buildGemPool(inv: Inventory, opts: GemPoolOptions): Map<number, number> {
   const pool = new Map<number, number>();
   for (const g of inv.gear) {
     if (g.slot !== "ooparts" && g.slot !== "exclusive") continue;
+    if (!opts.includeEquippedOnOthers && g.equippedBy && g.equippedBy !== opts.heroUid) continue;
+    if (g.equippedBy && opts.excludedHeroes.has(g.equippedBy)) continue;
     for (const id of g.gemSlots ?? []) {
       if (!id) continue;
       pool.set(id, (pool.get(id) ?? 0) + 1);

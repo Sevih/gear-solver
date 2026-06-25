@@ -91,6 +91,15 @@ function talismanWithGems(gemIds: number[]): GearPiece {
  * GEMS — pool building, scoring, allocation, delta aggregation
  * ───────────────────────────────────────────────────────────────────────── */
 
+/** Default unfiltered gem-pool opts — equivalent to the pre-B3 behavior
+ *  (all gear in the inventory contributes regardless of equippedBy). Used
+ *  by tests that aren't exercising the eligibility filter itself. */
+const ALL_GEMS: Parameters<typeof buildGemPool>[1] = {
+  heroUid: "hero-a",
+  includeEquippedOnOthers: true,
+  excludedHeroes: new Set(),
+};
+
 describe("buildGemPool", () => {
   it("counts each OptionID across all owned Talisman/EE pieces", () => {
     const inv = {
@@ -102,7 +111,7 @@ describe("buildGemPool", () => {
       characters: [],
       presets: [],
     } as Inventory;
-    const pool = buildGemPool(inv);
+    const pool = buildGemPool(inv, ALL_GEMS);
     expect(pool.get(15001)).toBe(2);
     expect(pool.get(15004)).toBe(1);
     expect(pool.get(15049)).toBe(2);
@@ -117,7 +126,39 @@ describe("buildGemPool", () => {
       characters: [],
       presets: [],
     } as Inventory;
-    expect(buildGemPool(inv).size).toBe(0);
+    expect(buildGemPool(inv, ALL_GEMS).size).toBe(0);
+  });
+
+  it("respects includeEquippedOnOthers — other-hero gems excluded by default", () => {
+    // Without the filter, the solver could propose gems that physically
+    // require unequipping another hero's Talisman/EE.
+    const mine = { ...talismanWithGems([15001, 15004]), uid: "t-mine", equippedBy: "hero-a" };
+    const someone = { ...talismanWithGems([15049, 15053]), uid: "t-other", equippedBy: "hero-b" };
+    const unequipped = { ...talismanWithGems([15037]), uid: "t-free", equippedBy: null };
+    const inv = { gear: [mine, someone, unequipped], characters: [], presets: [] } as Inventory;
+    const opts = { heroUid: "hero-a", includeEquippedOnOthers: false, excludedHeroes: new Set<string>() };
+    const pool = buildGemPool(inv, opts);
+    expect(pool.get(15001)).toBe(1); // hero-a's own gems
+    expect(pool.get(15004)).toBe(1);
+    expect(pool.get(15037)).toBe(1); // unequipped gem
+    expect(pool.get(15049)).toBeUndefined(); // hero-b excluded
+    expect(pool.get(15053)).toBeUndefined();
+  });
+
+  it("excludes gems on explicitly-excluded heroes even when includeEquippedOnOthers is on", () => {
+    const a = { ...talismanWithGems([15001]), uid: "t-a", equippedBy: "hero-a" };
+    const b = { ...talismanWithGems([15004]), uid: "t-b", equippedBy: "hero-b" };
+    const c = { ...talismanWithGems([15037]), uid: "t-c", equippedBy: "hero-c" };
+    const inv = { gear: [a, b, c], characters: [], presets: [] } as Inventory;
+    const opts = {
+      heroUid: "hero-a",
+      includeEquippedOnOthers: true,
+      excludedHeroes: new Set(["hero-c"]),
+    };
+    const pool = buildGemPool(inv, opts);
+    expect(pool.get(15001)).toBe(1);
+    expect(pool.get(15004)).toBe(1); // hero-b included (not excluded)
+    expect(pool.get(15037)).toBeUndefined(); // hero-c excluded
   });
 });
 
@@ -584,5 +625,77 @@ describe("calcBattlePower", () => {
     const cp4 = calcBattlePower(args({ first: 4, second: 0, ultimate: 0, chainPassive: 0 }));
     const cp10 = calcBattlePower(args({ first: 10, second: 0, ultimate: 0, chainPassive: 0 }));
     expect(cp10).toBe(cp4 + 600); // (10-4) × 100
+  });
+
+  it("critDmgRed (ECDR) contributes to the defR multiplier", () => {
+    // Pre-fix bug: ecdrRaw was hardcoded to 0, so CDR was free CP for the
+    // user but invisible to the solver — builds stacking CDR were silently
+    // undervalued vs equivalent crit/atk builds.
+    const skills = { first: 4, second: 0, ultimate: 0, chainPassive: 0 };
+    const noCdr = calcBattlePower({ ...args(skills), stats: { ...baseStats, critDmgRed: 0 } });
+    const withCdr = calcBattlePower({ ...args(skills), stats: { ...baseStats, critDmgRed: 40 } });
+    expect(withCdr).toBeGreaterThan(noCdr);
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * CRC overflow — CRC > 100 is wasted in-game; ratings and the score must
+ * cap to 100% to avoid rewarding non-existent crit rate.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+describe("crc clamp at 100%", () => {
+  it("computeCheapRatings clamps CRC at 100% in dmg / dmgs (in-game cap)", () => {
+    // Pre-fix bug: 115% CRC was credited as 1.15× damage even though the
+    // 15% overflow is wasted in-game.
+    const at100 = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 100, chd: 200,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const at115 = { ...at100, crc: 115 };
+    expect(computeCheapRatings(at100).dmg).toBe(computeCheapRatings(at115).dmg);
+    expect(computeCheapRatings(at100).dmgs).toBe(computeCheapRatings(at115).dmgs);
+  });
+
+  it("computeScore clamps CRC at 100% — overflow doesn't inflate the score", () => {
+    const fs100 = { atk: 0, def: 0, hp: 0, spd: 0, crc: 100, chd: 0,
+      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const fs150 = { ...fs100, crc: 150 };
+    expect(computeScore(fs100, { crc: 3 })).toBe(computeScore(fs150, { crc: 3 }));
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * REFORGE BUDGET — 6★ ascended (Singularity) pieces get +3 reforges
+ * on top of the regular star count.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+describe("simulateReforges — 6★ ascended budget", () => {
+  it("6★ ascended grants +3 reforges on top of the 6 default → 9 total", () => {
+    // Pre-fix bug: max budget was always `star` (6), under-using 3 ticks
+    // of headroom on the standard endgame piece.
+    const p: GearPiece = {
+      ...piece(6, 0, [
+        { stat: "atkPct", value: 4, percent: true, ticks: 1 },   // perTick = 4, room → cap at 6
+        { stat: "critRate", value: 1, percent: true, ticks: 1 }, // perTick = 1
+      ]),
+      ascended: true,
+    };
+    const sim = simulateReforges(p, { atk: 3 });
+    const atk = sim.subs.find((s) => s.stat === "atkPct")!;
+    const crc = sim.subs.find((s) => s.stat === "critRate")!;
+    // 9 reforges: ATK absorbs 5 (1→6 cap), CHC absorbs 4 (1→5)
+    expect(atk.ticks).toBe(6);
+    expect(crc.ticks).toBe(5);
+  });
+
+  it("6★ non-ascended sticks to the 6-reforge budget", () => {
+    const p = piece(6, 0, [
+      { stat: "atkPct", value: 4, percent: true, ticks: 1 },
+      { stat: "critRate", value: 1, percent: true, ticks: 1 },
+    ]); // ascended: false by default in `piece()`
+    const sim = simulateReforges(p, { atk: 3 });
+    const atk = sim.subs.find((s) => s.stat === "atkPct")!;
+    const crc = sim.subs.find((s) => s.stat === "critRate")!;
+    // 6 reforges only: ATK absorbs 5 → cap at 6; CHC absorbs 1 → 2
+    expect(atk.ticks).toBe(6);
+    expect(crc.ticks).toBe(2);
   });
 });
