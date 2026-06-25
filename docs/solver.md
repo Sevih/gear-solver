@@ -14,7 +14,7 @@ son pipeline interne, et les choix d'architecture qui le sous-tendent.
 ```
 BuilderScreen.tsx (React, main thread)
   │
-  ├─ useReducer(SolverFilters)   ← 11 actions, 10 panneaux contrôlés
+  ├─ useReducer(SolverFilters)   ← 13 actions, 9 panneaux + sidebar/footer contrôlés
   │
   ├─ SolverOrchestrator           ← pool de Web Workers (hardwareConcurrency-1, capped 8)
   │     │
@@ -47,11 +47,17 @@ Worker coûte ~30 ms + transfert de l'inventaire + gameData, à amortir).
 | **SOLVE**    | Maximise un **Score** pondéré par les priorités utilisateur (`Σ priority × final / norm`). Utile quand on sait quel profil de stats viser. | `score`             | `compose + cheap ratings` |
 | **SOLVE CP** | Maximise le **Combat Power** in-game (`CalcBattlePower` reverse-engineered). Mono-objectif. | `cp` (calculé dans la boucle) | `compose + cheap ratings + cp` |
 
-CP est cher : il est calculé **uniquement pour le top-N** en SOLVE (paresseux,
-dans `finalizeBuilds`) et **pour chaque combo** en SOLVE CP (sort key oblige).
-Le filtre CP utilisateur (`cp min/max`) est appliqué :
-- en SOLVE CP : dans la boucle (rejette tôt) ;
-- en SOLVE    : dans `finalizeBuilds` après calcul (peut réduire le top-N final).
+CP est cher : par défaut il est calculé **uniquement pour le top-N** en SOLVE
+(paresseux, dans `finalizeBuilds`, juste pour l'affichage) et **pour chaque combo**
+en SOLVE CP (sort key oblige).
+
+Le filtre CP utilisateur (`cp min/max`) est appliqué **dans la boucle** dès qu'il
+est actif — y compris en mode SOLVE, où CP est alors calculé par combo. C'est requis
+pour la justesse : différer le filtre à `finalizeBuilds` laissait le heap se remplir
+du top-K **par score** puis retirait a posteriori les builds hors-CP, évinçant des
+builds valides classés juste hors top-K (perte de recall / sous-retour). Idem pour le
+filtre `upg` (résolu en amont depuis le loadout équipé, appliqué in-loop). Les re-checks
+au finalize deviennent des no-op idempotents.
 
 ---
 
@@ -106,12 +112,18 @@ Pour chaque combo qui passe phase 4 :
 3. **Cheap ratings** : 8 produits simples (HpS, Ehp, EhpS, Dmg, DmgS, Mcd, McdS, DmgH).
 4. **Score** : `Σ priority × (final / STAT_NORMS) × 100`.
 5. **Rating filter** : pareil que stat filter, sur ratings + score.
-6. **CP** : calculé seulement en SOLVE CP (puis filtre CP).
+6. **CP / upg** : CP est calculé en SOLVE CP, OU en SOLVE dès qu'un filtre CP est posé
+   (le filtre rejette alors tôt). Si un filtre `upg` est posé, il est aussi évalué ici
+   (depuis le loadout équipé pré-résolu). Les deux filtrent **avant** le push, donc le
+   heap ne contient que des builds valides.
 7. **Push** dans un min-heap fixed-size (`TopKHeap`, K=1000 par défaut) keyed par `score` ou `cp` selon mode.
 
 ### Phase 6 — Finalize (worker side)
 - SOLVE CP : top-K déjà trié sur CP, on retourne tel quel.
-- SOLVE : on calcule CP pour chaque build du top-K (lazy), on applique le filtre CP user, on retourne ce qui reste.
+- SOLVE : on calcule CP pour chaque build du top-K **pour l'affichage** (lazy) quand aucun
+  filtre CP n'était actif ; sinon CP est déjà porté par le build. `upg` est (re)calculé pour
+  la colonne. Les filtres CP/upg ayant déjà été appliqués in-loop, les re-checks ici sont
+  des no-op idempotents.
 
 ### Côté orchestrator
 - Reçoit `{builds, permutations, searched}` de chaque worker.
@@ -138,19 +150,22 @@ vs le build sélectionné dans la table (col droite, em-dash tant qu'aucune lign
 n'est cliquée). Lecture pure, jamais éditable.
 
 ### Options
-4 toggles + un placeholder Exclude :
-- **Use reforged stats** — *non câblé* (toggle visuel, le solver ne simule pas le reforge).
+4 toggles + le multi-select Exclude :
+- **Use reforged stats** — **câblé** : le solver clone chaque pièce avec ses reforges
+  restants alloués aux substats prioritaires (`simulateReforges`, avant le top-% prune).
 - **Only maxed gear** — filtre pool à `enhanceLevel === 15`.
 - **Equipped items** — inclut les pièces équipées sur d'autres héros.
 - **Keep current** — verrouille les slots déjà équipés à leur pièce actuelle.
-- **Exclude equipped** (pill) — placeholder ; la liste `excludedHeroes` existe dans le reducer mais aucun multi-select n'est branché.
+- **Exclude equipped** — **câblé** : `ExcludeHeroesPicker` (multi-select) écrit dans
+  `excludedHeroes` via `toggleHeroExcluded` / `clearExcludedHeroes`.
 
 ### Stat filters
 Min/max par stat finale (12 stats). Appliqué après compose, rejet du combo si une stat sort de la bande. Inputs vides = pas de borne.
 
 ### Rating filters
-Min/max sur les ratings dérivés + Score. `cp` est traité spécialement (cf. § 2).
-`upg` est informatif, jamais filtré.
+Min/max sur les ratings dérivés + Score. `cp` et `upg` sont traités spécialement
+(appliqués in-loop quand posés, cf. § 2 / phase 5) — pas via le `FilterSpec[]` compilé
+car ils dépendent du loadout équipé / d'un calcul coûteux non disponible à la compile.
 
 ### Substat priority
 - Slider par stat (12 stats) : valeur entière `-1..3`. Stockée dans `priority` (clés user : `atk`, `crc`, `chd`, ...).
@@ -180,8 +195,17 @@ bonus 2pc/4pc atteignable) ne s'affichent pas. Tooltip 3-sections : nom + (N own
 ### Weapons & accessories
 Deux groupes de chips effect-icon (Weapons / Accessories), filtrés par class du héros (gated par `classLimit`). Click cycle `off → required → excluded → off`. Tooltip : nom + (N owned) / desc T4 / state.
 
-### RightSidebar — Actions
-Boutons placeholder (Equip / Unequip / Save Build / Remove Build / Select All / Deselect All). **Aucun n'est câblé** au moteur ; à brancher dans un futur milestone.
+### RightSidebar — Library
+Trois sections **câblées** (localStorage, par héros) :
+- **Save / Remove build** — bookmark le build sélectionné (`storage/savedBuilds.ts`).
+  Un build sauvé porte aussi son contexte reforge pour reprojeter ses substats à la
+  restauration.
+- **Filter presets** — sauve / charge / supprime un snapshot de filtres
+  (`storage/filterPresets.ts`, `loadPreset`).
+- **Restore** — repush un build sauvé dans la table + bottom band.
+
+Equip / Unequip **vers le jeu** restent absents (nécessitent une API jeu inexistante).
+Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le héros).
 
 ### FilterFooter (fixed en bas)
 - Chips par slot avec **hit/total (%)** — alimentés par `poolSizes` du premier progress event de chaque worker.
@@ -191,13 +215,22 @@ Boutons placeholder (Equip / Unequip / Save Build / Remove Build / Select All / 
 - Indicateur `solving…` (cyan, animé) pendant un run.
 
 ### ResultsTable
-Heatmap rouge-vert par colonne (min/max relatifs au result set actuel).
-Colonnes : sets, 8 stats principales, 6 ratings (HpS/Ehp/EhpS/Dmg/DmgS/Cp), Score, actions.
-Click sur une ligne → la `BottomGearBand` affiche les 8 pièces du build.
-État `solving…` / message d'erreur / état vide (pas de héros) gérés dans le header.
+Heatmap rouge-vert par colonne (min/max relatifs au result set actuel). Colonnes :
+sets, 8 stats principales, ratings (`TABLE_RATINGS`), **Score**, **Upg**, actions
+(`Upg` = nb de slots différant du loadout actuel, triable + filtrable). Tri par clic
+sur l'en-tête (null → desc → asc → null). Click sur une ligne → la `BottomGearBand`
+affiche les 8 pièces. État `solving…` / erreur / **état vide explicite** (un `emptyReason`
+dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres).
 
 ### BottomGearBand
-8 cartes (mirror compact de l'inventaire) — une par slot : weapon, exclusive, helmet, armor, accessory, talisman, gloves, boots. Chaque carte montre nom, enhance level, icône slot, main stat, subs (avec ticks). Em-dash quand aucun build n'est sélectionné.
+8 cartes (mirror compact de l'inventaire) — une par slot. Chaque carte montre nom,
+enhance level, icône slot, main stat, subs (avec ticks). En plus :
+- **Talisman / EE** : l'allocation de gemmes recommandée par le build (stat + valeur,
+  badge **swap** si elle diffère des gemmes socketées).
+- **Stats reforgées** : si *Use reforged stats* était actif, les subs affichés sont la
+  projection (`simulateReforges` re-simulé côté main thread) + badge **reforged**.
+
+Em-dash quand aucun build n'est sélectionné.
 
 ---
 
@@ -244,7 +277,10 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
    inventaire/game dépasse le gain CPU.
 
 3. **Partition embarrassingly parallel** — chaque worker prend une slice du
-   slot le plus grand. Aucune comm inter-worker, merge final O(W × K).
+   slot le plus grand. Aucune comm inter-worker, merge final O(W × K). Le nombre
+   de workers réellement sollicités est cappé à la taille du pool partitionné
+   (`chunkCount = clamp(1, W, maxPoolHit)`) — inutile d'envoyer une slice vide à
+   un worker quand le pool a moins d'items que de workers.
 
 4. **`pieces` array hoisted + mutée en place** — évite 10M+ allocations dans
    la boucle inner. Sûr car `computeFinalStats` ne garde pas la référence.
@@ -276,11 +312,12 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
 ## 8. Limites connues
 
 (rien de bloquant aujourd'hui — voir [todo.md](todo.md) pour le backlog.)
-- **`Upg` column** : pas calculée (toujours vide). Spec utilisateur originale.
-- **Exclude equipped multi-select** : pill placeholder ; `excludedHeroes`
-  existe dans le reducer mais aucun UI n'écrit dedans.
-- **Action buttons (Equip / Save Build / …)** : tous non câblés.
-- **Worker init = 8 × game/inventory** : chaque worker reçoit une copie par
+- **Equip / Unequip vers le jeu** : absents — nécessitent une API jeu inexistante
+  (le pipeline de capture est read-only pour l'instant).
+- **Perf hot-path** : `aggregateGearBuckets` re-somme les 8 pièces + recalcule les set
+  bonuses à chaque talisman ; un accumulateur incrémental est au backlog. La table de
+  résultats (topN=1000) n'est pas encore virtualisée.
+- **Worker init = W × game/inventory** : chaque worker reçoit une copie par
   postMessage. Pour des inventaires énormes (>50 MB) ça pourrait pincer.
   Alternative future : SharedArrayBuffer (besoin COOP/COEP headers).
 
@@ -294,15 +331,19 @@ apps/renderer/src/
 │   └── solver.worker.ts          ← thin adapter IPC ↔ engine
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats + aggregateGearBuckets (+ GemOverride)
+│   ├── storage/
+│   │   ├── savedBuilds.ts          ← bookmark de builds par héros (localStorage)
+│   │   └── filterPresets.ts        ← snapshots de filtres par héros (localStorage)
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
 │       ├── orchestrator.ts         ← pool de Web Workers, fan-out/fan-in, top-N merge
-│       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap
+│       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + simulateReforges
 │       ├── gems.ts                 ← buildGemPool + scoreGemPool + aggregateGemDelta + allocateGems
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + STAT_TO_PRIORITY
 │       └── cp.ts                   ← calcBattlePower (reverse-engineered)
 └── screens/
-    └── BuilderScreen.tsx           ← reducer SolverFilters + tous les panneaux + orchestrator wiring
+    ├── BuilderScreen.tsx           ← reducer SolverFilters + tous les panneaux + orchestrator wiring
+    └── BuildsScreen.tsx            ← roster équipé/composé + computeAdvice + Optimize →
 ```
 
 Bonus :
