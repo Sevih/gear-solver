@@ -164,10 +164,53 @@ function Card({ children, className, style }: { children: React.ReactNode; class
     </div>
   );
 }
-function SectionLabel({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
+// ── section icons (14px, lucide-style strokes) ──────────────────────────
+function SIcon({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between">
-      <span className="text-[9px] font-bold uppercase tracking-[0.11em] text-white/50">{children}</span>
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+      {children}
+    </svg>
+  );
+}
+const IC_SNAPSHOT = <SIcon><circle cx="12" cy="8" r="3.6" /><path d="M5 20c0-3.6 3.4-5.5 7-5.5s7 1.9 7 5.5" /></SIcon>;
+const IC_HEALTH = <SIcon><path d="M3 12h3.5l2 6 3.5-13 2.5 9 1.8-4H21" /></SIcon>;
+const IC_QUALITY = <SIcon><path d="M6 3h12l3.5 6L12 21 2.5 9z" /><path d="M2.5 9h19" /><path d="M12 21 8 9l4-6 4 6z" /></SIcon>;
+const IC_ROSTER = <SIcon><circle cx="9" cy="8" r="3.4" /><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5" /><path d="M16 4.2a3.4 3.4 0 0 1 0 6.6" /><path d="M17.5 15c2 .6 3.5 2.2 3.5 5" /></SIcon>;
+const IC_GEAR = <SIcon><rect x="3.5" y="3.5" width="7" height="7" rx="1.4" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.4" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.4" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.4" /></SIcon>;
+const IC_LIBRARY = <SIcon><path d="M6 3h11a1 1 0 0 1 1 1v17l-6.5-3.6L5 21V4a1 1 0 0 1 1-1z" /></SIcon>;
+const IC_BOLT = <SIcon><path d="M13 2 4 13h6l-1 9 9-12h-6z" /></SIcon>;
+
+// ── micro sub-label (11px) for the "By element / class / …" headers ──────
+function MIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-2.75 w-2.75 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">
+      {children}
+    </svg>
+  );
+}
+const IC_ELEMENT = <MIcon><path d="M12 3c.6 3.2 3.5 4.4 3.5 7.5a3.5 3.5 0 0 1-7 0c0-1.3.5-2.3 1.3-3.2" /></MIcon>;
+const IC_CLASS = <MIcon><path d="M12 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6z" /></MIcon>;
+const IC_RARITY = <MIcon><path d="M12 3.5l2.5 5.3 5.5.6-4 3.8 1 5.6-5-2.8-5 2.8 1-5.6-4-3.8 5.5-.6z" /></MIcon>;
+const IC_SLOT = <MIcon><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 12h16M12 4v16" /></MIcon>;
+const IC_SETS = <MIcon><path d="M12 3 3 8l9 5 9-5z" /><path d="M3 13l9 5 9-5" /></MIcon>;
+
+function SubLabel({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-1 text-[8.5px] font-bold uppercase tracking-widest text-zinc-600">
+      <span className="text-zinc-500">{icon}</span>{children}
+    </span>
+  );
+}
+
+function SectionLabel({ children, right, icon, tint }: {
+  children: React.ReactNode; right?: React.ReactNode; icon?: React.ReactNode; tint?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.11em] text-white/50">
+        {icon && <span style={tint ? { color: tint } : undefined}>{icon}</span>}
+        {children}
+      </span>
       {right}
     </div>
   );
@@ -381,7 +424,7 @@ export function HomeScreen({
           {/* identity row — account snapshot + system health */}
           <div className="flex gap-3.5">
             <Card className="flex min-w-0 flex-[1.7] flex-col gap-3.5">
-              <SectionLabel>Account snapshot</SectionLabel>
+              <SectionLabel icon={IC_SNAPSHOT} tint="#22d3ee">Account snapshot</SectionLabel>
               <div className="flex items-center gap-2">
                 <div className="flex flex-1 flex-col gap-1">
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Heroes owned</span>
@@ -413,7 +456,7 @@ export function HomeScreen({
             </Card>
 
             <Card className="flex min-w-0 flex-1 flex-col gap-3">
-              <SectionLabel>System health</SectionLabel>
+              <SectionLabel icon={IC_HEALTH} tint={emuReady ? "#34d399" : "#fbbf24"}>System health</SectionLabel>
               <div className="flex items-center gap-2.5">
                 <span className={cx("h-2.5 w-2.5 shrink-0 rounded-full", emuReady ? "bg-emerald-400 shadow-[0_0_8px_#34d399]" : "bg-amber-400 shadow-[0_0_8px_#fbbf24]")} />
                 <div className="flex min-w-0 flex-col gap-0.5">
@@ -430,7 +473,7 @@ export function HomeScreen({
 
           {/* HERO: gear quality distribution */}
           <Card className="flex flex-col gap-3.5">
-            <SectionLabel right={<Num className="text-[10px] text-zinc-600">{stats.totalGraded.toLocaleString()} pieces graded by substat roll quality</Num>}>
+            <SectionLabel icon={IC_QUALITY} tint="#fbbf24" right={<Num className="text-[10px] text-zinc-600">{stats.totalGraded.toLocaleString()} pieces graded by substat roll quality</Num>}>
               Gear quality distribution
             </SectionLabel>
             <div className="flex h-8 gap-0.75 overflow-hidden rounded-lg">
@@ -453,22 +496,22 @@ export function HomeScreen({
           <div className="flex items-stretch gap-3.5">
             {/* roster */}
             <Card className="flex min-w-0 flex-1 flex-col gap-3.5">
-              <SectionLabel right={<Num className="text-[10px] text-zinc-600">{stats.heroes.toLocaleString()} heroes</Num>}>Roster</SectionLabel>
+              <SectionLabel icon={IC_ROSTER} tint="#c4b5fd" right={<Num className="text-[10px] text-zinc-600">{stats.heroes.toLocaleString()} heroes</Num>}>Roster</SectionLabel>
               <div className="flex flex-col gap-2">
-                <span className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-zinc-600">By element</span>
+                <SubLabel icon={IC_ELEMENT}>By element</SubLabel>
                 {stats.elements.map((e) => (
                   <BarRow key={e.label} label={e.label} labelW={40} count={e.count} w={e.w} color={e.color} />
                 ))}
               </div>
               <div className="flex flex-col gap-2">
-                <span className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-zinc-600">By class</span>
+                <SubLabel icon={IC_CLASS}>By class</SubLabel>
                 {stats.classes.map((c) => (
                   <BarRow key={c.label} label={c.label} labelW={54} count={c.count} w={c.w} color="#6b7280" />
                 ))}
               </div>
               {stats.stars.length > 0 && (
                 <div className="flex flex-col gap-2">
-                  <span className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-zinc-600">By rarity</span>
+                  <SubLabel icon={IC_RARITY}>By rarity</SubLabel>
                   <div className="flex gap-2">
                     {stats.stars.map((r) => (
                       <div key={r.star} className="flex flex-1 flex-col items-center gap-0.5 rounded-lg border border-white/6 bg-white/3 px-1 py-2">
@@ -483,11 +526,11 @@ export function HomeScreen({
 
             {/* gear breakdown */}
             <Card className="flex min-w-0 flex-[1.3] flex-col gap-3.5">
-              <SectionLabel right={<Num className="text-[10px] text-zinc-600">{stats.gear.toLocaleString()} pieces</Num>}>Gear breakdown</SectionLabel>
+              <SectionLabel icon={IC_GEAR} tint="#38bdf8" right={<Num className="text-[10px] text-zinc-600">{stats.gear.toLocaleString()} pieces</Num>}>Gear breakdown</SectionLabel>
               <div className="flex gap-4">
                 {/* by slot */}
                 <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <span className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-zinc-600">By slot</span>
+                  <SubLabel icon={IC_SLOT}>By slot</SubLabel>
                   <div className="grid grid-cols-2 gap-x-3.5 gap-y-2">
                     {stats.slots.map((s) => (
                       <div key={s.id} className="flex items-center justify-between gap-1.5 border-b border-white/5 pb-1.5">
@@ -499,7 +542,7 @@ export function HomeScreen({
                 </div>
                 {/* top sets */}
                 <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <span className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-zinc-600">Top armor sets</span>
+                  <SubLabel icon={IC_SETS}>Top armor sets</SubLabel>
                   {stats.sets.length > 0 ? stats.sets.map((se) => (
                     <div key={se.id} className="flex items-center gap-2">
                       <span className="h-3.5 w-3.5 shrink-0 rounded" style={{ background: se.color }} />
@@ -526,7 +569,7 @@ export function HomeScreen({
           <div className="flex gap-3.5">
             <Card className="flex min-w-0 flex-1 items-center justify-between gap-3.5 py-3.5">
               <div className="flex items-center gap-5.5">
-                <SectionLabel>Library</SectionLabel>
+                <SectionLabel icon={IC_LIBRARY} tint="#c4b5fd">Library</SectionLabel>
                 <div className="flex flex-col gap-px">
                   <Num className="text-[20px] font-bold text-violet-300">{library.builds}</Num>
                   <span className="text-[9px] uppercase tracking-wider text-zinc-500">saved builds</span>
@@ -539,7 +582,7 @@ export function HomeScreen({
               <ActBtn tone="violet" onClick={onOpenBuilder}>Open Builder →</ActBtn>
             </Card>
             <Card className="flex min-w-0 flex-[1.5] items-center gap-3.5 py-3.5">
-              <SectionLabel>Quick actions</SectionLabel>
+              <SectionLabel icon={IC_BOLT} tint="#22d3ee">Quick actions</SectionLabel>
               <div className="flex flex-1 gap-2">
                 <button
                   onClick={onCapture}
