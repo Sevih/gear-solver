@@ -23,11 +23,13 @@
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
 ### 🟡/⚪ UX-cohérence & nits
-- [ ] 🟡 **`noCrit` dans le scoring du solver** — le flag `noCrit` (héros qui ne peuvent jamais crit :
-      Rhona / K.Tamamo / G.Nella) corrige l'encadré **Damage / +1%** mais PAS le solver : `computeCheapRatings`
-      (colonnes `dmg`/`dmgs`/`mcd` + le SOLVE CP) suppose le crit du héros et **surévalue** un héros no-crit.
-      Fix : forcer `crc = 0` (et ignorer CHD) pour ces héros avant le scoring — passer `noCrit` au contexte
-      de solve (`engine.ts` `precomputeContext`/`computeCheapRatings`) comme `dmgStat`/`dmgSec`. Léger.
+- [x] 🟡 **`noCrit` dans le scoring du solver** — ~~`computeCheapRatings` (colonnes `dmg`/`dmgs`/`mcd`)
+      suppose le crit du héros et surévalue un héros no-crit (Rhona / K.Tamamo / G.Nella).~~ Fait :
+      `precomputeContext` lit `meta.noCrit` → contexte → `computeCheapRatings(fs, dmgStat, dmgSec, noCrit)`
+      force `pCrit = 0` (le terme CHD disparaît) et `mcd` retombe sur le hit non-crit (pas de plafond crit
+      à atteindre). **CP laissé fidèle** : `calcBattlePower` est un miroir validé 0-diff de l'in-game et
+      SOLVE CP = « maximise le nombre CP du jeu » (qui inclut le crc tel quel) ; zéroter le crc divergerait.
+      +4 tests `solver.test.ts`.
 - [x] 🟡 **`SlotMini` non cliquable (Builds)** — ~~aucun moyen d'inspecter une pièce depuis la tab Builds
       (tooltip/clic), contrairement à l'Inventory.~~ Fait : hover sur une pièce équipée → `RichTooltip`
       (`placement="right"`) + `GearDetailBody` — le **panneau d'inspection complet** de l'Inventory

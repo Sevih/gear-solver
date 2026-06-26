@@ -71,11 +71,18 @@ const DR_FLOOR = 0.3;
  *  to the damage base. The offensive ratings `dmg`/`dmgs`/`mcd`/`mcds` score
  *  against `mainStat + Σ secondary` instead of bare ATK, so off-ATK and hybrid
  *  heroes get a meaningful "dmg" column. `dmgh` stays the explicit HP-scaling
- *  reference column regardless. */
+ *  reference column regardless.
+ *
+ *  `noCrit` heroes (Rhona / K.Tamamo / G.Nella — their damage skills can never
+ *  crit) score with `pCrit = 0` so the crit term drops out entirely, and `mcd`
+ *  (the "assume 100% CHC" column) collapses to the non-crit hit — they have no
+ *  crit ceiling to reach. Without this the offensive ratings reward CHC/CHD a
+ *  no-crit hero can never cash in, over-ranking crit gear for them. */
 export function computeCheapRatings(
   s: FinalStats,
   dmgStat: "atk" | "def" | "hp" = "atk",
   dmgSec?: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd" | "eff" | "crc"; ratio: number }>,
+  noCrit = false,
 ): CheapRatings {
   const hps = s.hp * s.spd;
   // EHP — combines DEF mitigation with the defender's DMGReduceRate
@@ -90,14 +97,18 @@ export function computeCheapRatings(
   // DMGBoost) folds into the DR rate per §3.2 — dmgRed is the *defender's*
   // stat, so it doesn't reduce a build's own offensive output, only its
   // EHP intake (above). This was the subtle bug in the first pass.
-  const pCrit = Math.min(s.crc, 100) / 100;
+  // No-crit heroes can never land a crit → pCrit collapses to 0, so the CHD
+  // term drops out of every offensive rating.
+  const pCrit = noCrit ? 0 : Math.min(s.crc, 100) / 100;
   const chdMult = s.chd / 100;
   const dmgUpMod = s.dmgUp / 100;
   // E[DR] / 1000 — normal hit = 1.0, crit = CHD/100, weighted by pCrit.
   // Then +dmgUp/100 from the attacker's DMGBoost buff chain.
   const drFactor = Math.max(DR_FLOOR, 1 + pCrit * (chdMult - 1) + dmgUpMod);
   // Same but assuming 100% CHC (the "I have raid crit buffs" comparison).
-  const mcdFactor = Math.max(DR_FLOOR, chdMult + dmgUpMod);
+  // A no-crit hero has no crit ceiling to reach, so its "max crit" hit is just
+  // the non-crit hit (== drFactor) — never a phantom CHD-scaled number.
+  const mcdFactor = noCrit ? drFactor : Math.max(DR_FLOOR, chdMult + dmgUpMod);
   // Penetration multiplier vs the TARGET_DEF enemy. PPR caps at 100% per
   // §1.2: `min(PPR, 1000)`; we model PEN past 100% as "no extra credit"
   // (the flat PiercePower stat is rare on builds and ignored here).

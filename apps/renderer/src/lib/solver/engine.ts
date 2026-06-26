@@ -118,6 +118,9 @@ export interface PrecomputedSolveContext {
   /** Additive secondary damage scalings (stat × ratio) — undefined for the
    *  pure-single-stat majority. Constant per solve. */
   dmgSec?: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd" | "eff" | "crc"; ratio: number }>;
+  /** Hero can never crit (Rhona / K.Tamamo / G.Nella) — the offensive ratings
+   *  score with `pCrit = 0` so CHC/CHD gear isn't rewarded for them. */
+  noCrit: boolean;
   /** Set requirements as an OR-list of AND-plans. Used for branch-and-prune
    *  in the armor cartesian (feasible = at least one plan still reachable). */
   setPlans: SetPlan[];
@@ -408,6 +411,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     starMeta,
     dmgStat: meta.dmgStat ?? "atk",
     dmgSec: meta.dmgSec,
+    noCrit: meta.noCrit ?? false,
     setPlans,
     excludedSets,
     allowBrokenSets,
@@ -661,7 +665,7 @@ export async function solveChunk(
   options: SolveChunkOptions = {},
 ): Promise<SolveChunkResult> {
   const { req, pools, baseline, scaling, ee, gemDeltaByTalismanSlots, gemAllocByTalismanSlots,
-          scoredGems, setPlans, allowBrokenSets, skills, starMeta, dmgStat, dmgSec } = ctx;
+          scoredGems, setPlans, allowBrokenSets, skills, starMeta, dmgStat, dmgSec, noCrit } = ctx;
   // EE gem-slot count is constant per solve (same EE piece across every combo).
   const eeSlots = gemSlotsOf(ee);
   const { mode, filters, game } = req;
@@ -852,7 +856,7 @@ export async function solveChunk(
 
                 if (!passesSpecs(fs, statFilterSpecs)) continue;
 
-                const ratings = computeCheapRatings(fs, dmgStat, dmgSec);
+                const ratings = computeCheapRatings(fs, dmgStat, dmgSec, noCrit);
                 const score = computeScore(fs, filters.priority);
 
                 if (!passesRatingSpecs(ratings, score, ratingFilterSpecs)) continue;

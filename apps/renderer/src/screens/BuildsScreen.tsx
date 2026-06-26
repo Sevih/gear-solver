@@ -492,10 +492,13 @@ const ADVICE_REQUIRED_SLOTS: ReadonlyArray<SlotId> = [
   "weapon", "accessory", "helmet", "armor", "gloves", "boots",
 ];
 
-/** Display labels for the main-gear slots used in advice messages. */
+/** Display labels for the slots used in advice messages (design SlotId keys —
+ *  resolve a core GearSlot through `toDesignSlot` first). Includes the two
+ *  gem-bearing slots for the gem-slot rule. */
 const ADVICE_SLOT_LABEL: Record<string, string> = {
   weapon: "Weapon", accessory: "Accessory", helmet: "Helmet",
   armor: "Armor", gloves: "Gloves", boots: "Boots",
+  talisman: "Talisman", exclusive: "EE",
 };
 
 /** Auto-detect notable conditions on a build. Pure + deterministic in
@@ -511,10 +514,20 @@ const ADVICE_SLOT_LABEL: Record<string, string> = {
  *   2. Lone set piece — a single piece of an armor set grants no bonus (no
  *      1pc tier exists in-game), so it's a wasted slot.
  *   3. 3/4 of a 4pc-capable set — the 4th piece completes the 4pc bonus.
+ *   4. Wasted stat caps — CRC / PEN over 100% is dead weight (both hard-cap at
+ *      100% in the damage model; the overflow could be reallocated).
+ *   5. Gem slots — empty gem slots on the Talisman / EE are free stats left on
+ *      the table; the 5th slot stays locked until the piece reaches +5.
+ *   6. Upgrade headroom — main-gear pieces with unused reforges, and 6★ pieces
+ *      not yet ascended, each aggregated into one line to avoid card spam.
  *
- *  Set tiers are read from `game.sets` (the T4 `level === 2` row, same
- *  derivation as the Builder's set catalog) — no assumed set sizes. */
-function computeAdvice(entry: ComposedEntry, game: GameData | null): AdviceItem[] {
+ *  Rules 4-6 only run on a fully-main-equipped hero (rule 1 returns early
+ *  otherwise) so they never fire on a half-built roster. Set tiers are read
+ *  from `game.sets` (the T4 `level === 2` row, same derivation as the
+ *  Builder's set catalog) — no assumed set sizes. Cap values (100% CRC/PEN)
+ *  and the reforge budget (6★ Singularity = star+3, else star) are model
+ *  constants mirrored from ratings.ts / engine.ts, not guesses. */
+export function computeAdvice(entry: ComposedEntry, game: GameData | null): AdviceItem[] {
   const { equipped, rawPieces } = entry;
   // No gear at all → the card's "No gear" label covers it; stay silent.
   if (equipped.size === 0) return [];
@@ -549,6 +562,51 @@ function computeAdvice(entry: ComposedEntry, game: GameData | null): AdviceItem[
       }
     }
   }
+
+  // Rule 4 — wasted stat caps. CRC and PEN both hard-cap at 100% in the damage
+  // model; any overflow is dead weight that could be reallocated. Rounded waste
+  // must be > 0 so a float a hair over 100 doesn't print a "0% wasted" line.
+  if (entry.stats) {
+    const capWaste = (label: string, v: number) => {
+      const waste = round1(v - 100);
+      if (waste > 0) out.push({ tone: "warn", text: `${label} ${round1(v)}% — ${waste}% wasted over the 100% cap` });
+    };
+    capWaste("Crit rate", entry.stats.crc);
+    capWaste("Penetration", entry.stats.pen);
+  }
+
+  // Rule 5 — gem slots on the gem-bearing pieces (Talisman / EE). `gemSlots` is
+  // always length 5 with `0` = empty; the 5th slot is gated behind enhance +5.
+  // An empty usable slot is free stats left on the table.
+  for (const p of rawPieces) {
+    if (!p.gemSlots) continue;
+    const label = ADVICE_SLOT_LABEL[toDesignSlot(p.slot) ?? ""] ?? "Piece";
+    const usable = p.enhanceLevel >= 5 ? 5 : 4;
+    const empty = usable - p.gemSlots.slice(0, usable).filter((g) => g !== 0).length;
+    if (empty > 0) {
+      out.push({ tone: "warn", text: `${label}: ${empty} empty gem slot${empty > 1 ? "s" : ""}` });
+    } else if (p.enhanceLevel < 5) {
+      out.push({ tone: "tip", text: `${label}: reach +5 to unlock a 5th gem slot` });
+    }
+  }
+
+  // Rule 6 — upgrade headroom on the main-gear pieces, each kind aggregated
+  // into one line so a roster of half-finished gear doesn't spam the card.
+  // `maxReforges` mirrors the in-game cap (6★ Singularity = star+3, else star).
+  // Gem pieces are skipped — gems aren't reforged/ascended like gear.
+  let unusedReforges = 0;
+  let unascended6 = 0;
+  for (const p of rawPieces) {
+    if (p.gemSlots) continue;
+    const ds = toDesignSlot(p.slot);
+    if (!ds || !ADVICE_REQUIRED_SLOTS.includes(ds)) continue;
+    const star = p.star ?? 0;
+    const maxReforges = star === 6 && p.ascended ? star + 3 : star;
+    if (p.reforgeCount < maxReforges) unusedReforges++;
+    if (star === 6 && !p.ascended) unascended6++;
+  }
+  if (unascended6 > 0) out.push({ tone: "info", text: `${unascended6} 6★ piece${unascended6 > 1 ? "s" : ""} not yet ascended` });
+  if (unusedReforges > 0) out.push({ tone: "info", text: `${unusedReforges} piece${unusedReforges > 1 ? "s" : ""} with unused reforges` });
 
   return out;
 }

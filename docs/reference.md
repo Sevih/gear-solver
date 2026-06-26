@@ -276,6 +276,16 @@ Conventions :
   (§3.2), empêche les ratings dmg/dmgh de descendre à 0 sur stacks
   de defender DMGReduce extrêmes.
 
+**Héros `noCrit`** (Rhona / K.Tamamo / G.Nella — leurs skills ne peuvent jamais
+crit) : `computeCheapRatings(fs, dmgStat, dmgSec, noCrit=true)` force `pCrit = 0`
+→ le terme crit disparaît de tous les ratings offensifs, et `mcd` (« assume 100%
+CHC ») retombe sur le hit non-crit (`mcdFactor === drFactor`) puisqu'il n'y a pas
+de plafond crit à atteindre. Sans ça le solveur récompensait de la CHC/CHD qu'un
+no-crit ne peut jamais encaisser. `noCrit` vient de `meta.noCrit`, propagé via le
+contexte de solve comme `dmgStat`/`dmgSec`. **CP non affecté** : `calcBattlePower`
+reste un miroir fidèle de l'in-game (qui utilise le crc brut), donc SOLVE CP
+optimise bien le nombre CP réel du jeu.
+
 **Pas inclus** dans les ratings (defender-dependent, hors scope build-trait) :
 Element (×0.8/×1.0/×1.2), Mark (×1.15), EnemyCriticalDamageReduce, MISS
 multiplier, `FinalDamageReduce` buff chain. Le PEN est l'exception : modélisé
@@ -539,7 +549,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | Fichier | Couverture |
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
-| `apps/renderer/test/solver.test.ts`     | 65 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR) |
+| `apps/renderer/test/solver.test.ts`     | 69 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR) |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped` : parité sans gemme crit, accept jusqu'à CHC 100 (overshoot ≤102), stop pile à 100, skip total au cap, split talisman/EE, delta null si rien d'utile, score ≤0 jamais pris |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount` : défaut `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, plafond dur 64 |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidélité, maps vides), import merge (dédup par `id`, collision garde l'existant), replace (overwrite), validation du bundle (kind/version/maps) |
@@ -548,7 +558,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick` : verdict des deux côtés de la bascule, équivalent-flat exact, égalité pile à la bascule, garde tick %=0 |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains` : tri décroissant, monotonie delta→gain, CHC nul si crit-cap, base 0 → vide |
 
-Run : `npm test --workspaces --if-present`. **Total : 152 tests** (core 11 + renderer 141 : solver, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue, +4 dmgValue).
+Run : `npm test --workspaces --if-present`. **Total : 156 tests** (core 11 + renderer 145 : solver, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue, +4 dmgValue).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 

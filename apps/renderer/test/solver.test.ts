@@ -858,6 +858,38 @@ describe("crc clamp at 100%", () => {
   });
 });
 
+describe("computeCheapRatings — noCrit heroes", () => {
+  // A no-crit hero can never land a crit, so CHC/CHD must not move its
+  // offensive ratings (Rhona / K.Tamamo / G.Nella).
+  const fs = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 80, chd: 250,
+    eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+
+  it("dmg ignores crit → equals the bare non-crit hit (ATK × penMult)", () => {
+    // pCrit forced to 0 → drFactor = 1.0 → dmg = ATK = 1000, regardless of CHC/CHD.
+    expect(computeCheapRatings(fs, "atk", undefined, true).dmg).toBe(1000);
+    // Crit-capable hero with the SAME stats scores higher (crit upside cashed in).
+    expect(computeCheapRatings(fs, "atk", undefined, false).dmg).toBeGreaterThan(1000);
+  });
+
+  it("mcd collapses to the non-crit hit (no 100%-crit ceiling to reach)", () => {
+    const r = computeCheapRatings(fs, "atk", undefined, true);
+    expect(r.mcd).toBe(r.dmg);   // mcdFactor === drFactor when noCrit
+    expect(r.mcd).toBe(1000);
+  });
+
+  it("CHC/CHD are inert for a noCrit hero — varying them doesn't change dmg", () => {
+    const lowCrit = { ...fs, crc: 0, chd: 100 };
+    const highCrit = { ...fs, crc: 100, chd: 300 };
+    expect(computeCheapRatings(lowCrit, "atk", undefined, true).dmg)
+      .toBe(computeCheapRatings(highCrit, "atk", undefined, true).dmg);
+  });
+
+  it("dmgUp still applies (it's not a crit term)", () => {
+    // drFactor = 1 + dmgUp/100 = 1.2 → dmg = 1200 even with no crit.
+    expect(computeCheapRatings({ ...fs, dmgUp: 20 }, "atk", undefined, true).dmg).toBeCloseTo(1200);
+  });
+});
+
 /* ─────────────────────────────────────────────────────────────────────────
  * REFORGE BUDGET — 6★ ascended (Singularity) pieces get +3 reforges
  * on top of the regular star count.

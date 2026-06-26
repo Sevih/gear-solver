@@ -120,6 +120,9 @@ Pour chaque combo qui passe phase 4 :
    - `gemDelta` est pré-agrégé (cf. § Gems).
 2. **Stat filter** : si une `FinalStats[key]` est hors `[min, max]` user, `continue`.
 3. **Cheap ratings** : 8 produits simples (HpS, Ehp, EhpS, Dmg, DmgS, Mcd, McdS, DmgH).
+   Pour un héros **`noCrit`** (`meta.noCrit`, propagé dans le contexte), `computeCheapRatings`
+   reçoit `noCrit=true` → `pCrit=0` (le terme CHD disparaît) et `mcd` retombe sur le hit
+   non-crit : la CHC/CHD ne gonfle plus ses ratings. CP reste inchangé (miroir in-game fidèle).
 4. **Score** : `Σ priority × (final / STAT_NORMS) × 100`.
 5. **Rating filter** : pareil que stat filter, sur ratings + score.
 6. **CP / upg** : CP est calculé en SOLVE CP, OU en SOLVE dès qu'un filtre CP est posé
