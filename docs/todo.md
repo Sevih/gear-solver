@@ -36,16 +36,21 @@
       (tooltip/clic), contrairement à l'Inventory.
 - [ ] 🟡 **Conservation des résultats** — conserver les résultats du solver quand on change de tab
       (voire permettre de laisser le solver tourner en fond).
-- [ ] 🟡 **Reset des tris au lancement** — les tabs Inventory et Builds conservent les tris même après
-      relance de l'app ; on n'en veut pas (repartir d'un tri par défaut).
-- [ ] 🟡 **`Advices` (tab Builder)** — ne compter « Missing » que si le perso a 1 EE + 3 autres pièces
-      (1 EE seul ≠ missing, juste ignoré). Advice quand un perso a > 102 % de crit ET des gems CHC sur
-      le talisman/EE (crit gaspillé).
+- [ ] 🟡 **Reset des tris/filtres au lancement** — l'état persiste au reload et on n'en veut pas :
+      **Inventory** persiste le tri (`gs.inv.sort`/`dir`/`tab`), **Builds** persiste ses filtres
+      (`gs.builds.filters` ; pas de tri, fixe CP desc). Repartir d'un défaut au lancement.
+- [ ] 🟡 **`Advices` (tab Builder)** — 2 ajouts à `computeAdvice` ([BuildsScreen.tsx:489-551](../apps/renderer/src/screens/BuildsScreen.tsx#L489)) :
+      1. **Réduction de bruit Missing** : le flag « Missing » est déjà correct (6 slots core, EE/Talisman
+         exclus) mais s'affiche sur tout perso incomplet. Le **suppresser** sur les persos peu équipés
+         (eg seuil : ne l'afficher que si déjà substantiellement geared, ~1 EE + 3 pièces) → on ne se
+         soucie pas d'un perso à peine équipé.
+      2. **Advice crit-overcap** (absent aujourd'hui) : perso à > 102 % de crit ET gems CHC socketées sur
+         talisman/EE → crit gaspillé.
 - [ ] 🟡 **Show/hide colonnes — accès clic-droit** — le menu « Columns » existe (`c8808d4`) ; ajouter
       l'ouverture via clic-droit sur les en-têtes de colonne.
-- [ ] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** alors que l'accessoire a un main user-sélectionnable
-      → placeholder potentiellement faux quand aucun build n'est sélectionné. *(laissé pour ne pas
-      diverger du panneau Inventory qui partage la map)*
+- [~] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** (wontfix assumé) — placeholder faux quand aucun build
+      n'est sélectionné (l'accessoire a un main user-sélectionnable), mais **laissé volontairement** pour
+      ne pas diverger du panneau Inventory qui partage la map. À ne reprendre que si les deux maps divergent.
 - [ ] ⚪ **Optims mineures Inventory (si profilage)** — `computeQuality` recalculé plusieurs fois par pièce
       (précalculable dans `toUiPiece`) · double virtualisation (`contentVisibility:auto` redondant avec
       `react-virtual`) · 7 `useMemo` d'availability fusionnables en une passe.
