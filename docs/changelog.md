@@ -88,7 +88,15 @@ garde le top-K CP. Budget défaut `CP_COMBO_BUDGET = 8 M` (~1 s), scalé par le 
 `100` = exhaustif). Priorité explicite prioritaire ; SOLVE Score sans priorité inchangé (prune sauté) ; Talisman/EE
 + slots `keepCurrent` exemptés ; sets requis préservés. **Limite assumée** : notation *standalone*, un membre qui
 ne brille qu'en complétant un set peut être sous-classé (monter Top% ou exiger le set). `keepTopN` /
-`allocateComboBudget` exportés + testés. +11 tests `cpPrune.test.ts`.
+`allocateComboBudget` exportés + testés. +12 tests `cpPrune.test.ts`.
+
+**Pin du build courant + debug CP** — suite : un solve rendait un CP **inférieur** au build équipé (le cap top-K
+pouvait élaguer une pièce actuelle). `keepTopN` accepte des `pinUids` : la pièce **actuellement équipée** de chaque
+slot est désormais **toujours gardée** → le build courant reste atteignable, donc le solver ne peut jamais rendre
+pire que l'équipé. Plus un bloc **debug** (`gs.debug.solver`) dans `precomputeContext` qui loggue `cp-current-build`
+= le CP que **notre moteur** calcule pour le build équipé (gems socketés) + la survie de chaque pièce au prune ;
+l'orchestrator loggue `topCp`/`topScore` du meilleur résultat. Tranche **recall** (pièce élaguée) vs **calc** (notre
+CP ≠ celui du jeu).
 
 **Défaut Top% 100 → 30** (`INITIAL_FILTERS`) — le slider garde son sens (100 = garde tout = exhaustif), mais le
 défaut élague à 30 %/slot. Warning du panneau Priority corrigé (le Top% mord en SOLVE CP même sans priorité).

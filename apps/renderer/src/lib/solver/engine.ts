@@ -27,6 +27,7 @@ import {
   type ScalingMap,
 } from "../composeBuild.js";
 import { calcBattlePower, makeCpEvaluator } from "./cp.js";
+import { debug, debugEnabled } from "../log.js";
 import { aggregateGemDelta, allocateGems, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
@@ -388,7 +389,12 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
         const others = equipped.filter((g) => g.slot !== slot);
         const scoreOf = (p: GearPiece): number =>
           cpEval(computeFinalStats(composed.noGearStats, composed.scaling, others.concat(p), game), ooEquipped);
-        pools[slot] = keepTopN(pools[slot], scoreOf, keeps[i]!, requiredSetIds);
+        // Pin the currently-equipped piece so the current build is always
+        // reachable → the solver can never return a lower CP than the hero
+        // already has, even when the piece doesn't rank in the budget's top-K.
+        const cur = equipped.find((g) => g.slot === slot);
+        const pin = cur ? new Set([cur.uid]) : undefined;
+        pools[slot] = keepTopN(pools[slot], scoreOf, keeps[i]!, requiredSetIds, pin);
       });
     }
   }
@@ -424,6 +430,28 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     for (const slot of ["helmet", "armor", "gloves", "boots"] as const) {
       if (!lockedSlots.has(slot)) pools[slot] = pruneDominatedForCp(pools[slot], setKeyOf);
     }
+  }
+
+  // Debug (gs.debug.solver) — diagnose "solver CP < my current build". Logs the
+  // CP OUR engine computes for the hero's currently-equipped build (socketed
+  // gems, no override) and whether each current piece survived the prune. If
+  // curCp ≈ the in-game number but the solve returns less → recall (a pinned
+  // piece should now prevent that); if curCp itself is below the in-game number
+  // → a compose/CP-calc gap to chase (gems / talisman / EE), not the search.
+  if (debugEnabled("solver") && req.mode === "cp") {
+    const eq = inv.gear.filter((g) => g.equippedBy === heroUid);
+    const oo = eq.find((g) => g.slot === "ooparts") ?? null;
+    const cpEvalDbg = makeCpEvaluator({
+      showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused,
+    });
+    const curCp = eq.length
+      ? cpEvalDbg(computeFinalStats(composed.noGearStats, composed.scaling, eq, game), oo)
+      : null;
+    const survival = (["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const).map((s) => {
+      const cur = eq.find((g) => g.slot === s) ?? null;
+      return { slot: s, uid: cur?.uid ?? null, inPool: cur ? pools[s].some((p) => p.uid === cur.uid) : null, kept: pools[s].length };
+    });
+    debug("solver", "cp-current-build", { heroUid, curCp, survival });
   }
 
   // Total counts for the footer (pre-filter) — count any piece in the slot,
@@ -627,25 +655,29 @@ function topPctPrune(pieces: GearPiece[], priority: Record<string, number>, pct:
 const CP_COMBO_BUDGET = 8_000_000;
 
 /** Generic top-N selector: score every piece with `scoreOf`, keep the top `n`
- *  (clamped to [1, length]), then always re-add pieces belonging to a required
- *  set so the set stays feasible even if its members score low (same protection
- *  as `topPctPrunePreserving`). Shared by the CP-weighted auto-prune; the
- *  priority prune keeps its own `topPctPrune` (per-roll normalized scoring). */
+ *  (clamped to [1, length]), then always re-add protected pieces — members of a
+ *  required set (so the set stays feasible even if they score low) and any
+ *  `pinUids` (the hero's currently-equipped piece, so the solver can always at
+ *  least reproduce the current build → never returns a WORSE result than what's
+ *  on the hero). Shared by the CP-weighted auto-prune; the priority prune keeps
+ *  its own `topPctPrune` (per-roll normalized scoring). */
 export function keepTopN(
   pieces: GearPiece[],
   scoreOf: (p: GearPiece) => number,
   n: number,
   requiredSetIds: Set<string>,
+  pinUids?: Set<string>,
 ): GearPiece[] {
   if (pieces.length === 0) return pieces;
   const scored = pieces.map((p) => ({ p, s: scoreOf(p) }));
   scored.sort((a, b) => b.s - a.s);
   const keep = Math.max(1, Math.min(pieces.length, n));
   const kept = scored.slice(0, keep).map((e) => e.p);
-  if (requiredSetIds.size === 0) return kept;
+  if (requiredSetIds.size === 0 && !pinUids?.size) return kept;
   const keptUids = new Set(kept.map((p) => p.uid));
   for (const p of pieces) {
-    if (p.armorSetId && requiredSetIds.has(p.armorSetId) && !keptUids.has(p.uid)) {
+    if (keptUids.has(p.uid)) continue;
+    if ((p.armorSetId && requiredSetIds.has(p.armorSetId)) || pinUids?.has(p.uid)) {
       kept.push(p);
       keptUids.add(p.uid);
     }

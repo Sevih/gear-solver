@@ -326,6 +326,8 @@ export class SolverOrchestrator {
       debug("solver", "done", {
         merged, returned: out.length,
         ms: durationMs,
+        topCp: this.mode === "cp" ? (out[0]?.cp ?? null) : undefined,
+        topScore: this.mode === "score" ? (out[0]?.score ?? null) : undefined,
         permutations: this.totalPerm(), searched: this.totalSearched(),
         perWorker: this.stats.map((s, i) => ({ w: i, perm: s.permutations, searched: s.searched })),
       });

@@ -99,6 +99,13 @@ describe("keepTopN", () => {
     const out = keepTopN([reqLow, piece("9"), piece("5")], score, 1, new Set(["Rage"]));
     expect(out.map((p) => p.uid).sort()).toEqual(["1", "9"]);
   });
+
+  it("pins a uid (current equipped piece) even when it scores below the cut", () => {
+    const score = (p: GearPiece) => Number(p.uid);
+    // keep top 1 → "9"; "1" is pinned (the hero's current piece) and survives.
+    const out = keepTopN([piece("1"), piece("9"), piece("5")], score, 1, NO_REQ, new Set(["1"]));
+    expect(out.map((p) => p.uid).sort()).toEqual(["1", "9"]);
+  });
 });
 
 describe("allocateComboBudget", () => {
