@@ -72,7 +72,7 @@
       6★ : ATK 40/4% · DEF 40/4% · HP 73/3% (bascule vers % au-dessus de base 1000 / 1000 / 2433).
 - [x] 🟢 **Rentabilité dégâts par +1% (subs offensifs)** — 2ᵉ encadré **"Damage / +1%"** : gain de dégâts
       attendu pour **+1%** de chaque stat pertinente (unité uniforme, pas le tick) — la/les **stat(s) de scaling
-      du héros** (ATK/DEF/HP selon `dmgStat` + secondaires `dmgSec`) vs **CHD** vs **DMG inc**, classé, meilleur
+      du héros** (ATK/DEF/HP/**SPD** selon `dmgStat` + secondaires `dmgSec`) vs **CHD** vs **DMG inc**, classé, meilleur
       en cyan. Pour une stat de scaling, +1% = un sub 1% → `base × 1% × (1+buffRate)` (amplificateur par stat
       depuis `scaling.buffPct`) ; CHD/DMG inc = +1 point. Réutilise le modèle validé `computeCheapRatings`
       (crit/DMG±/PEN, formules 1.4.9) : bump +1% et recompare `.dmg`. **Calculé à 100% crit (crit cap)** —

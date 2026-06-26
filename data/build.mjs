@@ -896,11 +896,12 @@ save("codex-curve.json", ingredientsResult.codexByLevel);
 //   - `scaling_add_*`      → an additive secondary component (D.Stella + HP×3%).
 // We emit `dmgStat` (the swapped MAIN, only when non-ATK — its ratio is a
 // constant that doesn't change same-hero ranking) and `dmgSec` (secondaries
-// with their ratio, which DO shift ranking). Only damage-relevant stats
-// (atk/def/hp) are kept — `scaling_add` is overloaded for non-damage effects
-// (SPEED / gold / buff-chance) which aren't part of the damage base.
-const SCALING_STAT_TO_KEY = { ST_ATTACK: "atk", ST_DEF: "def", ST_HP: "hp" };
-const DMG_SEC_STATS = new Set(["atk", "def", "hp"]);
+// with their ratio, which DO shift ranking). SPEED is a real damage scaling for
+// the SPD-attackers (Ryu Lion etc. — `scaling_add_flat ST_SPEED`), so it's kept
+// as a secondary; the engine adds `spd × ratio` to the damage base. (`gold` /
+// `buff-chance` scaling_add stay excluded — they're not in SCALING_STAT_TO_KEY.)
+const SCALING_STAT_TO_KEY = { ST_ATTACK: "atk", ST_DEF: "def", ST_HP: "hp", ST_SPEED: "spd" };
+const DMG_SEC_STATS = new Set(["atk", "def", "hp", "spd"]);
 function readDmgScaling(charId) {
   const f = resolveOuterpediaPath(`public/damage-calc/buffs/${charId}.json`);
   if (!f) return {};
@@ -913,7 +914,7 @@ function readDmgScaling(charId) {
       const key = e && SCALING_STAT_TO_KEY[e.statRef];
       if (!key) continue;
       if (e.target === "scaling_swap") {
-        if (key !== "atk") dmgStat = key; // ATK swap never happens; default stays atk
+        if (key === "def" || key === "hp") dmgStat = key; // main only swaps to DEF/HP (never ATK/SPD)
       } else if (e.target === "scaling_add_pct" || e.target === "scaling_add_flat") {
         if (!DMG_SEC_STATS.has(key)) continue;
         const ratio = Number(e.amount) / 1000;

@@ -80,7 +80,7 @@ interface SelectedComposition {
   /** Hero's damage-scaling stat (ATK default; DEF/HP exceptions) + secondary
    *  additive scalings — fed to `computeCheapRatings` for the damage panel. */
   dmgStat: "atk" | "def" | "hp";
-  dmgSec?: Array<{ stat: "atk" | "def" | "hp"; ratio: number }>;
+  dmgSec?: Array<{ stat: "atk" | "def" | "hp" | "spd"; ratio: number }>;
   /** Per-stat (1 + buffRate) amplifier: a +1% sub on a scaling stat raises the
    *  final stat by `base × 1% × dmgAmp[stat]`. */
   dmgAmp: { atk: number; def: number; hp: number };
@@ -1854,6 +1854,7 @@ const DMG_STAT_ICON: Record<string, { iconKey: string; label: string }> = {
   atk: { iconKey: "atk", label: "ATK" },
   def: { iconKey: "def", label: "DEF" },
   hp: { iconKey: "hp", label: "HP" },
+  spd: { iconKey: "spd", label: "SPD" },
   chd: { iconKey: "critDmg", label: "CHD" },
   dmgUp: { iconKey: "dmgUp", label: "DMG UP%" },
 };
@@ -1875,9 +1876,12 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
   // weight, matching how endgame builds reach the cap via gems/buffs).
   const atCap: FinalStats = { ...current, crc: 100 };
   // Scaling stats = main dmg stat + any additive secondary stats (deduped).
-  const scalingStats = Array.from(new Set<"atk" | "def" | "hp">([dmgStat, ...(dmgSec?.map((s) => s.stat) ?? [])]));
+  const scalingStats = Array.from(new Set<"atk" | "def" | "hp" | "spd">([dmgStat, ...(dmgSec?.map((s) => s.stat) ?? [])]));
   const candidates: DmgTickCandidate[] = scalingStats.map((s) => ({
-    key: s, label: DMG_STAT_ICON[s]!.label, field: s, delta: (baseFlat[s] * dmgAmp[s]) / 100, // 1% sub of that stat
+    key: s, label: DMG_STAT_ICON[s]!.label, field: s,
+    // ATK/DEF/HP: a 1% sub = base × 1% × (1+buffRate). SPD subs are flat, so a
+    // "1%" there is read as 1% of the hero's current speed (current.spd × 1%).
+    delta: s === "spd" ? current.spd / 100 : (baseFlat[s] * dmgAmp[s]) / 100,
   }));
   candidates.push({ key: "chd", label: "CHD", field: "chd", delta: 1 });
   candidates.push({ key: "dmgUp", label: "DMG UP%", field: "dmgUp", delta: 1 });
@@ -1887,7 +1891,7 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
   return (
     <Panel
       title="Damage / +1% · 100% crit"
-      hint="Expected-damage gain from +1% of each stat for this hero, computed at the crit cap (100% CHC) — the endgame baseline you build toward (below the cap, CHD is undervalued). Compares the hero's scaling stat(s), CHD and DMG inc. For a scaling stat, +1% = a 1% sub (base × 1%, through the hero's multipliers); CHD / DMG inc = +1 point. Cyan = where 1% buys the most damage. Uses the in-game crit / DMG± / PEN model."
+      hint="Expected-damage gain from +1% of each stat for this hero, computed at the crit cap (100% CHC) — the endgame baseline you build toward (below the cap, CHD is undervalued). Compares the hero's scaling stat(s), CHD and DMG inc. For ATK/DEF/HP, +1% = a 1% sub (base × 1%, through the hero's multipliers); CHD / DMG inc = +1 point; SPD (for SPD-scalers, flat subs) = 1% of the hero's speed. Cyan = where 1% buys the most damage. Uses the in-game crit / DMG± / PEN model."
       width={width}
     >
       <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">

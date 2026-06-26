@@ -32,7 +32,7 @@ export interface DmgTickGain {
 export function dmgTickGains(
   current: FinalStats,
   dmgStat: "atk" | "def" | "hp",
-  dmgSec: ReadonlyArray<{ stat: "atk" | "def" | "hp"; ratio: number }> | undefined,
+  dmgSec: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd"; ratio: number }> | undefined,
   candidates: ReadonlyArray<DmgTickCandidate>,
 ): DmgTickGain[] {
   const base = computeCheapRatings(current, dmgStat, dmgSec).dmg;

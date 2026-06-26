@@ -330,10 +330,11 @@ export interface CharacterDef {
    *  doesn't change same-hero build ranking. */
   dmgStat?: "def" | "hp";
   /** Additive secondary damage scalings — the damage base gains `stat × ratio`
-   *  for each (e.g. D.Stella → [{stat:"hp", ratio:0.03}]). Unlike the main swap,
-   *  these DO shift ranking (they value a second stat). Only atk/def/hp are
-   *  modeled. From outerpedia's `scaling_add_*` buffs (permille → ratio). */
-  dmgSec?: Array<{ stat: "atk" | "def" | "hp"; ratio: number }>;
+   *  for each (e.g. D.Stella → [{stat:"hp", ratio:0.03}], Ryu Lion →
+   *  [{stat:"spd", ratio:2.5}]). Unlike the main swap, these DO shift ranking
+   *  (they value a second stat). atk/def/hp/spd modeled. From outerpedia's
+   *  `scaling_add_*` buffs (permille → ratio). */
+  dmgSec?: Array<{ stat: "atk" | "def" | "hp" | "spd"; ratio: number }>;
   /** Null only if calc-stats couldn't find a row (defensive fallback). */
   ingredients: CharacterIngredients | null;
 }
