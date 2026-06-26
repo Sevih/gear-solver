@@ -32,6 +32,11 @@
       set requis (restreindre les pools armor au set quand un seul req-4pc actif — cf. le 🔴 ci-dessus).
 
 ### 🟡/⚪ UX-cohérence & nits
+- [ ] 🟡 **`noCrit` dans le scoring du solver** — le flag `noCrit` (héros qui ne peuvent jamais crit :
+      Rhona / K.Tamamo / G.Nella) corrige l'encadré **Damage / +1%** mais PAS le solver : `computeCheapRatings`
+      (colonnes `dmg`/`dmgs`/`mcd` + le SOLVE CP) suppose le crit du héros et **surévalue** un héros no-crit.
+      Fix : forcer `crc = 0` (et ignorer CHD) pour ces héros avant le scoring — passer `noCrit` au contexte
+      de solve (`engine.ts` `precomputeContext`/`computeCheapRatings`) comme `dmgStat`/`dmgSec`. Léger.
 - [x] 🟡 **`SlotMini` non cliquable (Builds)** — ~~aucun moyen d'inspecter une pièce depuis la tab Builds
       (tooltip/clic), contrairement à l'Inventory.~~ Fait : hover sur une pièce équipée → `RichTooltip` +
       `GearTooltipContent` (main/subs/gems, comme le détail Inventory).
