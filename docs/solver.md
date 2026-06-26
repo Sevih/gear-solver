@@ -134,8 +134,9 @@ Pour chaque combo qui passe phase 4 :
 
 ## 4. Les panneaux de l'UI
 
-Les 9 panneaux du haut + sidebar Actions + footer fixé. Chaque panneau pousse
-son state dans le reducer `SolverFilters` ([BuilderScreen.tsx](../apps/renderer/src/screens/BuilderScreen.tsx)).
+Les panneaux du haut (Hero, Stats, Sub tick value / Damage info, Options, filtres,
+priorité, mains, sets, effets) + sidebar Actions/Library + footer fixé. Chaque panneau
+de filtre pousse son state dans le reducer `SolverFilters` ([BuilderScreen.tsx](../apps/renderer/src/screens/BuilderScreen.tsx)).
 
 ### Hero
 Picker (combobox searchable) + portrait + 4 boutons d'action.
@@ -148,6 +149,21 @@ Picker (combobox searchable) + portrait + 4 boutons d'action.
 Snapshot des `FinalStats` du build actuellement équipé sur le héros (col gauche)
 vs le build sélectionné dans la table (col droite, em-dash tant qu'aucune ligne
 n'est cliquée). Lecture pure, jamais éditable.
+
+### Sub tick value & Damage / +1% (encadrés d'aide par héros)
+Deux panneaux d'info en lecture seule (col droite, sous Stats), recalculés au
+changement de héros / niveau / awakening :
+- **Sub tick value** (`lib/subValue.ts`) — pour ATK/DEF/HP, la valeur d'un tick de
+  sub 6★ en **flat** vs en **%** (≈ équivalent flat), gagnant en cyan. Un tick % scale
+  sur `base+evo+awak` (gear-indépendant — le flat gear est ajouté après le ×%, le
+  `(1+buffRate)` s'annule) → le verdict ne dépend que de la base du héros. Valeurs par
+  tick depuis `sub-ticks.json` (dérivé de `subStatPools` outerpedia).
+- **Damage / +1%** (`lib/dmgValue.ts`) — gain de dégâts attendu pour **+1%** de chaque
+  stat pertinente : la/les stat(s) de scaling du héros (ATK/DEF/HP/**SPD** via `dmgStat` +
+  secondaires `dmgSec`, SPD/EFF/CHC inclus) vs **CHD** vs **DMG inc**, classé, meilleur en
+  cyan. **Calculé à 100% crit** (crit cap = baseline endgame). Réutilise `computeCheapRatings`
+  (modèle dégâts RE 1.4.9). Les héros **no-crit** (`noCrit`, ex. 2000086/2000091/2000008)
+  forcent `crc=0` et masquent CHD.
 
 ### Options
 Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :

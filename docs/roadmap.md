@@ -30,6 +30,10 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   en **localStorage** (`lib/storage/`). Bouton Optimize → (Builds → Builder).
 - **Desktop Electron.** `apps/desktop` (main + serveur local + détection émulateur) —
   fonctionnel en dev.
+- **Repo sync (images + game data).** Au lancement, l'app se synchronise sur le repo public
+  `Sevih/outerpediaV2` (`data-sync.ts` dual-mode checkout/repo SHA-gated ; handler `/img/*`
+  partagé cascade checkout→cache→CDN→302) → suit les patchs jeu **sans nouveau build**.
+  Prod packagé encore à vérifier (M8).
 
 ## Next
 
@@ -59,9 +63,9 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 ## Reference — solver internals (M5/M6 delivered)
 
 ### M5 — Solver core ✅
-- Pruned cartesian search in a **Web Worker pool** (≤ 8 workers, embarrassingly parallel
-  partition on the largest slot). Per-slot prefilter (main, effect, sets-excluded), Top-%
-  substat prune, mid-tree set-feasibility prune, fixed-size top-K min-heap.
+- Pruned cartesian search in a **Web Worker pool** (`hardwareConcurrency-1`, hard cap 64,
+  embarrassingly parallel partition on the largest slot). Per-slot prefilter (main, effect,
+  sets-excluded), Top-% substat prune, mid-tree set-feasibility prune, fixed-size top-K min-heap.
 - Gem sub-solver greedy with pre-aggregated `{flat, pct}` delta per `talismanSlots` variant.
 - Two modes: **SOLVE** (priority-weighted Score, CP computed lazily for top-N),
   **SOLVE CP** (CP in-loop as sort key).

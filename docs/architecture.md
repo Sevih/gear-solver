@@ -16,15 +16,18 @@ Four layers, connected by plain JSON:
   from a Web Worker, a CLI, or the desktop shell. (The combination solver itself lives
   in `apps/renderer/src/lib/solver/`, not in core.)
 - **apps/renderer** — Vite + React. Loads the JSON, drives the engine, renders results.
-  Heavy solves fan out across a **pool of Web Workers** (size ≈ `hardwareConcurrency - 1`,
-  capped at 8) that import the pure engine modules in `apps/renderer/src/lib/solver/`.
-  See [solver.md](solver.md) for the solver pipeline + UI panels, and
-  [reference.md](reference.md) for the full formula + data-pipeline reference.
+  Heavy solves fan out across a **pool of Web Workers** (size = `hardwareConcurrency - 1`,
+  override `gs.solver.workerCount`, hard cap 64) that import the pure engine modules in
+  `apps/renderer/src/lib/solver/`. See [solver.md](solver.md) for the solver pipeline + UI
+  panels, and [reference.md](reference.md) for the full formula + data-pipeline reference.
 - **apps/desktop** — Electron shell that hosts the renderer. `main.ts` boots a local
   server (`server.ts`) that serves `data/derived` + the capture output and exposes the
-  capture/emulator IPC; in dev the Vite middleware covers the same role. Packaging
-  (electron-builder `extraResources` for `data/`, `setupAutoUpdate`) is wired but not
-  yet verified end-to-end on a real packaged build.
+  capture/emulator IPC; in dev the Vite middleware covers the same role. At launch it
+  **syncs images + game data from the public `Sevih/outerpediaV2` repo** (`data-sync.ts`
+  dual-mode checkout/repo, SHA-gated ; shared `/img/*` handler `img-cache.ts` cascading
+  checkout→disk cache→CDN→302) so the app follows game patches **without a new build**.
+  Packaging (electron-builder `extraResources` for `data/`, `setupAutoUpdate`) is wired but
+  not yet verified end-to-end on a real packaged build.
 
 ## Why this split
 
