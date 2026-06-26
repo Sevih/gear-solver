@@ -439,26 +439,25 @@ export function HomeScreen({
         <>
           {/* identity + ops row — account snapshot · system health · updates */}
           <div className="flex items-stretch gap-3.5">
-            <Card className="flex min-w-0 flex-2 flex-col gap-3.5">
+            {/* account snapshot — 2×2 grid keeps the card compact so Library
+                fits beside it on this row */}
+            <Card className="flex min-w-0 flex-[1.3] flex-col gap-3.5">
               <SectionLabel icon={IC_SNAPSHOT} tint="#22d3ee">Account snapshot</SectionLabel>
-              <div className="flex items-center gap-2">
-                <div className="flex flex-1 flex-col gap-1">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
+                <div className="flex flex-col gap-1">
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Heroes owned</span>
-                  <Num className="text-[32px] font-bold" color="#fbbf24">{stats.heroes.toLocaleString()}</Num>
+                  <Num className="text-[28px] font-bold" color="#fbbf24">{stats.heroes.toLocaleString()}</Num>
                 </div>
-                <span className="h-10.5 w-px bg-white/8" />
-                <div className="flex flex-1 flex-col gap-1">
+                <div className="flex flex-col gap-1">
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Gear pieces</span>
-                  <Num className="text-[32px] font-bold" color="#fbbf24">{stats.gear.toLocaleString()}</Num>
+                  <Num className="text-[28px] font-bold" color="#fbbf24">{stats.gear.toLocaleString()}</Num>
                 </div>
-                <span className="h-10.5 w-px bg-white/8" />
-                <div className="flex flex-1 flex-col gap-1.5">
+                <div className="flex flex-col gap-1.5">
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Last capture</span>
-                  <Num className="text-[17px] font-semibold text-zinc-200">{lastCap?.rel ?? "—"}</Num>
+                  <Num className="text-[16px] font-semibold text-zinc-200">{lastCap?.rel ?? "—"}</Num>
                   {lastCap && <Num className="text-[10px] text-zinc-400">{lastCap.abs} local</Num>}
                 </div>
-                <span className="h-10.5 w-px bg-white/8" />
-                <div className="flex flex-1 flex-col gap-1.5">
+                <div className="flex flex-col gap-1.5">
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Capture</span>
                   <span className={cx(
                     "inline-flex w-fit items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold",
@@ -469,6 +468,22 @@ export function HomeScreen({
                   </span>
                 </div>
               </div>
+            </Card>
+
+            {/* library — sits to the right of the now-compact snapshot */}
+            <Card className="flex min-w-0 flex-[0.85] flex-col gap-3.5">
+              <SectionLabel icon={IC_LIBRARY} tint="#c4b5fd">Library</SectionLabel>
+              <div className="flex flex-col gap-3.5">
+                <div className="flex flex-col gap-0.5">
+                  <Num className="text-[28px] font-bold text-violet-300">{library.builds}</Num>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">saved builds</span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <Num className="text-[28px] font-bold text-violet-300">{library.presets}</Num>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">filter presets</span>
+                </div>
+              </div>
+              <ActBtn tone="violet" className="mt-auto w-full text-center" onClick={onOpenBuilder}>Open Builder →</ActBtn>
             </Card>
 
             <Card className="flex min-w-0 flex-[1.1] flex-col gap-3">
@@ -589,22 +604,6 @@ export function HomeScreen({
                 <Stat label="+15 maxed" value={stats.maxed} />
                 <Stat label="Locked" value={stats.locked} />
               </div>
-            </Card>
-
-            {/* library — folded into the breakdown row as a compact column */}
-            <Card className="flex min-w-0 flex-[0.85] flex-col gap-3.5">
-              <SectionLabel icon={IC_LIBRARY} tint="#c4b5fd">Library</SectionLabel>
-              <div className="flex flex-col gap-3.5">
-                <div className="flex flex-col gap-0.5">
-                  <Num className="text-[28px] font-bold text-violet-300">{library.builds}</Num>
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">saved builds</span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <Num className="text-[28px] font-bold text-violet-300">{library.presets}</Num>
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">filter presets</span>
-                </div>
-              </div>
-              <ActBtn tone="violet" className="mt-auto w-full text-center" onClick={onOpenBuilder}>Open Builder →</ActBtn>
             </Card>
           </div>
         </>
