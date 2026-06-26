@@ -1,0 +1,54 @@
+name: Publish wiki
+
+# Publishes the in-repo `wiki/` directory (the English wiki source) to the
+# GitHub wiki repo (gear-solver.wiki.git) on every push to main that touches it.
+# The wiki must already exist (it does — has pages). `wiki/` is the single
+# source of truth; edit those files in a PR and this job mirrors them out.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'wiki/**'
+      - '.github/workflows/publish-wiki.yml'
+  # Manual re-publish (e.g. after a force-reset of the wiki).
+  workflow_dispatch:
+
+# Needed for GITHUB_TOKEN to push to the repo's wiki.
+permissions:
+  contents: write
+
+# Never run two publishes at once — they'd race on the wiki's single branch.
+concurrency:
+  group: publish-wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mirror wiki/ to the GitHub wiki
+        run: |
+          set -euo pipefail
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          tmp="$(mktemp -d)"
+          # The wiki lives at <repo>.wiki.git. x-access-token lets GITHUB_TOKEN push.
+          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" "$tmp"
+
+          # Replace the wiki content with wiki/ verbatim (‑‑delete drops removed
+          # pages). .git is excluded so we keep the wiki repo's history.
+          rsync -a --delete --exclude='.git' wiki/ "$tmp/"
+
+          cd "$tmp"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date — nothing to publish."
+          else
+            git commit -m "wiki: sync from ${GITHUB_SHA}"
+            git push
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
