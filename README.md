@@ -1,5 +1,12 @@
 # gear-solver
 
+![Electron](https://img.shields.io/badge/Electron-42-47848F?logo=electron&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
+![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38BDF8?logo=tailwindcss&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-4-6E9F18?logo=vitest&logoColor=white)
+
 Gear optimizer for **OUTERPLANE** — Fribbels-style. Captures your account's gear and
 characters from the game, then solves for the best builds per hero with a parallelized
 in-renderer Web Worker pool.
