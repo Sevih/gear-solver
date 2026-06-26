@@ -1565,7 +1565,7 @@ function PopoverButton({
 
 function Panel({ title, hint, hintWidth, action, children, width }: {
   title: string;
-  hint?: string;
+  hint?: ReactNode;
   /** Popover max width for the hint — bump for long explanatory copy. */
   hintWidth?: number;
   /** Optional small trailing element rendered next to the title (e.g. a
@@ -1830,8 +1830,14 @@ function SubValuePanel({ baseFlat, subTicks, width = "w-full" }: {
   return (
     <Panel
       title="Sub tick value"
-      hint="Per 6★ substat tick: flat vs %. A %-tick scales with the hero's base (base+evo+awak); flat is fixed. The cyan side is the more valuable sub to roll for this hero — % overtakes flat above the breakeven base shown."
-      hintWidth={360}
+      hintWidth={340}
+      hint={
+        <div className="space-y-1.5">
+          <p>Per <b className="text-white">6★ substat tick</b> — flat vs %.</p>
+          <p className="text-white/70">A <b className="text-white/90">%</b> tick scales with the hero&apos;s base (base + evo + awak); <b className="text-white/90">flat</b> is fixed.</p>
+          <p><span className="text-cyan-300">Cyan</span> = the more valuable sub to roll. % overtakes flat above the breakeven base shown.</p>
+        </div>
+      }
       width={width}
     >
       <div className="grid grid-cols-[auto_1fr_1.4fr] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">
@@ -1901,8 +1907,26 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
   return (
     <Panel
       title={`Damage / +1% · ${noCrit ? "no crit" : "100% crit"}`}
-      hintWidth={380}
-      hint={`Expected-damage gain from +1% of each stat for this hero, ${noCrit ? "evaluated at 0% crit — this hero can never crit (CHD is dead, so it's omitted)" : "computed at the crit cap (100% CHC) — the endgame baseline you build toward (below the cap, CHD is undervalued)"}. Compares the hero's scaling stat(s)${noCrit ? "" : ", CHD"} and DMG inc. For ATK/DEF/HP, +1% = a 1% sub (base × 1%, through the hero's multipliers); CHD / DMG inc / EFF / CHC = +1 point; SPD = +1 SPD point (flat). Cyan = where the most damage is bought. Uses the in-game crit / DMG± / PEN model.`}
+      hintWidth={360}
+      hint={
+        <div className="space-y-1.5">
+          <p>
+            Expected-damage gain from <b className="text-white">+1%</b> of each stat,{" "}
+            {noCrit
+              ? <>evaluated at <span className="text-amber-300">0% crit</span> — this hero can never crit (<b className="text-white/90">CHD</b> is dead, so it&apos;s omitted).</>
+              : <>at the <span className="text-cyan-300">crit cap</span> (100% CHC) — the endgame baseline you build toward.</>}
+          </p>
+          <div>
+            <div className="mb-0.5 text-[9px] uppercase tracking-wider text-white/40">+1% means, per row</div>
+            <div className="space-y-0.5 text-white/75">
+              <div><b className="text-white/90">ATK / DEF / HP</b> — a 1% sub (base × 1%, via the hero&apos;s mults)</div>
+              <div><b className="text-white/90">CHD · DMG inc · EFF · CHC</b> — +1 point</div>
+              <div><b className="text-white/90">SPD</b> — +1 SPD point (flat)</div>
+            </div>
+          </div>
+          <p><span className="text-cyan-300">Cyan</span> = where the most damage is bought. In-game crit / DMG± / PEN model.</p>
+        </div>
+      }
       width={width}
     >
       <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">

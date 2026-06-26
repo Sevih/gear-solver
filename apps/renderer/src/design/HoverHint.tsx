@@ -23,9 +23,10 @@ import { cx } from "./cx.js";
 export interface HoverHintProps {
   /** Visible label rendered first (e.g. "Quality"). Inherits parent styling. */
   name: ReactNode;
-  /** Body text shown in the popover on hover/focus. Plain string for now —
-   *  if a caller ever needs rich content we can lift this to ReactNode. */
-  text: string;
+  /** Body content shown in the popover on hover/focus. Accepts rich content
+   *  (paragraphs, lists, colored spans) — prefer structured JSX over one dense
+   *  block so long explanations stay readable. */
+  text: ReactNode;
   /** Extra classes for the outer wrapper — mainly to pass parent text
    *  styling (e.g. `font-semibold uppercase tracking-wider text-zinc-400`)
    *  that should affect the `name` but not the tooltip body. */
