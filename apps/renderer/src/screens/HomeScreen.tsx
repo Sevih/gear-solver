@@ -47,14 +47,18 @@ const CLASSES: { id: string; label: string }[] = [
   { id: "CCT_PRIEST",   label: "Healer" },
 ];
 // Tier colors mirror the Inventory tab's quality filter (QUALITY_COLOR) so the
-// two surfaces read identically.
-const TIER_META: { tier: QualityTier; label: string; color: string }[] = [
-  { tier: "poor",      label: "Poor",      color: QUALITY_COLOR.poor },
-  { tier: "decent",    label: "Decent",    color: QUALITY_COLOR.decent },
-  { tier: "good",      label: "Good",      color: QUALITY_COLOR.good },
-  { tier: "excellent", label: "Excellent", color: QUALITY_COLOR.excellent },
-  { tier: "perfect",   label: "Perfect",   color: QUALITY_COLOR.perfect },
+// two surfaces read identically. `hint` explains each tier's threshold (rolled
+// substat ticks vs the achievable max) — surfaced as a per-cell tooltip.
+const TIER_META: { tier: QualityTier; label: string; color: string; hint: string }[] = [
+  { tier: "poor",      label: "Poor",      color: QUALITY_COLOR.poor,      hint: "Poor — under 50% of the achievable substat rolls." },
+  { tier: "decent",    label: "Decent",    color: QUALITY_COLOR.decent,    hint: "Decent — 50 to 69% of the achievable substat rolls." },
+  { tier: "good",      label: "Good",      color: QUALITY_COLOR.good,      hint: "Good — 70 to 84% of the achievable substat rolls." },
+  { tier: "excellent", label: "Excellent", color: QUALITY_COLOR.excellent, hint: "Excellent — 85 to 99% of the achievable substat rolls." },
+  { tier: "perfect",   label: "Perfect",   color: QUALITY_COLOR.perfect,   hint: "Perfect — 100%: every possible substat roll landed." },
 ];
+// Shown on the section's info tooltip — how the grade is computed.
+const QUALITY_METRIC_HINT =
+  "Each piece is graded by its rolled substat ticks against the max it could reach (14 + spent reforges). Talisman & Exclusive Equipment aren't graded.";
 // Distinct hues cycled across the top owned armor sets (no per-set brand color
 // exists, so a tasteful rotation keeps the bars readable).
 const SET_COLORS = ["#ff6b6b", "#4dabf7", "#fbbf24", "#51cf66", "#c4b5fd", "#22d3ee", "#cc5de8"];
@@ -63,7 +67,7 @@ interface HomeStats {
   heroes: number;
   gear: number;
   totalGraded: number;
-  tiers: { tier: QualityTier; label: string; color: string; count: number; pct: string }[];
+  tiers: { tier: QualityTier; label: string; color: string; hint: string; count: number; pct: string }[];
   elements: { label: string; color: string; count: number; w: string }[];
   classes: { label: string; count: number; w: string }[];
   stars: { star: number; count: number }[];
@@ -226,6 +230,17 @@ function SectionLabel({ children, right, icon, tint }: {
 }
 function Num({ children, className, color }: { children: React.ReactNode; className?: string; color?: string }) {
   return <span className={cx("font-mono tabular-nums leading-none", className)} style={color ? { color } : undefined}>{children}</span>;
+}
+/** Small "?" affordance with a native tooltip — discoverable, zero layout cost. */
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span
+      title={text}
+      className="grid h-3.5 w-3.5 shrink-0 cursor-help place-items-center rounded-full border border-white/20 text-[8px] font-bold text-zinc-400"
+    >
+      ?
+    </span>
+  );
 }
 function ActBtn({ children, tone = "neutral", onClick, className, disabled }: {
   children: React.ReactNode; tone?: "neutral" | "cyan" | "violet"; onClick?: () => void; className?: string; disabled?: boolean;
@@ -526,7 +541,16 @@ export function HomeScreen({
 
           {/* HERO: gear quality distribution */}
           <Card className="flex flex-col gap-3.5">
-            <SectionLabel icon={IC_QUALITY} tint="#fbbf24" right={<Num className="text-[10px] text-zinc-400">{stats.totalGraded.toLocaleString()} pieces graded by substat roll quality</Num>}>
+            <SectionLabel
+              icon={IC_QUALITY}
+              tint="#fbbf24"
+              right={
+                <div className="flex items-center gap-2">
+                  <Num className="text-[10px] text-zinc-400">{stats.totalGraded.toLocaleString()} pieces graded by substat roll quality</Num>
+                  <InfoTip text={QUALITY_METRIC_HINT} />
+                </div>
+              }
+            >
               Gear quality distribution
             </SectionLabel>
             <div className="flex h-8 gap-0.75 overflow-hidden rounded-lg">
@@ -536,7 +560,7 @@ export function HomeScreen({
             </div>
             <div className="grid grid-cols-5 gap-3">
               {stats.tiers.map((t) => (
-                <div key={t.tier} className="flex flex-col gap-1">
+                <div key={t.tier} title={t.hint} className="flex cursor-help flex-col gap-1">
                   <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: t.color }} />
                     {t.label}
