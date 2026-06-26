@@ -13,6 +13,20 @@ in-renderer Web Worker pool.
 
 Packaged as an Electron desktop app (Windows). Not a web service.
 
+## 🎮 Just want to use it?
+
+**[⬇️ Download the latest installer](https://github.com/Sevih/gear-solver/releases/latest)**, then
+follow the **[Getting Started guide](https://github.com/Sevih/gear-solver/wiki/Getting-Started)** —
+install, import your account, optimize a hero. No build step, no command line. The
+**[player wiki](https://github.com/Sevih/gear-solver/wiki)** (Getting Started · Using the App ·
+FAQ) walks through everything.
+
+> Needs Windows + LDPlayer (rooted) with OUTERPLANE installed — see the guide for the why and how.
+
+## 🔧 Building / contributing?
+
+Read on. The rest of this README plus [docs/](docs) cover the stack, build, and internals:
+
 > **Reprendre le projet → [docs/STATUS.md](docs/STATUS.md).**
 > **Comprendre le moteur (pipeline, formules, sources) → [docs/reference.md](docs/reference.md).**
 > **Comprendre le solver (panneaux, optims) → [docs/solver.md](docs/solver.md).**
@@ -66,7 +80,11 @@ gear-solver/
 
 ---
 
-## Getting started
+## Building from source (devs)
+
+> Just want to *run* it? Grab the [installer](https://github.com/Sevih/gear-solver/releases/latest)
+> instead — see [🎮 Just want to use it?](#-just-want-to-use-it) above. This section is for
+> building from source.
 
 ```bash
 # Prereqs: Node ≥ 20, LDPlayer rooted with the Outerplane mobile client installed.
