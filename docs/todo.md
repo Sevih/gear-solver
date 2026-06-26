@@ -5,20 +5,12 @@
 > Priorités : 🔴 casse la confiance / fonctionnel · 🟠 perf · 🟡 UX-cohérence ·
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
-> **1 🔴 ouvert** (exclusion de pièce par set). Le reste = 🟠 perf, polish 🟡/🟢/⚪,
-> features, gros chantiers tests, « à vérifier en jeu » et la vérif packaging.
+> **0 🔴 ouvert.** Le reste = 🟠 perf, polish 🟡/🟢/⚪, features, gros chantiers tests,
+> « à vérifier en jeu » et la vérif packaging.
 
 ---
 
 ## Reste à faire
-
-### 🔴 Correctness — pré-filtrage du pool
-- [ ] 🔴 **Exclusion de pièce par set** — aujourd'hui seules les armes / accessoires sont effectivement
-      écartées selon les filtres (et encore, à confirmer) ; les **sets** ne filtrent pas le pool. Si on
-      impose une restriction (ex. `2pc ATK + 2pc PEN`), inutile d'inclure dans les pools armor les pièces
-      hors de ces sets. En revanche si on ne demande qu'**un** `2pc`, il faut garder de quoi compléter
-      (set demandé + 2 autres pièces). **Prévoir un setting « autoriser les broken sets ».**
-      *(Recoupe l'optim « Pré-filtrage armor par set requis » ci-dessous — à traiter ensemble.)*
 
 ### 🟠 Perf solver
 - [ ] **Solver CP trop lent** — le mode SOLVE CP met beaucoup trop de temps. Investiguer (CP calculé
@@ -28,8 +20,7 @@
       bit-identité, aucun test stat-locks ne rattrape une dérive ULP via `Math.trunc`). À faire en
       préservant l'ordre exact + test d'équivalence dédié.
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
-      `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings` · **Pré-filtrage armor** par
-      set requis (restreindre les pools armor au set quand un seul req-4pc actif — cf. le 🔴 ci-dessus).
+      `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
 ### 🟡/⚪ UX-cohérence & nits
 - [ ] 🟡 **`noCrit` dans le scoring du solver** — le flag `noCrit` (héros qui ne peuvent jamais crit :
@@ -136,6 +127,21 @@
 ---
 
 ## Livré
+
+### Session 2026-06-26 — 🔴 exclusion de pièce par set (pré-filtrage du pool)
+
+**Pré-filtrage du pool armor par set requis + setting « Allow broken sets »** — quand les sets contraignent
+**entièrement** l'armor (ex. `2pc A + 2pc B` ou `4pc A` → 0 slot libre), les pièces hors-set étaient
+quand même énumérées. Désormais `armorSetWhitelist` (`setPlans.ts`, pur) calcule la whitelist de sets
+admissibles et `precomputeContext` élague les pools helmet/armor/gloves/boots avant le cartésien
+(énorme réduction sur les recherches sets-contraintes). Un set requis seul (`2pc A`, slots libres)
+n'élague rien par défaut — il faut de quoi compléter. Nouveau toggle **Options → « Allow broken sets »**
+(`SolverOptions.allowBrokenSets`, défaut **true** = comportement legacy) : à **false**, chaque pièce
+d'armor doit appartenir à un set complété (2pc/4pc, pas de singleton ni de pièce set-less), ce qui (a)
+restreint la whitelist aux sets *formables* (présents dans ≥2 slots armor) + requis, et (b) ajoute un
+check leaf `allSetsComplete(setCount)` à la profondeur boots. Les slots verrouillés par **Keep current**
+sont exemptés de l'élagage. Rétro-compat presets (`allowBrokenSets ?? true`) + payloads worker. +13 tests
+`setPlans.test.ts` (`planSlots`, `armorSetWhitelist` 8 cas, `allSetsComplete` 4 cas).
 
 ### Session 2026-06-26 — view-state session-scoped
 

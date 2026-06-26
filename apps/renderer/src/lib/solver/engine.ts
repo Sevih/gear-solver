@@ -27,7 +27,7 @@ import { calcBattlePower } from "./cp.js";
 import { aggregateGemDelta, allocateGems, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
-import { planSetIds, setsFeasible } from "./setPlans.js";
+import { allSetsComplete, armorSetWhitelist, planSetIds, setsFeasible } from "./setPlans.js";
 import { gearPieceQualityTier, QUALITY_TIERS, type QualityTier } from "../quality.js";
 
 /** Map engine GearSlot → design SlotId used by the BuilderScreen's
@@ -122,6 +122,10 @@ export interface PrecomputedSolveContext {
    *  in the armor cartesian (feasible = at least one plan still reachable). */
   setPlans: SetPlan[];
   excludedSets: Set<string>;
+  /** When false, every armor piece must belong to a completed set (no
+   *  singleton / null-set filler) — enforced at the boots leaf. The armor
+   *  pools are also pre-pruned to set-admissible pieces (see `armorSetWhitelist`). */
+  allowBrokenSets: boolean;
   /** Required-effect icons per slot — when set, the slot's pool was already
    *  filtered to those icons in `buildPool`, but we still need the
    *  excluded set for tertiary checks. */
@@ -249,10 +253,14 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // Keep-current short-circuit: if the toggle is on AND the hero already
   // has a piece equipped in this slot, lock the pool to that single piece
   // (solver effectively just optimizes empty slots + Talisman + gems).
+  // Locked slots are recorded so the set-prune below can't drop a forced
+  // piece (the user explicitly pinned it; that pin wins over the set whitelist).
+  const lockedSlots = new Set<string>();
   const grabRespectingKeep = (slot: string): GearPiece[] => {
     if (!filters.options.keepCurrent) return grab(slot);
     const cur = inv.gear.find((g) => g.slot === slot && g.equippedBy === heroUid);
-    return cur ? [cur] : grab(slot);
+    if (cur) { lockedSlots.add(slot); return [cur]; }
+    return grab(slot);
   };
 
   const pools = {
@@ -264,6 +272,25 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     accessory: grabRespectingKeep("accessory"),
     ooparts: grabRespectingKeep("ooparts"),
   };
+
+  // Set-based pool prune. When the set requirements fully constrain the armor
+  // (e.g. `2pc A + 2pc B` or `4pc A` → no free armor slot), every out-of-set
+  // armor piece is dead weight — drop it before the cartesian blows up. When a
+  // requirement leaves free slots (`2pc A` alone), pieces of any set may fill
+  // them, so nothing is prunable UNLESS the user disallows broken sets, in
+  // which case only set-completing pieces (required + formable) survive.
+  // `armorSetWhitelist` returns null when no prune applies; locked slots are
+  // exempt so a keep-current pin is never elided.
+  const allowBrokenSets = filters.options.allowBrokenSets ?? true;
+  const ARMOR = ["helmet", "armor", "gloves", "boots"] as const;
+  const formableSets = computeFormableSets(ARMOR.map((s) => pools[s]));
+  const whitelist = armorSetWhitelist(setPlans, allowBrokenSets, formableSets);
+  if (whitelist) {
+    for (const slot of ARMOR) {
+      if (lockedSlots.has(slot)) continue;
+      pools[slot] = pools[slot].filter((g) => g.armorSetId != null && whitelist.has(g.armorSetId));
+    }
+  }
 
   // Reforge simulation — if the user toggled "Use reforged stats", clone
   // each piece with its remaining reforge attempts greedily allocated to
@@ -383,9 +410,29 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     dmgSec: meta.dmgSec,
     setPlans,
     excludedSets,
+    allowBrokenSets,
     excludedWeaponEffects,
     excludedAccessoryEffects,
   };
+}
+
+/** Sets reachable as a 2pc from the armor pools — present in ≥2 distinct armor
+ *  slots (you take at most one piece per slot, so a set living in a single slot
+ *  can never form a bonus). Drives the "no broken sets" free-slot whitelist. */
+function computeFormableSets(armorPools: GearPiece[][]): Set<string> {
+  const slotCount = new Map<string, number>();
+  for (const pool of armorPools) {
+    const seen = new Set<string>();
+    for (const g of pool) {
+      if (g.armorSetId && !seen.has(g.armorSetId)) {
+        seen.add(g.armorSetId);
+        slotCount.set(g.armorSetId, (slotCount.get(g.armorSetId) ?? 0) + 1);
+      }
+    }
+  }
+  const formable = new Set<string>();
+  for (const [id, n] of slotCount) if (n >= 2) formable.add(id);
+  return formable;
 }
 
 /** Per-substat tick cap for the reforge simulator. Observed max in real
@@ -614,7 +661,7 @@ export async function solveChunk(
   options: SolveChunkOptions = {},
 ): Promise<SolveChunkResult> {
   const { req, pools, baseline, scaling, ee, gemDeltaByTalismanSlots, gemAllocByTalismanSlots,
-          scoredGems, setPlans, skills, starMeta, dmgStat, dmgSec } = ctx;
+          scoredGems, setPlans, allowBrokenSets, skills, starMeta, dmgStat, dmgSec } = ctx;
   // EE gem-slot count is constant per solve (same EE piece across every combo).
   const eeSlots = gemSlotsOf(ee);
   const { mode, filters, game } = req;
@@ -686,8 +733,14 @@ export async function solveChunk(
   // pruned only when NO plan is still reachable (OR semantics). At remaining 0
   // (boots leaf) this is exactly the build-valid test (a plan needing 0 more
   // pieces is fully satisfied). See setPlans.ts `setsFeasible`.
-  const checkSetsFeasible = (remainingSlots: number): boolean =>
-    setsFeasible(setPlans, setCount, remainingSlots);
+  const checkSetsFeasible = (remainingSlots: number): boolean => {
+    if (!setsFeasible(setPlans, setCount, remainingSlots)) return false;
+    // "No broken sets" is a leaf-only constraint: a singleton at mid-depth may
+    // still pair up in a later armor slot, so we only reject the complete
+    // 4-armor loadout (remainingSlots === 0) where the tally is final.
+    if (!allowBrokenSets && remainingSlots === 0 && !allSetsComplete(setCount)) return false;
+    return true;
+  };
 
   let permutations = 0;
   let searched = 0;

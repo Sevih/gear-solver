@@ -71,6 +71,9 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
       accessoryEffectPicks: sanitizeEffects(f.accessoryEffectPicks),
       // Field added after some presets were saved — default to no quality gate.
       minQuality: f.minQuality ?? null,
+      // `allowBrokenSets` was added later — a legacy preset's options lack it.
+      // Default to true (legacy behavior) so the toggle/badge render correctly.
+      options: { ...f.options, allowBrokenSets: f.options?.allowBrokenSets ?? true },
     },
   };
 }

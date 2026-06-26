@@ -39,6 +39,12 @@ export interface SolveFilters {
     reforgeMode: ReforgeMode;
     includeEquippedOnOthers: boolean;
     keepCurrent: boolean;
+    /** When false, every armor piece in a build must belong to a completed set
+     *  (no singleton / null-set filler) — and the armor pools are pre-pruned to
+     *  set-admissible pieces. True (default) keeps the legacy behavior where a
+     *  partial set requirement (e.g. a single 2pc) lets any piece fill the free
+     *  slots. Absent → treated as true for back-compat with older payloads. */
+    allowBrokenSets?: boolean;
   };
   /** Hero UIDs whose currently-equipped gear is locked out of the pool. */
   excludedHeroes: string[];

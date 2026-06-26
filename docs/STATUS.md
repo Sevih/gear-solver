@@ -58,6 +58,9 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      `lib/dmgValue.ts`). Table de résultats : colonnes Set / arme / accessoire, menu
      show/hide colonnes, bouton Filter (re-filtre client-side), filtre Min quality, hauteur
      plafonnée (15 lignes). Reforge 3 modes (disable/classic/ascended) + gems cap-reaching.
+     **Pré-filtrage du pool armor par set** : un set qui contraint tout l'armor (2pc+2pc / 4pc)
+     élague les pièces hors-set avant le cartésien ; toggle Options « Allow broken sets » (off →
+     chaque pièce armor doit compléter un set, leaf reject des singletons).
    - **Onglet Settings** : modal left-rail à onglets (Setup · Solver · Data · Backup · Debug),
      section Solver (worker count Auto/Manual, result/per-worker count, heatmap), backup
      JSON import/export, sync « game data » manuelle.

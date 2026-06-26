@@ -80,7 +80,16 @@ filtre les pièces de l'inventaire :
 - exclu si **effect chip** (weapon/accessory) marqué `excluded` ; ou marqué `required` et l'icône ne match pas
 - exclu si `armorSetId ∈ excludedSets`
 
-Toggle **`keepCurrent`** : si la pièce actuellement équipée par le héros existe pour ce slot, le pool est restreint à `[currentPiece]` (le solver ne touche pas au slot).
+Toggle **`keepCurrent`** : si la pièce actuellement équipée par le héros existe pour ce slot, le pool est restreint à `[currentPiece]` (le solver ne touche pas au slot). Les slots ainsi verrouillés sont **exemptés** du set-prune ci-dessous.
+
+**Set-prune du pool armor** (`armorSetWhitelist`, pur) : quand les sets contraignent
+**entièrement** l'armor (un plan `2pc A + 2pc B` ou `4pc A` → `Σcount === 4`, aucun slot
+libre), les pools helmet/armor/gloves/boots sont **élagués** aux seuls sets admissibles
+**avant** le cartésien — énorme réduction sur les recherches sets-contraintes. Un set requis
+**seul** (`2pc A`, slots libres) n'élague rien par défaut : il faut garder de quoi compléter.
+Le toggle **Allow broken sets** (cf. § Options) renverse ça : à *false*, les slots libres
+doivent eux aussi former un set complet → la whitelist se restreint aux sets requis + *formables*
+(présents dans ≥2 slots armor) et un check leaf rejette les builds à singleton (cf. phase 4).
 
 ### Phase 3 — Top-% prune (heuristique)
 Si l'utilisateur a posé au moins une priorité non-nulle ET `topPct < 100` :
@@ -101,6 +110,7 @@ Le mapping engine→user (`STAT_TO_PRIORITY` dans `ratings.ts`) garantit que
   worker reçoit sa slice → embarrassingly parallel, aucune comm inter-worker.
 - **Set tracking** : à chaque slot armor, `incSet(armorSetId)` au début de la pièce, `decSet` après l'inner loop.
 - **Mid-tree pruning** : à chaque depth `D` (D armor slots itérés, `4-D` restants), pour chaque set requis (2pc ou 4pc) on vérifie qu'il reste assez de slots pour atteindre le seuil. Sinon, `continue` au prochain frère.
+- **Leaf no-broken-set** : si **Allow broken sets** est *off*, à la profondeur boots (`remaining === 0`) on rejette aussi tout build dont le tally `setCount` n'est pas « complet » (`allSetsComplete` : tout set présent ≥2 ET 4 pièces armor toutes set-trackées → soit un 4pc, soit deux 2pc). Check leaf-only : un singleton mid-tree peut encore s'apparier plus bas.
 
 ### Phase 5 — Per-combo : compose + ratings + filtres + heap
 Pour chaque combo qui passe phase 4 :
@@ -180,6 +190,10 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
 - **Only maxed gear** — filtre pool à `enhanceLevel === 15`.
 - **Equipped items** — inclut les pièces équipées sur d'autres héros.
 - **Keep current** — verrouille les slots déjà équipés à leur pièce actuelle.
+- **Allow broken sets** (`allowBrokenSets`, défaut **true**) — *true* : un set requis partiel
+  (ex. un seul `2pc`) laisse n'importe quelle pièce remplir les slots armor libres (comportement
+  legacy). *false* : chaque pièce d'armor doit compléter un set (2pc/4pc) → le solver élague en
+  plus les pièces set-less/non-formables du pool et rejette les builds à singleton au leaf.
 - **Exclude equipped** — **câblé** : `ExcludeHeroesPicker` (multi-select) écrit dans
   `excludedHeroes` via `toggleHeroExcluded` / `clearExcludedHeroes`.
 

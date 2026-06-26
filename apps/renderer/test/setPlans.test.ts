@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { planFeasible, planSetIds, setPicksToPlans, setsFeasible } from "../src/lib/solver/setPlans.js";
+import {
+  allSetsComplete,
+  armorSetWhitelist,
+  planFeasible,
+  planSetIds,
+  planSlots,
+  setPicksToPlans,
+  setsFeasible,
+} from "../src/lib/solver/setPlans.js";
 import type { SetPlan } from "../src/lib/solver/types.js";
 
 const counts = (o: Record<string, number>) => new Map(Object.entries(o));
@@ -84,5 +92,71 @@ describe("setsFeasible — OR over plans + leaf validation", () => {
     expect(setsFeasible(setPlans, counts({ A: 3 }), 0)).toBe(false);
     expect(setsFeasible(setPlans, counts({ A: 1 }), 3)).toBe(true);  // need 3 in 3 → still alive
     expect(setsFeasible(setPlans, counts({ A: 0 }), 3)).toBe(false); // need 4 in 3 → dead
+  });
+});
+
+describe("planSlots", () => {
+  it("sums the conds' counts", () => {
+    expect(planSlots([{ setId: "A", count: 4 }])).toBe(4);
+    expect(planSlots([{ setId: "A", count: 2 }, { setId: "B", count: 2 }])).toBe(4);
+    expect(planSlots([{ setId: "A", count: 2 }])).toBe(2);
+    expect(planSlots([])).toBe(0);
+  });
+});
+
+describe("armorSetWhitelist — set-based pool prune", () => {
+  const noFormable = new Set<string>();
+
+  it("no plan + broken allowed → null (no prune)", () => {
+    expect(armorSetWhitelist([], true, noFormable)).toBeNull();
+  });
+
+  it("no plan + broken disallowed → only formable sets (every piece must pair)", () => {
+    expect(armorSetWhitelist([], false, new Set(["X", "Y"]))).toEqual(new Set(["X", "Y"]));
+  });
+
+  it("full plan (2pc+2pc) → only its sets, even with broken allowed", () => {
+    const plan: SetPlan[] = [[{ setId: "A", count: 2 }, { setId: "B", count: 2 }]];
+    expect(armorSetWhitelist(plan, true, new Set(["Z"]))).toEqual(new Set(["A", "B"]));
+  });
+
+  it("full plan (4pc) → only that set", () => {
+    expect(armorSetWhitelist([[{ setId: "A", count: 4 }]], true, noFormable)).toEqual(new Set(["A"]));
+  });
+
+  it("partial plan (single 2pc) + broken allowed → null (filler can be anything)", () => {
+    expect(armorSetWhitelist([[{ setId: "A", count: 2 }]], true, new Set(["Z"]))).toBeNull();
+  });
+
+  it("partial plan + broken disallowed → required set PLUS every formable set", () => {
+    const plan: SetPlan[] = [[{ setId: "A", count: 2 }]];
+    expect(armorSetWhitelist(plan, false, new Set(["B", "C"]))).toEqual(new Set(["A", "B", "C"]));
+  });
+
+  it("OR of plans unions the admissible sets", () => {
+    const plans: SetPlan[] = [[{ setId: "A", count: 4 }], [{ setId: "B", count: 2 }, { setId: "C", count: 2 }]];
+    expect(armorSetWhitelist(plans, true, noFormable)).toEqual(new Set(["A", "B", "C"]));
+  });
+
+  it("infeasible plan (>4 pieces) admits nothing", () => {
+    const plan: SetPlan[] = [[{ setId: "A", count: 4 }, { setId: "B", count: 2 }]];
+    expect(armorSetWhitelist(plan, true, noFormable)).toEqual(new Set());
+  });
+});
+
+describe("allSetsComplete — no-broken-sets leaf check", () => {
+  it("two 2pc → complete", () => {
+    expect(allSetsComplete(counts({ A: 2, B: 2 }))).toBe(true);
+  });
+  it("a single 4pc → complete", () => {
+    expect(allSetsComplete(counts({ A: 4 }))).toBe(true);
+  });
+  it("a singleton set → broken", () => {
+    expect(allSetsComplete(counts({ A: 2, B: 1, C: 1 }))).toBe(false);
+    expect(allSetsComplete(counts({ A: 3, B: 1 }))).toBe(false);
+  });
+  it("a 3pc + nothing (set-less filler) → total < 4 → broken", () => {
+    expect(allSetsComplete(counts({ A: 3 }))).toBe(false);  // 3 counted, 1 null-set piece
+    expect(allSetsComplete(counts({ A: 2 }))).toBe(false);  // 2 counted, 2 null-set fillers
   });
 });

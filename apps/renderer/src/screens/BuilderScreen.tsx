@@ -260,6 +260,11 @@ interface SolverOptions {
   /** Lock the selected hero's currently-equipped pieces — only fill empty
    *  slots and leave the rest alone. */
   keepCurrent: boolean;
+  /** Allow builds with incomplete sets (singleton / set-less filler pieces).
+   *  True (default) keeps legacy behavior: a partial set requirement leaves the
+   *  free armor slots open to any piece. False forces every armor piece to be
+   *  part of a 2pc/4pc — and lets the solver pre-prune the armor pools. */
+  allowBrokenSets: boolean;
 }
 
 /** Reforge context carried alongside a result set — the mode + priority the
@@ -327,7 +332,7 @@ export interface SolverFilters {
 }
 
 const INITIAL_FILTERS: SolverFilters = {
-  options: { onlyMaxed: false, reforgeMode: "disable", includeEquippedOnOthers: true, keepCurrent: false },
+  options: { onlyMaxed: false, reforgeMode: "disable", includeEquippedOnOthers: true, keepCurrent: false, allowBrokenSets: true },
   excludedHeroes: new Set(),
   statFilters: {},
   ratingFilters: {},
@@ -1328,10 +1333,12 @@ function BuilderToolbar({
   const setCount = filters.setPlans.filter((p) => p.length > 0).length + filters.excludedSets.length;
   const effectCount = Object.keys(filters.weaponEffectPicks).length + Object.keys(filters.accessoryEffectPicks).length;
   // Options badge counts only the constraints NOT surfaced as inline toggles
-  // (include-equipped flipped off, keep-current on, plus each excluded hero).
+  // (include-equipped flipped off, keep-current on, broken-sets disallowed,
+  // plus each excluded hero).
   const optionCount =
     (filters.options.includeEquippedOnOthers ? 0 : 1) +
     (filters.options.keepCurrent ? 1 : 0) +
+    (filters.options.allowBrokenSets ? 0 : 1) +
     (filters.minQuality ? 1 : 0) +
     filters.excludedHeroes.size;
 
@@ -1970,6 +1977,7 @@ function OptionsPanel({
       <div className="space-y-0.5">
         <ToggleRow label="Equipped items" hint="Include gear equipped on other heroes (own hero always in)." checked={options.includeEquippedOnOthers} onChange={set("includeEquippedOnOthers")} />
         <ToggleRow label="Keep current" hint="Lock current pieces (only fill empty slots). Gems are still re-allocated — useful for 'keep my gear, tell me which gems to socket'." checked={options.keepCurrent} onChange={set("keepCurrent")} />
+        <ToggleRow label="Allow broken sets" hint="On (default): a partial set requirement (e.g. a single 2pc) lets any gear fill the free armor slots. Off: every armor piece must complete a 2pc/4pc — the solver also prunes set-less pieces from the pool, so a fully-constrained requirement (2pc+2pc / 4pc) searches far fewer combos." checked={options.allowBrokenSets} onChange={set("allowBrokenSets")} />
       </div>
       <label className="mt-2 flex items-center justify-between gap-2" title="Drop gear below this rolled-substat quality from the pool. Talisman / EE have no quality and are always kept.">
         <span className="text-[11px] text-white/80">Min quality</span>

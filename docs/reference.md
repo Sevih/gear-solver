@@ -419,6 +419,17 @@ rejette ooparts/exclusive en early-return.
 
 Énorme gain sur les recherches `req-4pc Sharp` quand peu de helmets Sharp.
 
+**Pré-filtrage du pool armor** (`armorSetWhitelist`, `precomputeContext`) — complémentaire
+au mid-tree. Quand les plans contraignent **entièrement** l'armor (`Σcount === ARMOR_SLOTS`
+sur un plan → 0 slot libre, ex. `2pc A + 2pc B` ou `4pc A`), les pools helmet/armor/gloves/boots
+sont élagués aux seuls sets admissibles (union des conds des plans pleins) **avant** d'entrer
+dans le cartésien. Un plan partiel (slots libres) sous `allowBrokenSets=true` n'élague rien
+(un filler peut être n'importe quoi → `null` = pas de prune). Sous `allowBrokenSets=false`, les
+slots libres doivent compléter un set → la whitelist = sets requis ∪ *sets formables* (présents
+dans ≥2 slots armor, `computeFormableSets`), et un check leaf `allSetsComplete(setCount)`
+(profondeur boots, `remaining===0`) rejette les builds à singleton/pièce set-less (formes valides :
+un 4pc OU deux 2pc). Slots **Keep current** verrouillés exemptés. Helpers purs testés isolément.
+
 ### 2.11 Combat Power + Upg filters (appliqués in-loop quand posés)
 
 CP est cher (~20× cheap rating) et `upg` dépend du current loadout du héros,
@@ -532,12 +543,12 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped` : parité sans gemme crit, accept jusqu'à CHC 100 (overshoot ≤102), stop pile à 100, skip total au cap, split talisman/EE, delta null si rien d'utile, score ≤0 jamais pris |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount` : défaut `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, plafond dur 64 |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidélité, maps vides), import merge (dédup par `id`, collision garde l'existant), replace (overwrite), validation du bundle (kind/version/maps) |
-| `apps/renderer/test/setPlans.test.ts`   | 13 tests — expansion des chips (`setPicksToPlans`), `planSetIds`, `planFeasible` (somme multi-cond), `setsFeasible` OR + leaf-validation à `remaining 0`, parité mono-plan req-4pc |
+| `apps/renderer/test/setPlans.test.ts`   | 26 tests — expansion des chips (`setPicksToPlans`), `planSetIds`, `planSlots`, `planFeasible` (somme multi-cond), `setsFeasible` OR + leaf-validation à `remaining 0`, parité mono-plan req-4pc, **`armorSetWhitelist`** (prune plein vs partiel × broken on/off, OR union, plan infaisable), **`allSetsComplete`** (4pc / 2×2pc / singleton / filler set-less) |
 | `apps/renderer/test/translateReco.test.ts` | 10 tests — reco→patch : mains (OR-union), effets (icônes required, null skip+warn), sets (combo→plan 1:1, combo non-résolu droppé entier), priorité substats (tiers→poids, collision de bucket, clé inconnue) |
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick` : verdict des deux côtés de la bascule, équivalent-flat exact, égalité pile à la bascule, garde tick %=0 |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains` : tri décroissant, monotonie delta→gain, CHC nul si crit-cap, base 0 → vide |
 
-Run : `npm test --workspaces --if-present`. **Total : 139 tests** (core 11 + renderer 128 : solver, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue, +4 dmgValue).
+Run : `npm test --workspaces --if-present`. **Total : 152 tests** (core 11 + renderer 141 : solver, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue, +4 dmgValue).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 
