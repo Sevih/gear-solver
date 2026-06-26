@@ -340,8 +340,12 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // CP-mode dominance prune (structural combo-count reduction — see Phase 3).
   // CP is monotone in every gear stat, so a piece strictly dominated within its
   // slot's set / effect group can never produce a higher-CP build than its
-  // dominator → drop it before the cartesian. Runs AFTER reforge + top-% so it
-  // compares the projected pool pieces the solver will actually compose.
+  // dominator → drop it before the cartesian. Runs LAST (after the onlyMaxed /
+  // set / reforge / top-% steps) so it compares the exact pool array the solver
+  // iterates — the monotonicity proof is over the composed bucket numbers, so it
+  // holds whatever produced them: captured stats (reforgeMode "disable"), the
+  // ceiling projection ("classic"/"ascended"), with or without onlyMaxed. The
+  // mode only changes WHICH pieces survive, never the prune's correctness.
   //
   // Disabled when a constraint could make a strictly-lower-stat build uniquely
   // feasible (else dropping the dominated piece would under-return):
@@ -651,9 +655,11 @@ function bucketDominatesStrict(x: GearBuckets, y: GearBuckets): boolean {
  *  are never pitted: armor by `armorSetId` (set bonus + feasibility differ
  *  across sets), weapon/accessory by effect id (CP ignores effects, but a
  *  distinct effect is a distinct build the user may want, so we never elide the
- *  last piece of an effect). Pieces carry their POST-reforge stats here (the
- *  pool was already projected), so the compared vector is the one the solver
- *  composes. O(n²) per group — groups are small. Pure; exported for tests. */
+ *  last piece of an effect). Pieces carry whatever stats the active reforge mode
+ *  left them with (captured in "disable", ceiling-projected otherwise) — the
+ *  caller prunes the post-projection pool, so the compared vector is exactly the
+ *  one the solver composes. O(n²) per group — groups are small. Pure; exported
+ *  for tests. */
 export function pruneDominatedForCp(pieces: GearPiece[], groupKeyOf: (p: GearPiece) => string): GearPiece[] {
   if (pieces.length < 2) return pieces;
   const buckets = pieces.map((p) => aggregatePrefixBuckets([p]));

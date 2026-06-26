@@ -14,8 +14,11 @@
   composante-par-composante par une autre du **même slot + groupe** (set pour l'armure, effet pour
   arme/accessoire) ne peut jamais produire un build de CP supérieure → `pruneDominatedForCp` (`engine.ts`)
   l'élague du pool **avant le cartésien** (réduction multiplicative du nombre de combos). Ne compare que les
-  axes de bucket réellement lus par `finalStatsFromBuckets` (CP-pertinents) sur les pièces **post-reforge**
-  (le pool est déjà projeté). Désactivé si un filtre pourrait rendre un build à stats plus basses uniquement
+  axes de bucket réellement lus par `finalStatsFromBuckets` (CP-pertinents), et tourne **en dernier** (après
+  onlyMaxed / set / projection reforge / top-%) sur le **tableau de pool exact que le solve itère** : la
+  preuve de monotonie porte sur les nombres composés, donc elle tient quel que soit le `reforgeMode` (stats
+  capturées en `disable`, projetées au plafond en `classic`/`ascended`) et que `onlyMaxed` soit actif ou non
+  — le mode change *quelles* pièces survivent, jamais la correction. Désactivé si un filtre pourrait rendre un build à stats plus basses uniquement
   admissible (**borne max** sur une stat, ou **tout** filtre rating/cp/upg) ; les bornes min seules restent
   optimisées. Talisman/EE exemptés (gemmes issues de l'alloc globale + reroute de cap par-combo cassent la
   monotonie par-pièce). Exact au sommet du classement CP ; seuls des quasi-doublons strictement ≤ quittent la
