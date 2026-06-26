@@ -3839,14 +3839,23 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }:
         </div>
       )}
 
-      {/* Singularity +15 passive — unconditional DMG+ (weapon/acc) or DMG- (armor). */}
-      {singEffects.map((e, i) => (
-        <div key={`sing-${i}`} className="flex items-center gap-2 font-mono text-[11px] tabular-nums text-amber-200/90" title={e.name ?? undefined}>
-          <span className="rounded border border-amber-400/30 bg-amber-500/10 px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider not-italic">+15</span>
-          <span className="flex-1 truncate">{STAT[e.stat]?.longLabel ?? e.stat}</span>
-          <span className="font-semibold text-amber-100">+{e.value}{e.percent ? "%" : ""}</span>
-        </div>
-      ))}
+      {/* Singularity +15 passive. The UNCONDITIONAL "to target" DMG+ (weapon/acc)
+       *  / DMG- (armor) is on the character sheet (amber, applies). The
+       *  CONDITIONAL variants (vs an element, vs a singularity buff) are
+       *  combat-only — the stat layer excludes them, so the card shows them
+       *  muted + a "cond" tag and their own label (e.g. "DMG Increase vs Earth")
+       *  so they're never mistaken for applied stats. */}
+      {singEffects.map((e, i) => {
+        const cond = !!e.combatOnly;
+        return (
+          <div key={`sing-${i}`} className={cx("flex items-center gap-1.5 font-mono text-[10.5px] tabular-nums", cond ? "text-white/45" : "text-amber-200/90")} title={e.name ?? undefined}>
+            <span className={cx("rounded border px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider not-italic", cond ? "border-white/15 text-white/40" : "border-amber-400/30 bg-amber-500/10 text-amber-200")}>+15</span>
+            <span className="flex-1 truncate">{e.name ?? STAT[e.stat]?.longLabel ?? e.stat}</span>
+            {cond && <span className="shrink-0 text-[8px] font-semibold uppercase tracking-wider text-white/35">cond</span>}
+            <span className={cx("font-semibold", cond ? "text-white/50" : "text-amber-100")}>+{e.value}{e.percent ? "%" : ""}</span>
+          </div>
+        );
+      })}
 
       {/* Gem slots (Talisman / EE) show the build's gems ONLY; gear shows substats. */}
       {gemSlot ? (

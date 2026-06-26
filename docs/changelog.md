@@ -93,9 +93,13 @@ Lot de lisibilité sur la `BottomGearBand` (`GearCard`) :
   « substats ») **ET** l'allocation recommandée du build → bruit. Désormais une seule section **Gems** = les
   gemmes que le build pose : la reco du solver (badge **swap** si différente) ou, s'il n'a pas réalloué, les
   socketées (label **current**). `GemRecommendation` → `GemsSection`.
-- **Passif Singularité +15 affiché** — les pièces ascensionnées portent un passif inconditionnel (DMG+ sur
-  arme/accessoire, DMG- sur armure) qui n'apparaissait pas sur les cartes (seul le `GearDetail` Inventory le
-  montrait). Rendu maintenant via les entrées `main` `source === "singularity"`, badge **+15** ambre.
+- **Passif Singularité +15 affiché + labellisé** — les pièces ascensionnées portent un passif +15 qui
+  n'apparaissait pas sur les cartes (seul le `GearDetail` Inventory le montrait). Rendu via les entrées `main`
+  `source === "singularity"`. **Distinction conditionnel/appliqué** : l'inconditionnel « DMG Increase to target »
+  (`BT_STAT_PREMIUM/NONE`, `combatOnly:false`) compte dans le sheet → **ambre** ; les variantes conditionnelles
+  (« vs Earth » `TARGET_ELEMENT`, « vs singularity buff » `TARGET_HAS_BUFF`, `combatOnly:true`) sont exclues du
+  calcul → affichées **grisées + tag `cond`** avec leur propre libellé, pour ne jamais être prises pour des stats
+  appliquées (le calcul/CP, lui, les excluait déjà via `if (s.combatOnly) continue` — vérifié, pas un bug calc).
 - **Extrapolation plus claire** — quand une pièce est projetée (reforge classic/ascended), badge **▲ projected /
   classic / ascended** sur la ligne d'enhance (au lieu d'un badge discret « Substats »), valeur de main stat en
   **cyan**, substats teintés cyan. Tooltip explicite « re-scalé / reforgé vers cette cible, pas tes rolls actuels ».
