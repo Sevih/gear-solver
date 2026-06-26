@@ -16,7 +16,7 @@ BuilderScreen.tsx (React, main thread)
   │
   ├─ useReducer(SolverFilters)   ← 13 actions, 9 panneaux + sidebar/footer contrôlés
   │
-  ├─ SolverOrchestrator           ← pool de Web Workers (hardwareConcurrency-1, capped 8)
+  ├─ SolverOrchestrator           ← pool de Web Workers (hardwareConcurrency-1, override gs.solver.workerCount)
   │     │
   │     │  fan-out (postMessage)
   │     ▼
@@ -289,8 +289,13 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
 
 1. **Engine pur, sans React** (`engine.ts`, `gems.ts`, `ratings.ts`, `cp.ts`) — importable depuis n'importe quel worker ou test, pas de DOM ni de Suspense à se trimballer.
 
-2. **Worker pool ≤ 8** — au-delà, l'overhead postMessage + sérialisation
-   inventaire/game dépasse le gain CPU.
+2. **Worker pool = `hardwareConcurrency − 1`** (`resolveWorkerCount`, override
+   `gs.solver.workerCount`, plafond dur 64) — un cœur laissé à l'UI, le reste à
+   la recherche. L'ancien plafond fixe à 8 laissait les machines many-core
+   sous-employées (8 workers / 32 threads = 25 % CPU) ; le clone postMessage
+   inventaire/game par worker est un coût *fixe* par solve, amorti sur un solve
+   de plusieurs secondes — scaler avec la machine est donc le bon défaut. Le log
+   debug `solver` (`pool`) affiche le nombre résolu + `hardwareConcurrency`.
 
 3. **Partition embarrassingly parallel** — chaque worker prend une slice du
    slot le plus grand. Aucune comm inter-worker, merge final O(W × K). Le nombre

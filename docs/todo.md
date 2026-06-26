@@ -74,12 +74,16 @@
       (`simulateReforges` budget paramétrable), centralisé dans `projectPieceForReforge` (partagé engine ↔
       gear band). La carte affiche l'enhance projeté (`+15 · ascended`) + badge **classic/ascended** + ticks.
       *(Reste possible si besoin : un indicateur explicite "needs upgrade" vs déjà au plafond.)*
-- [ ] 🟠 **Solve sous-utilise le CPU** — pendant un solve, CPU ~25% max mais temp 70-80° : le pool de workers ne
-      sature pas les cœurs. Investiguer la parallélisation (taille du pool, découpe des chunks, idle workers).
+- [x] 🟠 **Solve sous-utilise le CPU** — cause : plafond fixe à 8 workers (8/32 threads = 25 %). Fix :
+      `resolveWorkerCount()` = `hardwareConcurrency − 1` (1 cœur pour l'UI, plafond dur 64) + override
+      `gs.solver.workerCount` + log debug `solver`/`pool` (workers + hardwareConcurrency) pour vérifier.
+      *(À vérifier sur ta machine : le solve doit maintenant saturer ~tous les cœurs. Si le clone
+      postMessage game/inventory × N devient le nouveau goulot à fort N → réduire le payload par worker
+      / SharedArrayBuffer, cf. §8 limites connues.)*
 
 ### Features
 - [ ] **Settings — options globales** — panneau pour worker count override · topK/topN · heatmap on/off
-      (en plus des debug toggles déjà là).
+      (en plus des debug toggles déjà là). prevoir meme une refonte graphique / orga de la fenetre settings
 
 ### À vérifier EN JEU
 - [ ] **Cap de Quality ne scale pas avec les étoiles** — `computeQuality` fixe `max = 14 + reforge.n`
@@ -91,8 +95,8 @@
 - [ ] **Snapshot `data/` versioning** — stamper un hash/timestamp à chaque rebuild de `data/derived` pour
       invalider les caches localStorage après un patch jeu (les SavedBuild référencent des `pieceUids`
       qui peuvent disparaître).
-- [ ] **Equip / Unequip** — bloqué : nécessite une API jeu inexistante (retiré du UI). À reprendre si le
-      pipeline de capture peut un jour envoyer des commandes au jeu.
+- [ ] **Equip / Unequip** — modifier les emplacements des equipements sur les personnages. on n'envoi rien au 
+      jeu (on modifie les fichiers que l'on a recuperer)
 
 ### Tests (fixtures lourdes)
 - [ ] **CP solver vs Builds** — comparer `calcBattlePower` sur le même build depuis les deux écrans

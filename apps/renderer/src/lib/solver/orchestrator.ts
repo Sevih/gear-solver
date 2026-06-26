@@ -21,6 +21,30 @@ import type {
   WorkerOutput,
 } from "./types.js";
 
+/** localStorage key for a manual worker-count override (the future Settings
+ *  panel writes here; read once at pool creation). */
+const WORKER_COUNT_KEY = "gs.solver.workerCount";
+
+/** Resolve how many solver workers to spawn. Default = `hardwareConcurrency - 1`
+ *  (use every logical core but one, kept free for the main thread / UI), with a
+ *  generous hard ceiling so a pathological override or an absurd core count
+ *  can't spawn thousands of workers. A valid `gs.solver.workerCount` override
+ *  wins (clamped to [1, ceiling]). Changing the override takes effect on the
+ *  next pool creation (screen reload). */
+export function resolveWorkerCount(): number {
+  const CEILING = 64;
+  const hwc = navigator.hardwareConcurrency || 4;
+  let override = NaN;
+  try {
+    const raw = localStorage.getItem(WORKER_COUNT_KEY);
+    if (raw) override = parseInt(raw, 10);
+  } catch {
+    // localStorage can throw in locked-down contexts — fall back to the default.
+  }
+  if (Number.isFinite(override) && override >= 1) return Math.min(override, CEILING);
+  return Math.max(1, Math.min(CEILING, hwc - 1));
+}
+
 export interface OrchestratorCallbacks {
   onProgress(p: { permutations: number; searched: number; poolSizes?: PoolSizes }): void;
   onResult(builds: SolveBuild[]): void;
@@ -75,12 +99,16 @@ export class SolverOrchestrator {
     this.cb = cb;
   }
 
-  /** Lazily spin up the pool. Sized to (hardwareConcurrency - 1) clamped
-   *  to [1, 8] — past 8 workers the partition overhead and bytes pushed
-   *  through postMessage outweigh the parallel speedup for typical solves. */
+  /** Lazily spin up the pool. Sized by `resolveWorkerCount()` — defaults to
+   *  (hardwareConcurrency - 1) so the search uses every core but one (left for
+   *  the main thread / UI), overridable via `gs.solver.workerCount`. The old
+   *  hard cap of 8 left high-core machines mostly idle (8 workers / 32 threads
+   *  = 25% CPU); the per-solve postMessage/clone overhead is amortized over a
+   *  multi-second solve, so scaling with the machine is the right default. */
   private ensurePool(): void {
     if (this.workers.length > 0) return;
-    const n = Math.max(1, Math.min(8, navigator.hardwareConcurrency - 1));
+    const n = resolveWorkerCount();
+    debug("solver", "pool", { workers: n, hardwareConcurrency: navigator.hardwareConcurrency });
     for (let i = 0; i < n; i++) {
       const w = new SolverWorker();
       const idx = i;
