@@ -40,6 +40,10 @@
   `gs.builds.notes` reste durable.
 - ✅ 🟡 **Show/hide colonnes — clic-droit** — état `open` de `ColumnsMenu` remonté dans `ResultsTable` ;
   `onContextMenu` sur le `<tr>` d'en-tête `preventDefault()` + ouvre le menu.
+- ✅ 🔍 **Cap de Quality — vérifié en jeu (aucun changement)** — confirmé : la note se fait sur l'**investi**,
+  pas sur le potentiel ni les étoiles. Un 6★ non reforge a un socle **4/4/3/3 = 14** ; reforge ×2 → noté sur 16.
+  Donc `computeQuality` = `14 + reforges_faits` (`max = 14 + reforge.n`) est **correct** — rien à corriger.
+  (A fait surgir un nit séparé : le tint doré `isMax = s.lv >= stars` a un mauvais seuil par-sub, cf. todo.)
 - ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** (wontfix assumé) — placeholder faux quand aucun build
   n'est sélectionné, **laissé volontairement** pour ne pas diverger du panneau Inventory qui partage la
   map. À ne reprendre que si les deux maps divergent.
