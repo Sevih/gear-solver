@@ -13,10 +13,10 @@
 ## Reste à faire
 
 ### 🟠 Perf solver
-- [~] **Solver CP trop lent** — 2 optims du coût par combo livrées (évaluateur CP préparé + cheap ratings
-      différés au finalize ; cf. changelog). **Reste** (levier structurel, le plus gros gain) : réduire le
-      **nombre de combos** atteignant le CP — pré-filtre de pool plus agressif et/ou borne CP dérivée d'un
-      upper-bound par slot pour pruner tôt. Demande un profilage sur vrai compte.
+- [~] **Solver CP trop lent** — coût par combo réduit (évaluateur CP préparé + cheap ratings différés) ET
+      **nombre de combos** réduit : pruning par dominance en mode CP (pré-filtre de pool, cf. changelog).
+      **Reste (optionnel)** : branch-and-bound CP exact (borne sup par sous-arbre vs K-ième meilleur) — gain
+      potentiellement modeste vu `topK = 1000`/worker, à n'envisager que si un profilage sur vrai compte le réclame.
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 

@@ -9,6 +9,18 @@
 ## Items de backlog clôturés (index)
 
 ### 🟠 Perf solver
+- ✅ **Pruning par dominance (SOLVE CP)** — la CP étant monotone-croissante en chaque stat finale (et chaque
+  stat finale en chaque entrée de bucket `flat/pct/buffPct`), une pièce dont la contribution est dominée
+  composante-par-composante par une autre du **même slot + groupe** (set pour l'armure, effet pour
+  arme/accessoire) ne peut jamais produire un build de CP supérieure → `pruneDominatedForCp` (`engine.ts`)
+  l'élague du pool **avant le cartésien** (réduction multiplicative du nombre de combos). Ne compare que les
+  axes de bucket réellement lus par `finalStatsFromBuckets` (CP-pertinents) sur les pièces **post-reforge**
+  (le pool est déjà projeté). Désactivé si un filtre pourrait rendre un build à stats plus basses uniquement
+  admissible (**borne max** sur une stat, ou **tout** filtre rating/cp/upg) ; les bornes min seules restent
+  optimisées. Talisman/EE exemptés (gemmes issues de l'alloc globale + reroute de cap par-combo cassent la
+  monotonie par-pièce). Exact au sommet du classement CP ; seuls des quasi-doublons strictement ≤ quittent la
+  queue. +10 tests `dominance.test.ts` (drop strict, ties/Pareto/groupes gardés, reforge, équivalence top-CP
+  end-to-end via `solveChunk`).
 - ✅ **Accumulateur de buckets — re-sum déféré** — `aggregatePrefixBuckets` somme les 6 pièces
   invariantes (weapon..accessory) **1×/itération accessory** ; `computeFinalStatsFromPrefix` clone
   ce prefix et n'ajoute que talisman → EE → gemOverride → setBonuses, **dans l'ordre de slot exact**.

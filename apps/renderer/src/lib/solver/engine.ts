@@ -21,6 +21,7 @@ import {
   computeSetBonuses,
   type FinalStats,
   type FinalStatsBaseline,
+  type GearBuckets,
   type GemOverride,
   type ScalingMap,
 } from "../composeBuild.js";
@@ -336,6 +337,35 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     }
   }
 
+  // CP-mode dominance prune (structural combo-count reduction — see Phase 3).
+  // CP is monotone in every gear stat, so a piece strictly dominated within its
+  // slot's set / effect group can never produce a higher-CP build than its
+  // dominator → drop it before the cartesian. Runs AFTER reforge + top-% so it
+  // compares the projected pool pieces the solver will actually compose.
+  //
+  // Disabled when a constraint could make a strictly-lower-stat build uniquely
+  // feasible (else dropping the dominated piece would under-return):
+  //   - a stat MAX bound — a weaker piece may be the only one under the cap;
+  //   - ANY rating / cp / upg bound — the cheap ratings aren't guaranteed
+  //     monotone in the stats, and `upg` keys off the equipped-piece identity,
+  //     not the stat vector; neither is ordered by stat dominance.
+  // Stat MIN bounds stay optimized (the dominator meets them whenever the
+  // dominated does). Talisman / EE are never pruned: their gems come from the
+  // global allocation and the per-combo crit-cap reroute breaks per-piece
+  // monotonicity.
+  const noStatMax = !Object.values(filters.statFilters).some((b) => b?.max != null);
+  const noRatingBound = !Object.values(filters.ratingFilters).some((b) => b && (b.min != null || b.max != null));
+  if (req.mode === "cp" && noStatMax && noRatingBound) {
+    const effKeyOf = (g: GearPiece): string => game.equipment[String(g.itemId)]?.setId ?? "—";
+    const setKeyOf = (g: GearPiece): string => g.armorSetId ?? "—";
+    for (const slot of ["weapon", "accessory"] as const) {
+      if (!lockedSlots.has(slot)) pools[slot] = pruneDominatedForCp(pools[slot], effKeyOf);
+    }
+    for (const slot of ["helmet", "armor", "gloves", "boots"] as const) {
+      if (!lockedSlots.has(slot)) pools[slot] = pruneDominatedForCp(pools[slot], setKeyOf);
+    }
+  }
+
   // Total counts for the footer (pre-filter) — count any piece in the slot,
   // ignoring filters, so the user sees "26/152" semantics.
   const countAll = (slot: string): number => inv.gear.reduce((n, g) => n + (g.slot === slot ? 1 : 0), 0);
@@ -569,6 +599,84 @@ function topPctPrunePreserving(
     }
   }
   return kept;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Phase 3 — CP-mode dominance prune
+ * CP is monotone non-decreasing in every FinalStat, and every FinalStat is
+ * monotone non-decreasing in each gear bucket entry (`composeMultStat` and the
+ * additive stats only ever ADD the gear contribution). So if piece X's stat
+ * contribution is ≥ piece Y's on every CP-relevant bucket axis (and > on one),
+ * then for ANY fixed choice of the other slots `CP(build with X) ≥ CP(build
+ * with Y)` — Y can never produce a higher-CP build than X. Drop the dominated
+ * pieces before the cartesian (multiplicative combo-count cut, exact at the
+ * top of the CP ranking; only weakly-worse near-duplicates leave the tail).
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/** The bucket axes `finalStatsFromBuckets` actually reads — i.e. the only
+ *  contributions that move a FinalStat (and thus CP). Dominance compares these
+ *  ONLY: a difference on any other key can't change CP, so ignoring it both
+ *  prevents dropping a CP-equal piece over an irrelevant stat and tightens the
+ *  prune. `pct` and `buffPct` read the same rate keys. */
+const CP_FLAT_KEYS = ["atk", "def", "hp", "spd", "eff", "effRes", "dmgUp", "dmgReduce", "pen", "critDmgReduce"] as const;
+const CP_RATE_KEYS = ["atkPct", "defPct", "hpPct", "spd", "critRate", "critDmg", "eff", "effRes", "dmgUp", "dmgReduce", "pen", "critDmgReduce"] as const;
+
+/** Does X's contribution dominate Y's — ≥ on every CP-relevant axis and > on at
+ *  least one? Missing keys count as 0. A strict edge on a CP-relevant axis means
+ *  `CP_X ≥ CP_Y` (≥, not >, because CP floors — a tie on rounding still leaves Y
+ *  weakly worse, never better, so it's safely droppable). Pieces equal on every
+ *  relevant axis are NOT dominated (strict stays false) → both kept. */
+function bucketDominatesStrict(x: GearBuckets, y: GearBuckets): boolean {
+  let strict = false;
+  for (const k of CP_FLAT_KEYS) {
+    const xv = x.flat[k] ?? 0, yv = y.flat[k] ?? 0;
+    if (xv < yv) return false;
+    if (xv > yv) strict = true;
+  }
+  for (const k of CP_RATE_KEYS) {
+    const xv = x.pct[k] ?? 0, yv = y.pct[k] ?? 0;
+    if (xv < yv) return false;
+    if (xv > yv) strict = true;
+  }
+  for (const k of CP_RATE_KEYS) {
+    const xv = x.buffPct[k] ?? 0, yv = y.buffPct[k] ?? 0;
+    if (xv < yv) return false;
+    if (xv > yv) strict = true;
+  }
+  return strict;
+}
+
+/** Drop pieces strictly dominated (per `bucketDominatesStrict`) by another in
+ *  the SAME group of the slot. `groupKeyOf` partitions so incomparable pieces
+ *  are never pitted: armor by `armorSetId` (set bonus + feasibility differ
+ *  across sets), weapon/accessory by effect id (CP ignores effects, but a
+ *  distinct effect is a distinct build the user may want, so we never elide the
+ *  last piece of an effect). Pieces carry their POST-reforge stats here (the
+ *  pool was already projected), so the compared vector is the one the solver
+ *  composes. O(n²) per group — groups are small. Pure; exported for tests. */
+export function pruneDominatedForCp(pieces: GearPiece[], groupKeyOf: (p: GearPiece) => string): GearPiece[] {
+  if (pieces.length < 2) return pieces;
+  const buckets = pieces.map((p) => aggregatePrefixBuckets([p]));
+  const groups = new Map<string, number[]>();
+  for (let i = 0; i < pieces.length; i++) {
+    const k = groupKeyOf(pieces[i]!);
+    const arr = groups.get(k);
+    if (arr) arr.push(i); else groups.set(k, [i]);
+  }
+  const dropped = new Set<number>();
+  for (const idxs of groups.values()) {
+    for (const yi of idxs) {
+      if (dropped.has(yi)) continue;
+      for (const xi of idxs) {
+        if (xi === yi || dropped.has(xi)) continue;
+        // A dropped xi is itself dominated by a surviving piece that
+        // (transitively) also dominates yi, so skipping it loses no kill.
+        if (bucketDominatesStrict(buckets[xi]!, buckets[yi]!)) { dropped.add(yi); break; }
+      }
+    }
+  }
+  if (dropped.size === 0) return pieces;
+  return pieces.filter((_, i) => !dropped.has(i));
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
