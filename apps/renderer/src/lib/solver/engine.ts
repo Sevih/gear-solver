@@ -16,7 +16,8 @@
 import type { GameData, GearPiece, ReforgeCeiling, RolledStat } from "@gear-solver/core";
 import { composeCharStats, expToLevel, projectMainToCeiling } from "@gear-solver/core";
 import {
-  computeFinalStats,
+  aggregatePrefixBuckets,
+  computeFinalStatsFromPrefix,
   computeSetBonuses,
   type FinalStats,
   type FinalStatsBaseline,
@@ -843,6 +844,13 @@ export async function solveChunk(
               // map inside every per-talisman compose. Bit-identical to the
               // in-loop recompute — same pieces, same output order.
               const setBonuses = computeSetBonuses(pieces, game?.sets ?? null);
+              // Prefix buckets — the 6 invariant pieces (weapon..accessory) are
+              // fixed across the talisman loop, so aggregate them ONCE here
+              // instead of re-summing all 6 (+EE) per talisman. The talisman
+              // loop clones this and tops up with talisman + EE + gems + sets,
+              // in the exact slot order, so the compose stays bit-identical
+              // (see `computeFinalStatsFromPrefix`).
+              const prefixBuckets = aggregatePrefixBuckets(pieces.slice(0, 6));
               for (const talisman of slotPools.ooparts) {
                 permutations++;
                 if (permutations % tickEvery === 0 && !(await tick())) break;
@@ -855,7 +863,7 @@ export async function solveChunk(
                 const talismanSlots = talisman.enhanceLevel >= 5 ? 5 : 4;
                 const gemDelta = gemDeltaByTalismanSlots.get(talismanSlots) ?? null;
                 let gemAlloc = gemAllocByTalismanSlots.get(talismanSlots) ?? { talisman: [], ee: [] };
-                let fs = computeFinalStats(baseline, scaling, pieces, game, gemDelta ?? undefined, setBonuses);
+                let fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, gemDelta ?? undefined, setBonuses);
 
                 // Gem cap handling (slow path). The precomputed default delta is
                 // CHC-blind, so it neither guarantees the crit cap nor avoids
@@ -871,7 +879,7 @@ export async function solveChunk(
                   const preGemCrc = fs.crc - defaultCrcGem;
                   const reached = allocateGemsReachingCap(scoredGems, talismanSlots, eeSlots, preGemCrc);
                   if (!gemDeltaEquals(reached.delta, gemDelta)) {
-                    fs = computeFinalStats(baseline, scaling, pieces, game, reached.delta ?? undefined, setBonuses);
+                    fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, reached.delta ?? undefined, setBonuses);
                     gemAlloc = reached.alloc;
                   }
                 } else if (fs.crc > CRC_OVERSHOOT_CEIL && defaultCrcGem > 0) {
@@ -880,7 +888,7 @@ export async function solveChunk(
                   // reallocate this combo's pre-gem CHC so wasted crit gems
                   // become useful non-crit ones. Untriggered combos pay nothing.
                   const capped = allocateGemsCapped(scoredGems, talismanSlots, eeSlots, fs.crc - defaultCrcGem);
-                  fs = computeFinalStats(baseline, scaling, pieces, game, capped.delta ?? undefined, setBonuses);
+                  fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, capped.delta ?? undefined, setBonuses);
                   gemAlloc = capped.alloc;
                 }
 

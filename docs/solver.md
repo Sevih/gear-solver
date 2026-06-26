@@ -348,6 +348,13 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
 4. **`pieces` array hoisted + mutée en place** — évite 10M+ allocations dans
    la boucle inner. Sûr car `computeFinalStats` ne garde pas la référence.
 
+4b. **Accumulateur de buckets incrémental** — les 6 pièces invariantes
+    (weapon..accessory) sont agrégées **1× par itération accessory**
+    (`aggregatePrefixBuckets`) ; le talisman loop clone ce prefix et n'ajoute que
+    talisman + EE + gems + sets (`computeFinalStatsFromPrefix`). **Bit-identique**
+    au re-sum complet (ordre de slot préservé, prefix = somme partielle clonée),
+    validé par un test d'équivalence dédié + le 0-diff end-to-end.
+
 5. **Gem delta pré-agrégé** — la contribution gem ne se calcule qu'**une fois
    par variant talismanSlots** au lieu de N combos × 10 gems × resolveStat.
    Gain massif sur le hot path.
@@ -394,10 +401,11 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
 (rien de bloquant aujourd'hui — voir [todo.md](todo.md) pour le backlog.)
 - **Equip / Unequip vers le jeu** : absents — nécessitent une API jeu inexistante
   (le pipeline de capture est read-only pour l'instant).
-- **Perf hot-path** : le rebuild des set bonuses par talisman est hoisté (§7.10) et la
-  table de résultats est virtualisée (`@tanstack/react-virtual`). Reste que
-  `aggregateGearBuckets` re-somme les 6+EE pièces invariantes à chaque talisman — un
-  accumulateur incrémental (en préservant l'ordre flottant) est au backlog.
+- **Perf hot-path** : le rebuild des set bonuses par talisman est hoisté (§7.10), les
+  6 pièces invariantes ne sont plus re-sommées par talisman (accumulateur de buckets
+  incrémental bit-identique, §7.4b), et la table de résultats est virtualisée
+  (`@tanstack/react-virtual`). Reste structurel : réduire le **nombre de combos**
+  atteignant le compose/CP (pré-filtre de pool, borne CP par upper-bound).
 - **Worker init = W × game/inventory** : `game` + inventaire sont structured-clonés
   vers chaque worker **une seule fois** (message `init`, mis en cache worker-side ;
   re-broadcast seulement à une re-capture). Chaque solve n'envoie plus que le payload
@@ -415,7 +423,7 @@ apps/renderer/src/
 ├── workers/
 │   └── solver.worker.ts          ← thin adapter IPC ↔ engine
 ├── lib/
-│   ├── composeBuild.ts            ← computeFinalStats + aggregateGearBuckets (+ GemOverride)
+│   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← bookmark de builds par héros (localStorage)
 │   │   └── filterPresets.ts        ← snapshots de filtres par héros (localStorage)

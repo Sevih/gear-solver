@@ -347,6 +347,19 @@ Pour chaque armorSetId présent ≥ 2× dans les pieces :
 
 Valeurs routées vers `flat` ou `pct` via `setBonusStatKey(st, isRate)`.
 
+**Accumulateur incrémental (hot path solver)** : `aggregateGearBuckets` re-somme
+les 8 pièces à chaque combo. Le solver évite le re-sum des 6 pièces invariantes
+(weapon..accessory) par talisman : `aggregatePrefixBuckets` les agrège **1× par
+itération accessory**, puis `computeFinalStatsFromPrefix` clone ce prefix et n'ajoute
+que talisman → EE → gemOverride → setBonuses. **Bit-identique** au full-array :
+l'addition flottante est associative à gauche, le prefix cloné est la même somme
+partielle, et l'ordre de slot est préservé (l'EE, à l'index 7 après le talisman,
+est ré-ajouté par talisman plutôt que pré-sommé — sinon l'ordre casserait). Les
+helpers `addPieceToBuckets`/`addGemOverride`/`addSetBonuses` sont partagés entre les
+deux chemins → identité par construction. Critique car `Math.trunc` dans
+`composeMultStat` ne pardonne pas une dérive ULP ; couvert par un test d'équivalence
+dédié + le test solveChunk 0-diff end-to-end.
+
 ### 2.7 Gem sub-solver (`gems.ts`)
 
 **Pool** : multiset des OptionIDs (15001..15054) socketés sur les Talisman
@@ -556,7 +569,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | Fichier | Couverture |
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
-| `apps/renderer/test/solver.test.ts`     | 70 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`** |
+| `apps/renderer/test/solver.test.ts`     | 74 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`**, **incremental bucket accumulator equivalence** (`computeFinalStatsFromPrefix` vs full-array) |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped` : parité sans gemme crit, accept jusqu'à CHC 100 (overshoot ≤102), stop pile à 100, skip total au cap, split talisman/EE, delta null si rien d'utile, score ≤0 jamais pris |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount` : défaut `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, plafond dur 64 |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidélité, maps vides), import merge (dédup par `id`, collision garde l'existant), replace (overwrite), validation du bundle (kind/version/maps) |
@@ -566,7 +579,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick` : verdict des deux côtés de la bascule, équivalent-flat exact, égalité pile à la bascule, garde tick %=0 |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains` : tri décroissant, monotonie delta→gain, CHC nul si crit-cap, base 0 → vide |
 
-Run : `npm test --workspaces --if-present`. **Total : 171 tests** (core 11 + renderer 160 : solver, solveChunk, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue, +4 dmgValue, +11 buildAdvice).
+Run : `npm test --workspaces --if-present`. **Total : 175 tests** (core 11 + renderer 164 : solver, solveChunk, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue, +4 dmgValue, +11 buildAdvice).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 
@@ -618,7 +631,7 @@ prebake en flat qui ne match que si baseForRate ≈ 100).
 ```
 apps/renderer/src/
 ├── lib/
-│   ├── composeBuild.ts            ← computeFinalStats + aggregateGearBuckets (+ GemOverride)
+│   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← localStorage per-hero saved builds
 │   │   └── filterPresets.ts        ← localStorage per-hero filter snapshots

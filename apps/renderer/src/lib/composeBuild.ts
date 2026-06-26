@@ -119,6 +119,51 @@ export interface GemOverride {
 /** Result of `computeSetBonuses` — the active 2pc/4pc bonus stat options. */
 export type SetBonusList = ReadonlyArray<{ st: string; ap: string; v: number }>;
 
+/** The three stat buckets fed to the in-game CalcFinalStat split. */
+export interface GearBuckets {
+  flat: Record<string, number>;
+  pct: Record<string, number>;
+  buffPct: Record<string, number>;
+}
+
+/** Fold one piece's mains + subs into the buckets, IN PLACE. Shared by the
+ *  full-array aggregation and the solver's incremental path so both apply the
+ *  exact same per-piece logic (and thus the same float summation when fed the
+ *  same piece order). `gemOverrideActive` skips a gem-slot piece's subs (its
+ *  socketed gems are replaced by the override delta). */
+function addPieceToBuckets(p: GearPiece, b: GearBuckets, gemOverrideActive: boolean): void {
+  for (const s of p.main) {
+    if (s.combatOnly) continue;
+    const target = s.fromBuff ? b.buffPct : (s.percent ? b.pct : b.flat);
+    target[s.stat] = (target[s.stat] ?? 0) + s.value;
+  }
+  const isGemSlot = p.slot === "ooparts" || p.slot === "exclusive";
+  if (!(isGemSlot && gemOverrideActive)) {
+    for (const s of p.subs) {
+      const target = s.percent ? b.pct : b.flat;
+      target[s.stat] = (target[s.stat] ?? 0) + s.value;
+    }
+  }
+}
+
+/** Add the pre-aggregated gem override delta to the buckets, IN PLACE. */
+function addGemOverride(gemOverride: GemOverride, b: GearBuckets): void {
+  for (const k in gemOverride.flat) b.flat[k] = (b.flat[k] ?? 0) + (gemOverride.flat[k] ?? 0);
+  for (const k in gemOverride.pct) b.pct[k] = (b.pct[k] ?? 0) + (gemOverride.pct[k] ?? 0);
+}
+
+/** Add the active set bonuses to the buckets, IN PLACE. */
+function addSetBonuses(setBonuses: SetBonusList, b: GearBuckets): void {
+  for (const sb of setBonuses) {
+    const isRate = sb.ap === "OAT_RATE";
+    const statKey = setBonusStatKey(sb.st, isRate);
+    if (!statKey) continue;
+    const value = (isRate || PERCENT_STATS.has(statKey)) ? sb.v / 10 : sb.v;
+    const bucket = (isRate || PERCENT_STATS.has(statKey)) ? b.pct : b.flat;
+    bucket[statKey] = (bucket[statKey] ?? 0) + value;
+  }
+}
+
 export function aggregateGearBuckets(
   pieces: GearPiece[],
   game: GameData | null,
@@ -129,44 +174,28 @@ export function aggregateGearBuckets(
    *  talisman never carries a set). Omitted → computed internally, identical
    *  result (the BuildsScreen / non-solver path stays unchanged). */
   precomputedSetBonuses?: SetBonusList,
-): {
-  flat: Record<string, number>; pct: Record<string, number>; buffPct: Record<string, number>;
-} {
-  const flat: Record<string, number> = {};
-  const pct: Record<string, number> = {};
-  const buffPct: Record<string, number> = {};
-  for (const p of pieces) {
-    for (const s of p.main) {
-      if (s.combatOnly) continue;
-      const target = s.fromBuff ? buffPct : (s.percent ? pct : flat);
-      target[s.stat] = (target[s.stat] ?? 0) + s.value;
-    }
-    // Skip current-gems-as-subs on Talisman/EE when the solver supplied an
-    // override; the override's deltas land in `flat`/`pct` after the per-piece
-    // loop. Non-override paths read `p.subs` normally — same code BuildsScreen
-    // has relied on (parser pushes socketed gems into `subs`).
-    const isGemSlot = p.slot === "ooparts" || p.slot === "exclusive";
-    if (!(isGemSlot && gemOverride)) {
-      for (const s of p.subs) {
-        const target = s.percent ? pct : flat;
-        target[s.stat] = (target[s.stat] ?? 0) + s.value;
-      }
-    }
-  }
-  if (gemOverride) {
-    for (const k in gemOverride.flat) flat[k] = (flat[k] ?? 0) + (gemOverride.flat[k] ?? 0);
-    for (const k in gemOverride.pct) pct[k] = (pct[k] ?? 0) + (gemOverride.pct[k] ?? 0);
-  }
-  const setBonuses = precomputedSetBonuses ?? computeSetBonuses(pieces, game?.sets ?? null);
-  for (const b of setBonuses) {
-    const isRate = b.ap === "OAT_RATE";
-    const statKey = setBonusStatKey(b.st, isRate);
-    if (!statKey) continue;
-    const value = (isRate || PERCENT_STATS.has(statKey)) ? b.v / 10 : b.v;
-    const bucket = (isRate || PERCENT_STATS.has(statKey)) ? pct : flat;
-    bucket[statKey] = (bucket[statKey] ?? 0) + value;
-  }
-  return { flat, pct, buffPct };
+): GearBuckets {
+  const b: GearBuckets = { flat: {}, pct: {}, buffPct: {} };
+  // Skip current-gems-as-subs on Talisman/EE when an override is supplied; the
+  // override's deltas land after the per-piece loop. Non-override paths read
+  // `p.subs` normally (parser pushes socketed gems into `subs`).
+  for (const p of pieces) addPieceToBuckets(p, b, !!gemOverride);
+  if (gemOverride) addGemOverride(gemOverride, b);
+  addSetBonuses(precomputedSetBonuses ?? computeSetBonuses(pieces, game?.sets ?? null), b);
+  return b;
+}
+
+/** Aggregate ONLY the invariant prefix pieces (weapon..accessory — everything
+ *  the solver's talisman loop holds fixed). These are never gem slots, so no
+ *  override handling is needed. Summed once per accessory iteration; the
+ *  talisman loop clones the result and tops up with the talisman + EE.
+ *
+ *  Returned buckets are owned by the caller — `computeFinalStatsFromPrefix`
+ *  clones them per combo so this prefix can be reused across the talisman loop. */
+export function aggregatePrefixBuckets(prefix: GearPiece[]): GearBuckets {
+  const b: GearBuckets = { flat: {}, pct: {}, buffPct: {} };
+  for (const p of prefix) addPieceToBuckets(p, b, false);
+  return b;
 }
 
 const SET_BONUS_KEY_RATE: Record<string, string> = {
@@ -203,7 +232,48 @@ export function computeFinalStats(
    *  it so the per-talisman compose doesn't rebuild it. */
   precomputedSetBonuses?: SetBonusList,
 ): FinalStats {
-  const { flat, pct, buffPct } = aggregateGearBuckets(pieces, game, gemOverride, precomputedSetBonuses);
+  return finalStatsFromBuckets(baseline, scaling, aggregateGearBuckets(pieces, game, gemOverride, precomputedSetBonuses));
+}
+
+/** Solver hot-path variant of `computeFinalStats`. Instead of re-summing all
+ *  6 (+EE) invariant pieces on every talisman, it starts from a `prefix`
+ *  (weapon..accessory, aggregated once per accessory iteration via
+ *  `aggregatePrefixBuckets`), clones it, and tops up with only the varying
+ *  talisman + the EE + gem override + set bonuses.
+ *
+ *  Order is preserved EXACTLY vs the full-array path: the prefix folds pieces
+ *  0..5, then this adds talisman (index 6), then EE (index 7), then the gem
+ *  override, then the set bonuses — the same sequence `computeFinalStats` walks
+ *  for the `[weapon,helmet,armor,gloves,boots,accessory,talisman,ee]` array.
+ *  Because float addition is left-associative and the cloned prefix is the same
+ *  running partial sum, the result is BIT-IDENTICAL (the in-game `Math.trunc`
+ *  is unforgiving of ULP drift, so this is load-bearing — see the equivalence
+ *  test). `setBonuses` is required here (the solver always hoists it).
+ *
+ *  The EE is re-folded per talisman rather than baked into the prefix because
+ *  it sits AFTER the talisman in slot order — pre-summing it would reorder the
+ *  additions and break bit-identity. It's a single cheap piece. */
+export function computeFinalStatsFromPrefix(
+  baseline: FinalStatsBaseline,
+  scaling: ScalingMap,
+  prefix: GearBuckets,
+  talisman: GearPiece | null,
+  ee: GearPiece | null,
+  gemOverride: GemOverride | undefined,
+  setBonuses: SetBonusList,
+): FinalStats {
+  const b: GearBuckets = { flat: { ...prefix.flat }, pct: { ...prefix.pct }, buffPct: { ...prefix.buffPct } };
+  if (talisman) addPieceToBuckets(talisman, b, !!gemOverride);
+  if (ee) addPieceToBuckets(ee, b, !!gemOverride);
+  if (gemOverride) addGemOverride(gemOverride, b);
+  addSetBonuses(setBonuses, b);
+  return finalStatsFromBuckets(baseline, scaling, b);
+}
+
+/** Plug the aggregated gear buckets into the per-axis CalcFinalStat formula.
+ *  Shared by both the full-array and incremental compose paths so the final
+ *  arithmetic is defined once. */
+function finalStatsFromBuckets(baseline: FinalStatsBaseline, scaling: ScalingMap, { flat, pct, buffPct }: GearBuckets): FinalStats {
   return {
     atk: composeMultStat(scaling.atk, flat.atk ?? 0, pct.atkPct ?? 0, buffPct.atkPct ?? 0),
     def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0, buffPct.defPct ?? 0),

@@ -17,7 +17,11 @@
  */
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, Inventory, RolledStat, StatType } from "@gear-solver/core";
-import { aggregateGearBuckets, computeSetBonuses, type GemOverride } from "../src/lib/composeBuild.js";
+import {
+  aggregateGearBuckets, aggregatePrefixBuckets, computeFinalStats, computeFinalStatsFromPrefix,
+  computeSetBonuses, type FinalStatsBaseline, type GemOverride, type ScalingMap,
+} from "../src/lib/composeBuild.js";
+import type { StatScaling } from "@gear-solver/core";
 import { simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
 import type { SolveBuild } from "../src/lib/solver/types.js";
 import { calcBattlePower, makeCpEvaluator } from "../src/lib/solver/cp.js";
@@ -451,6 +455,68 @@ describe("aggregateGearBuckets — precomputed set bonuses (hoist equivalence)",
     expect(computeSetBonuses(sparse, gameWithSet.sets))
       .toEqual(computeSetBonuses([armor("helmet", "S1"), armor("armor", "S1")], gameWithSet.sets));
   });
+});
+
+describe("computeFinalStatsFromPrefix — incremental bucket accumulator equivalence", () => {
+  // The solver aggregates the 6 invariant pieces (weapon..accessory) ONCE per
+  // accessory iteration, then clones + tops up with the talisman + EE per combo.
+  // It MUST be bit-identical to folding the full [w,h,a,g,b,acc,tali,ee] array
+  // in slot order — the in-game `Math.trunc` in composeMultStat is unforgiving
+  // of ULP drift, and no stat-lock would catch a 1-off here.
+  const gameWithSet = {
+    ...game,
+    sets: {
+      S1: { name: "Sharp", levels: [
+        { level: 1, p2: { st: "ST_ATK", ap: "OAT_RATE", v: 153 }, p4: { st: "ST_NONE", ap: "", v: null } },
+        { level: 2, p2: { st: "ST_ATK", ap: "OAT_RATE", v: 200 }, p4: { st: "ST_NONE", ap: "", v: null } },
+      ] },
+    },
+  } as unknown as GameData;
+
+  const sc = (baseValue: number): StatScaling => ({
+    baseValue, evoValue: 0, awakValue: 0, awakPct: 0, transcendPct: 0, codexPct: 0, buffPct: 0, buffValue: 0,
+  });
+  // Awkward bases so the trunc lands near a boundary — maximizes the chance a
+  // reordered ULP would flip a stat by 1 if the order weren't preserved.
+  const baseline: FinalStatsBaseline = { spd: 103, chc: 5.3, chd: 51.7, pen: 0, dmgInc: 0, dmgRed: 0 };
+  const scaling: ScalingMap = { atk: sc(1337), def: sc(733), hp: sc(7919), eff: sc(101), res: sc(97) };
+
+  // Each slot dumps fractional %ATK (and other) rolls onto the SAME buckets, so
+  // the running sum has many additions whose order must match exactly.
+  const pc = (slot: string, setId: string | null, main: RolledStat[], subs: RolledStat[]): GearPiece => ({
+    uid: `p-${slot}`, itemId: 1, slot: slot as GearPiece["slot"], setId: null, armorSetId: setId,
+    rarity: "unique", star: 6, name: "", classLimit: null,
+    breakthrough: 0, reforgeCount: 0, enhanceLevel: 15, singularityLevel: 0,
+    ascended: false, locked: false, equippedBy: null, main, subs,
+  });
+  const atkp = (v: number): RolledStat => ({ stat: "atkPct", value: v, percent: true });
+  const flatAtk = (v: number): RolledStat => ({ stat: "atk", value: v, percent: false });
+
+  const weapon = pc("weapon", null, [atkp(61.8)], [atkp(3.3), flatAtk(47)]);
+  const helmet = pc("helmet", "S1", [flatAtk(50)], [atkp(2.7), { stat: "hp", value: 533, percent: false }]);
+  const armorP = pc("armor", "S1", [], [atkp(7.1), { stat: "def", value: 111, percent: false }]);
+  const gloves = pc("gloves", "S1", [], [atkp(4.9), { stat: "critRate", value: 5.7, percent: true }]);
+  const boots = pc("boots", "S1", [], [atkp(6.3), { stat: "spd", value: 13, percent: false }]);
+  const accessory = pc("accessory", null, [{ stat: "critDmg", value: 37.4, percent: true }], [atkp(1.9)]);
+  const talisman = pc("ooparts", null, [], [atkp(2.4), { stat: "atk", value: 200, percent: false }]);
+  const ee = pc("exclusive", null, [{ stat: "atkPct", value: 8.8, percent: true, fromBuff: true } as RolledStat], [atkp(1.1)]);
+
+  const prefix = [weapon, helmet, armorP, gloves, boots, accessory];
+
+  for (const withEe of [false, true]) {
+    for (const override of [undefined, { flat: { atk: 12 }, pct: { atkPct: 2.4, critRate: 3 } } as GemOverride]) {
+      it(`matches the full-array compose (ee=${withEe}, override=${!!override})`, () => {
+        const full = withEe ? [...prefix, talisman, ee] : [...prefix, talisman];
+        const setBonuses = computeSetBonuses(full, gameWithSet.sets);
+        const fromFull = computeFinalStats(baseline, scaling, full, gameWithSet, override, setBonuses);
+        const fromPrefix = computeFinalStatsFromPrefix(
+          baseline, scaling, aggregatePrefixBuckets(prefix), talisman, withEe ? ee : null, override, setBonuses,
+        );
+        // Strict deep equality — every truncated stat must match to the integer.
+        expect(fromPrefix).toEqual(fromFull);
+      });
+    }
+  }
 });
 
 /* ─────────────────────────────────────────────────────────────────────────

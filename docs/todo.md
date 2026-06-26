@@ -20,10 +20,14 @@
       CP, les 8 produits ne servent qu'à l'affichage). **Reste** (levier structurel, le plus gros gain) :
       réduire le **nombre de combos** atteignant le CP — pré-filtre de pool plus agressif et/ou borne
       CP dérivée d'un upper-bound par slot pour pruner tôt. Demande un profilage sur vrai compte.
-- [ ] **Accumulateur de buckets — re-sum déféré** — le hoist des set bonuses est fait ; reste le re-sum
-      des 6+EE pièces par talisman. Gain marginal + **risque d'ordre flottant** (`incSet/decSet` casse la
-      bit-identité, aucun test stat-locks ne rattrape une dérive ULP via `Math.trunc`). À faire en
-      préservant l'ordre exact + test d'équivalence dédié.
+- [x] **Accumulateur de buckets — re-sum déféré** — ~~reste le re-sum des 6+EE pièces par talisman.~~ Fait :
+      `aggregatePrefixBuckets` somme les 6 pièces invariantes (weapon..accessory) **1× par itération
+      accessory** ; `computeFinalStatsFromPrefix` clone ce prefix et n'ajoute que talisman → EE →
+      gemOverride → setBonuses, **dans l'ordre de slot exact** (= l'ordre du tableau full). **Bit-identique**
+      (addition associative à gauche, prefix = somme partielle clonée ; l'EE reste ré-ajouté par talisman
+      car il est après le talisman dans l'ordre). Helpers `addPieceToBuckets`/`addGemOverride`/`addSetBonuses`
+      partagés entre full-array et incremental → identité par construction. **+4 tests d'équivalence dédiés**
+      (ee on/off × override on/off) + couvert end-to-end par le test solveChunk 0-diff.
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
