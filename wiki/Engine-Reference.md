@@ -202,6 +202,13 @@ File: [compose-stats.ts](../packages/core/src/compose-stats.ts) +
 Reverse-engineered from `CalcBattlePower` (libil2cpp.so 1.4.9), validated 0-diff
 on 5 chars (LB0/1/2/3). Implementation: [cp.ts](../apps/renderer/src/lib/solver/cp.ts).
 
+**SOLVE CP hot path**: `makeCpEvaluator(consts)` pre-captures the per-solve constant
+additive bonuses (`starBonus`, `skillSum`, `eeBp`, `fusionBp` — all exact integers) and
+returns a closure `(stats, talisman) → cp`. Avoids the per-combo `CpArgs` object allocation
+and the constant re-derivation. **Bit-identical** to `calcBattlePower`: the hoisted
+constants are integers (lossless summation) and the final sum order is preserved. Dedicated
+identity test.
+
 **Critical conventions**:
 - **CRC capped at 100%** BEFORE entering the formula.
 - CRC/CHD/PEN/DMGup/DMGRed/ECDR: RAW values (× 10 of the displayed %).
@@ -304,6 +311,15 @@ Conventions:
   (§3.2), prevents the dmg/dmgh ratings from dropping to 0 on extreme
   defender DMGReduce stacks.
 
+**`noCrit` heroes** (Rhona / K.Tamamo / G.Nella — their skills can never crit):
+`computeCheapRatings(fs, dmgStat, dmgSec, noCrit=true)` forces `pCrit = 0` → the crit
+term drops out of every offensive rating, and `mcd` ("assume 100% CHC") falls back to the
+non-crit hit (`mcdFactor === drFactor`) since there's no crit ceiling to reach. Without
+this the solver rewarded CHC/CHD a no-crit hero can never cash in. `noCrit` comes from
+`meta.noCrit`, propagated through the solve context like `dmgStat`/`dmgSec`. **CP is not
+affected**: `calcBattlePower` stays a faithful in-game mirror (which uses raw crc), so
+SOLVE CP still maximizes the game's real CP number.
+
 **Not included** in the ratings (defender-dependent, out of build-trait scope):
 Element (×0.8/×1.0/×1.2), Mark (×1.15), EnemyCriticalDamageReduce, MISS
 multiplier, `FinalDamageReduce` buff chain. PEN is the exception: modeled
@@ -357,6 +373,18 @@ For each armorSetId present ≥ 2× among the pieces:
   which stores its effect in `desc` rather than in a stat).
 
 Values routed to `flat` or `pct` via `setBonusStatKey(st, isRate)`.
+
+**Incremental accumulator (solver hot path)**: `aggregateGearBuckets` re-sums all 8
+pieces per combo. The solver skips re-summing the 6 invariant pieces (weapon..accessory)
+per talisman: `aggregatePrefixBuckets` aggregates them **once per accessory iteration**,
+then `computeFinalStatsFromPrefix` clones that prefix and only adds talisman → EE →
+gemOverride → setBonuses. **Bit-identical** to the full-array path: float addition is
+left-associative, the cloned prefix is the same partial sum, and the slot order is
+preserved (the EE, at index 7 after the talisman, is re-folded per talisman rather than
+pre-summed — pre-summing would break the order). The `addPieceToBuckets` /
+`addGemOverride` / `addSetBonuses` helpers are shared by both paths → identity by
+construction. Critical because `Math.trunc` in `composeMultStat` is unforgiving of ULP
+drift; covered by a dedicated equivalence test + the end-to-end solveChunk 0-diff test.
 
 ### 2.7 Gem sub-solver (`gems.ts`)
 
@@ -442,6 +470,17 @@ At each depth `D` of the armor loop (helmet=1, armor=2, gloves=3, boots=4):
   subtree.
 
 Huge gain on `req-4pc Sharp` searches when few Sharp helmets exist.
+
+**Armor pool pre-filter** (`armorSetWhitelist`, `precomputeContext`) — complements
+the mid-tree prune. When the plans **fully** constrain the armor (`Σcount === ARMOR_SLOTS`
+on a plan → 0 free slot, e.g. `2pc A + 2pc B` or `4pc A`), the helmet/armor/gloves/boots
+pools are pruned to the admissible sets only (union of the full plans' conds) **before**
+entering the cartesian. A partial plan (free slots) under `allowBrokenSets=true` prunes
+nothing (a filler can be anything → `null` = no prune). Under `allowBrokenSets=false`, the
+free slots must complete a set → the whitelist = required sets ∪ *formable sets* (present in
+≥2 armor slots, `computeFormableSets`), and a leaf check `allSetsComplete(setCount)` (boots
+depth, `remaining===0`) rejects singleton / set-less builds (valid shapes: one 4pc OR two
+2pc). **Keep current** locked slots are exempt. Pure helpers tested in isolation.
 
 ### 2.11 Combat Power + Upg filters (applied in-loop when set)
 
@@ -617,7 +656,7 @@ matches if baseForRate ≈ 100).
 ```
 apps/renderer/src/
 ├── lib/
-│   ├── composeBuild.ts            ← computeFinalStats + aggregateGearBuckets (+ GemOverride)
+│   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← localStorage per-hero saved builds
 │   │   └── filterPresets.ts        ← localStorage per-hero filter snapshots
@@ -625,9 +664,10 @@ apps/renderer/src/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
 │       ├── orchestrator.ts         ← pool of Web Workers, fan-out/in, merge top-N
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + simulateReforges + TopKHeap
+│       ├── setPlans.ts             ← setsFeasible + armorSetWhitelist + allSetsComplete (set OR-of-AND model)
 │       ├── gems.ts                 ← buildGemPool + scoreGemPool + aggregateGemDelta + allocateGems + gemSlotsOf
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + ROLL_NORMS + STAT_TO_PRIORITY
-│       └── cp.ts                   ← calcBattlePower
+│       └── cp.ts                   ← calcBattlePower + makeCpEvaluator
 ├── workers/
 │   └── solver.worker.ts            ← IPC adapter, MessageChannel yield
 └── screens/

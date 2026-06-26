@@ -53,6 +53,13 @@ CP is expensive: by default it is computed **only for the top-N** in SOLVE
 (lazily, in `finalizeBuilds`, just for display) and **for every combo**
 in SOLVE CP (the sort key requires it).
 
+Two optimizations cut the per-combo cost in SOLVE CP: (1) a **prepared CP
+evaluator** (`makeCpEvaluator`) captures the constant bonuses (star/skill/EE/fusion)
+once → no per-combo `CpArgs` allocation and no constant re-derivation, **bit-identical**
+to `calcBattlePower`; (2) the **cheap ratings are deferred** to `finalizeBuilds` (top-N
+only) when no rating filter is set — symmetric to SOLVE's lazy CP, since the heap is
+sorted by CP, not by the ratings.
+
 The user CP filter (`cp min/max`) is applied **in the loop** as soon as it
 is active — including in SOLVE mode, where CP is then computed per combo. This is required
 for correctness: deferring the filter to `finalizeBuilds` let the heap fill up
@@ -82,7 +89,16 @@ filters the inventory pieces:
 - excluded if **effect chip** (weapon/accessory) marked `excluded`; or marked `required` and the icon does not match
 - excluded if `armorSetId ∈ excludedSets`
 
-**`keepCurrent`** toggle: if the piece currently equipped by the hero exists for this slot, the pool is restricted to `[currentPiece]` (the solver does not touch the slot).
+**`keepCurrent`** toggle: if the piece currently equipped by the hero exists for this slot, the pool is restricted to `[currentPiece]` (the solver does not touch the slot). Such locked slots are **exempt** from the set-prune below.
+
+**Armor pool set-prune** (`armorSetWhitelist`, pure): when the set requirements
+**fully** constrain the armor (a plan `2pc A + 2pc B` or `4pc A` → `Σcount === 4`, no
+free slot), the helmet/armor/gloves/boots pools are **pruned** to admissible sets only
+**before** the cartesian — a huge reduction on set-constrained searches. A **single**
+required set (`2pc A`, free slots) prunes nothing by default: you must keep filler to
+complete the build. The **Allow broken sets** toggle (cf. § Options) flips this: when
+*false*, the free slots must also form a complete set → the whitelist narrows to required
++ *formable* sets (present in ≥2 armor slots) and a leaf check rejects singleton builds (cf. phase 4).
 
 ### Phase 3 — Top-% prune (heuristic)
 If the user has set at least one non-zero priority AND `topPct < 100`:
@@ -103,6 +119,7 @@ Nested-loop enumeration: `weapon × helmet × armor × gloves × boots × access
   worker receives its slice → embarrassingly parallel, no inter-worker communication.
 - **Set tracking**: at each armor slot, `incSet(armorSetId)` at the start of the piece, `decSet` after the inner loop.
 - **Mid-tree pruning**: at each depth `D` (D armor slots iterated, `4-D` remaining), for each required set (2pc or 4pc) we verify that enough slots remain to reach the threshold. Otherwise, `continue` to the next sibling.
+- **Leaf no-broken-set**: when **Allow broken sets** is *off*, at boots depth (`remaining === 0`) we also reject any build whose `setCount` tally isn't "complete" (`allSetsComplete`: every present set ≥2 AND all 4 armor pieces set-tracked → a 4pc or two 2pc). Leaf-only: a mid-tree singleton may still pair up deeper.
 
 ### Phase 5 — Per-combo: compose + ratings + filters + heap
 For each combo that passes phase 4:
@@ -112,6 +129,11 @@ For each combo that passes phase 4:
    - `gemDelta` is pre-aggregated (cf. § Gems).
 2. **Stat filter**: if a `FinalStats[key]` is outside the user `[min, max]`, `continue`.
 3. **Cheap ratings**: 8 simple products (HpS, Ehp, EhpS, Dmg, DmgS, Mcd, McdS, DmgH).
+   For a **`noCrit`** hero (`meta.noCrit`, propagated into the context), `computeCheapRatings`
+   gets `noCrit=true` → `pCrit=0` (the CHD term drops out) and `mcd` falls back to the
+   non-crit hit: CHC/CHD no longer inflate its ratings. In SOLVE CP with no rating filter,
+   the 8 products are **deferred** to `finalizeBuilds` (top-N only) — the heap sorts by CP.
+   CP itself stays a faithful in-game mirror (its formula uses raw crc).
 4. **Score**: `Σ priority × (final / STAT_NORMS) × 100`.
 5. **Rating filter**: same as the stat filter, on ratings + score.
 6. **CP / upg**: CP is computed in SOLVE CP, OR in SOLVE as soon as a CP filter is set
@@ -182,6 +204,10 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
 - **Only maxed gear** — filters the pool to `enhanceLevel === 15`.
 - **Equipped items** — includes pieces equipped on other heroes.
 - **Keep current** — locks the already-equipped slots to their current piece.
+- **Allow broken sets** (`allowBrokenSets`, default **true**) — *true*: a partial set
+  requirement (e.g. a single `2pc`) lets any gear fill the free armor slots (legacy
+  behavior). *false*: every armor piece must complete a 2pc/4pc → the solver also prunes
+  set-less / non-formable pieces from the pool and rejects singleton builds at the leaf.
 - **Exclude equipped** — **wired**: `ExcludeHeroesPicker` (multi-select) writes into
   `excludedHeroes` via `toggleHeroExcluded` / `clearExcludedHeroes`.
 
@@ -244,7 +270,9 @@ The **Optimize →** button lives on the Builds tab side (opens the Builder on t
 Red-green heatmap per column (min/max relative to the current result set). Columns:
 sets, 8 main stats, ratings (`TABLE_RATINGS`), **Score**, **Upg**, actions
 (`Upg` = number of slots differing from the current loadout, sortable + filterable). Sort by clicking
-the header (null → desc → asc → null). Click on a row → the `BottomGearBand`
+the header (null → desc → asc → null). The **Columns** menu (show/hide columns, persisted
+`gs.builder.cols`) opens from the toolbar button **or by right-clicking any column header**
+(`ColumnsMenu` controlled, `onContextMenu` on the header `<tr>`). Click on a row → the `BottomGearBand`
 shows the 8 pieces. `solving…` / error / **explicit empty state** (an `emptyReason`
 derived from `poolSizes` lists the slots that fell to 0 pieces after filters).
 
@@ -325,6 +353,13 @@ automatically (each piece scores 0, random ranking, so we keep everything).
 4. **Hoisted `pieces` array + mutated in place** — avoids 10M+ allocations in
    the inner loop. Safe because `computeFinalStats` does not keep the reference.
 
+4b. **Incremental bucket accumulator** — the 6 invariant pieces (weapon..accessory)
+    are aggregated **once per accessory iteration** (`aggregatePrefixBuckets`); the
+    talisman loop clones that prefix and only adds talisman + EE + gems + sets
+    (`computeFinalStatsFromPrefix`). **Bit-identical** to the full re-sum (slot order
+    preserved, prefix = a cloned running partial sum), validated by a dedicated
+    equivalence test + the end-to-end 0-diff test.
+
 5. **Pre-aggregated gem delta** — the gem contribution is computed only **once
    per talismanSlots variant** instead of N combos × 10 gems × resolveStat.
    Massive gain on the hot path.
@@ -334,7 +369,12 @@ automatically (each piece scores 0, random ranking, so we keep everything).
    searches.
 
 7. **Lazy CP in SOLVE** — CP is ~20× more expensive than a cheap rating. Computed
-   only for the final top-N (~1000 vs millions).
+   only for the final top-N (~1000 vs millions). In **SOLVE CP** (CP is the sort key,
+   computed per combo), two mitigations: (a) a **prepared CP evaluator**
+   (`makeCpEvaluator`) — constant bonuses captured once, no per-combo `CpArgs`
+   allocation nor constant re-derivation (bit-identical); (b) **deferred cheap ratings**
+   to finalize (top-N) when no rating filter is set — the heap sorts by CP, so the 8
+   ratings products only feed the display.
 
 8. **Responsive cancel via MessageChannel** — `solveChunk` is async, yields at each
    tick (~4096 combos) via a `MessageChannel.postMessage` round-trip (<1ms vs 4ms
@@ -366,10 +406,11 @@ automatically (each piece scores 0, random ranking, so we keep everything).
 (nothing blocking today — see the backlog.)
 - **Equip / Unequip to the game**: absent — they require a non-existent game API
   (the capture pipeline is read-only for now).
-- **Hot-path perf**: the per-talisman set bonus rebuild is hoisted (§7.10) and the
-  results table is virtualized (`@tanstack/react-virtual`). It remains that
-  `aggregateGearBuckets` re-sums the 6+EE invariant pieces on each talisman — an
-  incremental accumulator (preserving float order) is on the backlog.
+- **Hot-path perf**: the per-talisman set bonus rebuild is hoisted (§7.10), the 6
+  invariant pieces are no longer re-summed per talisman (incremental bit-identical
+  bucket accumulator, §7.4b), and the results table is virtualized
+  (`@tanstack/react-virtual`). What remains is structural: cutting the **number** of
+  combos that reach compose/CP (pool pre-filter, CP upper-bound).
 - **Worker init = W × game/inventory**: `game` + inventory are structured-cloned
   to each worker **only once** (`init` message, cached worker-side;
   re-broadcast only on a re-capture). Each solve only sends the lightened payload
@@ -387,7 +428,7 @@ apps/renderer/src/
 ├── workers/
 │   └── solver.worker.ts          ← thin adapter IPC ↔ engine
 ├── lib/
-│   ├── composeBuild.ts            ← computeFinalStats + aggregateGearBuckets (+ GemOverride)
+│   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← per-hero build bookmarks (localStorage)
 │   │   └── filterPresets.ts        ← per-hero filter snapshots (localStorage)
@@ -395,9 +436,10 @@ apps/renderer/src/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
 │       ├── orchestrator.ts         ← Web Worker pool, fan-out/fan-in, top-N merge
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + simulateReforges
+│       ├── setPlans.ts             ← setsFeasible + armorSetWhitelist + allSetsComplete (set OR-of-AND model)
 │       ├── gems.ts                 ← buildGemPool + scoreGemPool + aggregateGemDelta + allocateGems
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + STAT_TO_PRIORITY
-│       └── cp.ts                   ← calcBattlePower (reverse-engineered)
+│       └── cp.ts                   ← calcBattlePower + makeCpEvaluator (reverse-engineered)
 └── screens/
     ├── BuilderScreen.tsx           ← SolverFilters reducer + all panels + orchestrator wiring
     └── BuildsScreen.tsx            ← equipped/composed roster + computeAdvice + Optimize →
