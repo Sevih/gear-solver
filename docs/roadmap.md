@@ -34,6 +34,14 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   `Sevih/outerpediaV2` (`data-sync.ts` dual-mode checkout/repo SHA-gated ; handler `/img/*`
   partagé cascade checkout→cache→CDN→302) → suit les patchs jeu **sans nouveau build**.
   Prod packagé encore à vérifier (M8).
+- **Home dashboard.** Onglet d'accueil (`HomeScreen.tsx`) : snapshot du compte (2×2),
+  répartition de la qualité du gear par tier avec explications, breakdowns roster
+  (élément / classe / rareté), centre de mise à jour inline (pas de popups natifs).
+- **UI partagée & inspection.** Panneau de détail gear extrait (`design/GearDetail.tsx`,
+  `GearDetailBody`) **réutilisé** par l'Inventaire (panneau plein) et l'onglet Builds
+  (tooltip au survol, `RichTooltip`). Builder maintenu monté entre onglets (préserve les
+  résultats + solve en tâche de fond). Settings refondu en modale à onglets
+  (`design/SettingsModal.tsx` : Setup / Solver / Data / Backup / Debug).
 
 ## Next
 

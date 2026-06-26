@@ -14,7 +14,7 @@ son pipeline interne, et les choix d'architecture qui le sous-tendent.
 ```
 BuilderScreen.tsx (React, main thread)
   │
-  ├─ useReducer(SolverFilters)   ← 13 actions, 9 panneaux + sidebar/footer contrôlés
+  ├─ useReducer(SolverFilters)   ← 19 actions, 10 panneaux + sidebar/footer contrôlés
   │
   ├─ SolverOrchestrator           ← pool de Web Workers (hardwareConcurrency-1, override gs.solver.workerCount)
   │     │

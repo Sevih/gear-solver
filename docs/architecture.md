@@ -16,6 +16,10 @@ Four layers, connected by plain JSON:
   from a Web Worker, a CLI, or the desktop shell. (The combination solver itself lives
   in `apps/renderer/src/lib/solver/`, not in core.)
 - **apps/renderer** — Vite + React. Loads the JSON, drives the engine, renders results.
+  Screens: **Home** (account dashboard + gear-quality distribution + update center),
+  **Inventory** (table + per-piece detail), **Builds** (equipped/composed roster + Optimize→),
+  **Builder** (the solver), plus a tabbed **Settings** modal. The gear detail panel
+  (`design/GearDetail.tsx`) is shared between Inventory and the Builds hover tooltip.
   Heavy solves fan out across a **pool of Web Workers** (size = `hardwareConcurrency - 1`,
   override `gs.solver.workerCount`, hard cap 64) that import the pure engine modules in
   `apps/renderer/src/lib/solver/`. See [solver.md](solver.md) for the solver pipeline + UI

@@ -69,8 +69,9 @@ cf. `parse.ts` qui lit `c.First` … `c.ChainPassive`).
 du `CharUID` de chaque item (`parse.ts` : `equippedBy = CharUID === "0" ? null : CharUID`).
 
 **Presets** : `PresetList` vit dans **`/user/item`** (pas `/user/character`) —
-array de `{Name (base64), ItemUIDList[8]}`. Ordre des 8 slots (cf. `raw.ts`
-`RawPreset`) : Weapon, Accessory, Helmet, Armor, Gloves, Boots, EE, Talisman.
+array de `{PresetType, Num, Name (base64), ItemUIDList[8], Favorites}` (shape complète
+dans `raw.ts` `RawPreset` ; le parser ne lit aujourd'hui que `Name` + `ItemUIDList`).
+Ordre des 8 slots : Weapon, Accessory, Helmet, Armor, Gloves, Boots, EE, Talisman.
 Les noms sont base64-encoded UTF-8 (Cf. `decodeBase64Utf8` dans parse.ts).
 
 ---

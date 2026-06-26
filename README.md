@@ -20,7 +20,7 @@ Packaged as an Electron desktop app (Windows). Not a web service.
 - **Parses** the captured JSON into a typed inventory (gear, characters, presets)
   with resolved stat values matching in-game display.
 - **Composes** each hero's full stat sheet — mirror of in-game `CFormula::CalcFinalStat`
-  (reverse-engineered, validated 0-diff against the in-game character sheet for 8 chars
+  (reverse-engineered, validated 0-diff against the in-game character sheet for 9 chars
   spanning LB0/1/2/3 and lv 100–120, see `data/stat-locks.json`).
 - **Solves** the optimal gear allocation per hero in a Web Worker pool: pruned cartesian
   search with mid-tree set feasibility checks, per-slot top-% prune, greedy gem
@@ -45,6 +45,7 @@ gear-solver/
 │  ├─ game/             Game tables (copy of Outerplane templates)
 │  ├─ derived/          Distilled tables consumed by the engine (gitignored output of build.mjs)
 │  └─ stat-locks.json   Per-hero regression snapshots validated against in-game
+├─ scripts/             Release tooling (release.mjs)
 └─ docs/                STATUS, architecture, reference, solver, data-schema, roadmap, todo, design-prompt
 ```
 
@@ -86,12 +87,14 @@ The renderer auto-imports the latest capture on launch.
 
 ```bash
 npm run typecheck             # all workspaces (strict + noUnusedLocals/Parameters)
-npm test                      # core (7 tests) + renderer (35 tests)
+npm test                      # core (11 tests) + renderer (128 tests) = 139
 ```
 
 The renderer test suite covers the gem pool / scoring / allocation / delta aggregation,
-gem-override equivalence in `aggregateGearBuckets`, the 8 cheap ratings + Score
-normalization, reforge simulation, top-K min-heap, and the engine↔user stat key mapping.
+gem-override equivalence in `aggregateGearBuckets`, the 8 cheap ratings (+ damage-stat
+scaling) + Score normalization, reforge simulation, set-plan feasibility, sub-tick & damage
+value panels, reco→filter translation, the top-K min-heap, worker-count resolution, JSON
+backup round-trip, and the engine↔user stat key mapping.
 
 ---
 
@@ -119,7 +122,9 @@ See [docs/architecture.md](docs/architecture.md) for the layer split rationale, 
 
 ## Status
 
-Data capture, parser, stat composer, solver, Builder UI and persistence are all live.
-Backlog (validation tests for CP equivalence + mid-tree pruning, JSON import/export,
-production build path for `data/`, reforge-aware ticks heuristic refinements,
-Electron packaging polish) is tracked in [docs/todo.md](docs/todo.md).
+Data capture, parser, stat composer, solver, the Home dashboard, Inventory/Builds/Builder
+screens, the tabbed Settings modal, persistence (saved builds + filter presets) and JSON
+backup import/export are all live. Backlog (validation tests for CP equivalence + mid-tree
+pruning, snapshot versioning for the `data/` cache, production build path for `data/`,
+`noCrit` propagation into solver scoring, reforge-aware ticks heuristic refinements,
+end-to-end verification of the Electron packaged build) is tracked in [docs/todo.md](docs/todo.md).
