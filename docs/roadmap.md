@@ -64,8 +64,12 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   validé, auto-update testé contre une release signée + feed.
 
 ### Perf hot-path (au fil du profilage)
-- Accumulateur de buckets incrémental (`aggregateGearBuckets` re-somme tout par combo) —
-  hoist des set bonuses **livré**, re-sum par talisman encore déféré.
+- Accumulateur de buckets incrémental — ✅ **livré** : `aggregatePrefixBuckets` somme les
+  6 pièces invariantes 1×/accessory, `computeFinalStatsFromPrefix` clone + ajoute talisman/EE/
+  gems/sets (bit-identique, +4 tests d'équivalence). Le hoist des set bonuses était déjà livré.
+- Coût par combo SOLVE CP — ✅ **réduit** : évaluateur CP préparé (`makeCpEvaluator`, bonus
+  constants capturés 1×, plus d'allocation `CpArgs`) + cheap ratings différés au finalize quand
+  aucun filtre de rating. **Reste structurel** : réduire le **nombre** de combos (pré-filtre pool, borne CP).
 - Virtualisation de la table de résultats (topN=1000) — ✅ **livrée**
   (`@tanstack/react-virtual` + `memo(ResultRow)`).
 
@@ -80,16 +84,19 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 ### M5 — Solver core ✅
 - Pruned cartesian search in a **Web Worker pool** (`hardwareConcurrency-1`, hard cap 64,
   embarrassingly parallel partition on the largest slot). Per-slot prefilter (main, effect,
-  sets-excluded), Top-% substat prune, mid-tree set-feasibility prune, fixed-size top-K min-heap.
+  sets-excluded), **set-based armor pool prune** (`armorSetWhitelist` — a fully-constraining
+  set requirement drops out-of-set pieces; **Allow broken sets** toggle for the partial case),
+  Top-% substat prune, mid-tree set-feasibility prune, fixed-size top-K min-heap.
 - Gem sub-solver greedy with pre-aggregated `{flat, pct}` delta per `talismanSlots` variant.
 - Two modes: **SOLVE** (priority-weighted Score, CP computed lazily for top-N),
-  **SOLVE CP** (CP in-loop as sort key).
+  **SOLVE CP** (CP in-loop as sort key, prepared `makeCpEvaluator` + deferred ratings).
+- `noCrit` heroes score with `pCrit = 0` (no phantom CHC/CHD reward).
 - *Détails complets* : [docs/solver.md](solver.md).
 
 ### M6 — Solver UX ✅
 - BuilderScreen (Fribbels-style dense layout) : 9 panneaux du haut, table résultats
   avec heatmap, bottom gear band 8 slots, footer fixé avec compteurs P/S/Results.
-- État centralisé via `useReducer(SolverFilters)` — 13 actions, tous les inputs contrôlés.
+- État centralisé via `useReducer(SolverFilters)` — 19 actions (a grandi depuis M6), tous les inputs contrôlés.
 - Boutons SOLVE / SOLVE CP / Cancel / Reset filters branchés sur l'orchestrator.
 
 ---

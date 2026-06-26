@@ -115,28 +115,33 @@ npm run data:build       # régénère data/derived depuis data/game
 > Le polish solver, la persistance (Save build / Filter presets) et le wrapper Electron
 > de base sont **livrés** (voir « Ce qui est FAIT »). Reste :
 
-- **Perf hot-path** : accumulateur de buckets incrémental (re-sum par talisman encore
-  déféré ; le hoist des set bonuses + la virtualisation de la table sont **livrés**).
-- **Packaging desktop (M7+)** : le plumbing existe (electron-builder `extraResources`,
+- **Perf hot-path solver** : l'accumulateur de buckets incrémental, le hoist des set bonuses,
+  la virtualisation de la table et les optims SOLVE CP (évaluateur CP préparé + ratings différés)
+  sont **livrés**. Reste **structurel** : réduire le **nombre** de combos atteignant le compose/CP
+  (pré-filtre de pool plus agressif, borne CP par upper-bound) — demande un profilage sur vrai compte.
+- **Packaging desktop (M8)** : le plumbing existe (electron-builder `extraResources`,
   `setupAutoUpdate`) ; reste à **vérifier sur un vrai build packagé** (bake `data/`,
   installeur, auto-update contre une release signée + feed). **Inclut la vérif de la sync
   repo en prod** : 1er lancement online seed→SHA→download→rebuild, cache image à la demande,
   2e lancement SHA inchangé instantané, offline cold-cache sans crash.
-- **Equip / Unequip vers le jeu** : nécessite une API jeu inexistante (retiré de l'UI ;
-  à reprendre si le pipeline de capture peut envoyer des commandes).
-- **Versioning du snapshot `data/`** (le JSON import/export des builds/presets est **livré** —
-  `transfer.ts` + section Backup dans Settings + 8 tests).
+- **Édition d'équipement — UI déclencheur** : les méthodes core (`equipItem`/`unequipItem`),
+  l'endpoint writer `POST /api/captured/user-item` et le client renderer sont **livrés** ; reste
+  à brancher des boutons / assignation par slot côté Builder/Builds (édite le JSON capturé local,
+  on n'écrit jamais vers le jeu — API inexistante).
+- **Invalidation de cache au patch** : le stamp `version.json` (`{ hash, builtAt }`) est **livré**
+  (affiché Settings → Data) ; reste à **comparer le hash** au lancement pour élaguer les caches
+  localStorage (SavedBuild aux `pieceUids` disparus).
 - **Robustesse/sécu desktop** : cleanup process orphelins, gardes Host/Origin (cf. todo).
 
 ## Carte du repo
 
 ```
 apps/renderer/    UI React + Vite (renderer process Electron) ; le SOLVER vit ici
-                  (src/lib/solver/: engine.ts, orchestrator.ts, gems.ts, worker)
+                  (src/lib/solver/: engine.ts, orchestrator.ts, gems.ts, cp.ts,
+                  ratings.ts, setPlans.ts, worker ; composeBuild.ts une couche au-dessus)
 apps/desktop/     Electron : main.ts, server.ts (serveur local), emulator-detect.ts
 packages/core/    moteur stats : raw.ts, types.ts, gamedata.ts, stats.ts, parse.ts,
-                  compose-stats.ts, index.ts  (les anciens stubs solver.ts/score.ts
-                  ont été supprimés)
+                  compose-stats.ts, equip.ts (édition locale), index.ts
 tools/capture/    pipeline de capture (capture.ps1, disarm.ps1, addon.py, scripts/)
 data/game/        tables brutes du jeu (copie)
 data/derived/     tables distillées (générées, kebab-case) — consommées par le moteur
