@@ -75,9 +75,14 @@
 - [~] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** (wontfix assumé) — placeholder faux quand aucun build
       n'est sélectionné (l'accessoire a un main user-sélectionnable), mais **laissé volontairement** pour
       ne pas diverger du panneau Inventory qui partage la map. À ne reprendre que si les deux maps divergent.
-- [ ] ⚪ **Optims mineures Inventory (si profilage)** — `computeQuality` recalculé plusieurs fois par pièce
-      (précalculable dans `toUiPiece`) · double virtualisation (`contentVisibility:auto` redondant avec
-      `react-virtual`) · 7 `useMemo` d'availability fusionnables en une passe.
+- [~] ⚪ **Optims mineures Inventory (si profilage)** — Fait : double virtualisation supprimée
+      (`contentVisibility:auto`/`containIntrinsicSize` retirés des `GearTile` — `react-virtual` ne monte
+      déjà que les lignes visibles + overscan, le CSS était un résidu de l'ancienne grille non-virtualisée) ·
+      7 `useMemo` d'availability **fusionnés en une seule passe** sur `scopedForStats` (mains/subs/sets/
+      classes/stars/rarities/qualities + `computeQuality` une fois par pièce au lieu d'une passe dédiée).
+      **Reste** : `computeQuality` est encore recalculé dans `matchesFilters` (chip quality actif) et le
+      panneau de détail — un précalcul partagé (`toUiPiece` / map par UID) traverserait la frontière
+      adapter↔quality (calcul), différé tant que le profilage ne le réclame pas.
 
 ### 🟢 Features
 - [x] 🟢 **Rentabilité % vs Flat (subs)** — encadré **"Sub tick value"** dans le Builder (entre current→projected

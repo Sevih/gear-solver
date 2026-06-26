@@ -688,8 +688,6 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect 
           ? "border-cyan-300 bg-cyan-500/10 shadow-[0_0_8px_0_rgba(34,211,238,0.9),0_0_22px_4px_rgba(34,211,238,0.5)]"
           : "border-white/5 bg-white/[0.012] hover:border-white/15 hover:bg-white/3",
       )}
-      // CSS-native virtualization - skip layout/paint for off-screen tiles.
-      style={{ contentVisibility: "auto", containIntrinsicSize: "0 96px" }}
     >
       {/* Icon size tuned to grid column min (96px) minus the 4px border so
           the cyan stroke sits right on the icon's visual edge with no
@@ -1052,58 +1050,47 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
     return true;
   }), [ui, tab, f.slots]);
 
-  const availableMains = useMemo(() => {
-    const s = new Set<string>();
-    for (const p of scopedForStats) for (const m of p.main) s.add(m.stat);
-    return s;
-  }, [scopedForStats]);
-  const availableSubs = useMemo(() => {
-    const s = new Set<string>();
-    for (const p of scopedForStats) for (const sub of p.subs) s.add(sub.stat);
-    return s;
-  }, [scopedForStats]);
-  // Armor 4-pc set IDs present in the scope, paired with their localized name
-  // (pulled from game.sets) for the pill labels.
-  const availableArmorSets = useMemo(() => {
-    const m = new Map<string, string>();
+  // Filter-pill availability — which chips can possibly match in the current
+  // scope, so the modal disables (or omits) chips that would zero out the grid.
+  // Computed in ONE pass over `scopedForStats` (was 7 separate useMemos each
+  // re-walking the same list; `computeQuality` in particular ran a whole pass
+  // on its own). Destructured below so every downstream consumer keeps its
+  // individual `availableX` binding unchanged.
+  const {
+    availableMains, availableSubs, availableArmorSets, availableClasses,
+    availableStars, availableRarities, availableQualities,
+  } = useMemo(() => {
+    const mains = new Set<string>();
+    const subs = new Set<string>();
+    // Armor 4-pc set IDs present in the scope, paired with their localized
+    // name (from game.sets) for the pill labels.
+    const armorSets = new Map<string, string>();
+    // Class-restricted pieces — class name set (the modal maps name → icon).
+    const classes = new Set<string>();
+    // Star / Grade / Quality — pills outside these render disabled so the
+    // player never picks a chip guaranteed to zero out the grid.
+    const stars = new Set<number>();
+    const rarities = new Set<DesignRarity>();
+    const qualities = new Set<QualityTier>();
     for (const p of scopedForStats) {
-      if (!p.armorSetId) continue;
-      if (m.has(p.armorSetId)) continue;
-      const def = game?.sets?.[p.armorSetId];
-      m.set(p.armorSetId, def?.name ?? `Set #${p.armorSetId}`);
-    }
-    return m;
-  }, [scopedForStats, game]);
-  // Class-restricted pieces in the scope — class name set (no metadata
-  // needed, the FilterModal's class section already maps name → icon).
-  const availableClasses = useMemo(() => {
-    const s = new Set<string>();
-    for (const p of scopedForStats) {
-      if (p.classLimit) s.add(p.classLimit);
-    }
-    return s;
-  }, [scopedForStats]);
-  // Star / Grade / Quality availability — pills outside this set render
-  // disabled in the modal so the player never picks a chip that's
-  // guaranteed to zero out the grid.
-  const availableStars = useMemo(() => {
-    const s = new Set<number>();
-    for (const p of scopedForStats) s.add(p.stars);
-    return s;
-  }, [scopedForStats]);
-  const availableRarities = useMemo(() => {
-    const s = new Set<DesignRarity>();
-    for (const p of scopedForStats) s.add(p.rarity);
-    return s;
-  }, [scopedForStats]);
-  const availableQualities = useMemo(() => {
-    const s = new Set<QualityTier>();
-    for (const p of scopedForStats) {
+      for (const m of p.main) mains.add(m.stat);
+      for (const sub of p.subs) subs.add(sub.stat);
+      if (p.armorSetId && !armorSets.has(p.armorSetId)) {
+        const def = game?.sets?.[p.armorSetId];
+        armorSets.set(p.armorSetId, def?.name ?? `Set #${p.armorSetId}`);
+      }
+      if (p.classLimit) classes.add(p.classLimit);
+      stars.add(p.stars);
+      rarities.add(p.rarity);
       const q = computeQuality(p);
-      if (q) s.add(q.tier);
+      if (q) qualities.add(q.tier);
     }
-    return s;
-  }, [scopedForStats]);
+    return {
+      availableMains: mains, availableSubs: subs, availableArmorSets: armorSets,
+      availableClasses: classes, availableStars: stars,
+      availableRarities: rarities, availableQualities: qualities,
+    };
+  }, [scopedForStats, game]);
 
   // Auto-prune any selection that becomes unavailable when the scope
   // narrows, so a chip the user can no longer see can't silently zero out
