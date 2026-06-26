@@ -1,6 +1,12 @@
 ### gear-solver
 
+**📖 Player guide**
 - [Home](Home)
+- [Getting Started](Getting-Started)
+- [Using the App](Using-the-App)
+- [FAQ & Troubleshooting](FAQ)
+
+**🔧 Internals (dev)**
 - [Architecture](Architecture)
 - [Solver](Solver)
 - [Engine Reference](Engine-Reference)

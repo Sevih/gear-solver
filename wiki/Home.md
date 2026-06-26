@@ -10,6 +10,14 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
 > The French [`docs/`](https://github.com/Sevih/gear-solver/tree/main/docs) remain the
 > maintainer's authoritative source.
 
+## Start here
+
+- **🎮 Just want to use it?** → **[Getting Started](Getting-Started)** (install + import your
+  account), then **[Using the App](Using-the-App)** (the tabs, optimizing a hero). Stuck?
+  → **[FAQ & Troubleshooting](FAQ)**.
+- **🔧 Want to know how it works / contribute?** → [Architecture](Architecture),
+  [Solver](Solver), [Engine Reference](Engine-Reference).
+
 ## What it does
 
 - **Captures** your account data via a mitmproxy pipeline against the mobile client
@@ -30,6 +38,16 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
   Builder/Builds trigger UI is the remaining step). → [Engine Reference](Engine-Reference)
 
 ## Pages
+
+**📖 Player guide**
+
+| Page | What's in it |
+|------|--------------|
+| [Getting Started](Getting-Started) | Prerequisites, first-launch wizard, importing your account (capture) |
+| [Using the App](Using-the-App) | The four tabs (Home / Inventory / Builds / Builder), optimizing a hero, settings, updates |
+| [FAQ & Troubleshooting](FAQ) | Capture issues, post-patch fixes, Builder tips, backups |
+
+**🔧 Internals (dev)**
 
 | Page | What's in it |
 |------|--------------|
