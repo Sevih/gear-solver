@@ -69,6 +69,23 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — cartes de gear Builder (gems, passifs singularité, extrapolation)
+
+Lot de lisibilité sur la `BottomGearBand` (`GearCard`) :
+- **Gems en double supprimés** — les cartes Talisman/EE affichaient les gemmes **socketées** (en tant que
+  « substats ») **ET** l'allocation recommandée du build → bruit. Désormais une seule section **Gems** = les
+  gemmes que le build pose : la reco du solver (badge **swap** si différente) ou, s'il n'a pas réalloué, les
+  socketées (label **current**). `GemRecommendation` → `GemsSection`.
+- **Passif Singularité +15 affiché** — les pièces ascensionnées portent un passif inconditionnel (DMG+ sur
+  arme/accessoire, DMG- sur armure) qui n'apparaissait pas sur les cartes (seul le `GearDetail` Inventory le
+  montrait). Rendu maintenant via les entrées `main` `source === "singularity"`, badge **+15** ambre.
+- **Extrapolation plus claire** — quand une pièce est projetée (reforge classic/ascended), badge **▲ projected /
+  classic / ascended** sur la ligne d'enhance (au lieu d'un badge discret « Substats »), valeur de main stat en
+  **cyan**, substats teintés cyan. Tooltip explicite « re-scalé / reforgé vers cette cible, pas tes rolls actuels ».
+- **Vérifié (pas un bug)** : le panneau **Projected** tient déjà compte des stats extrapolées — `precomputeContext`
+  projette le pool (`projectPieceForReforge`) **avant** le solve, donc `build.finalStats` est composé sur les pièces
+  projetées. Talisman/EE non projetés (gems), cohérent côté carte.
+
 ### Session 2026-06-27 — 🔴 sets conditionnels (lost-HP) faussement aplatis en stats flat
 
 **Bug** : les sets « comeback » dont le bonus scale avec les **PV perdus du porteur** étaient distillés en stat

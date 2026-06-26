@@ -3793,6 +3793,13 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }:
   // go through the same adapter the Inventory tab uses so the tile renders
   // with the right rarity / breakthrough / image overlays.
   const iconPiece = piece && game ? toIconPiece(toUiPiece(piece, game)) : null;
+  // Talisman / EE carry gems, not rollable substats — their card shows the
+  // build's gems only (not the socketed set rendered AS substats too).
+  const gemSlot = slot === "talisman" || slot === "exclusive";
+  // Singularity +15 passive (weapon/acc unconditional DMG+, armor DMG-) — shown
+  // on the card so the user sees what the ascended piece grants beyond its main.
+  const singEffects = piece?.main.filter((m) => m.source === "singularity") ?? [];
+  const projLabel = reforgeMode === "ascended" ? "ascended" : reforgeMode === "classic" ? "classic" : "projected";
   return (
     <div className="flex w-56 shrink-0 flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-1 px-3 py-2.5">
       <div className="flex items-center gap-1.5">
@@ -3804,70 +3811,81 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }:
       <div className="flex items-start gap-3">
         <SlotMini slot={slot} piece={iconPiece} size={56} />
         <div className="min-w-0 flex-1 text-[11px] leading-tight">
-          <div className={cx("italic", piece ? "text-white/70" : "text-white/65")}>
-            {piece ? `+${piece.enhanceLevel}${piece.ascended ? " · ascended" : ""}` : "—"}
+          <div className={cx("flex flex-wrap items-center gap-1.5 italic", piece ? "text-white/70" : "text-white/65")}>
+            <span>{piece ? `+${piece.enhanceLevel}${piece.ascended ? " · ascended" : ""}` : "—"}</span>
+            {reforged && (
+              <span
+                className="rounded border border-cyan-400/40 bg-cyan-500/15 px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider not-italic text-cyan-300"
+                title="Extrapolated to this reforge target: the main stat is re-scaled and substats are reforged to here — NOT your current rolls."
+              >
+                ▲ {projLabel}
+              </span>
+            )}
           </div>
           <div className="text-white">{slotMeta?.label ?? slot}</div>
         </div>
       </div>
 
       {/* The EE's main stat is fixed (ATK% — only one option exists), so it's
-       *  pure noise on the card; skip it for the exclusive slot. */}
+       *  pure noise on the card; skip it for the exclusive slot. Main value goes
+       *  cyan when extrapolated (re-scaled by the reforge projection). */}
       {slot !== "exclusive" && (
         <div className="flex items-center gap-2 font-mono text-[12px] tabular-nums">
           <StatIcon stat={mainStatKey} size={16} className="shrink-0" />
           <span className="flex-1 text-white">{mainStatMeta?.longLabel ?? mainStatKey}</span>
-          <span className={cx("font-semibold", mainStat ? "text-white" : "text-white/65")}>
+          <span className={cx("font-semibold", !mainStat ? "text-white/65" : reforged ? "text-cyan-300" : "text-white")}>
             {mainStat ? `${mainStat.value}${mainStat.percent ? "%" : ""}` : "—"}
           </span>
         </div>
       )}
 
-      {reforged && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/60">Substats</span>
-          <span className="rounded border border-cyan-400/40 bg-cyan-500/15 px-1 py-px text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
-            {reforgeMode === "ascended" ? "ascended" : reforgeMode === "classic" ? "classic" : "projected"}
-          </span>
+      {/* Singularity +15 passive — unconditional DMG+ (weapon/acc) or DMG- (armor). */}
+      {singEffects.map((e, i) => (
+        <div key={`sing-${i}`} className="flex items-center gap-2 font-mono text-[11px] tabular-nums text-amber-200/90" title={e.name ?? undefined}>
+          <span className="rounded border border-amber-400/30 bg-amber-500/10 px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider not-italic">+15</span>
+          <span className="flex-1 truncate">{STAT[e.stat]?.longLabel ?? e.stat}</span>
+          <span className="font-semibold text-amber-100">+{e.value}{e.percent ? "%" : ""}</span>
         </div>
-      )}
-      <div className="space-y-1 font-mono text-[10.5px] tabular-nums">
-        {piece && piece.subs.length > 0 ? piece.subs.map((s, i) => (
-          <div key={i} className="flex items-center gap-1.5 text-white/80">
-            <StatIcon stat={s.stat} size={12} className="shrink-0" />
-            {s.ticks != null && (
-              <span className="rounded border border-white/8 px-1 py-px text-[9.5px] text-white/60">LV{s.ticks}</span>
-            )}
-            <span className="flex-1 truncate text-white/80">{STAT[s.stat]?.longLabel ?? s.stat}</span>
-            <span className="text-white">{s.value}{s.percent ? "%" : ""}</span>
-          </div>
-        )) : (
-          <div className="text-[10.5px] italic text-white/55">—</div>
-        )}
-      </div>
+      ))}
 
-      {piece && game && recommendedGems && (
-        <GemRecommendation recommended={recommendedGems} piece={piece} game={game} />
+      {/* Gem slots (Talisman / EE) show the build's gems ONLY; gear shows substats. */}
+      {gemSlot ? (
+        piece && game
+          ? <GemsSection recommended={recommendedGems} piece={piece} game={game} />
+          : <div className="text-[10.5px] italic text-white/55">—</div>
+      ) : (
+        <div className="space-y-1 font-mono text-[10.5px] tabular-nums">
+          {piece && piece.subs.length > 0 ? piece.subs.map((s, i) => (
+            <div key={i} className={cx("flex items-center gap-1.5", reforged ? "text-cyan-100/90" : "text-white/80")}>
+              <StatIcon stat={s.stat} size={12} className="shrink-0" />
+              {s.ticks != null && (
+                <span className="rounded border border-white/8 px-1 py-px text-[9.5px] text-white/60">LV{s.ticks}</span>
+              )}
+              <span className="flex-1 truncate">{STAT[s.stat]?.longLabel ?? s.stat}</span>
+              <span className="text-white">{s.value}{s.percent ? "%" : ""}</span>
+            </div>
+          )) : (
+            <div className="text-[10.5px] italic text-white/55">—</div>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-/** Recommended gem allocation for a Talisman / EE card. The solver scores
- *  the player's whole gem pool and proposes the K best for this build —
- *  surfaced here so the displayed stats (computed WITH these gems in SOLVE
- *  CP) are actually reachable. A "swap" badge flags when the recommendation
- *  differs from the piece's currently-socketed gems; renders nothing when
- *  the solver kept the current gems (all-zero allocation, e.g. SOLVE with
- *  no priority). */
-function GemRecommendation({ recommended, piece, game }: {
-  recommended: number[];
+/** Gems on a Talisman / EE card — the build's gems ONLY (showing the socketed
+ *  set AS substats too was just noise). When the solver reallocated, show its
+ *  recommendation with a "swap" badge; otherwise show the piece's currently-
+ *  socketed gems, marked "current". The displayed stats are computed WITH the
+ *  shown gems (SOLVE CP), so they stay consistent. */
+function GemsSection({ recommended, piece, game }: {
+  recommended?: number[];
   piece: GearPiece;
   game: GameData;
 }) {
-  const recIds = recommended.filter((id) => id > 0);
-  if (recIds.length === 0) return null; // no reallocation — current gems kept
+  const recIds = (recommended ?? []).filter((id) => id > 0);
   const currentIds = (piece.gemSlots ?? []).filter((id) => id > 0);
+  const usingRec = recIds.length > 0;
   // Multiset equality (slot order is irrelevant — gems are interchangeable).
   const sortedEq = (a: number[], b: number[]): boolean => {
     if (a.length !== b.length) return false;
@@ -3875,10 +3893,10 @@ function GemRecommendation({ recommended, piece, game }: {
     const sb = [...b].sort((x, y) => x - y);
     return sa.every((v, i) => v === sb[i]);
   };
-  const isSwap = !sortedEq(recIds, currentIds);
-  const gems = recIds
-    .map((id) => resolveStat(id, 1, game.options))
-    .filter((r): r is NonNullable<typeof r> => r != null);
+  const isSwap = usingRec && !sortedEq(recIds, currentIds);
+  const gems = usingRec
+    ? recIds.map((id) => resolveStat(id, 1, game.options)).filter((r): r is NonNullable<typeof r> => r != null)
+    : piece.subs.map((s) => ({ stat: s.stat, value: s.value, percent: s.percent }));
   return (
     <div className="space-y-1 border-t border-white/8 pt-2">
       <div className="flex items-center gap-1.5">
@@ -3888,16 +3906,23 @@ function GemRecommendation({ recommended, piece, game }: {
             swap
           </span>
         )}
+        {!usingRec && gems.length > 0 && (
+          <span className="text-[9px] uppercase tracking-wider text-white/40">current</span>
+        )}
       </div>
-      <div className="space-y-1 font-mono text-[10.5px] tabular-nums">
-        {gems.map((g, i) => (
-          <div key={i} className="flex items-center gap-1.5 text-white/80">
-            <StatIcon stat={g.stat} size={12} className="shrink-0" />
-            <span className="flex-1 truncate text-white/80">{STAT[g.stat]?.longLabel ?? g.stat}</span>
-            <span className="text-white">{g.value}{g.percent ? "%" : ""}</span>
-          </div>
-        ))}
-      </div>
+      {gems.length > 0 ? (
+        <div className="space-y-1 font-mono text-[10.5px] tabular-nums">
+          {gems.map((g, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-white/80">
+              <StatIcon stat={g.stat} size={12} className="shrink-0" />
+              <span className="flex-1 truncate text-white/80">{STAT[g.stat]?.longLabel ?? g.stat}</span>
+              <span className="text-white">{g.value}{g.percent ? "%" : ""}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-[10.5px] italic text-white/55">— no gems —</div>
+      )}
     </div>
   );
 }
