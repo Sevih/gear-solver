@@ -110,7 +110,24 @@ export interface CancelMessage {
   type: "cancel";
 }
 
-export type WorkerInput = SolveRequest | CancelMessage;
+/** One-shot "here is the constant data" message, broadcast to every worker
+ *  when the pool is created or the captured game/inventory changes. The worker
+ *  caches both and re-attaches them to each subsequent `SolveRequestMsg`, so
+ *  the heavy `game` + `inventory` graphs are structured-cloned ONCE per worker
+ *  lifetime instead of on every solve fan-out. */
+export interface InitMessage {
+  type: "init";
+  game: GameData;
+  inventory: Inventory;
+}
+
+/** Per-solve message on the wire — the full `SolveRequest` minus the constant
+ *  `game` + `inventory` (sent once via `InitMessage`, cached worker-side). The
+ *  worker re-merges the cached pair before handing a complete `SolveRequest`
+ *  to the engine, so engine signatures are unchanged. */
+export type SolveRequestMsg = Omit<SolveRequest, "game" | "inventory">;
+
+export type WorkerInput = SolveRequestMsg | CancelMessage | InitMessage;
 
 /** One ranked build returned by the solver. UIDs only — main thread looks
  *  up the full piece data from its inventory map for the table + bottom band. */

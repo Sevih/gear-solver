@@ -77,9 +77,10 @@
 - [x] 🟠 **Solve sous-utilise le CPU** — cause : plafond fixe à 8 workers (8/32 threads = 25 %). Fix :
       `resolveWorkerCount()` = `hardwareConcurrency − 1` (1 cœur pour l'UI, plafond dur 64) + override
       `gs.solver.workerCount` + log debug `solver`/`pool` (workers + hardwareConcurrency) pour vérifier.
-      *(À vérifier sur ta machine : le solve doit maintenant saturer ~tous les cœurs. Si le clone
-      postMessage game/inventory × N devient le nouveau goulot à fort N → réduire le payload par worker
-      / SharedArrayBuffer, cf. §8 limites connues.)*
+      Payload réduit en amont (**send-once**) : `game` + inventaire clonés vers chaque worker une
+      seule fois (`init`, cachés worker-side) au lieu d'à chaque solve → le fan-out ne porte plus
+      que le payload allégé + précalcul. Reste possible si inventaire énorme : SharedArrayBuffer (§8).
+      *(À vérifier sur ta machine : le solve doit maintenant saturer ~tous les cœurs.)*
 
 ### Features
 - [ ] **Settings — options globales** — panneau pour worker count override · topK/topN · heatmap on/off

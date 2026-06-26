@@ -332,6 +332,14 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
 11. **Min-heap top-K** — `O(N log K)` au lieu de `O(N log N)` si on triait
     l'ensemble. K=1000 → log K ≈ 10.
 
+12. **`init` send-once** — `game` + inventaire (graphes constants, lourds) sont
+    envoyés à chaque worker **une fois** (message `init`, cachés worker-side) au lieu
+    d'être re-clonés à chaque fan-out. Re-broadcast seulement quand la ref change (re-capture).
+    Le solve n'envoie plus que le payload allégé (`SolveRequestMsg` = `SolveRequest`
+    moins game/inventory) + le précalcul des pools. Le worker re-fusionne les constantes
+    cachées → `SolveRequest` complet, donc **le moteur est inchangé**. Indispensable au
+    scaling worker-count (§7.2) : sans ça, N clones de `game` par solve domineraient.
+
 ---
 
 ## 8. Limites connues
@@ -343,9 +351,13 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
   table de résultats est virtualisée (`@tanstack/react-virtual`). Reste que
   `aggregateGearBuckets` re-somme les 6+EE pièces invariantes à chaque talisman — un
   accumulateur incrémental (en préservant l'ordre flottant) est au backlog.
-- **Worker init = W × game/inventory** : chaque worker reçoit une copie par
-  postMessage. Pour des inventaires énormes (>50 MB) ça pourrait pincer.
-  Alternative future : SharedArrayBuffer (besoin COOP/COEP headers).
+- **Worker init = W × game/inventory** : `game` + inventaire sont structured-clonés
+  vers chaque worker **une seule fois** (message `init`, mis en cache worker-side ;
+  re-broadcast seulement à une re-capture). Chaque solve n'envoie plus que le payload
+  allégé (filtres + précalcul des pools), pas les gros graphes constants — ce qui rend
+  le scaling à beaucoup de workers viable (sinon N clones de `game` par solve domineraient
+  le fan-out). Reste la copie initiale W× : pour des inventaires énormes (>50 MB), l'étape
+  suivante est SharedArrayBuffer (besoin COOP/COEP + flatten binaire des données).
 
 ---
 

@@ -27,6 +27,7 @@
  * is well under 1ms. (Why not setTimeout(0)? Workers throttle setTimeout
  * to ~4ms minimum, giving ~9.6s of pure throttle for 10M permutations.)
  */
+import type { GameData, Inventory } from "@gear-solver/core";
 import type { SolveRequest, WorkerInput, WorkerOutput } from "../lib/solver/types.js";
 import { finalizeBuilds, prepareContext, solveChunk } from "../lib/solver/engine.js";
 
@@ -40,15 +41,34 @@ const ctx = self as unknown as WorkerCtx;
  *  whose captured generation no longer matches must bail without posting. */
 let currentGen = 0;
 
+/** Constant data cached from the orchestrator's one-shot `init` message — the
+ *  heavy `game` + `inventory` graphs. Re-attached to every lean
+ *  `SolveRequestMsg` so they're structured-cloned ONCE per worker lifetime,
+ *  not on every solve. Null until the first `init` arrives (the orchestrator
+ *  always broadcasts `init` before the first `solve`). */
+let cachedGame: GameData | null = null;
+let cachedInventory: Inventory | null = null;
+
 ctx.onmessage = (e) => {
   const msg = e.data;
+  if (msg.type === "init") {
+    cachedGame = msg.game;
+    cachedInventory = msg.inventory;
+    return;
+  }
   if (msg.type === "cancel") {
     currentGen++;
     return;
   }
   if (msg.type === "solve") {
     currentGen++;
-    void runSolve(msg, currentGen);
+    if (!cachedGame || !cachedInventory) {
+      post({ type: "error", solveId: msg.solveId, message: "worker received a solve before init (no cached game/inventory)" });
+      return;
+    }
+    // Re-attach the cached constants → a complete SolveRequest for the engine.
+    const req: SolveRequest = { ...msg, game: cachedGame, inventory: cachedInventory };
+    void runSolve(req, currentGen);
   }
 };
 

@@ -18,6 +18,7 @@ import type {
   SolveFilters,
   SolveMode,
   SolveRequest,
+  SolveRequestMsg,
   WorkerOutput,
 } from "./types.js";
 
@@ -91,6 +92,12 @@ export class SolverOrchestrator {
    *  a stale `result` from a superseded run would slip into the new `buf`
    *  and trip `flush()` prematurely with mixed builds + half-zero stats. */
   private solveId = 0;
+  /** Identity of the game / inventory currently cached in the worker pool via
+   *  `init`. When a solve arrives with a different reference (first solve, or a
+   *  re-capture swapped the inventory), we re-broadcast `init` before fanning
+   *  out — otherwise the big constant graphs would ride along every solve. */
+  private initedGame: GameData | null = null;
+  private initedInventory: Inventory | null = null;
   /** Wall-clock (performance.now) at the current solve's fan-out — paired with
    *  flush() to log solve duration when `gs.debug.solver` is on. */
   private startedAt = 0;
@@ -107,6 +114,11 @@ export class SolverOrchestrator {
    *  multi-second solve, so scaling with the machine is the right default. */
   private ensurePool(): void {
     if (this.workers.length > 0) return;
+    // Fresh workers hold no cached data — force an `init` re-broadcast on the
+    // upcoming solve (the identity check below would otherwise skip it if the
+    // game/inventory refs happen to match a previous pool's).
+    this.initedGame = null;
+    this.initedInventory = null;
     const n = resolveWorkerCount();
     debug("solver", "pool", { workers: n, hardwareConcurrency: navigator.hardwareConcurrency });
     for (let i = 0; i < n; i++) {
@@ -124,6 +136,18 @@ export class SolverOrchestrator {
   solve(args: SolveArgs): void {
     if (this.active) this.cancelInternal();
     this.ensurePool();
+    // One-shot `init`: ship the constant game + inventory to every worker only
+    // when they changed (first solve, or a re-capture swapped the inventory).
+    // After this, each solve's fan-out carries only the lean per-solve payload
+    // (filters + precompute), not the heavy graphs — the big win for high
+    // worker counts where N clones of `game` would otherwise dominate fan-out.
+    if (this.initedGame !== args.game || this.initedInventory !== args.inventory) {
+      for (const w of this.workers) {
+        w.postMessage({ type: "init", game: args.game, inventory: args.inventory });
+      }
+      this.initedGame = args.game;
+      this.initedInventory = args.inventory;
+    }
     this.solveId++;
     this.active = true;
     this.mode = args.mode;
@@ -140,28 +164,31 @@ export class SolverOrchestrator {
     // one structured-clone cost when postMessage'ing the bundle to each
     // worker; the engine work skipped is much heavier than the clone.
     //
-    // `seedReq` mirrors the per-worker SolveRequest except for chunk fields
-    // (precomputeContext ignores those — they only matter inside solveChunk).
-    // `chunkCount` here is a placeholder — precomputeContext ignores chunk
-    // fields, and the real value depends on the partitioned pool size, which
-    // we only know once `precomputed.poolSizes` is in hand (below).
-    const seedReq: SolveRequest = {
+    // `leanSeed` is the per-solve wire payload sans the constant game +
+    // inventory (cached worker-side via `init`) and sans the chunk fields
+    // (filled per-worker in the fan-out). The main-thread `precomputeContext`
+    // still needs the full request, so we splice game/inventory back in just
+    // for that call — `chunkCount` there is a placeholder it ignores.
+    const leanSeed: Omit<SolveRequestMsg, "chunkIndex" | "chunkCount" | "precomputed"> = {
       type: "solve",
       solveId: this.solveId,
       mode: args.mode,
       heroUid: args.heroUid,
-      inventory: args.inventory,
-      game: args.game,
       userGeasLevels: args.userGeasLevels,
       userCodexLevel: args.userCodexLevel,
       userSkills: args.userSkills,
       filters: args.filters,
       topK,
-      chunkIndex: 0,
-      chunkCount: this.workers.length,
     };
     let precomputed;
     try {
+      const seedReq: SolveRequest = {
+        ...leanSeed,
+        game: args.game,
+        inventory: args.inventory,
+        chunkIndex: 0,
+        chunkCount: this.workers.length,
+      };
       precomputed = precomputeContext(seedReq);
     } catch (err) {
       this.active = false;
@@ -195,8 +222,8 @@ export class SolverOrchestrator {
     for (let i = 0; i < chunkCount; i++) {
       const w = this.workers[i];
       if (!w) continue;
-      const req: SolveRequest = { ...seedReq, chunkIndex: i, chunkCount, precomputed };
-      w.postMessage(req);
+      const msg: SolveRequestMsg = { ...leanSeed, chunkIndex: i, chunkCount, precomputed };
+      w.postMessage(msg);
     }
   }
 
