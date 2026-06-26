@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, RolledStat, StatScaling } from "@gear-solver/core";
-import { keepTopPct } from "../src/lib/solver/engine.js";
+import { allocateComboBudget, keepTopN, keepTopPct } from "../src/lib/solver/engine.js";
 import { computeFinalStats, type FinalStatsBaseline, type ScalingMap } from "../src/lib/composeBuild.js";
 import { makeCpEvaluator } from "../src/lib/solver/cp.js";
 
@@ -80,6 +80,54 @@ describe("keepTopPct", () => {
     expect(uids).toContain("1"); // preserved despite low score
     expect(uids).toContain("9"); // the top-% winner
     expect(uids).not.toContain("5"); // neither top-% nor required
+  });
+});
+
+describe("keepTopN", () => {
+  it("keeps the top n by score, clamped to the pool length", () => {
+    const score = (p: GearPiece) => Number(p.uid);
+    const pool = [piece("1"), piece("4"), piece("2"), piece("3")];
+    expect(keepTopN(pool, score, 2, NO_REQ).map((p) => p.uid).sort()).toEqual(["3", "4"]);
+    // n > length keeps everything; n < 1 floors at 1.
+    expect(keepTopN(pool, score, 99, NO_REQ)).toHaveLength(4);
+    expect(keepTopN(pool, score, 0, NO_REQ).map((p) => p.uid)).toEqual(["4"]);
+  });
+
+  it("preserves required-set members below the cut", () => {
+    const score = (p: GearPiece) => Number(p.uid);
+    const reqLow = piece("1", { armorSetId: "Rage" });
+    const out = keepTopN([reqLow, piece("9"), piece("5")], score, 1, new Set(["Rage"]));
+    expect(out.map((p) => p.uid).sort()).toEqual(["1", "9"]);
+  });
+});
+
+describe("allocateComboBudget", () => {
+  it("keeps the product within budget", () => {
+    const counts = [12, 44, 50, 62, 45, 17]; // the real-account pools
+    const keep = allocateComboBudget(counts, 8_000_000);
+    const product = keep.reduce((a, b) => a * b, 1);
+    expect(product).toBeLessThanOrEqual(8_000_000);
+    // Every slot keeps ≥1 and never more than it has.
+    keep.forEach((k, i) => {
+      expect(k).toBeGreaterThanOrEqual(1);
+      expect(k).toBeLessThanOrEqual(counts[i]!);
+    });
+  });
+
+  it("keeps small slots whole and only trims the big ones", () => {
+    // Tight budget: the two small slots fit whole (3×4=12), the 200-pool gets
+    // the rest and is trimmed so the product stays within budget.
+    const keep = allocateComboBudget([3, 4, 200], 120);
+    expect(keep[0]).toBe(3);
+    expect(keep[1]).toBe(4);
+    expect(keep[2]).toBeLessThan(200);
+    expect(keep.reduce((a, b) => a * b, 1)).toBeLessThanOrEqual(120);
+  });
+
+  it("returns counts aligned to the input order (not the sorted order)", () => {
+    const keep = allocateComboBudget([100, 2, 100], 400);
+    expect(keep[1]).toBe(2); // the small middle slot stays whole in place
+    expect(keep).toHaveLength(3);
   });
 });
 

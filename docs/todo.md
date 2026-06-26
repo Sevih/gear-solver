@@ -14,12 +14,13 @@
 
 ### 🟠 Perf solver
 - [~] **Solver CP trop lent** — diagnostic sur vrai compte : Top% 100 défaut + aucune priorité = **cartésien
-      complet** (2,4 G combos, >100 s, `S ≈ P`). **Livré** : (1) **auto-prune CP-pondéré** — en SOLVE CP sans
-      priorité, chaque slot est classé par le CP qu'une pièce donne dans le build courant, top-% gardé (forme
-      *soft* du dominance prune) ; (2) **défaut Top% → 30** (slider 100 = exhaustif) ; (3) **garde-fou** : bandeau
-      si `∏ poolSizes > 50 M`. Plus coût/combo réduit + dominance prune + set-prune (cf. changelog).
-      **Reste** : (a) **re-mesurer sur vrai compte** (footer ⏱) — si jouable, fermer ; (b) *optionnel si encore
-      lent* : branch-and-bound CP exact (borne sup par sous-arbre vs K-ième meilleur), gain incertain vu `topK = 1000`/worker.
+      complet** (2,4 G combos, >100 s, `S ≈ P`) ; et un prune **en %** ne suffit pas (30 %/slot = encore 1,25 G).
+      **Livré** : (1) **auto-prune CP-pondéré + budget combos** — en SOLVE CP sans priorité, chaque slot est classé
+      par le CP qu'une pièce donne dans le build courant, et `allocateComboBudget` borne `∏ ≤ 8 M` (scalé par Top%) ;
+      (2) **défaut Top% → 30** (slider 100 = exhaustif) ; (3) **garde-fou** : bandeau si `∏ poolSizes > 50 M`. Plus
+      coût/combo réduit + dominance prune + set-prune (cf. changelog).
+      **Reste** : (a) **re-mesurer sur vrai compte** (footer ⏱) — vise ~1 s ; vérifier que le top-CP reste correct
+      (la notation standalone peut sous-classer un membre de set) ; (b) *optionnel* : branch-and-bound CP exact.
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 

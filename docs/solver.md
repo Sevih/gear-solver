@@ -110,18 +110,26 @@ score(piece) = Σ_rolls priority[user_key] × (value / STAT_NORMS[user_key])
 engine→user (`STAT_TO_PRIORITY` dans `ratings.ts`) garantit que `atkPct` rolls
 et `atk` flats partagent la même bucket priority `atk`.
 
-**b) SOLVE CP sans priorité (auto-prune CP-pondéré)** — c'est le cas par défaut
-réel (« max CP » sans rien tuner). Chaque candidat est classé par **le CP qu'il
-donne s'il est posé dans le build actuel du héros** (`cpEval(computeFinalStats(
-baseline, scaling, [autres pièces équipées, candidat]))`) : le baseline = les
-pièces équipées des **autres** slots, donc la chaîne crit/pen/spd qui scale l'ATK
-est réaliste (un baseline mono-pièce sous-classerait les pièces ATK). On garde
-les `⌈N × pct / 100⌉` meilleurs. C'est la **forme *soft* du dominance prune**
-(classer par un scalaire CP au lieu d'exiger ≥ sur tous les axes) — et c'est ce
-qui fait réellement chuter le cartésien quand aucune pièce n'est Pareto-dominée.
-Heuristique : `topPct = 100` rebascule en exhaustif. Talisman/EE exemptés (leurs
-gems viennent de l'alloc globale) ; slots `keepCurrent` exemptés. Sélection +
-préservation des sets requis factorisées dans `keepTopPct`.
+**b) SOLVE CP sans priorité (auto-prune CP-pondéré + budget combos)** — c'est le
+cas par défaut réel (« max CP » sans rien tuner). Chaque candidat est classé par
+**le CP qu'il donne s'il est posé dans le build actuel du héros** (`cpEval(
+computeFinalStats(baseline, scaling, [autres pièces équipées, candidat]))`) : le
+baseline = les pièces équipées des **autres** slots, donc la chaîne crit/pen/spd
+qui scale l'ATK est réaliste (un baseline mono-pièce sous-classerait l'ATK).
+C'est la **forme *soft* du dominance prune** (classer par un scalaire CP au lieu
+d'exiger ≥ sur tous les axes).
+
+**Cap par budget combos, pas par pourcentage** : un % ne borne pas le **produit**
+— 30 % de six pools de ~150 = encore ~`10^10` (mesuré : **1,25 G** post-prune-30 %
+sur un vrai compte). `allocateComboBudget` répartit (water-filling) un nombre de
+pièces à garder **par slot** pour que `∏ ≤ budget` (slots petits gardés entiers,
+le surplus va aux gros slots armor), puis `keepTopN` garde le top-K CP. Budget
+défaut `CP_COMBO_BUDGET = 8 M` (≈ 1 s de solve), **scalé par le slider Top%**
+(`budget = 8M × topPct/30` ; `topPct = 100` rebascule en exhaustif). Talisman/EE
++ slots `keepCurrent` exemptés. Préservation des sets requis dans `keepTopN`.
+**Limite assumée** : une pièce est notée *standalone* — un membre qui ne brille
+qu'en complétant un set (formé avec d'autres candidats) peut être sous-classé ;
+monter le Top% ou exiger le set pour ces cas.
 
 **c) SOLVE (Score) sans priorité** — aucun signal (chaque pièce score 0), prune
 **sauté** : on garde tout (le ranking serait arbitraire).
@@ -341,9 +349,9 @@ Top-% prune ramène ça à `(150 × pct/100)^7` :
 - 10% → ~10^8 (utilisable, 1-5s)
 - 5% → ~10^6 (très rapide, mais peut zapper le build optimal)
 
-Le hint du panneau le dit explicitement : *"Heuristic — too low a Top % drops optimal builds"*. C'est un trade-off pure recall vs vitesse. Le **défaut est 30** (pas 100) : sur un vrai compte, 100% = des **milliards** de combos (mesuré : 2,4 G, >100 s) ; 30% par slot fait chuter ça de plusieurs ordres de grandeur.
+Le hint du panneau le dit explicitement : *"Heuristic — too low a Top % drops optimal builds"*. C'est un trade-off pure recall vs vitesse. **Attention** : un Top% en *pourcentage* ne borne pas le **produit** — sur un vrai compte, 30 %/slot laisse encore ~`10^10` combos (mesuré : 1,25 G post-prune-30 %, toujours >100 s). C'est pourquoi le **mode CP sans priorité** ne dépend pas du % brut mais d'un **budget combos absolu** (phase 3b) qui borne `∏` directement → solve en ~1 s quel que soit le compte.
 
-Avec `priority` vide : en **SOLVE Score** le prune est sauté (score 0 partout, ranking arbitraire → on garde tout). En **SOLVE CP**, plus de short-circuit : l'auto-prune CP-pondéré (phase 3b) fournit un ranking pertinent sans priorité, donc « max CP » est jouable sans rien tuner.
+Avec `priority` vide : en **SOLVE Score** le prune est sauté (score 0 partout, ranking arbitraire → on garde tout). En **SOLVE CP**, plus de short-circuit : l'auto-prune CP-pondéré + budget combos (phase 3b) rend « max CP » jouable sans rien tuner.
 
 **Garde-fou** : la BuilderScreen estime le cartésien (`∏ poolSizes`, post-prune ; les `poolSizes` arrivent dès le départ du solve, avant la recherche réelle). Au-dessus de `CARTESIAN_WARN` (50 M), un bandeau avertit que le solve sera lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloquant.
 

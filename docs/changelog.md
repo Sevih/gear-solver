@@ -76,15 +76,19 @@
 défaut (Top% 100, pas de priorité) le sautait → cartésien complet. Le dominance prune (exact) ne mord pas sur un
 inventaire Pareto-divers (presque aucune pièce dominée sur **tous** les axes).
 
-**Auto-prune CP-pondéré** (`engine.ts`) — en **SOLVE CP sans priorité**, chaque slot est désormais classé par
-**le CP qu'une pièce donne posée dans le build courant du héros** (`cpEval(computeFinalStats(baseline, scaling,
-[autres pièces équipées, candidat]))`), et on garde le top-`topPct`. Le baseline = les pièces équipées des autres
-slots → la chaîne crit/pen/spd qui scale l'ATK est réaliste (un baseline mono-pièce sous-classerait l'ATK). C'est
-la **forme *soft* du dominance prune** (classer par un scalaire CP au lieu d'exiger ≥ sur tous les axes) — et c'est
-ce qui fait réellement chuter le cartésien. Heuristique : `Top% = 100` rebascule en exhaustif ; priorité explicite
-prioritaire (rank par elle) ; SOLVE Score sans priorité inchangé (prune sauté). Talisman/EE + slots `keepCurrent`
-exemptés. Sélection + préservation des sets requis factorisées dans `keepTopPct` (exporté, testé). +6 tests
-`cpPrune.test.ts`.
+**Auto-prune CP-pondéré + budget combos** (`engine.ts`) — en **SOLVE CP sans priorité**, chaque slot est
+désormais classé par **le CP qu'une pièce donne posée dans le build courant du héros** (`cpEval(computeFinalStats(
+baseline, scaling, [autres pièces équipées, candidat]))`). Le baseline = les pièces équipées des autres slots → la
+chaîne crit/pen/spd qui scale l'ATK est réaliste (un baseline mono-pièce sous-classerait l'ATK). C'est la **forme
+*soft* du dominance prune** (classer par un scalaire CP au lieu d'exiger ≥ sur tous les axes). **Correctif clé** :
+un *pourcentage* ne borne pas le **produit** — 30 %/slot laissait encore **1,25 G** combos (mesuré sur vrai compte,
+>100 s). Le cap se fait donc par **budget combos absolu** : `allocateComboBudget` water-fill un nombre de pièces à
+garder par slot pour que `∏ ≤ budget` (petits slots entiers, surplus vers les gros slots armor), puis `keepTopN`
+garde le top-K CP. Budget défaut `CP_COMBO_BUDGET = 8 M` (~1 s), scalé par le slider Top% (`8M × topPct/30` ;
+`100` = exhaustif). Priorité explicite prioritaire ; SOLVE Score sans priorité inchangé (prune sauté) ; Talisman/EE
++ slots `keepCurrent` exemptés ; sets requis préservés. **Limite assumée** : notation *standalone*, un membre qui
+ne brille qu'en complétant un set peut être sous-classé (monter Top% ou exiger le set). `keepTopN` /
+`allocateComboBudget` exportés + testés. +11 tests `cpPrune.test.ts`.
 
 **Défaut Top% 100 → 30** (`INITIAL_FILTERS`) — le slider garde son sens (100 = garde tout = exhaustif), mais le
 défaut élague à 30 %/slot. Warning du panneau Priority corrigé (le Top% mord en SOLVE CP même sans priorité).

@@ -359,24 +359,37 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       // candidate by the CP it yields when dropped into the hero's CURRENT
       // build (other slots = their equipped pieces), so the crit/pen/spd chain
       // that scales ATK is realistic instead of near-zero — a bare single-piece
-      // baseline would under-rank ATK pieces. Keep the top pct. This is the
-      // soft, scalar form of the dominance prune (rank by one CP number instead
-      // of requiring ≥ on every axis), and it's what collapses the cartesian on
-      // an unfiltered CP solve. Heuristic — Top% = 100 escapes to exhaustive.
-      // Talisman / EE are exempt (their gems come from the global allocation,
-      // so per-piece CP ranking would misjudge them).
+      // baseline would under-rank ATK pieces. This is the soft, scalar form of
+      // the dominance prune (rank by one CP number instead of requiring ≥ on
+      // every axis), and it's what collapses the cartesian on an unfiltered CP
+      // solve.
+      //
+      // Crucially we cap by an ABSOLUTE combo budget, not a fixed percentage: a
+      // percentage doesn't bound the PRODUCT — 30% of six ~150-piece pools is
+      // still ~10^10 combos (measured: 1.25e9 post-30%-prune on a real account).
+      // `allocateComboBudget` water-fills per-slot keep-counts so ∏ ≤ budget
+      // (small slots kept whole, the surplus flowing to the big armor slots).
+      // The Top% slider scales the budget (30 = default target; 100 already
+      // short-circuited to exhaustive above). Heuristic — set-coupled builds can
+      // be under-ranked (a piece is scored standalone, not for a set it'd help
+      // form with other candidates); raise Top% or require the set for those.
+      // Talisman / EE are exempt (their gems come from the global allocation, so
+      // per-piece CP ranking would misjudge them); locked slots too.
       const cpEval = makeCpEvaluator({
         showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused,
       });
       const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
       const ooEquipped = equipped.find((g) => g.slot === "ooparts") ?? null;
-      for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const) {
-        if (lockedSlots.has(slot)) continue;
+      const gearSlots = (["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const)
+        .filter((s) => !lockedSlots.has(s));
+      const budget = CP_COMBO_BUDGET * (filters.topPct / 30);
+      const keeps = allocateComboBudget(gearSlots.map((s) => pools[s].length), budget);
+      gearSlots.forEach((slot, i) => {
         const others = equipped.filter((g) => g.slot !== slot);
         const scoreOf = (p: GearPiece): number =>
           cpEval(computeFinalStats(composed.noGearStats, composed.scaling, others.concat(p), game), ooEquipped);
-        pools[slot] = keepTopPct(pools[slot], scoreOf, filters.topPct, requiredSetIds);
-      }
+        pools[slot] = keepTopN(pools[slot], scoreOf, keeps[i]!, requiredSetIds);
+      });
     }
   }
 
@@ -608,21 +621,26 @@ function topPctPrune(pieces: GearPiece[], priority: Record<string, number>, pct:
   return scored.slice(0, keep).map((e) => e.p);
 }
 
-/** Generic top-% selector: score every piece with `scoreOf`, keep the top
- *  `ceil(N × pct/100)` (≥1), then always re-add pieces belonging to a required
+/** Default combo budget for the CP-weighted auto-prune: the cartesian the solver
+ *  is allowed to walk at the default Top% (30). At ~13M combos/s across a modern
+ *  worker pool this finishes in ~1s; the Top% slider scales it linearly. */
+const CP_COMBO_BUDGET = 8_000_000;
+
+/** Generic top-N selector: score every piece with `scoreOf`, keep the top `n`
+ *  (clamped to [1, length]), then always re-add pieces belonging to a required
  *  set so the set stays feasible even if its members score low (same protection
  *  as `topPctPrunePreserving`). Shared by the CP-weighted auto-prune; the
  *  priority prune keeps its own `topPctPrune` (per-roll normalized scoring). */
-export function keepTopPct(
+export function keepTopN(
   pieces: GearPiece[],
   scoreOf: (p: GearPiece) => number,
-  pct: number,
+  n: number,
   requiredSetIds: Set<string>,
 ): GearPiece[] {
   if (pieces.length === 0) return pieces;
   const scored = pieces.map((p) => ({ p, s: scoreOf(p) }));
   scored.sort((a, b) => b.s - a.s);
-  const keep = Math.max(1, Math.ceil(pieces.length * pct / 100));
+  const keep = Math.max(1, Math.min(pieces.length, n));
   const kept = scored.slice(0, keep).map((e) => e.p);
   if (requiredSetIds.size === 0) return kept;
   const keptUids = new Set(kept.map((p) => p.uid));
@@ -633,6 +651,37 @@ export function keepTopPct(
     }
   }
   return kept;
+}
+
+/** Top-% wrapper over `keepTopN` — keeps `ceil(N × pct/100)`. */
+export function keepTopPct(
+  pieces: GearPiece[],
+  scoreOf: (p: GearPiece) => number,
+  pct: number,
+  requiredSetIds: Set<string>,
+): GearPiece[] {
+  return keepTopN(pieces, scoreOf, Math.ceil(pieces.length * pct / 100), requiredSetIds);
+}
+
+/** Water-fill per-slot keep-counts so the product stays within `budget`. Process
+ *  slots smallest-first: each gets a fair share `floor(remaining^(1/slotsLeft))`,
+ *  and a slot smaller than its share is kept whole — its unused budget flows to
+ *  the remaining (larger) slots. Guarantees `∏ keep ≤ budget` (each step divides
+ *  the running budget by the count it just committed) while never trimming a
+ *  slot that already fits. Returns counts aligned to the input order. */
+export function allocateComboBudget(counts: number[], budget: number): number[] {
+  const order = counts.map((c, i) => ({ c, i })).sort((a, b) => a.c - b.c);
+  const keep = new Array<number>(counts.length).fill(0);
+  let remaining = Math.max(1, budget);
+  let slotsLeft = counts.length;
+  for (const { c, i } of order) {
+    const fair = Math.max(1, Math.floor(remaining ** (1 / slotsLeft)));
+    const k = Math.max(1, Math.min(c, fair));
+    keep[i] = k;
+    remaining = Math.max(1, Math.floor(remaining / k));
+    slotsLeft--;
+  }
+  return keep;
 }
 
 /** Variant of `topPctPrune` that always keeps pieces belonging to a required
