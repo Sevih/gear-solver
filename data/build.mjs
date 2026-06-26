@@ -428,6 +428,18 @@ const BUFF_TYPE_TO_STAT = {
   BT_DMG_TARGET_BREAK: "ST_DMG_BOOST",
   BT_DMG_REDUCE: "ST_DMG_REDUCE_RATE",
 };
+// Conditional "scales with the OWNER's lost HP" buff types — the mechanic of the
+// comeback sets Revenge (15, +ATK), Patience (16, +DEF) and Swiftness (19, +SPD).
+// Their stored Value is the MAXIMUM (at full missing HP): 1600 = +160% ATK/DEF,
+// 1000 = +100% SPD. They are NOT flat sheet stats — applying the max
+// unconditionally doubled SPD and inflated ATK/DEF. The engine has no combat-HP
+// model, so we emit NO numeric bonus (p2/p4 = null, same as boolean effect sets
+// like Immunity); the localized prose ("proportional to missing Health") carries
+// the meaning in the UI. `_HALF` is the 6★ tier variant of the same mechanic.
+const CONDITIONAL_OWNER_BUFF_TYPES = new Set([
+  "BT_STAT_OWNER_LOST_HP_RATE",
+  "BT_STAT_OWNER_LOST_HP_RATE_HALF",
+]);
 function resolveSetEffectEntry(stat, ap, value, buffId, setLevel) {
   if (stat && stat !== "ST_NONE") {
     return { st: stat, ap, v: Number(value) };
@@ -435,6 +447,7 @@ function resolveSetEffectEntry(stat, ap, value, buffId, setLevel) {
   if (!buffId) return null;
   const b = buffByIDLevel.get(`${buffId}|${setLevel}`);
   if (!b) return null;
+  if (CONDITIONAL_OWNER_BUFF_TYPES.has(b.Type)) return null;
   if (b.StatType && b.StatType !== "ST_NONE") {
     return { st: b.StatType, ap: b.ApplyingType, v: Number(b.Value) };
   }

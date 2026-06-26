@@ -69,6 +69,19 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — 🔴 sets conditionnels (lost-HP) faussement aplatis en stats flat
+
+**Bug** : les sets « comeback » dont le bonus scale avec les **PV perdus du porteur** étaient distillés en stat
+plate et appliqués **inconditionnellement à leur valeur MAX** → Swiftness (19) doublait la SPD (`floor(base·100/100)`,
+d'où le build à 338 SPD repéré en jeu), Revenge (15) ajoutait **+160% ATK** et Patience (16) **+160% DEF**. Tous les
+trois passent par un buff de Type `BT_STAT_OWNER_LOST_HP_RATE` (L1) / `_HALF` (6★), `StatType=ATK/DEF/SPEED`,
+`Value=1600/1000` — la valeur au max de PV manquants, pas un bonus garanti. **Fix** (`data/build.mjs`,
+`resolveSetEffectEntry`) : ces Types conditionnels renvoient désormais `p2/p4 = null` (aucun bonus numérique, comme
+les sets-effet booléens type Immunity) ; la prose « proportional to missing Health » porte le sens côté UI. Le moteur
+n'a pas de modèle de PV en combat, donc on n'estime rien plutôt que de gonfler. `sets.json` régénéré (sets 15/16/19
+→ p2/p4 null). Impacte le stat-sheet, le solver (plus de sur-valorisation de ces sets) **et** la tab Builds. Tests
+verts (stat-locks inclus → aucun héros locké n'utilisait ces sets).
+
 ### Session 2026-06-26 — SOLVE CP jouable par défaut (auto-prune CP-pondéré + garde-fou)
 
 **Diagnostic (vrai compte)** — un SOLVE CP sans réglage tournait >100 s pour **2,4 milliards** de combos,
