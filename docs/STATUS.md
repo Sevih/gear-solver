@@ -23,6 +23,8 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
    - `data/game/` : 29 tables Outerplane copiées (copie locale, pas de dépendance externe).
    - `data/build.mjs` → `data/derived/` : tables compactes (`options`, `equipment`, `sets`,
      `characters`, `sub-ticks`, …) que le moteur consomme. Re-générable via `npm run data:build`.
+     Écrit aussi `version.json` `{ hash, builtAt }` — `hash` = hash de contenu **stable** des
+     dérivés (un rebuild no-op ne le bouge pas), affiché dans Settings → Data.
    - `data/sync.ps1` : re-copie depuis Outerpedia + rebuild (à lancer après un patch du jeu).
    - **Sync au lancement depuis le repo public `Sevih/outerpediaV2`** (`apps/desktop/src/data-sync.ts`,
      dual-mode checkout/repo) : images **et** tables suivent les patchs **sans nouveau build** de l'app.
@@ -41,9 +43,14 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      par tier (couleurs partagées avec l'Inventory), répartition étoiles, Library, et
      **update center inline** (check/apply des updates repo, sans popups natifs).
    - **Onglet Inventory** : table + filtres + détail pièce (mains, subs, ticks, reforge,
-     breakthrough, singularity), score par pièce, indicateur de qualité.
+     breakthrough, singularity), score par pièce, indicateur de qualité. Tris/filtres/onglet
+     **session-scoped** (`useSessionState`/sessionStorage) → stables au switch d'onglet, remis
+     au défaut au lancement.
    - **Onglet Builds** : carte par héros avec stats composées (`composeBuild` mirror
-     in-game CalcFinalStat), comparaison vs locks régression (`data/stat-locks.json`).
+     in-game CalcFinalStat), comparaison vs locks régression (`data/stat-locks.json`). **Advices**
+     auto par carte (`lib/buildAdvice.ts`, pur + testé) : missing/sets, caps gaspillés (crc/pen
+     >100), slots de gem vides (Talisman/EE), reforges non utilisés + 6★ non ascensionné. Filtres
+     roster session-scoped.
    - **Onglet Builder** : optimiseur de gear Fribbels-style. Voir [docs/solver.md](solver.md)
      pour le détail. Worker pool en renderer, partition embarrassingly parallel, gem
      sub-solver, modes SOLVE (par Score pondéré) et SOLVE CP (par Combat Power).
@@ -63,7 +70,12 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      chaque pièce armor doit compléter un set, leaf reject des singletons).
    - **Onglet Settings** : modal left-rail à onglets (Setup · Solver · Data · Backup · Debug),
      section Solver (worker count Auto/Manual, result/per-worker count, heatmap), backup
-     JSON import/export, sync « game data » manuelle.
+     JSON import/export, sync « game data » manuelle, **version des données dérivées** affichée
+     (hash + date, lue depuis `data/derived/version.json`).
+   - **Édition d'équipement (méthodes)** : `equipItem`/`unequipItem` (`packages/core/src/equip.ts`,
+     réécrivent le `CharUID` du JSON capturé, déplacement de slot, immuables, +tests) + endpoint
+     writer `POST /api/captured/user-item` (`server.ts` + miroir Vite) + client `src/equip.ts`.
+     **Pas encore d'UI déclencheur** (Builder/Builds) — c'est l'étape restante.
    - **Perf solver** : pool dimensionné à la machine (`hardwareConcurrency − 1`), `game` +
      inventaire envoyés aux workers **une fois** (init), compteur « ⚙ N workers » dans le footer.
 

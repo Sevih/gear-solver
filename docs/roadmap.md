@@ -48,7 +48,13 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 ### M7 (reste) — Persistence & sharing
 - **JSON import/export** des builds/presets (partage / backup) — ✅ **livré**
   (`lib/storage/transfer.ts` + section Backup dans Settings + 8 tests).
-- **Versioning du snapshot `data/`** pour invalider les caches localStorage après un patch.
+- **View-state session-scoped** — ✅ **livré** : tris/filtres Inventory + filtres roster Builds en
+  `sessionStorage` (`useSessionState`), réinitialisés au lancement (`gs.builds.notes` reste durable).
+- **Versioning du snapshot `data/`** — stamp + expo ✅ **livrés** (`build.mjs` → `version.json`
+  `{ hash, builtAt }`, hash de contenu stable ; affiché Settings → Data). **Reste** : l'invalidation
+  des caches localStorage au changement de hash (élaguer les SavedBuild aux `pieceUids` disparus).
+- **Édition d'équipement** — méthodes core (`equipItem`/`unequipItem`) + writer
+  `POST /api/captured/user-item` + client renderer ✅ **livrés** ; reste le déclencheur UI (Builder/Builds).
 - **Production build path** pour `data` (bake derived + snapshot dans le bundle prod).
 
 ### M8 — Packaging desktop (câblé, à vérifier)
@@ -63,8 +69,9 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 - Virtualisation de la table de résultats (topN=1000) — ✅ **livrée**
   (`@tanstack/react-virtual` + `memo(ResultRow)`).
 
-> Equip / Unequip **vers le jeu** : hors scope tant qu'aucune API jeu n'existe (le pipeline
-> de capture est read-only).
+> Equip / Unequip : l'édition **locale** (réécriture du JSON capturé) est livrée côté méthodes +
+> plomberie ; pousser le changement **vers le jeu** reste hors scope tant qu'aucune API jeu n'existe
+> (le pipeline de capture est read-only).
 
 ---
 

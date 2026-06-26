@@ -15,7 +15,7 @@ Pour le **mapping OptionID/ItemID/CharID → tables dérivées** et les
 | Champ | Sémantique |
 |-------|------------|
 | `ItemUID` | id d'instance unique (string) |
-| `CharUID` | UID du héros équipé ; `"0"` = libre |
+| `CharUID` | UID du héros équipé ; `"0"` = libre. Réécrit **localement** par les méthodes d'édition d'équipement (`equipItem`/`unequipItem`, `packages/core/src/equip.ts`) — voir [reference.md §1.7](reference.md#17-édition-déquipement-packagescoresrcequipts) ; rien n'est envoyé au jeu |
 | `ItemID` | template id → `data/derived/equipment.json` (slot, set, rarity, image, effectIcon, classLimit) |
 | `BreakLimitLevel` | breakthrough T0–T4 |
 | `SmeltingCount` | nombre de reforges déjà spent |
@@ -87,11 +87,14 @@ node levels par account).
 ## Cycle de re-capture après patch jeu
 
 1. `data/sync.ps1` re-copie `data/game/*.json` depuis le checkout outerpedia-v2.
-2. `npm run data:build` régénère `data/derived/*.json` consommés par le moteur.
+2. `npm run data:build` régénère `data/derived/*.json` consommés par le moteur (et réécrit
+   `data/derived/version.json` `{ hash, builtAt }` — le `hash` ne change que si la donnée a
+   réellement bougé). Affiché dans Settings → Data.
 3. Re-capture le compte si la version a changé (`tools/capture/capture.ps1`).
 4. Tests verts (`npm test --workspaces`).
 5. Re-validate les stat-locks via le toggle debug de l'app, refresh des
    snapshots dans `data/stat-locks.json` si nécessaire.
 
-Stale-detection est manuelle pour l'instant (cf.
+Le `hash` de `version.json` est le crochet d'une future invalidation auto des caches localStorage ;
+l'élagage des SavedBuild aux `pieceUids` disparus reste à brancher (cf.
 [todo.md](todo.md) "Snapshot data versioning").

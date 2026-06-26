@@ -58,6 +58,13 @@ cibles dérivent de la même table — `ItemSpecialOptionTemplet` notamment) :
 Re-générer après un patch jeu : `npm run data:build` (ou `data/sync.ps1`
 si on doit aussi recopier depuis Outerpedia).
 
+`build.mjs` écrit aussi `data/derived/version.json` `{ hash, builtAt }` : `hash` est un
+`sha256` du contenu de **tous** les fichiers dérivés (nom + corps, ordre d'émission fixe),
+donc **stable tant que la donnée est inchangée** (un rebuild no-op ne le bouge pas). Lu côté
+renderer par `loadDataVersion()` ([data.ts](../apps/renderer/src/data.ts)) et affiché en
+lecture seule dans Settings → Data. C'est le crochet d'une future invalidation des caches
+localStorage après un patch (comparer le `hash`, élaguer les SavedBuild aux `pieceUids` disparus).
+
 Fichier : [data/build.mjs](../data/build.mjs).
 
 ### 1.3 Parse (`packages/core/src/parse.ts`)
@@ -126,6 +133,23 @@ Pipeline détaillé dans [solver.md](solver.md). Résumé :
 - **Worker** — instance d'engine, calcul d'un chunk.
 - **Engine** — `prepareContext + solveChunk + finalizeBuilds`. Phases 1-6 :
   précompute → pools → top-% → cartesian + set-prune → compose + ratings + heap → CP.
+
+### 1.7 Édition d'équipement (`packages/core/src/equip.ts`)
+
+L'app ne parle jamais au jeu : déplacer une pièce = **réécrire le JSON capturé**. Le owner
+d'une pièce est `RawItem.CharUID` (`"0"` = libre, même convention qu'au parse).
+
+- `equipItem(raw, game, itemUid, charUid)` — pose `CharUID = charUid` sur la pièce et **déplace**
+  vers `"0"` celle qui occupait le même slot du perso (un slot = une pièce ; slot résolu via
+  `game.equipment[ItemID].slot`). No-op (clone inchangé) si item inconnu / non-gear / déjà sur ce
+  perso ; `charUid "0"` délègue à `unequipItem`. **Immuable** — l'entrée n'est jamais mutée.
+- `unequipItem(raw, itemUid)` — `CharUID = "0"` ; no-op clone si absent / déjà libre.
+
+Persistance : le **renderer** applique le transform (il a core + la game data chargée), puis POST
+le snapshot complet à `POST /api/captured/user-item` (writer bête : valide `{ ItemList[] }` +
+`writeFileSync` `out/user_item.json`, refus 409 si pipeline armé). Client :
+[apps/renderer/src/equip.ts](../apps/renderer/src/equip.ts) (`equipPiece`/`unequipPiece`). Le
+déclencheur UI (Builder/Builds) reste à câbler.
 
 ---
 
@@ -569,6 +593,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | Fichier | Couverture |
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
+| `packages/core/test/equip.test.ts` | 11 tests — `equipItem`/`unequipItem` : pose sur slot vide, **déplacement** du slot occupé (même perso), no-op (déjà équipé / item inconnu / non-gear), `charUid "0"` = unequip, scope du déplacement (autre perso/autre slot intacts), **immutabilité** de l'entrée |
 | `apps/renderer/test/solver.test.ts`     | 74 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`**, **incremental bucket accumulator equivalence** (`computeFinalStatsFromPrefix` vs full-array) |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped` : parité sans gemme crit, accept jusqu'à CHC 100 (overshoot ≤102), stop pile à 100, skip total au cap, split talisman/EE, delta null si rien d'utile, score ≤0 jamais pris |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount` : défaut `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, plafond dur 64 |
@@ -578,8 +603,9 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/translateReco.test.ts` | 10 tests — reco→patch : mains (OR-union), effets (icônes required, null skip+warn), sets (combo→plan 1:1, combo non-résolu droppé entier), priorité substats (tiers→poids, collision de bucket, clé inconnue) |
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick` : verdict des deux côtés de la bascule, équivalent-flat exact, égalité pile à la bascule, garde tick %=0 |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains` : tri décroissant, monotonie delta→gain, CHC nul si crit-cap, base 0 → vide |
+| `apps/renderer/test/buildAdvice.test.ts` | 11 tests — `computeAdvice` (Builds) : no-gear silencieux, missing + early-return, sets (singleton / 3-of-4), caps gaspillés crc/pen (seuil arrondi >0), gem slots vides Talisman/EE + tip +5, upgrade agrégé (reforges non utilisés / 6★ non ascensionné), singularier/pluraliser |
 
-Run : `npm test --workspaces --if-present`. **Total : 175 tests** (core 11 + renderer 164 : solver, solveChunk, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue, +4 dmgValue, +11 buildAdvice).
+Run : `npm test --workspaces --if-present`. **Total : 186 tests** (core 22 : parse 11 + equip 11 · renderer 164 : solver 74, solveChunk 3, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, subValue 5, dmgValue 4, buildAdvice 11).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 
