@@ -516,12 +516,17 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // stays visible instead of the table greedily eating all vertical space.
   // Persisted so the user's preferred split survives reloads.
   const [resultRows, setResultRows] = usePersistedState<number>("gs.builder.resultRows", 12);
-  // Consume the preselect once on mount so the parent can clear it (the
-  // initializer above already captured the value into `selectedUid`).
+  // Adopt a preselect from the parent (Builds → Optimize) whenever it arrives,
+  // then let the parent clear it. Keyed on `initialHeroUid` (not mount-only) so
+  // it works on later clicks too — the Builder now stays mounted across tabs,
+  // so a fresh Optimize is a prop change rather than a remount.
   useEffect(() => {
-    if (initialHeroUid) onInitialHeroConsumed?.();
+    if (initialHeroUid) {
+      setSelectedUid(initialHeroUid);
+      onInitialHeroConsumed?.();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialHeroUid]);
   const [filters, dispatch] = useReducer(solverFiltersReducer, INITIAL_FILTERS);
 
   // Solver state — orchestrator stays alive for the screen's lifetime so

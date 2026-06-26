@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { GameData, Inventory, RawUserItem, RawUserCharacter, UserGeasLevels } from "@gear-solver/core";
 import { autoImport, parseFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
@@ -23,13 +23,18 @@ const BuilderScreen = lazy(() => import("./screens/BuilderScreen.js").then((m) =
 /** Per-screen error boundary — a throw in a `useMemo`/render (e.g. a bad
  *  filter combo or stale persisted state) used to blank the whole app with
  *  no message. This catches it, shows the error + a Retry, and keeps the
- *  shell (header/tabs) alive. Reset by remounting on tab change (`key={tab}`)
- *  so navigating away recovers automatically. */
-class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+ *  shell (header/tabs) alive. Conditionally-rendered screens remount fresh on
+ *  return; the always-mounted Builder passes `resetKey={tab}` so navigating
+ *  away and back clears a crash without remounting it (which would wipe the
+ *  solver results we keep alive). */
+class ScreenErrorBoundary extends Component<{ children: ReactNode; resetKey?: unknown }, { error: Error | null }> {
   override state: { error: Error | null } = { error: null };
   static getDerivedStateFromError(error: Error) { return { error }; }
   override componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[screen crash]", error, info.componentStack);
+  }
+  override componentDidUpdate(prev: { resetKey?: unknown }) {
+    if (this.state.error && prev.resetKey !== this.props.resetKey) this.setState({ error: null });
   }
   override render() {
     if (this.state.error) {
@@ -60,6 +65,10 @@ export function App() {
   // Home is the default landing tab (fresh installs open here). Returning
   // users keep whatever tab they last left via the persisted value.
   const [tab, setTab] = usePersistedState<Tab>("gs.tab", "Home");
+  // Builder mounts on first visit and then stays mounted (hidden when inactive),
+  // so its solver results — and a solve still running — survive tab switches.
+  const builderMounted = useRef(false);
+  builderMounted.current ||= tab === "Builder";
   const [game, setGame] = useState<GameData | null>(null);
   const [inv, setInv] = useState<Inventory | null>(null);
   const [userGeas, setUserGeas] = useState<UserGeasLevels | null>(null);
@@ -272,11 +281,12 @@ export function App() {
       )}
 
       <main className="min-h-[calc(100vh-60px)]">
-        {/* key={tab} remounts the boundary on tab switch so a crash on one
-            screen doesn't persist after navigating away. */}
-        <ScreenErrorBoundary key={tab}>
-          <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-400">Loading {tab.toLowerCase()}…</div>}>
-            {tab === "Home" && (
+        <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-400">Loading {tab.toLowerCase()}…</div>}>
+          {/* Home / Inventory / Builds are cheap to rebuild, so they stay
+              conditionally rendered (and remount fresh — which also resets
+              their per-screen error boundary). */}
+          {tab === "Home" && (
+            <ScreenErrorBoundary>
               <HomeScreen
                 inventory={inv}
                 game={game}
@@ -288,12 +298,22 @@ export function App() {
                 onSyncData={() => void syncGameData()}
                 onOpenBuilder={() => setTab("Builder")}
               />
-            )}
-            {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} />}
-            {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} />}
-            {tab === "Builder" && <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />}
-          </Suspense>
-        </ScreenErrorBoundary>
+            </ScreenErrorBoundary>
+          )}
+          {tab === "Inventory" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} /></ScreenErrorBoundary>}
+          {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} /></ScreenErrorBoundary>}
+          {/* Builder stays MOUNTED once first opened (hidden via display:none
+              when inactive), so its solver results survive tab switches and a
+              solve can finish in the background. The `h-full` wrapper keeps the
+              definite-height chain BuilderScreen's internal scroll relies on. */}
+          {builderMounted.current && (
+            <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
+              <ScreenErrorBoundary resetKey={tab}>
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
+              </ScreenErrorBoundary>
+            </div>
+          )}
+        </Suspense>
       </main>
 
       {!inv && (

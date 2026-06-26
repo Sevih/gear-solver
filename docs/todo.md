@@ -35,8 +35,12 @@
 - [x] 🟡 **`SlotMini` non cliquable (Builds)** — ~~aucun moyen d'inspecter une pièce depuis la tab Builds
       (tooltip/clic), contrairement à l'Inventory.~~ Fait : hover sur une pièce équipée → `RichTooltip` +
       `GearTooltipContent` (main/subs/gems, comme le détail Inventory).
-- [ ] 🟡 **Conservation des résultats** — conserver les résultats du solver quand on change de tab
-      (voire permettre de laisser le solver tourner en fond).
+- [x] 🟡 **Conservation des résultats** — le Builder **reste monté** (caché en `display:none` quand inactif)
+      une fois ouvert, au lieu d'être démonté à chaque changement d'onglet (`App.tsx` : plus de
+      `key={tab}` global, boundaries par écran, wrapper `h-full` pour la chaîne de hauteur). Donc résultats /
+      filtres / héros sélectionné conservés **et** un solve continue de tourner en fond (le worker pool n'est
+      plus `dispose()` au démontage). `initialHeroUid` consommé sur changement de prop (plus seulement au mount)
+      pour que « Optimize » re-cible bien le héros maintenant que le Builder ne remonte plus.
 - [ ] 🟡 **Reset des tris/filtres au lancement** — l'état persiste au reload et on n'en veut pas :
       **Inventory** persiste le tri (`gs.inv.sort`/`dir`/`tab`), **Builds** persiste ses filtres
       (`gs.builds.filters` ; pas de tri, fixe CP desc). Repartir d'un défaut au lancement.
