@@ -12,6 +12,17 @@ export const QUALITY_LABEL: Record<QualityTier, string> = {
   poor: "Poor", decent: "Decent", good: "Good", excellent: "Excellent", perfect: "Perfect",
 };
 
+/** Per-tier accent color — the single source of truth shared by the Inventory
+ *  tab's quality filter/bar (`QUALITY_TONE`) and the Home gear-quality
+ *  distribution, so the two never drift. */
+export const QUALITY_COLOR: Record<QualityTier, string> = {
+  poor: "#a1a1aa",
+  decent: "#7dd3fc",
+  good: "#6ee7b7",
+  excellent: "#c4b5fd",
+  perfect: "#fbbf24",
+};
+
 /** Tier from a tick score: the piece's current rolled ticks vs the achievable
  *  max. The only place the percentage cutoffs live. */
 export function qualityTierFromScore(current: number, max: number): QualityTier {

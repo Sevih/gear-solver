@@ -22,7 +22,7 @@ import type { EmulatorStatus } from "../emulator.js";
 import { cx } from "../design/cx.js";
 import { Spinner } from "../design/Shell.js";
 import { SLOTS, toDesignSlot, type SlotId } from "../design/tokens.js";
-import { gearPieceQualityTier, type QualityTier } from "../lib/quality.js";
+import { gearPieceQualityTier, QUALITY_COLOR, type QualityTier } from "../lib/quality.js";
 import { loadSavedBuilds } from "../lib/storage/savedBuilds.js";
 import { loadFilterPresets } from "../lib/storage/filterPresets.js";
 import {
@@ -46,12 +46,14 @@ const CLASSES: { id: string; label: string }[] = [
   { id: "CCT_DEFENDER", label: "Defender" },
   { id: "CCT_PRIEST",   label: "Healer" },
 ];
+// Tier colors mirror the Inventory tab's quality filter (QUALITY_COLOR) so the
+// two surfaces read identically.
 const TIER_META: { tier: QualityTier; label: string; color: string }[] = [
-  { tier: "poor",      label: "Poor",      color: "#71717a" },
-  { tier: "decent",    label: "Decent",    color: "#4dabf7" },
-  { tier: "good",      label: "Good",      color: "#9D51FF" },
-  { tier: "excellent", label: "Excellent", color: "#fbbf24" },
-  { tier: "perfect",   label: "Perfect",   color: "#22d3ee" },
+  { tier: "poor",      label: "Poor",      color: QUALITY_COLOR.poor },
+  { tier: "decent",    label: "Decent",    color: QUALITY_COLOR.decent },
+  { tier: "good",      label: "Good",      color: QUALITY_COLOR.good },
+  { tier: "excellent", label: "Excellent", color: QUALITY_COLOR.excellent },
+  { tier: "perfect",   label: "Perfect",   color: QUALITY_COLOR.perfect },
 ];
 // Distinct hues cycled across the top owned armor sets (no per-set brand color
 // exists, so a tasteful rotation keeps the bars readable).
@@ -445,15 +447,17 @@ export function HomeScreen({
               <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
                 <div className="flex flex-col gap-1">
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Heroes owned</span>
-                  <div className="flex items-end gap-2">
+                  <div className="flex items-center gap-3">
                     <Num className="text-[28px] font-bold leading-none" color="#fbbf24">{stats.heroes.toLocaleString()}</Num>
                     {stats.stars.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pb-0.5">
+                      <div className="flex flex-col gap-0.5">
                         {stats.stars.map((r) => (
-                          <span key={r.star} className="flex items-center gap-0.5" title={`${r.count} × ${r.star}★`}>
-                            {Array.from({ length: r.star }).map((_, i) => (
-                              <img key={i} src="/img/ui/star/CM_icon_star_y.webp" alt="" className="h-2.5 w-2.5" />
-                            ))}
+                          <span key={r.star} className="flex items-center gap-1" title={`${r.count} × ${r.star}★`}>
+                            <span className="flex min-w-9 items-center gap-0.5">
+                              {Array.from({ length: r.star }).map((_, i) => (
+                                <img key={i} src="/img/ui/star/CM_icon_star_y.webp" alt="" className="h-2.5 w-2.5" />
+                              ))}
+                            </span>
                             <Num className="text-[10px] font-semibold text-zinc-300">{r.count}</Num>
                           </span>
                         ))}
@@ -532,8 +536,11 @@ export function HomeScreen({
             </div>
             <div className="grid grid-cols-5 gap-3">
               {stats.tiers.map((t) => (
-                <div key={t.tier} className="flex flex-col gap-1 pl-2.5" style={{ borderLeft: `2px solid ${t.color}` }}>
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">{t.label}</span>
+                <div key={t.tier} className="flex flex-col gap-1">
+                  <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: t.color }} />
+                    {t.label}
+                  </span>
                   <Num className="text-[23px] font-bold" color={t.color}>{t.count.toLocaleString()}</Num>
                   <Num className="text-[10px] text-zinc-400">{t.pct} of pool</Num>
                 </div>

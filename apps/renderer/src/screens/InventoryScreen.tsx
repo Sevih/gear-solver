@@ -17,13 +17,13 @@ import { HoverHint } from "../design/HoverHint.js";
 // Tier type + the score→tier thresholds live in lib/quality.ts (single source
 // of truth, also used by the Builder's solve-pool quality filter). QUALITY_TONE
 // stays here — it's UI-only (bar color + filter pill).
-import { QUALITY_TIERS, qualityTierFromScore, type QualityTier } from "../lib/quality.js";
+import { QUALITY_COLOR, QUALITY_TIERS, qualityTierFromScore, type QualityTier } from "../lib/quality.js";
 export const QUALITY_TONE: Record<QualityTier, { text: string; bar: string; label: string }> = {
-  poor:      { text: "text-white",      bar: "#a1a1aa", label: "Poor" },
-  decent:    { text: "text-sky-300",    bar: "#7dd3fc", label: "Decent" },
-  good:      { text: "text-emerald-300",bar: "#6ee7b7", label: "Good" },
-  excellent: { text: "text-violet-300", bar: "#c4b5fd", label: "Excellent" },
-  perfect:   { text: "text-amber-300",  bar: "#fbbf24", label: "Perfect" },
+  poor:      { text: "text-white",      bar: QUALITY_COLOR.poor,      label: "Poor" },
+  decent:    { text: "text-sky-300",    bar: QUALITY_COLOR.decent,    label: "Decent" },
+  good:      { text: "text-emerald-300",bar: QUALITY_COLOR.good,      label: "Good" },
+  excellent: { text: "text-violet-300", bar: QUALITY_COLOR.excellent, label: "Excellent" },
+  perfect:   { text: "text-amber-300",  bar: QUALITY_COLOR.perfect,   label: "Perfect" },
 };
 
 // Gear-rollable stat keys — everything in `STAT` minus the three set-only
