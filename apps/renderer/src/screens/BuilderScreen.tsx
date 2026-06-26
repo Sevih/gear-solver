@@ -1481,7 +1481,7 @@ function ToolbarToggle({ label, on, onClick }: { label: string; on: boolean; onC
         <span
           className={cx(
             "absolute top-px h-3 w-3 rounded-full transition-all",
-            on ? "left-[13px] bg-cyan-300" : "left-px bg-zinc-400",
+            on ? "left-3.25 bg-cyan-300" : "left-px bg-zinc-400",
           )}
         />
       </span>

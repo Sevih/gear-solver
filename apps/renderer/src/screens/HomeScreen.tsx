@@ -433,7 +433,7 @@ export function HomeScreen({
             <SectionLabel right={<Num className="text-[10px] text-zinc-600">{stats.totalGraded.toLocaleString()} pieces graded by substat roll quality</Num>}>
               Gear quality distribution
             </SectionLabel>
-            <div className="flex h-8 gap-[3px] overflow-hidden rounded-lg">
+            <div className="flex h-8 gap-0.75 overflow-hidden rounded-lg">
               {stats.tiers.map((t) => (
                 <div key={t.tier} style={{ flex: `${t.count} 1 0`, background: t.color, opacity: 0.92 }} />
               ))}
