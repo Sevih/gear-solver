@@ -248,6 +248,34 @@ function localData(): Plugin {
           return;
         }
 
+        // Captured user_item write-back (equip / unequip edits) — mirrors the
+        // Electron prod server. The renderer applies the core equip helpers and
+        // POSTs the full rewritten snapshot; we validate + write it. Refused
+        // while armed so a capture can't clobber the edit (mirrors wipe).
+        if (url === "/api/captured/user-item" && req.method === "POST") {
+          res.setHeader("Content-Type", "application/json");
+          if (existsSync(join(CAPTURED, ".mitm.pid"))) {
+            res.statusCode = 409;
+            return res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
+          }
+          const chunks: Buffer[] = [];
+          req.on("data", (c: Buffer) => chunks.push(c));
+          req.on("end", () => {
+            try {
+              const body = Buffer.concat(chunks).toString("utf-8");
+              const parsed = JSON.parse(body) as { ItemList?: unknown };
+              if (!Array.isArray(parsed.ItemList)) throw new Error("missing ItemList[]");
+              writeFileSync(join(CAPTURED, "user_item.json"), body, "utf-8");
+              res.statusCode = 204;
+              res.end();
+            } catch (err) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: (err as Error).message }));
+            }
+          });
+          return;
+        }
+
         for (const [prefix, dir] of Object.entries(mounts)) {
           if (!url.startsWith(prefix)) continue;
           const rel = decodeURIComponent(url.slice(prefix.length));

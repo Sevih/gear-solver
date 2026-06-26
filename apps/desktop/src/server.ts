@@ -426,6 +426,53 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
+  // --- captured user_item write-back (equip / unequip edits) ---
+  // The renderer applies the core equipItem/unequipItem helpers against the
+  // loaded game data and POSTs the FULL rewritten user_item.json here; the
+  // server just validates + writes it (it has no game data to resolve slots).
+  // Refused while armed so the next /user/item capture can't clobber the edit
+  // (mirrors /api/capture/wipe).
+  if (url === "/api/captured/user-item" && req.method === "POST") {
+    res.setHeader("Content-Type", "application/json");
+    if (isArmed()) {
+      res.statusCode = 409;
+      res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let aborted = false;
+    const MAX_BODY = 32_000_000; // ~32 MB — a large account's user_item.json
+    req.on("data", (c: Buffer) => {
+      if (aborted) return;
+      size += c.length;
+      if (size > MAX_BODY) {
+        aborted = true;
+        res.statusCode = 413;
+        res.end(JSON.stringify({ error: "payload too large" }));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      if (aborted) return;
+      try {
+        const body = Buffer.concat(chunks).toString("utf-8");
+        const parsed = JSON.parse(body) as { ItemList?: unknown };
+        if (!Array.isArray(parsed.ItemList)) throw new Error("missing ItemList[]");
+        writeFileSync(join(CAPTURE_OUT, "user_item.json"), body, "utf-8");
+        dlog("capture", `user_item.json rewritten (${parsed.ItemList.length} items)`);
+        res.statusCode = 204;
+        res.end();
+      } catch (err) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: (err as Error).message }));
+      }
+    });
+    return;
+  }
+
   // --- /img/* — disk cache + GitHub CDN, shared with the Vite dev middleware.
   // serveImg resolves: dev local checkout → disk cache → CDN (jsDelivr/raw) +
   // cache → webp fallback → 302 outerpedia.com last resort. Pinned to the same

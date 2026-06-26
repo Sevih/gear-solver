@@ -106,15 +106,17 @@
       invalider les caches localStorage après un patch jeu (les SavedBuild référencent des `pieceUids`
       qui peuvent disparaître).
 - [~] **Equip / Unequip** — modifier les emplacements d'équipement sur les personnages (on n'envoie rien
-      au jeu : on réécrit le JSON capturé `user_item.json`, champ `CharUID`). **Méthodes pures faites** :
-      `equipItem(raw, game, itemUid, charUid)` / `unequipItem(raw, itemUid)` dans `packages/core/src/equip.ts`
-      (immuables, déplacement du slot — un slot = une pièce, `"0"` = libre ; +11 tests `equip.test.ts`).
-      **Reste à brancher** (déclenché depuis le solver/Builder) :
-      1. **Endpoint d'écriture** `POST /api/captured/equip` `{ itemUid, charUid|null }` dans `server.ts`
-         (lit `out/user_item.json`, applique `equipItem`/`unequipItem` avec la game data chargée pour le slot,
-         `writeFileSync` — mirror du POST `/api/stat-locks` + `/api/capture/wipe`) ; miroir dev `vite.config.ts`.
-      2. **Client renderer** `equipPiece`/`unequipPiece` (POST) puis `refreshInventory` (`App.tsx`).
-      3. **Déclencheur UI** côté Builder/Builds (boutons / assignation par slot) → appelle le client + refresh.
+      au jeu : on réécrit le JSON capturé `user_item.json`, champ `CharUID`). **Méthodes + plomberie faites** :
+      - `equipItem(raw, game, itemUid, charUid)` / `unequipItem(raw, itemUid)` (`packages/core/src/equip.ts`,
+        immuables, déplacement du slot — un slot = une pièce, `"0"` = libre ; +11 tests `equip.test.ts`).
+      - **Endpoint writer** `POST /api/captured/user-item` (`server.ts` + miroir dev `vite.config.ts`) :
+        valide `{ ItemList[] }` + `writeFileSync` `out/user_item.json` ; refus 409 si pipeline armé (mirror wipe).
+        Choix de design : le **transform tourne côté renderer** (qui a déjà core + la game data pour le slot),
+        le serveur reste un writer bête → pas de couplage desktop→core.
+      - **Client renderer** `equipPiece(game, itemUid, charUid)` / `unequipPiece(itemUid)` (`apps/renderer/src/equip.ts`) :
+        fetch `user_item.json` → `equipItem`/`unequipItem` → POST l'instantané réécrit.
+      **Reste (étape 3)** : **déclencheur UI** côté Builder/Builds (boutons / assignation par slot) → appelle
+      le client puis `refreshInventory` (`App.tsx`). Vérif round-trip live à faire quand l'UI est branchée.
 
 ### Tests (fixtures lourdes)
 - [ ] **CP solver vs Builds** — comparer `calcBattlePower` sur le même build depuis les deux écrans
@@ -140,14 +142,20 @@
 
 ## Livré
 
-### Session 2026-06-26 — Equip/Unequip : méthodes core
+### Session 2026-06-26 — Equip/Unequip : méthodes core + plomberie
 
 **`equipItem` / `unequipItem`** — module pur `packages/core/src/equip.ts` qui réécrit un
 `RawUserItem` capturé (champ `CharUID`, `"0"` = libre) : equip pose l'owner + **déplace** la pièce
 qui occupait le même slot du perso (un slot = une pièce) ; unequip remet à `"0"`. Immuables (jamais
 de mutation de l'entrée), no-op clone sur item inconnu / non-gear / déjà dans l'état voulu. +11 tests
-`equip.test.ts`. Le **branchement** (endpoint d'écriture disque + déclencheur Builder/Builds) reste
-un todo dédié (cf. « Equip / Unequip » dans Reste à faire).
+`equip.test.ts`.
+
+**Plomberie de persistance** — endpoint writer `POST /api/captured/user-item` (`server.ts` prod +
+miroir dev `vite.config.ts`) qui valide `{ ItemList[] }` et `writeFileSync` `out/user_item.json`
+(refus 409 si pipeline armé, mirror du wipe). Le **transform tourne côté renderer** (déjà core + game
+data chargée) → serveur writer bête, **pas de couplage desktop→core**. Client `apps/renderer/src/equip.ts`
+(`equipPiece`/`unequipPiece`) : fetch raw → core transform → POST. **Reste** : le déclencheur UI
+(Builder/Builds) + vérif round-trip live (cf. « Equip / Unequip » dans Reste à faire, étape 3).
 
 ### Session 2026-06-26 — Builds advice (lot prioritaire) + dedup reforge budget
 
