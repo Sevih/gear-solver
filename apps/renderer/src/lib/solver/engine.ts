@@ -445,6 +445,16 @@ function computeFormableSets(armorPools: GearPiece[][]): Set<string> {
  *  within reachable in-game bounds. */
 const REFORGE_PER_SUB_CAP = 6;
 
+/** In-game reforge budget for a piece: N reforges for a 1★→6★ piece (= its
+ *  star), with a 6★ ascended (Singularity) piece getting an extra +3 → 9 total.
+ *  The +3 is exclusive to 6★ Singularity items; lower-star ascension doesn't
+ *  exist (ascension is a 6★-only mechanic). Exported so non-solver surfaces
+ *  (e.g. the Builds advice) read the same budget instead of re-deriving it. */
+export function maxReforgesOf(piece: GearPiece): number {
+  const star = piece.star ?? 0;
+  return star === 6 && piece.ascended ? star + 3 : star;
+}
+
 /** Predict the maximum-rolled state of a piece by distributing its
  *  remaining reforge attempts (`star − reforgeCount`) across substats:
  *  greedy by `priority × per-tick value`, respecting the per-sub LV6 cap
@@ -465,16 +475,10 @@ const REFORGE_PER_SUB_CAP = 6;
  *  enough for "what's the best this piece can become?" previews. */
 export function simulateReforges(piece: GearPiece, priority: Record<string, number>, maxReforgesOverride?: number): GearPiece {
   if (piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
-  // In-game reforge budget: N reforges for 1★→6★ pieces. A 6★ ascended
-  // (Singularity) piece gets an additional +3 reforges → 9 total (the +3
-  // is exclusive to 6★ Singularity items; lower-star ascended doesn't exist
-  // since ascension is a 6★-only mechanic in this build).
-  //
-  // `maxReforgesOverride` lets the reforge-mode preview impose a fixed
-  // endgame budget regardless of the piece's actual star (classic = 6,
-  // ascended = 9) — "project every piece as if it were max-star 6★".
-  const star = piece.star ?? 0;
-  const maxReforges = maxReforgesOverride ?? ((star === 6 && piece.ascended) ? star + 3 : star);
+  // `maxReforgesOverride` lets the reforge-mode preview impose a fixed endgame
+  // budget regardless of the piece's actual star (classic = 6, ascended = 9) —
+  // "project every piece as if it were max-star 6★".
+  const maxReforges = maxReforgesOverride ?? maxReforgesOf(piece);
   const remaining = Math.max(0, maxReforges - piece.reforgeCount);
   if (remaining === 0 || piece.subs.length === 0) return piece;
   const subs: RolledStat[] = piece.subs.map((s) => ({ ...s }));

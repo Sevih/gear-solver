@@ -48,21 +48,15 @@
       remount lors d'un switch d'onglet (les écrans Home/Inventory/Builds remontent à chaque tab),
       mais repart au défaut au **lancement** (sessionStorage vidé à la fermeture de la fenêtre).
       `gs.builds.notes` (contenu utilisateur) reste durable en localStorage.
-- [ ] 🟡 **`Advices` (tab Builder)** — nouvelles règles dans `computeAdvice` ([BuildsScreen.tsx:489-551](../apps/renderer/src/screens/BuildsScreen.tsx#L489)).
-      `ComposedEntry` expose : stats finales, baseline sans gear, pièces brutes (gems/subs/reforge/enhance/
-      ascended/quality/sets), `meta.dmgStat`. **Lot prioritaire** (haute confiance, données déjà là) :
-      1. **Caps gaspillés** — `crc > 100` (surtout si gems CHC sur talisman/EE) · `dmgRed > 70` (mitigation
-         plancher 0.3 → cap 70 %, *seuil à valider en jeu*) · `pen > 100` (cappe à 100). « X % gaspillés,
-         réallouer ». Caps déjà dans le modèle (ratings.ts), juste à comparer.
-      2. **Gems** — slots de gem vides sur talisman/EE (`gemSlots` à 0) · 5ᵉ slot verrouillé si
-         `enhanceLevel < 5`.
-      3. **Upgrade** — reforges non utilisés (`reforgeCount < maxReforges`) · pièces non max-enhance · 6★
-         non ascensionné (agréger pour éviter le bruit).
-      4. **Réduction de bruit Missing** — le flag est déjà correct (6 slots core, EE/Talisman exclus) mais
-         s'affiche sur tout perso incomplet ; le suppresser sur les persos peu équipés (seuil ~1 EE + 3 pièces).
-      **Lot secondaire** (confiance moyenne / refacto) : main off-scaling vs `meta.dmgStat` · pièce de
-      basse qualité équipée · « 4pc complet dispo en inventaire » / « effet d'arme manquant »
-      (*nécessite de passer l'inventaire complet à `computeAdvice`*).
+- [~] 🟡 **`Advices` (tab Builds)** — **lot prioritaire fait** : `computeAdvice` extrait dans le module pur
+      `lib/buildAdvice.ts` (testable standalone, +11 tests `buildAdvice.test.ts`), branché par `BuildsScreen`.
+      Nouvelles règles haute-confiance : **(4)** caps gaspillés `crc > 100` / `pen > 100` (waste arrondi, pas de
+      « 0 % ») — `dmgRed > 70` **non fait** (seuil à valider en jeu) ; **(5)** gems — slots vides sur Talisman/EE
+      (`gemSlots`, 5ᵉ slot gaté à +5) + tip « reach +5 » ; **(6)** upgrade agrégé — reforges non utilisés
+      (`maxReforgesOf` **importé du solver** `engine.ts`, pas de formule dupliquée) + 6★ non ascensionné.
+      Règles 4-6 ne tournent que sur un héros pleinement équipé (rule 1 early-return). **Reste** : (1) bruit
+      Missing sur persos peu équipés · pièces non max-enhance (cap +N ambigu, à valider) · lot secondaire
+      (main off-scaling vs `meta.dmgStat`, basse qualité, « 4pc dispo en inventaire » — nécessite l'inventaire complet).
 - [ ] 🟡 **Show/hide colonnes — accès clic-droit** — le menu « Columns » existe (`c8808d4`) ; ajouter
       l'ouverture via clic-droit sur les en-têtes de colonne.
 - [~] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** (wontfix assumé) — placeholder faux quand aucun build
@@ -130,6 +124,23 @@
 
 ## Livré
 
+### Session 2026-06-26 — Builds advice (lot prioritaire) + dedup reforge budget
+
+**`computeAdvice` extrait + enrichi** — sorti de `BuildsScreen` vers le module pur `lib/buildAdvice.ts`
+(testable standalone, mirror `subValue`/`dmgValue`), +11 tests `buildAdvice.test.ts`. Règles ajoutées :
+caps gaspillés (`crc`/`pen` > 100), gem slots vides sur Talisman/EE (+ tip « reach +5 »), upgrade agrégé
+(reforges non utilisés + 6★ non ascensionné). Le budget de reforge n'est plus dupliqué : `maxReforgesOf`
+**exporté depuis le solver** `engine.ts` (extrait de `simulateReforges`, comportement inchangé) et importé
+par l'advice. `ComposedEntry` satisfait structurellement `AdviceInput`.
+
+### Session 2026-06-26 — view-state session-scoped + optims Inventory
+
+**Reset des tris/filtres au lancement** — `useSessionState` (sessionStorage) ajouté à
+`hooks/usePersistedState.ts`. Inventory (tab/sort/dir/filters) + Builds (roster filters) session-scoped :
+stables au switch d'onglet, réinitialisés au lancement. `gs.builds.notes` reste durable.
+**Optims Inventory** — `contentVisibility:auto` retiré (résidu pré-virtualisation) + 7 `useMemo`
+d'availability fusionnés en une passe sur `scopedForStats`.
+
 ### Session 2026-06-26 — 🔴 exclusion de pièce par set (pré-filtrage du pool)
 
 **Pré-filtrage du pool armor par set requis + setting « Allow broken sets »** — quand les sets contraignent
@@ -144,13 +155,6 @@ restreint la whitelist aux sets *formables* (présents dans ≥2 slots armor) + 
 check leaf `allSetsComplete(setCount)` à la profondeur boots. Les slots verrouillés par **Keep current**
 sont exemptés de l'élagage. Rétro-compat presets (`allowBrokenSets ?? true`) + payloads worker. +13 tests
 `setPlans.test.ts` (`planSlots`, `armorSetWhitelist` 8 cas, `allSetsComplete` 4 cas).
-
-### Session 2026-06-26 — view-state session-scoped
-
-**Reset des tris/filtres au lancement** — `useSessionState` (sessionStorage) ajouté à
-`hooks/usePersistedState.ts` (impl partagée `useStorageState`). Inventory (tab/sort/dir/filters) +
-Builds (roster filters) sont désormais session-scoped : stables au switch d'onglet (les écrans
-remontent), réinitialisés au défaut au prochain lancement. `gs.builds.notes` reste durable.
 
 ### Session 2026-06-26 — onglet Home + panneau d'inspection partagé
 
