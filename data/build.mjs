@@ -961,7 +961,9 @@ save("characters.json", characters);
 // flat-vs-% choice) and remap to engine stat keys. Skipped silently if absent.
 const subTickDetail = loadOuterpedia("data/equipment/item-stats-detail.json");
 if (subTickDetail?.subStatPools) {
-  const STAT_KEY = { ATK: "atk", "ATK%": "atkPct", DEF: "def", "DEF%": "defPct", HP: "hp", "HP%": "hpPct" };
+  // Duals (flat+% — for the flat-vs-% panel) plus the offensive single-%
+  // stats CHC/CHD/DMG UP% (engine keys crc/chd/dmgUp — for the damage panel).
+  const STAT_KEY = { ATK: "atk", "ATK%": "atkPct", DEF: "def", "DEF%": "defPct", HP: "hp", "HP%": "hpPct", CHC: "crc", CHD: "chd", "DMG UP%": "dmgUp" };
   const TIER_STAR = { 105: "5", 106: "6" };
   const subTicks = {};
   for (const [tier, star] of Object.entries(TIER_STAR)) {

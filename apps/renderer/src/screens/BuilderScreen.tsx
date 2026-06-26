@@ -27,6 +27,7 @@ import { RichTooltip } from "../design/RichTooltip.js";
 import { SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toIconPiece, toUiPiece } from "../design/adapter.js";
 import { flatVsPctTick } from "../lib/subValue.js";
+import { dmgTickGains, type DmgTickCandidate } from "../lib/dmgValue.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
 import { resolveWorkerCount, SolverOrchestrator } from "../lib/solver/orchestrator.js";
@@ -76,6 +77,13 @@ interface SelectedComposition {
   /** Hero's no-gear base flat (base+evo+awak) for ATK/DEF/HP — what a %-sub
    *  tick scales against (gear-independent). Powers the flat-vs-% panel. */
   baseFlat: { atk: number; def: number; hp: number };
+  /** Hero's damage-scaling stat (ATK default; DEF/HP exceptions) + secondary
+   *  additive scalings — fed to `computeCheapRatings` for the dmg-per-tick panel. */
+  dmgStat: "atk" | "def" | "hp";
+  dmgSec?: Array<{ stat: "atk" | "def" | "hp"; ratio: number }>;
+  /** (1 + buffRate) amplifier on the dmg stat's gear contributions: a %dmg-stat
+   *  tick raises the final stat by `base × pct% × dmgAmp`. */
+  dmgAmp: number;
 }
 
 /** Hero display name aligned with the Builds tab: "Nickname Name" when the
@@ -844,7 +852,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const current = computeFinalStats(composed.noGearStats, composed.scaling, equippedPieces, game);
     const sumFlat = (s: { baseValue: number; evoValue: number; awakValue: number }) => s.baseValue + s.evoValue + s.awakValue;
     const baseFlat = { atk: sumFlat(composed.scaling.atk), def: sumFlat(composed.scaling.def), hp: sumFlat(composed.scaling.hp) };
-    return { current, baseFlat };
+    const dmgStat = meta.dmgStat ?? "atk";
+    const dmgAmp = 1 + (composed.scaling[dmgStat]?.buffPct ?? 0) / 100;
+    return { current, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp };
   }, [inventory, game, selected, userGeasLevels, userCodexLevel]);
 
   /** Selected hero's class (Striker / Mage / …). Null when no hero is picked
@@ -931,6 +941,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
             width="w-full"
           />
           <SubValuePanel baseFlat={composition?.baseFlat ?? null} subTicks={game?.subTicks} width="w-full" />
+          <DmgPerTickPanel comp={composition ?? null} subTicks={game?.subTicks} width="w-full" />
           <RightSidebar
             canSave={selectedBuild != null}
             canSavePreset={selectedUid != null}
@@ -1819,6 +1830,63 @@ function SubValuePanel({ baseFlat, subTicks, width = "w-full" }: {
             </span>
           </Fragment>
         ))}
+      </div>
+    </Panel>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Damage / tick — which offensive sub tick adds the most expected damage
+ * ───────────────────────────────────────────────────────────────────────── */
+const DMG_TICK_ICON: Record<string, { iconKey: string; label: string }> = {
+  atk: { iconKey: "atk", label: "ATK%" },
+  def: { iconKey: "def", label: "DEF%" },
+  hp: { iconKey: "hp", label: "HP%" },
+  crc: { iconKey: "critRate", label: "CHC" },
+  chd: { iconKey: "critDmg", label: "CHD" },
+  dmgUp: { iconKey: "dmgUp", label: "DMG UP%" },
+};
+
+/** Marginal expected-damage gain per 6★ offensive sub tick for the picked hero
+ *  (dmg stat % vs CHC vs CHD vs DMG UP), ranked, best in cyan. Reuses the
+ *  validated `computeCheapRatings` model — so e.g. a crit-capped hero correctly
+ *  shows ~0% for CHC. The dmg-stat %-tick raises the final stat by
+ *  base × pct% × (1+buffRate); CHC/CHD/DMG-UP are additive (+tick). */
+function DmgPerTickPanel({ comp, subTicks, width = "w-full" }: {
+  comp: SelectedComposition | null;
+  subTicks: GameData["subTicks"] | undefined;
+  width?: string;
+}) {
+  const tier = subTicks?.["6"];
+  if (!comp || !tier) return null;
+  const { current, baseFlat, dmgStat, dmgSec, dmgAmp } = comp;
+  const dmgPct = tier[`${dmgStat}Pct`];
+  const candidates: DmgTickCandidate[] = [];
+  if (dmgPct) candidates.push({ key: dmgStat, label: DMG_TICK_ICON[dmgStat]!.label, field: dmgStat, delta: (baseFlat[dmgStat] * dmgPct.step) / 100 * dmgAmp });
+  if (tier.crc) candidates.push({ key: "crc", label: "CHC", field: "crc", delta: tier.crc.step });
+  if (tier.chd) candidates.push({ key: "chd", label: "CHD", field: "chd", delta: tier.chd.step });
+  if (tier.dmgUp) candidates.push({ key: "dmgUp", label: "DMG UP%", field: "dmgUp", delta: tier.dmgUp.step });
+  const gains = dmgTickGains(current, dmgStat, dmgSec, candidates);
+  if (gains.length === 0) return null;
+  const bestKey = gains[0]!.gainPct > 0 ? gains[0]!.key : null;
+  return (
+    <Panel
+      title="Damage / tick"
+      hint="Expected-damage gain per 6★ offensive sub tick for this hero (in-game crit / DMG± / PEN model). Cyan = the most valuable offensive sub to roll. A CHC near 0% means the hero is already crit-capped."
+      width={width}
+    >
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">
+        {gains.map((g) => {
+          const icon = DMG_TICK_ICON[g.key]!;
+          const best = g.key === bestKey;
+          return (
+            <Fragment key={g.key}>
+              <StatIcon stat={icon.iconKey} size={12} />
+              <span className={best ? "text-cyan-300" : "text-white/55"}>{icon.label}</span>
+              <span className={cx("text-right", best ? "text-cyan-300" : "text-white/45")}>+{g.gainPct.toFixed(2)}%</span>
+            </Fragment>
+          );
+        })}
       </div>
     </Panel>
   );

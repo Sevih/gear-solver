@@ -487,10 +487,12 @@ fetch runtime côté renderer). Rafraîchies **au lancement** par `data-sync.ts`
 `build.mjs` lit ses dirs via env (`OUTERPEDIA_GAME_DIR` / `OUTERPEDIA_SYNC_DIR`
 / `OUTERPEDIA_DERIVED_DIR`) — défauts = `data/game` + `data/derived` + checkout.
 
-`sub-ticks.json` (dérivé) : valeurs par tick des subs ATK/DEF/HP flat+% par étoile
-(5★/6★), extraites de `subStatPools` (outerpedia `data/equipment/item-stats-detail.json`
-— les **subs**, à ne pas confondre avec les mains de `statRanges.json`). Alimente
-l'encadré Builder "Sub tick value" (rentabilité flat vs %, `lib/subValue.ts`).
+`sub-ticks.json` (dérivé) : valeurs par tick des subs par étoile (5★/6★) — ATK/DEF/HP
+flat+% **plus** CHC/CHD/DMG UP% — extraites de `subStatPools` (outerpedia
+`data/equipment/item-stats-detail.json` — les **subs**, à ne pas confondre avec les
+mains de `statRanges.json`). Alimente deux encadrés Builder : "Sub tick value"
+(rentabilité flat vs %, `lib/subValue.ts`) et "Damage / tick" (gain de dégâts marginal
+par sub offensif via `computeCheapRatings`, `lib/dmgValue.ts`).
 
 **Tables critiques pour la math** :
 - `CharacterTemplet.json` — base stats, skill blocks, class passive
@@ -532,8 +534,9 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/setPlans.test.ts`   | 13 tests — expansion des chips (`setPicksToPlans`), `planSetIds`, `planFeasible` (somme multi-cond), `setsFeasible` OR + leaf-validation à `remaining 0`, parité mono-plan req-4pc |
 | `apps/renderer/test/translateReco.test.ts` | 10 tests — reco→patch : mains (OR-union), effets (icônes required, null skip+warn), sets (combo→plan 1:1, combo non-résolu droppé entier), priorité substats (tiers→poids, collision de bucket, clé inconnue) |
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick` : verdict des deux côtés de la bascule, équivalent-flat exact, égalité pile à la bascule, garde tick %=0 |
+| `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains` : tri décroissant, monotonie delta→gain, CHC nul si crit-cap, base 0 → vide |
 
-Run : `npm test --workspaces --if-present`. **Total : 135 tests** (core 11 + renderer 124 : solver, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue).
+Run : `npm test --workspaces --if-present`. **Total : 139 tests** (core 11 + renderer 128 : solver, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue, +4 dmgValue).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 
