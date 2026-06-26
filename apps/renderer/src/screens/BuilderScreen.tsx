@@ -916,10 +916,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           <div
             className="flex shrink-0 gap-2"
-            // Fixed height at the chosen row count — the table keeps its size and
-            // it's the gear band below that yields (scrolls) when space is tight,
-            // not the table.
-            style={{ height: resultRows * RESULT_ROW_H + 46 }}
+            // Fixed height at the chosen row count (capped at 15 — the table is
+            // virtualized and scrolls for the rest), so it keeps its size and the
+            // gear band below yields (scrolls) when space is tight, not the table.
+            style={{ height: Math.min(resultRows, 15) * RESULT_ROW_H + 46 }}
           >
             <ResultsTable
               builds={displayedResults}
@@ -3004,9 +3004,9 @@ function ResultsTable({
             <input
               type="range"
               min={5}
-              max={30}
+              max={15}
               step={1}
-              value={rows}
+              value={Math.min(rows, 15)}
               onChange={(e) => onRowsChange(Number(e.target.value))}
               className="w-20 accent-cyan-400"
             />
