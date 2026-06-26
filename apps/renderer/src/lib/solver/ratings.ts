@@ -75,7 +75,7 @@ const DR_FLOOR = 0.3;
 export function computeCheapRatings(
   s: FinalStats,
   dmgStat: "atk" | "def" | "hp" = "atk",
-  dmgSec?: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd"; ratio: number }>,
+  dmgSec?: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd" | "eff" | "crc"; ratio: number }>,
 ): CheapRatings {
   const hps = s.hp * s.spd;
   // EHP — combines DEF mitigation with the defender's DMGReduceRate
@@ -110,7 +110,7 @@ export function computeCheapRatings(
   let dmgBase = dmgStat === "def" ? s.def : dmgStat === "hp" ? s.hp : s.atk;
   if (dmgSec) {
     for (const { stat, ratio } of dmgSec) {
-      dmgBase += (stat === "def" ? s.def : stat === "hp" ? s.hp : stat === "spd" ? s.spd : s.atk) * ratio;
+      dmgBase += (stat === "def" ? s.def : stat === "hp" ? s.hp : stat === "spd" ? s.spd : stat === "eff" ? s.eff : stat === "crc" ? s.crc : s.atk) * ratio;
     }
   }
   const dmg = dmgBase * drFactor * penMult;

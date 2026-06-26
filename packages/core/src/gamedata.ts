@@ -331,10 +331,14 @@ export interface CharacterDef {
   dmgStat?: "def" | "hp";
   /** Additive secondary damage scalings — the damage base gains `stat × ratio`
    *  for each (e.g. D.Stella → [{stat:"hp", ratio:0.03}], Ryu Lion →
-   *  [{stat:"spd", ratio:2.5}]). Unlike the main swap, these DO shift ranking
-   *  (they value a second stat). atk/def/hp/spd modeled. From outerpedia's
-   *  `scaling_add_*` buffs (permille → ratio). */
-  dmgSec?: Array<{ stat: "atk" | "def" | "hp" | "spd"; ratio: number }>;
+   *  [{stat:"spd", ratio:2.5}], K.Tamamo → [{stat:"eff", ratio:1.2}]). Unlike the
+   *  main swap, these DO shift ranking (they value a second stat).
+   *  atk/def/hp/spd/eff/crc modeled. From outerpedia's `scaling_add_*` buffs. */
+  dmgSec?: Array<{ stat: "atk" | "def" | "hp" | "spd" | "eff" | "crc"; ratio: number }>;
+  /** True when the hero's passive permanently zeroes crit (`crit_rate -100
+   *  always` — Rhona / K.Tamamo / G.Nella): they can never crit, so CHD is dead
+   *  and the dmg model must NOT assume the crit cap. */
+  noCrit?: boolean;
   /** Null only if calc-stats couldn't find a row (defensive fallback). */
   ingredients: CharacterIngredients | null;
 }

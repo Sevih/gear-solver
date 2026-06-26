@@ -117,7 +117,7 @@ export interface PrecomputedSolveContext {
   dmgStat: "atk" | "def" | "hp";
   /** Additive secondary damage scalings (stat × ratio) — undefined for the
    *  pure-single-stat majority. Constant per solve. */
-  dmgSec?: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd"; ratio: number }>;
+  dmgSec?: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd" | "eff" | "crc"; ratio: number }>;
   /** Set requirements as an OR-list of AND-plans. Used for branch-and-prune
    *  in the armor cartesian (feasible = at least one plan still reachable). */
   setPlans: SetPlan[];

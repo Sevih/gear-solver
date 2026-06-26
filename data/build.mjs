@@ -896,25 +896,31 @@ save("codex-curve.json", ingredientsResult.codexByLevel);
 //   - `scaling_add_*`      → an additive secondary component (D.Stella + HP×3%).
 // We emit `dmgStat` (the swapped MAIN, only when non-ATK — its ratio is a
 // constant that doesn't change same-hero ranking) and `dmgSec` (secondaries
-// with their ratio, which DO shift ranking). SPEED is a real damage scaling for
-// the SPD-attackers (Ryu Lion etc. — `scaling_add_flat ST_SPEED`), so it's kept
-// as a secondary; the engine adds `spd × ratio` to the damage base. (`gold` /
-// `buff-chance` scaling_add stay excluded — they're not in SCALING_STAT_TO_KEY.)
-const SCALING_STAT_TO_KEY = { ST_ATTACK: "atk", ST_DEF: "def", ST_HP: "hp", ST_SPEED: "spd" };
-const DMG_SEC_STATS = new Set(["atk", "def", "hp", "spd"]);
+// with their ratio, which DO shift ranking). Damage-scaling stats are kept as
+// secondaries (engine adds `stat × ratio` to the damage base): ATK/DEF/HP, SPD
+// (Ryu Lion etc.), EFF (ST_BUFF_CHANCE) and CHC (ST_CRITICAL_RATE) for the few
+// heroes that scale on those. Excluded: `ST_GET_GOLD_RATE` (gold, not damage),
+// and `scaling_target_stat` (scales on the TARGET's stat — a different mechanic).
+// Also emit `noCrit` for heroes whose passive permanently zeroes crit
+// (`crit_rate -100 always` — Rhona, K.Tamamo, G.Nella) so CHD/crit-cap don't apply.
+const SCALING_STAT_TO_KEY = { ST_ATTACK: "atk", ST_DEF: "def", ST_HP: "hp", ST_SPEED: "spd", ST_BUFF_CHANCE: "eff", ST_CRITICAL_RATE: "crc" };
+const DMG_SEC_STATS = new Set(["atk", "def", "hp", "spd", "eff", "crc"]);
 function readDmgScaling(charId) {
   const f = resolveOuterpediaPath(`public/damage-calc/buffs/${charId}.json`);
   if (!f) return {};
   try {
     const buffs = JSON.parse(readFileSync(f, "utf-8"))?.buffs ?? [];
     let dmgStat = null;
+    let noCrit = false;
     const secMax = new Map(); // stat -> max ratio (S1/S2/S3 repeat the same scaling)
     for (const b of buffs) {
       const e = b?.effect;
+      // Permanent crit-disable passive (e.g. Rhona) — the hero can never crit.
+      if (e?.target === "crit_rate" && Number(e.amount) <= -100 && b?.trigger?.requires === "always") noCrit = true;
       const key = e && SCALING_STAT_TO_KEY[e.statRef];
       if (!key) continue;
       if (e.target === "scaling_swap") {
-        if (key === "def" || key === "hp") dmgStat = key; // main only swaps to DEF/HP (never ATK/SPD)
+        if (key === "def" || key === "hp") dmgStat = key; // main only swaps to DEF/HP
       } else if (e.target === "scaling_add_pct" || e.target === "scaling_add_flat") {
         if (!DMG_SEC_STATS.has(key)) continue;
         const ratio = Number(e.amount) / 1000;
@@ -922,7 +928,7 @@ function readDmgScaling(charId) {
       }
     }
     const dmgSec = secMax.size > 0 ? [...secMax].map(([stat, ratio]) => ({ stat, ratio })) : null;
-    return { dmgStat, dmgSec };
+    return { dmgStat, dmgSec, noCrit };
   } catch {
     return {};
   }
@@ -940,7 +946,7 @@ for (const c of load("CharacterTemplet.json")) {
   // a literal "Core Fusion" prefix — their in-game NickName text (e.g.
   // "Eye of the Snowy Mountains") is flavor, not the variant identifier.
   const nickname = showNickName.has(c.ID) ? (textChar.get(c.NickNameID) ?? null) : null;
-  const { dmgStat, dmgSec } = readDmgScaling(c.ID);
+  const { dmgStat, dmgSec, noCrit } = readDmgScaling(c.ID);
   characters[c.ID] = {
     name: textChar.get(c.NameID) ?? null,
     nickname,
@@ -951,6 +957,7 @@ for (const c of load("CharacterTemplet.json")) {
     recommendSetId: c.RecommandSetOptionID && c.RecommandSetOptionID !== "0" ? c.RecommandSetOptionID : null,
     ...(dmgStat ? { dmgStat } : {}),
     ...(dmgSec ? { dmgSec } : {}),
+    ...(noCrit ? { noCrit: true } : {}),
   };
 }
 save("characters.json", characters);
