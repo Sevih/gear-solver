@@ -2799,21 +2799,24 @@ function EffectBadge({ state }: { state: ChipState }) {
  *  stat filter is force-shown (locked) so you can't hide what you're filtering
  *  on. Preferences persist via the parent's `colPrefs`. */
 function ColumnsMenu({
-  statFilters, colPrefs, onToggle, onReset,
+  statFilters, colPrefs, onToggle, onReset, open, onOpenChange,
 }: {
   statFilters: Record<string, MinMax>;
   colPrefs: Record<string, boolean>;
   onToggle: (key: string, def: boolean) => void;
   onReset: () => void;
+  /** Controlled open state — lifted to the table so a right-click on any
+   *  column header (not just the toolbar button) can open the menu. */
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
+  const ref = useClickOutside<HTMLDivElement>(open, () => onOpenChange(false));
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onOpenChange(false); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, onOpenChange]);
   const items: Array<{ key: string; label: string; iconKey: string | null; def: boolean; forced: boolean }> = [
     { key: "wpn", label: "Weapon effect", iconKey: null, def: true, forced: false },
     { key: "acc", label: "Accessory effect", iconKey: null, def: true, forced: false },
@@ -2829,8 +2832,9 @@ function ColumnsMenu({
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => onOpenChange(!open)}
         aria-expanded={open}
+        title="Show / hide columns — also opens on right-click of any column header."
         className="flex items-center gap-1 rounded border border-white/10 bg-white/4 px-2 py-0.5 text-[9.5px] uppercase tracking-wider text-white/60 hover:text-white"
       >
         columns <span className="text-[8px]">{open ? "▲" : "▼"}</span>
@@ -2963,6 +2967,9 @@ function ResultsTable({
   // stat with an active filter band is force-shown regardless so you never
   // filter on a hidden column. The "Columns" menu in the header toggles these.
   const [colPrefs, setColPrefs] = usePersistedState<Record<string, boolean>>("gs.builder.cols", {});
+  // Columns menu open state lifted here so a right-click on any column header
+  // opens the same menu the toolbar "columns" button does.
+  const [colsMenuOpen, setColsMenuOpen] = useState(false);
   const statCols = useMemo(
     () => SOLVER_STATS.filter((s, i) => {
       const b = statFilters[s.key];
@@ -3068,6 +3075,8 @@ function ResultsTable({
             colPrefs={colPrefs}
             onToggle={(key, def) => setColPrefs((p) => ({ ...p, [key]: !(p[key] ?? def) }))}
             onReset={() => setColPrefs({})}
+            open={colsMenuOpen}
+            onOpenChange={setColsMenuOpen}
           />
           <Pill tone={error ? "rose" : "emerald"}>{builds.length} builds</Pill>
         </div>
@@ -3078,7 +3087,11 @@ function ResultsTable({
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse font-mono text-[10.5px] tabular-nums">
           <thead className="sticky top-0 z-10 bg-bg-elev-1 text-white/70 [&_th]:bg-bg-elev-1">
-            <tr className="border-b border-white/8">
+            <tr
+              className="border-b border-white/8"
+              onContextMenu={(e) => { e.preventDefault(); setColsMenuOpen(true); }}
+              title="Right-click to show / hide columns"
+            >
               <th className="px-1.5 py-1 text-left text-[9.5px] font-semibold uppercase tracking-wider">sets</th>
               {showWpn && <th className="px-1.5 py-1 text-left text-[9.5px] font-semibold uppercase tracking-wider" title="Weapon effect">wpn</th>}
               {showAcc && <th className="px-1.5 py-1 text-left text-[9.5px] font-semibold uppercase tracking-wider" title="Accessory effect">acc</th>}

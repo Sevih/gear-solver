@@ -57,8 +57,11 @@
       Règles 4-6 ne tournent que sur un héros pleinement équipé (rule 1 early-return). **Reste** : (1) bruit
       Missing sur persos peu équipés · pièces non max-enhance (cap +N ambigu, à valider) · lot secondaire
       (main off-scaling vs `meta.dmgStat`, basse qualité, « 4pc dispo en inventaire » — nécessite l'inventaire complet).
-- [ ] 🟡 **Show/hide colonnes — accès clic-droit** — le menu « Columns » existe (`c8808d4`) ; ajouter
-      l'ouverture via clic-droit sur les en-têtes de colonne.
+- [x] 🟡 **Show/hide colonnes — accès clic-droit** — ~~le menu « Columns » existe (`c8808d4`) ; ajouter
+      l'ouverture via clic-droit sur les en-têtes de colonne.~~ Fait : état `open` de `ColumnsMenu` remonté
+      dans `ResultsTable` (contrôlé via `open`/`onOpenChange`) ; `onContextMenu` sur le `<tr>` d'en-tête
+      `preventDefault()` + ouvre le menu. Le `useClickOutside` (mousedown, attaché seulement quand ouvert)
+      ne ferme pas au clic-droit. Hints ajoutés (bouton + en-tête).
 - [~] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** (wontfix assumé) — placeholder faux quand aucun build
       n'est sélectionné (l'accessoire a un main user-sélectionnable), mais **laissé volontairement** pour
       ne pas diverger du panneau Inventory qui partage la map. À ne reprendre que si les deux maps divergent.

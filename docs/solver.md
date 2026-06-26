@@ -259,8 +259,10 @@ Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le hé
 Heatmap rouge-vert par colonne (min/max relatifs au result set actuel). Colonnes :
 sets, 8 stats principales, ratings (`TABLE_RATINGS`), **Score**, **Upg**, actions
 (`Upg` = nb de slots différant du loadout actuel, triable + filtrable). Tri par clic
-sur l'en-tête (null → desc → asc → null). Click sur une ligne → la `BottomGearBand`
-affiche les 8 pièces. État `solving…` / erreur / **état vide explicite** (un `emptyReason`
+sur l'en-tête (null → desc → asc → null). Menu **Columns** (show/hide colonnes, persisté
+`gs.builder.cols`) ouvrable par le bouton de la toolbar **ou par clic-droit sur n'importe
+quel en-tête** (`ColumnsMenu` contrôlé, `onContextMenu` sur le `<tr>` d'en-tête). Click sur
+une ligne → la `BottomGearBand` affiche les 8 pièces. État `solving…` / erreur / **état vide explicite** (un `emptyReason`
 dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres).
 
 ### BottomGearBand
