@@ -954,6 +954,29 @@ for (const c of load("CharacterTemplet.json")) {
 }
 save("characters.json", characters);
 
+// ── Substat tick values (flat-vs-% rentability, Builder info panel) ──────────
+// Source: outerpedia's pre-parsed `subStatPools` (data/equipment/item-stats-detail.json),
+// keyed by gear-star tier ("105" = 5★, "106" = 6★); `step` is the per-tick value,
+// `max` = step × 6. We keep only the ATK/DEF/HP flat+% duals (the only stats with a
+// flat-vs-% choice) and remap to engine stat keys. Skipped silently if absent.
+const subTickDetail = loadOuterpedia("data/equipment/item-stats-detail.json");
+if (subTickDetail?.subStatPools) {
+  const STAT_KEY = { ATK: "atk", "ATK%": "atkPct", DEF: "def", "DEF%": "defPct", HP: "hp", "HP%": "hpPct" };
+  const TIER_STAR = { 105: "5", 106: "6" };
+  const subTicks = {};
+  for (const [tier, star] of Object.entries(TIER_STAR)) {
+    const pool = subTickDetail.subStatPools[tier]?.pool;
+    if (!Array.isArray(pool)) continue;
+    const row = {};
+    for (const p of pool) {
+      const key = STAT_KEY[p.key];
+      if (key) row[key] = { step: p.step, percent: !!p.percent };
+    }
+    if (Object.keys(row).length) subTicks[star] = row;
+  }
+  if (Object.keys(subTicks).length) save("sub-ticks.json", subTicks);
+}
+
 console.log(
   `derived: options=${Object.keys(options).length} equipment=${Object.keys(equipment).length} ` +
     `sets=${Object.keys(sets).length} characters=${Object.keys(characters).length} ` +

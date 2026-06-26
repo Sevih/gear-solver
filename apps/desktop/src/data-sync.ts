@@ -40,7 +40,7 @@ const GAME_FILES = [
 /** Outerpedia-only build inputs (read by build.mjs's loadOuterpedia), mirrored
  *  under `syncDir` at their repo-relative paths so build.mjs finds them. */
 const JSON2_EXTRAS = ["TextSkill.json", "CharacterExtraTemplet.json"];
-const EQUIPMENT_FILES = ["weapon.json", "accessory.json", "talisman.json", "ee.json", "sets.json"];
+const EQUIPMENT_FILES = ["weapon.json", "accessory.json", "talisman.json", "ee.json", "sets.json", "item-stats-detail.json"];
 
 /** Locate the outerpedia `data/admin/json2` dir (the raw datamine) in a local
  *  checkout, if any. `OUTERPEDIA_PATH` env wins. Absent on a user's machine →

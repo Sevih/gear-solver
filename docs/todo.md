@@ -56,10 +56,12 @@
       `react-virtual`) · 7 `useMemo` d'availability fusionnables en une passe.
 
 ### 🟢 Features
-- [ ] 🟢 **Rentabilité % vs Flat (subs)** — pour ATK / DEF / HP il existe une version flat et une version %.
-      Une fois un héros choisi, afficher (dans le cadre info current → projected + library de la tab Builder)
-      combien un tick de sub rapporte en flat **et** en % pour ce héros, afin d'indiquer s'il est plus
-      rentable de chercher du flat ou du % sur les subs.
+- [x] 🟢 **Rentabilité % vs Flat (subs)** — encadré **"Sub tick value"** dans le Builder (entre current→projected
+      et la library) : par héros, la valeur d'un tick de sub 6★ en flat ET en % (≈ équivalent flat), gagnant en
+      cyan. Math : un tick % scale sur `base+evo+awak` (gear-indépendant — le flat gear est ajouté après le ×% ;
+      le `(1+buffRate)` s'annule) → verdict = fonction de la base seule. Valeurs par tick = `subStatPools`
+      d'outerpedia (`item-stats-detail.json`) → dérivé `sub-ticks.json` ; logique pure `lib/subValue.ts` (+5 tests).
+      6★ : ATK 40/4% · DEF 40/4% · HP 73/3% (bascule vers % au-dessus de base 1000 / 1000 / 2433).
 
 ### À vérifier EN JEU
 - [ ] **Cap de Quality ne scale pas avec les étoiles** — `computeQuality` fixe `max = 14 + reforge.n`

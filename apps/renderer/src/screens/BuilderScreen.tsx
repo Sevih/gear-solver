@@ -14,7 +14,7 @@
  * Every input is visual placeholder — state lives only where needed to
  * demonstrate behavior (hero combobox open/close, picker selection).
  */
-import { memo, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, expToLevel, resolveStat } from "@gear-solver/core";
@@ -26,6 +26,7 @@ import { GameText } from "../design/GameText.js";
 import { RichTooltip } from "../design/RichTooltip.js";
 import { SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toIconPiece, toUiPiece } from "../design/adapter.js";
+import { flatVsPctTick } from "../lib/subValue.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
 import { resolveWorkerCount, SolverOrchestrator } from "../lib/solver/orchestrator.js";
@@ -72,6 +73,9 @@ interface BuilderScreenProps {
  *  or the composer lacked the ingredients to run. */
 interface SelectedComposition {
   current: FinalStats;
+  /** Hero's no-gear base flat (base+evo+awak) for ATK/DEF/HP — what a %-sub
+   *  tick scales against (gear-independent). Powers the flat-vs-% panel. */
+  baseFlat: { atk: number; def: number; hp: number };
 }
 
 /** Hero display name aligned with the Builds tab: "Nickname Name" when the
@@ -838,7 +842,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     });
     const equippedPieces = inventory.gear.filter((g) => g.equippedBy === selected.uid);
     const current = computeFinalStats(composed.noGearStats, composed.scaling, equippedPieces, game);
-    return { current };
+    const sumFlat = (s: { baseValue: number; evoValue: number; awakValue: number }) => s.baseValue + s.evoValue + s.awakValue;
+    const baseFlat = { atk: sumFlat(composed.scaling.atk), def: sumFlat(composed.scaling.def), hp: sumFlat(composed.scaling.hp) };
+    return { current, baseFlat };
   }, [inventory, game, selected, userGeasLevels, userCodexLevel]);
 
   /** Selected hero's class (Striker / Mage / …). Null when no hero is picked
@@ -924,6 +930,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
             projected={selectedBuild?.finalStats ?? null}
             width="w-full"
           />
+          <SubValuePanel baseFlat={composition?.baseFlat ?? null} subTicks={game?.subTicks} width="w-full" />
           <RightSidebar
             canSave={selectedBuild != null}
             canSavePreset={selectedUid != null}
@@ -1760,6 +1767,60 @@ function StatsPanelRow({
         {proj != null ? `${proj}${stat.unit}` : "—"}
       </span>
     </>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Sub tick value — flat vs % rentability for ATK / DEF / HP
+ * ───────────────────────────────────────────────────────────────────────── */
+const SUB_VALUE_STATS = [
+  { key: "atk", pctKey: "atkPct", label: "ATK" },
+  { key: "def", pctKey: "defPct", label: "DEF" },
+  { key: "hp", pctKey: "hpPct", label: "HP" },
+] as const;
+
+/** Per-tick flat-vs-% sub value for the picked hero. A %-tick scales with the
+ *  hero's no-gear base (base+evo+awak), a flat tick is constant — so which is
+ *  worth more depends only on the hero. Reference = 6★ substats. Hidden until a
+ *  hero is picked and the sub-tick table is present. */
+function SubValuePanel({ baseFlat, subTicks, width = "w-full" }: {
+  baseFlat: { atk: number; def: number; hp: number } | null;
+  subTicks: GameData["subTicks"] | undefined;
+  width?: string;
+}) {
+  const tier = subTicks?.["6"];
+  if (!baseFlat || !tier) return null;
+  const rows = SUB_VALUE_STATS.map((s) => {
+    const flat = tier[s.key];
+    const pct = tier[s.pctKey];
+    if (!flat || !pct) return null;
+    const base = baseFlat[s.key];
+    return { key: s.key, label: s.label, cmp: flatVsPctTick(base, flat.step, pct.step) };
+  }).filter((r): r is NonNullable<typeof r> => r != null);
+  if (rows.length === 0) return null;
+  return (
+    <Panel
+      title="Sub tick value"
+      hint="Per 6★ substat tick: flat vs %. A %-tick scales with the hero's base (base+evo+awak); flat is fixed. The cyan side is the more valuable sub to roll for this hero — % overtakes flat above the breakeven base shown."
+      width={width}
+    >
+      <div className="grid grid-cols-[auto_1fr_1.4fr] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">
+        <span />
+        <span className="text-right text-[8.5px] uppercase tracking-wider text-white/40">flat</span>
+        <span className="text-right text-[8.5px] uppercase tracking-wider text-white/40">% (≈ flat)</span>
+        {rows.map((r) => (
+          <Fragment key={r.key}>
+            <StatIcon stat={r.key} size={12} />
+            <span className={cx("text-right", r.cmp.winner === "flat" ? "text-cyan-300" : "text-white/45")}>
+              +{r.cmp.flatTick}
+            </span>
+            <span className={cx("text-right", r.cmp.winner === "pct" ? "text-cyan-300" : "text-white/45")}>
+              +{r.cmp.pctTick}% <span className="text-white/30">≈{Math.round(r.cmp.pctFlatEquiv)}</span>
+            </span>
+          </Fragment>
+        ))}
+      </div>
+    </Panel>
   );
 }
 

@@ -422,7 +422,16 @@ export interface GameData {
   archiveBonus: ArchiveBonusCurve;
   trustCharacter: TrustExpCurve;
   trustBuffs: TrustBuffTable;
+  /** Per-tick substat values by gear star (keys "5"/"6"), for the flat-vs-%
+   *  rentability panel. Only the ATK/DEF/HP flat+% duals. Possibly empty when
+   *  the source table wasn't synced. */
+  subTicks: SubTickTable;
 }
+
+/** `{ "<star>": { "<engine stat key>": { step, percent } } }` — `step` is the
+ *  per-tick value, `percent` whether it's a %-stat (value already in display
+ *  units, e.g. 4 = 4%). Derived from outerpedia's `subStatPools`. */
+export type SubTickTable = Record<string, Record<string, { step: number; percent: boolean }>>;
 
 /** Resolve a character's cumulative XP to a level using the ExpCharacterTemplet
  *  curve. Returns `lv1` for any sub-threshold XP and clamps to the max level. */

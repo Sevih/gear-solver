@@ -487,6 +487,11 @@ fetch runtime côté renderer). Rafraîchies **au lancement** par `data-sync.ts`
 `build.mjs` lit ses dirs via env (`OUTERPEDIA_GAME_DIR` / `OUTERPEDIA_SYNC_DIR`
 / `OUTERPEDIA_DERIVED_DIR`) — défauts = `data/game` + `data/derived` + checkout.
 
+`sub-ticks.json` (dérivé) : valeurs par tick des subs ATK/DEF/HP flat+% par étoile
+(5★/6★), extraites de `subStatPools` (outerpedia `data/equipment/item-stats-detail.json`
+— les **subs**, à ne pas confondre avec les mains de `statRanges.json`). Alimente
+l'encadré Builder "Sub tick value" (rentabilité flat vs %, `lib/subValue.ts`).
+
 **Tables critiques pour la math** :
 - `CharacterTemplet.json` — base stats, skill blocks, class passive
 - `CharacterEvolutionStatTemplet.json` — evolution rows
@@ -526,8 +531,9 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidélité, maps vides), import merge (dédup par `id`, collision garde l'existant), replace (overwrite), validation du bundle (kind/version/maps) |
 | `apps/renderer/test/setPlans.test.ts`   | 13 tests — expansion des chips (`setPicksToPlans`), `planSetIds`, `planFeasible` (somme multi-cond), `setsFeasible` OR + leaf-validation à `remaining 0`, parité mono-plan req-4pc |
 | `apps/renderer/test/translateReco.test.ts` | 10 tests — reco→patch : mains (OR-union), effets (icônes required, null skip+warn), sets (combo→plan 1:1, combo non-résolu droppé entier), priorité substats (tiers→poids, collision de bucket, clé inconnue) |
+| `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick` : verdict des deux côtés de la bascule, équivalent-flat exact, égalité pile à la bascule, garde tick %=0 |
 
-Run : `npm test --workspaces --if-present`. **Total : 109 tests** (7 parse + 64 solver + 7 gemsCapped + 8 transfer + 13 setPlans + 10 translateReco).
+Run : `npm test --workspaces --if-present`. **Total : 135 tests** (core 11 + renderer 124 : solver, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 

@@ -42,6 +42,7 @@ const game: GameData = {
   archiveBonus: [],
   trustCharacter: [],
   trustBuffs: [],
+  subTicks: {},
   buffs: {
     // Lv 1..11 = enhanceLevel 0..10. v=120 at Lv11 → DMG_BOOST OAT_ADD → percent ÷10 = 12%.
     "BID_ITEM_STAT_OOPARTS_DMG_6": [
