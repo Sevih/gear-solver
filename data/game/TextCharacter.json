@@ -3920,6 +3920,38 @@
     "China_Traditional": "差不多…要來破壞慶功宴了吧？"
   },
   {
+    "ID": "2000116_Name",
+    "Korean": "아나키",
+    "English": "Anarky",
+    "Japanese": "アナーキ",
+    "China_Simplified": "阿娜奇",
+    "China_Traditional": "阿娜奇"
+  },
+  {
+    "ID": "2000116_NickName",
+    "Korean": "뒷골목의 다빈치",
+    "English": "Back-alley Da Vinci",
+    "Japanese": "路地裏のダ・ヴィンチ",
+    "China_Simplified": "后巷的达芬奇",
+    "China_Traditional": "後巷的達芬奇"
+  },
+  {
+    "ID": "2000116_First_Meet",
+    "Korean": "스트릿 아트의 뉴 패러다임, 아나키 님의 등장이시다!\\n이곳에서도 멋드러진 자유를 선보일테니 기대하라고, 대장!",
+    "English": "A new paradigm in street art has arrived — presenting the one and only Anarky! \\nExpect nothing less than jaw-dropping freedom on display here too, Boss!",
+    "Japanese": "ストリートアートのニューパラダイム、\\nアナーキ様の登場だ！ \\n自由を見せてやるから、期待しとけよ、大将！",
+    "China_Simplified": "街头艺术的新风范，阿娜奇大人驾到！\\n本大人要在这里展现超凡自由，\\n瞧好吧，老大！ ",
+    "China_Traditional": "街頭藝術的新典範，阿娜奇大人登場啦！\\n在這裡我也會展現帥氣十足的自由，\\n好好期待吧，老大！ "
+  },
+  {
+    "ID": "2000116_Gacha_Comment",
+    "Korean": "세상이여! 내 외침을 들어!",
+    "English": "World! Hear my cry!",
+    "Japanese": "世界よ！ オレノサケビヲキケ！",
+    "China_Simplified": "世界啊！听我呐喊！",
+    "China_Traditional": "世界啊！聽聽我的吶喊吧！"
+  },
+  {
     "ID": "2000117_Name",
     "Korean": "에리스",
     "English": "Eris",
@@ -6904,6 +6936,30 @@
     "China_Traditional": "CV. 伊瀨茉莉也"
   },
   {
+    "ID": "2000116_CVName_kr",
+    "Korean": "CV. 채림",
+    "English": "VA. Chae Rim",
+    "Japanese": "CV. チェリム",
+    "China_Simplified": "CV. 綵玪",
+    "China_Traditional": "CV. 綵玪"
+  },
+  {
+    "ID": "2000116_CVName_en",
+    "Korean": "CV. Jackie Lastra",
+    "English": "VA. Jackie Lastra",
+    "Japanese": "CV. Jackie Lastra",
+    "China_Simplified": "CV. Jackie Lastra",
+    "China_Traditional": "CV. Jackie Lastra"
+  },
+  {
+    "ID": "2000116_CVName_jp",
+    "Korean": "CV. 하나이 미하루",
+    "English": "VA. Miharu Hanai",
+    "Japanese": "CV. 花井美春",
+    "China_Simplified": "CV. 花井美春",
+    "China_Traditional": "CV. 花井美春"
+  },
+  {
     "ID": "2000117_CVName_kr",
     "Korean": "CV. 이은조",
     "English": "VA. Lee Eun-jo",
@@ -6950,54 +7006,6 @@
     "Japanese": "CV. 久保ユリカ",
     "China_Simplified": "CV. 久保由利香",
     "China_Traditional": "CV. 久保由利香"
-  },
-  {
-    "ID": "2700037_CVName_kr",
-    "Korean": "CV. 곽규미",
-    "English": "VA. Gwak Gyu-mi",
-    "Japanese": "CV. クァク・キュミ",
-    "China_Simplified": "CV. 郭奎媄",
-    "China_Traditional": "CV. 郭奎媄"
-  },
-  {
-    "ID": "2700037_CVName_jp",
-    "Korean": "CV. 사토 리나",
-    "English": "VA. Rina Sato",
-    "Japanese": "CV. 佐藤利奈",
-    "China_Simplified": "CV. 佐藤利奈",
-    "China_Traditional": "CV. 佐藤利奈"
-  },
-  {
-    "ID": "2700037_CVName_en",
-    "Korean": "CV. Shelby Young ",
-    "English": "VA. Shelby Young ",
-    "Japanese": "CV. Shelby Young",
-    "China_Simplified": "CV. Shelby Young ",
-    "China_Traditional": "CV. Shelby Young "
-  },
-  {
-    "ID": "2700043_CVName_kr",
-    "Korean": "CV. 장미",
-    "English": "VA. Jang Mi",
-    "Japanese": "CV. ジャン・ミ",
-    "China_Simplified": "CV. 张美",
-    "China_Traditional": "CV. 張美"
-  },
-  {
-    "ID": "2700043_CVName_jp",
-    "Korean": "CV. 이와미 마나카",
-    "English": "VA. Manaka Iwami",
-    "Japanese": "CV. 石見舞菜香",
-    "China_Simplified": "CV. 石见舞菜香",
-    "China_Traditional": "CV. 石見舞菜香"
-  },
-  {
-    "ID": "2700043_CVName_en",
-    "Korean": "CV. Jeannie Tirado",
-    "English": "VA. Jeannie Tirado",
-    "Japanese": "CV. Jeannie Tirado",
-    "China_Simplified": "CV. Jeannie Tirado",
-    "China_Traditional": "CV. Jeannie Tirado"
   },
   {
     "ID": "4000005_Name",
@@ -14048,6 +14056,22 @@
     "China_Traditional": "草莓巧克力球殭屍"
   },
   {
+    "ID": "3100189_Name",
+    "Korean": "관리인",
+    "English": "Caretaker",
+    "Japanese": "管理人",
+    "China_Simplified": "管理员",
+    "China_Traditional": "管理員"
+  },
+  {
+    "ID": "3100190_Name",
+    "Korean": "마을 이장",
+    "English": "Village Chief",
+    "Japanese": "村長",
+    "China_Simplified": "村长",
+    "China_Traditional": "村長"
+  },
+  {
     "ID": "3100191_Name",
     "Korean": "학생",
     "English": "Student",
@@ -14257,27 +14281,27 @@
   },
   {
     "ID": "2030071_Name",
-    "Korean": "풍양의 날 카논",
-    "English": "Bountiful Day Kanon",
-    "Japanese": "豊穣の日・カノン",
-    "China_Simplified": "丰饶之日·卡農",
-    "China_Traditional": "豐饒之日·卡農"
+    "Korean": "고고카레 카논",
+    "English": "Go-Go Curry Kanon",
+    "Japanese": "ゴーゴーカレー・カノン",
+    "China_Simplified": "咖喱加油·卡農",
+    "China_Traditional": "咖哩加油·卡農"
   },
   {
     "ID": "2030060_Name",
-    "Korean": "풍양의 날 타마라",
-    "English": "Bountiful Day Tamara",
-    "Japanese": "豊穣の日・タマラ",
-    "China_Simplified": "丰饶之日·塔玛拉",
-    "China_Traditional": "豐饒之日·塔瑪拉"
+    "Korean": "고고카레 타마라",
+    "English": "Go-Go Curry Tamara",
+    "Japanese": "ゴーゴーカレー・タマラ",
+    "China_Simplified": "咖喱加油·塔玛拉",
+    "China_Traditional": "咖哩加油·塔瑪拉"
   },
   {
     "ID": "2020087_Name",
-    "Korean": "풍양의 날 레이",
-    "English": "Bountiful Day Rey",
-    "Japanese": "豊穣の日・レイ",
-    "China_Simplified": "丰饶之日·蕾伊",
-    "China_Traditional": "豐饒之日·蕾伊"
+    "Korean": "고고카레 레이",
+    "English": "Go-Go Curry Rey",
+    "Japanese": "ゴーゴーカレー・レイ",
+    "China_Simplified": "咖喱加油·蕾伊",
+    "China_Traditional": "咖哩加油·蕾伊"
   },
   {
     "ID": "2020117_Name",
@@ -14334,5 +14358,13 @@
     "Japanese": "SDミッドナイトラッシュ・スカディ",
     "China_Simplified": "SD午夜突袭·斯卡蒂",
     "China_Traditional": "SD午夜突襲·斯卡蒂"
+  },
+  {
+    "ID": "2010116_Name",
+    "Korean": "산뜻한 오후 햇살 아나키",
+    "English": "Sunny Afternoon Anarky",
+    "Japanese": "爽やかな午後の陽射し・アナーキ",
+    "China_Simplified": "清爽午后阳光·阿娜奇",
+    "China_Traditional": "清爽午後陽光·阿娜奇"
   }
 ]

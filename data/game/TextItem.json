@@ -21305,11 +21305,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30216_DESC",
-    "Korean": "[카지노] 컨셉의 교체용 로비를 얻습니다.",
-    "English": "Obtain a Casino-themed lobby.",
-    "Japanese": "【背景：カジノ】を獲得できる。\\nロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【赌场】主题大厅。",
-    "China_Traditional": "可獲得能替換成【賭場】風格的大廳。"
+    "Korean": "[카지노] 컨셉의 교체용 로비를 얻습니다.\\n로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement lobby with a [Casino] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Background].",
+    "Japanese": "【カジノ】コンセプトの交換用ロビーを獲得します。\\nロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【背景】項目で変更できます。",
+    "China_Simplified": "获得【赌场】概念的替换大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【背景】项目中进行更换。",
+    "China_Traditional": "獲得【賭場】概念的替換大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【背景】項目中進行更換。"
   },
   {
     "ID": "ITEM_BOX_RANDOM_30217_DESC",
@@ -21409,11 +21409,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30221_DESC",
-    "Korean": "[해변] 컨셉의 교체용 로비를 얻습니다.",
-    "English": "Obtain a beach-themed lobby.",
-    "Japanese": "【背景：ビーチ】を獲得できる。\\nロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【海边】主题大厅。",
-    "China_Traditional": "可獲得能替換成【海邊】風格的大廳。"
+    "Korean": "[해변] 컨셉의 교체용 로비를 얻습니다.\\n로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement lobby with a [Beach] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Background].",
+    "Japanese": "【ビーチ】コンセプトの交換用ロビーを獲得します。\\nロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【背景】項目で変更できます。",
+    "China_Simplified": "获得【海滩】概念的替换大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【背景】项目中进行更换。",
+    "China_Traditional": "獲得【海灘】概念的替換大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【背景】項目中進行更換。"
   },
   {
     "ID": "ITEM_BOX_RANDOM_30222_DESC",
@@ -23569,11 +23569,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30260_DESC",
-    "Korean": "[노을지는 해변] 컨셉의 교체용 로비를 얻습니다.",
-    "English": "Obtain a Sunset Beach-themed lobby",
-    "Japanese": "【背景：サンセットビーチ】を獲得できる。\\nロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【夕阳下的海边】主题大厅。",
-    "China_Traditional": "可獲得能替換成【日落景點海邊】風格的大廳。"
+    "Korean": "[노을지는 해변] 컨셉의 교체용 로비를 얻습니다.\\n로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement lobby with a [Sunset Beach] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Background].",
+    "Japanese": "【サンセットビーチ】コンセプトの交換用ロビーを獲得する。\\nロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【背景】項目で変更できます。",
+    "China_Simplified": "获得【夕阳下的海边】概念的替换大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【背景】项目中进行更换。",
+    "China_Traditional": "獲得【日落景點海邊】概念的替換大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【背景】項目中進行更換。"
   },
   {
     "ID": "ITEM_BOX_RANDOM_30261_NAME",
@@ -26401,11 +26401,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30285_DESC",
-    "Korean": "[봉마의 사원] 컨셉의 교체용 로비를 얻습니다.",
-    "English": "Obtain a Temple-of-Sealing-themed lobby.",
-    "Japanese": "【背景：封魔の寺院】を獲得できる。\\nロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【封魔寺院】主题大厅。",
-    "China_Traditional": "可獲得能替換成【封魔寺院】風格的\\n大廳。"
+    "Korean": "[봉마의 사원] 컨셉의 교체용 로비를 얻습니다.\\n로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement lobby with a [Temple of Sealing] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Background].",
+    "Japanese": "【封魔の寺院】コンセプトの交換用ロビーを獲得する。\\nロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【背景】項目で変更できます。",
+    "China_Simplified": "获得【封魔寺院】概念的替换大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【背景】项目中进行更换。",
+    "China_Traditional": "獲得【封魔寺院】概念的替換大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【背景】項目中進行更換。"
   },
   {
     "ID": "PRODUCT_EVENT_06_0001_NAME",
@@ -28153,27 +28153,27 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30321_DESC",
-    "Korean": "[크리스마스 아지트] 컨셉의 교체용 로비를 얻습니다.",
-    "English": "Obtain a Holiday Base-themed lobby.",
-    "Japanese": "【背景：クリスマスアジト】を獲得できる。\\nロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【圣诞基地】主题大厅。",
-    "China_Traditional": "可獲得能替換成【聖誕節基地】風格的大廳。"
+    "Korean": "[크리스마스 아지트] 컨셉의 교체용 로비를 얻습니다.\\n로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement lobby with a [Holiday Base] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Background].",
+    "Japanese": "【クリスマスアジト】コンセプトの交換用ロビーを獲得する。\\nロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【背景】項目で変更できます。",
+    "China_Simplified": "获得【圣诞基地】概念的替换大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【背景】项目中进行更换。",
+    "China_Traditional": "獲得【聖誕節基地】概念的替換大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【背景】項目中進行更換。"
   },
   {
     "ID": "ITEM_BOX_RANDOM_30322_DESC",
-    "Korean": "[크리스마스 길드 아지트] 컨셉의 교체용 로비를 얻습니다.",
-    "English": "Obtain a Holiday Guild Base-themed lobby.",
-    "Japanese": "【背景：クリスマスギルドアジト】を獲得できる。\\nロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【圣诞公会基地】主题大厅。",
-    "China_Traditional": "可獲得能替換成【聖誕節公會基地】風格的大廳。"
+    "Korean": "[크리스마스 길드 아지트] 컨셉의 교체용 로비를 얻습니다.\\n로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement lobby with a [Holiday Guild Base] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Background].",
+    "Japanese": "【クリスマスギルドアジト】コンセプトの交換用ロビーを獲得する。\\nロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【背景】項目で変更できます。",
+    "China_Simplified": "获得【圣诞公会基地】概念的替换大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【背景】项目中进行更换。",
+    "China_Traditional": "獲得【聖誕節公會基地】概念的替換大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【背景】項目中進行更換。"
   },
   {
     "ID": "ITEM_BOX_RANDOM_30323_DESC",
-    "Korean": "[달리아의 마왕성] 컨셉의 교체용 로비를 얻습니다.",
-    "English": "Obtain a Dahlia's Archdemon Castle-themed lobby.",
-    "Japanese": "【背景：ダリアの魔王城】を獲得できる。\\nロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【达利娅的魔王城堡】主题大厅。",
-    "China_Traditional": "可獲得能替換成【達利亞的魔王城】風格的大廳。"
+    "Korean": "[달리아의 마왕성] 컨셉의 교체용 로비를 얻습니다.\\n로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement lobby with a [Dahlia's Archdemon Castle] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Background].",
+    "Japanese": "【ダリアの魔王城】コンセプトの交換用ロビーを獲得する。\\nロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【背景】項目で変更できます。",
+    "China_Simplified": "获得【达利娅的魔王城堡】概念的替换大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【背景】项目中进行更换。",
+    "China_Traditional": "獲得【達利亞的魔王城】概念的替換大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【背景】項目中進行更換。"
   },
   {
     "ID": "ITEM_ACC_U_5_28_NAME",
@@ -29673,11 +29673,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30340_DESC",
-    "Korean": "[발렌타인] 컨셉의 교체용 로비를 얻습니다.",
-    "English": "Obtain a Valentine-themed lobby.",
-    "Japanese": "【背景：バレンタイン】を獲得できる。\\nロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【情人节】主题大厅。",
-    "China_Traditional": "可獲得能替換成【情人節】風格的大廳。"
+    "Korean": "[발렌타인] 컨셉의 교체용 로비를 얻습니다.\\n로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement lobby with a [Valentine] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Background].",
+    "Japanese": "【バレンタイン】コンセプトの交換用ロビーを獲得する。\\nロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【背景】項目で変更できます。",
+    "China_Simplified": "获得【情人节】概念的替换大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【背景】项目中进行更换。",
+    "China_Traditional": "獲得【情人節】概念的替換大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【背景】項目中進行更換。"
   },
   {
     "ID": "PRODUCT_PACKAGE_100160_NAME",
@@ -31052,8 +31052,8 @@
     "Korean": "베로니카에게 선물하면 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 10만골드로 판매하실 수 있습니다.",
     "English": "When gifted to Veronica, provides enough EXP (170,000) to grow Affinity to Level 10 at once.\\nIf a perfect bond of affection has already been established, this item can be sold for 100,000 Gold.",
     "Japanese": "【ヴェロニカ】との絆をより深めることができる証票。\\n【ヴェロニカ】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら10万ゴールドで売却可能。",
-    "China_Simplified": "赠予维罗妮卡后，提供可一次性将好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以10万金币出售。",
-    "China_Traditional": "贈予維羅妮卡後，提供可一次性將好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以10萬金幣出售。"
+    "China_Simplified": "赠予维罗妮卡后，提供可一次性将亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以10万金币出售。",
+    "China_Traditional": "贈予維羅妮卡後，提供可一次性將親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以10萬金幣出售。"
   },
   {
     "ID": "PRODUCT_POPUP_VERONICA",
@@ -31161,7 +31161,7 @@
   },
   {
     "ID": "PRODUCT_POPUP_PACKAGE_620018",
-    "Korean": "장비 성장  패키지 I",
+    "Korean": "장비 성장 패키지 I",
     "English": "Gear Growth Pack I",
     "Japanese": "装備育成パックI",
     "China_Simplified": "装备成长礼包I",
@@ -32153,11 +32153,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30364_DESC",
-    "Korean": "[온천] 컨셉의 교체용 로비를 얻습니다.",
-    "English": "Obtain a Hot-Spring-themed lobby.",
-    "Japanese": "【背景：温泉】を獲得できる。ロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【温泉】主题大厅。",
-    "China_Traditional": "可獲得能替換成【溫泉】風格的大廳。"
+    "Korean": "[온천] 컨셉의 교체용 로비를 얻습니다.\\n로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement lobby with a [Hot Spring] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Background].",
+    "Japanese": "【温泉】コンセプトの交換用ロビーを獲得する。\\nロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【背景】項目で変更できます。",
+    "China_Simplified": "获得【温泉】概念的替换大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【背景】项目中进行更换。",
+    "China_Traditional": "獲得【溫泉】概念的替換大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【背景】項目中進行更換。"
   },
   {
     "ID": "PRODUCT_EVENT_11_0021_NAME",
@@ -32801,11 +32801,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30372_DESC",
-    "Korean": "[수영장의 오후] 컨셉의 교체용 전용 로비를 얻습니다.",
-    "English": "Obtain an Afternoon at the Swimming Pool-themed exclusive lobby.",
-    "Japanese": "【背景：午後のプール】を獲得できる。ロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【游泳池的午后】主题专属大厅。",
-    "China_Traditional": "可獲得能替換成【泳池的午後】風格的大廳。"
+    "Korean": "[수영장의 오후] 컨셉의 교체용 전용 로비를 얻습니다.\\n전용 로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [전용 배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement exclusive lobby with a [Afternoon at the Swimming Pool] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Exclusive Background].",
+    "Japanese": "【午後のプール】コンセプトの交換用専用ロビーを獲得する。\\n専用ロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【専用背景】項目で変更できます。",
+    "China_Simplified": "获得【泳池下午】概念的替换专属大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【专属背景】项目中进行更换。",
+    "China_Traditional": "獲得【泳池的午後】概念的替換專屬大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【專屬背景】項目中進行更換。"
   },
   {
     "ID": "ITEM_RECRUIT_TICKET_05_NAME",
@@ -33129,11 +33129,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30373_DESC",
-    "Korean": "[요타월드] 컨셉의 교체용 로비를 얻습니다.",
-    "English": "Obtain an Iota World-themed lobby.",
-    "Japanese": "【背景：イオータワールド】を獲得できる。ロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【佑妲世界】主题大厅。",
-    "China_Traditional": "可獲得能替換成【佑妲樂園】風格的\\n大廳。"
+    "Korean": "[요타월드] 컨셉의 교체용 로비를 얻습니다.\\n로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement lobby with an [Iotaworld] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Background].",
+    "Japanese": "【イオータワールド】コンセプトの交換用ロビーを獲得する。\\nロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【背景】項目で変更できます。",
+    "China_Simplified": "获得【佑妲世界】概念的替换大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【背景】项目中进行更换。",
+    "China_Traditional": "獲得【佑妲樂園】概念的替換大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【背景】項目中進行更換。"
   },
   {
     "ID": "PRODUCT_EVENT_12_0001_NAME",
@@ -33193,11 +33193,11 @@
   },
   {
     "ID": "PRODUCT_EVENT_12_0008_NAME",
-    "Korean": "옵셔니움 (무기/악세서리)",
-    "English": "Potentium (Weapon/Accessory)",
-    "Japanese": "オプショニウム\\n(武器・アクセサリー)",
-    "China_Simplified": "属性剂(武器/饰品)",
-    "China_Traditional": "屬性劑(武器/飾品)"
+    "Korean": "블루 스타 더스트 x20",
+    "English": "Blue Stardust x20",
+    "Japanese": "ブルースターダストx20",
+    "China_Simplified": "蓝色星尘X20",
+    "China_Traditional": "藍色星塵X20"
   },
   {
     "ID": "PRODUCT_EVENT_12_0009_NAME",
@@ -33273,11 +33273,11 @@
   },
   {
     "ID": "PRODUCT_EVENT_12_0018_NAME",
-    "Korean": "옵셔니움 (방어구)",
-    "English": "Potentium (Armor)",
-    "Japanese": "オプショニウム(防具)",
-    "China_Simplified": "属性剂(防具)",
-    "China_Traditional": "屬性劑(防具)"
+    "Korean": "블루 메모리 스톤 x20",
+    "English": "Blue Memory Stone x20",
+    "Japanese": "ブルーメモリーストーンx20",
+    "China_Simplified": "蓝色记忆石x20",
+    "China_Traditional": "藍色記憶石x20"
   },
   {
     "ID": "PRODUCT_EVENT_12_0019_NAME",
@@ -35689,11 +35689,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30391_DESC",
-    "Korean": "[백귀야행의 밤] 컨셉의 교체용 전용 로비를 얻습니다.",
-    "English": "Obtain a Night of the Wild Spirits-themed exclusive lobby.",
-    "Japanese": "【背景 - 百鬼夜行の夜】を獲得できる。ロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【百鬼夜行之夜】主题专属大厅。",
-    "China_Traditional": "可獲得能替換成【百鬼夜行之夜】風格的大廳。"
+    "Korean": "[백귀야행의 밤] 컨셉의 교체용 전용 로비를 얻습니다.\\n전용 로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [전용 배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement exclusive lobby with a [Night of the Wild Spirits] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Exclusive Background].",
+    "Japanese": "【百鬼夜行の夜】コンセプトの交換用専用ロビーを獲得する。\\n専用ロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【専用背景】項目で変更できます。",
+    "China_Simplified": "获得【百鬼夜行之夜】概念的替换专属大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【专属背景】项目中进行更换。",
+    "China_Traditional": "獲得【百鬼夜行之夜】概念的替換專屬大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【專屬背景】項目中進行更換。"
   },
   {
     "ID": "PRODUCT_PACKAGE_100295_NAME",
@@ -35940,8 +35940,8 @@
     "Korean": "사용 시 선택한 동료의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.",
     "English": "When used, provides enough EXP (170,000) to grow the selected hero's Affinity to Level 10 at once.",
     "Japanese": "使用時、選択した仲間の親密度を一度にLv.10まで成長させることができる分量の経験値（170,000）を提供します。",
-    "China_Simplified": "使用时，提供可一次性将所选同伴好感度成长至10级的经验值（170,000）。",
-    "China_Traditional": "使用時，提供可一次性將所選同伴好感度成長至10級的經驗值（170,000）。"
+    "China_Simplified": "使用时，提供可一次性将所选同伴亲密度成长至10级的经验值（170,000）。",
+    "China_Traditional": "使用時，提供可一次性將所選同伴親密度成長至10級的經驗值（170,000）。"
   },
   {
     "ID": "ITEM_BOX_RANDOM_30398_NAME",
@@ -36404,40 +36404,40 @@
     "Korean": "[베스]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [베스]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 50만골드로 판매하실 수 있습니다.",
     "English": "A token that allows you to forge an eternal bond of Affinity with [Beth].\\nWhen used, provides enough EXP (170,000) to grow [Beth]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 500,000 Gold.",
     "Japanese": "【ベス】との絆をより深めることができる証票。\\n【ベス】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら50万ゴールドで売却可能。",
-    "China_Simplified": "可与【贝丝】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【贝丝】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以50万金币出售。",
-    "China_Traditional": "可與【貝絲】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【貝絲】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以50萬金幣出售。"
+    "China_Simplified": "可与【贝丝】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【贝丝】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以50万金币出售。",
+    "China_Traditional": "可與【貝絲】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【貝絲】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以50萬金幣出售。"
   },
   {
     "ID": "ITEM_PRESENT_MAX_2000077_DESC",
     "Korean": "[카파]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [카파]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 50만골드로 판매하실 수 있습니다.",
     "English": "A token that allows you to forge an eternal bond of Affinity with [Kappa].\\nWhen used, provides enough EXP (170,000) to grow [Kappa]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 500,000 Gold.",
     "Japanese": "【カッパ】との絆をより深めることができる証票。\\n【カッパ】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら50万ゴールドで売却可能。",
-    "China_Simplified": "可与【卡帕】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【卡帕】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以50万金币出售。",
-    "China_Traditional": "可與【卡帕】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【卡帕】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以50萬金幣出售。"
+    "China_Simplified": "可与【卡帕】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【卡帕】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以50万金币出售。",
+    "China_Traditional": "可與【卡帕】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【卡帕】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以50萬金幣出售。"
   },
   {
     "ID": "ITEM_PRESENT_MAX_2000055_DESC",
     "Korean": "[아에르]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [아에르]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 50만골드로 판매하실 수 있습니다.",
     "English": "A token that allows you to forge an eternal bond of Affinity with [Aer].\\nWhen used, provides enough EXP (170,000) to grow [Aer]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 500,000 Gold.",
     "Japanese": "【アエル】との絆をより深めることができる証票。\\n【アエル】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら50万ゴールドで売却可能。",
-    "China_Simplified": "可与【艾耶尔】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【艾耶尔】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以50万金币出售。",
-    "China_Traditional": "可與【艾耶爾】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【艾耶爾】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以50萬金幣出售。"
+    "China_Simplified": "可与【艾耶尔】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【艾耶尔】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以50万金币出售。",
+    "China_Traditional": "可與【艾耶爾】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【艾耶爾】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以50萬金幣出售。"
   },
   {
     "ID": "ITEM_PRESENT_MAX_2000078_DESC",
     "Korean": "[라플라스]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [라플라스]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 50만골드로 판매하실 수 있습니다.",
     "English": "A token that allows you to forge an eternal bond of Affinity with [Laplace].\\nWhen used, provides enough EXP (170,000) to grow [Laplace]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 500,000 Gold.",
     "Japanese": "【ラプラス】との絆をより深めることができる証票。\\n【ラプラス】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら50万ゴールドで売却可能。",
-    "China_Simplified": "可与【拉普拉丝】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【拉普拉丝】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以50万金币出售。",
-    "China_Traditional": "可與【拉普拉絲】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【拉普拉絲】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以50萬金幣出售。"
+    "China_Simplified": "可与【拉普拉丝】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【拉普拉丝】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以50万金币出售。",
+    "China_Traditional": "可與【拉普拉絲】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【拉普拉絲】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以50萬金幣出售。"
   },
   {
     "ID": "ITEM_PRESENT_MAX_2000022_DESC",
     "Korean": "[노아]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [노아]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 50만골드로 판매하실 수 있습니다.",
     "English": "A token that allows you to forge an eternal bond of Affinity with [Noa].\\nWhen used, provides enough EXP (170,000) to grow [Noa]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 500,000 Gold.",
     "Japanese": "【ノア】との絆をより深めることができる証票。\\n【ノア】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら50万ゴールドで売却可能。",
-    "China_Simplified": "可与【伊特诺】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【伊特诺】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以50万金币出售。",
-    "China_Traditional": "可與【伊特諾】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【伊特諾】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以50萬金幣出售。"
+    "China_Simplified": "可与【伊特诺】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【伊特诺】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以50万金币出售。",
+    "China_Traditional": "可與【伊特諾】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【伊特諾】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以50萬金幣出售。"
   },
   {
     "ID": "ITEM_PRESENT_MAX_2000043_DESC",
@@ -38153,11 +38153,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30414_DESC",
-    "Korean": "[성야의 축복] 컨셉의 교체용 전용 로비를 얻습니다.",
-    "English": "Obtain a Holy Night's Blessing-themed exclusive lobby.",
-    "Japanese": "【背景 - 聖夜の祝福】を獲得できる。ロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【圣诞夜的祝福】主题专属大厅。",
-    "China_Traditional": "可獲得能替換成【聖誕夜的祝福】風格的大廳。"
+    "Korean": "[성야의 축복] 컨셉의 교체용 전용 로비를 얻습니다.\\n전용 로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [전용 배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement exclusive lobby with a [Holy Night's Blessing] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Exclusive Background].",
+    "Japanese": "【聖夜の祝福】コンセプトの交換用専用ロビーを獲得する。\\n専用ロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【専用背景】項目で変更できます。",
+    "China_Simplified": "获得【圣诞夜的祝福】概念的替换专属大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【专属背景】项目中进行更换。",
+    "China_Traditional": "獲得【聖誕夜的祝福】概念的替換專屬大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【專屬背景】項目中進行更換。"
   },
   {
     "ID": "PRODUCT_PACKAGE_620109_NAME",
@@ -39585,7 +39585,7 @@
   },
   {
     "ID": "PRODUCT_PACKAGE_100345_NAME",
-    "Korean": "밀랍 날개의 소망  I",
+    "Korean": "밀랍 날개의 소망 I",
     "English": "Wish of the Wax Wings I",
     "Japanese": "蝋の翼の所望Ⅰ",
     "China_Simplified": "蜡翼之愿I",
@@ -39625,11 +39625,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30419_DESC",
-    "Korean": "[단란한 한 때] 컨셉의 교체용 전용 로비를 얻습니다.",
-    "English": "Obtain A Cherished Time Together-themed exclusive lobby.",
-    "Japanese": "【楽しいひととき】をテーマにした背景。ロビー設定画面で選択・配置できる。",
-    "China_Simplified": "可获得【温馨的时光】主题专属大厅。",
-    "China_Traditional": "可獲得能替換成【溫馨時刻】風格的\\n大廳。"
+    "Korean": "[단란한 한 때] 컨셉의 교체용 전용 로비를 얻습니다.\\n전용 로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [전용 배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement exclusive lobby with a [A Cherished Time Together] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Exclusive Background].",
+    "Japanese": "【楽しいひととき】コンセプトの交換用専用ロビーを獲得する。\\n専用ロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【専用背景】項目で変更できます。",
+    "China_Simplified": "获得【温馨的时光】概念的替换专属大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【专属背景】项目中进行更换。",
+    "China_Traditional": "獲得【溫馨時刻】概念的替換專屬大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【專屬背景】項目中進行更換。"
   },
   {
     "ID": "PRODUCT_PACKAGE_620136_NAME",
@@ -39641,7 +39641,7 @@
   },
   {
     "ID": "PRODUCT_PACKAGE_620137_NAME",
-    "Korean": "(한정) 매그놀리아 페스티벌  I",
+    "Korean": "(한정) 매그놀리아 페스티벌 I",
     "English": "(Limited) Magnolia Festival I",
     "Japanese": "(限定)マグノリア\\nフェスティバルⅠ",
     "China_Simplified": "(限定)麦格诺里亚庆典I",
@@ -39649,7 +39649,7 @@
   },
   {
     "ID": "PRODUCT_PACKAGE_620138_NAME",
-    "Korean": "(한정) 매그놀리아 페스티벌  II",
+    "Korean": "(한정) 매그놀리아 페스티벌 II",
     "English": "(Limited) Magnolia Festival II",
     "Japanese": "(限定)マグノリア\\nフェスティバルⅡ",
     "China_Simplified": "(限定)麦格诺里亚庆典II",
@@ -41553,7 +41553,7 @@
   },
   {
     "ID": "ITEM_MONAD_KEY_DESC_04",
-    "Korean": "정교하게 조각된 열쇠입니다..\\n특정 선택지를 고를 때 사용됩니다.",
+    "Korean": "정교하게 조각된 열쇠입니다.\\n특정 선택지를 고를 때 사용됩니다.",
     "English": "A delicately carved key.\\nUsed for selecting specific options.",
     "Japanese": "きめ細かく彫刻されている鍵です…\\n特定の選択肢を選ぶ時に使用する。",
     "China_Simplified": "精致雕刻的钥匙。\\n在选择特定选项时使用。",
@@ -42065,11 +42065,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30439_DESC",
-    "Korean": "[유토피아로의 항해] 컨셉의 교체용 전용 로비를 얻습니다.",
-    "English": "Obtain a replaceable exclusive lobby themed “Voyage to Utopia.”",
-    "Japanese": "着せ替え用ロビー「ユートピアへの航海」を獲得する。",
-    "China_Simplified": "獲得可替換的專屬大廳「航向烏托邦」。",
-    "China_Traditional": "獲得可替換的專屬大廳「航向烏托邦」。"
+    "Korean": "[유토피아로의 항해] 컨셉의 교체용 전용 로비를 얻습니다.\\n전용 로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [전용 배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement exclusive lobby with a [Voyage to Utopia] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Exclusive Background].",
+    "Japanese": "【ユートピアへの航海】コンセプトの交換用専用ロビーを獲得する。\\n専用ロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【専用背景】項目で変更できます。",
+    "China_Simplified": "获得【启程乌托邦】概念的替换专属大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【专属背景】项目中进行更换。",
+    "China_Traditional": "獲得【啟程烏托邦】概念的替換專屬大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【專屬背景】項目中進行更換。"
   },
   {
     "ID": "ITEM_REMAINS_ORDER_NAME_1",
@@ -42572,8 +42572,8 @@
     "Korean": "[데미우르고스 블라다]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [데미우르고스 블라다]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
     "English": "A token that forges an eternal bond with [Demiurge Vlada].\\nWhen used, provides enough EXP (170,000) to grow [Demiurge Vlada]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 300 Ether (Free).",
     "Japanese": "【デミウルゴス・ヴラダ】との絆をより深めることができる証票。\\n使用時、【デミウルゴス・ヴラダ】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
-    "China_Simplified": "可与【创世之神·布拉达】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【创世之神·布拉达】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
-    "China_Traditional": "可與【迪米烏哥斯·佛拉達】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【迪米烏哥斯·佛拉達】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+    "China_Simplified": "可与【创世之神·布拉达】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【创世之神·布拉达】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【迪米烏哥斯·佛拉達】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【迪米烏哥斯·佛拉達】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
   },
   {
     "ID": "ITEM_WEAPON_IRREGULAR_U_6_02_NAME_EVENT",
@@ -43073,7 +43073,7 @@
   },
   {
     "ID": "PRODUCT_PACKAGE_620272_NAME",
-    "Korean": "그노시스 달리아  장비 풀패키지",
+    "Korean": "그노시스 달리아 장비 풀패키지",
     "English": "Gnosis Dahlia Full Gear Package",
     "Japanese": "グノーシス・ダリア総装備パック",
     "China_Simplified": "格諾西斯・达利娅全套装备包",
@@ -43081,7 +43081,7 @@
   },
   {
     "ID": "PRODUCT_PACKAGE_620273_NAME",
-    "Korean": "그노시스 넬라  장비 풀패키지",
+    "Korean": "그노시스 넬라 장비 풀패키지",
     "English": "Gnosis Nella Full Gear Package",
     "Japanese": "グノーシス・ネラ総装備パック",
     "China_Simplified": "格諾西斯・内拉全套装备包",
@@ -44108,8 +44108,8 @@
     "Korean": "[비엘라]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [비엘라]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
     "English": "A token that allows you to forge an eternal bond of Affinity with [Viella].\\nWhen used, provides enough EXP (170,000) to grow [Viella]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 300 Ether (Free).",
     "Japanese": "【ビエラ】との絆をより深めることができる証票。\\n【ビエラ】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
-    "China_Simplified": "可与【比埃拉】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【比埃拉】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
-    "China_Traditional": "可與【碧耶拉】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【碧耶拉】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+    "China_Simplified": "可与【比埃拉】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【比埃拉】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【碧耶拉】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【碧耶拉】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
   },
   {
     "ID": "ITEM_BOX_RANDOM_9990010_NAME",
@@ -44697,11 +44697,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30476_DESC",
-    "Korean": "[월하, 겹치는 마음] 컨셉의 교체용 전용 로비를 얻습니다.",
-    "English": "Obtain a \"Moonlit Intertwined Hearts\" themed exclusive lobby.",
-    "Japanese": "【月下、重なる想い】をテーマにした背景。ロビー設定画面で選択・配置できる。",
-    "China_Simplified": "获得【月下，交叠的心】主题专属大厅。",
-    "China_Traditional": "可獲得能替換成【月下，交疊的心】風格的大廳。"
+    "Korean": "[월하, 겹치는 마음] 컨셉의 교체용 전용 로비를 얻습니다.\\n전용 로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [전용 배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement exclusive lobby with a [Under the Moon, Overlapping Hearts] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Exclusive Background].",
+    "Japanese": "【月下、重なり合う思い】コンセプトの交換用専用ロビーを獲得する。\\n専用ロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【専用背景】項目で変更できます。",
+    "China_Simplified": "获得【月下·交叠的心意】概念的替换专属大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【专属背景】项目中进行更换。",
+    "China_Traditional": "獲得【月下・交疊的心意】概念的替換專屬大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【專屬背景】項目中進行更換。"
   },
   {
     "ID": "ITEM_MATERIAL_CHAR_CORE_FUSION_1",
@@ -44740,8 +44740,8 @@
     "Korean": "[포르투나]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [포르투나]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
     "English": "A token that forges an eternal bond with [Fortuna].\\nWhen used, provides enough EXP (170,000) to grow [Fortuna]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 300 Ether (Free).",
     "Japanese": "【フォルトゥナ】との絆をより深めることができる証票。\\n【フォルトゥナ】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
-    "China_Simplified": "可与【福尔图娜】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【福尔图娜】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
-    "China_Traditional": "可與【波魯圖娜】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【波魯圖娜】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+    "China_Simplified": "可与【福尔图娜】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【福尔图娜】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【波魯圖娜】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【波魯圖娜】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
   },
   {
     "ID": "PRODUCT_PACKAGE_620292_NAME",
@@ -45236,8 +45236,8 @@
     "Korean": "[그노시스 달리아]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [그노시스 달리아]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
     "English": "A token that forges an eternal bond with [Gnosis Dahlia].\\nWhen used, provides enough EXP (170,000) to grow [Gnosis Dahlia]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 300 Ether (Free).",
     "Japanese": "【グノーシス・ダリア】との絆をより深めることができる証票。\\n【グノーシス・ダリア】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
-    "China_Simplified": "可与【诺希斯·达利娅】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【诺希斯·达利娅】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
-    "China_Traditional": "可與【格諾西斯·達利亞】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【格諾西斯·達利亞】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+    "China_Simplified": "可与【诺希斯·达利娅】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【诺希斯·达利娅】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【格諾西斯·達利亞】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【格諾西斯·達利亞】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
   },
   {
     "ID": "PRODUCT_LIMITCRYSTAL_1200428_NAME",
@@ -45732,8 +45732,8 @@
     "Korean": "[그노시스 비엘라]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [그노시스 비엘라]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
     "English": "A token that forges an eternal bond with [Gnosis Viella].\\nWhen used, provides enough EXP (170,000) to grow [Gnosis Viella]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 300  Ether (Free).",
     "Japanese": "【グノーシス・ビエラ】との絆をより深めることができる証票。\\n【グノーシス・ビエラ】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
-    "China_Simplified": "可与【诺希斯·比埃拉】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【诺希斯·比埃拉】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
-    "China_Traditional": "可與【格諾西斯·碧耶拉】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【格諾西斯·碧耶拉】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+    "China_Simplified": "可与【诺希斯·比埃拉】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【诺希斯·比埃拉】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【格諾西斯·碧耶拉】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【格諾西斯·碧耶拉】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
   },
   {
     "ID": "PRODUCT_PACKAGE_500068_NAME",
@@ -46340,8 +46340,8 @@
     "Korean": "[프리미네]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [프리미네]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
     "English": "A token that allows you to forge an eternal bond of Affinity with [Primine].\\nWhen used, provides enough EXP (170,000) to grow [Primine]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 300 Ether (Free).",
     "Japanese": "【プリミネ】と永遠の愛情関係を築くことができる証。\\n【プリミネ】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
-    "China_Simplified": "可与【普莉米妮】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【普莉米妮】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
-    "China_Traditional": "可與【普莉米妮】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【普莉米妮】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+    "China_Simplified": "可与【普莉米妮】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【普莉米妮】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【普莉米妮】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【普莉米妮】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
   },
   {
     "ID": "PRODUCT_PACKAGE_500069_NAME",
@@ -46948,8 +46948,8 @@
     "Korean": "[에리스]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [에리스]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
     "English": "A token that forges an eternal bond with [Eris].\\nWhen used, provides enough EXP (170,000) to grow [Eris]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 300 Ether (Free).",
     "Japanese": "【エリス】との絆をより深めることができる証票。\\n【エリス】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
-    "China_Simplified": "可与【艾理斯】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【艾理斯】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
-    "China_Traditional": "可與【艾理斯】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【艾理斯】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+    "China_Simplified": "可与【艾理斯】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【艾理斯】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【艾理斯】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【艾理斯】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
   },
   {
     "ID": "PRODUCT_PACKAGE_500070_NAME",
@@ -47588,8 +47588,8 @@
     "Korean": "[그노시스 도미네]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [그노시스 도미네]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
     "English": "A token that allows you to build an eternal bond of affection with [Gnosis Domine].\\nWhen used, provides enough EXP (170,000) to grow [Gnosis Domine]'s Affinity to Level 10 at once.\\nIf a perfect bond has already been established, this item can be sold for 300 Free Ether.",
     "Japanese": "【グノーシス・ドミネ】と永遠の愛情関係を築くことができる証。\\n【グノーシス・ドミネ】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
-    "China_Simplified": "可与【诺希斯·多米内】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【诺希斯·多米内】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
-    "China_Traditional": "可與【格諾西斯·多米內】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【格諾西斯·多米內】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+    "China_Simplified": "可与【诺希斯·多米内】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【诺希斯·多米内】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【格諾西斯·多米內】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【格諾西斯·多米內】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
   },
   {
     "ID": "ITEM_MONAD_EQUIP_ENCHANT_1_NAME",
@@ -48113,11 +48113,11 @@
   },
   {
     "ID": "ITEM_BOX_RANDOM_30517_DESC",
-    "Korean": "[블랙 캘릭스] 컨셉의 교체용 전용 로비를 얻습니다.",
-    "English": "Obtain an exclusive lobby with a [Black Calix] concept.",
-    "Japanese": "[ブラックカリックス]コンセプトの専用ロビーを獲得する。",
-    "China_Simplified": "获得[黑色圣杯]概念的专属大厅。",
-    "China_Traditional": "獲得[黑色聖杯]概念的專屬大廳。"
+    "Korean": "[블랙 캘릭스] 컨셉의 교체용 전용 로비를 얻습니다.\\n전용 로비는 [소지품] 내에서 로비 아이템을 사용하신 후, [로비 설정] - [전용 배경] 항목에서 변경하실 수 있습니다.",
+    "English": "Obtain a replacement exclusive lobby with a [Black Calix] concept.\\nAfter using the lobby item in [Inventory], you can change it under [Lobby Settings] - [Exclusive Background].",
+    "Japanese": "【ブラックカリクス】コンセプトの交換用専用ロビーを獲得する。\\n専用ロビーは【バッグ】内でロビーアイテムを使用した後、【ロビー設定】 - 【専用背景】項目で変更できます。",
+    "China_Simplified": "获得【黑色圣杯】概念的替换专属大厅。\\n在【背包】内使用大厅道具后，可在【大厅设置】 - 【专属背景】项目中进行更换。",
+    "China_Traditional": "獲得【黑色聖杯】概念的替換專屬大廳。\\n在【背包】內使用大廳道具後，可在【大廳設置】 - 【專屬背景】項目中進行更換。"
   },
   {
     "ID": "SYS_REWARD_FARMING_GIFT_1",
@@ -49420,8 +49420,8 @@
     "Korean": "[다이안]과 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [다이안]과의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
     "English": "A token that forges an eternal bond with [Dianne].\\nWhen used, provides enough EXP (170,000) to grow [Dianne]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 300 Ether (Free).",
     "Japanese": "【ダイアン】との絆をより深めることができる証票。\\n【ダイアン】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
-    "China_Simplified": "可与【黛安】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【黛安】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
-    "China_Traditional": "可與【黛安】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【黛安】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+    "China_Simplified": "可与【黛安】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【黛安】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【黛安】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【黛安】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
   },
   {
     "ID": "ITEM_BOX_RANDOM_30518_NAME",
@@ -49676,8 +49676,8 @@
     "Korean": "[레이]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [레이]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
     "English": "A token that forges an eternal bond of Affinity with [Rey].\\nWhen used, provides enough EXP (170,000) to grow [Rey]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 300 Free Ether.",
     "Japanese": "【レイ】と永遠の愛情関係を築くことができる証。\\n【レイ】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
-    "China_Simplified": "可与【蕾伊】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【蕾伊】好感度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
-    "China_Traditional": "可與【蕾伊】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【蕾伊】好感度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+    "China_Simplified": "可与【蕾伊】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【蕾伊】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【蕾伊】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【蕾伊】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
   },
   {
     "ID": "PRODUCT_PACKAGE_500076_NAME",
@@ -50033,11 +50033,11 @@
   },
   {
     "ID": "PRODUCT_STEPUP_BANNER_01",
-    "Korean": "삼세요호 스텝업",
-    "English": "Kitsune of Eternity Step-Up",
-    "Japanese": "三世妖狐ステップアップ",
-    "China_Simplified": "三世妖狐阶梯礼包",
-    "China_Traditional": "三世妖狐階梯禮包"
+    "Korean": "차원호출 스텝업",
+    "English": "Dimensional Supply Step-Up",
+    "Japanese": "次元召喚ステップアップ",
+    "China_Simplified": "次元召唤阶梯礼包",
+    "China_Traditional": "次元召喚階梯禮包"
   },
   {
     "ID": "PRODUCT_STEPUP_BANNER_02",
@@ -50049,11 +50049,11 @@
   },
   {
     "ID": "PRODUCT_STEPUP_BANNER_03",
-    "Korean": "3주년 기념 스텝업",
-    "English": "3rd Anniversary Step-Up",
-    "Japanese": "3周年記念ステップアップ",
-    "China_Simplified": "3周年纪念阶梯礼包",
-    "China_Traditional": "3週年紀念階梯禮包"
+    "Korean": "그래피티 스텝업",
+    "English": "Graffiti Step-Up",
+    "Japanese": "グラフィティステップアップ",
+    "China_Simplified": "涂鸦阶梯礼包",
+    "China_Traditional": "塗鴉階梯禮包"
   },
   {
     "ID": "ITEM_BOX_RANDOM_30527_NAME",
@@ -50774,5 +50774,469 @@
     "Japanese": "豊穣の日・フラン",
     "China_Simplified": "丰饶之日的芙蓢",
     "China_Traditional": "豐饒之日的芙蓢"
+  },
+  {
+    "ID": "ITEM_C_EQUIP_2000116_NAME",
+    "Korean": "침묵의 소리",
+    "English": "Sound of Silence",
+    "Japanese": "沈黙の音",
+    "China_Simplified": "寂静之声",
+    "China_Traditional": "寂靜之聲"
+  },
+  {
+    "ID": "ITEM_PRESENT_MAX_2000116_NAME",
+    "Korean": "아나키와의 서약",
+    "English": "Oath with Anarky",
+    "Japanese": "アナーキの誓約",
+    "China_Simplified": "与阿娜奇之约",
+    "China_Traditional": "與阿娜奇之約"
+  },
+  {
+    "ID": "ITEM_PRESENT_MAX_2000116_DESC",
+    "Korean": "[아나키]와 영원한 애정 관계를 구축할 수 있는 증표.\\n사용 시 [아나키]의 애정도를 한번에 10LV까지 성장 시킬 수 있는 분량의 경험치 (170,000) 를 제공합니다.\\n이미 완벽한 애정 관계가 구축되신 경우, 해당 아이템을 300 무료 에테르로 판매하실 수 있습니다.",
+    "English": "A token that allows you to forge an eternal bond of Affinity with [Anarky].\\nWhen used, provides enough EXP (170,000) to grow [Anarky]'s Affinity to Level 10 at once.\\nIf Affinity is already maxed, this item can be sold for 300 Ether (Free).",
+    "Japanese": "【アナーキ】と永遠の愛情関係を築くことができる証。\\n【アナーキ】の親密度が170,000上昇し、一度にLv.10まで上げることができます。\\n既に最大なら300無償エーテルで売却可能。",
+    "China_Simplified": "可与【阿娜奇】建立永恒爱情关系的凭证。\\n使用时，提供可一次性将【阿娜奇】亲密度成长至10级的经验值（170,000）。\\n若已建立完美的爱情关系，可将该道具以300无偿以太出售。",
+    "China_Traditional": "可與【阿娜奇】建立永恆愛情關係的憑證。\\n使用時，提供可一次性將【阿娜奇】親密度成長至10級的經驗值（170,000）。\\n若已建立完美的愛情關係，可將該道具以300無償乙太出售。"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_500077_NAME",
+    "Korean": "영혼의 파트너 레이",
+    "English": "Ace Accomplice Rey",
+    "Japanese": "魂のパートナー・レイ",
+    "China_Simplified": "灵魂伙伴·蕾伊",
+    "China_Traditional": "靈魂夥伴·蕾伊"
+  },
+  {
+    "ID": "PRODUCT_EVENT_12_0101_NAME",
+    "Korean": "무제한 식당 이용권",
+    "English": "Unlimited Restaurant Voucher",
+    "Japanese": "食べ放題食券",
+    "China_Simplified": "餐厅无限使用券",
+    "China_Traditional": "吃到飽餐券"
+  },
+  {
+    "ID": "PRODUCT_EVENT_12_0102_NAME",
+    "Korean": "프로필 테두리 - 워터 슬라이드 ll",
+    "English": "Profile Frame: Water Slide ll",
+    "Japanese": "プロフィールフレーム - ウォータースライド ll",
+    "China_Simplified": "头像边框 - 滑水道 ll",
+    "China_Traditional": "頭像外框 - 滑水道 ll"
+  },
+  {
+    "ID": "PRODUCT_EVENT_12_0103_NAME",
+    "Korean": "융합형 코어 x50",
+    "English": "Fusion-Type Core x50",
+    "Japanese": "フュージョン型コア x50",
+    "China_Simplified": "融合型核心 x50",
+    "China_Traditional": "融合型核心 x50"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91191_NAME",
+    "Korean": "차원호출 스텝업 I",
+    "English": "Dimensional Supply Step-Up I",
+    "Japanese": "次元召喚ステップアップI",
+    "China_Simplified": "次元召唤阶梯礼包I",
+    "China_Traditional": "次元召喚階梯禮包I"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91192_NAME",
+    "Korean": "차원호출 스텝업 II",
+    "English": "Dimensional Supply Step-Up II",
+    "Japanese": "次元召喚ステップアップII",
+    "China_Simplified": "次元召唤阶梯礼包II",
+    "China_Traditional": "次元召喚階梯禮包II"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91193_NAME",
+    "Korean": "차원호출 스텝업 III",
+    "English": "Dimensional Supply Step-Up III",
+    "Japanese": "次元召喚ステップアップIII",
+    "China_Simplified": "次元召唤阶梯礼包III",
+    "China_Traditional": "次元召喚階梯禮包III"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91194_NAME",
+    "Korean": "차원호출 스텝업 IV",
+    "English": "Dimensional Supply Step-Up IV",
+    "Japanese": "次元召喚ステップアップIV",
+    "China_Simplified": "次元召唤阶梯礼包IV",
+    "China_Traditional": "次元召喚階梯禮包IV"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91195_NAME",
+    "Korean": "차원호출 스텝업 V",
+    "English": "Dimensional Supply Step-Up V",
+    "Japanese": "次元召喚ステップアップV",
+    "China_Simplified": "次元召唤阶梯礼包V",
+    "China_Traditional": "次元召喚階梯禮包V"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91196_NAME",
+    "Korean": "그래피티 스텝업 I",
+    "English": "Graffiti Step-Up I",
+    "Japanese": "グラフィティステップアップI",
+    "China_Simplified": "涂鸦阶梯礼包I",
+    "China_Traditional": "塗鴉階梯禮包I"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91197_NAME",
+    "Korean": "그래피티 스텝업 II",
+    "English": "Graffiti Step-Up II",
+    "Japanese": "グラフィティステップアップII",
+    "China_Simplified": "涂鸦阶梯礼包II",
+    "China_Traditional": "塗鴉階梯禮包II"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91198_NAME",
+    "Korean": "그래피티 스텝업 III",
+    "English": "Graffiti Step-Up III",
+    "Japanese": "グラフィティステップアップIII",
+    "China_Simplified": "涂鸦阶梯礼包III",
+    "China_Traditional": "塗鴉階梯禮包III"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91199_NAME",
+    "Korean": "그래피티 스텝업 IV",
+    "English": "Graffiti Step-Up IV",
+    "Japanese": "グラフィティステップアップIV",
+    "China_Simplified": "涂鸦阶梯礼包IV",
+    "China_Traditional": "塗鴉階梯禮包IV"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91200_NAME",
+    "Korean": "그래피티 스텝업 V",
+    "English": "Graffiti Step-Up V",
+    "Japanese": "グラフィティステップアップV",
+    "China_Simplified": "涂鸦阶梯礼包V",
+    "China_Traditional": "塗鴉階梯禮包V"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_100541_NAME",
+    "Korean": "그래피티 보더 I",
+    "English": "Graffiti Boarder I",
+    "Japanese": "グラフィティボーダーI",
+    "China_Simplified": "涂鸦滑手礼包I",
+    "China_Traditional": "塗鴉滑手禮包I"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_100542_NAME",
+    "Korean": "그래피티 보더 II",
+    "English": "Graffiti Boarder II",
+    "Japanese": "グラフィティボーダーII",
+    "China_Simplified": "涂鸦滑手礼包II",
+    "China_Traditional": "塗鴉滑手禮包II"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_100543_NAME",
+    "Korean": "그래피티 보더 III",
+    "English": "Graffiti Boarder III",
+    "Japanese": "グラフィティボーダーIII",
+    "China_Simplified": "涂鸦滑手礼包III",
+    "China_Traditional": "塗鴉滑手禮包III"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_100544_NAME",
+    "Korean": "그래피티 보더 IV",
+    "English": "Graffiti Boarder IV",
+    "Japanese": "グラフィティボーダーIV",
+    "China_Simplified": "涂鸦滑手礼包IV",
+    "China_Traditional": "塗鴉滑手禮包IV"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_100545_NAME",
+    "Korean": "그래피티 보더 V",
+    "English": "Graffiti Boarder V",
+    "Japanese": "グラフィティボーダーV",
+    "China_Simplified": "涂鸦滑手礼包V",
+    "China_Traditional": "塗鴉滑手禮包V"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_100546_NAME",
+    "Korean": "차원 호출 팩 I",
+    "English": "Dimensional Supply Pack I",
+    "Japanese": "次元召喚パックI",
+    "China_Simplified": "次元召唤包I",
+    "China_Traditional": "次元召喚包I"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_100547_NAME",
+    "Korean": "차원 호출 팩 II",
+    "English": "Dimensional Supply Pack II",
+    "Japanese": "次元召喚パックII",
+    "China_Simplified": "次元召唤包II",
+    "China_Traditional": "次元召喚包II"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_100548_NAME",
+    "Korean": "차원 호출 팩 III",
+    "English": "Dimensional Supply Pack III",
+    "Japanese": "次元召喚パックIII",
+    "China_Simplified": "次元召唤包III",
+    "China_Traditional": "次元召喚包III"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_500078_NAME",
+    "Korean": "(여름한정) 모나드 에바 바캉스 패키지",
+    "English": "(Summer Limited) Monad Eva Vacation Package",
+    "Japanese": "(夏限定)モナド・エヴァバカンスパック",
+    "China_Simplified": "（夏季限定）单子·艾娃度假礼包",
+    "China_Traditional": "（夏季限定）單體·艾娃度假禮包"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_500079_NAME",
+    "Korean": "(여름한정) 한여름의 모나드 에바 패키지",
+    "English": "(Summer Limited) Midsummer Monad Eva Package",
+    "Japanese": "(夏限定)真夏のモナド・エヴァパック",
+    "China_Simplified": "（夏季限定）盛夏单子·艾娃礼包",
+    "China_Traditional": "（夏季限定）盛夏單體·艾娃禮包"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_CHAR_GET_2000116",
+    "Korean": "아나키 초월팩",
+    "English": "Anarky Transcendence Pack",
+    "Japanese": "アナーキ超越パック",
+    "China_Simplified": "阿娜奇超越包",
+    "China_Traditional": "阿娜奇超越包"
+  },
+  {
+    "ID": "PRODUCT_POPUP_PACKAGE_630089",
+    "Korean": "(한정) 풀장의 트릭스터 부스터 I",
+    "English": "(Limited) Poolside Trickster Booster I",
+    "Japanese": "(限定)プールのトリックスターブースターI",
+    "China_Simplified": "（限定）泳池魔术师强化包I",
+    "China_Traditional": "（限定）泳池畔的魔術師強化包I"
+  },
+  {
+    "ID": "PRODUCT_POPUP_PACKAGE_630090",
+    "Korean": "(한정) 풀장의 트릭스터 부스터 II",
+    "English": "(Limited) Poolside Trickster Booster II",
+    "Japanese": "(限定)プールのトリックスターブースターII",
+    "China_Simplified": "（限定）泳池魔术师强化包II",
+    "China_Traditional": "（限定）泳池畔的魔術師強化包II"
+  },
+  {
+    "ID": "PRODUCT_POPUP_PACKAGE_630091",
+    "Korean": "(한정) 청운의 꿈 부스터 I",
+    "English": "(Limited) Summer Knight's Dream Booster I",
+    "Japanese": "(限定)青雲の志ブースターI",
+    "China_Simplified": "（限定）青云之志强化包I",
+    "China_Traditional": "（限定）青雲之志強化包I"
+  },
+  {
+    "ID": "PRODUCT_POPUP_PACKAGE_630092",
+    "Korean": "(한정) 청운의 꿈 부스터 II",
+    "English": "(Limited) Summer Knight's Dream Booster II",
+    "Japanese": "(限定)青雲の志ブースターII",
+    "China_Simplified": "（限定）青云之志强化包II",
+    "China_Traditional": "（限定）青雲之志強化包II"
+  },
+  {
+    "ID": "PRODUCT_LIMITCRYSTAL_1200447_NAME",
+    "Korean": "50% 할인! 차원 호출 티켓",
+    "English": "50% Off! Dimensional Supply Ticket",
+    "Japanese": "50%割引！次元召喚チケット",
+    "China_Simplified": "50%折扣！次元召唤券",
+    "China_Traditional": "50%折扣！次元召喚券"
+  },
+  {
+    "ID": "ITEM_RECRUIT_TICKET_07_NAME",
+    "Korean": "차원 호출 티켓",
+    "English": "Dimensional Supply Ticket",
+    "Japanese": "次元召喚チケット",
+    "China_Simplified": "次元召唤券",
+    "China_Traditional": "次元召喚券"
+  },
+  {
+    "ID": "ITEM_RECRUIT_TICKET_08_NAME",
+    "Korean": "차원 호출 티켓(이벤트)",
+    "English": "Dimensional Supply Ticket (Event)",
+    "Japanese": "次元召喚チケット（イベント）",
+    "China_Simplified": "次元召唤券（活动）",
+    "China_Traditional": "次元召喚券（活動）"
+  },
+  {
+    "ID": "ITEM_RECRUIT_TICKET_07_DESC",
+    "Korean": "차원 물자 호출을 이용할 수 있는 티켓입니다. 1장으로 1회 호출을 이용할 수 있습니다.",
+    "English": "A ticket that can be used for Dimensional Gear Supply. 1 ticket can be used for 1 Dimensional Supply.",
+    "Japanese": "次元物資召喚に使用するチケットです。1枚につき1回召喚を行えます。",
+    "China_Simplified": "可用于次元物资召唤的券。1张可使用1次召唤。",
+    "China_Traditional": "可用於次元物資召喚的券。1張可使用1次召喚。"
+  },
+  {
+    "ID": "ITEM_RECRUIT_TICKET_08_DESC",
+    "Korean": "차원 물자 호출을 이용할 수 있는 티켓입니다. 1장으로 1회 호출을 이용할 수 있습니다.\\n이 티켓은 마일리지가 적립되지 않습니다.",
+    "English": "A ticket that can be used for Dimensional Gear Supply. 1 ticket can be used for 1 Dimensional Supply.\\nThis ticket does not accumulate mileage.",
+    "Japanese": "次元物資召喚に使用するチケットです。1枚につき1回召喚を行えます。\\n※本チケットを使用した場合、次元召喚Ptは獲得できません。",
+    "China_Simplified": "可用于次元物资召唤的券。1张可使用1次召唤。\\n该券不累积里程。",
+    "China_Traditional": "可用於次元物資召喚的券。1張可使用1次召喚。\\n該券不累積里程。"
+  },
+  {
+    "ID": "PRODUCT_MEMORYSTAR_2038_NAME",
+    "Korean": "차원 호출 티켓 x2",
+    "English": "Dimensional Supply Ticket x2",
+    "Japanese": "次元召喚チケット x2",
+    "China_Simplified": "次元召唤券 x2",
+    "China_Traditional": "次元召喚券 x2"
+  },
+  {
+    "ID": "PRODUCT_PVP_1300_NAME",
+    "Korean": "재련 초기화 스크롤[전설]",
+    "English": "Reforge Reset Scroll [Legendary]",
+    "Japanese": "再錬リセットスクロール【レジェンド】",
+    "China_Simplified": "重铸初始化卷轴【传说】",
+    "China_Traditional": "重鑄初始化卷軸【傳說】"
+  },
+  {
+    "ID": "PRODUCT_PVP_1301_NAME",
+    "Korean": "트랜스톤(개별)",
+    "English": "Transistone (Individual)",
+    "Japanese": "トランストーン(選択)",
+    "China_Simplified": "转换石(个别)",
+    "China_Traditional": "轉換石(個別)"
+  },
+  {
+    "ID": "PRODUCT_PVP_1302_NAME",
+    "Korean": "트랜스톤(전체)",
+    "English": "Transistone (Total)",
+    "Japanese": "トランストーン(全体)",
+    "China_Simplified": "转换石(全部)",
+    "China_Traditional": "轉換石(全體)"
+  },
+  {
+    "ID": "PRODUCT_PVP_1303_NAME",
+    "Korean": "전문 스킬 교본",
+    "English": "Professional Skill Manual",
+    "Japanese": "スキル教本：専門家編",
+    "China_Simplified": "专业技能教材",
+    "China_Traditional": "專家技能教材"
+  },
+  {
+    "ID": "PRODUCT_PVP_1304_NAME",
+    "Korean": "골드 10,000",
+    "English": "10,000 Gold",
+    "Japanese": "ゴールド10,000",
+    "China_Simplified": "金币10,000",
+    "China_Traditional": "金幣10,000"
+  },
+  {
+    "ID": "PRODUCT_PVP_1305_NAME",
+    "Korean": "전설 등급 선물 선택 상자",
+    "English": "Legendary Quality Present Selection Chest",
+    "Japanese": "プレゼント選択ボックス(レジェンド)",
+    "China_Simplified": "传说级别礼物自选箱",
+    "China_Traditional": "傳說等級禮物選擇箱"
+  },
+  {
+    "ID": "PRODUCT_PVP_1306_NAME",
+    "Korean": "3단계 보석 랜덤 상자",
+    "English": "Stage 3 Gem Random Chest",
+    "Japanese": "ジェムランダムボックス(3ランク)",
+    "China_Simplified": "3阶段宝石随机箱",
+    "China_Traditional": "3階段寶石隨機箱"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30537_NAME",
+    "Korean": "차원 호출 상자 l",
+    "English": "Dimensional Supply Box I",
+    "Japanese": "次元召喚ボックスI",
+    "China_Simplified": "次元召唤箱I",
+    "China_Traditional": "次元召喚箱I"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30538_NAME",
+    "Korean": "차원 호출 상자 ll",
+    "English": "Dimensional Supply Box II",
+    "Japanese": "次元召喚ボックスII",
+    "China_Simplified": "次元召唤箱II",
+    "China_Traditional": "次元召喚箱II"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30539_NAME",
+    "Korean": "차원 호출 상자 lll",
+    "English": "Dimensional Supply Box III",
+    "Japanese": "次元召喚ボックスIII",
+    "China_Simplified": "次元召唤箱III",
+    "China_Traditional": "次元召喚箱III"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30540_NAME",
+    "Korean": "차원 호출 상자 lV",
+    "English": "Dimensional Supply Box IV",
+    "Japanese": "次元召喚ボックスIV",
+    "China_Simplified": "次元召唤箱IV",
+    "China_Traditional": "次元召喚箱IV"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30541_NAME",
+    "Korean": "차원 호출 상자 V",
+    "English": "Dimensional Supply Box V",
+    "Japanese": "次元召喚ボックスV",
+    "China_Simplified": "次元召唤箱V",
+    "China_Traditional": "次元召喚箱V"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30542_NAME",
+    "Korean": "차원 호출 상자[이펙티온]",
+    "English": "Dimensional Supply Box [Effectium]",
+    "Japanese": "次元召喚ボックス【エフェクター】",
+    "China_Simplified": "次元召唤箱【效果石】",
+    "China_Traditional": "次元召喚箱【效果石】"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30537_DESC",
+    "Korean": "100,000 골드를 얻습니다.",
+    "English": "Obtain 100,000 Gold.",
+    "Japanese": "ゴールドを100,000獲得する。",
+    "China_Simplified": "获得100,000金币。",
+    "China_Traditional": "獲得100,000金幣。"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30538_DESC",
+    "Korean": "200,000 골드를 얻습니다.",
+    "English": "Obtain 200,000 Gold.",
+    "Japanese": "ゴールドを200,000獲得する。",
+    "China_Simplified": "获得200,000金币。",
+    "China_Traditional": "獲得200,000金幣。"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30539_DESC",
+    "Korean": "300,000 골드를 얻습니다.",
+    "English": "Obtain 300,000 Gold.",
+    "Japanese": "ゴールドを300,000獲得する。",
+    "China_Simplified": "获得300,000金币。",
+    "China_Traditional": "獲得300,000金幣。"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30540_DESC",
+    "Korean": "400,000 골드를 얻습니다.",
+    "English": "Obtain 400,000 Gold.",
+    "Japanese": "ゴールドを400,000獲得する。",
+    "China_Simplified": "获得400,000金币。",
+    "China_Traditional": "獲得400,000金幣。"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30541_DESC",
+    "Korean": "1,000,000 골드를 얻습니다.",
+    "English": "Obtain 1,000,000 Gold.",
+    "Japanese": "ゴールドを1,000,000獲得する。",
+    "China_Simplified": "获得1,000,000金币。",
+    "China_Traditional": "獲得1,000,000金幣。"
+  },
+  {
+    "ID": "ITEM_BOX_RANDOM_30542_DESC",
+    "Korean": "이펙티온을 20,000 개 얻습니다.",
+    "English": "Obtain 20,000 Effectium.",
+    "Japanese": "エフェクターを20,000個獲得する。",
+    "China_Simplified": "获得效果石20,000个。",
+    "China_Traditional": "獲得效果石20,000個。"
+  },
+  {
+    "ID": "PRODUCT_PACKAGE_91000065_NAME",
+    "Korean": "디스코드 24,000명 달성 기념 보상",
+    "English": "Official Discord Reaches 24,000 members!",
+    "Japanese": "Discord 24,000人達成記念報酬",
+    "China_Simplified": "Discord 24,000人达成纪念奖励",
+    "China_Traditional": "Discord 24,000人達成紀念獎勵"
   }
 ]

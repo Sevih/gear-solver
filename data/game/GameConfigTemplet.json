@@ -381,23 +381,23 @@
   },
   {
     "ID": "REALTIME_ARENA_FREE_BAN_COOL",
-    "ValueString": "35"
+    "ValueString": "40"
   },
   {
     "ID": "REALTIME_ARENA_SELECT_COOL",
-    "ValueString": "25"
+    "ValueString": "40"
   },
   {
     "ID": "REALTIME_ARENA_CHARACTER_BAN_COOL",
-    "ValueString": "25"
+    "ValueString": "40"
   },
   {
     "ID": "REALTIME_ARENA_TEAM_SET_COOL",
-    "ValueString": "45"
+    "ValueString": "50"
   },
   {
     "ID": "REALTIME_ARENA_BATTLE_TURN_COOL",
-    "ValueString": "10"
+    "ValueString": "15"
   },
   {
     "ID": "REALTIME_ARENA_BATTLE_START_DELAY_SEC",
@@ -773,7 +773,7 @@
   },
   {
     "ID": "PVP_REALTIME_BAN_GUARD_SLOT",
-    "ValueString": "3"
+    "ValueString": "0"
   },
   {
     "ID": "MAX_DAILY_BONUS_COUNT_FARMING_DUNGEON",
@@ -798,6 +798,10 @@
   {
     "ID": "SINGULAR_ENCHANT_RERALL_WARNING_RATE_ARMOR",
     "ValueString": "40"
+  },
+  {
+    "ID": "EQUIP_RECRUIT_CUSTOM_PICK_UP_SELECT_ID_LIST ",
+    "ValueString": "784,1801,5312"
   },
   {
     "ID": "PRESENT_TO_SPECIAL_EQUIP   ",

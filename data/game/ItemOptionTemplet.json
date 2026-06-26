@@ -10108,6 +10108,18 @@
     "BuffID": "BID_CEQUIP_MAIN_DMG_FIRE"
   },
   {
+    "ID": "20116",
+    "GroupID": "2000116",
+    "Rate": "10000",
+    "OptionType": "IOT_BUFF",
+    "_unknown_0": "IOR_NONE",
+    "StatType": "ST_HIT_AP",
+    "ApplyingType": "OAT_ADD",
+    "OptionFactor": "1",
+    "OptionMaxValue": "10",
+    "BuffID": "BID_CEQUIP_MAIN_DMG_REDUCE_LIGHT"
+  },
+  {
     "ID": "20117",
     "GroupID": "2000117",
     "Rate": "10000",

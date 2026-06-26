@@ -9945,6 +9945,94 @@
   },
   {
     "ID": "905",
+    "CharacterID": "2000116",
+    "EvolutionLevel": "2",
+    "RewardStatType_1": "ST_DEF",
+    "RewardValue_1": "26",
+    "RewardStatType_2": "ST_HP",
+    "RewardValue_2": "92",
+    "RewardStatType_3": "ST_BUFF_CHANCE",
+    "RewardValue_3": "10"
+  },
+  {
+    "ID": "906",
+    "CharacterID": "2000116",
+    "EvolutionLevel": "3",
+    "RewardStatType_1": "ST_DEF",
+    "RewardValue_1": "26",
+    "RewardStatType_2": "ST_HP",
+    "RewardValue_2": "92",
+    "RewardStatType_3": "ST_BUFF_CHANCE",
+    "RewardValue_3": "20"
+  },
+  {
+    "ID": "907",
+    "CharacterID": "2000116",
+    "EvolutionLevel": "4",
+    "RewardStatType_1": "ST_DEF",
+    "RewardValue_1": "39",
+    "RewardStatType_2": "ST_HP",
+    "RewardValue_2": "138",
+    "RewardStatType_3": "ST_BUFF_CHANCE",
+    "RewardValue_3": "20"
+  },
+  {
+    "ID": "908",
+    "CharacterID": "2000116",
+    "EvolutionLevel": "5",
+    "RewardStatType_1": "ST_DEF",
+    "RewardValue_1": "39",
+    "RewardStatType_2": "ST_HP",
+    "RewardValue_2": "138",
+    "RewardStatType_3": "ST_BUFF_CHANCE",
+    "RewardValue_3": "20"
+  },
+  {
+    "ID": "909",
+    "CharacterID": "2000116",
+    "EvolutionLevel": "6",
+    "RewardStatType_1": "ST_HP",
+    "RewardValue_1": "493",
+    "RewardStatType_2": "ST_DEF",
+    "RewardValue_2": "135",
+    "RewardStatType_3": "ST_SPEED",
+    "RewardValue_3": "5"
+  },
+  {
+    "ID": "910",
+    "CharacterID": "2000116",
+    "EvolutionLevel": "7",
+    "RewardStatType_1": "ST_DMG_BOOST",
+    "RewardValue_1": "20",
+    "RewardStatType_2": "ST_ATK",
+    "RewardValue_2": "28",
+    "RewardStatType_3": "ST_HP",
+    "RewardValue_3": "300"
+  },
+  {
+    "ID": "911",
+    "CharacterID": "2000116",
+    "EvolutionLevel": "8",
+    "RewardStatType_1": "ST_DMG_BOOST",
+    "RewardValue_1": "20",
+    "RewardStatType_2": "ST_ATK",
+    "RewardValue_2": "28",
+    "RewardStatType_3": "ST_HP",
+    "RewardValue_3": "300"
+  },
+  {
+    "ID": "912",
+    "CharacterID": "2000116",
+    "EvolutionLevel": "9",
+    "RewardStatType_1": "ST_DMG_BOOST",
+    "RewardValue_1": "20",
+    "RewardStatType_2": "ST_ATK",
+    "RewardValue_2": "28",
+    "RewardStatType_3": "ST_SPEED",
+    "RewardValue_3": "5"
+  },
+  {
+    "ID": "913",
     "CharacterID": "2000117",
     "EvolutionLevel": "2",
     "RewardStatType_1": "ST_ATK",
@@ -9955,7 +10043,7 @@
     "RewardValue_3": "20"
   },
   {
-    "ID": "906",
+    "ID": "914",
     "CharacterID": "2000117",
     "EvolutionLevel": "3",
     "RewardStatType_1": "ST_ATK",
@@ -9966,7 +10054,7 @@
     "RewardValue_3": "30"
   },
   {
-    "ID": "907",
+    "ID": "915",
     "CharacterID": "2000117",
     "EvolutionLevel": "4",
     "RewardStatType_1": "ST_ATK",
@@ -9977,7 +10065,7 @@
     "RewardValue_3": "30"
   },
   {
-    "ID": "908",
+    "ID": "916",
     "CharacterID": "2000117",
     "EvolutionLevel": "5",
     "RewardStatType_1": "ST_ATK",
@@ -9988,7 +10076,7 @@
     "RewardValue_3": "30"
   },
   {
-    "ID": "909",
+    "ID": "917",
     "CharacterID": "2000117",
     "EvolutionLevel": "6",
     "RewardStatType_1": "ST_HP",
@@ -9999,129 +10087,41 @@
     "RewardValue_3": "39"
   },
   {
-    "ID": "910",
-    "CharacterID": "2000117",
-    "EvolutionLevel": "7",
-    "RewardStatType_1": "ST_DMG_BOOST",
-    "RewardValue_1": "20",
-    "RewardStatType_2": "ST_ATK",
-    "RewardValue_2": "39",
-    "RewardStatType_3": "ST_HP",
-    "RewardValue_3": "201"
-  },
-  {
-    "ID": "911",
-    "CharacterID": "2000117",
-    "EvolutionLevel": "8",
-    "RewardStatType_1": "ST_DMG_BOOST",
-    "RewardValue_1": "20",
-    "RewardStatType_2": "ST_ATK",
-    "RewardValue_2": "39",
-    "RewardStatType_3": "ST_BUFF_CHANCE",
-    "RewardValue_3": "20"
-  },
-  {
-    "ID": "912",
-    "CharacterID": "2000117",
-    "EvolutionLevel": "9",
-    "RewardStatType_1": "ST_DMG_BOOST",
-    "RewardValue_1": "20",
-    "RewardStatType_2": "ST_ATK",
-    "RewardValue_2": "39",
-    "RewardStatType_3": "ST_HP",
-    "RewardValue_3": "201"
-  },
-  {
-    "ID": "913",
-    "CharacterID": "2000119",
-    "EvolutionLevel": "2",
-    "RewardStatType_1": "ST_ATK",
-    "RewardValue_1": "29",
-    "RewardStatType_2": "ST_HP",
-    "RewardValue_2": "70",
-    "RewardStatType_3": "ST_BUFF_CHANCE",
-    "RewardValue_3": "20"
-  },
-  {
-    "ID": "914",
-    "CharacterID": "2000119",
-    "EvolutionLevel": "3",
-    "RewardStatType_1": "ST_ATK",
-    "RewardValue_1": "29",
-    "RewardStatType_2": "ST_HP",
-    "RewardValue_2": "70",
-    "RewardStatType_3": "ST_BUFF_CHANCE",
-    "RewardValue_3": "30"
-  },
-  {
-    "ID": "915",
-    "CharacterID": "2000119",
-    "EvolutionLevel": "4",
-    "RewardStatType_1": "ST_ATK",
-    "RewardValue_1": "43",
-    "RewardStatType_2": "ST_HP",
-    "RewardValue_2": "105",
-    "RewardStatType_3": "ST_BUFF_CHANCE",
-    "RewardValue_3": "30"
-  },
-  {
-    "ID": "916",
-    "CharacterID": "2000119",
-    "EvolutionLevel": "5",
-    "RewardStatType_1": "ST_ATK",
-    "RewardValue_1": "43",
-    "RewardStatType_2": "ST_HP",
-    "RewardValue_2": "105",
-    "RewardStatType_3": "ST_BUFF_CHANCE",
-    "RewardValue_3": "30"
-  },
-  {
-    "ID": "917",
-    "CharacterID": "2000119",
-    "EvolutionLevel": "6",
-    "RewardStatType_1": "ST_HP",
-    "RewardValue_1": "403",
-    "RewardStatType_2": "ST_DEF",
-    "RewardValue_2": "73",
-    "RewardStatType_3": "ST_DMG_BOOST",
-    "RewardValue_3": "20"
-  },
-  {
     "ID": "918",
-    "CharacterID": "2000119",
+    "CharacterID": "2000117",
     "EvolutionLevel": "7",
-    "RewardStatType_1": "ST_ATK",
-    "RewardValue_1": "43",
-    "RewardStatType_2": "ST_HP",
-    "RewardValue_2": "105",
-    "RewardStatType_3": "ST_DMG_BOOST",
-    "RewardValue_3": "20"
+    "RewardStatType_1": "ST_DMG_BOOST",
+    "RewardValue_1": "20",
+    "RewardStatType_2": "ST_ATK",
+    "RewardValue_2": "39",
+    "RewardStatType_3": "ST_HP",
+    "RewardValue_3": "201"
   },
   {
     "ID": "919",
-    "CharacterID": "2000119",
+    "CharacterID": "2000117",
     "EvolutionLevel": "8",
-    "RewardStatType_1": "ST_ATK",
-    "RewardValue_1": "43",
-    "RewardStatType_2": "ST_BUFF_CHANCE",
-    "RewardValue_2": "20",
-    "RewardStatType_3": "ST_DMG_BOOST",
+    "RewardStatType_1": "ST_DMG_BOOST",
+    "RewardValue_1": "20",
+    "RewardStatType_2": "ST_ATK",
+    "RewardValue_2": "39",
+    "RewardStatType_3": "ST_BUFF_CHANCE",
     "RewardValue_3": "20"
   },
   {
     "ID": "920",
-    "CharacterID": "2000119",
+    "CharacterID": "2000117",
     "EvolutionLevel": "9",
-    "RewardStatType_1": "ST_ATK",
-    "RewardValue_1": "43",
-    "RewardStatType_2": "ST_HP",
-    "RewardValue_2": "105",
-    "RewardStatType_3": "ST_DEF",
-    "RewardValue_3": "35"
+    "RewardStatType_1": "ST_DMG_BOOST",
+    "RewardValue_1": "20",
+    "RewardStatType_2": "ST_ATK",
+    "RewardValue_2": "39",
+    "RewardStatType_3": "ST_HP",
+    "RewardValue_3": "201"
   },
   {
     "ID": "921",
-    "CharacterID": "2000120",
+    "CharacterID": "2000119",
     "EvolutionLevel": "2",
     "RewardStatType_1": "ST_ATK",
     "RewardValue_1": "29",
@@ -10132,7 +10132,7 @@
   },
   {
     "ID": "922",
-    "CharacterID": "2000120",
+    "CharacterID": "2000119",
     "EvolutionLevel": "3",
     "RewardStatType_1": "ST_ATK",
     "RewardValue_1": "29",
@@ -10143,7 +10143,7 @@
   },
   {
     "ID": "923",
-    "CharacterID": "2000120",
+    "CharacterID": "2000119",
     "EvolutionLevel": "4",
     "RewardStatType_1": "ST_ATK",
     "RewardValue_1": "43",
@@ -10154,7 +10154,7 @@
   },
   {
     "ID": "924",
-    "CharacterID": "2000120",
+    "CharacterID": "2000119",
     "EvolutionLevel": "5",
     "RewardStatType_1": "ST_ATK",
     "RewardValue_1": "43",
@@ -10165,7 +10165,7 @@
   },
   {
     "ID": "925",
-    "CharacterID": "2000120",
+    "CharacterID": "2000119",
     "EvolutionLevel": "6",
     "RewardStatType_1": "ST_HP",
     "RewardValue_1": "403",
@@ -10176,7 +10176,7 @@
   },
   {
     "ID": "926",
-    "CharacterID": "2000120",
+    "CharacterID": "2000119",
     "EvolutionLevel": "7",
     "RewardStatType_1": "ST_ATK",
     "RewardValue_1": "43",
@@ -10187,7 +10187,7 @@
   },
   {
     "ID": "927",
-    "CharacterID": "2000120",
+    "CharacterID": "2000119",
     "EvolutionLevel": "8",
     "RewardStatType_1": "ST_ATK",
     "RewardValue_1": "43",
@@ -10198,6 +10198,94 @@
   },
   {
     "ID": "928",
+    "CharacterID": "2000119",
+    "EvolutionLevel": "9",
+    "RewardStatType_1": "ST_ATK",
+    "RewardValue_1": "43",
+    "RewardStatType_2": "ST_HP",
+    "RewardValue_2": "105",
+    "RewardStatType_3": "ST_DEF",
+    "RewardValue_3": "35"
+  },
+  {
+    "ID": "929",
+    "CharacterID": "2000120",
+    "EvolutionLevel": "2",
+    "RewardStatType_1": "ST_ATK",
+    "RewardValue_1": "29",
+    "RewardStatType_2": "ST_HP",
+    "RewardValue_2": "70",
+    "RewardStatType_3": "ST_BUFF_CHANCE",
+    "RewardValue_3": "20"
+  },
+  {
+    "ID": "930",
+    "CharacterID": "2000120",
+    "EvolutionLevel": "3",
+    "RewardStatType_1": "ST_ATK",
+    "RewardValue_1": "29",
+    "RewardStatType_2": "ST_HP",
+    "RewardValue_2": "70",
+    "RewardStatType_3": "ST_BUFF_CHANCE",
+    "RewardValue_3": "30"
+  },
+  {
+    "ID": "931",
+    "CharacterID": "2000120",
+    "EvolutionLevel": "4",
+    "RewardStatType_1": "ST_ATK",
+    "RewardValue_1": "43",
+    "RewardStatType_2": "ST_HP",
+    "RewardValue_2": "105",
+    "RewardStatType_3": "ST_BUFF_CHANCE",
+    "RewardValue_3": "30"
+  },
+  {
+    "ID": "932",
+    "CharacterID": "2000120",
+    "EvolutionLevel": "5",
+    "RewardStatType_1": "ST_ATK",
+    "RewardValue_1": "43",
+    "RewardStatType_2": "ST_HP",
+    "RewardValue_2": "105",
+    "RewardStatType_3": "ST_BUFF_CHANCE",
+    "RewardValue_3": "30"
+  },
+  {
+    "ID": "933",
+    "CharacterID": "2000120",
+    "EvolutionLevel": "6",
+    "RewardStatType_1": "ST_HP",
+    "RewardValue_1": "403",
+    "RewardStatType_2": "ST_DEF",
+    "RewardValue_2": "73",
+    "RewardStatType_3": "ST_DMG_BOOST",
+    "RewardValue_3": "20"
+  },
+  {
+    "ID": "934",
+    "CharacterID": "2000120",
+    "EvolutionLevel": "7",
+    "RewardStatType_1": "ST_ATK",
+    "RewardValue_1": "43",
+    "RewardStatType_2": "ST_HP",
+    "RewardValue_2": "105",
+    "RewardStatType_3": "ST_DMG_BOOST",
+    "RewardValue_3": "20"
+  },
+  {
+    "ID": "935",
+    "CharacterID": "2000120",
+    "EvolutionLevel": "8",
+    "RewardStatType_1": "ST_ATK",
+    "RewardValue_1": "43",
+    "RewardStatType_2": "ST_BUFF_CHANCE",
+    "RewardValue_2": "20",
+    "RewardStatType_3": "ST_DMG_BOOST",
+    "RewardValue_3": "20"
+  },
+  {
+    "ID": "936",
     "CharacterID": "2000120",
     "EvolutionLevel": "9",
     "RewardStatType_1": "ST_ATK",
