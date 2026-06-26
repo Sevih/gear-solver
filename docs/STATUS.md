@@ -158,5 +158,6 @@ docs/             architecture.md, data-schema.md, reference.md, roadmap.md, sol
 - [docs/data-schema.md](data-schema.md) — schéma des données capturées + mappings
 - [docs/reference.md](reference.md) — **doc dense unifiée** : traitements (capture→parse→compose→solve), calculs (CalcFinalStat, CP, ratings, score, gems, reforge), sources (tables jeu, locks, RVAs, conventions stat)
 - [docs/solver.md](solver.md) — solver Builder : pipeline, panneaux UI, optimisations, limites
-- [docs/todo.md](todo.md) — backlog actionnable (polish solver, persistence, validation, hygiene)
+- [docs/todo.md](todo.md) — backlog **actionnable** (tâches ouvertes uniquement)
+- [docs/changelog.md](changelog.md) — **journal des livraisons** (ce qui est livré, par session)
 - [tools/capture/README.md](../tools/capture/README.md) — pipeline de capture en détail
