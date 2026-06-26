@@ -3,7 +3,7 @@
  * outerpedia/project/gs-data.jsx (Claude Design handoff bundle).
  *
  * Visual identity:
- * - Space Grotesk (UI) + JetBrains Mono (numbers/data).
+ * - Space Grotesk (UI) + IBM Plex Mono (numbers/data — slashed zero for 0/8 legibility).
  * - Violet (#9D51FF) for the brand mark, cyan (#22d3ee) reserved for the
  *   primary solve/optimise action, gold (#fbbf24) for stat values, amber for
  *   star rows, Singularity vertical gradient cyan → violet → magenta.
