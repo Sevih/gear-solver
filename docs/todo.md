@@ -32,8 +32,9 @@
       set requis (restreindre les pools armor au set quand un seul req-4pc actif — cf. le 🔴 ci-dessus).
 
 ### 🟡/⚪ UX-cohérence & nits
-- [ ] 🟡 **`SlotMini` non cliquable (Builds)** — aucun moyen d'inspecter une pièce depuis la tab Builds
-      (tooltip/clic), contrairement à l'Inventory.
+- [x] 🟡 **`SlotMini` non cliquable (Builds)** — ~~aucun moyen d'inspecter une pièce depuis la tab Builds
+      (tooltip/clic), contrairement à l'Inventory.~~ Fait : hover sur une pièce équipée → `RichTooltip` +
+      `GearTooltipContent` (main/subs/gems, comme le détail Inventory).
 - [ ] 🟡 **Conservation des résultats** — conserver les résultats du solver quand on change de tab
       (voire permettre de laisser le solver tourner en fond).
 - [ ] 🟡 **Reset des tris/filtres au lancement** — l'état persiste au reload et on n'en veut pas :

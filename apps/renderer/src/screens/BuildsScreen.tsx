@@ -7,6 +7,8 @@ import { cx } from "../design/cx.js";
 import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
 import { CyanButton } from "../design/Shell.js";
 import { CharacterPortrait, SlotMini, StatIcon } from "../design/EquipmentIcon.js";
+import { RichTooltip } from "../design/RichTooltip.js";
+import { GearTooltipContent } from "../design/GearTooltip.js";
 import { Pill } from "../design/Chips.js";
 import { TOKENS, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toUiPiece } from "../design/adapter.js";
@@ -755,7 +757,12 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
         <div className={cx("grid grid-cols-4 grid-rows-2 gap-1.5", equipped.size === 0 && "opacity-40")}>
           {BUILD_SLOT_ORDER.map((id) => {
             const p = equipped.get(id);
-            return <SlotMini key={id} slot={id} piece={p?.iconPiece ?? null} size={55} />;
+            const mini = <SlotMini slot={id} piece={p?.iconPiece ?? null} size={55} />;
+            // Filled slots become inspectable on hover (main/subs/gems), the way
+            // the Inventory tab lets you click a tile. Empty slots stay inert.
+            return p
+              ? <RichTooltip key={id} className="cursor-help" content={<GearTooltipContent piece={p} />}>{mini}</RichTooltip>
+              : <span key={id}>{mini}</span>;
           })}
         </div>
         {equipped.size === 0 && (
