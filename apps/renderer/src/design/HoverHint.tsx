@@ -30,13 +30,16 @@ export interface HoverHintProps {
    *  styling (e.g. `font-semibold uppercase tracking-wider text-zinc-400`)
    *  that should affect the `name` but not the tooltip body. */
   className?: string;
+  /** Popover max width in px. Bump it for long explanatory copy so it doesn't
+   *  wrap into a tall, narrow column. Defaults to 240. */
+  maxWidth?: number;
 }
 
-const TOOLTIP_MAX_W = 240;   // px — matches the inline-style maxWidth below.
+const TOOLTIP_MAX_W = 240;   // px — default popover max width.
 const EDGE_PADDING = 8;      // px — gap kept from the viewport edges.
 const ANCHOR_GAP = 8;        // px — gap between the icon and the popover.
 
-export function HoverHint({ name, text, className }: HoverHintProps) {
+export function HoverHint({ name, text, className, maxWidth = TOOLTIP_MAX_W }: HoverHintProps) {
   const triggerRef = useRef<HTMLSpanElement | null>(null);
   const [open, setOpen] = useState(false);
   // `pos` is the viewport-relative anchor point: the popover is centered
@@ -48,14 +51,14 @@ export function HoverHint({ name, text, className }: HoverHintProps) {
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const half = TOOLTIP_MAX_W / 2;
+    const half = maxWidth / 2;
     let left = r.left + r.width / 2;
     if (left - half < EDGE_PADDING) left = half + EDGE_PADDING;
     if (left + half > window.innerWidth - EDGE_PADDING) {
       left = window.innerWidth - half - EDGE_PADDING;
     }
     setPos({ top: r.top - ANCHOR_GAP, left });
-  }, []);
+  }, [maxWidth]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -98,7 +101,7 @@ export function HoverHint({ name, text, className }: HoverHintProps) {
             position: "fixed",
             top: pos.top,
             left: pos.left,
-            maxWidth: TOOLTIP_MAX_W,
+            maxWidth,
             transform: "translate(-50%, -100%)",
           }}
           className="pointer-events-none z-9999 whitespace-normal rounded-md border border-white/10 bg-zinc-900 px-3 py-2 text-[11px] font-normal leading-snug tracking-normal text-white normal-case shadow-lg shadow-black/40"

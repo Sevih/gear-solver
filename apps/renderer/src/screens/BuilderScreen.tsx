@@ -1563,9 +1563,11 @@ function PopoverButton({
   );
 }
 
-function Panel({ title, hint, action, children, width }: {
+function Panel({ title, hint, hintWidth, action, children, width }: {
   title: string;
   hint?: string;
+  /** Popover max width for the hint — bump for long explanatory copy. */
+  hintWidth?: number;
   /** Optional small trailing element rendered next to the title (e.g. a
    *  "clear" link for the Substat priority panel). */
   action?: ReactNode;
@@ -1582,6 +1584,7 @@ function Panel({ title, hint, action, children, width }: {
             className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70"
             name={title}
             text={hint}
+            maxWidth={hintWidth}
           />
         ) : (
           <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">{title}</span>
@@ -1828,6 +1831,7 @@ function SubValuePanel({ baseFlat, subTicks, width = "w-full" }: {
     <Panel
       title="Sub tick value"
       hint="Per 6★ substat tick: flat vs %. A %-tick scales with the hero's base (base+evo+awak); flat is fixed. The cyan side is the more valuable sub to roll for this hero — % overtakes flat above the breakeven base shown."
+      hintWidth={360}
       width={width}
     >
       <div className="grid grid-cols-[auto_1fr_1.4fr] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">
@@ -1897,6 +1901,7 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
   return (
     <Panel
       title={`Damage / +1% · ${noCrit ? "no crit" : "100% crit"}`}
+      hintWidth={380}
       hint={`Expected-damage gain from +1% of each stat for this hero, ${noCrit ? "evaluated at 0% crit — this hero can never crit (CHD is dead, so it's omitted)" : "computed at the crit cap (100% CHC) — the endgame baseline you build toward (below the cap, CHD is undervalued)"}. Compares the hero's scaling stat(s)${noCrit ? "" : ", CHD"} and DMG inc. For ATK/DEF/HP, +1% = a 1% sub (base × 1%, through the hero's multipliers); CHD / DMG inc / EFF / CHC = +1 point; SPD = +1 SPD point (flat). Cyan = where the most damage is bought. Uses the in-game crit / DMG± / PEN model.`}
       width={width}
     >
