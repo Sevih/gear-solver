@@ -98,6 +98,16 @@ pire que l'équipé. Plus un bloc **debug** (`gs.debug.solver`) dans `precompute
 l'orchestrator loggue `topCp`/`topScore` du meilleur résultat. Tranche **recall** (pièce élaguée) vs **calc** (notre
 CP ≠ celui du jeu).
 
+**🔴 Scoring de gemmes CP-aware (la vraie cause du CP < équipé)** — le debug l'a prouvé : `curCp = 315 492` (= le
+jeu, notre calc est juste) mais `topCp = 292 530` avec **toutes** les pièces actuelles dans le pool. Cause : en
+SOLVE CP sans priorité, `scoreGemPool` rankait les gemmes par **`value / norm` brut** (magnitude), pas par leur
+apport CP → l'allocateur préférait des gemmes **dmg-reduce / flat** (gros chiffres, ~0 CP) aux gemmes **atk/crit/pen**
+qui font le CP, et **baissait l'ATK** du build (9819 → 8919) donc le CP réel. Fix : `cpStatWeights` calcule un poids
+CP par stat (= ΔCP d'un bump ROLL_NORM de la stat, évalué **au build courant** — une stat déjà à son cap CP, ex.
+CRC ~100 %, retombe à ~0) et sert de priorité aux gemmes en mode CP. Priorité utilisateur explicite toujours
+prioritaire ; SOLVE Score sans priorité inchangé (fallback gems socketés). `cpStatWeights` exporté + 2 tests
+(offensif ≫ dmg-reduce, poids ≥ 0). Suite : core 22 + renderer 188 = 210.
+
 **Défaut Top% 100 → 30** (`INITIAL_FILTERS`) — le slider garde son sens (100 = garde tout = exhaustif), mais le
 défaut élague à 30 %/slot. Warning du panneau Priority corrigé (le Top% mord en SOLVE CP même sans priorité).
 

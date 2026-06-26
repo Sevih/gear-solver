@@ -473,12 +473,15 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // allocator yields `null` → solver falls back to the Talisman/EE's
   // own socketed subs (good for SOLVE mode without explicit intent).
   //
-  // SOLVE CP mode opts out of that fallback (`allowZeroPriority`) and
-  // ranks gems by raw `value / norm` instead — "maximize CP" implies
-  // "use the best gems available"; preserving currently-socketed gems
-  // would silently disable gem optimization for the typical CP usage
-  // (user clicks SOLVE CP without touching the priority panel, expects
-  // the solver to recommend the strongest gems for the new build).
+  // SOLVE CP mode without a user priority scores gems by their CP WEIGHT
+  // (`cpStatWeights`), not raw magnitude. Ranking by `value / norm` made the
+  // allocator grab high-magnitude dmg-reduce / flat gems that barely move CP,
+  // so a CP solve could return LESS CP than the equipped build (its good gems
+  // swapped for big-number low-CP ones). The CP weights are evaluated at the
+  // hero's current build, so the picked gems actually maximize CP. An explicit
+  // user priority still wins; SOLVE Score without a priority keeps the old
+  // fallback (scores collapse to 0 → socketed gems preserved).
+  //
   // Gem pool eligibility mirrors `allow()` for pieces: gear on other heroes
   // only counts when `includeEquippedOnOthers` is on, and excluded heroes
   // are skipped outright. Otherwise the solver could recommend gems that
@@ -488,9 +491,16 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     includeEquippedOnOthers: filters.options.includeEquippedOnOthers,
     excludedHeroes: excludedSet,
   });
-  const scoredGems = scoreGemPool(gemPool, filters.priority, game, {
-    allowZeroPriority: req.mode === "cp",
-  });
+  const gemPriority = hasPriority
+    ? filters.priority
+    : req.mode === "cp"
+      ? cpStatWeights(
+          computeFinalStats(composed.noGearStats, composed.scaling, inv.gear.filter((g) => g.equippedBy === heroUid), game),
+          makeCpEvaluator({ showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused }),
+          inv.gear.find((g) => g.equippedBy === heroUid && g.slot === "ooparts") ?? null,
+        )
+      : filters.priority;
+  const scoredGems = scoreGemPool(gemPool, gemPriority, game, { allowZeroPriority: false });
   const eeSlotCount = gemSlotsOf(ee);
   // Pre-aggregate gem contribution per talismanSlots variant — at most
   // two variants (4 and 5) cover every talisman in the inventory.
@@ -693,6 +703,37 @@ export function keepTopPct(
   requiredSetIds: Set<string>,
 ): GearPiece[] {
   return keepTopN(pieces, scoreOf, Math.ceil(pieces.length * pct / 100), requiredSetIds);
+}
+
+/** CP weight per user priority key = ΔCP from adding one ROLL_NORM-sized bump of
+ *  that stat to a reference build (clamped ≥0). Lets SOLVE CP score gems by their
+ *  CP impact instead of raw magnitude: without it the allocator grabs big-number
+ *  dmg-reduce / flat gems that barely move CP over the atk / crit / pen gems that
+ *  actually drive it (observed: a CP solve returning LESS CP than the equipped
+ *  build because its gems were swapped for high-magnitude low-CP ones). Evaluated
+ *  at `cur` so a stat already at its CP cap (e.g. CRC ~100%) gets ~0 weight on its
+ *  own. Keyed by user priority keys so it drops straight into `scoreGemPool`. */
+export function cpStatWeights(
+  cur: FinalStats,
+  cpEval: (s: FinalStats, oo: GearPiece | null) => number,
+  ooparts: GearPiece | null,
+): Record<string, number> {
+  const cp0 = cpEval(cur, ooparts);
+  const d = (patch: Partial<FinalStats>): number => Math.max(0, cpEval({ ...cur, ...patch }, ooparts) - cp0);
+  return {
+    atk: d({ atk: cur.atk + ROLL_NORMS.atk! }),
+    def: d({ def: cur.def + ROLL_NORMS.def! }),
+    hp:  d({ hp:  cur.hp  + ROLL_NORMS.hp! }),
+    spd: d({ spd: cur.spd + ROLL_NORMS.spd! }),
+    crc: d({ crc: cur.crc + ROLL_NORMS.critRate! }),
+    chd: d({ chd: cur.chd + ROLL_NORMS.critDmg! }),
+    pen: d({ pen: cur.pen + ROLL_NORMS.pen! }),
+    dmgUp: d({ dmgUp: cur.dmgUp + ROLL_NORMS.dmgUp! }),
+    dmgRed: d({ dmgRed: cur.dmgRed + ROLL_NORMS.dmgReduce! }),
+    critDmgRed: d({ critDmgRed: cur.critDmgRed + ROLL_NORMS.critDmgReduce! }),
+    eff: d({ eff: cur.eff + ROLL_NORMS.eff! }),
+    res: d({ res: cur.res + ROLL_NORMS.effRes! }),
+  };
 }
 
 /** Water-fill per-slot keep-counts so the product stays within `budget`. Process

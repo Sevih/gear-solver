@@ -318,7 +318,7 @@ Em-dash quand aucun build n'est sélectionné.
 
 **Pool** : multiset des `gemSlots[]` non-nuls de tous les Talismans + EE de l'inventaire (les gems sont swappables in-game, donc on agrège globalement).
 
-**Scoring** : pour chaque gem, `score = priority × (value / STAT_NORMS)`. Normalisé pour permettre la comparaison cross-stat. Triés desc.
+**Scoring** : pour chaque gem, `score = priority × (value / ROLL_NORMS)`. Normalisé pour la comparaison cross-stat. Triés desc. **En SOLVE CP sans priorité utilisateur**, la « priority » passée n'est pas vide mais les **poids CP** (`cpStatWeights` : ΔCP d'un bump ROLL_NORM de chaque stat, évalué au build courant). Sinon (rank par `value/norm` brut), l'allocateur préférait des gemmes dmg-reduce/flat (grosse magnitude, ~0 CP) aux gemmes atk/crit/pen → un solve CP pouvait rendre **moins** de CP que le build équipé. Une stat déjà à son cap CP (ex. CRC ~100 %) reçoit un poids ~0.
 
 **Allocation (défaut, fast path)** : greedy, K = `talismanSlots + eeSlots` (4 ou 5 selon `enhanceLevel`). On prend les K premiers gems avec `score > 0`. Pré-calculé **une fois par variant talismanSlots** (4 ou 5) dans `prepareContext` — pas de re-calcul dans la hot loop.
 
@@ -330,11 +330,10 @@ Le pré-gem CHC du combo est récupéré depuis `fs.crc − defaultCrcGem` (le c
 
 **Pré-agrégation** : la contribution gem est convertie en `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`. La compose ajoute juste ces deltas aux buckets après l'agrégation des pièces. Évite `resolveStat` × 10 gems × N combos.
 
-**Fallback `null`** : si la priority est vide (aucun gem n'a un `score > 0`),
-le delta est `null` → le solver ne passe pas de `gemOverride` → la compose
-utilise les **gems actuellement socketés sur le Talisman + EE** (via `piece.subs`).
-C'est volontaire : sans intention utilisateur, on respecte l'état du joueur
-plutôt que d'estimer 0 gems et sous-évaluer CP.
+**Fallback `null`** : en **SOLVE Score sans priorité**, la priority est vide (aucun gem n'a
+un `score > 0`) → delta `null` → pas de `gemOverride` → la compose utilise les **gems
+actuellement socketés** (via `piece.subs`). Sans intention utilisateur on respecte l'état du
+joueur. (SOLVE CP n'y tombe plus : il utilise les poids CP ci-dessus.)
 
 ---
 

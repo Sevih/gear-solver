@@ -13,8 +13,8 @@
  */
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, RolledStat, StatScaling } from "@gear-solver/core";
-import { allocateComboBudget, keepTopN, keepTopPct } from "../src/lib/solver/engine.js";
-import { computeFinalStats, type FinalStatsBaseline, type ScalingMap } from "../src/lib/composeBuild.js";
+import { allocateComboBudget, cpStatWeights, keepTopN, keepTopPct } from "../src/lib/solver/engine.js";
+import { computeFinalStats, type FinalStats, type FinalStatsBaseline, type ScalingMap } from "../src/lib/composeBuild.js";
 import { makeCpEvaluator } from "../src/lib/solver/cp.js";
 
 const GAME = { options: {}, equipment: {}, sets: {}, equipmentPassives: {}, multiTierPassives: {},
@@ -151,5 +151,26 @@ describe("CP scorer drives the prune toward high-CP gear", () => {
     const weak = piece("weak", { subs: [flatSub("def", 20)] });
     const out = keepTopPct([weak, strong], cpScore([]), 50, NO_REQ);
     expect(out.map((p) => p.uid)).toEqual(["strong"]);
+  });
+});
+
+describe("cpStatWeights (CP-aware gem scoring)", () => {
+  const CUR: FinalStats = {
+    atk: 9000, def: 2000, hp: 13000, spd: 200, crc: 70, chd: 250,
+    eff: 100, res: 100, dmgUp: 30, dmgRed: 0, pen: 60, critDmgRed: 0,
+  };
+  it("weights offensive stats well above dmg-reduce (the bug fix)", () => {
+    // The raw value/norm scorer over-picked dmg-reduce gems and dropped CP;
+    // the CP weights must rank atk/crit/pen above dmg-reduce.
+    const w = cpStatWeights(CUR, cpEval, null);
+    expect(w.atk!).toBeGreaterThan(w.dmgRed!);
+    expect(w.chd!).toBeGreaterThan(w.dmgRed!);
+    expect(w.pen!).toBeGreaterThan(w.dmgRed!);
+  });
+  it("returns a non-negative weight for every priority key", () => {
+    const w = cpStatWeights(CUR, cpEval, null);
+    for (const k of ["atk", "def", "hp", "spd", "crc", "chd", "pen", "dmgUp", "dmgRed", "critDmgRed", "eff", "res"]) {
+      expect(w[k]!).toBeGreaterThanOrEqual(0);
+    }
   });
 });
