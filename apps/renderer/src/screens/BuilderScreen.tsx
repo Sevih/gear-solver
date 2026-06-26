@@ -915,10 +915,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
          *  stays visible) stacked over the gear band. */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           <div
-            className="flex min-h-0 gap-2"
-            // Cap the results row so the gear band below stays visible; it can
-            // still SHRINK on short screens (the table scrolls) and won't grow
-            // past the chosen row count on tall ones.
+            className="flex min-h-0 flex-1 gap-2"
+            // Grow to fill the left column but cap at the chosen row count so the
+            // gear band below stays visible; still SHRINKs on short screens.
             style={{ maxHeight: resultRows * RESULT_ROW_H + 46 }}
           >
             <ResultsTable
@@ -3665,7 +3664,7 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }:
   // with the right rarity / breakthrough / image overlays.
   const iconPiece = piece && game ? toIconPiece(toUiPiece(piece, game)) : null;
   return (
-    <div className="flex w-72 shrink-0 flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-1 px-3 py-2.5">
+    <div className="flex w-56 shrink-0 flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-1 px-3 py-2.5">
       <div className="flex items-center gap-1.5">
         <span className={cx("truncate font-display text-[13px] font-semibold", name ? "text-white" : "text-white/40")}>
           {name ?? "—"}
