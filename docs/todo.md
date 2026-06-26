@@ -140,6 +140,15 @@
 
 ## Livré
 
+### Session 2026-06-26 — Equip/Unequip : méthodes core
+
+**`equipItem` / `unequipItem`** — module pur `packages/core/src/equip.ts` qui réécrit un
+`RawUserItem` capturé (champ `CharUID`, `"0"` = libre) : equip pose l'owner + **déplace** la pièce
+qui occupait le même slot du perso (un slot = une pièce) ; unequip remet à `"0"`. Immuables (jamais
+de mutation de l'entrée), no-op clone sur item inconnu / non-gear / déjà dans l'état voulu. +11 tests
+`equip.test.ts`. Le **branchement** (endpoint d'écriture disque + déclencheur Builder/Builds) reste
+un todo dédié (cf. « Equip / Unequip » dans Reste à faire).
+
 ### Session 2026-06-26 — Builds advice (lot prioritaire) + dedup reforge budget
 
 **`computeAdvice` extrait + enrichi** — sorti de `BuildsScreen` vers le module pur `lib/buildAdvice.ts`
