@@ -4,7 +4,7 @@ import { composeCharStats, expToLevel } from "@gear-solver/core";
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { cx } from "../design/cx.js";
-import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
+import { jsonWithSets, usePersistedState, useSessionState } from "../hooks/usePersistedState.js";
 import { CyanButton } from "../design/Shell.js";
 import { CharacterPortrait, SlotMini, StatIcon } from "../design/EquipmentIcon.js";
 import { RichTooltip } from "../design/RichTooltip.js";
@@ -869,8 +869,11 @@ interface BuildsScreenProps {
 
 export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, debug, onOptimize }: BuildsScreenProps) {
   // Roster filter state — name search + element/class multi-toggles. Empty
-  // sets mean "no filter on this axis".
-  const [filtersRaw, setFilters] = usePersistedState<RosterFilters>(
+  // sets mean "no filter on this axis". Session-scoped (sessionStorage): stable
+  // while tab-hopping but reset to "no filter" on the next app launch, so the
+  // roster opens unfiltered each session instead of inheriting last session's
+  // search/toggles. (Per-hero `notes` below stay durable — that's user content.)
+  const [filtersRaw, setFilters] = useSessionState<RosterFilters>(
     "gs.builds.filters",
     () => ({ query: "", elements: new Set(), classes: new Set(), locks: "all" }),
     ROSTER_FILTER_CODEC,

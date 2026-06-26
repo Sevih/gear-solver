@@ -47,9 +47,14 @@
       filtres / héros sélectionné conservés **et** un solve continue de tourner en fond (le worker pool n'est
       plus `dispose()` au démontage). `initialHeroUid` consommé sur changement de prop (plus seulement au mount)
       pour que « Optimize » re-cible bien le héros maintenant que le Builder ne remonte plus.
-- [ ] 🟡 **Reset des tris/filtres au lancement** — l'état persiste au reload et on n'en veut pas :
-      **Inventory** persiste le tri (`gs.inv.sort`/`dir`/`tab`), **Builds** persiste ses filtres
-      (`gs.builds.filters` ; pas de tri, fixe CP desc). Repartir d'un défaut au lancement.
+- [x] 🟡 **Reset des tris/filtres au lancement** — ~~l'état persiste au reload et on n'en veut pas :
+      Inventory persiste le tri (`gs.inv.sort`/`dir`/`tab`), Builds persiste ses filtres.~~ Fait :
+      nouveau hook `useSessionState` (backend **sessionStorage**) dans `hooks/usePersistedState.ts`
+      (factorisé avec `usePersistedState` via `useStorageState`). View-state basculé en session-scoped :
+      Inventory (`gs.inv.tab`/`sort`/`dir`/`filters.v3`) + Builds (`gs.builds.filters`). Survit au
+      remount lors d'un switch d'onglet (les écrans Home/Inventory/Builds remontent à chaque tab),
+      mais repart au défaut au **lancement** (sessionStorage vidé à la fermeture de la fenêtre).
+      `gs.builds.notes` (contenu utilisateur) reste durable en localStorage.
 - [ ] 🟡 **`Advices` (tab Builder)** — nouvelles règles dans `computeAdvice` ([BuildsScreen.tsx:489-551](../apps/renderer/src/screens/BuildsScreen.tsx#L489)).
       `ComposedEntry` expose : stats finales, baseline sans gear, pièces brutes (gems/subs/reforge/enhance/
       ascended/quality/sets), `meta.dmgStat`. **Lot prioritaire** (haute confiance, données déjà là) :
@@ -126,6 +131,13 @@
 ---
 
 ## Livré
+
+### Session 2026-06-26 — view-state session-scoped
+
+**Reset des tris/filtres au lancement** — `useSessionState` (sessionStorage) ajouté à
+`hooks/usePersistedState.ts` (impl partagée `useStorageState`). Inventory (tab/sort/dir/filters) +
+Builds (roster filters) sont désormais session-scoped : stables au switch d'onglet (les écrans
+remontent), réinitialisés au défaut au prochain lancement. `gs.builds.notes` reste durable.
 
 ### Session 2026-06-26 — onglet Home + panneau d'inspection partagé
 

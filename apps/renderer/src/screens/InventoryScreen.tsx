@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
 import { cx } from "../design/cx.js";
-import { jsonWithSets, usePersistedState } from "../hooks/usePersistedState.js";
+import { jsonWithSets, useSessionState } from "../hooks/usePersistedState.js";
 import { EquipmentIcon, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
 import {
   RARITY, SLOTS, STAT,
@@ -988,13 +988,14 @@ export interface InventoryScreenProps {
 }
 
 export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
-  // Persist filters / sort / view so the page survives a reload (or tab swap).
-  // `selectedId` stays ephemeral — re-opening the drawer to a random item after
-  // a reload would be more annoying than useful.
-  const [f, setF] = usePersistedState<FilterState>(FILTERS_STORAGE_KEY, emptyFilters, FILTER_CODEC);
-  const [tab, setTabState] = usePersistedState<InvTab>("gs.inv.tab", "all");
-  const [sort, setSort] = usePersistedState<SortKey>("gs.inv.sort", "enhance");
-  const [dir, setDir] = usePersistedState<"asc" | "desc">("gs.inv.dir", "desc");
+  // Session-scoped view state — filters / sort / sub-tab survive remounting on
+  // a tab swap (sessionStorage) but reset to their defaults on the next app
+  // launch, so each session starts from a clean inventory view rather than last
+  // session's leftover sort+filters. `selectedId` stays fully ephemeral.
+  const [f, setF] = useSessionState<FilterState>(FILTERS_STORAGE_KEY, emptyFilters, FILTER_CODEC);
+  const [tab, setTabState] = useSessionState<InvTab>("gs.inv.tab", "all");
+  const [sort, setSort] = useSessionState<SortKey>("gs.inv.sort", "enhance");
+  const [dir, setDir] = useSessionState<"asc" | "desc">("gs.inv.dir", "desc");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
 
