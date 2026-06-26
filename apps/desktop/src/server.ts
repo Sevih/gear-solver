@@ -49,6 +49,7 @@ import { proxyReco } from "./reco-proxy.js";
 import { syncGameData } from "./data-sync.js";
 import { serveImg } from "./img-cache.js";
 import { getCurrentRef } from "./repo-source.js";
+import { getStatus as getUpdateStatus, triggerCheck as triggerUpdateCheck, installUpdate } from "./updater.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -300,6 +301,26 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
     syncGameData({ repoRoot: IS_DEV ? REPO_ROOT : process.resourcesPath, gameDir: GAME_DIR, syncDir: SYNC_DIR, derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
       .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
       .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
+    return;
+  }
+  // --- auto-update — drives the Home tab's inline update card. status is
+  // polled; check/install are user actions (Check again / Retry / Install). ---
+  if (url === "/api/update/status" && req.method === "GET") {
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(getUpdateStatus()));
+    return;
+  }
+  if (url === "/api/update/check" && req.method === "POST") {
+    triggerUpdateCheck();
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+  if (url === "/api/update/install" && req.method === "POST") {
+    // 409 when nothing is downloaded yet (button shouldn't be reachable then,
+    // but guard against a stale client racing the state).
+    res.statusCode = installUpdate() ? 204 : 409;
+    res.end();
     return;
   }
   // Build-reco proxy → outerpedia API (Get Preset). GET only, numeric id.

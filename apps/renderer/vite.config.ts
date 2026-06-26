@@ -150,6 +150,24 @@ function localData(): Plugin {
           return;
         }
         if (url === "/api/capture/status" && req.method === "GET") return captureStatus(res);
+        // Auto-update — there's no electron-updater in dev (no packaged app),
+        // so mirror the prod `/api/update/*` shape with a static "up to date"
+        // payload. Lets the Home tab's update card render faithfully under
+        // `npm run dev`; check/install are inert no-ops.
+        if (url === "/api/update/status" && req.method === "GET") {
+          const ref = getCurrentRef();
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({
+            state: "uptodate", version: null, progress: 0, error: null,
+            appVersion: desktopPkg.version,
+            dataSha: ref && ref !== "main" ? ref.slice(0, 7) : null,
+          }));
+          return;
+        }
+        if ((url === "/api/update/check" || url === "/api/update/install") && req.method === "POST") {
+          res.statusCode = 204;
+          return res.end();
+        }
         // Manual "Sync game data" — pull raw tables from the outerpedia repo + rebuild.
         if (url === "/api/data/sync" && req.method === "POST") {
           syncGameData({ repoRoot: root, gameDir: GAME_DIR, syncDir: null, derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })

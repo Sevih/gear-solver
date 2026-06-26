@@ -13,12 +13,12 @@
  *   then loaded against that local server's ephemeral 127.0.0.1 port.
  */
 import { app, BrowserWindow, dialog } from "electron";
-import electronUpdaterPkg from "electron-updater";
 import type { Server } from "node:http";
 import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { disarmIfArmed, startServer } from "./server.js";
+import { setupAutoUpdate } from "./updater.js";
 import { dlog, dwarn } from "./log.js";
 import { syncGameData } from "./data-sync.js";
 import { BUNDLED_DERIVED, CACHE_ROOT, DERIVED, GAME_DIR, IMG_CACHE_DIR, REPO_SHA_STATE, REPO_ROOT, SYNC_DIR } from "./paths.js";
@@ -27,49 +27,10 @@ import { prefetchImages } from "./img-cache.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// electron-updater ships a CommonJS bundle; the ESM-friendly default
-// export gives us the `autoUpdater` singleton we want.
-const { autoUpdater } = electronUpdaterPkg;
-
 const IS_DEV = !app.isPackaged;
 const DEV_URL = process.env.GEAR_SOLVER_DEV_URL ?? "http://localhost:5173";
 
 let httpServer: Server | null = null;
-
-/** Auto-update flow — checks GitHub releases for `Sevih/gear-solver` on
- *  startup, prompts the user when a newer version is available, downloads
- *  in the background, then offers to restart. Disabled in dev (no installed
- *  app to update) and silently a no-op when offline / GH down. */
-function setupAutoUpdate(): void {
-  if (IS_DEV) return;
-  autoUpdater.autoDownload = false; // we trigger download after user consent
-  autoUpdater.on("update-available", (info) => {
-    dialog.showMessageBox({
-      type: "info",
-      title: "Update available",
-      message: `Outerpedia Gear Solver ${info.version} is available. Download now?`,
-      buttons: ["Download", "Later"],
-      defaultId: 0,
-      cancelId: 1,
-    }).then((r) => { if (r.response === 0) void autoUpdater.downloadUpdate(); });
-  });
-  autoUpdater.on("update-downloaded", (info) => {
-    dialog.showMessageBox({
-      type: "info",
-      title: "Update ready",
-      message: `Version ${info.version} downloaded. Restart now to install?`,
-      buttons: ["Restart", "Later"],
-      defaultId: 0,
-      cancelId: 1,
-    }).then((r) => { if (r.response === 0) autoUpdater.quitAndInstall(); });
-  });
-  autoUpdater.on("error", (err) => {
-    // Don't block app launch on update check failures (offline, GH down, …).
-    dwarn("server", "auto-update error:", err.message);
-  });
-  // Fire-and-forget — promise rejection already handled by the 'error' event.
-  void autoUpdater.checkForUpdates();
-}
 
 /** Warm the disk image cache with the high-traffic UI + equipment subset (webp
  *  only) for the current repo SHA. Runs at most once per SHA (guarded by a
@@ -160,7 +121,7 @@ if (!app.requestSingleInstanceLock()) {
     // Re-pin to the SHA we just built from so icons match the data snapshot.
     setCurrentRef(readShaState(REPO_SHA_STATE)?.sha ?? getCurrentRef());
     await createWindow();
-    setupAutoUpdate();
+    setupAutoUpdate(IS_DEV);
     // Background: warm the small UI/equipment image subset once per repo update
     // (prod only — dev serves from the checkout). Non-blocking, best-effort.
     if (!IS_DEV) void warmImageCache();

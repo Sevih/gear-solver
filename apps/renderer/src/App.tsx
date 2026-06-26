@@ -7,6 +7,7 @@ import { getGameVersion } from "./game-version.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
 import { LogView } from "./design/LogView.js";
 import { SettingsModal } from "./design/SettingsModal.js";
+import { HomeScreen } from "./screens/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
@@ -56,7 +57,9 @@ const APP_VERSION =
   "0.4";
 
 export function App() {
-  const [tab, setTab] = usePersistedState<Tab>("gs.tab", "Inventory");
+  // Home is the default landing tab (fresh installs open here). Returning
+  // users keep whatever tab they last left via the persisted value.
+  const [tab, setTab] = usePersistedState<Tab>("gs.tab", "Home");
   const [game, setGame] = useState<GameData | null>(null);
   const [inv, setInv] = useState<Inventory | null>(null);
   const [userGeas, setUserGeas] = useState<UserGeasLevels | null>(null);
@@ -109,6 +112,21 @@ export function App() {
       // produced the refresh.
       setStatus(label === "Auto-import" ? "" : `${label} · ${r.game ? "stats resolved" : "engine-only fallback"}`);
     } else setStatus(r.game ? "Game data loaded - no capture found." : "No data. Arm capture to begin.");
+  }
+
+  // Manual "Sync game data" — pulls fresh tables from the outerpedia repo and
+  // rebuilds the derived data, then re-imports so the renderer picks it up.
+  // Surfaced from the Home tab's System health / Quick actions.
+  async function syncGameData() {
+    setStatus("Syncing game data…");
+    try {
+      const r = await fetch("/api/data/sync", { method: "POST" });
+      const j = (await r.json().catch(() => null)) as { status?: string; message?: string } | null;
+      await refreshInventory("Game data synced");
+      setStatus(j?.message ? `Game data: ${j.message}` : "Game data synced.");
+    } catch {
+      setStatus("Game data sync failed.");
+    }
   }
 
   useEffect(() => { void refreshInventory("Auto-import"); }, []);
@@ -181,6 +199,8 @@ export function App() {
         version={APP_VERSION}
         gameVersion={gameVersion}
         counts={{
+          // Home has no natural count badge — it's the landing dashboard.
+          Home: null,
           // Total piece count is the more useful at-a-glance figure than
           // "equipped/total" (we always know it from inv.gear.length without
           // resolving char ownership). Null while no capture has loaded yet.
@@ -256,6 +276,20 @@ export function App() {
             screen doesn't persist after navigating away. */}
         <ScreenErrorBoundary key={tab}>
           <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-500">Loading {tab.toLowerCase()}…</div>}>
+            {tab === "Home" && (
+              <HomeScreen
+                inventory={inv}
+                game={game}
+                capStatus={capStatus}
+                emulator={emulator}
+                appVersion={APP_VERSION}
+                busy={running !== "none"}
+                onCapture={() => runCapture("capture")}
+                onSyncData={() => void syncGameData()}
+                onOpenSettings={() => setWizardOpen(true)}
+                onOpenBuilder={() => setTab("Builder")}
+              />
+            )}
             {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} />}
             {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} />}
             {tab === "Builder" && <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />}

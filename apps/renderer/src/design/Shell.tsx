@@ -97,14 +97,15 @@ export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = f
   );
 }
 
-export type Tab = "Inventory" | "Builds" | "Builder";
-const TABS: Tab[] = ["Inventory", "Builds", "Builder"];
+export type Tab = "Home" | "Inventory" | "Builds" | "Builder";
+const TABS: Tab[] = ["Home", "Inventory", "Builds", "Builder"];
 
 /** Per-tab activity counts. Renders next to the tab label as a mini pill so
  *  the page-level "Inventory · 1450 pieces" header can disappear without
  *  the user losing the at-a-glance summary. Use `null` to hide a tab's
  *  badge (e.g. "Builder" has no natural count today). */
 export interface TabCounts {
+  Home: number | null;
   Inventory: number | null;
   Builds: number | null;
   Builder: number | null;
