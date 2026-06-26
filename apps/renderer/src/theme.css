@@ -1,17 +1,26 @@
 @import "tailwindcss";
 
 /* gear-solver design tokens — ported from outerpedia/project/gs-data.jsx + data.jsx
-   Visual language: Space Grotesk (UI) + IBM Plex Mono (numbers/data), violet
-   brand accent, cyan for the solve/optimise action, dark indigo surface.
+   Visual language matches the outerpedia site for brand consistency:
+   Paybooc-Bold (UI, the game-flavored display face) with Geist as fallback,
+   Geist Mono for numbers/data. Mirrors outerpedia globals.css:
+     --font-sans: var(--font-game), var(--font-geist-sans);
+     --font-mono: var(--font-geist-mono);
+   Numbers stay in Geist Mono (the data face) — NOT Paybooc — for legible,
+   tabular digits at the 8–10px table/badge sizes. */
 
-   IBM Plex Mono (not JetBrains Mono) for data: it ships a SLASHED zero by
-   default, so 0 can't be misread as 8 / O at the 8–10px sizes the stat tables
-   and badges use (JetBrains Mono's dotted zero collapses to a plain ring there). */
+@font-face {
+  font-family: "Paybooc";
+  src: url("./fonts/Paybooc-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 @theme {
-  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-sans: "Paybooc", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Paybooc", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
 
   /* surfaces (oklch indigo-black) */
   --color-bg-app: oklch(0.135 0.012 270);
@@ -50,14 +59,11 @@ body,
   min-height: 100vh;
 }
 
-/* Belt-and-suspenders on the data font: pin a slashed zero + tabular figures
-   via `font-feature-settings` (independent of Tailwind's numeric utilities, so
-   a cell that only sets `tabular-nums` can't clobber the slash). IBM Plex Mono
-   already slashes its zero by default; this also forces it on the `ui-monospace`
-   fallback when the web font hasn't loaded yet. */
+/* Tabular figures on the data font (Geist Mono) so digit columns stay aligned.
+   Geist Mono draws a slashed zero by default — no `font-feature-settings`
+   toggle (that earlier forced a dotted-ring zero on other faces). */
 .font-mono {
-  font-feature-settings: "zero" 1, "tnum" 1;
-  font-variant-numeric: slashed-zero tabular-nums;
+  font-variant-numeric: tabular-nums;
 }
 
 /* hide all scrollbars in the app (matches the design's gs-scope styling) */

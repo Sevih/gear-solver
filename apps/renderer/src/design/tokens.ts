@@ -3,7 +3,9 @@
  * outerpedia/project/gs-data.jsx (Claude Design handoff bundle).
  *
  * Visual identity:
- * - Space Grotesk (UI) + IBM Plex Mono (numbers/data — slashed zero for 0/8 legibility).
+ * - Paybooc-Bold (UI, game face; Geist fallback) + Geist Mono (numbers/data) —
+ *   matches the outerpedia site for brand consistency; Geist Mono's slashed zero
+ *   keeps 0 distinct from 8 / O.
  * - Violet (#9D51FF) for the brand mark, cyan (#22d3ee) reserved for the
  *   primary solve/optimise action, gold (#fbbf24) for stat values, amber for
  *   star rows, Singularity vertical gradient cyan → violet → magenta.
