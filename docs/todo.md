@@ -119,10 +119,14 @@
       le client puis `refreshInventory` (`App.tsx`). Vérif round-trip live à faire quand l'UI est branchée.
 
 ### Tests (fixtures lourdes)
-- [ ] **CP solver vs Builds** — comparer `calcBattlePower` sur le même build depuis les deux écrans
-      (doit donner 0-diff).
-- [ ] **mid-tree pruning** — fixture req-4pc Sharp + 1 helmet Sharp : compteur de combos visités
-      strictement < combos sans prune.
+- [x] **CP solver vs Builds** — ~~comparer `calcBattlePower` sur le même build depuis les deux écrans.~~
+      Fait (`solveChunk.test.ts`) : `solveChunk` en mode CP → `finalizeBuilds` → pour chaque build,
+      `computeFinalStats` + `calcBattlePower` recalculés indépendamment sur les mêmes pièces = 0-diff
+      (stats **et** CP). Vérifie aussi que les ratings différés sont bien recalculés au finalize.
+- [x] **mid-tree pruning** — ~~fixture req-4pc + compteur de combos visités < sans prune.~~ Fait : pools
+      A/B 2-par-slot, `req-4pc A` → 1 combo scoré (chemin all-A) vs 16 en brute-force ; cas insatisfiable
+      (1 seule pièce A) → 0 combo scoré, search élaguée entièrement. `SolveContext` hand-construit
+      (baseline/scaling = nombres simples), pas de fixture héros.
 
 ### Externe — Packaging desktop (vérif sur un vrai build, le plumbing existe)
 - [ ] Bake prod du `data/` (`extraResources` → `process.resourcesPath`) · `electron build`/installeur

@@ -94,7 +94,7 @@ The renderer auto-imports the latest capture on launch.
 
 ```bash
 npm run typecheck             # all workspaces (strict + noUnusedLocals/Parameters)
-npm test                      # core (11 tests) + renderer (157 tests) = 168
+npm test                      # core (11 tests) + renderer (160 tests) = 171
 ```
 
 The renderer test suite covers the gem pool / scoring / allocation / delta aggregation,
