@@ -761,7 +761,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
             // Filled slots become inspectable on hover (main/subs/gems), the way
             // the Inventory tab lets you click a tile. Empty slots stay inert.
             return p
-              ? <RichTooltip key={id} className="cursor-help" content={<GearTooltipContent piece={p} />}>{mini}</RichTooltip>
+              ? <RichTooltip key={id} placement="right" className="cursor-help" content={<GearTooltipContent piece={p} />}>{mini}</RichTooltip>
               : <span key={id}>{mini}</span>;
           })}
         </div>
