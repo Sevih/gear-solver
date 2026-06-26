@@ -1036,7 +1036,7 @@ function PromptDialog({
             if (e.key === "Enter") submit();
             else if (e.key === "Escape") onClose();
           }}
-          className="w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-[12px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
+          className="w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-[12px] text-white placeholder:text-white/55 focus:border-cyan-400/40 focus:outline-none"
         />
         <div className="mt-3 flex justify-end gap-2">
           <button
@@ -1383,7 +1383,7 @@ function BuilderToolbar({
           type="button"
           onClick={onClearFilter}
           title="Show all stored results again."
-          className="h-9 shrink-0 rounded-lg px-1 text-[11px] text-white/45 hover:text-white/80"
+          className="h-9 shrink-0 rounded-lg px-1 text-[11px] text-white/65 hover:text-white/80"
         >
           ✕
         </button>
@@ -1426,7 +1426,7 @@ function BuilderToolbar({
       <button
         type="button"
         onClick={() => dispatch({ type: "resetAll" })}
-        className="ml-auto shrink-0 text-[11px] text-white/50 underline-offset-2 hover:text-white/80 hover:underline"
+        className="ml-auto shrink-0 text-[11px] text-white/70 underline-offset-2 hover:text-white/80 hover:underline"
       >
         reset filters
       </button>
@@ -1446,7 +1446,7 @@ function ToolbarDivider() {
 function ReforgeModeControl({ value, dispatch }: { value: ReforgeMode; dispatch: Dispatch<SolverAction> }) {
   return (
     <div className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/4 pl-2.5 pr-1">
-      <span className="text-[11px] text-white/55">Reforge</span>
+      <span className="text-[11px] text-white/70">Reforge</span>
       <div className="flex items-center gap-0.5">
         {REFORGE_MODES.map((m) => {
           const on = value === m.value;
@@ -1459,7 +1459,7 @@ function ReforgeModeControl({ value, dispatch }: { value: ReforgeMode; dispatch:
               title={m.hint}
               className={cx(
                 "h-5 rounded px-1.5 text-[10.5px] font-semibold transition-colors",
-                on ? "bg-cyan-400/20 text-cyan-200" : "text-white/50 hover:text-white/80",
+                on ? "bg-cyan-400/20 text-cyan-200" : "text-white/70 hover:text-white/80",
               )}
             >
               {m.label}
@@ -1549,7 +1549,7 @@ function PopoverButton({
         {count > 0 && (
           <span className={cx("rounded px-1.5 font-mono text-[9px] tabular-nums", badgeTone)}>{count}</span>
         )}
-        <span className="text-[8px] text-white/40">{open ? "▲" : "▼"}</span>
+        <span className="text-[8px] text-white/65">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className={cx("absolute top-[calc(100%+8px)] z-40 rounded-lg bg-bg-elev-1 shadow-2xl shadow-black/70", align === "right" ? "right-0" : "left-0")}>
@@ -1690,12 +1690,12 @@ function HeroSelect({
         onFocus={() => { setOpen(true); setQuery(""); }}
         onKeyDown={onKeyDown}
         placeholder={selectedName || "Search hero…"}
-        className="w-full rounded-md border border-white/8 bg-black/30 px-2 py-1 text-[11.5px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
+        className="w-full rounded-md border border-white/8 bg-black/30 px-2 py-1 text-[11.5px] text-white placeholder:text-white/55 focus:border-cyan-400/40 focus:outline-none"
       />
       {open && (
         <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-md border border-white/10 bg-zinc-900 shadow-lg">
           {filtered.length === 0 ? (
-            <div className="px-2 py-2 text-[11px] italic text-white/40">No hero matches</div>
+            <div className="px-2 py-2 text-[11px] italic text-white/65">No hero matches</div>
           ) : (
             <ul id="hero-listbox" role="listbox" className="flex flex-col py-1">
               {filtered.map((c, i) => (
@@ -1782,10 +1782,10 @@ function StatsPanelRow({
   return (
     <>
       <StatIcon stat={stat.iconKey} size={12} />
-      <span className={cx("text-right", cur != null ? "text-white" : "text-white/30")}>
+      <span className={cx("text-right", cur != null ? "text-white" : "text-white/55")}>
         {cur != null ? `${cur}${stat.unit}` : "—"}
       </span>
-      <span className="text-white/40">▸</span>
+      <span className="text-white/65">▸</span>
       <span className={cx("text-right", projTone)}>
         {proj != null ? `${proj}${stat.unit}` : "—"}
       </span>
@@ -1829,16 +1829,16 @@ function SubValuePanel({ baseFlat, subTicks, width = "w-full" }: {
     >
       <div className="grid grid-cols-[auto_1fr_1.4fr] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">
         <span />
-        <span className="text-right text-[8.5px] uppercase tracking-wider text-white/40">flat</span>
-        <span className="text-right text-[8.5px] uppercase tracking-wider text-white/40">% (≈ flat)</span>
+        <span className="text-right text-[8.5px] uppercase tracking-wider text-white/65">flat</span>
+        <span className="text-right text-[8.5px] uppercase tracking-wider text-white/65">% (≈ flat)</span>
         {rows.map((r) => (
           <Fragment key={r.key}>
             <StatIcon stat={r.key} size={12} />
-            <span className={cx("text-right", r.cmp.winner === "flat" ? "text-cyan-300" : "text-white/45")}>
+            <span className={cx("text-right", r.cmp.winner === "flat" ? "text-cyan-300" : "text-white/65")}>
               +{r.cmp.flatTick}
             </span>
-            <span className={cx("text-right", r.cmp.winner === "pct" ? "text-cyan-300" : "text-white/45")}>
-              +{r.cmp.pctTick}% <span className="text-white/30">≈{Math.round(r.cmp.pctFlatEquiv)}</span>
+            <span className={cx("text-right", r.cmp.winner === "pct" ? "text-cyan-300" : "text-white/65")}>
+              +{r.cmp.pctTick}% <span className="text-white/55">≈{Math.round(r.cmp.pctFlatEquiv)}</span>
             </span>
           </Fragment>
         ))}
@@ -1901,8 +1901,8 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
           return (
             <Fragment key={g.key}>
               <StatIcon stat={icon.iconKey} size={12} />
-              <span className={best ? "text-cyan-300" : "text-white/55"}>{icon.label}</span>
-              <span className={cx("text-right", best ? "text-cyan-300" : "text-white/45")}>+{g.gainPct.toFixed(2)}%</span>
+              <span className={best ? "text-cyan-300" : "text-white/70"}>{icon.label}</span>
+              <span className={cx("text-right", best ? "text-cyan-300" : "text-white/65")}>+{g.gainPct.toFixed(2)}%</span>
             </Fragment>
           );
         })}
@@ -2010,13 +2010,13 @@ function ExcludeHeroesPicker({
         <span className="truncate">
           {excluded.size === 0 ? "Exclude equipped" : `Excluded: ${excluded.size}`}
         </span>
-        <span className="text-white/30">▾</span>
+        <span className="text-white/55">▾</span>
       </button>
       {excluded.size > 0 && (
         <button
           type="button"
           onClick={() => onClear()}
-          className="px-1.5 py-1 text-white/40 hover:text-rose-300 focus:outline-none"
+          className="px-1.5 py-1 text-white/65 hover:text-rose-300 focus:outline-none"
           title="Clear all"
           aria-label="Clear all excluded heroes"
         >✕</button>
@@ -2030,11 +2030,11 @@ function ExcludeHeroesPicker({
             onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
             autoFocus
             placeholder="Search hero…"
-            className="shrink-0 border-b border-white/8 bg-black/30 px-2 py-1 text-[11px] text-white placeholder:text-white/30 focus:outline-none"
+            className="shrink-0 border-b border-white/8 bg-black/30 px-2 py-1 text-[11px] text-white placeholder:text-white/55 focus:outline-none"
           />
           <ul className="min-h-0 flex-1 overflow-y-auto py-1">
             {filtered.length === 0 ? (
-              <li className="px-2 py-2 text-[11px] italic text-white/40">No hero matches</li>
+              <li className="px-2 py-2 text-[11px] italic text-white/65">No hero matches</li>
             ) : filtered.map((c) => {
               const meta = game?.characters[String(c.charId)] ?? null;
               const checked = excluded.has(c.uid);
@@ -2320,10 +2320,10 @@ function MainStatRow({
 }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-white/50">{label}</div>
+      <div className="text-[10px] uppercase tracking-wider text-white/70">{label}</div>
       <div className="mt-0.5 flex flex-wrap gap-1">
         {entries.length === 0 ? (
-          <span className="text-[10.5px] italic text-white/30">none owned</span>
+          <span className="text-[10.5px] italic text-white/55">none owned</span>
         ) : (
           entries.map((e) => (
             <MainStatChip key={e.key} entry={e} picked={!!picks[e.key]} onClick={() => onToggle(e.key)} />
@@ -2426,7 +2426,7 @@ function SetsPanel({
             onClick={() => setMode(m)}
             className={cx(
               "rounded px-2 py-0.5 capitalize transition-colors",
-              mode === m ? "bg-cyan-500/20 text-cyan-100" : "text-white/50 hover:text-white/80",
+              mode === m ? "bg-cyan-500/20 text-cyan-100" : "text-white/70 hover:text-white/80",
             )}
           >
             {m}
@@ -2461,7 +2461,7 @@ function SetsPanel({
       )}
 
       {sets.length === 0 ? (
-        <div className="text-[11px] italic text-white/40">No forms-anything set in inventory</div>
+        <div className="text-[11px] italic text-white/65">No forms-anything set in inventory</div>
       ) : (
         <div className="flex flex-wrap gap-1">
           {sets.map((s) => (
@@ -2471,8 +2471,8 @@ function SetsPanel({
       )}
 
       {mode === "require" && summary && (
-        <div className="mt-2 text-[10px] leading-snug text-white/55">
-          <span className="text-white/40">Match: </span>{summary}
+        <div className="mt-2 text-[10px] leading-snug text-white/70">
+          <span className="text-white/65">Match: </span>{summary}
         </div>
       )}
     </Panel>
@@ -2494,7 +2494,7 @@ function PlanTab({
     <span
       className={cx(
         "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10.5px] transition-colors",
-        active ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-100" : "border-white/10 bg-white/2 text-white/55 hover:text-white/85",
+        active ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-100" : "border-white/10 bg-white/2 text-white/70 hover:text-white/85",
       )}
     >
       <button type="button" onClick={onSelect} className="flex items-center gap-1">
@@ -2505,7 +2505,7 @@ function PlanTab({
         <button
           type="button"
           onClick={onRemove}
-          className="text-white/40 hover:text-rose-300"
+          className="text-white/65 hover:text-rose-300"
           title="Remove this group"
           aria-label={`Remove ${label}`}
         >
@@ -2564,9 +2564,9 @@ function EffectGroup({
 }) {
   return (
     <div>
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-white/50">{title}</div>
+      <div className="mb-1 text-[10px] uppercase tracking-wider text-white/70">{title}</div>
       {effects.length === 0 ? (
-        <div className="text-[10.5px] italic text-white/40">none</div>
+        <div className="text-[10.5px] italic text-white/65">none</div>
       ) : (
         <div className="flex flex-wrap gap-1">
           {effects.map((e) => (
@@ -2790,7 +2790,7 @@ function ColumnsMenu({
       {open && (
         <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-44 rounded-lg border border-white/10 bg-bg-elev-1 p-2 shadow-2xl shadow-black/70">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-white/45">Visible columns</span>
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-white/65">Visible columns</span>
             <button type="button" onClick={onReset} className="text-[10px] text-cyan-300 hover:text-cyan-200">reset</button>
           </div>
           <div className="max-h-72 overflow-y-auto">
@@ -2998,13 +2998,13 @@ function ResultsTable({
       <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-3 py-1.5">
         <div className="flex items-baseline gap-3">
           <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">Results</span>
-          <span className="text-[10.5px] italic text-white/40">
+          <span className="text-[10.5px] italic text-white/65">
             {solving ? "Solving…" : error ? "Solver error — see below." : "Click a row to reveal the equipment that produced it. Click a column header to sort."}
           </span>
         </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5" title="Results table height (rows visible before scrolling) — lower it to keep the gear cards below in view">
-            <span className="text-[9.5px] uppercase tracking-wider text-white/40">height</span>
+            <span className="text-[9.5px] uppercase tracking-wider text-white/65">height</span>
             <input
               type="range"
               min={5}
@@ -3067,7 +3067,7 @@ function ResultsTable({
                     <span className="not-italic font-mono text-[10.5px]">{emptyReason}</span>
                   </span>
                 ) : (
-                  <span className="text-white/40">Pick a hero and click SOLVE to populate the results.</span>
+                  <span className="text-white/65">Pick a hero and click SOLVE to populate the results.</span>
                 )}
               </td></tr>
             )}
@@ -3230,7 +3230,7 @@ const ResultRow = memo(function ResultRow({
             ))}
           </div>
         ) : (
-          <span className="text-white/30">—</span>
+          <span className="text-white/55">—</span>
         )}
       </td>
       {showWpn && <EffectCell chip={effects?.weapon ?? null} />}
@@ -3349,9 +3349,9 @@ function RecoBuildPicker({ reco, onPick, onClose }: {
       <div className="w-full max-w-sm rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)]" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1.5 flex items-center justify-between">
           <h3 className="font-display text-[13px] font-semibold text-white">Choose a build</h3>
-          <button type="button" onClick={onClose} className="text-white/40 hover:text-white" aria-label="Close">✕</button>
+          <button type="button" onClick={onClose} className="text-white/65 hover:text-white" aria-label="Close">✕</button>
         </div>
-        <p className="mb-3 text-[11px] leading-snug text-white/50">
+        <p className="mb-3 text-[11px] leading-snug text-white/70">
           This hero has multiple recommended builds. Pick one to apply its mains, sets, effects and substat priority.
         </p>
         <ul className="flex flex-col gap-1.5">
@@ -3365,7 +3365,7 @@ function RecoBuildPicker({ reco, onPick, onClose }: {
                   className="w-full rounded-md border border-white/10 bg-white/2 px-3 py-2 text-left transition-colors hover:border-cyan-400/40 hover:bg-cyan-500/10"
                 >
                   <div className="text-[12.5px] font-medium text-white">{name}</div>
-                  <div className="text-[10.5px] text-white/50">{summarize(b)}</div>
+                  <div className="text-[10.5px] text-white/70">{summarize(b)}</div>
                 </button>
               </li>
             );
@@ -3426,7 +3426,7 @@ function RightSidebar({
 
       <Panel title="Saved builds" hint="Click a build to load it into the table + bottom band. The trash icon removes it permanently." width="w-full">
         {savedBuilds.length === 0 ? (
-          <div className="text-[10.5px] italic text-white/40">No saved builds for this hero.</div>
+          <div className="text-[10.5px] italic text-white/65">No saved builds for this hero.</div>
         ) : (
           <ul className="flex flex-col gap-0.5">
             {savedBuilds.map((b) => (
@@ -3444,7 +3444,7 @@ function RightSidebar({
 
       <Panel title="Filter presets" hint="Load a saved filter set into the panels. Useful to switch between e.g. 'CHC build' and 'tank build' without re-clicking every chip." width="w-full">
         {presets.length === 0 ? (
-          <div className="text-[10.5px] italic text-white/40">No presets for this hero.</div>
+          <div className="text-[10.5px] italic text-white/65">No presets for this hero.</div>
         ) : (
           <ul className="flex flex-col gap-0.5">
             {presets.map((p) => (
@@ -3477,12 +3477,12 @@ function LibraryRow({
         title={title}
       >
         <span className="truncate text-[11px] text-white">{title}</span>
-        <span className="truncate text-[10px] text-white/40">{subtitle}</span>
+        <span className="truncate text-[10px] text-white/65">{subtitle}</span>
       </button>
       <button
         type="button"
         onClick={onDelete}
-        className="shrink-0 px-1 text-[12px] text-white/30 opacity-0 transition-opacity hover:text-rose-300 group-hover:opacity-100"
+        className="shrink-0 px-1 text-[12px] text-white/55 opacity-0 transition-opacity hover:text-rose-300 group-hover:opacity-100"
         title="Delete"
       >
         ✕
@@ -3538,7 +3538,7 @@ function FilterFooter({
       })}
       <span className="text-white/20">|</span>
       <FilterBig label="P" value={permutations} title="Total permutations explored across the worker pool." />
-      <span className="text-white/30">/</span>
+      <span className="text-white/55">/</span>
       <FilterBig label="S" value={searched} title="Permutations that survived stat + rating filters and got scored." />
       <span className="text-white/20">|</span>
       <FilterBig label="Results" value={resultCount} title="Builds returned to the table (top-N by Score or CP)." />
@@ -3547,12 +3547,12 @@ function FilterFooter({
           <span className="text-[10px] uppercase tracking-wider text-cyan-300/80 animate-pulse">solving…</span>
         )}
         <span
-          className="inline-flex items-center gap-1 text-white/55"
+          className="inline-flex items-center gap-1 text-white/70"
           title={`Solver worker pool — parallel search threads (hardwareConcurrency − 1, override via gs.solver.workerCount). ${workerCount} worker${workerCount === 1 ? "" : "s"}.`}
         >
           <span aria-hidden>⚙</span>
           <span className="text-white/80">{workerCount}</span>
-          <span className="text-white/40">{workerCount === 1 ? "worker" : "workers"}</span>
+          <span className="text-white/65">{workerCount === 1 ? "worker" : "workers"}</span>
         </span>
       </span>
     </footer>
@@ -3568,7 +3568,7 @@ function FilterChip({ slot, hit, of }: { slot: SlotId; hit: number; of: number }
     <span className="inline-flex items-center gap-1">
       <SlotIcon slot={slot} size={14} />
       <span className="text-white">{hit}/{of}</span>
-      <span className="text-white/40">({pct}%)</span>
+      <span className="text-white/65">({pct}%)</span>
     </span>
   );
 }
@@ -3675,7 +3675,7 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }:
   return (
     <div className="flex w-56 shrink-0 flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-1 px-3 py-2.5">
       <div className="flex items-center gap-1.5">
-        <span className={cx("truncate font-display text-[13px] font-semibold", name ? "text-white" : "text-white/40")}>
+        <span className={cx("truncate font-display text-[13px] font-semibold", name ? "text-white" : "text-white/65")}>
           {name ?? "—"}
         </span>
       </div>
@@ -3683,7 +3683,7 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }:
       <div className="flex items-start gap-3">
         <SlotMini slot={slot} piece={iconPiece} size={56} />
         <div className="min-w-0 flex-1 text-[11px] leading-tight">
-          <div className={cx("italic", piece ? "text-white/70" : "text-white/40")}>
+          <div className={cx("italic", piece ? "text-white/70" : "text-white/65")}>
             {piece ? `+${piece.enhanceLevel}${piece.ascended ? " · ascended" : ""}` : "—"}
           </div>
           <div className="text-white">{slotMeta?.label ?? slot}</div>
@@ -3696,7 +3696,7 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }:
         <div className="flex items-center gap-2 font-mono text-[12px] tabular-nums">
           <StatIcon stat={mainStatKey} size={16} className="shrink-0" />
           <span className="flex-1 text-white">{mainStatMeta?.longLabel ?? mainStatKey}</span>
-          <span className={cx("font-semibold", mainStat ? "text-white" : "text-white/40")}>
+          <span className={cx("font-semibold", mainStat ? "text-white" : "text-white/65")}>
             {mainStat ? `${mainStat.value}${mainStat.percent ? "%" : ""}` : "—"}
           </span>
         </div>
@@ -3721,7 +3721,7 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }:
             <span className="text-white">{s.value}{s.percent ? "%" : ""}</span>
           </div>
         )) : (
-          <div className="text-[10.5px] italic text-white/30">—</div>
+          <div className="text-[10.5px] italic text-white/55">—</div>
         )}
       </div>
 

@@ -89,7 +89,7 @@ export function SubstatChip({
     )}>
       <StatIcon stat={stat} size={14} />
       <span className="text-zinc-100">{value}</span>
-      {lv != null && <span className="text-[9px] text-zinc-600">lv{lv}</span>}
+      {lv != null && <span className="text-[9px] text-zinc-400">lv{lv}</span>}
     </span>
   );
 }

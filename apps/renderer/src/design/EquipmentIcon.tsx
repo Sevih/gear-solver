@@ -18,7 +18,7 @@ export function StatIcon({
   const tip = title === null ? undefined : (title ?? meta?.label);
   if (!meta?.icon) {
     return (
-      <span className={cx("font-mono uppercase tracking-wider text-zinc-500", className)} title={tip} style={{ fontSize: Math.max(9, Math.round(size * 0.7)) }}>
+      <span className={cx("font-mono uppercase tracking-wider text-zinc-400", className)} title={tip} style={{ fontSize: Math.max(9, Math.round(size * 0.7)) }}>
         {meta?.label ?? stat.toUpperCase()}
       </span>
     );
@@ -110,7 +110,7 @@ export function SlotGlyph({ slot, className = "h-3 w-3" }: { slot: SlotId | stri
 function ArtFallback({ slot, k }: { slot: string; k: number }) {
   return (
     <div
-      className="grid h-full w-full place-items-center font-mono uppercase tracking-wider text-zinc-500"
+      className="grid h-full w-full place-items-center font-mono uppercase tracking-wider text-zinc-400"
       style={{
         fontSize: Math.max(7, Math.round(8 * k)),
         background: "repeating-linear-gradient(135deg, rgba(255,255,255,0.025) 0 4px, transparent 4px 8px)",

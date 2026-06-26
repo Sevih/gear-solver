@@ -275,7 +275,7 @@ export function App() {
         {/* key={tab} remounts the boundary on tab switch so a crash on one
             screen doesn't persist after navigating away. */}
         <ScreenErrorBoundary key={tab}>
-          <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-500">Loading {tab.toLowerCase()}…</div>}>
+          <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-400">Loading {tab.toLowerCase()}…</div>}>
             {tab === "Home" && (
               <HomeScreen
                 inventory={inv}
@@ -297,7 +297,7 @@ export function App() {
       </main>
 
       {!inv && (
-        <div className="px-6 py-2 text-center text-[11px] text-zinc-500">
+        <div className="px-6 py-2 text-center text-[11px] text-zinc-400">
           Manual fallback:{" "}
           <input
             type="file"

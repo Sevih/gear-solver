@@ -248,7 +248,7 @@ export function CyanButton({
         "inline-flex items-center justify-center gap-1.5 rounded-md font-semibold transition-colors",
         size === "lg" ? "h-10 px-5 text-[13px]" : size === "sm" ? "h-7 px-2.5 text-[11.5px]" : "h-8 px-3.5 text-[12px]",
         disabled
-          ? "cursor-not-allowed border border-white/6 bg-white/2 text-white/40"
+          ? "cursor-not-allowed border border-white/6 bg-white/2 text-white/65"
           : "border border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 shadow-[0_0_18px_-6px_rgba(34,211,238,0.6)]",
         className,
       )}

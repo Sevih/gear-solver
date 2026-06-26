@@ -246,9 +246,9 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
   };
   return (
     <div className="flex flex-wrap items-center gap-3 px-6 pt-4 text-[11.5px]">
-      <span className="font-mono uppercase tracking-wider text-zinc-500">Filter</span>
+      <span className="font-mono uppercase tracking-wider text-zinc-400">Filter</span>
       <div className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/7 bg-black/30 px-2">
-        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5 text-zinc-500" fill="none" stroke="currentColor" strokeWidth={1.4}>
+        <svg viewBox="0 0 14 14" className="h-3.5 w-3.5 text-zinc-400" fill="none" stroke="currentColor" strokeWidth={1.4}>
           <circle cx={6} cy={6} r={4} />
           <path d="M9 9 L12 12" strokeLinecap="round" />
         </svg>
@@ -256,7 +256,7 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
           value={f.query}
           onChange={(e) => setF({ ...f, query: e.target.value })}
           placeholder="Search hero…"
-          className="w-32 bg-transparent text-[11.5px] text-zinc-200 outline-none placeholder:text-zinc-600"
+          className="w-32 bg-transparent text-[11.5px] text-zinc-200 outline-none placeholder:text-zinc-400"
         />
       </div>
       <div className="flex gap-1">
@@ -605,10 +605,10 @@ function NoteField({ value, onChange }: { value: string; onChange: (next: string
         onBlur={() => setFocused(false)}
         maxLength={NOTE_MAX}
         placeholder="Notes…"
-        className="field-sizing-content min-w-20 max-w-60 resize-none rounded-md border border-white/8 bg-black/30 px-2 py-1 text-[11px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
+        className="field-sizing-content min-w-20 max-w-60 resize-none rounded-md border border-white/8 bg-black/30 px-2 py-1 text-[11px] text-white placeholder:text-white/55 focus:border-cyan-400/40 focus:outline-none"
       />
       {focused && (
-        <div className={cx("text-right font-mono text-[9.5px]", tight ? "text-amber-300" : "text-white/40")}>
+        <div className={cx("text-right font-mono text-[9.5px]", tight ? "text-amber-300" : "text-white/65")}>
           {value.length}/{NOTE_MAX}
         </div>
       )}
@@ -1055,10 +1055,10 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
             {inventory.characters.length === 0 ? (
               <>
                 <span className="font-display text-[14px] font-semibold text-white">No characters captured yet</span>
-                <span className="max-w-sm text-[12px] text-white/50">Your gear imported, but no roster. Play to the lobby and reload so the character list is captured too.</span>
+                <span className="max-w-sm text-[12px] text-white/70">Your gear imported, but no roster. Play to the lobby and reload so the character list is captured too.</span>
               </>
             ) : (
-              <span className="text-[12px] italic text-white/40">No hero matches the current filters.</span>
+              <span className="text-[12px] italic text-white/65">No hero matches the current filters.</span>
             )}
           </div>
         ) : (
@@ -1085,7 +1085,7 @@ function Empty({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-24 text-center">
       <h2 className="font-display text-[18px] font-semibold text-zinc-100">{title}</h2>
-      <p className="max-w-sm text-[12.5px] leading-relaxed text-zinc-500">{subtitle}</p>
+      <p className="max-w-sm text-[12.5px] leading-relaxed text-zinc-400">{subtitle}</p>
     </div>
   );
 }

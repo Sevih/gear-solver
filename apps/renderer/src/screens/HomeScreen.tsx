@@ -204,8 +204,8 @@ const IC_SETS = <MIcon><path d="M12 3 3 8l9 5 9-5z" /><path d="M3 13l9 5 9-5" />
 
 function SubLabel({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <span className="flex items-center gap-1 text-[8.5px] font-bold uppercase tracking-widest text-zinc-600">
-      <span className="text-zinc-500">{icon}</span>{children}
+    <span className="flex items-center gap-1 text-[8.5px] font-bold uppercase tracking-widest text-zinc-400">
+      <span className="text-zinc-400">{icon}</span>{children}
     </span>
   );
 }
@@ -215,7 +215,7 @@ function SectionLabel({ children, right, icon, tint }: {
 }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.11em] text-white/50">
+      <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.11em] text-white/70">
         {icon && <span style={tint ? { color: tint } : undefined}>{icon}</span>}
         {children}
       </span>
@@ -289,8 +289,8 @@ function UpdateCard({ status, onCheck, onInstall }: {
       style={{ background: "#101012", border: `1px solid ${cfg.border}`, boxShadow: cfg.glow }}
     >
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.11em] text-white/50">
-          <span className="text-white/40">{IC_UPDATE}</span>Updates
+        <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.11em] text-white/70">
+          <span className="text-white/65">{IC_UPDATE}</span>Updates
         </span>
         <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: cfg.tagColor }}>{cfg.tag}</span>
       </div>
@@ -302,7 +302,7 @@ function UpdateCard({ status, onCheck, onInstall }: {
             <span className="truncate text-[13.5px] font-semibold leading-tight" style={{ color: cfg.titleColor }}>{cfg.title}</span>
             {showNew && <span className="rounded-[5px] bg-cyan-400/15 px-1.5 py-px font-mono text-[8.5px] font-bold tracking-wider text-cyan-300">NEW</span>}
           </div>
-          <span className="truncate text-[11px] text-zinc-500">{cfg.sub}</span>
+          <span className="truncate text-[11px] text-zinc-400">{cfg.sub}</span>
         </div>
       </div>
 
@@ -331,15 +331,15 @@ function UpdateCard({ status, onCheck, onInstall }: {
       {/* version metadata (always) */}
       <div className="flex items-center justify-between border-t border-white/7 pt-2.5">
         <div className="flex flex-col gap-px">
-          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-white/40">App</span>
+          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-white/65">App</span>
           <Num className="text-[11.5px] font-semibold text-zinc-300">v{status.appVersion}</Num>
         </div>
         <div className="flex flex-col items-end gap-px">
-          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-white/40">Game data</span>
-          <Num className="text-[11.5px] font-semibold text-zinc-500">{status.dataSha ?? "—"}</Num>
+          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-white/65">Game data</span>
+          <Num className="text-[11.5px] font-semibold text-zinc-400">{status.dataSha ?? "—"}</Num>
         </div>
       </div>
-      {status.state === "downloaded" && <span className="-mt-1 text-center text-[9.5px] text-zinc-600">Installing restarts the app</span>}
+      {status.state === "downloaded" && <span className="-mt-1 text-center text-[9.5px] text-zinc-400">Installing restarts the app</span>}
     </div>
   );
 }
@@ -363,8 +363,8 @@ function EmptyDashboard({ onCapture }: { onCapture: () => void }) {
       >
         Capture your account
       </button>
-      <div className="mt-6 flex items-center gap-2.5 font-mono text-[11px] text-zinc-600">
-        <span>launch emulator</span><span className="text-zinc-700">→</span><span>arm capture</span><span className="text-zinc-700">→</span><span>open Outerplane</span>
+      <div className="mt-6 flex items-center gap-2.5 font-mono text-[11px] text-zinc-400">
+        <span>launch emulator</span><span className="text-zinc-400">→</span><span>arm capture</span><span className="text-zinc-400">→</span><span>open Outerplane</span>
       </div>
     </div>
   );
@@ -443,23 +443,23 @@ export function HomeScreen({
               <SectionLabel icon={IC_SNAPSHOT} tint="#22d3ee">Account snapshot</SectionLabel>
               <div className="flex items-center gap-2">
                 <div className="flex flex-1 flex-col gap-1">
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Heroes owned</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Heroes owned</span>
                   <Num className="text-[32px] font-bold" color="#fbbf24">{stats.heroes.toLocaleString()}</Num>
                 </div>
                 <span className="h-10.5 w-px bg-white/8" />
                 <div className="flex flex-1 flex-col gap-1">
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Gear pieces</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Gear pieces</span>
                   <Num className="text-[32px] font-bold" color="#fbbf24">{stats.gear.toLocaleString()}</Num>
                 </div>
                 <span className="h-10.5 w-px bg-white/8" />
                 <div className="flex flex-1 flex-col gap-1.5">
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Last capture</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Last capture</span>
                   <Num className="text-[17px] font-semibold text-zinc-200">{lastCap?.rel ?? "—"}</Num>
-                  {lastCap && <Num className="text-[10px] text-zinc-600">{lastCap.abs} local</Num>}
+                  {lastCap && <Num className="text-[10px] text-zinc-400">{lastCap.abs} local</Num>}
                 </div>
                 <span className="h-10.5 w-px bg-white/8" />
                 <div className="flex flex-1 flex-col gap-1.5">
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Capture</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Capture</span>
                   <span className={cx(
                     "inline-flex w-fit items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold",
                     armed ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : "border-white/10 bg-white/4 text-zinc-400",
@@ -477,7 +477,7 @@ export function HomeScreen({
                 <span className={cx("h-2.5 w-2.5 shrink-0 rounded-full", emuReady ? "bg-emerald-400 shadow-[0_0_8px_#34d399]" : "bg-amber-400 shadow-[0_0_8px_#fbbf24]")} />
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <span className="text-[13px] font-semibold text-white">{emuReady ? "Capture pipeline ready" : "Setup incomplete"}</span>
-                  <Num className="truncate text-[10.5px] text-zinc-600">{emuLine}</Num>
+                  <Num className="truncate text-[10.5px] text-zinc-400">{emuLine}</Num>
                 </div>
               </div>
               <div className="mt-auto flex gap-2">
@@ -494,7 +494,7 @@ export function HomeScreen({
 
           {/* HERO: gear quality distribution */}
           <Card className="flex flex-col gap-3.5">
-            <SectionLabel icon={IC_QUALITY} tint="#fbbf24" right={<Num className="text-[10px] text-zinc-600">{stats.totalGraded.toLocaleString()} pieces graded by substat roll quality</Num>}>
+            <SectionLabel icon={IC_QUALITY} tint="#fbbf24" right={<Num className="text-[10px] text-zinc-400">{stats.totalGraded.toLocaleString()} pieces graded by substat roll quality</Num>}>
               Gear quality distribution
             </SectionLabel>
             <div className="flex h-8 gap-0.75 overflow-hidden rounded-lg">
@@ -507,7 +507,7 @@ export function HomeScreen({
                 <div key={t.tier} className="flex flex-col gap-1 pl-2.5" style={{ borderLeft: `2px solid ${t.color}` }}>
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">{t.label}</span>
                   <Num className="text-[23px] font-bold" color={t.color}>{t.count.toLocaleString()}</Num>
-                  <Num className="text-[10px] text-zinc-600">{t.pct} of pool</Num>
+                  <Num className="text-[10px] text-zinc-400">{t.pct} of pool</Num>
                 </div>
               ))}
             </div>
@@ -517,7 +517,7 @@ export function HomeScreen({
           <div className="flex items-stretch gap-3.5">
             {/* roster */}
             <Card className="flex min-w-0 flex-1 flex-col gap-3.5">
-              <SectionLabel icon={IC_ROSTER} tint="#c4b5fd" right={<Num className="text-[10px] text-zinc-600">{stats.heroes.toLocaleString()} heroes</Num>}>Roster</SectionLabel>
+              <SectionLabel icon={IC_ROSTER} tint="#c4b5fd" right={<Num className="text-[10px] text-zinc-400">{stats.heroes.toLocaleString()} heroes</Num>}>Roster</SectionLabel>
               <div className="flex flex-col gap-2">
                 <SubLabel icon={IC_ELEMENT}>By element</SubLabel>
                 {stats.elements.map((e) => (
@@ -551,7 +551,7 @@ export function HomeScreen({
 
             {/* gear breakdown */}
             <Card className="flex min-w-0 flex-[1.3] flex-col gap-3.5">
-              <SectionLabel icon={IC_GEAR} tint="#38bdf8" right={<Num className="text-[10px] text-zinc-600">{stats.gear.toLocaleString()} pieces</Num>}>Gear breakdown</SectionLabel>
+              <SectionLabel icon={IC_GEAR} tint="#38bdf8" right={<Num className="text-[10px] text-zinc-400">{stats.gear.toLocaleString()} pieces</Num>}>Gear breakdown</SectionLabel>
               <div className="flex gap-4">
                 {/* by slot */}
                 <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -580,7 +580,7 @@ export function HomeScreen({
                       <Num className="w-7.5 shrink-0 text-right text-[11px] font-semibold text-zinc-300">{se.count}</Num>
                     </div>
                   )) : (
-                    <span className="text-[11px] text-zinc-600">No armor sets resolved.</span>
+                    <span className="text-[11px] text-zinc-400">No armor sets resolved.</span>
                   )}
                 </div>
               </div>
@@ -597,11 +597,11 @@ export function HomeScreen({
               <div className="flex flex-col gap-3.5">
                 <div className="flex flex-col gap-0.5">
                   <Num className="text-[28px] font-bold text-violet-300">{library.builds}</Num>
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">saved builds</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">saved builds</span>
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <Num className="text-[28px] font-bold text-violet-300">{library.presets}</Num>
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">filter presets</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">filter presets</span>
                 </div>
               </div>
               <ActBtn tone="violet" className="mt-auto w-full text-center" onClick={onOpenBuilder}>Open Builder →</ActBtn>
@@ -637,7 +637,7 @@ function Stat({ label, value, gradient }: { label: string; value: number; gradie
       {gradient ? (
         <span className="bg-linear-to-r from-cyan-400 via-violet-500 to-pink-500 bg-clip-text text-[9px] font-bold uppercase tracking-wider text-transparent">{label}</span>
       ) : (
-        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">{label}</span>
+        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">{label}</span>
       )}
       <Num className={cx("text-[18px] font-bold", gradient ? "text-cyan-300" : "text-zinc-200")}>{value.toLocaleString()}</Num>
     </div>

@@ -35,7 +35,7 @@ function lineTone(line: string): string {
   // `__EXIT__:N` is the sentinel streamCapture strips, but if it ever leaks
   // through (e.g. a buffered partial flush) we don't want it shouting in the
   // user's face — dim it.
-  if (line.startsWith("__EXIT__")) return "text-zinc-600";
+  if (line.startsWith("__EXIT__")) return "text-zinc-400";
   return "text-zinc-400";
 }
 

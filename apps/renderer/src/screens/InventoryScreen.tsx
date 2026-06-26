@@ -437,14 +437,14 @@ function FilterModal({
                 value={draft.query}
                 onChange={(e) => setDraft({ ...draft, query: e.target.value })}
                 placeholder="Name, slot, rarity, stat…"
-                className="w-full rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 pr-7 text-[12px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
+                className="w-full rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 pr-7 text-[12px] text-white placeholder:text-white/55 focus:border-cyan-400/40 focus:outline-none"
               />
               {draft.query && (
                 <button
                   type="button"
                   onClick={() => setDraft({ ...draft, query: "" })}
                   aria-label="Clear search"
-                  className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-white/50 hover:bg-white/8 hover:text-white"
+                  className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-white/70 hover:bg-white/8 hover:text-white"
                 >
                   <svg viewBox="0 0 14 14" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
                     <path d="M3 3 L11 11 M11 3 L3 11" />
@@ -1098,7 +1098,7 @@ function GemPanel({ slots }: { slots: NonNullable<UiPiece["gemSlots"]> }) {
         return (
           <div
             key={i}
-            className="flex items-center gap-2 text-[12px] text-white/40"
+            className="flex items-center gap-2 text-[12px] text-white/65"
             title={s.unlocked ? "Empty gem slot" : "Locked — unlocks at enhance +5"}
           >
             <div className="grid h-5 w-5 shrink-0 place-items-center rounded-sm border border-dashed border-white/10 bg-white/2">
@@ -1132,7 +1132,7 @@ function SetEffectRow({ tag, desc }: { tag: "2-pc" | "4-pc"; desc: string | null
       <span className="w-12 shrink-0 font-mono text-white/70">{tag}</span>
       {desc
         ? <span className="flex-1 text-white"><GameText text={desc} /></span>
-        : <span className="flex-1 text-white/50">—</span>}
+        : <span className="flex-1 text-white/70">—</span>}
     </div>
   );
 }

@@ -166,7 +166,7 @@ export function SettingsModal({
         <header className="flex shrink-0 items-center justify-between border-b border-white/8 bg-zinc-950/80 px-4.5 py-3.5">
           <div className="leading-tight">
             <div className="font-display text-[15px] font-bold tracking-[-0.01em] text-zinc-100">Settings</div>
-            <div className="text-[11px] text-zinc-500">Connection, solver, data &amp; developer tools</div>
+            <div className="text-[11px] text-zinc-400">Connection, solver, data &amp; developer tools</div>
           </div>
           <button
             onClick={onClose}
@@ -217,7 +217,7 @@ export function SettingsModal({
 
             {/* CONTEXTUAL FOOTER */}
             <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-white/8 bg-zinc-950/80 px-4 py-2.5">
-              <span className="text-[11px] text-zinc-600">{FOOTER_NOTE[tab]}</span>
+              <span className="text-[11px] text-zinc-400">{FOOTER_NOTE[tab]}</span>
               <div className="flex items-center gap-2.5">
                 <button
                   onClick={onClose}
@@ -230,7 +230,7 @@ export function SettingsModal({
                     className={cx(
                       "inline-flex items-center gap-1.5 rounded-md px-4 py-1.5 text-[12px] font-bold tracking-[0.02em]",
                       loading
-                        ? "cursor-wait bg-zinc-800 text-zinc-500"
+                        ? "cursor-wait bg-zinc-800 text-zinc-400"
                         : "bg-linear-to-b from-cyan-400 to-cyan-500 text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.4),0_6px_16px_-8px_rgba(34,211,238,0.6)]",
                     )}
                   >
@@ -261,7 +261,7 @@ function SetupPane({ result }: { result: PreflightResult | null }) {
   return (
     <div className="flex flex-col gap-3">
       <SectionStrip title="Setup status" note={result?.device ? `Target ${result.device}` : null} />
-      <p className="text-[11.5px] leading-relaxed text-zinc-500">
+      <p className="text-[11.5px] leading-relaxed text-zinc-400">
         First-launch wizard — these four checks must pass before capture can attach. They re-probe each time
         this window opens and self-dismiss once green.
       </p>
@@ -291,7 +291,7 @@ function SetupPane({ result }: { result: PreflightResult | null }) {
             )} />
             <div className="flex flex-col gap-0.5">
               <span className={cx("text-[13px] font-medium", pending ? "text-zinc-400" : "text-zinc-100")}>{copy.title}</span>
-              {c.detail && <span className="font-mono text-[10.5px] text-zinc-600">{c.detail}</span>}
+              {c.detail && <span className="font-mono text-[10.5px] text-zinc-400">{c.detail}</span>}
             </div>
           </div>
         );
@@ -328,7 +328,7 @@ function SolverPane({
       <div className="flex items-start justify-between gap-4.5">
         <div className="flex max-w-82.5 flex-col gap-0.5">
           <span className="text-[13px] font-medium text-white">Worker threads</span>
-          <span className="text-[11.5px] leading-snug text-zinc-500">
+          <span className="text-[11.5px] leading-snug text-zinc-400">
             More workers = faster solve, hotter and louder CPU. Takes effect on the next solve.
           </span>
           <span className="mt-0.5 font-mono text-[11px] text-cyan-300">
@@ -355,7 +355,7 @@ function SolverPane({
       <div className="flex items-start justify-between gap-4.5">
         <div className="flex max-w-82.5 flex-col gap-0.5">
           <span className="text-[13px] font-medium text-white">Result count</span>
-          <span className="text-[11.5px] leading-snug text-zinc-500">
+          <span className="text-[11.5px] leading-snug text-zinc-400">
             How many ranked builds the results table keeps. Range 10–5000.
           </span>
         </div>
@@ -373,7 +373,7 @@ function SolverPane({
       <div className="flex items-center justify-between gap-4.5">
         <div className="flex max-w-90 flex-col gap-0.5">
           <span className="text-[13px] font-medium text-white">Results heatmap</span>
-          <span className="text-[11.5px] leading-snug text-zinc-500">Emerald→rose column shading on the results table.</span>
+          <span className="text-[11.5px] leading-snug text-zinc-400">Emerald→rose column shading on the results table.</span>
         </div>
         <Switch checked={solver.heatmap} onToggle={() => solver.setHeatmap((v) => !v)} />
       </div>
@@ -419,7 +419,7 @@ function SolverPane({
             solver.setHeatmap(true);
             setManualBuf(autoEffective);
           }}
-          className="text-[11px] text-zinc-500 underline underline-offset-2 hover:text-zinc-300"
+          className="text-[11px] text-zinc-400 underline underline-offset-2 hover:text-zinc-300"
         >Reset solver settings to defaults</button>
       </div>
     </div>
@@ -521,7 +521,7 @@ function SectionStrip({ title, note }: { title: string; note?: string | null }) 
   return (
     <div className="flex items-center justify-between rounded-md border border-white/6 bg-white/2 px-3 py-2">
       <span className="text-[10px] font-bold uppercase tracking-[0.13em] text-white/70">{title}</span>
-      {note && <span className="font-mono text-[10px] text-zinc-500">{note}</span>}
+      {note && <span className="font-mono text-[10px] text-zinc-400">{note}</span>}
     </div>
   );
 }
@@ -538,7 +538,7 @@ function SegButton({ label, on, onClick, divided }: { label: string; on: boolean
       className={cx(
         "px-3.5 py-1.5 text-[11px] font-semibold transition-colors",
         divided && "border-l border-white/12",
-        on ? "bg-cyan-400/14 text-cyan-300" : "bg-transparent text-zinc-500 hover:text-zinc-300",
+        on ? "bg-cyan-400/14 text-cyan-300" : "bg-transparent text-zinc-400 hover:text-zinc-300",
       )}
     >{label}</button>
   );
@@ -595,7 +595,7 @@ function DataAction({ label, description, onClick, tone = "default", actionLabel
           <span className={cx("text-[13px] font-medium", danger ? "font-semibold text-rose-300" : "text-zinc-100")}>{label}</span>
           {danger && <span className="rounded bg-rose-500/16 px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.08em] text-rose-300">destructive</span>}
         </div>
-        <div className="text-[11.5px] leading-snug text-zinc-500">{description}</div>
+        <div className="text-[11.5px] leading-snug text-zinc-400">{description}</div>
       </div>
       <button
         onClick={onClick}
@@ -626,7 +626,7 @@ function ToggleAction({ label, description, checked, onToggle }: ToggleActionPro
     <div className="flex items-center justify-between gap-4 rounded-lg border border-white/7 bg-zinc-900/40 px-3 py-2.5">
       <div className="min-w-0 max-w-95">
         <div className="text-[13px] font-medium text-white">{label}</div>
-        <div className="text-[11.5px] leading-snug text-zinc-500">{description}</div>
+        <div className="text-[11.5px] leading-snug text-zinc-400">{description}</div>
       </div>
       <Switch checked={checked} onToggle={onToggle} />
     </div>
