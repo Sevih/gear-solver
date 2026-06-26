@@ -28,7 +28,7 @@ import { SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toIconPiece, toUiPiece } from "../design/adapter.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
-import { SolverOrchestrator } from "../lib/solver/orchestrator.js";
+import { resolveWorkerCount, SolverOrchestrator } from "../lib/solver/orchestrator.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
 import { fetchReco } from "../lib/reco/fetchReco.js";
@@ -635,6 +635,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       : solveResults),
     [solveResults, displayFilter],
   );
+  // Resolved solver worker-pool size — surfaced in the footer so the user can
+  // confirm the search uses the whole machine. Stable per session (reads
+  // hardwareConcurrency + the `gs.solver.workerCount` override once).
+  const workerCount = useMemo(() => resolveWorkerCount(), []);
   // Apply the current stat/rating bands to the stored results without
   // re-solving. Re-anchors the selection to the new top row.
   const applyClientFilter = () => {
@@ -930,6 +934,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         poolSizes={solveProgress.poolSizes}
         resultCount={displayedResults.length}
         solving={solving}
+        workerCount={workerCount}
       />
       <PromptDialog
         prompt={namePrompt}
@@ -3323,13 +3328,16 @@ function formatTimeAgo(ts: number): string {
  * just laid out left-to-right with `|` separators so it fits on one line.
  * ───────────────────────────────────────────────────────────────────────── */
 function FilterFooter({
-  permutations, searched, poolSizes, resultCount, solving,
+  permutations, searched, poolSizes, resultCount, solving, workerCount,
 }: {
   permutations: number;
   searched: number;
   poolSizes: PoolSizes | null;
   resultCount: number;
   solving: boolean;
+  /** Resolved solver worker-pool size — pinned at the far right so the user
+   *  can confirm the search parallelism at a glance. */
+  workerCount: number;
 }) {
   // Slots rendered in the same order the inventory tab uses so the user's
   // eye-flow is identical across tabs.
@@ -3351,9 +3359,19 @@ function FilterFooter({
       <FilterBig label="S" value={searched} title="Permutations that survived stat + rating filters and got scored." />
       <span className="text-white/20">|</span>
       <FilterBig label="Results" value={resultCount} title="Builds returned to the table (top-N by Score or CP)." />
-      {solving && (
-        <span className="ml-auto text-[10px] uppercase tracking-wider text-cyan-300/80 animate-pulse">solving…</span>
-      )}
+      <span className="ml-auto inline-flex items-center gap-3">
+        {solving && (
+          <span className="text-[10px] uppercase tracking-wider text-cyan-300/80 animate-pulse">solving…</span>
+        )}
+        <span
+          className="inline-flex items-center gap-1 text-white/55"
+          title={`Solver worker pool — parallel search threads (hardwareConcurrency − 1, override via gs.solver.workerCount). ${workerCount} worker${workerCount === 1 ? "" : "s"}.`}
+        >
+          <span aria-hidden>⚙</span>
+          <span className="text-white/80">{workerCount}</span>
+          <span className="text-white/40">{workerCount === 1 ? "worker" : "workers"}</span>
+        </span>
+      </span>
     </footer>
   );
 }
