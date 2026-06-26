@@ -23,7 +23,7 @@ import {
   type GemOverride,
   type ScalingMap,
 } from "../composeBuild.js";
-import { calcBattlePower } from "./cp.js";
+import { calcBattlePower, makeCpEvaluator } from "./cp.js";
 import { aggregateGemDelta, allocateGems, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
@@ -637,6 +637,14 @@ export interface SolveChunkResult {
   searched: number;
 }
 
+/** Shared zero-ratings placeholder for the SOLVE-CP deferred-ratings path.
+ *  Never inspected (the defer flag guarantees no rating-keyed filter reads it)
+ *  and overwritten by `finalizeBuilds` for the top-N, so a single shared frozen
+ *  instance is safe across every combo. */
+const PLACEHOLDER_RATINGS: CheapRatings = Object.freeze({
+  hps: 0, ehp: 0, ehps: 0, dmg: 0, dmgs: 0, mcd: 0, mcds: 0, dmgh: 0,
+});
+
 export interface SolveChunkOptions {
   /** Called whenever a combo is visited (before any pruning). Returns
    *  `false` to abort the loop (e.g. cancelled by the orchestrator). */
@@ -722,6 +730,24 @@ export async function solveChunk(
   // filter deferred to finalize evicts valid builds that ranked just outside
   // the top-K-by-score heap, silently under-returning the result set.
   const cpFilter = filters.ratingFilters.cp;
+  // In SOLVE CP the heap orders by CP, not by the cheap ratings, so the ratings
+  // are only needed for the top-N display + any rating-BAND filter. When no
+  // rating-band filter is set (score-only specs don't count — Score derives
+  // from FinalStats, not the ratings), defer the 8 ratings products to
+  // `finalizeBuilds` (top-N only), mirroring how SOLVE defers CP. Removes the
+  // per-combo ratings pass across millions of CP combos.
+  const deferRatings = mode === "cp" && !ratingFilterSpecs.some((sp) => sp.key !== "score");
+  // CP hot-loop evaluator — captures the constant star/skill/EE/fusion bonuses
+  // ONCE so each combo's CP is just the stat-dependent math (no per-combo
+  // `CpArgs` allocation, no constant re-derivation). Bit-identical to
+  // `calcBattlePower` (see cp.ts `makeCpEvaluator`).
+  const cpEval = makeCpEvaluator({
+    showUIStar: starMeta.showUIStar,
+    starPlus: starMeta.starPlus,
+    skills,
+    ee,
+    fused: starMeta.fused,
+  });
   // Upg filter has the same recall hazard: it can't be a hot-loop FilterSpec
   // (it needs the hero's current loadout), but deferring it to finalize drops
   // heap survivors a posteriori, evicting valid builds that ranked just
@@ -860,7 +886,12 @@ export async function solveChunk(
 
                 if (!passesSpecs(fs, statFilterSpecs)) continue;
 
-                const ratings = computeCheapRatings(fs, dmgStat, dmgSec, noCrit);
+                // Ratings deferred in SOLVE CP with no rating-band filter — the
+                // placeholder rides the heap and `finalizeBuilds` computes the
+                // real ratings for the top-N only. `passesRatingSpecs` only ever
+                // reads `score` here when deferred (the defer flag guarantees no
+                // rating-keyed spec), so the zero placeholder is never inspected.
+                const ratings = deferRatings ? PLACEHOLDER_RATINGS : computeCheapRatings(fs, dmgStat, dmgSec, noCrit);
                 const score = computeScore(fs, filters.priority);
 
                 if (!passesRatingSpecs(ratings, score, ratingFilterSpecs)) continue;
@@ -874,15 +905,7 @@ export async function solveChunk(
                 // ranked just outside top-K (recall loss / under-return).
                 let cp: number | null = null;
                 if (mode === "cp" || cpFilter) {
-                  cp = calcBattlePower({
-                    stats: fs,
-                    showUIStar: starMeta.showUIStar,
-                    starPlus: starMeta.starPlus,
-                    skills,
-                    ee,
-                    ooparts: talisman,
-                    fused: starMeta.fused,
-                  });
+                  cp = cpEval(fs, talisman);
                   if (cpFilter && !inMinMax(cp, cpFilter)) continue;
                 }
 
@@ -943,9 +966,14 @@ export async function solveChunk(
  *    re-check is likewise a no-op (the recall hazard of an a-posteriori CP/upg
  *    filter is handled by enforcing both in `solveChunk`, not here). */
 export function finalizeBuilds(ctx: SolveContext, builds: SolveBuild[], mode: SolveMode): SolveBuild[] {
-  const { req, ee, skills, starMeta } = ctx;
+  const { req, ee, skills, starMeta, dmgStat, dmgSec, noCrit } = ctx;
   const byUid = new Map<string, GearPiece>();
   for (const g of req.inventory.gear) byUid.set(g.uid, g);
+  // SOLVE CP deferred the cheap ratings (heap orders by CP, ratings only feed
+  // the display), so compute the real ratings here for the surviving top-N.
+  // Mirror the exact defer condition from `solveChunk` (no rating-band filter).
+  const ratingsDeferred =
+    mode === "cp" && !compileFilterSpecs(req.filters.ratingFilters).some((sp) => sp.key !== "score");
   // Hero's currently-equipped piece UIDs — denominator for the upgrade-count
   // metric. Fresh-roster heroes will see all 8 slots count as "new".
   const equippedUids = new Set<string>();
@@ -979,7 +1007,8 @@ export function finalizeBuilds(ctx: SolveContext, builds: SolveBuild[], mode: So
       if (!equippedUids.has(b.pieceUids[i]!)) upg++;
     }
     if (upgFilter && !inMinMax(upg, upgFilter)) continue;
-    out.push({ ...b, cp, upg });
+    const ratings = ratingsDeferred ? computeCheapRatings(b.finalStats, dmgStat, dmgSec, noCrit) : b.ratings;
+    out.push({ ...b, cp, upg, ratings });
   }
   return out;
 }

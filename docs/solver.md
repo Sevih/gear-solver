@@ -51,6 +51,13 @@ CP est cher : par défaut il est calculé **uniquement pour le top-N** en SOLVE
 (paresseux, dans `finalizeBuilds`, juste pour l'affichage) et **pour chaque combo**
 en SOLVE CP (sort key oblige).
 
+Deux optimisations réduisent le coût par combo en SOLVE CP : (1) un **évaluateur CP
+préparé** (`makeCpEvaluator`) capture les bonus constants (star/skill/EE/fusion) une
+fois → plus d'allocation d'objet `CpArgs` ni de re-dérivation par combo, **bit-identique**
+à `calcBattlePower` ; (2) les **cheap ratings sont différés** au `finalizeBuilds` (top-N
+seulement) quand aucun filtre de rating n'est posé — symétrique au CP-lazy de SOLVE,
+puisque le heap est trié par CP, pas par les ratings.
+
 Le filtre CP utilisateur (`cp min/max`) est appliqué **dans la boucle** dès qu'il
 est actif — y compris en mode SOLVE, où CP est alors calculé par combo. C'est requis
 pour la justesse : différer le filtre à `finalizeBuilds` laissait le heap se remplir
@@ -350,7 +357,12 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
    sets-restreintes.
 
 7. **CP paresseux en SOLVE** — CP est ~20× plus cher qu'un cheap rating. Calculé
-   seulement pour le top-N final (~1000 vs des millions).
+   seulement pour le top-N final (~1000 vs des millions). En **SOLVE CP** (CP =
+   sort key, calculé par combo), deux mitigations : (a) **évaluateur CP préparé**
+   (`makeCpEvaluator`) — bonus constants capturés une fois, plus d'allocation
+   `CpArgs` ni de re-dérivation par combo (bit-identique) ; (b) **cheap ratings
+   différés** au finalize (top-N) quand aucun filtre de rating n'est posé — le
+   heap trie par CP, donc les 8 produits ratings ne servent qu'à l'affichage.
 
 8. **Cancel responsive via MessageChannel** — `solveChunk` est async, yield à chaque
    tick (~4096 combos) via un `MessageChannel.postMessage` round-trip (<1ms vs 4ms

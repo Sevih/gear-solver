@@ -173,6 +173,13 @@ Fichier : [compose-stats.ts](../packages/core/src/compose-stats.ts) +
 Reverse-engineered de `CalcBattlePower` (libil2cpp.so 1.4.9), validé 0-diff
 sur 5 chars (LB0/1/2/3). Implémentation : [cp.ts](../apps/renderer/src/lib/solver/cp.ts).
 
+**Hot path SOLVE CP** : `makeCpEvaluator(consts)` pré-capture les bonus additifs
+constants par solve (`starBonus`, `skillSum`, `eeBp`, `fusionBp` — tous entiers
+exacts) et retourne une closure `(stats, talisman) → cp`. Évite l'allocation d'un
+objet `CpArgs` et la re-dérivation des constantes à chaque combo. **Bit-identique**
+à `calcBattlePower` : les constantes hoistées sont des entiers (sommation sans perte)
+et l'ordre de la somme finale est préservé. Test d'identité dédié.
+
 **Conventions critiques** :
 - **CRC capped at 100%** AVANT entrée dans la formule.
 - CRC/CHD/PEN/DMGup/DMGRed/ECDR : valeurs RAW (× 10 du % affiché).
@@ -549,7 +556,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | Fichier | Couverture |
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
-| `apps/renderer/test/solver.test.ts`     | 69 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR) |
+| `apps/renderer/test/solver.test.ts`     | 70 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`** |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped` : parité sans gemme crit, accept jusqu'à CHC 100 (overshoot ≤102), stop pile à 100, skip total au cap, split talisman/EE, delta null si rien d'utile, score ≤0 jamais pris |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount` : défaut `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, plafond dur 64 |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidélité, maps vides), import merge (dédup par `id`, collision garde l'existant), replace (overwrite), validation du bundle (kind/version/maps) |
@@ -558,7 +565,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick` : verdict des deux côtés de la bascule, équivalent-flat exact, égalité pile à la bascule, garde tick %=0 |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains` : tri décroissant, monotonie delta→gain, CHC nul si crit-cap, base 0 → vide |
 
-Run : `npm test --workspaces --if-present`. **Total : 156 tests** (core 11 + renderer 145 : solver, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue, +4 dmgValue).
+Run : `npm test --workspaces --if-present`. **Total : 168 tests** (core 11 + renderer 157 : solver, gemsCapped, transfer, setPlans, translateReco, workerCount, +5 subValue, +4 dmgValue, +11 buildAdvice).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 

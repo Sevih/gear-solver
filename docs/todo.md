@@ -13,8 +13,13 @@
 ## Reste à faire
 
 ### 🟠 Perf solver
-- [ ] **Solver CP trop lent** — le mode SOLVE CP met beaucoup trop de temps. Investiguer (CP calculé
-      in-loop par combo : profiler, mémoïser ce qui peut l'être, voir si un pré-filtre réduit le pool).
+- [~] **Solver CP trop lent** — 2 optims du coût par combo livrées : **(a)** évaluateur CP préparé
+      `makeCpEvaluator` (bonus star/skill/EE/fusion capturés 1×, plus d'allocation `CpArgs` ni de
+      re-dérivation par combo, **bit-identique** + test d'identité) ; **(b)** cheap ratings **différés**
+      au `finalizeBuilds` (top-N) en SOLVE CP quand aucun filtre de rating n'est posé (le heap trie par
+      CP, les 8 produits ne servent qu'à l'affichage). **Reste** (levier structurel, le plus gros gain) :
+      réduire le **nombre de combos** atteignant le CP — pré-filtre de pool plus agressif et/ou borne
+      CP dérivée d'un upper-bound par slot pour pruner tôt. Demande un profilage sur vrai compte.
 - [ ] **Accumulateur de buckets — re-sum déféré** — le hoist des set bonuses est fait ; reste le re-sum
       des 6+EE pièces par talisman. Gain marginal + **risque d'ordre flottant** (`incSet/decSet` casse la
       bit-identité, aucun test stat-locks ne rattrape une dérive ULP via `Math.trunc`). À faire en
@@ -100,8 +105,16 @@
 - [ ] **Snapshot `data/` versioning** — stamper un hash/timestamp à chaque rebuild de `data/derived` pour
       invalider les caches localStorage après un patch jeu (les SavedBuild référencent des `pieceUids`
       qui peuvent disparaître).
-- [ ] **Equip / Unequip** — modifier les emplacements d'équipement sur les personnages. On n'envoie rien
-      au jeu (on modifie les fichiers capturés qu'on a récupérés).
+- [~] **Equip / Unequip** — modifier les emplacements d'équipement sur les personnages (on n'envoie rien
+      au jeu : on réécrit le JSON capturé `user_item.json`, champ `CharUID`). **Méthodes pures faites** :
+      `equipItem(raw, game, itemUid, charUid)` / `unequipItem(raw, itemUid)` dans `packages/core/src/equip.ts`
+      (immuables, déplacement du slot — un slot = une pièce, `"0"` = libre ; +11 tests `equip.test.ts`).
+      **Reste à brancher** (déclenché depuis le solver/Builder) :
+      1. **Endpoint d'écriture** `POST /api/captured/equip` `{ itemUid, charUid|null }` dans `server.ts`
+         (lit `out/user_item.json`, applique `equipItem`/`unequipItem` avec la game data chargée pour le slot,
+         `writeFileSync` — mirror du POST `/api/stat-locks` + `/api/capture/wipe`) ; miroir dev `vite.config.ts`.
+      2. **Client renderer** `equipPiece`/`unequipPiece` (POST) puis `refreshInventory` (`App.tsx`).
+      3. **Déclencheur UI** côté Builder/Builds (boutons / assignation par slot) → appelle le client + refresh.
 
 ### Tests (fixtures lourdes)
 - [ ] **CP solver vs Builds** — comparer `calcBattlePower` sur le même build depuis les deux écrans

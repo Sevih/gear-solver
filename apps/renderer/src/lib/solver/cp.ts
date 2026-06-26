@@ -27,8 +27,43 @@ export interface CpArgs {
   fused: boolean;
 }
 
-export function calcBattlePower(args: CpArgs): number {
-  const { stats: s, showUIStar, starPlus, skills, ee, ooparts, fused } = args;
+/** The four constant-per-solve additive bonuses, captured once. All are exact
+ *  integers, so pre-computing them and re-summing in the original order below
+ *  is byte-identical to the all-inline formula (no float-order drift). */
+interface CpBonuses {
+  starBonus: number;
+  /** Σ (skillLevel − 1) over the four skills — already summed (still an int). */
+  skillSum: number;
+  eeBp: number;
+  fusionBp: number;
+}
+
+function cpBonuses(showUIStar: number, starPlus: number, skills: CpArgs["skills"], ee: GearPiece | null, fused: boolean): CpBonuses {
+  // Each skill contributes (level − 1) × 100 to CP. All four skills start at
+  // Lv1 in-game and max at Lv5, so a fresh character (every skill Lv1) adds 0.
+  // Verified on Flamberge (6★ lv5): S1 Lv1/2/3 → in-game CP 6085/6185/6285
+  // (+100 per level from Lv1), and her all-Lv1 sheet decomposes exactly onto
+  // 6085 only when skillSum = 0. S1 is symmetric with the other three — an
+  // earlier `max(0, first-4)` wrongly assumed a Lv4 baseline (the all-Lv1 case
+  // was never exercised). Clamped ≥0 so a partial capture (level 0) can't
+  // subtract CP.
+  const skillSum =
+      Math.max(0, skills.first - 1)
+    + Math.max(0, skills.second - 1)
+    + Math.max(0, skills.ultimate - 1)
+    + Math.max(0, skills.chainPassive - 1);
+  return {
+    starBonus: showUIStar * 500 + starPlus * 120,
+    skillSum,
+    eeBp: ee ? ee.enhanceLevel * 100 + 300 : 0,
+    fusionBp: fused ? 5000 : 0,
+  };
+}
+
+/** Stat-dependent CP core + the captured constant bonuses + the talisman's
+ *  per-piece bonus. The final summation order is exactly the original
+ *  all-inline formula, so results are bit-for-bit identical. */
+function cpFrom(s: FinalStats, ooparts: GearPiece | null, b: CpBonuses): number {
   const crcRaw = Math.min(s.crc * 10, 1000); // cap at 100%
   const chdRaw = s.chd * 10;
   const penRaw = s.pen * 10;
@@ -58,22 +93,20 @@ export function calcBattlePower(args: CpArgs): number {
   const chain = (1 + effF) * crcF * critF * penF * spdF;
   const atkPart = 0.125 * s.atk * (1 + chain);
   const defPart = (s.hp + s.def) * defF * defR * resR;
-  const starBonus = showUIStar * 500 + starPlus * 120;
-  // Each skill contributes (level − 1) × 100 to CP. All four skills start at
-  // Lv1 in-game and max at Lv5, so a fresh character (every skill Lv1) adds 0.
-  // Verified on Flamberge (6★ lv5): S1 Lv1/2/3 → in-game CP 6085/6185/6285
-  // (+100 per level from Lv1), and her all-Lv1 sheet decomposes exactly onto
-  // 6085 only when skillSum = 0. S1 is symmetric with the other three — an
-  // earlier `max(0, first-4)` wrongly assumed a Lv4 baseline (the all-Lv1 case
-  // was never exercised). Clamped ≥0 so a partial capture (level 0) can't
-  // subtract CP.
-  const skillSum =
-      Math.max(0, skills.first - 1)
-    + Math.max(0, skills.second - 1)
-    + Math.max(0, skills.ultimate - 1)
-    + Math.max(0, skills.chainPassive - 1);
-  const eeBp = ee ? ee.enhanceLevel * 100 + 300 : 0;
   const ooBp = ooparts ? ooparts.enhanceLevel * 100 + (ooparts.star ?? 0) * 50 : 0;
-  const fusionBp = fused ? 5000 : 0;
-  return Math.floor(atkPart + defPart + starBonus + skillSum * 100 + eeBp + ooBp + fusionBp);
+  return Math.floor(atkPart + defPart + b.starBonus + b.skillSum * 100 + b.eeBp + ooBp + b.fusionBp);
+}
+
+export function calcBattlePower(args: CpArgs): number {
+  return cpFrom(args.stats, args.ooparts, cpBonuses(args.showUIStar, args.starPlus, args.skills, args.ee, args.fused));
+}
+
+/** Hot-loop CP evaluator. The solver computes CP for every surviving combo in
+ *  SOLVE CP mode, so it pre-captures the constant bonuses ONCE and returns a
+ *  closure `(stats, talisman) → cp` — no per-combo `CpArgs` allocation and no
+ *  re-derivation of the star / skill / EE / fusion constants. Bit-identical to
+ *  `calcBattlePower` with the same inputs (see `cpFrom`). */
+export function makeCpEvaluator(c: Omit<CpArgs, "stats" | "ooparts">): (s: FinalStats, ooparts: GearPiece | null) => number {
+  const bonuses = cpBonuses(c.showUIStar, c.starPlus, c.skills, c.ee, c.fused);
+  return (s, ooparts) => cpFrom(s, ooparts, bonuses);
 }

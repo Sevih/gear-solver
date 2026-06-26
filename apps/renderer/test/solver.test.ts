@@ -20,7 +20,7 @@ import type { GameData, GearPiece, Inventory, RolledStat, StatType } from "@gear
 import { aggregateGearBuckets, computeSetBonuses, type GemOverride } from "../src/lib/composeBuild.js";
 import { simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
 import type { SolveBuild } from "../src/lib/solver/types.js";
-import { calcBattlePower } from "../src/lib/solver/cp.js";
+import { calcBattlePower, makeCpEvaluator } from "../src/lib/solver/cp.js";
 import { aggregateGemDelta, allocateGems, buildGemPool, gemSlotsOf, scoreGemPool } from "../src/lib/solver/gems.js";
 import { computeCheapRatings, computeScore, STAT_NORMS, STAT_TO_PRIORITY } from "../src/lib/solver/ratings.js";
 
@@ -831,6 +831,29 @@ describe("calcBattlePower", () => {
     const noCdr = calcBattlePower({ ...args(skills), stats: { ...baseStats, critDmgRed: 0 } });
     const withCdr = calcBattlePower({ ...args(skills), stats: { ...baseStats, critDmgRed: 40 } });
     expect(withCdr).toBeGreaterThan(noCdr);
+  });
+
+  it("makeCpEvaluator is bit-identical to calcBattlePower (hot-loop CP path)", () => {
+    // The solver's SOLVE-CP hot loop uses a prepared evaluator that captures
+    // the constant star/skill/EE/fusion bonuses once. It MUST return exactly
+    // the same integer as the all-inline calcBattlePower for every combo, or
+    // SOLVE CP would rank/round differently than the validated formula.
+    const ee = { enhanceLevel: 12 } as Parameters<typeof calcBattlePower>[0]["ee"];
+    const oo = { enhanceLevel: 9, star: 6 } as Parameters<typeof calcBattlePower>[0]["ooparts"];
+    const consts = { showUIStar: 5, starPlus: 2, skills: { first: 5, second: 3, ultimate: 4, chainPassive: 2 }, ee, fused: true };
+    const evalCp = makeCpEvaluator(consts);
+    // Sweep a range of stat profiles — crit cap, high CHD, PEN, CDR, off-stat.
+    const profiles = [
+      baseStats,
+      { ...baseStats, crc: 100, chd: 300, pen: 60 },
+      { ...baseStats, crc: 130, chd: 80, dmgUp: 40, dmgRed: 30, critDmgRed: 25 },
+      { ...baseStats, atk: 4321, def: 1234, hp: 56789, spd: 257, eff: 312, res: 287 },
+      { ...baseStats, atk: 0, def: 0, hp: 0, spd: 0, crc: 0, chd: 0, eff: 0, res: 0 },
+    ];
+    for (const stats of profiles) {
+      expect(evalCp(stats, oo)).toBe(calcBattlePower({ ...consts, stats, ooparts: oo }));
+      expect(evalCp(stats, null)).toBe(calcBattlePower({ ...consts, stats, ooparts: null }));
+    }
   });
 });
 
