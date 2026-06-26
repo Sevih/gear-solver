@@ -8,6 +8,7 @@
  * after refreshing data/game/ from Outerpedia (see data/sync.ps1).
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { computeCharacterIngredients } from "./calc-stats.mjs";
@@ -32,7 +33,18 @@ const load = (n) => {
   }
   return v;
 };
-const save = (n, o) => writeFileSync(join(DERIVED, n), JSON.stringify(o));
+// Running content hash of every derived file (name + body, in the fixed order
+// build emits them). Deterministic given identical inputs → a stable `hash` in
+// version.json, so a consumer can tell whether `data/derived` actually changed
+// across a rebuild (vs a no-op re-run) — the basis for invalidating localStorage
+// caches after a real game patch.
+const _derivedHash = createHash("sha256");
+const save = (n, o) => {
+  const s = JSON.stringify(o);
+  _derivedHash.update(n);
+  _derivedHash.update(s);
+  writeFileSync(join(DERIVED, n), s);
+};
 const lang = "English";
 
 // Outerpedia-v2 checkout — used to enrich the equipment table with image refs
@@ -987,9 +999,17 @@ if (subTickDetail?.subStatPools) {
   if (Object.keys(subTicks).length) save("sub-ticks.json", subTicks);
 }
 
+// Stamp the build: a content hash (stable iff the derived output is unchanged)
+// plus a build timestamp. Written AFTER the digest so version.json itself isn't
+// folded into the hash. The renderer surfaces this (Settings → Data) and it's
+// the hook a future cache-invalidation can compare against.
+const version = { hash: _derivedHash.digest("hex").slice(0, 12), builtAt: new Date().toISOString() };
+writeFileSync(join(DERIVED, "version.json"), JSON.stringify(version));
+
 console.log(
   `derived: options=${Object.keys(options).length} equipment=${Object.keys(equipment).length} ` +
     `sets=${Object.keys(sets).length} characters=${Object.keys(characters).length} ` +
     `expCurves=${Object.keys(expCurves).length} singSteps=${singularitySteps.length} ` +
     `buffs=${Object.keys(buffs).length} eePassives=${Object.keys(eePassives).length}`,
 );
+console.log(`derived version: ${version.hash} (built ${version.builtAt})`);

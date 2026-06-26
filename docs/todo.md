@@ -102,9 +102,13 @@
       **Confirmer en jeu** si le cap doit dépendre de `stars` (ne pas présumer).
 
 ### Persistence
-- [ ] **Snapshot `data/` versioning** — stamper un hash/timestamp à chaque rebuild de `data/derived` pour
-      invalider les caches localStorage après un patch jeu (les SavedBuild référencent des `pieceUids`
-      qui peuvent disparaître).
+- [~] **Snapshot `data/` versioning** — **stamp + expo faits** : `build.mjs` écrit `data/derived/version.json`
+      `{ hash, builtAt }` — `hash` = hash de contenu de TOUS les fichiers dérivés (stable tant que la donnée
+      est inchangée, donc un re-build no-op ne le bouge pas ; `builtAt` = timestamp informatif). Chargé par
+      `loadDataVersion()` (`data.ts`), affiché read-only dans **Settings → Data** (« Game data version »).
+      **Reste (différé — touche les caches Builder)** : comparer le `hash` au démarrage vs un `gs.data.hash`
+      stocké et, au changement, **invalider/élaguer** les caches localStorage (SavedBuild référençant des
+      `pieceUids` disparus, presets). À faire dans la couche storage / au boot, hors UI Builder.
 - [~] **Equip / Unequip** — modifier les emplacements d'équipement sur les personnages (on n'envoie rien
       au jeu : on réécrit le JSON capturé `user_item.json`, champ `CharUID`). **Méthodes + plomberie faites** :
       - `equipItem(raw, game, itemUid, charUid)` / `unequipItem(raw, itemUid)` (`packages/core/src/equip.ts`,
@@ -145,6 +149,16 @@
 ---
 
 ## Livré
+
+### Session 2026-06-26 — Snapshot data versioning (stamp + expo)
+
+**Stamp de version des données dérivées** — `data/build.mjs` accumule un hash de contenu (`sha256` sur
+nom+corps de chaque fichier dérivé, ordre fixe) et écrit `data/derived/version.json` `{ hash, builtAt }`.
+Le `hash` est **stable tant que la donnée est inchangée** (un re-build no-op ne le bouge pas) → base d'une
+future invalidation de cache ; `builtAt` est informatif. Renderer : `loadDataVersion()` (`data.ts`) +
+ligne read-only « Game data version » dans **Settings → Data** (`SettingsModal`). **Invalidation des
+caches localStorage différée** (compare le hash au boot + élague les SavedBuild aux `pieceUids` disparus —
+touche la couche storage Builder-adjacente, cf. « Snapshot data versioning » dans Reste à faire).
 
 ### Session 2026-06-26 — Equip/Unequip : méthodes core + plomberie
 

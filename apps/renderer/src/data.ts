@@ -38,6 +38,24 @@ async function getJSON<T>(url: string): Promise<T | null> {
   }
 }
 
+/** Stamp written by `data/build.mjs` into `data/derived/version.json`. `hash`
+ *  is a content hash of every derived file (stable iff the data is unchanged);
+ *  `builtAt` is an ISO build timestamp. Both surfaced read-only in Settings →
+ *  Data so the user can tell which game-data snapshot is loaded. */
+export interface DataVersion {
+  hash: string;
+  builtAt: string;
+}
+
+/** Fetch the derived-data version stamp. Null when absent (data built before
+ *  the stamp existed, or no build yet) or malformed — callers degrade to "—". */
+export async function loadDataVersion(): Promise<DataVersion | null> {
+  const v = await getJSON<Partial<DataVersion>>("/gamedata/version.json");
+  return v && typeof v.hash === "string" && typeof v.builtAt === "string"
+    ? { hash: v.hash, builtAt: v.builtAt }
+    : null;
+}
+
 export async function loadGameData(): Promise<GameData | null> {
   const [options, equipment, sets, equipmentPassives, multiTierPassives, gems, singularityOptions, eePassives, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, trustBuffs, subTicks] = await Promise.all([
     getJSON<GameData["options"]>("/gamedata/options.json"),

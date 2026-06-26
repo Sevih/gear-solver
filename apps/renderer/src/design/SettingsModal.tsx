@@ -18,6 +18,7 @@ import { cx } from "./cx.js";
 import { Spinner } from "./Shell.js";
 import { applyBackup, buildBackup } from "../lib/storage/transfer.js";
 import { resolveWorkerCount } from "../lib/solver/orchestrator.js";
+import { loadDataVersion, type DataVersion } from "../data.js";
 
 export type CheckId = "emulator-installed" | "emulator-running" | "adb-connection" | "root-toggle";
 
@@ -434,9 +435,27 @@ function DataPane({
   onResetOnboarding: () => void;
   onAfterWipe?: () => void;
 }) {
+  // Read-only stamp of the loaded derived-data snapshot (data/derived/version.json,
+  // written by build.mjs). Fetched once on open; absent on data built before the
+  // stamp existed → renders an em-dash.
+  const [version, setVersion] = useState<DataVersion | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadDataVersion().then((v) => { if (alive) setVersion(v); });
+    return () => { alive = false; };
+  }, []);
   return (
     <div className="flex flex-col gap-3">
       <SectionStrip title="Data" />
+      <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2 text-[11px]">
+        <span className="text-white/50">Game data version</span>{" "}
+        {version
+          ? <>
+              <span className="font-mono text-white/85">{version.hash}</span>
+              <span className="text-white/40"> · built {new Date(version.builtAt).toLocaleString()}</span>
+            </>
+          : <span className="text-white/40">—</span>}
+      </div>
       <DataAction
         label="Sync game data"
         description="Refresh the raw tables from the local outerpedia checkout and rebuild the derived data (run after a game patch). Auto-runs at launch when the source is newer."
