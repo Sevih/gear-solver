@@ -56,6 +56,15 @@ interface BuilderScreenProps {
   /** Called once on mount after consuming `initialHeroUid`, so the parent can
    *  clear it (a later plain visit to the Builder shouldn't re-preselect). */
   onInitialHeroConsumed?: () => void;
+  /** Solver-pool override (Settings → Solver): null = auto. Drives the footer
+   *  read-out and forces a worker-pool rebuild when it changes. */
+  workerCount?: number | null;
+  /** Ranked builds returned by a solve (Settings → Solver, default 1000). */
+  topN?: number;
+  /** Per-worker heap depth before merge (Settings → Solver, default 1000). */
+  topK?: number;
+  /** Results-table column heatmap on/off (Settings → Solver, default on). */
+  heatmap?: boolean;
 }
 
 /** Composed snapshot for the selected hero — drives the Stats panel readout
@@ -486,7 +495,7 @@ function buildPassesFilters(
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, initialHeroUid, onInitialHeroConsumed }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, initialHeroUid, onInitialHeroConsumed, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
@@ -558,6 +567,18 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     return () => { orchestratorRef.current?.dispose(); orchestratorRef.current = null; };
   }, []);
 
+  // Worker-count override changed (Settings → Solver): tear the pool down so
+  // the next solve lazily rebuilds it at the new size. The orchestrator reads
+  // the count via `resolveWorkerCount()` (localStorage), which App has already
+  // written by the time this effect runs. Skips the initial mount (nothing to
+  // dispose yet — the ref is null).
+  useEffect(() => {
+    if (orchestratorRef.current) {
+      orchestratorRef.current.dispose();
+      orchestratorRef.current = null;
+    }
+  }, [workerCount]);
+
   const startSolve = (mode: SolveMode) => {
     // The SOLVE button is only gated on `selectedUid`, so it can be clicked
     // while game data is still loading — surface that instead of bailing
@@ -621,6 +642,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         chainPassive: selected.skills.chainPassive,
       },
       filters: serializedFilters,
+      // Result-set size + per-worker heap depth from Settings → Solver.
+      topN,
+      topK,
     });
   };
 
@@ -636,9 +660,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     [solveResults, displayFilter],
   );
   // Resolved solver worker-pool size — surfaced in the footer so the user can
-  // confirm the search uses the whole machine. Stable per session (reads
-  // hardwareConcurrency + the `gs.solver.workerCount` override once).
-  const workerCount = useMemo(() => resolveWorkerCount(), []);
+  // confirm the search uses the whole machine. Recomputes when the override
+  // setting changes (Settings → Solver) so the read-out stays live.
+  const resolvedWorkers = useMemo(() => resolveWorkerCount(workerCount), [workerCount]);
   // Apply the current stat/rating bands to the stored results without
   // re-solving. Re-anchors the selection to the new top row.
   const applyClientFilter = () => {
@@ -890,6 +914,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           pieceByUid={pieceByUid}
           armorSets={armorSetCatalog}
           game={game}
+          heatmap={heatmap}
         />
         {/* Right column — projected stats over the library. Direction B keeps
          *  this thin so the results table dominates the width. */}
@@ -934,7 +959,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         poolSizes={solveProgress.poolSizes}
         resultCount={displayedResults.length}
         solving={solving}
-        workerCount={workerCount}
+        workerCount={resolvedWorkers}
       />
       <PromptDialog
         prompt={namePrompt}
@@ -2653,7 +2678,7 @@ function ColumnsMenu({
 
 function ResultsTable({
   builds, selectedIdx, onSelect, solving, error, emptyReason, statFilters, rows, onRowsChange,
-  pieceByUid, armorSets, game,
+  pieceByUid, armorSets, game, heatmap,
 }: {
   builds: SolveBuild[];
   selectedIdx: number | null;
@@ -2680,6 +2705,8 @@ function ResultsTable({
   /** Game data — resolves a build's weapon/accessory pieces to their effect
    *  (icon + name) for the Weapon/Accessory effect columns. */
   game: GameData | null;
+  /** Results-table column heatmap on/off (Settings → Solver). */
+  heatmap: boolean;
 }) {
   // setId → display meta, for the per-build Set tags.
   const armorSetById = useMemo(() => {
@@ -2758,8 +2785,12 @@ function ResultsTable({
   const showAcc = colPrefs["acc"] ?? true;
   // Per-column min/max for the heatmap — recomputed when builds (or the set
   // of visible stat columns) change. Stats and ratings computed once; reused
-  // across every row.
-  const ranges = useMemo(() => computeColumnRanges(builds, statCols), [builds, statCols]);
+  // across every row. When the heatmap setting is off, empty ranges make
+  // `heatStyle` return undefined for every cell (no tint), skipping the scan.
+  const ranges = useMemo(
+    () => (heatmap ? computeColumnRanges(builds, statCols) : EMPTY_RANGES),
+    [builds, statCols, heatmap],
+  );
   // Sort state — column key + direction. Default null = solver's native
   // order (Score desc in SOLVE, CP desc in SOLVE CP). Click cycles
   // null → desc → asc → null per column; clicking a different column resets.
@@ -2961,6 +2992,10 @@ interface ColumnRanges {
   rating: Record<string, { min: number; max: number }>;
   score: { min: number; max: number };
 }
+/** Heatmap-off ranges — `score` non-finite + empty stat/rating maps make
+ *  `heatStyle` bail (no tint) on every cell. */
+const EMPTY_RANGES: ColumnRanges = { stat: {}, rating: {}, score: { min: Infinity, max: -Infinity } };
+
 function computeColumnRanges(builds: SolveBuild[], statCols: ReadonlyArray<typeof SOLVER_STATS[number]>): ColumnRanges {
   const stat: ColumnRanges["stat"] = {};
   const rating: ColumnRanges["rating"] = {};

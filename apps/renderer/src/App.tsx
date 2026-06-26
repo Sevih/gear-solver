@@ -81,6 +81,16 @@ export function App() {
   // fan-out / merge / duration logging on. Persisted so it survives reloads
   // while profiling a slow solve.
   const [debugSolver, setDebugSolver] = usePersistedState<boolean>("gs.debug.solver", false);
+  // Solver tuning (edited in Settings → Solver, consumed by the Builder).
+  // workerCount: null = auto (hardwareConcurrency − 1); a number pins the pool
+  // size. Shares `gs.solver.workerCount` with the non-React `resolveWorkerCount`.
+  const [workerCount, setWorkerCount] = usePersistedState<number | null>("gs.solver.workerCount", null);
+  // topN = ranked builds returned to the table; topK = per-worker heap depth
+  // before merge (advanced — too low drops good builds). Heatmap = results-table
+  // column shading.
+  const [solverTopN, setSolverTopN] = usePersistedState<number>("gs.solver.topN", 1000);
+  const [solverTopK, setSolverTopK] = usePersistedState<number>("gs.solver.topK", 1000);
+  const [heatmap, setHeatmap] = usePersistedState<boolean>("gs.builder.heatmap", true);
   // Hero to preselect when the Builder tab opens — set by the Builds tab's
   // "Optimize →" button, consumed (and cleared) by BuilderScreen on mount so
   // a later normal visit to the Builder doesn't re-preselect a stale hero.
@@ -212,6 +222,12 @@ export function App() {
         onToggleDebugStatLocks={() => setDebugStatLocks((v) => !v)}
         debugSolver={debugSolver}
         onToggleDebugSolver={() => setDebugSolver((v) => !v)}
+        solver={{
+          workerCount, setWorkerCount,
+          topN: solverTopN, setTopN: setSolverTopN,
+          topK: solverTopK, setTopK: setSolverTopK,
+          heatmap, setHeatmap,
+        }}
       />
 
       {(status || log.length > 0) && (
@@ -242,7 +258,7 @@ export function App() {
           <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-500">Loading {tab.toLowerCase()}…</div>}>
             {tab === "Inventory" && <InventoryScreen inventory={inv} game={game} />}
             {tab === "Builds" && <BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} />}
-            {tab === "Builder" && <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} />}
+            {tab === "Builder" && <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />}
           </Suspense>
         </ScreenErrorBoundary>
       </main>

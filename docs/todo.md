@@ -12,6 +12,11 @@
 ## Reste à faire
 
 ### 🟠 Perf solver
+- [ ] 🔴**Exclusion de piece** actuellement seul les armes et les accessoires sont effectiver ecarté en 
+      fonction des filtres (et encore je suis pas 100% sur) par contre pour les sets ce n'est pas le cas. 
+      si on fournit une restriction (eg je veux set2 atk + set2 pen) alors ça ne sert a rien d'inclure les 
+      pieces qui ne font pas partie de ses sets. en revanche si on ne fournit que 1 set2 piece on peux faire un combo
+      setdemander + 2 autre piece (prevoir de rajouter un settings pour autoriser les broken set).
 - [ ] **Solver CP trop lent** — le mode SOLVE CP met beaucoup trop de temps. Investiguer (CP calculé
       in-loop par combo : profiler, mémoïser ce qui peut l'être, voir si un pré-filtre réduit le pool).
 - [ ] **Accumulateur de buckets — re-sum déféré** — le hoist des set bonuses est fait ; reste le re-sum
@@ -31,6 +36,10 @@
 - [ ] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** alors que l'accessoire a un main user-sélectionnable
       → placeholder potentiellement faux quand aucun build n'est sélectionné. *(laissé pour ne pas
       diverger du panneau Inventory qui partage la map)*
+- [ ] 🟢 **Rentabilité des % vs Flat** — pour les stats comme Atk, Def, HP il existe une version flat et une version %. 
+      lorsque que l'on a choisit un personnage, dans un cadre "info" entre current => projected et library (tab builder) 
+      pour informer sur combien le tick de sub rapporte (en version % et flat) et du coup pouvoir indiquer si il est plus 
+      rentable d'aller chercher du flat ou  du % sur les subs
 - [ ] ⚪ **Optims mineures Inventory (si profilage)** — `computeQuality` recalculé plusieurs fois par pièce
       (précalculable dans `toUiPiece`) · double virtualisation (`contentVisibility:auto` redondant avec
       `react-virtual`) · 7 `useMemo` d'availability fusionnables en une passe.
@@ -83,8 +92,12 @@
       *(À vérifier sur ta machine : le solve doit maintenant saturer ~tous les cœurs.)*
 
 ### Features
-- [ ] **Settings — options globales** — panneau pour worker count override · topK/topN · heatmap on/off
-      (en plus des debug toggles déjà là). prevoir meme une refonte graphique / orga de la fenetre settings
+- [x] **Settings — options globales** — refonte **left-rail à onglets** (Setup · Solver · Data · Backup · Debug,
+      footer contextuel) portée depuis le design Claude (`docs/design/settings-redesign-brief.md`). Nouvelle section
+      **Solver** : worker count (Auto/Manual + stepper, dispose+rebuild du pool au changement), result count (topN),
+      per-worker depth (topK, derrière « Show advanced » + warning), heatmap on/off. Réglages persistés (App
+      `usePersistedState`) câblés : `resolveWorkerCount(override)` + footer réactif, topN/topK dans `startSolve`,
+      heatmap gate `ResultsTable` (`EMPTY_RANGES`). `gs.solver.workerCount` partagé avec le code non-React.
 
 ### À vérifier EN JEU
 - [ ] **Cap de Quality ne scale pas avec les étoiles** — `computeQuality` fixe `max = 14 + reforge.n`

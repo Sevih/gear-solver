@@ -26,24 +26,37 @@ import type {
  *  panel writes here; read once at pool creation). */
 const WORKER_COUNT_KEY = "gs.solver.workerCount";
 
+/** Hard ceiling so a pathological override or an absurd core count can't spawn
+ *  thousands of workers. */
+const WORKER_COUNT_CEILING = 64;
+
 /** Resolve how many solver workers to spawn. Default = `hardwareConcurrency - 1`
- *  (use every logical core but one, kept free for the main thread / UI), with a
- *  generous hard ceiling so a pathological override or an absurd core count
- *  can't spawn thousands of workers. A valid `gs.solver.workerCount` override
- *  wins (clamped to [1, ceiling]). Changing the override takes effect on the
- *  next pool creation (screen reload). */
-export function resolveWorkerCount(): number {
-  const CEILING = 64;
+ *  (use every logical core but one, kept free for the main thread / UI). A valid
+ *  manual override wins (clamped to [1, ceiling]).
+ *
+ *  `override` lets a React caller pass the live setting value directly (for a
+ *  reactive read-out) instead of going through localStorage: pass `undefined`
+ *  (default) to read the persisted `gs.solver.workerCount`, a number to force a
+ *  manual count, or `null` to force the auto default. The non-React orchestrator
+ *  always uses the localStorage path. */
+export function resolveWorkerCount(override?: number | null): number {
   const hwc = navigator.hardwareConcurrency || 4;
-  let override = NaN;
+  const ov = override !== undefined ? override : readWorkerCountOverride();
+  if (ov != null && Number.isFinite(ov) && ov >= 1) return Math.min(ov, WORKER_COUNT_CEILING);
+  return Math.max(1, Math.min(WORKER_COUNT_CEILING, hwc - 1));
+}
+
+/** Read the persisted manual worker-count override, or null when unset/auto. */
+function readWorkerCountOverride(): number | null {
   try {
     const raw = localStorage.getItem(WORKER_COUNT_KEY);
-    if (raw) override = parseInt(raw, 10);
+    if (!raw) return null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : null;
   } catch {
     // localStorage can throw in locked-down contexts — fall back to the default.
+    return null;
   }
-  if (Number.isFinite(override) && override >= 1) return Math.min(override, CEILING);
-  return Math.max(1, Math.min(CEILING, hwc - 1));
 }
 
 export interface OrchestratorCallbacks {
