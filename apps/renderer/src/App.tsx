@@ -286,7 +286,6 @@ export function App() {
                 busy={running !== "none"}
                 onCapture={() => runCapture("capture")}
                 onSyncData={() => void syncGameData()}
-                onOpenSettings={() => setWizardOpen(true)}
                 onOpenBuilder={() => setTab("Builder")}
               />
             )}
