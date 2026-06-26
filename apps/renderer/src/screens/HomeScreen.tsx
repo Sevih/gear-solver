@@ -249,7 +249,7 @@ function UpdateCard({ status, onCheck, onInstall }: {
         {status.state === "downloading" && (
           <div className="mt-1 flex max-w-85 items-center gap-2.5">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/8">
-              <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-cyan-500 transition-[width] duration-200" style={{ width: `${status.progress}%` }} />
+              <div className="h-full rounded-full bg-linear-to-r from-cyan-400 to-cyan-500 transition-[width] duration-200" style={{ width: `${status.progress}%` }} />
             </div>
             <Num className="min-w-9 text-right text-[11px] font-semibold text-cyan-300">{status.progress}%</Num>
           </div>
@@ -269,7 +269,7 @@ function UpdateCard({ status, onCheck, onInstall }: {
           <>
             <button
               onClick={onInstall}
-              className="w-full rounded-lg bg-gradient-to-b from-cyan-400 to-cyan-500 px-4.5 py-2.5 text-[12.5px] font-bold tracking-tight text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.45),0_7px_18px_-8px_rgba(34,211,238,0.7)] hover:brightness-105"
+              className="w-full rounded-lg bg-linear-to-b from-cyan-400 to-cyan-500 px-4.5 py-2.5 text-[12.5px] font-bold tracking-tight text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.45),0_7px_18px_-8px_rgba(34,211,238,0.7)] hover:brightness-105"
             >
               Install new version
             </button>
@@ -302,7 +302,7 @@ function EmptyDashboard({ onCapture }: { onCapture: () => void }) {
       </p>
       <button
         onClick={onCapture}
-        className="rounded-[10px] bg-gradient-to-b from-cyan-400 to-cyan-500 px-6.5 py-3 text-[13px] font-bold tracking-tight text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.45),0_8px_22px_-8px_rgba(34,211,238,0.7)] hover:brightness-105"
+        className="rounded-[10px] bg-linear-to-b from-cyan-400 to-cyan-500 px-6.5 py-3 text-[13px] font-bold tracking-tight text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.45),0_8px_22px_-8px_rgba(34,211,238,0.7)] hover:brightness-105"
       >
         Capture your account
       </button>
@@ -545,7 +545,7 @@ export function HomeScreen({
                   onClick={onCapture}
                   disabled={busy}
                   className={cx(
-                    "flex-1 rounded-lg bg-gradient-to-b from-cyan-400 to-cyan-500 py-2.5 text-[11.5px] font-bold text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.4)] hover:brightness-105",
+                    "flex-1 rounded-lg bg-linear-to-b from-cyan-400 to-cyan-500 py-2.5 text-[11.5px] font-bold text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.4)] hover:brightness-105",
                     busy && "cursor-not-allowed opacity-50",
                   )}
                 >
@@ -584,7 +584,7 @@ function Stat({ label, value, gradient }: { label: string; value: number; gradie
       gradient ? "border border-cyan-400/20 bg-cyan-400/5" : "border border-white/7 bg-white/3",
     )}>
       {gradient ? (
-        <span className="bg-gradient-to-r from-cyan-400 via-violet-500 to-pink-500 bg-clip-text text-[9px] font-bold uppercase tracking-wider text-transparent">{label}</span>
+        <span className="bg-linear-to-r from-cyan-400 via-violet-500 to-pink-500 bg-clip-text text-[9px] font-bold uppercase tracking-wider text-transparent">{label}</span>
       ) : (
         <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">{label}</span>
       )}
