@@ -75,8 +75,9 @@
       du héros** (ATK/DEF/HP selon `dmgStat` + secondaires `dmgSec`) vs **CHD** vs **DMG inc**, classé, meilleur
       en cyan. Pour une stat de scaling, +1% = un sub 1% → `base × 1% × (1+buffRate)` (amplificateur par stat
       depuis `scaling.buffPct`) ; CHD/DMG inc = +1 point. Réutilise le modèle validé `computeCheapRatings`
-      (crit/DMG±/PEN, formules 1.4.9) : bump +1% et recompare `.dmg`. Logique pure `lib/dmgValue.ts` (+4 tests).
-      Ex. gros attaquant : 1% ATK ≻ DMG inc ≻ CHD ; support à faible base : DMG inc ≻ ATK.
+      (crit/DMG±/PEN, formules 1.4.9) : bump +1% et recompare `.dmg`. **Calculé à 100% crit (crit cap)** —
+      baseline endgame, sinon CHD est sous-évalué ; à 100% crit CHD ≡ DMG inc par point. Logique pure
+      `lib/dmgValue.ts` (+4 tests). Ex. gros attaquant : 1% ATK ≻ CHD = DMG inc ; faible base : se resserre.
 
 ### À vérifier EN JEU
 - [ ] **Cap de Quality ne scale pas avec les étoiles** — `computeQuality` fixe `max = 14 + reforge.n`

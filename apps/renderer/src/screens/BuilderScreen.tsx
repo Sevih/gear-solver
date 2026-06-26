@@ -1847,18 +1847,22 @@ const DMG_STAT_ICON: Record<string, { iconKey: string; label: string }> = {
   dmgUp: { iconKey: "dmgUp", label: "DMG UP%" },
 };
 
-/** Expected-damage gain from **+1%** of each relevant stat for the picked hero:
- *  the hero's scaling stat(s) (ATK / DEF / HP per `dmgStat` + `dmgSec`) vs CHD vs
- *  DMG inc, ranked, best in cyan. A "1%" of a scaling stat = a 1% sub →
- *  `base × 1% × (1+buffRate)` added to the final; CHD / DMG-UP are additive (+1).
- *  Reuses the validated `computeCheapRatings` model so crit interactions
- *  (e.g. CHD worth less below the crit cap) fall out correctly. */
+/** Expected-damage gain from **+1%** of each relevant stat for the picked hero,
+ *  computed at the **crit cap (100% CHC)** — the endgame theorycraft baseline you
+ *  build toward (otherwise CHD is undervalued). Compares the hero's scaling
+ *  stat(s) (ATK / DEF / HP per `dmgStat` + `dmgSec`) vs CHD vs DMG inc, ranked,
+ *  best in cyan. A "1%" of a scaling stat = a 1% sub → `base × 1% × (1+buffRate)`
+ *  added to the final; CHD / DMG-UP are additive (+1). Reuses the validated
+ *  `computeCheapRatings` model (crit folded into the hit rate per the binary). */
 function DmgPer1PctPanel({ comp, width = "w-full" }: {
   comp: SelectedComposition | null;
   width?: string;
 }) {
   if (!comp) return null;
   const { current, baseFlat, dmgStat, dmgSec, dmgAmp } = comp;
+  // Evaluate at 100% crit — the crit-cap baseline (so CHD is valued at full
+  // weight, matching how endgame builds reach the cap via gems/buffs).
+  const atCap: FinalStats = { ...current, crc: 100 };
   // Scaling stats = main dmg stat + any additive secondary stats (deduped).
   const scalingStats = Array.from(new Set<"atk" | "def" | "hp">([dmgStat, ...(dmgSec?.map((s) => s.stat) ?? [])]));
   const candidates: DmgTickCandidate[] = scalingStats.map((s) => ({
@@ -1866,13 +1870,13 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
   }));
   candidates.push({ key: "chd", label: "CHD", field: "chd", delta: 1 });
   candidates.push({ key: "dmgUp", label: "DMG UP%", field: "dmgUp", delta: 1 });
-  const gains = dmgTickGains(current, dmgStat, dmgSec, candidates);
+  const gains = dmgTickGains(atCap, dmgStat, dmgSec, candidates);
   if (gains.length === 0) return null;
   const bestKey = gains[0]!.gainPct > 0 ? gains[0]!.key : null;
   return (
     <Panel
-      title="Damage / +1%"
-      hint="Expected-damage gain from +1% of each stat for this hero — the hero's scaling stat(s), CHD and DMG inc. For a scaling stat, +1% = a 1% sub (base × 1%, through the hero's multipliers); CHD / DMG inc = +1 point. Cyan = where 1% buys the most damage. Uses the in-game crit / DMG± / PEN model."
+      title="Damage / +1% · 100% crit"
+      hint="Expected-damage gain from +1% of each stat for this hero, computed at the crit cap (100% CHC) — the endgame baseline you build toward (below the cap, CHD is undervalued). Compares the hero's scaling stat(s), CHD and DMG inc. For a scaling stat, +1% = a 1% sub (base × 1%, through the hero's multipliers); CHD / DMG inc = +1 point. Cyan = where 1% buys the most damage. Uses the in-game crit / DMG± / PEN model."
       width={width}
     >
       <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">
