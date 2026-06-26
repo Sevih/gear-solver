@@ -39,13 +39,21 @@
 - [ ] 🟡 **Reset des tris/filtres au lancement** — l'état persiste au reload et on n'en veut pas :
       **Inventory** persiste le tri (`gs.inv.sort`/`dir`/`tab`), **Builds** persiste ses filtres
       (`gs.builds.filters` ; pas de tri, fixe CP desc). Repartir d'un défaut au lancement.
-- [ ] 🟡 **`Advices` (tab Builder)** — 2 ajouts à `computeAdvice` ([BuildsScreen.tsx:489-551](../apps/renderer/src/screens/BuildsScreen.tsx#L489)) :
-      1. **Réduction de bruit Missing** : le flag « Missing » est déjà correct (6 slots core, EE/Talisman
-         exclus) mais s'affiche sur tout perso incomplet. Le **suppresser** sur les persos peu équipés
-         (eg seuil : ne l'afficher que si déjà substantiellement geared, ~1 EE + 3 pièces) → on ne se
-         soucie pas d'un perso à peine équipé.
-      2. **Advice crit-overcap** (absent aujourd'hui) : perso à > 102 % de crit ET gems CHC socketées sur
-         talisman/EE → crit gaspillé.
+- [ ] 🟡 **`Advices` (tab Builder)** — nouvelles règles dans `computeAdvice` ([BuildsScreen.tsx:489-551](../apps/renderer/src/screens/BuildsScreen.tsx#L489)).
+      `ComposedEntry` expose : stats finales, baseline sans gear, pièces brutes (gems/subs/reforge/enhance/
+      ascended/quality/sets), `meta.dmgStat`. **Lot prioritaire** (haute confiance, données déjà là) :
+      1. **Caps gaspillés** — `crc > 100` (surtout si gems CHC sur talisman/EE) · `dmgRed > 70` (mitigation
+         plancher 0.3 → cap 70 %, *seuil à valider en jeu*) · `pen > 100` (cappe à 100). « X % gaspillés,
+         réallouer ». Caps déjà dans le modèle (ratings.ts), juste à comparer.
+      2. **Gems** — slots de gem vides sur talisman/EE (`gemSlots` à 0) · 5ᵉ slot verrouillé si
+         `enhanceLevel < 5`.
+      3. **Upgrade** — reforges non utilisés (`reforgeCount < maxReforges`) · pièces non max-enhance · 6★
+         non ascensionné (agréger pour éviter le bruit).
+      4. **Réduction de bruit Missing** — le flag est déjà correct (6 slots core, EE/Talisman exclus) mais
+         s'affiche sur tout perso incomplet ; le suppresser sur les persos peu équipés (seuil ~1 EE + 3 pièces).
+      **Lot secondaire** (confiance moyenne / refacto) : main off-scaling vs `meta.dmgStat` · pièce de
+      basse qualité équipée · « 4pc complet dispo en inventaire » / « effet d'arme manquant »
+      (*nécessite de passer l'inventaire complet à `computeAdvice`*).
 - [ ] 🟡 **Show/hide colonnes — accès clic-droit** — le menu « Columns » existe (`c8808d4`) ; ajouter
       l'ouverture via clic-droit sur les en-têtes de colonne.
 - [~] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** (wontfix assumé) — placeholder faux quand aucun build
