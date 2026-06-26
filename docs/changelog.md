@@ -69,6 +69,23 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — CSP stricte sur le serveur prod (warning Electron)
+
+Electron râlait en console (`Insecure Content-Security-Policy` / `unsafe-eval`) parce que le renderer
+n'avait aucune CSP. En dev c'est purement Vite (HMR via `eval`) et c'est inévitable ; en **prod**, le
+serveur HTTP embarqué (`apps/desktop/src/server.ts`) sert maintenant le document HTML avec une CSP
+serrée au plus juste de la surface réelle :
+- `script-src 'self'` (build prod = scripts externes, zéro inline/eval) → **le warning disparaît dans la
+  build packagée**.
+- `style-src`/`font-src` ouvrent **Google Fonts** (Geist + Geist Mono) ; `'unsafe-inline'` sur les styles
+  couvre les `style={{…}}` de React.
+- `img-src` autorise `https://outerpedia.com` pour le **302 de secours** de `/img/*` (img-cache.ts) — la
+  CSP re-vérifie la cible du redirect — plus `data:`/`blob:` (canvas/capture).
+- Tout le reste (gamedata, captured JSON, API reco/update, solver worker) est same-origin → `'self'`.
+- Durcissement : `object-src 'none'`, `frame-ancestors 'none'`, `base-uri 'self'`, `form-action 'none'`.
+
+En-tête posé uniquement sur les réponses `text/html` (root + fallback SPA), seul document que la CSP régit.
+
 ### Session 2026-06-27 — cartes de gear Builder (gems, passifs singularité, extrapolation)
 
 Lot de lisibilité sur la `BottomGearBand` (`GearCard`) :

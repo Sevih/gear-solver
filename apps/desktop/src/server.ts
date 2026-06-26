@@ -73,11 +73,42 @@ function mime(file: string): string {
   return MIME[extname(file).toLowerCase()] ?? "application/octet-stream";
 }
 
+/**
+ * Content-Security-Policy for the renderer document. The prod build ships only
+ * external module scripts (no inline/eval — that's a dev-only Vite thing), so
+ * `script-src 'self'` is safe and silences Electron's insecure-CSP warning for
+ * good. The few cross-origin holes are exactly the renderer's real needs:
+ *   - style-src/font-src → Google Fonts (Geist + Geist Mono, loaded from
+ *     index.html). 'unsafe-inline' on styles covers React's `style={{…}}` attrs.
+ *   - img-src outerpedia.com → the `/img/*` route's last-resort 302 to the
+ *     public CDN (img-cache.ts); CSP re-checks redirect targets, so it must be
+ *     whitelisted. data:/blob: cover canvas/capture-derived images.
+ * Everything else (game data, captured JSON, reco/update APIs, the solver
+ * worker) is same-origin and falls under 'self'.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https://outerpedia.com",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'",
+  "form-action 'none'",
+].join("; ");
+
 /** Stream a static file with an ETag built from size+mtime; honor If-None-Match
  *  for cheap 304s. */
 function serveStatic(req: IncomingMessage, res: ServerResponse, file: string, cacheMode: "etag" | "long"): void {
   if (!existsSync(file)) { res.statusCode = 404; res.end("not found"); return; }
-  res.setHeader("Content-Type", mime(file));
+  const contentType = mime(file);
+  res.setHeader("Content-Type", contentType);
+  // Lock down the renderer document (the only thing CSP governs); set it here
+  // so both the root and the SPA-fallback index.html serves are covered.
+  if (contentType.startsWith("text/html")) res.setHeader("Content-Security-Policy", CSP);
   if (cacheMode === "long") {
     res.setHeader("Cache-Control", "public, max-age=86400");
   } else {
