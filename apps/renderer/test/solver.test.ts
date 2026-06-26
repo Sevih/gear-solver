@@ -894,4 +894,18 @@ describe("simulateReforges — 6★ ascended budget", () => {
     expect(atk.ticks).toBe(6);
     expect(crc.ticks).toBe(2);
   });
+
+  it("budget override forces a fixed endgame budget regardless of real star", () => {
+    // A 3★ piece (real budget 3) previewed in ascended mode gets the fixed
+    // 9-tick budget — "project every piece as a maxed 6★ ascended".
+    const p = piece(3, 0, [
+      { stat: "atkPct", value: 4, percent: true, ticks: 1 },   // → cap at 6 (5 ticks)
+      { stat: "critRate", value: 1, percent: true, ticks: 1 }, // → absorbs the other 4
+    ]);
+    const sim = simulateReforges(p, { atk: 3 }, 9);
+    const atk = sim.subs.find((s) => s.stat === "atkPct")!;
+    const crc = sim.subs.find((s) => s.stat === "critRate")!;
+    expect(atk.ticks).toBe(6);
+    expect(crc.ticks).toBe(5); // 9 total − 4 into atk
+  });
 });

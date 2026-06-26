@@ -8,6 +8,7 @@
  * one-key-per-build which would scatter writes), and the read on mount is
  * a single localStorage hit.
  */
+import type { ReforgeMode } from "../solver/engine.js";
 import type { SolveBuild, SolveMode } from "../solver/types.js";
 
 export interface SavedBuild {
@@ -23,8 +24,10 @@ export interface SavedBuild {
   /** Reforge context the build was solved with — needed to reproduce the
    *  bottom gear band's projected (max-roll) substats on restore. Optional
    *  for backward compat: builds saved before this field fall back to
-   *  showing the pieces' current rolls (their pre-existing behavior). */
-  reforge?: { useReforged: boolean; priority: Record<string, number> };
+   *  showing the pieces' current rolls (their pre-existing behavior).
+   *  `useReforged` is the legacy boolean shape (pre-reforge-modes) — read
+   *  tolerantly and migrated to `reforgeMode` on restore. */
+  reforge?: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number> };
   /** Wall-clock ms — sort key for newest-first display. */
   createdAt: number;
 }

@@ -217,6 +217,89 @@ export function allocateGemsCapped(
   return { alloc: { talisman, ee }, delta: picked > 0 ? { flat, pct } : null };
 }
 
+/**
+ * Two-stage "reach the cap, then fill by priority" allocation. Unlike
+ * `allocateGemsCapped` (which only AVOIDS overshooting once already at the cap),
+ * this actively spends crit gems FIRST to bring CHC up to `CRC_GEM_CAP`, then
+ * fills the remaining slots by priority order (skipping any further crit gem,
+ * which would be wasted). Mirrors the player's real intent for a crit DPS:
+ * "guarantee the crit cap, then pour the rest into damage/EHP".
+ *
+ * Stage 1 walks crit gems in score-desc order (equal crit priority ⇒ highest
+ * value first), so the cap is reached with the FEWEST gems, leaving the most
+ * slots for stage 2. It stops as soon as `preGemCrc + accumulated ≥ cap`
+ * (overshoot ≤ one 3% gem) or crit gems / slots run out. When `preGemCrc` is
+ * already ≥ cap, stage 1 is a no-op and stage 2 skips crit entirely — same
+ * outcome as `allocateGemsCapped` for the no-priority path.
+ *
+ * Used only when the user prioritized crc (`crc` weight > 0) and the pool has
+ * crit gems — gated by the caller so non-crit builds never pay for it.
+ */
+export function allocateGemsReachingCap(
+  scored: ScoredGem[],
+  talismanSlots: number,
+  eeSlots: number,
+  preGemCrc: number,
+): CappedAllocation {
+  const talisman: number[] = [];
+  const ee: number[] = [];
+  const flat: Record<string, number> = {};
+  const pct: Record<string, number> = {};
+  const total = talismanSlots + eeSlots;
+  const used = new Array(scored.length).fill(false);
+  let picked = 0;
+  const place = (g: ScoredGem): void => {
+    if (talisman.length < talismanSlots) talisman.push(g.id);
+    else ee.push(g.id);
+    const bucket = g.percent ? pct : flat;
+    bucket[g.stat] = (bucket[g.stat] ?? 0) + g.value;
+  };
+  // Stage 1 — spend crit gems until the CHC cap is reached.
+  let crc = preGemCrc;
+  if (crc < CRC_GEM_CAP) {
+    for (let i = 0; i < scored.length && picked < total; i++) {
+      const g = scored[i];
+      if (!g || used[i] || g.stat !== CRC_GEM_STAT || g.score <= 0) continue;
+      place(g);
+      used[i] = true;
+      crc += g.value;
+      picked++;
+      if (crc >= CRC_GEM_CAP) break;
+    }
+  }
+  // Stage 2 — fill the rest by priority order, skipping crit (capped/wasted).
+  for (let i = 0; i < scored.length && picked < total; i++) {
+    const g = scored[i];
+    if (!g || used[i] || g.score <= 0 || g.stat === CRC_GEM_STAT) continue;
+    place(g);
+    used[i] = true;
+    picked++;
+  }
+  while (talisman.length < talismanSlots) talisman.push(0);
+  while (ee.length < eeSlots) ee.push(0);
+  return { alloc: { talisman, ee }, delta: picked > 0 ? { flat, pct } : null };
+}
+
+/** Cheap structural equality for two gem bucket deltas (`{flat, pct}` or null).
+ *  Lets the hot loop skip a redundant recompose when the cap-reaching
+ *  allocation lands on the exact same gem contribution as the precomputed
+ *  default greedy (common when crit gems already rank high in priority). */
+export function gemDeltaEquals(
+  a: { flat: Record<string, number>; pct: Record<string, number> } | null,
+  b: { flat: Record<string, number>; pct: Record<string, number> } | null,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return bucketEquals(a.flat, b.flat) && bucketEquals(a.pct, b.pct);
+}
+
+function bucketEquals(a: Record<string, number>, b: Record<string, number>): boolean {
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) if (a[k] !== b[k]) return false;
+  return true;
+}
+
 /** Pre-aggregate a gem allocation into a `{flat, pct}` bucket delta the
  *  composer can merge in O(stats) per combo instead of O(gems × resolveStat).
  *  Called once per `(talismanSlots, eeSlots)` variant in `prepareContext`

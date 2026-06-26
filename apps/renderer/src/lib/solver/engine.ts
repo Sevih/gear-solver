@@ -13,8 +13,8 @@
  * React). The worker thin-wraps these and translates progress callbacks
  * into postMessage events.
  */
-import type { GearPiece, RolledStat } from "@gear-solver/core";
-import { composeCharStats, expToLevel } from "@gear-solver/core";
+import type { GameData, GearPiece, ReforgeCeiling, RolledStat } from "@gear-solver/core";
+import { composeCharStats, expToLevel, projectMainToCeiling } from "@gear-solver/core";
 import {
   computeFinalStats,
   computeSetBonuses,
@@ -24,7 +24,7 @@ import {
   type ScalingMap,
 } from "../composeBuild.js";
 import { calcBattlePower } from "./cp.js";
-import { aggregateGemDelta, allocateGems, allocateGemsCapped, buildGemPool, CRC_OVERSHOOT_CEIL, gemSlotsOf, scoreGemPool, type ScoredGem } from "./gems.js";
+import { aggregateGemDelta, allocateGems, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
 import { planSetIds, setsFeasible } from "./setPlans.js";
@@ -35,6 +35,37 @@ import { gearPieceQualityTier, QUALITY_TIERS, type QualityTier } from "../qualit
  *  Talisman); the rest are 1:1. */
 function engineToDesign(slot: string): string {
   return slot === "ooparts" ? "talisman" : slot;
+}
+
+/** Reforge-mode preview: how aggressively to project each pool piece toward
+ *  an endgame ceiling before scoring. `disable` keeps pieces as captured;
+ *  `classic` / `ascended` project main stats + substat reforge ticks to the
+ *  6★ non-ascended (+10, 6 ticks) / 6★ ascended (+15, 9 ticks) endgame. */
+export type ReforgeMode = "disable" | "classic" | "ascended";
+
+/** Per-mode projection plan — the enhance ceiling fed to `projectMainToCeiling`
+ *  (main-stat re-scale) and the fixed reforge budget fed to `simulateReforges`
+ *  (substat ticks). Budgets are fixed (not derived from the piece's real star)
+ *  so every piece is previewed as a maxed 6★. */
+const REFORGE_PLANS: Record<Exclude<ReforgeMode, "disable">, { ceiling: ReforgeCeiling; budget: number }> = {
+  classic:  { ceiling: { enhanceLevel: 10, ascended: false, singularityLevel: 0 }, budget: 6 },
+  ascended: { ceiling: { enhanceLevel: 15, ascended: true,  singularityLevel: 5 }, budget: 9 },
+};
+
+/** Project a single pool piece to its reforge-mode ceiling: main-stat re-scale
+ *  (`projectMainToCeiling`) + substat reforge ticks (`simulateReforges`) at the
+ *  mode's fixed endgame budget. `disable` and Talisman/EE return the piece
+ *  untouched. Shared by `precomputeContext` (pool scoring) and the Builder's
+ *  bottom gear band (display), so the previewed card matches the scored stats. */
+export function projectPieceForReforge(
+  piece: GearPiece,
+  game: GameData,
+  mode: ReforgeMode,
+  priority: Record<string, number>,
+): GearPiece {
+  if (mode === "disable" || piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
+  const plan = REFORGE_PLANS[mode];
+  return simulateReforges(projectMainToCeiling(piece, game, plan.ceiling), priority, plan.budget);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -248,9 +279,10 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // (i.e. SOLVE mode without explicit priority — the fallback that reads
   // talisman subs directly). `simulateReforges` itself also rejects these
   // slots defensively in case a future caller forgets to filter here.
-  if (filters.options.useReforged) {
+  const reforgeMode = filters.options.reforgeMode ?? "disable";
+  if (reforgeMode !== "disable") {
     for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const) {
-      pools[slot] = pools[slot].map((p) => simulateReforges(p, filters.priority));
+      pools[slot] = pools[slot].map((p) => projectPieceForReforge(p, game, reforgeMode, filters.priority));
     }
   }
 
@@ -380,14 +412,18 @@ const REFORGE_PER_SUB_CAP = 6;
  *  This is intentionally a HEURISTIC — the real game lets you re-roll
  *  individual ticks (orange) but we assume monotonic additions only. Good
  *  enough for "what's the best this piece can become?" previews. */
-export function simulateReforges(piece: GearPiece, priority: Record<string, number>): GearPiece {
+export function simulateReforges(piece: GearPiece, priority: Record<string, number>, maxReforgesOverride?: number): GearPiece {
   if (piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
   // In-game reforge budget: N reforges for 1★→6★ pieces. A 6★ ascended
   // (Singularity) piece gets an additional +3 reforges → 9 total (the +3
   // is exclusive to 6★ Singularity items; lower-star ascended doesn't exist
   // since ascension is a 6★-only mechanic in this build).
+  //
+  // `maxReforgesOverride` lets the reforge-mode preview impose a fixed
+  // endgame budget regardless of the piece's actual star (classic = 6,
+  // ascended = 9) — "project every piece as if it were max-star 6★".
   const star = piece.star ?? 0;
-  const maxReforges = (star === 6 && piece.ascended) ? star + 3 : star;
+  const maxReforges = maxReforgesOverride ?? ((star === 6 && piece.ascended) ? star + 3 : star);
   const remaining = Math.max(0, maxReforges - piece.reforgeCount);
   if (remaining === 0 || piece.subs.length === 0) return piece;
   const subs: RolledStat[] = piece.subs.map((s) => ({ ...s }));
@@ -585,6 +621,14 @@ export async function solveChunk(
   const heap = new TopKHeap(topK, mode);
   const tickEvery = options.tickEvery ?? 4096;
 
+  // Crit-cap gem strategy: when the user prioritized crc AND the pool holds
+  // crit gems, the per-combo allocation REACHES the 100% CHC cap first (crit
+  // gems), then fills by priority. Gated here once per solve so non-crit
+  // builds never enter the slow path. `crc` is the user-facing priority key
+  // (engine `critRate` maps to it via STAT_TO_PRIORITY).
+  const hasCritGems = scoredGems.some((g) => g.stat === "critRate" && g.score > 0);
+  const wantCritCap = (filters.priority.crc ?? 0) > 0 && hasCritGems;
+
   // Partition the slot with the largest pool — best load balance.
   const partitionSlot = pickPartitionSlot(pools);
   const partitioned = partition(pools[partitionSlot], chunkIndex, chunkCount);
@@ -726,17 +770,28 @@ export async function solveChunk(
                 let gemAlloc = gemAllocByTalismanSlots.get(talismanSlots) ?? { talisman: [], ee: [] };
                 let fs = computeFinalStats(baseline, scaling, pieces, game, gemDelta ?? undefined, setBonuses);
 
-                // Crit-cap correction (slow path). The precomputed gem alloc is
-                // CHC-blind, so on a high-base-CHC combo it can stack crit gems
-                // past the 100% cap. `fs.crc > 102` ⟺ at least one crit gem was
-                // placed past the cap (the capped max is one 3% overshoot);
-                // gated on the default alloc actually using crit gems so a combo
-                // that's already >102 from gear alone (nothing to swap) stays on
-                // the fast path. When triggered, reallocate for this combo's
-                // pre-gem CHC and recompose — wasted crit gems become useful
-                // non-crit ones. Untriggered combos pay zero extra cost.
+                // Gem cap handling (slow path). The precomputed default delta is
+                // CHC-blind, so it neither guarantees the crit cap nor avoids
+                // overshooting it. The pre-gem CHC for THIS combo is recoverable
+                // from the composed CHC minus the default gem crc contribution
+                // (crit rate is purely additive — no scaling compounding).
                 const defaultCrcGem = gemDelta?.pct?.critRate ?? 0;
-                if (fs.crc > CRC_OVERSHOOT_CEIL && defaultCrcGem > 0) {
+                if (wantCritCap) {
+                  // User prioritized crc → REACH the 100% cap with crit gems
+                  // first, then fill the rest by priority. Recompose only when
+                  // the cap-aware allocation actually differs from the default
+                  // greedy (it often won't, when crit gems already rank high).
+                  const preGemCrc = fs.crc - defaultCrcGem;
+                  const reached = allocateGemsReachingCap(scoredGems, talismanSlots, eeSlots, preGemCrc);
+                  if (!gemDeltaEquals(reached.delta, gemDelta)) {
+                    fs = computeFinalStats(baseline, scaling, pieces, game, reached.delta ?? undefined, setBonuses);
+                    gemAlloc = reached.alloc;
+                  }
+                } else if (fs.crc > CRC_OVERSHOOT_CEIL && defaultCrcGem > 0) {
+                  // No crc priority (e.g. SOLVE CP raw-gem fallback): just avoid
+                  // overshoot. `fs.crc > 102` ⟺ ≥1 crit gem landed past the cap;
+                  // reallocate this combo's pre-gem CHC so wasted crit gems
+                  // become useful non-crit ones. Untriggered combos pay nothing.
                   const capped = allocateGemsCapped(scoredGems, talismanSlots, eeSlots, fs.crc - defaultCrcGem);
                   fs = computeFinalStats(baseline, scaling, pieces, game, capped.delta ?? undefined, setBonuses);
                   gemAlloc = capped.alloc;

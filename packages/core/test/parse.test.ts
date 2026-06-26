@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseInventory, isGear } from "../src/parse.js";
+import { parseInventory, isGear, projectMainToCeiling } from "../src/parse.js";
 import type { RawUserItem } from "../src/raw.js";
 import type { GameData } from "../src/gamedata.js";
 
@@ -186,5 +186,42 @@ describe("parseInventory", () => {
     expect(crit.value).toBe(18);
     const spd = g.subs.find((s) => s.stat === "spd")!;
     expect(spd.value).toBe(12);
+  });
+});
+
+describe("projectMainToCeiling", () => {
+  // The +0 weapon (main ATK 240) and its +15-ascended twin (ATK 1380) are
+  // pinned to the real in-game readout above — so projecting the +0 piece to
+  // the ascended ceiling must reproduce exactly 1380 (validates the
+  // recover-base-via-multiplier-ratio approach against ground truth).
+  const ASCENDED = { enhanceLevel: 15, ascended: true, singularityLevel: 5 };
+  const CLASSIC = { enhanceLevel: 10, ascended: false, singularityLevel: 0 };
+
+  it("projects a +0 main to the +15 ascended ceiling, matching the parsed +15 piece", () => {
+    const base = parseInventory(sample, undefined, game).gear[0]!; // +0, ATK 240
+    const projected = projectMainToCeiling(base, game, ASCENDED);
+    expect(projected.main[0]).toMatchObject({ stat: "atk", value: 1380 });
+    expect(projected.enhanceLevel).toBe(15);
+    expect(projected.ascended).toBe(true);
+  });
+
+  it("projects a +0 main to the +10 classic ceiling (mult 5×1.20)", () => {
+    const base = parseInventory(sample, undefined, game).gear[0]!; // +0, ATK 240
+    const projected = projectMainToCeiling(base, game, CLASSIC);
+    // 240 / 1.20 × (1 + 0.4*10) × 1.20 = 240 × 5 = 1200
+    expect(projected.main[0]).toMatchObject({ stat: "atk", value: 1200 });
+    expect(projected.enhanceLevel).toBe(10);
+  });
+
+  it("never downgrades: a +15 ascended piece previewed as classic is untouched", () => {
+    const asc = parseInventory(sample, undefined, game).gear[1]!; // +15 ascended, ATK 1380
+    const projected = projectMainToCeiling(asc, game, CLASSIC);
+    expect(projected).toBe(asc); // identity — no change
+    expect(projected.main[0]).toMatchObject({ stat: "atk", value: 1380 });
+  });
+
+  it("leaves Talisman (ooparts) mains untouched (enhance doesn't scale them)", () => {
+    const tal = parseInventory(sample, undefined, game).gear.find((g) => g.uid === "tal")!;
+    expect(projectMainToCeiling(tal, game, ASCENDED)).toBe(tal); // identity
   });
 });

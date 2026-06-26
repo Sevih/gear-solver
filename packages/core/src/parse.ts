@@ -65,11 +65,13 @@ function levelFromExp(meta: EquipmentDef, enhance: EnhanceData, exp: number): nu
   return lv;
 }
 
-/** Apply enhance + breakthrough + (optional) singularity scaling to a rolled main stat.
- *  Mirrors outerpedia-v2 `mainStat` / `mainStatAscended`. Talisman (slot=ooparts) has
- *  enhanceFactor=0 in-game ⇒ we just return the base. */
-function scaleMain(base: RolledStat, slot: string, lv: number, tier: number, ascended: boolean, singLevel: number, e: EnhanceData): number {
-  if (slot === "ooparts") return base.value;
+/** Main-stat multiplier for a given enhance/breakthrough/ascension state.
+ *  Mirrors outerpedia-v2 `mainStat` / `mainStatAscended`. Talisman (slot=ooparts)
+ *  has enhanceFactor=0 in-game ⇒ multiplier is a no-op (1). Factored out of
+ *  `scaleMain` so the reforge-projection helper can re-scale an already-scaled
+ *  main between two states via the ratio of multipliers. */
+function mainMult(slot: string, lv: number, tier: number, ascended: boolean, singLevel: number, e: EnhanceData): number {
+  if (slot === "ooparts") return 1;
   let mult: number;
   if (ascended) {
     const stepsSum = e.singularity.steps.slice(0, singLevel).reduce((a, b) => a + b, 0);
@@ -77,10 +79,70 @@ function scaleMain(base: RolledStat, slot: string, lv: number, tier: number, asc
   } else {
     mult = 1 + e.enhanceFactor * lv;
   }
-  mult *= 1 + e.tierFactor * tier;
-  const raw = base.value * mult;
-  // Percent stats keep 1 decimal (floor), flat stats are integers (floor).
-  return base.percent ? Math.floor(raw * 10 + 1e-9) / 10 : Math.floor(raw + 1e-9);
+  return mult * (1 + e.tierFactor * tier);
+}
+
+/** Round a raw main-stat value the way the game displays it: percent stats
+ *  keep 1 decimal (floor), flat stats are integers (floor). */
+function roundMain(raw: number, percent: boolean): number {
+  return percent ? Math.floor(raw * 10 + 1e-9) / 10 : Math.floor(raw + 1e-9);
+}
+
+/** Apply enhance + breakthrough + (optional) singularity scaling to a rolled main stat. */
+function scaleMain(base: RolledStat, slot: string, lv: number, tier: number, ascended: boolean, singLevel: number, e: EnhanceData): number {
+  if (slot === "ooparts") return base.value;
+  return roundMain(base.value * mainMult(slot, lv, tier, ascended, singLevel, e), base.percent);
+}
+
+/** Target enhancement ceiling a piece is projected to by the reforge-mode
+ *  preview. `classic` = the non-ascended endgame (+10, 6 reforge ticks);
+ *  `ascended` = the Singularity endgame (+15, sing step 5, 9 ticks). The
+ *  engine maps its `reforgeMode` to one of these and feeds it to
+ *  `projectMainToCeiling` (main-stat re-scale, here) + `simulateReforges`
+ *  (substat ticks, in the solver engine). */
+export interface ReforgeCeiling {
+  enhanceLevel: number;
+  ascended: boolean;
+  singularityLevel: number;
+}
+
+/** Re-scale a piece's regular main stats (`source: "option"`, non-buff) from
+ *  its current enhance/ascension state to a target ceiling, for the Builder's
+ *  reforge-mode preview ("show what this piece becomes at +15 ascended").
+ *
+ *  The parsed `main` values are already scaled to the piece's current state
+ *  (parse-time `scaleMain`), and `RolledStat` doesn't retain the base value, so
+ *  we recover it via the multiplier ratio: `projected = current / curMult ×
+ *  tgtMult`. The floor in the original scaling makes the recovered base
+ *  slightly lossy, but the error is sub-unit — fine for a planning preview.
+ *
+ *  Never DOWNGRADES: a piece already past the ceiling (e.g. an ascended +15
+ *  piece previewed in `classic` mode) is returned untouched. Talisman / EE,
+ *  singularity rolls, EE passives and buff-shaped mains are left as-is — only
+ *  the standard rolled mains scale with enhance. Returns the original piece
+ *  reference when nothing changes (so callers can use identity to detect a
+ *  projection happened). */
+export function projectMainToCeiling(piece: GearPiece, game: GameData, target: ReforgeCeiling): GearPiece {
+  const e = game.enhance;
+  if (!e || !piece.slot || piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
+  const tier = piece.breakthrough;
+  const curMult = mainMult(piece.slot, piece.enhanceLevel, tier, piece.ascended, piece.singularityLevel, e);
+  const tgtMult = mainMult(piece.slot, target.enhanceLevel, tier, target.ascended, target.singularityLevel, e);
+  // Don't downgrade a piece that's already beyond the previewed ceiling.
+  if (tgtMult <= curMult || curMult === 0) return piece;
+  const ratio = tgtMult / curMult;
+  const main = piece.main.map((m) =>
+    m.source === "option" && !m.fromBuff
+      ? { ...m, value: roundMain(m.value * ratio, m.percent) }
+      : m,
+  );
+  return {
+    ...piece,
+    main,
+    enhanceLevel: target.enhanceLevel,
+    ascended: target.ascended,
+    singularityLevel: target.singularityLevel,
+  };
 }
 
 export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {

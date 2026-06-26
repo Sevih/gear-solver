@@ -4,7 +4,7 @@
  */
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import type { FinalStats } from "../composeBuild.js";
-import type { PrecomputedSolveContext } from "./engine.js";
+import type { PrecomputedSolveContext, ReforgeMode } from "./engine.js";
 import type { CheapRatings } from "./ratings.js";
 
 /** Sort objective for the solver:
@@ -33,7 +33,10 @@ export type EffectConstraint = "required" | "excluded";
 export interface SolveFilters {
   options: {
     onlyMaxed: boolean;
-    useReforged: boolean;
+    /** Reforge-mode preview: "disable" (gear as captured) | "classic"
+     *  (+10 / 6 ticks) | "ascended" (+15 / 9 ticks). Replaces the old
+     *  `useReforged` boolean. */
+    reforgeMode: ReforgeMode;
     includeEquippedOnOthers: boolean;
     keepCurrent: boolean;
   };

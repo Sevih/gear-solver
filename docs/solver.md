@@ -150,9 +150,17 @@ vs le build sélectionné dans la table (col droite, em-dash tant qu'aucune lign
 n'est cliquée). Lecture pure, jamais éditable.
 
 ### Options
-4 toggles + le multi-select Exclude :
-- **Use reforged stats** — **câblé** : le solver clone chaque pièce avec ses reforges
-  restants alloués aux substats prioritaires (`simulateReforges`, avant le top-% prune).
+Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
+- **Reforge** (`reforgeMode`, 3 états, **câblé**) — projette chaque pièce du pool
+  vers un plafond endgame **avant** le top-% prune (`projectPieceForReforge`) :
+  - **Off** : gear tel que capturé.
+  - **Classic** : projette à **+10 non-ascended** (main re-scalé via le mult de
+    `scaleMain` côté core `projectMainToCeiling`, + substats max-rollés à **6 ticks**).
+  - **Ascended** : projette à **+15 ascended** (override le flag réel → on suppose tout
+    ascensionné ; **9 ticks**). Ne *downgrade* jamais une pièce déjà au-dessus du plafond.
+
+  Le re-scale du main passe par le ratio des multiplicateurs (`RolledStat` ne garde pas
+  la valeur de base) — validé contre l'in-game (test `projectMainToCeiling` : 240 → 1380).
 - **Only maxed gear** — filtre pool à `enhanceLevel === 15`.
 - **Equipped items** — inclut les pièces équipées sur d'autres héros.
 - **Keep current** — verrouille les slots déjà équipés à leur pièce actuelle.
@@ -227,8 +235,10 @@ dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres).
 enhance level, icône slot, main stat, subs (avec ticks). En plus :
 - **Talisman / EE** : l'allocation de gemmes recommandée par le build (stat + valeur,
   badge **swap** si elle diffère des gemmes socketées).
-- **Stats reforgées** : si *Use reforged stats* était actif, les subs affichés sont la
-  projection (`simulateReforges` re-simulé côté main thread) + badge **reforged**.
+- **Stats projetées** : si le mode Reforge ≠ Off, main + subs affichés sont la projection
+  (`projectPieceForReforge` re-simulé côté main thread) + badge **classic** / **ascended**.
+  La carte montre aussi l'enhance projeté (`+15 · ascended`) puisque la pièce projetée
+  porte son `enhanceLevel`/`ascended` cible.
 
 Em-dash quand aucun build n'est sélectionné.
 
@@ -240,7 +250,13 @@ Em-dash quand aucun build n'est sélectionné.
 
 **Scoring** : pour chaque gem, `score = priority × (value / STAT_NORMS)`. Normalisé pour permettre la comparaison cross-stat. Triés desc.
 
-**Allocation** : greedy, K = `talismanSlots + eeSlots` (4 ou 5 selon `enhanceLevel`). On prend les K premiers gems avec `score > 0`. Pré-calculé **une fois par variant talismanSlots** (4 ou 5) dans `prepareContext` — pas de re-calcul dans la hot loop.
+**Allocation (défaut, fast path)** : greedy, K = `talismanSlots + eeSlots` (4 ou 5 selon `enhanceLevel`). On prend les K premiers gems avec `score > 0`. Pré-calculé **une fois par variant talismanSlots** (4 ou 5) dans `prepareContext` — pas de re-calcul dans la hot loop.
+
+**Cap-reaching CHC (slow path, par combo)** : quand l'utilisateur priorise `crc` **et** le pool a des gems crit (`wantCritCap`), l'allocation est **étagée** (`allocateGemsReachingCap`) :
+1. **Étage 1** — dépenser des gems crit pour **atteindre** le cap CHC à 100 % (en priorité, même si l'atk score plus haut), overshoot ≤ un gem 3 %.
+2. **Étage 2** — remplir le reste **par priorité** (en sautant tout gem crit, désormais gaspillé).
+
+Le pré-gem CHC du combo est récupéré depuis `fs.crc − defaultCrcGem` (le crit rate est purement additif). On ne **recompose** que si le delta cap-aware diffère du greedy par défaut (`gemDeltaEquals`) — souvent identique quand les gems crit rankent déjà haut. Le cas sans priorité crc (ex. fallback SOLVE CP) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.crc > 102`).
 
 **Pré-agrégation** : la contribution gem est convertie en `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`. La compose ajoute juste ces deltas aux buckets après l'agrégation des pièces. Évite `resolveStat` × 10 gems × N combos.
 

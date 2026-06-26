@@ -21,8 +21,10 @@
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings` · **Pré-filtrage armor** par
       set requis (restreindre les pools armor au set quand un seul req-4pc actif).
-- [ ] **gems strategy** prevoir certaines stats a maxer sur les gems "un genre de prio" exemple pour un personnage 
-      qui a atk>spd>chc>chd>dmg up et bien les gems serviront dabord a maxer le chc (logique si on veux le cap crit sur un dps) puis on max la stat qui rapportera le plus de EHP/DMG
+- [x] **gems strategy** — allocation **étagée cap-reaching** : étage 1 atteint le cap CHC à 100 %
+      avec les gems crit (même si l'atk score plus haut), étage 2 remplit par priorité (skip crit).
+      Gaté sur `crc priority > 0` + pool crit, recompose seulement si le delta diffère du greedy
+      (`allocateGemsReachingCap` / `gemDeltaEquals`). Étage 2 = priorité actuelle (pas de profil séparé).
 ### 🟡/⚪ UX-cohérence & nits
 - [ ] 🟡 **`SlotMini` non cliquable (Builds)** — aucun moyen d'inspecter une pièce depuis la tab Builds
       (tooltip/clic), contrairement à l'Inventory.
@@ -53,20 +55,25 @@
 - [x] 🟡 **Abréviations stats** — labels alignés sur `outerpedia-v2/data/stats.json` (CHC/CHD/CDMG RED%/PEN%/DMG UP%/…)
       + **en-têtes du tableau en icônes** (plus de texte). `CDR` ambigu (= Cooldown pour l'user) → `CDMG RED%`.
       (CDR avait été retirée à tort sur un malentendu d'abréviation → restaurée.)
-- [x] 🟡 **Show/hide colonnes** — menu « Columns » dans le header (stats/ratings/score/upg, persistant ;
+- [~] 🟡 **Show/hide colonnes** — menu « Columns » dans le header (stats/ratings/score/upg, persistant, possibilité d'acces avec un click droit sur les entete de colonne ;
       colonne filtrée = forcée visible) (`c8808d4`).
 - [x] 🟡 **Tooltips en-têtes** — nom complet + définition (TextSystem `SYS_DESC_*`) au survol (`5fa5037`).
 - [x] 🔴 **Colonne Set cassée** — rendait `—`, jamais implémentée → set tags par build (icône + tier 2/4) (`500fb26`).
 - [x] 🟡 **Colonnes arme + accessoire** — effets d'arme/accessoire par build (icône + nom au survol), toggleables
       via le menu Columns (`a08f9b6`).
+- [ ] 🟡 **Conservation des resultats** — il faut conserver les rsultats du solver quand on 
+      change de tab (voir meme permettre de laisser le solver tourner).
+- [ ] 🟢 **reset des filtres** — tab inventaire et builds actuelement conserve les tries meme 
+      apres relance de l'app et on veut pas
 > **▶ Prochaine session** — les 2 items ci-dessous restent du review post-direction-B (tout le reste est livré).
 
-- [ ] 🟡 **Reforge / upgrade dans la gear band** — représenter les pièces qui **nécessitent une upgrade** + les
-      **ticks extrapolés**. **3 modes globaux** (s'appliquent à tout le solver, remplacent le bool `useReforged`) :
-      **classic** = +10 T4 / 6 ticks · **ascended** = +15 T4 / 9 ticks · **disable**. La présentation des cartes
-      diffère selon le mode (badge upgrade + ticks projetés).
-      *Point de départ : cartographier `simulateReforges` + le flux `useReforged` (BuilderScreen `solveReforgeRef`/
-      `resultsReforge` + gear band) avant de coder l'enum 3 états.*
+- [x] 🟡 **Reforge / upgrade dans la gear band** — **3 modes globaux** `reforgeMode` (segmented control
+      toolbar) remplacent le bool `useReforged` : **disable** · **classic** (+10 / 6 ticks) · **ascended**
+      (+15 / 9 ticks, projette tout comme ascensionné). Projection complète = main re-scalé (core
+      `projectMainToCeiling`, ratio des mults, validé in-game) + substats reforgés au budget du mode
+      (`simulateReforges` budget paramétrable), centralisé dans `projectPieceForReforge` (partagé engine ↔
+      gear band). La carte affiche l'enhance projeté (`+15 · ascended`) + badge **classic/ascended** + ticks.
+      *(Reste possible si besoin : un indicateur explicite "needs upgrade" vs déjà au plafond.)*
 - [ ] 🟠 **Solve sous-utilise le CPU** — pendant un solve, CPU ~25% max mais temp 70-80° : le pool de workers ne
       sature pas les cœurs. Investiguer la parallélisation (taille du pool, découpe des chunks, idle workers).
 

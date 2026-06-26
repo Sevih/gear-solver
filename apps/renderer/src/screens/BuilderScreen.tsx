@@ -27,7 +27,7 @@ import { RichTooltip } from "../design/RichTooltip.js";
 import { SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toIconPiece, toUiPiece } from "../design/adapter.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
-import { simulateReforges } from "../lib/solver/engine.js";
+import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
 import { SolverOrchestrator } from "../lib/solver/orchestrator.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
@@ -226,7 +226,10 @@ function statHeaderTooltip(key: string, label: string): string {
  * ───────────────────────────────────────────────────────────────────────── */
 interface SolverOptions {
   onlyMaxed: boolean;
-  useReforged: boolean;
+  /** Reforge-mode preview — replaces the old `useReforged` boolean.
+   *  "disable" scores gear as captured; "classic"/"ascended" project each
+   *  piece to the +10 / +15 endgame (main re-scale + substat reforge ticks). */
+  reforgeMode: ReforgeMode;
   /** Include gear equipped on OTHER heroes in the candidate pool. The
    *  selected hero's own gear is always in. */
   includeEquippedOnOthers: boolean;
@@ -234,6 +237,32 @@ interface SolverOptions {
    *  slots and leave the rest alone. */
   keepCurrent: boolean;
 }
+
+/** Reforge context carried alongside a result set — the mode + priority the
+ *  build was solved with, so the bottom gear band can re-project the same
+ *  main/substats it was scored against. */
+interface ReforgeContext {
+  reforgeMode: ReforgeMode;
+  priority: Record<string, number>;
+}
+
+/** Migrate a persisted reforge context (saved builds) to the current shape.
+ *  Pre-reforge-modes builds stored a `useReforged` boolean → map true to
+ *  "classic" (the only projection that existed then), false/absent to
+ *  "disable". */
+function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number> } | undefined): ReforgeContext {
+  if (!r) return { reforgeMode: "disable", priority: {} };
+  const reforgeMode = r.reforgeMode ?? (r.useReforged ? "classic" : "disable");
+  return { reforgeMode, priority: r.priority };
+}
+
+/** UI metadata for the reforge-mode segmented control — order = cycle order,
+ *  label = chip text, hint = tooltip. */
+const REFORGE_MODES: ReadonlyArray<{ value: ReforgeMode; label: string; hint: string }> = [
+  { value: "disable",  label: "Off",      hint: "Reforge preview off — score gear exactly as captured." },
+  { value: "classic",  label: "Classic",  hint: "Project every piece to the +10 endgame (6 reforge ticks): main stats re-scaled, substats max-rolled by priority." },
+  { value: "ascended", label: "Ascended", hint: "Project every piece to the +15 Singularity endgame (9 reforge ticks): main stats re-scaled, substats max-rolled by priority." },
+];
 
 type MinMax = { min?: number; max?: number };
 
@@ -274,7 +303,7 @@ export interface SolverFilters {
 }
 
 const INITIAL_FILTERS: SolverFilters = {
-  options: { onlyMaxed: false, useReforged: false, includeEquippedOnOthers: true, keepCurrent: false },
+  options: { onlyMaxed: false, reforgeMode: "disable", includeEquippedOnOthers: true, keepCurrent: false },
   excludedHeroes: new Set(),
   statFilters: {},
   ratingFilters: {},
@@ -289,7 +318,8 @@ const INITIAL_FILTERS: SolverFilters = {
 };
 
 type SolverAction =
-  | { type: "setOption"; key: keyof SolverOptions; value: boolean }
+  | { type: "setOption"; key: Exclude<keyof SolverOptions, "reforgeMode">; value: boolean }
+  | { type: "setReforgeMode"; value: ReforgeMode }
   | { type: "setMinQuality"; value: QualityTier | null }
   | { type: "toggleHeroExcluded"; uid: string }
   | { type: "setStatFilter"; stat: string; bound: "min" | "max"; value: number | undefined }
@@ -325,6 +355,8 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
   switch (action.type) {
     case "setOption":
       return { ...state, options: { ...state.options, [action.key]: action.value } };
+    case "setReforgeMode":
+      return { ...state, options: { ...state.options, reforgeMode: action.value } };
     case "setMinQuality":
       return { ...state, minQuality: action.value };
     case "toggleHeroExcluded": {
@@ -473,17 +505,14 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const orchestratorRef = useRef<SolverOrchestrator | null>(null);
   /** Reforge context of the most recent solve — snapshotted at solve start so
    *  the async `onResult` reads the run's own value (not a later filter edit).
-   *  The bottom gear band re-runs the deterministic `simulateReforges` with
-   *  this priority to display the same projected substats the engine scored. */
-  const solveReforgeRef = useRef<{ useReforged: boolean; priority: Record<string, number> }>(
-    { useReforged: false, priority: {} },
-  );
+   *  The bottom gear band re-runs the deterministic `projectPieceForReforge`
+   *  with this mode + priority to display the same projected main/substats the
+   *  engine scored. */
+  const solveReforgeRef = useRef<ReforgeContext>({ reforgeMode: "disable", priority: {} });
   /** Reforge context tied to whatever currently populates `solveResults` —
    *  set from `solveReforgeRef` on a live solve, or from the saved build's
    *  stored context on restore. Drives the bottom band's projection. */
-  const [resultsReforge, setResultsReforge] = useState<{ useReforged: boolean; priority: Record<string, number> }>(
-    { useReforged: false, priority: {} },
-  );
+  const [resultsReforge, setResultsReforge] = useState<ReforgeContext>({ reforgeMode: "disable", priority: {} });
   const [solving, setSolving] = useState(false);
   const [solveProgress, setSolveProgress] = useState<{ permutations: number; searched: number; poolSizes: PoolSizes | null }>(
     { permutations: 0, searched: 0, poolSizes: null },
@@ -559,7 +588,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setLastSolveMode(mode);
     // Snapshot the reforge context for this run (shallow-copy the priority so
     // a later filter edit can't mutate what `onResult` reads).
-    solveReforgeRef.current = { useReforged: filters.options.useReforged, priority: { ...filters.priority } };
+    solveReforgeRef.current = { reforgeMode: filters.options.reforgeMode, priority: { ...filters.priority } };
     const serializedFilters: SolveFilters = {
       options: filters.options,
       excludedHeroes: Array.from(filters.excludedHeroes),
@@ -672,8 +701,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setSolveResults([b.build]);
     setDisplayFilter(null); // a single restored build is never client-filtered
     // Restore the build's reforge context so the bottom band projects the
-    // same substats it was solved with (pre-field builds → no projection).
-    setResultsReforge(b.reforge ?? { useReforged: false, priority: {} });
+    // same substats it was solved with (pre-field / legacy builds migrated).
+    setResultsReforge(migrateReforge(b.reforge));
     setSelectedBuildIdx(0);
     setLastSolveMode(b.mode);
   };
@@ -1300,11 +1329,7 @@ function BuilderToolbar({
         </button>
       )}
       <ToolbarDivider />
-      <ToolbarToggle
-        label="Reforged"
-        on={filters.options.useReforged}
-        onClick={() => dispatch({ type: "setOption", key: "useReforged", value: !filters.options.useReforged })}
-      />
+      <ReforgeModeControl value={filters.options.reforgeMode} dispatch={dispatch} />
       <ToolbarToggle
         label="Maxed only"
         on={filters.options.onlyMaxed}
@@ -1352,6 +1377,38 @@ function BuilderToolbar({
 /** Slim divider between toolbar groups. */
 function ToolbarDivider() {
   return <span className="h-6 w-px shrink-0 bg-white/10" />;
+}
+
+/** Reforge-mode segmented control — Off / Classic / Ascended. Replaces the
+ *  old binary "Reforged" toggle: each chip projects pool pieces to a different
+ *  endgame ceiling (see REFORGE_MODES). The active chip is highlighted; the
+ *  whole strip carries a label so it reads as one control. */
+function ReforgeModeControl({ value, dispatch }: { value: ReforgeMode; dispatch: Dispatch<SolverAction> }) {
+  return (
+    <div className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/4 pl-2.5 pr-1">
+      <span className="text-[11px] text-white/55">Reforge</span>
+      <div className="flex items-center gap-0.5">
+        {REFORGE_MODES.map((m) => {
+          const on = value === m.value;
+          return (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => dispatch({ type: "setReforgeMode", value: m.value })}
+              aria-pressed={on}
+              title={m.hint}
+              className={cx(
+                "h-5 rounded px-1.5 text-[10.5px] font-semibold transition-colors",
+                on ? "bg-cyan-400/20 text-cyan-200" : "text-white/50 hover:text-white/80",
+              )}
+            >
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 /** Compact inline toggle pill (the two always-visible quick options). */
@@ -1689,7 +1746,7 @@ function OptionsPanel({
   game: GameData | null;
   dispatch: Dispatch<SolverAction>;
 }) {
-  const set = (key: keyof SolverOptions) => (v: boolean) => dispatch({ type: "setOption", key, value: v });
+  const set = (key: Exclude<keyof SolverOptions, "reforgeMode">) => (v: boolean) => dispatch({ type: "setOption", key, value: v });
   return (
     <Panel title="Options" hint="Pool toggles. Equipped items + Exclude equipped together drive what gear the solver may touch. (Reforged / Maxed-only live as quick toggles in the toolbar.)" width="w-52">
       <div className="space-y-0.5">
@@ -3333,29 +3390,29 @@ function BottomGearBand({
   build: SolveBuild | null;
   pieceByUid: Map<string, GearPiece>;
   game: GameData | null;
-  /** Reforge context the displayed build was solved with — when
-   *  `useReforged`, each card re-runs the deterministic `simulateReforges`
-   *  so its substats match the build's projected `finalStats` instead of the
-   *  pieces' current rolls (the engine scored the reforged clones). */
-  reforge: { useReforged: boolean; priority: Record<string, number> };
+  /** Reforge context the displayed build was solved with — when the mode is
+   *  not "disable", each card re-runs the deterministic `projectPieceForReforge`
+   *  so its main/substats match the build's projected `finalStats` instead of
+   *  the pieces' current rolls (the engine scored the projected clones). */
+  reforge: ReforgeContext;
 }) {
   // Map engine slot → display piece for the selected build. The result's
   // `pieceUids` carries slot order (engine names); we re-key by GearSlot and,
-  // when reforge projection is on, swap in the simulated max-roll clone.
-  // `simulateReforges` self-filters (returns the original for Talisman/EE or
-  // when there's nothing left to reforge), so identity inequality is a
-  // reliable "was projected" signal for the badge.
+  // when a reforge mode is active, swap in the projected clone.
+  // `projectPieceForReforge` self-filters (returns the original for Talisman/EE,
+  // "disable" mode, or when there's nothing left to project), so identity
+  // inequality is a reliable "was projected" signal for the badge.
   const pieceBySlot = useMemo(() => {
     const map = new Map<string, { piece: GearPiece; reforged: boolean }>();
     if (!build) return map;
     for (const uid of build.pieceUids) {
       const original = pieceByUid.get(uid);
       if (!original?.slot) continue;
-      const piece = reforge.useReforged ? simulateReforges(original, reforge.priority) : original;
+      const piece = game ? projectPieceForReforge(original, game, reforge.reforgeMode, reforge.priority) : original;
       map.set(original.slot, { piece, reforged: piece !== original });
     }
     return map;
-  }, [build, pieceByUid, reforge]);
+  }, [build, pieceByUid, game, reforge]);
 
   return (
     <div className="flex shrink-0 flex-wrap gap-2">
@@ -3374,7 +3431,7 @@ function BottomGearBand({
           : slot === "exclusive"
             ? build?.gemAllocation.ee
             : undefined;
-        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} />;
+        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} reforgeMode={reforge.reforgeMode} />;
       })}
     </div>
   );
@@ -3391,16 +3448,18 @@ const SLOT_MAIN_PLACEHOLDER: Record<string, string> = {
 /** Compact mirror of the Inventory tab's `ItemDetail` panel — same section
  *  flow (header / icon+label / main stat / substats). Renders em-dash
  *  placeholders when no piece is wired (no build selected yet). */
-function GearCard({ slot, piece, game, recommendedGems, reforged }: {
+function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
   /** Build's recommended gem allocation for this slot (Talisman/EE only),
    *  OptionIDs with 0 = empty. Undefined for non-gem slots. */
   recommendedGems?: number[];
-  /** True when `piece.subs` are projected (max-roll reforge), not the
-   *  current rolls — flags the substat list with a "reforged" badge. */
+  /** True when `piece` was projected (main re-scale + reforge ticks), not the
+   *  current rolls — flags the substat list with a mode badge. */
   reforged?: boolean;
+  /** Reforge mode driving the projection — labels the badge (classic/ascended). */
+  reforgeMode?: ReforgeMode;
 }) {
   const slotMeta = SLOT_BY[slot];
   const def = piece && game ? game.equipment[String(piece.itemId)] : null;
@@ -3446,7 +3505,7 @@ function GearCard({ slot, piece, game, recommendedGems, reforged }: {
         <div className="flex items-center gap-1.5">
           <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/60">Substats</span>
           <span className="rounded border border-cyan-400/40 bg-cyan-500/15 px-1 py-px text-[9px] font-semibold uppercase tracking-wider text-cyan-300">
-            reforged
+            {reforgeMode === "ascended" ? "ascended" : reforgeMode === "classic" ? "classic" : "projected"}
           </span>
         </div>
       )}
