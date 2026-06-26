@@ -46,6 +46,9 @@ const EQUIPMENT_FILES = ["weapon.json", "accessory.json", "talisman.json", "ee.j
  *  checkout, if any. `OUTERPEDIA_PATH` env wins. Absent on a user's machine →
  *  triggers REPO mode. */
 function findJson2(): string | null {
+  // Test hook: force REPO mode even on a machine that has a checkout, so the
+  // packaged-build sync path can be exercised in dev (OUTERPEDIA_NO_CHECKOUT=1).
+  if (process.env.OUTERPEDIA_NO_CHECKOUT) return null;
   const env = process.env.OUTERPEDIA_PATH;
   const candidates = [
     env ? join(env, "data", "admin", "json2") : null,

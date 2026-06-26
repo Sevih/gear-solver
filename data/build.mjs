@@ -40,6 +40,9 @@ const lang = "English";
 // auto-detected across the maintainer's two known checkouts. Missing entries
 // are skipped silently so the build never hard-fails.
 function findOuterpedia() {
+  // Test hook: ignore the checkout so build inputs resolve ONLY from
+  // OUTERPEDIA_SYNC_DIR — proves the REPO-mode sync downloaded everything.
+  if (process.env.OUTERPEDIA_NO_CHECKOUT) return null;
   const candidates = [
     process.env.OUTERPEDIA_PATH,
     "C:\\Users\\Sevih\\Documents\\Projet perso\\outerpedia-v2",
