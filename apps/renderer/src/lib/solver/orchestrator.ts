@@ -61,7 +61,9 @@ function readWorkerCountOverride(): number | null {
 
 export interface OrchestratorCallbacks {
   onProgress(p: { permutations: number; searched: number; poolSizes?: PoolSizes }): void;
-  onResult(builds: SolveBuild[]): void;
+  /** `durationMs` = wall-clock from fan-out to this flush (whole milliseconds),
+   *  so the UI can show how long the solve actually took. */
+  onResult(builds: SolveBuild[], durationMs: number): void;
   onError(message: string): void;
 }
 
@@ -319,15 +321,16 @@ export class SolverOrchestrator {
     this.buf.sort(cmp);
     const merged = this.buf.length;
     const out = this.buf.slice(0, this.topN);
+    const durationMs = Math.round(performance.now() - this.startedAt);
     if (debugEnabled("solver")) {
       debug("solver", "done", {
         merged, returned: out.length,
-        ms: Math.round(performance.now() - this.startedAt),
+        ms: durationMs,
         permutations: this.totalPerm(), searched: this.totalSearched(),
         perWorker: this.stats.map((s, i) => ({ w: i, perm: s.permutations, searched: s.searched })),
       });
     }
-    this.cb.onResult(out);
+    this.cb.onResult(out, durationMs);
     this.active = false;
   }
 }

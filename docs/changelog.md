@@ -69,6 +69,15 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-26 — Timer de solve dans le footer Builder
+
+**Durée du dernier solve affichée** — l'orchestrator mesurait déjà le wall-clock (`startedAt` →
+flush) mais ne le loggait que sous `gs.debug.solver`. Il le remonte maintenant à l'UI : `onResult`
+gagne un `durationMs`, `BuilderScreen` le stocke (`lastSolveMs`, remis à null au lancement d'un solve),
+et le `FilterFooter` affiche **⏱ N ms / N.NN s** une fois le run fini (caché pendant `solving…`). But :
+donner une mesure exacte de la vitesse du solver (au lieu de chronométrer à la louche) pour décider si
+le SOLVE CP demande encore du travail. Aucun changement de la logique de calcul.
+
 ### Session 2026-06-26 — Snapshot data versioning (stamp + expo)
 
 **Stamp de version des données dérivées** — `data/build.mjs` accumule un hash de contenu (`sha256` sur

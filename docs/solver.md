@@ -260,7 +260,10 @@ Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le hé
 - **P** : permutations totales explorées (somme across workers).
 - **S** : permutations qui ont passé tous les filtres (scoring).
 - **Results** : taille du top-N retourné.
-- Indicateur `solving…` (cyan, animé) pendant un run.
+- Indicateur `solving…` (cyan, animé) pendant un run ; une fois fini, **⏱ durée**
+  du dernier solve (wall-clock fan-out→merge, `< 1 s` en ms sinon en s) — l'orchestrator
+  remonte `durationMs` via `onResult`. Sert à jauger la vitesse du solver d'un coup d'œil.
+- **⚙ N workers** : taille du pool de recherche résolu.
 
 ### ResultsTable
 Heatmap rouge-vert par colonne (min/max relatifs au result set actuel). Colonnes :

@@ -552,6 +552,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     { permutations: 0, searched: 0, poolSizes: null },
   );
   const [solveResults, setSolveResults] = useState<SolveBuild[]>([]);
+  /** Wall-clock of the last completed solve (ms), shown in the footer; null
+   *  while solving or before the first solve. */
+  const [lastSolveMs, setLastSolveMs] = useState<number | null>(null);
   const [solveError, setSolveError] = useState<string | null>(null);
   const [selectedBuildIdx, setSelectedBuildIdx] = useState<number | null>(null);
   /** Post-solve client filter — a snapshot of the stat/rating bands applied to
@@ -621,7 +624,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     if (!orchestratorRef.current) {
       orchestratorRef.current = new SolverOrchestrator({
         onProgress: (p) => setSolveProgress({ permutations: p.permutations, searched: p.searched, poolSizes: p.poolSizes ?? null }),
-        onResult:   (builds) => { setSolveResults(builds); setResultsReforge(solveReforgeRef.current); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); },
+        onResult:   (builds, durationMs) => { setSolveResults(builds); setResultsReforge(solveReforgeRef.current); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); },
         onError:    (msg) => { setSolveError(msg); setSolving(false); },
       });
     }
@@ -630,6 +633,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setSolveResults([]);
     setSelectedBuildIdx(null);
     setDisplayFilter(null);
+    setLastSolveMs(null);
     setSolveProgress({ permutations: 0, searched: 0, poolSizes: null });
     setLastSolveMode(mode);
     // Snapshot the reforge context for this run (shallow-copy the priority so
@@ -1003,6 +1007,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         resultCount={displayedResults.length}
         solving={solving}
         workerCount={resolvedWorkers}
+        durationMs={lastSolveMs}
       />
       <PromptDialog
         prompt={namePrompt}
@@ -3572,7 +3577,7 @@ function formatTimeAgo(ts: number): string {
  * just laid out left-to-right with `|` separators so it fits on one line.
  * ───────────────────────────────────────────────────────────────────────── */
 function FilterFooter({
-  permutations, searched, poolSizes, resultCount, solving, workerCount,
+  permutations, searched, poolSizes, resultCount, solving, workerCount, durationMs,
 }: {
   permutations: number;
   searched: number;
@@ -3582,6 +3587,9 @@ function FilterFooter({
   /** Resolved solver worker-pool size — pinned at the far right so the user
    *  can confirm the search parallelism at a glance. */
   workerCount: number;
+  /** Wall-clock of the last completed solve (ms), or null while solving / before
+   *  the first solve. Shown so the user can gauge solver speed at a glance. */
+  durationMs: number | null;
 }) {
   // Slots rendered in the same order the inventory tab uses so the user's
   // eye-flow is identical across tabs.
@@ -3606,6 +3614,15 @@ function FilterFooter({
       <span className="ml-auto inline-flex items-center gap-3">
         {solving && (
           <span className="text-[10px] uppercase tracking-wider text-cyan-300/80 animate-pulse">solving…</span>
+        )}
+        {!solving && durationMs != null && (
+          <span
+            className="inline-flex items-center gap-1 text-white/70"
+            title="Wall-clock time of the last completed solve (fan-out → all workers merged)."
+          >
+            <span aria-hidden>⏱</span>
+            <span className="text-white/80">{durationMs < 1000 ? `${durationMs} ms` : `${(durationMs / 1000).toFixed(2)} s`}</span>
+          </span>
         )}
         <span
           className="inline-flex items-center gap-1 text-white/70"

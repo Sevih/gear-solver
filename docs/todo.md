@@ -17,6 +17,8 @@
       **nombre de combos** réduit : pruning par dominance en mode CP (pré-filtre de pool, cf. changelog).
       **Reste (optionnel)** : branch-and-bound CP exact (borne sup par sous-arbre vs K-ième meilleur) — gain
       potentiellement modeste vu `topK = 1000`/worker, à n'envisager que si un profilage sur vrai compte le réclame.
+      **Mesure** : le footer Builder affiche désormais la **durée ⏱** du dernier solve (livré) → lancer un SOLVE CP
+      sur le héros le mieux équipé et lire le temps ; si acceptable, l'item se ferme sans B&B.
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
