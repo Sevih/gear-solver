@@ -1,6 +1,6 @@
 # STATUS — où on en est / comment reprendre
 
-Dernière mise à jour : 2026-06-25. Ce fichier est le point d'entrée pour reprendre le
+Dernière mise à jour : 2026-06-26. Ce fichier est le point d'entrée pour reprendre le
 projet à froid. Les détails sont dans les autres docs (liens en bas).
 
 ## But du projet
@@ -22,8 +22,11 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
 2. **Données statiques du jeu** (`data/`)
    - `data/game/` : 29 tables Outerplane copiées (copie locale, pas de dépendance externe).
    - `data/build.mjs` → `data/derived/` : tables compactes (`options`, `equipment`, `sets`,
-     `characters`) que le moteur consomme. Re-générable via `npm run data:build`.
+     `characters`, `sub-ticks`, …) que le moteur consomme. Re-générable via `npm run data:build`.
    - `data/sync.ps1` : re-copie depuis Outerpedia + rebuild (à lancer après un patch du jeu).
+   - **Sync au lancement depuis le repo public `Sevih/outerpediaV2`** (`apps/desktop/src/data-sync.ts`,
+     dual-mode checkout/repo) : images **et** tables suivent les patchs **sans nouveau build** de l'app.
+     Handler `/img/*` partagé (`img-cache.ts`) cascade checkout→cache disque→CDN jsDelivr/raw→302.
 
 3. **Moteur** (`packages/core/`, `@gear-solver/core`)
    - Parse l'inventaire capturé en modèle propre avec **vraies valeurs de stats résolues**.
@@ -34,6 +37,9 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
 4. **Renderer** (`apps/renderer/`, Vite + React, embarqué dans Electron)
    - **Auto-import** : au démarrage, charge `data/derived` + `tools/capture/out` (servis en
      direct par un middleware Vite) et affiche l'inventaire parsé. Fallback fichier manuel.
+   - **Onglet Home** (par défaut) : dashboard — snapshot du compte (2×2), répartition qualité
+     par tier (couleurs partagées avec l'Inventory), répartition étoiles, Library, et
+     **update center inline** (check/apply des updates repo, sans popups natifs).
    - **Onglet Inventory** : table + filtres + détail pièce (mains, subs, ticks, reforge,
      breakthrough, singularity), score par pièce, indicateur de qualité.
    - **Onglet Builds** : carte par héros avec stats composées (`composeBuild` mirror
@@ -44,7 +50,19 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      **Câblé end-to-end** : cancel mid-solve (`MessageChannel` yield), colonne Upg
      (calculée, triable, filtrable), Exclude-equipped multi-select, simulation de reforge,
      allocation de gemmes recommandée, Save/Remove build + Filter presets par héros
-     (localStorage), bouton Optimize → depuis l'onglet Builds.
+     (localStorage), bouton Optimize → depuis l'onglet Builds. **Reste monté entre onglets**
+     (`display:none`) → résultats / filtres / héros conservés + solve qui tourne en fond.
+     Deux encadrés d'aide par héros : *Sub tick value* (rentabilité flat vs % d'un tick de sub,
+     `lib/subValue.ts`) et *Damage / +1%* (gain de dégâts pour +1% des stats de scaling /
+     CHD / DMG inc, calculé à 100% crit, SPD/EFF/CHC en secondaires, no-crit détecté,
+     `lib/dmgValue.ts`). Table de résultats : colonnes Set / arme / accessoire, menu
+     show/hide colonnes, bouton Filter (re-filtre client-side), filtre Min quality, hauteur
+     plafonnée (15 lignes). Reforge 3 modes (disable/classic/ascended) + gems cap-reaching.
+   - **Onglet Settings** : modal left-rail à onglets (Setup · Solver · Data · Backup · Debug),
+     section Solver (worker count Auto/Manual, result/per-worker count, heatmap), backup
+     JSON import/export, sync « game data » manuelle.
+   - **Perf solver** : pool dimensionné à la machine (`hardwareConcurrency − 1`), `game` +
+     inventaire envoyés aux workers **une fois** (init), compteur « ⚙ N workers » dans le footer.
 
 5. **Desktop Electron** (`apps/desktop/`) — `main.ts` + serveur local (`server.ts`) +
    détection d'émulateur, capture native via IPC. App fonctionnelle en dev ; le
@@ -86,7 +104,9 @@ npm run data:build       # régénère data/derived depuis data/game
   déféré ; le hoist des set bonuses + la virtualisation de la table sont **livrés**).
 - **Packaging desktop (M7+)** : le plumbing existe (electron-builder `extraResources`,
   `setupAutoUpdate`) ; reste à **vérifier sur un vrai build packagé** (bake `data/`,
-  installeur, auto-update contre une release signée + feed).
+  installeur, auto-update contre une release signée + feed). **Inclut la vérif de la sync
+  repo en prod** : 1er lancement online seed→SHA→download→rebuild, cache image à la demande,
+  2e lancement SHA inchangé instantané, offline cold-cache sans crash.
 - **Equip / Unequip vers le jeu** : nécessite une API jeu inexistante (retiré de l'UI ;
   à reprendre si le pipeline de capture peut envoyer des commandes).
 - **Versioning du snapshot `data/`** (le JSON import/export des builds/presets est **livré** —
