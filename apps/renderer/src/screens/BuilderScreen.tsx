@@ -1884,9 +1884,9 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
   const scalingStats = Array.from(new Set<"atk" | "def" | "hp" | "spd" | "eff" | "crc">([dmgStat, ...(dmgSec?.map((s) => s.stat) ?? [])]));
   const candidates: DmgTickCandidate[] = scalingStats.map((s) => ({
     key: s, label: DMG_STAT_ICON[s]!.label, field: s,
-    // ATK/DEF/HP: a 1% sub = base × 1% × (1+buffRate). SPD subs are flat → "1%"
-    // = 1% of the hero's current speed. EFF/CHC are additive % → +1 point.
-    delta: s === "spd" ? current.spd / 100 : s === "eff" || s === "crc" ? 1 : (baseFlat[s] * dmgAmp[s]) / 100,
+    // ATK/DEF/HP: a 1% sub = base × 1% × (1+buffRate). SPD is flat (so it's per
+    // +1 SPD point), EFF/CHC are additive % → also +1 point.
+    delta: s === "spd" || s === "eff" || s === "crc" ? 1 : (baseFlat[s] * dmgAmp[s]) / 100,
   }));
   // CHD is dead for no-crit heroes — drop it (it would just read +0.00%).
   if (!noCrit) candidates.push({ key: "chd", label: "CHD", field: "chd", delta: 1 });
@@ -1897,7 +1897,7 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
   return (
     <Panel
       title={`Damage / +1% · ${noCrit ? "no crit" : "100% crit"}`}
-      hint={`Expected-damage gain from +1% of each stat for this hero, ${noCrit ? "evaluated at 0% crit — this hero can never crit (CHD is dead, so it's omitted)" : "computed at the crit cap (100% CHC) — the endgame baseline you build toward (below the cap, CHD is undervalued)"}. Compares the hero's scaling stat(s)${noCrit ? "" : ", CHD"} and DMG inc. For ATK/DEF/HP, +1% = a 1% sub (base × 1%, through the hero's multipliers); CHD / DMG inc / EFF / CHC = +1 point; SPD (flat subs) = 1% of the hero's speed. Cyan = where 1% buys the most damage. Uses the in-game crit / DMG± / PEN model.`}
+      hint={`Expected-damage gain from +1% of each stat for this hero, ${noCrit ? "evaluated at 0% crit — this hero can never crit (CHD is dead, so it's omitted)" : "computed at the crit cap (100% CHC) — the endgame baseline you build toward (below the cap, CHD is undervalued)"}. Compares the hero's scaling stat(s)${noCrit ? "" : ", CHD"} and DMG inc. For ATK/DEF/HP, +1% = a 1% sub (base × 1%, through the hero's multipliers); CHD / DMG inc / EFF / CHC = +1 point; SPD = +1 SPD point (flat). Cyan = where the most damage is bought. Uses the in-game crit / DMG± / PEN model.`}
       width={width}
     >
       <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">
