@@ -17,6 +17,7 @@ import type { GameData, GearPiece, ReforgeCeiling, RolledStat } from "@gear-solv
 import { composeCharStats, expToLevel, projectMainToCeiling } from "@gear-solver/core";
 import {
   aggregatePrefixBuckets,
+  computeFinalStats,
   computeFinalStatsFromPrefix,
   computeSetBonuses,
   type FinalStats,
@@ -318,22 +319,64 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     }
   }
 
-  // Top-% per-slot prune. Only meaningful when the user set a non-zero
-  // priority on at least one stat — otherwise every piece scores 0 and the
-  // prune is arbitrary (we skip in that case).
+  // Star metadata + skills for CP — hoisted above the prune so the
+  // CP-weighted auto-prune below can build a CP evaluator (also returned).
+  const transRow = meta.ingredients.transcendByStar?.[String(hero.stars)] ?? null;
+  const starMeta = {
+    showUIStar: transRow?.showUIStar ?? 0,
+    starPlus: transRow?.starPlus ?? 0,
+    fused: hero.fusionCharId !== 0,
+  };
+  const skills = {
+    first: req.userSkills.first,
+    second: req.userSkills.second,
+    ultimate: req.userSkills.ultimate,
+    chainPassive: req.userSkills.chainPassive,
+  };
+
+  // Top-% per-slot prune. Needs a ranking signal:
+  //   - explicit substat priority  → rank by it (SOLVE or SOLVE CP);
+  //   - else SOLVE CP              → rank by a CP-weighted proxy (below);
+  //   - else SOLVE (Score) w/o priority → no signal, skip (every piece scores 0).
   //
   // Required-set protection: pieces belonging to a `req-2pc` / `req-4pc`
-  // set are never elided by the prune, regardless of priority score. Without
-  // this guard, a low-priority-scoring piece could be dropped from the pool
-  // and `checkSetsFeasible` would silently return 0 results (the user sees
-  // "no builds" without a clue why). The protected pieces survive on top of
-  // the regular top-% selection, so the effective pool size may exceed
-  // ceil(N × pct/100) by the count of protected pieces — intentional.
+  // set are never elided by the prune, regardless of score. Without this
+  // guard, a low-scoring set member could be dropped and `checkSetsFeasible`
+  // would silently return 0 results (the user sees "no builds" without a clue
+  // why). Protected pieces survive on top of the regular top-% slice, so the
+  // effective pool size may exceed ceil(N × pct/100) by their count.
   const hasPriority = Object.values(filters.priority).some((v) => v !== 0);
-  if (hasPriority && filters.topPct < 100) {
+  if (filters.topPct < 100) {
     const requiredSetIds = planSetIds(setPlans);
-    for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const) {
-      pools[slot] = topPctPrunePreserving(pools[slot], filters.priority, filters.topPct, requiredSetIds);
+    if (hasPriority) {
+      // User intent wins — rank each slot by the explicit priority.
+      for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const) {
+        pools[slot] = topPctPrunePreserving(pools[slot], filters.priority, filters.topPct, requiredSetIds);
+      }
+    } else if (req.mode === "cp") {
+      // CP-weighted auto-prune — makes "max CP" tractable without a hand-tuned
+      // priority (the default-Top% case the user actually hits). Rank each
+      // candidate by the CP it yields when dropped into the hero's CURRENT
+      // build (other slots = their equipped pieces), so the crit/pen/spd chain
+      // that scales ATK is realistic instead of near-zero — a bare single-piece
+      // baseline would under-rank ATK pieces. Keep the top pct. This is the
+      // soft, scalar form of the dominance prune (rank by one CP number instead
+      // of requiring ≥ on every axis), and it's what collapses the cartesian on
+      // an unfiltered CP solve. Heuristic — Top% = 100 escapes to exhaustive.
+      // Talisman / EE are exempt (their gems come from the global allocation,
+      // so per-piece CP ranking would misjudge them).
+      const cpEval = makeCpEvaluator({
+        showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused,
+      });
+      const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
+      const ooEquipped = equipped.find((g) => g.slot === "ooparts") ?? null;
+      for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const) {
+        if (lockedSlots.has(slot)) continue;
+        const others = equipped.filter((g) => g.slot !== slot);
+        const scoreOf = (p: GearPiece): number =>
+          cpEval(computeFinalStats(composed.noGearStats, composed.scaling, others.concat(p), game), ooEquipped);
+        pools[slot] = keepTopPct(pools[slot], scoreOf, filters.topPct, requiredSetIds);
+      }
     }
   }
 
@@ -418,20 +461,6 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     gemDeltaByTalismanSlots.set(ts, aggregateGemDelta(scoredGems, ts, eeSlotCount));
     gemAllocByTalismanSlots.set(ts, allocateGems(scoredGems, ts, eeSlotCount));
   }
-
-  // Star metadata + skills for CP.
-  const transRow = meta.ingredients.transcendByStar?.[String(hero.stars)] ?? null;
-  const starMeta = {
-    showUIStar: transRow?.showUIStar ?? 0,
-    starPlus: transRow?.starPlus ?? 0,
-    fused: hero.fusionCharId !== 0,
-  };
-  const skills = {
-    first: req.userSkills.first,
-    second: req.userSkills.second,
-    ultimate: req.userSkills.ultimate,
-    chainPassive: req.userSkills.chainPassive,
-  };
 
   return {
     baseline: composed.noGearStats,
@@ -577,6 +606,33 @@ function topPctPrune(pieces: GearPiece[], priority: Record<string, number>, pct:
   scored.sort((a, b) => b.s - a.s);
   const keep = Math.max(1, Math.ceil(pieces.length * pct / 100));
   return scored.slice(0, keep).map((e) => e.p);
+}
+
+/** Generic top-% selector: score every piece with `scoreOf`, keep the top
+ *  `ceil(N × pct/100)` (≥1), then always re-add pieces belonging to a required
+ *  set so the set stays feasible even if its members score low (same protection
+ *  as `topPctPrunePreserving`). Shared by the CP-weighted auto-prune; the
+ *  priority prune keeps its own `topPctPrune` (per-roll normalized scoring). */
+export function keepTopPct(
+  pieces: GearPiece[],
+  scoreOf: (p: GearPiece) => number,
+  pct: number,
+  requiredSetIds: Set<string>,
+): GearPiece[] {
+  if (pieces.length === 0) return pieces;
+  const scored = pieces.map((p) => ({ p, s: scoreOf(p) }));
+  scored.sort((a, b) => b.s - a.s);
+  const keep = Math.max(1, Math.ceil(pieces.length * pct / 100));
+  const kept = scored.slice(0, keep).map((e) => e.p);
+  if (requiredSetIds.size === 0) return kept;
+  const keptUids = new Set(kept.map((p) => p.uid));
+  for (const p of pieces) {
+    if (p.armorSetId && requiredSetIds.has(p.armorSetId) && !keptUids.has(p.uid)) {
+      kept.push(p);
+      keptUids.add(p.uid);
+    }
+  }
+  return kept;
 }
 
 /** Variant of `topPctPrune` that always keeps pieces belonging to a required

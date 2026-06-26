@@ -13,12 +13,13 @@
 ## Reste à faire
 
 ### 🟠 Perf solver
-- [~] **Solver CP trop lent** — coût par combo réduit (évaluateur CP préparé + cheap ratings différés) ET
-      **nombre de combos** réduit : pruning par dominance en mode CP (pré-filtre de pool, cf. changelog).
-      **Reste (optionnel)** : branch-and-bound CP exact (borne sup par sous-arbre vs K-ième meilleur) — gain
-      potentiellement modeste vu `topK = 1000`/worker, à n'envisager que si un profilage sur vrai compte le réclame.
-      **Mesure** : le footer Builder affiche désormais la **durée ⏱** du dernier solve (livré) → lancer un SOLVE CP
-      sur le héros le mieux équipé et lire le temps ; si acceptable, l'item se ferme sans B&B.
+- [~] **Solver CP trop lent** — diagnostic sur vrai compte : Top% 100 défaut + aucune priorité = **cartésien
+      complet** (2,4 G combos, >100 s, `S ≈ P`). **Livré** : (1) **auto-prune CP-pondéré** — en SOLVE CP sans
+      priorité, chaque slot est classé par le CP qu'une pièce donne dans le build courant, top-% gardé (forme
+      *soft* du dominance prune) ; (2) **défaut Top% → 30** (slider 100 = exhaustif) ; (3) **garde-fou** : bandeau
+      si `∏ poolSizes > 50 M`. Plus coût/combo réduit + dominance prune + set-prune (cf. changelog).
+      **Reste** : (a) **re-mesurer sur vrai compte** (footer ⏱) — si jouable, fermer ; (b) *optionnel si encore
+      lent* : branch-and-bound CP exact (borne sup par sous-arbre vs K-ième meilleur), gain incertain vu `topK = 1000`/worker.
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 

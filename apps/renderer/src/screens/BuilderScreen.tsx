@@ -331,13 +331,31 @@ export interface SolverFilters {
   minQuality: QualityTier | null;
 }
 
+/** Cartesian size (∏ per-slot pools) above which the Builder warns the solve
+ *  will be slow and nudges the user to prune. Tuned so the default Top%-30 +
+ *  CP-proxy case clears it, while an exhaustive (Top% 100) solve on a real
+ *  account trips it. */
+const CARTESIAN_WARN = 50_000_000;
+
+/** Compact big-number label for the guard-rail (2.4e9 → "2.4B"). */
+function formatCombos(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(0)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`;
+  return String(n);
+}
+
 const INITIAL_FILTERS: SolverFilters = {
   options: { onlyMaxed: false, reforgeMode: "disable", includeEquippedOnOthers: true, keepCurrent: false, allowBrokenSets: true },
   excludedHeroes: new Set(),
   statFilters: {},
   ratingFilters: {},
   priority: {},
-  topPct: 100,
+  // Default to a per-slot top-30% prune, not 100% (= keep everything). On a
+  // real account the full cartesian is billions of combos; SOLVE CP ranks each
+  // slot by a CP proxy so the 30% bites even without a hand-set priority, and
+  // SOLVE (Score) needs a priority for it to apply. Drag to 100 = exhaustive.
+  topPct: 30,
   mainPicks: {},
   setPlans: [[]],
   excludedSets: [],
@@ -717,6 +735,21 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     return dead.map((s) => `${SLOT_BY[s]?.label ?? s}: 0 pieces after filters`).join(" · ");
   }, [solveProgress.poolSizes]);
 
+  // Guard-rail — rough size of the cartesian the solver walks (∏ of the
+  // partitionable per-slot pools, post-prune; EE isn't partitioned). poolSizes
+  // arrive the instant a solve starts (precompute runs before the fan-out), so
+  // a huge product surfaces a warning right away instead of after a 100s grind.
+  // 0 if any slot is empty (the emptyReason banner covers that case).
+  const cartesianEstimate = useMemo(() => {
+    const ps = solveProgress.poolSizes;
+    if (!ps) return 0;
+    let n = 1;
+    for (const s of ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "talisman"] as const) {
+      n *= ps[s]?.hit ?? 0;
+    }
+    return n;
+  }, [solveProgress.poolSizes]);
+
   // Saved-builds handlers — `selectedUid` gates everything; the UI hides /
   // disables the controls when no hero is picked so we don't have to thread
   // null-checks past these helpers' callers.
@@ -927,6 +960,15 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         onFilter={applyClientFilter}
         onClearFilter={() => setDisplayFilter(null)}
       />
+      {cartesianEstimate > CARTESIAN_WARN && (
+        <div className="flex shrink-0 items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-[11px] leading-snug text-amber-200">
+          <span aria-hidden className="mt-px">⚠</span>
+          <span>
+            ~{formatCombos(cartesianEstimate)} combinations to search — this can take minutes.
+            Lower <b>Top %</b>, set a substat <b>priority</b>, or require a <b>set</b> to cut it down.
+          </span>
+        </div>
+      )}
       <div className="flex min-h-0 flex-1 gap-2">
         {/* Left column — results table (height-capped so the gear band below
          *  stays visible) stacked over the gear band. */}
@@ -2290,7 +2332,7 @@ function SubstatPriorityPanel({
           />
         ))}
       </div>
-      <div className={cx("mt-2 flex items-center gap-2 border-t border-white/6 pt-2", !hasPriority && "opacity-60")}>
+      <div className="mt-2 flex items-center gap-2 border-t border-white/6 pt-2">
         <span className="text-[10.5px] uppercase tracking-wider text-white/60">Top %</span>
         <input
           type="range"
@@ -2305,7 +2347,8 @@ function SubstatPriorityPanel({
       </div>
       {topPct < 100 && !hasPriority && (
         <div className="mt-1 text-[10px] leading-snug text-amber-300/80">
-          No effect yet — set a substat priority above for the Top % to filter.
+          SOLVE CP ranks each slot by a CP proxy, so Top % applies. For SOLVE (Score),
+          set a substat priority above or Top % has no effect.
         </div>
       )}
     </Panel>

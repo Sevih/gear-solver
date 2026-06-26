@@ -69,6 +69,30 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-26 — SOLVE CP jouable par défaut (auto-prune CP-pondéré + garde-fou)
+
+**Diagnostic (vrai compte)** — un SOLVE CP sans réglage tournait >100 s pour **2,4 milliards** de combos,
+`S ≈ P` (quasi aucun élagage). Cause : le Top% prune était gardé derrière `hasPriority && topPct < 100`, et le
+défaut (Top% 100, pas de priorité) le sautait → cartésien complet. Le dominance prune (exact) ne mord pas sur un
+inventaire Pareto-divers (presque aucune pièce dominée sur **tous** les axes).
+
+**Auto-prune CP-pondéré** (`engine.ts`) — en **SOLVE CP sans priorité**, chaque slot est désormais classé par
+**le CP qu'une pièce donne posée dans le build courant du héros** (`cpEval(computeFinalStats(baseline, scaling,
+[autres pièces équipées, candidat]))`), et on garde le top-`topPct`. Le baseline = les pièces équipées des autres
+slots → la chaîne crit/pen/spd qui scale l'ATK est réaliste (un baseline mono-pièce sous-classerait l'ATK). C'est
+la **forme *soft* du dominance prune** (classer par un scalaire CP au lieu d'exiger ≥ sur tous les axes) — et c'est
+ce qui fait réellement chuter le cartésien. Heuristique : `Top% = 100` rebascule en exhaustif ; priorité explicite
+prioritaire (rank par elle) ; SOLVE Score sans priorité inchangé (prune sauté). Talisman/EE + slots `keepCurrent`
+exemptés. Sélection + préservation des sets requis factorisées dans `keepTopPct` (exporté, testé). +6 tests
+`cpPrune.test.ts`.
+
+**Défaut Top% 100 → 30** (`INITIAL_FILTERS`) — le slider garde son sens (100 = garde tout = exhaustif), mais le
+défaut élague à 30 %/slot. Warning du panneau Priority corrigé (le Top% mord en SOLVE CP même sans priorité).
+
+**Garde-fou cartésien** (`BuilderScreen`) — estime `∏ poolSizes` (post-prune ; les `poolSizes` arrivent dès le
+départ du solve, avant la recherche réelle) et affiche un bandeau ⚠ au-dessus de `CARTESIAN_WARN` (50 M) qui
+propose de baisser Top% / poser une priorité / exiger un set. Non-bloquant.
+
 ### Session 2026-06-26 — Timer de solve dans le footer Builder
 
 **Durée du dernier solve affichée** — l'orchestrator mesurait déjà le wall-clock (`startedAt` →

@@ -99,17 +99,32 @@ doivent eux aussi former un set complet → la whitelist se restreint aux sets r
 (présents dans ≥2 slots armor) et un check leaf rejette les builds à singleton (cf. phase 4).
 
 ### Phase 3 — Top-% prune (heuristique)
-Si l'utilisateur a posé au moins une priorité non-nulle ET `topPct < 100` :
-score chaque pièce du pool par
+Tourne dès que `topPct < 100`, avec **deux clés de ranking** selon le signal dispo :
+
+**a) Priorité explicite (SOLVE ou SOLVE CP)** — l'intention utilisateur gagne. Score chaque pièce par
 ```
 score(piece) = Σ_rolls priority[user_key] × (value / STAT_NORMS[user_key])
 ```
-tri desc, garde les `⌈N × pct / 100⌉` meilleurs. **Normalisation cruciale** :
-sans elle, les pièces à grosse magnitude (HP +200) écrasent toujours les
-pièces crit (CHC +5) à priorité égale.
+**Normalisation cruciale** : sans elle, les pièces à grosse magnitude (HP +200)
+écrasent toujours les pièces crit (CHC +5) à priorité égale. Le mapping
+engine→user (`STAT_TO_PRIORITY` dans `ratings.ts`) garantit que `atkPct` rolls
+et `atk` flats partagent la même bucket priority `atk`.
 
-Le mapping engine→user (`STAT_TO_PRIORITY` dans `ratings.ts`) garantit que
-`atkPct` rolls et `atk` flats partagent la même bucket priority `atk`.
+**b) SOLVE CP sans priorité (auto-prune CP-pondéré)** — c'est le cas par défaut
+réel (« max CP » sans rien tuner). Chaque candidat est classé par **le CP qu'il
+donne s'il est posé dans le build actuel du héros** (`cpEval(computeFinalStats(
+baseline, scaling, [autres pièces équipées, candidat]))`) : le baseline = les
+pièces équipées des **autres** slots, donc la chaîne crit/pen/spd qui scale l'ATK
+est réaliste (un baseline mono-pièce sous-classerait les pièces ATK). On garde
+les `⌈N × pct / 100⌉` meilleurs. C'est la **forme *soft* du dominance prune**
+(classer par un scalaire CP au lieu d'exiger ≥ sur tous les axes) — et c'est ce
+qui fait réellement chuter le cartésien quand aucune pièce n'est Pareto-dominée.
+Heuristique : `topPct = 100` rebascule en exhaustif. Talisman/EE exemptés (leurs
+gems viennent de l'alloc globale) ; slots `keepCurrent` exemptés. Sélection +
+préservation des sets requis factorisées dans `keepTopPct`.
+
+**c) SOLVE (Score) sans priorité** — aucun signal (chaque pièce score 0), prune
+**sauté** : on garde tout (le ranking serait arbitraire).
 
 ### Phase 4 — Cartesian + set-prune
 Énumération nested loop : `weapon × helmet × armor × gloves × boots × accessory × ooparts`.
@@ -217,7 +232,9 @@ car ils dépendent du loadout équipé / d'un calcul coûteux non disponible à 
 
 ### Substat priority
 - Slider par stat (12 stats) : valeur entière `-1..3`. Stockée dans `priority` (clés user : `atk`, `crc`, `chd`, ...).
-- Slider **Top %** : `5..100`. Pilote la phase 3 prune.
+- Slider **Top %** : `5..100`, **défaut 30** (plus 100). Pilote la phase 3 prune.
+  À 100 = exhaustif. Sans priorité, il mord quand même en SOLVE CP (auto-prune
+  CP-pondéré, phase 3b) ; en SOLVE Score il faut une priorité.
 - Bouton **(clear)** : `dispatch({type: "clearPriority"})`.
 
 Quand priority est uniformément 0 : le pool n'est pas pruné et les **gems
@@ -324,9 +341,11 @@ Top-% prune ramène ça à `(150 × pct/100)^7` :
 - 10% → ~10^8 (utilisable, 1-5s)
 - 5% → ~10^6 (très rapide, mais peut zapper le build optimal)
 
-Le hint du panneau le dit explicitement : *"Heuristic — too low a Top % drops optimal builds"*. C'est un trade-off pure recall vs vitesse.
+Le hint du panneau le dit explicitement : *"Heuristic — too low a Top % drops optimal builds"*. C'est un trade-off pure recall vs vitesse. Le **défaut est 30** (pas 100) : sur un vrai compte, 100% = des **milliards** de combos (mesuré : 2,4 G, >100 s) ; 30% par slot fait chuter ça de plusieurs ordres de grandeur.
 
-Avec `priority` vide, le score est arbitraire — le prune est **désactivé** automatiquement (chaque pièce score 0, ranking aléatoire, donc on garde tout).
+Avec `priority` vide : en **SOLVE Score** le prune est sauté (score 0 partout, ranking arbitraire → on garde tout). En **SOLVE CP**, plus de short-circuit : l'auto-prune CP-pondéré (phase 3b) fournit un ranking pertinent sans priorité, donc « max CP » est jouable sans rien tuner.
+
+**Garde-fou** : la BuilderScreen estime le cartésien (`∏ poolSizes`, post-prune ; les `poolSizes` arrivent dès le départ du solve, avant la recherche réelle). Au-dessus de `CARTESIAN_WARN` (50 M), un bandeau avertit que le solve sera lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloquant.
 
 ---
 
@@ -407,8 +426,11 @@ Avec `priority` vide, le score est arbitraire — le prune est **désactivé** a
 - **Perf hot-path** : le rebuild des set bonuses par talisman est hoisté (§7.10), les
   6 pièces invariantes ne sont plus re-sommées par talisman (accumulateur de buckets
   incrémental bit-identique, §7.4b), et la table de résultats est virtualisée
-  (`@tanstack/react-virtual`). Reste structurel : réduire le **nombre de combos**
-  atteignant le compose/CP (pré-filtre de pool, borne CP par upper-bound).
+  (`@tanstack/react-virtual`). Le **nombre de combos** est attaqué côté pool :
+  défaut Top% 30 + auto-prune CP-pondéré (phase 3b) + dominance prune (§3) +
+  set-prune (§armor). Reste optionnel : borne CP par upper-bound (branch-and-bound
+  exact) — gain incertain vu `topK = 1000`/worker, à valider par un profilage sur
+  vrai compte (footer ⏱ pour mesurer).
 - **Worker init = W × game/inventory** : `game` + inventaire sont structured-clonés
   vers chaque worker **une seule fois** (message `init`, mis en cache worker-side ;
   re-broadcast seulement à une re-capture). Chaque solve n'envoie plus que le payload
