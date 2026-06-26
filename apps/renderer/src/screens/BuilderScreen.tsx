@@ -910,32 +910,40 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         onFilter={applyClientFilter}
         onClearFilter={() => setDisplayFilter(null)}
       />
-      <div
-        className="flex min-h-0 flex-1 gap-2"
-        // Cap the results row so the bottom gear band is always visible. flex-1
-        // still lets it SHRINK on short screens (the table scrolls); maxHeight
-        // stops it from growing past the chosen row count on tall ones, leaving
-        // the slack below the gear band instead of pushing the band off-screen.
-        style={{ maxHeight: resultRows * RESULT_ROW_H + 46 }}
-      >
-        <ResultsTable
-          builds={displayedResults}
-          selectedIdx={selectedBuildIdx}
-          onSelect={setSelectedBuildIdx}
-          solving={solving}
-          error={solveError}
-          emptyReason={emptyReason}
-          statFilters={filters.statFilters}
-          rows={resultRows}
-          onRowsChange={setResultRows}
-          pieceByUid={pieceByUid}
-          armorSets={armorSetCatalog}
-          game={game}
-          heatmap={heatmap}
-        />
-        {/* Right column — projected stats over the library. Direction B keeps
-         *  this thin so the results table dominates the width. */}
-        <div className="flex w-72 shrink-0 flex-col gap-2 overflow-y-auto">
+      <div className="flex min-h-0 flex-1 gap-2">
+        {/* Left column — results table (height-capped so the gear band below
+         *  stays visible) stacked over the gear band. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+          <div
+            className="flex min-h-0 gap-2"
+            // Cap the results row so the gear band below stays visible; it can
+            // still SHRINK on short screens (the table scrolls) and won't grow
+            // past the chosen row count on tall ones.
+            style={{ maxHeight: resultRows * RESULT_ROW_H + 46 }}
+          >
+            <ResultsTable
+              builds={displayedResults}
+              selectedIdx={selectedBuildIdx}
+              onSelect={setSelectedBuildIdx}
+              solving={solving}
+              error={solveError}
+              emptyReason={emptyReason}
+              statFilters={filters.statFilters}
+              rows={resultRows}
+              onRowsChange={setResultRows}
+              pieceByUid={pieceByUid}
+              armorSets={armorSetCatalog}
+              game={game}
+              heatmap={heatmap}
+            />
+          </div>
+          <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} />
+        </div>
+        {/* Right column — spans the FULL height (next to both the results table
+         *  AND the gear band) so Current→Projected · Sub tick · Damage · Library
+         *  fit without scrolling on a normal window. overflow-y-auto stays as a
+         *  safety for very long saved-build lists / short screens. */}
+        <div className="flex w-72 shrink-0 flex-col gap-1.5 overflow-y-auto">
           <StatsPanel
             stats={composition?.current ?? null}
             projected={selectedBuild?.finalStats ?? null}
@@ -960,15 +968,14 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
             onRemovePreset={removePresetById}
           />
         </div>
-        {recoPicker && (
-          <RecoBuildPicker
-            reco={recoPicker}
-            onPick={applyRecoBuild}
-            onClose={() => setRecoPicker(null)}
-          />
-        )}
       </div>
-      <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} />
+      {recoPicker && (
+        <RecoBuildPicker
+          reco={recoPicker}
+          onPick={applyRecoBuild}
+          onClose={() => setRecoPicker(null)}
+        />
+      )}
       {/* Fixed at the viewport bottom — escapes the flex layout via
        *  position:fixed, so the rest of the screen sees an extra
        *  `pb-9` reservation instead of laying out for it. */}
