@@ -8,8 +8,8 @@
  *     polls `/api/update/status` and surfaces the one action that's left:
  *     "Install new version".
  *  2. Dashboard — a calm, scannable read of the captured account: identity
- *     (heroes + gear + capture health) up top, the gear-quality distribution as
- *     the hero stat, roster/gear breakdowns below, library + quick actions last.
+ *     (snapshot + library + capture health + updates) up top, the gear-quality
+ *     distribution as the hero stat, then roster/gear breakdowns below.
  *
  * All numbers are derived from the already-loaded `inventory` + `game` (no new
  * fetches beyond the update poll). When nothing is captured yet, the dashboard

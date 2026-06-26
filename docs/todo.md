@@ -38,8 +38,9 @@
       Fix : forcer `crc = 0` (et ignorer CHD) pour ces héros avant le scoring — passer `noCrit` au contexte
       de solve (`engine.ts` `precomputeContext`/`computeCheapRatings`) comme `dmgStat`/`dmgSec`. Léger.
 - [x] 🟡 **`SlotMini` non cliquable (Builds)** — ~~aucun moyen d'inspecter une pièce depuis la tab Builds
-      (tooltip/clic), contrairement à l'Inventory.~~ Fait : hover sur une pièce équipée → `RichTooltip` +
-      `GearTooltipContent` (main/subs/gems, comme le détail Inventory).
+      (tooltip/clic), contrairement à l'Inventory.~~ Fait : hover sur une pièce équipée → `RichTooltip`
+      (`placement="right"`) + `GearDetailBody` — le **panneau d'inspection complet** de l'Inventory
+      (main/subs ou gems, qualité, passifs, sets, singularity), pas une version réduite.
 - [x] 🟡 **Conservation des résultats** — le Builder **reste monté** (caché en `display:none` quand inactif)
       une fois ouvert, au lieu d'être démonté à chaque changement d'onglet (`App.tsx` : plus de
       `key={tab}` global, boundaries par écran, wrapper `h-full` pour la chaîne de hauteur). Donc résultats /
@@ -125,6 +126,40 @@
 ---
 
 ## Livré
+
+### Session 2026-06-26 — onglet Home + panneau d'inspection partagé
+
+**Home — nouvel onglet landing (update center + dashboard)** (ports « Home Directions » de Claude Design,
+direction A) — onglet par défaut (`gs.tab` → `"Home"`). **(1) Update center** : carte inline pilotée par
+état (uptodate / checking / downloading % / downloaded→Install / offline→Retry) qui **remplace les 2
+dialogs natifs** ; auto-download dans le main process, le renderer poll `/api/update/status` et n'expose
+que l'action restante (« Install new version »). Nouveaux : `apps/desktop/src/updater.ts` (state machine
+electron-updater, `autoDownload=true`, `autoInstallOnAppQuit=false`), routes `/api/update/{status,check,install}`
+(`server.ts`), miroir statique dev (`vite.config.ts`, ne peut pas importer electron-updater), `lib/update.ts`.
+**(2) Dashboard** dérivé de l'inventaire/game déjà chargés (aucun fetch sauf le poll) : Account snapshot
+(2×2, héros×★ à côté de Heroes owned) · Library · System health · Gear quality distribution (hero,
+couleurs `QUALITY_COLOR` partagées avec le filtre Inventory, tooltip par tier) · breakdowns Roster
+(icônes élément/classe réelles) + Gear (slots / top armor sets via `armorSetIcon` / tuiles
+Ascended·+15·Locked). Empty state = CTA capture seule (la carte update reste). `App.tsx` : handler
+`syncGameData`, props passées à `<HomeScreen>`.
+
+**Panneau d'inspection partagé `GearDetailBody`** (`fc927ec`→`4f9d5b5`) — extraction du panneau gauche de
+l'Inventory dans `design/GearDetail.tsx` (exporte `GearDetailBody`, `QUALITY_TONE`, `computeQuality`), pour
+que d'autres surfaces rendent un détail **identique** sans dupliquer. `InventoryScreen` consomme l'export
+(helpers locaux supprimés) ; la tab **Builds** inspecte les pièces équipées au survol (`RichTooltip` +
+`GearDetailBody`). Au passage : **fix doublon de gems** (EE/talisman affichaient subs ET gems → désormais
+`gemSlots ? GemPanel : subs`, mutuellement exclusif) + ajout du **passif Singularity** et du **passif
+d'item**. `GearTooltip.tsx` (intermédiaire) supprimé.
+
+**`RichTooltip placement="right"`** (`a1355d4`) — popover à droite du curseur (flip à gauche + clamp
+vertical en 2 passes rAF) pour les listes denses où un tooltip au-dessus/dessous masque les voisins.
+
+**Builder monté en permanence entre onglets** (`0d0ccde`) — plus de démontage à chaque changement
+d'onglet (caché en `display:none`) : résultats / filtres / héros sélectionné conservés et un solve
+continue en fond. `initialHeroUid` consommé sur changement de prop (plus seulement au mount).
+
+**Lisibilité globale** (`87c2b94`) — sweep app-wide : plus de texte gris sombre illisible sur le fond
+très foncé (bump des tons `muted`/`zinc` vers des valeurs lisibles).
 
 ### Session 2026-06-26 — solver tuning, reforge/gems, settings, assets sync
 
