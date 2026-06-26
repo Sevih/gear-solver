@@ -2,21 +2,25 @@
 
 > Backlog opérationnel unique. Le détail des items **livrés** vit dans
 > l'historique git + la section « Livré » en bas (et [roadmap.md](roadmap.md)).
-> Priorités : 🔴 casse la confiance / fonctionnel · 🟠 perf · 🟡 UX-cohérence · ⚪ nit.
+> Priorités : 🔴 casse la confiance / fonctionnel · 🟠 perf · 🟡 UX-cohérence ·
+> 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
-> **Tous les 🔴 sont faits.** Ce qui reste = 🟠 perf, polish 🟡/⚪, features, gros
-> chantiers tests, « à vérifier en jeu » et la vérif packaging.
+> **1 🔴 ouvert** (exclusion de pièce par set). Le reste = 🟠 perf, polish 🟡/🟢/⚪,
+> features, gros chantiers tests, « à vérifier en jeu » et la vérif packaging.
 
 ---
 
 ## Reste à faire
 
+### 🔴 Correctness — pré-filtrage du pool
+- [ ] 🔴 **Exclusion de pièce par set** — aujourd'hui seules les armes / accessoires sont effectivement
+      écartées selon les filtres (et encore, à confirmer) ; les **sets** ne filtrent pas le pool. Si on
+      impose une restriction (ex. `2pc ATK + 2pc PEN`), inutile d'inclure dans les pools armor les pièces
+      hors de ces sets. En revanche si on ne demande qu'**un** `2pc`, il faut garder de quoi compléter
+      (set demandé + 2 autres pièces). **Prévoir un setting « autoriser les broken sets ».**
+      *(Recoupe l'optim « Pré-filtrage armor par set requis » ci-dessous — à traiter ensemble.)*
+
 ### 🟠 Perf solver
-- [ ] 🔴**Exclusion de piece** actuellement seul les armes et les accessoires sont effectiver ecarté en 
-      fonction des filtres (et encore je suis pas 100% sur) par contre pour les sets ce n'est pas le cas. 
-      si on fournit une restriction (eg je veux set2 atk + set2 pen) alors ça ne sert a rien d'inclure les 
-      pieces qui ne font pas partie de ses sets. en revanche si on ne fournit que 1 set2 piece on peux faire un combo
-      setdemander + 2 autre piece (prevoir de rajouter un settings pour autoriser les broken set).
 - [ ] **Solver CP trop lent** — le mode SOLVE CP met beaucoup trop de temps. Investiguer (CP calculé
       in-loop par combo : profiler, mémoïser ce qui peut l'être, voir si un pré-filtre réduit le pool).
 - [ ] **Accumulateur de buckets — re-sum déféré** — le hoist des set bonuses est fait ; reste le re-sum
@@ -25,79 +29,32 @@
       préservant l'ordre exact + test d'équivalence dédié.
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings` · **Pré-filtrage armor** par
-      set requis (restreindre les pools armor au set quand un seul req-4pc actif).
-- [x] **gems strategy** — allocation **étagée cap-reaching** : étage 1 atteint le cap CHC à 100 %
-      avec les gems crit (même si l'atk score plus haut), étage 2 remplit par priorité (skip crit).
-      Gaté sur `crc priority > 0` + pool crit, recompose seulement si le delta diffère du greedy
-      (`allocateGemsReachingCap` / `gemDeltaEquals`). Étage 2 = priorité actuelle (pas de profil séparé).
+      set requis (restreindre les pools armor au set quand un seul req-4pc actif — cf. le 🔴 ci-dessus).
+
 ### 🟡/⚪ UX-cohérence & nits
 - [ ] 🟡 **`SlotMini` non cliquable (Builds)** — aucun moyen d'inspecter une pièce depuis la tab Builds
       (tooltip/clic), contrairement à l'Inventory.
+- [ ] 🟡 **Conservation des résultats** — conserver les résultats du solver quand on change de tab
+      (voire permettre de laisser le solver tourner en fond).
+- [ ] 🟡 **Reset des tris au lancement** — les tabs Inventory et Builds conservent les tris même après
+      relance de l'app ; on n'en veut pas (repartir d'un tri par défaut).
+- [ ] 🟡 **`Advices` (tab Builder)** — ne compter « Missing » que si le perso a 1 EE + 3 autres pièces
+      (1 EE seul ≠ missing, juste ignoré). Advice quand un perso a > 102 % de crit ET des gems CHC sur
+      le talisman/EE (crit gaspillé).
+- [ ] 🟡 **Show/hide colonnes — accès clic-droit** — le menu « Columns » existe (`c8808d4`) ; ajouter
+      l'ouverture via clic-droit sur les en-têtes de colonne.
 - [ ] ⚪ **`SLOT_MAIN_PLACEHOLDER.accessory = "hp"`** alors que l'accessoire a un main user-sélectionnable
       → placeholder potentiellement faux quand aucun build n'est sélectionné. *(laissé pour ne pas
       diverger du panneau Inventory qui partage la map)*
-- [ ] 🟢 **Rentabilité des % vs Flat** — pour les stats comme Atk, Def, HP il existe une version flat et une version %. 
-      lorsque que l'on a choisit un personnage, dans un cadre "info" entre current => projected et library (tab builder) 
-      pour informer sur combien le tick de sub rapporte (en version % et flat) et du coup pouvoir indiquer si il est plus 
-      rentable d'aller chercher du flat ou  du % sur les subs
 - [ ] ⚪ **Optims mineures Inventory (si profilage)** — `computeQuality` recalculé plusieurs fois par pièce
       (précalculable dans `toUiPiece`) · double virtualisation (`contentVisibility:auto` redondant avec
       `react-virtual`) · 7 `useMemo` d'availability fusionnables en une passe.
-- [ ] 🟡 **`Advices tab builder`** — on considere Missing que si il a 1 EE + 3 autres piece (si il a juste 1EE 
-      alors c'est pas du missing mais juste un truc dont on se fiche). Advice si un perso a plus de 102% de crit et a des gems CHC sur le talisman/EE.
-- [x] 🟡 **Apparence UX tab builder** — direction **B (toolbar + popovers)** portée dans `BuilderScreen`
-      (toolbar : hero · Solve/Solve CP · toggles Reforged/Maxed · popovers Options/Stat/Ratings/Priority/Mains/Sets/Effects
-      avec badges de comptage ; table quasi pleine largeur + colonne droite stats→projetées + library). Brief :
-      [docs/design/builder-redesign-brief.md](design/builder-redesign-brief.md). Toute la logique (reducer/solve/persistance)
-      préservée — seul le layout a changé.
 
-### Builder — suites du review post-direction-B
-- [x] Toggles Reforged/Maxed dupliqués (inline + popover Options) → retirés du popover (`a4108db`).
-- [x] Popovers + header de table semi-transparents (`bg-elev-2` = 70% alpha) → backing opaque `bg-elev-1` (`a4108db`).
-- [x] Main-stat de l'EE masquée dans la gear band (fixe ATK%, une seule option) (`a4108db`).
-- [n/a] Top% « perdu » → en fait toujours là, dans le popover **Priority** (sa place logique). À surfacer si besoin.
-- [n/a] Gems déjà présentes affichées → `GemRecommendation` ne montre déjà QUE les gems proposées (+ badge swap).
-- [x] 🟢 **Bouton « Filter »** — re-filtre client-side des résultats stockés par les bandes stat/rating sans
-      re-solve (instantané après le 1er calcul) ; sélection/gear band indexent la vue filtrée, ✕ pour annuler (`44170ae`).
-- [x] 🟢 **Filtre qualité** — select « Min quality » (Options) qui exclut du pool les pièces sous le tier choisi ;
-      seuils partagés via `lib/quality.ts` (plus de divergence avec l'Inventory) (`d06f06f`).
-- [x] 🟡 **Abréviations stats** — labels alignés sur `outerpedia-v2/data/stats.json` (CHC/CHD/CDMG RED%/PEN%/DMG UP%/…)
-      + **en-têtes du tableau en icônes** (plus de texte). `CDR` ambigu (= Cooldown pour l'user) → `CDMG RED%`.
-      (CDR avait été retirée à tort sur un malentendu d'abréviation → restaurée.)
-- [~] 🟡 **Show/hide colonnes** — menu « Columns » dans le header (stats/ratings/score/upg, persistant, possibilité d'acces avec un click droit sur les entete de colonne ;
-      colonne filtrée = forcée visible) (`c8808d4`).
-- [x] 🟡 **Tooltips en-têtes** — nom complet + définition (TextSystem `SYS_DESC_*`) au survol (`5fa5037`).
-- [x] 🔴 **Colonne Set cassée** — rendait `—`, jamais implémentée → set tags par build (icône + tier 2/4) (`500fb26`).
-- [x] 🟡 **Colonnes arme + accessoire** — effets d'arme/accessoire par build (icône + nom au survol), toggleables
-      via le menu Columns (`a08f9b6`).
-- [ ] 🟡 **Conservation des resultats** — il faut conserver les rsultats du solver quand on 
-      change de tab (voir meme permettre de laisser le solver tourner).
-- [ ] 🟢 **reset des filtres** — tab inventaire et builds actuelement conserve les tries meme 
-      apres relance de l'app et on veut pas
-> **▶ Prochaine session** — les 2 items ci-dessous restent du review post-direction-B (tout le reste est livré).
-
-- [x] 🟡 **Reforge / upgrade dans la gear band** — **3 modes globaux** `reforgeMode` (segmented control
-      toolbar) remplacent le bool `useReforged` : **disable** · **classic** (+10 / 6 ticks) · **ascended**
-      (+15 / 9 ticks, projette tout comme ascensionné). Projection complète = main re-scalé (core
-      `projectMainToCeiling`, ratio des mults, validé in-game) + substats reforgés au budget du mode
-      (`simulateReforges` budget paramétrable), centralisé dans `projectPieceForReforge` (partagé engine ↔
-      gear band). La carte affiche l'enhance projeté (`+15 · ascended`) + badge **classic/ascended** + ticks.
-      *(Reste possible si besoin : un indicateur explicite "needs upgrade" vs déjà au plafond.)*
-- [x] 🟠 **Solve sous-utilise le CPU** — cause : plafond fixe à 8 workers (8/32 threads = 25 %). Fix :
-      `resolveWorkerCount()` = `hardwareConcurrency − 1` (1 cœur pour l'UI, plafond dur 64) + override
-      `gs.solver.workerCount` + log debug `solver`/`pool` (workers + hardwareConcurrency) pour vérifier.
-      Payload réduit en amont (**send-once**) : `game` + inventaire clonés vers chaque worker une
-      seule fois (`init`, cachés worker-side) au lieu d'à chaque solve → le fan-out ne porte plus
-      que le payload allégé + précalcul. Reste possible si inventaire énorme : SharedArrayBuffer (§8).
-      *(À vérifier sur ta machine : le solve doit maintenant saturer ~tous les cœurs.)*
-
-### Features
-- [x] **Settings — options globales** — refonte **left-rail à onglets** (Setup · Solver · Data · Backup · Debug,
-      footer contextuel) portée depuis le design Claude (`docs/design/settings-redesign-brief.md`). Nouvelle section
-      **Solver** : worker count (Auto/Manual + stepper, dispose+rebuild du pool au changement), result count (topN),
-      per-worker depth (topK, derrière « Show advanced » + warning), heatmap on/off. Réglages persistés (App
-      `usePersistedState`) câblés : `resolveWorkerCount(override)` + footer réactif, topN/topK dans `startSolve`,
-      heatmap gate `ResultsTable` (`EMPTY_RANGES`). `gs.solver.workerCount` partagé avec le code non-React.
+### 🟢 Features
+- [ ] 🟢 **Rentabilité % vs Flat (subs)** — pour ATK / DEF / HP il existe une version flat et une version %.
+      Une fois un héros choisi, afficher (dans le cadre info current → projected + library de la tab Builder)
+      combien un tick de sub rapporte en flat **et** en % pour ce héros, afin d'indiquer s'il est plus
+      rentable de chercher du flat ou du % sur les subs.
 
 ### À vérifier EN JEU
 - [ ] **Cap de Quality ne scale pas avec les étoiles** — `computeQuality` fixe `max = 14 + reforge.n`
@@ -109,8 +66,8 @@
 - [ ] **Snapshot `data/` versioning** — stamper un hash/timestamp à chaque rebuild de `data/derived` pour
       invalider les caches localStorage après un patch jeu (les SavedBuild référencent des `pieceUids`
       qui peuvent disparaître).
-- [ ] **Equip / Unequip** — modifier les emplacements des equipements sur les personnages. on n'envoi rien au 
-      jeu (on modifie les fichiers que l'on a recuperer)
+- [ ] **Equip / Unequip** — modifier les emplacements d'équipement sur les personnages. On n'envoie rien
+      au jeu (on modifie les fichiers capturés qu'on a récupérés).
 
 ### Tests (fixtures lourdes)
 - [ ] **CP solver vs Builds** — comparer `calcBattlePower` sur le même build depuis les deux écrans
@@ -136,17 +93,47 @@
 
 ## Livré
 
-### Session 2026-06-26 — assets & game-data sync depuis le repo GitHub
+### Session 2026-06-26 — solver tuning, reforge/gems, settings, assets sync
 
-**🔴 Images + game-data sourcés du repo `Sevih/outerpediaV2` (sync au lancement)** — déclencheur :
-404 sur `CT_Slot_Lock.png` → `/img/*` ne venait pas du projet (checkout local en dev, 302 outerpedia.com
-en prod, bundle d'images cassé `outerpedia-v2` → installeur sans aucune image). Nouveau modèle : handler
-`/img/*` partagé (`img-cache.ts`) checkout→cache disque→CDN jsDelivr/raw→fallback webp→302 ; `data-sync.ts`
-dual-mode (checkout mtime-gated / download CDN SHA-gated via `api.github.com/commits/main`) ; `build.mjs`
-dirs via env ; `main.ts` seed derived + pin SHA + préfetch fond ui/equipment ; coords centralisées
-`repo-source.ts` ; cache `.cache/outerpedia` (dev) / `<userData>/outerpedia-cache` (prod). Refs `.png`
-hardcodées → `.webp`. extraResources : images cassées retirées, `build.mjs`/`calc-stats.mjs` shippés.
-→ l'app suit les patchs **sans nouveau build**, dépendance internet/site minimisée (1 fetch par asset à vie).
+**Settings — refonte left-rail à onglets + section Solver** (`85b8a86`) — onglets Setup · Solver · Data ·
+Backup · Debug avec footer contextuel (Re-check sur Setup seulement). Section **Solver** : worker count
+Auto/Manual (dispose+rebuild du pool au changement), result count (topN), per-worker depth (topK, derrière
+« Show advanced » + warning recall), heatmap on/off. Réglages persistés App `usePersistedState`,
+`resolveWorkerCount(override)` + footer réactif, topN/topK dans `startSolve`, heatmap gate `ResultsTable`
+(`EMPTY_RANGES`). Brief design : `docs/design/settings-redesign-brief.md`.
+
+**Solve sous-utilise le CPU → pool adaptatif + send-once** (`f532d42`, `2022df4`, `c8e93c4`) — plafond fixe
+8 → `hardwareConcurrency − 1` (1 cœur pour l'UI, override `gs.solver.workerCount`, plafond dur 64) ;
+`game` + inventaire envoyés à chaque worker **une fois** (`init`, cachés worker-side) au lieu d'à chaque
+solve ; compteur « ⚙ N workers » dans le footer Builder.
+
+**Reforge 3 modes + gems cap-reaching** (`20ab51e`) — `reforgeMode` disable / classic (+10, 6 ticks) /
+ascended (+15, 9 ticks) remplace le bool `useReforged` ; projection complète = main re-scalé
+(`projectMainToCeiling`, validé in-game) + substats (`simulateReforges` budget), centralisé dans
+`projectPieceForReforge`. Gems étagées : cap CHC à 100 % d'abord (gems crit) puis priorité
+(`allocateGemsReachingCap` / `gemDeltaEquals`).
+
+**Images + game-data sourcés du repo `Sevih/outerpediaV2` (sync au lancement)** — déclencheur : 404 sur
+`CT_Slot_Lock.png` → `/img/*` ne venait pas du projet (checkout local en dev, 302 outerpedia.com en prod,
+bundle d'images cassé). Nouveau modèle : handler `/img/*` partagé (`img-cache.ts`)
+checkout→cache disque→CDN jsDelivr/raw→fallback webp→302 ; `data-sync.ts` dual-mode (checkout mtime-gated /
+download CDN SHA-gated via `api.github.com/commits/main`) ; `build.mjs` dirs via env ; `main.ts` seed
+derived + pin SHA + préfetch fond ui/equipment ; coords centralisées `repo-source.ts` ; cache
+`.cache/outerpedia` (dev) / `<userData>/outerpedia-cache` (prod). Refs `.png` → `.webp`. extraResources :
+images cassées retirées, `build.mjs`/`calc-stats.mjs` shippés. → l'app suit les patchs **sans nouveau
+build**, dépendance internet/site minimisée (1 fetch par asset à vie).
+
+**Builder — table & filtres** — colonne Set par build (icône + tier 2/4) (`500fb26`) · colonnes arme +
+accessoire (effet icône + nom) toggleables (`a08f9b6`) · menu « Columns » show/hide (stats/ratings/score/upg,
+persistant, colonne filtrée forcée visible) (`c8808d4`) · tooltips d'en-tête (nom complet + def TextSystem)
+(`5fa5037`) · abréviations stats alignées sur outerpedia + en-têtes en icônes (CDR→CDMG RED%) · bouton
+« Filter » (re-filtre client-side sans re-solve) (`44170ae`) · filtre « Min quality » (seuils partagés
+`lib/quality.ts`) (`d06f06f`).
+
+**Builder — polish direction-B** — toggles Reforged/Maxed dé-dupliqués (`a4108db`) · popovers + header de
+table opaques (`bg-elev-1`) (`a4108db`) · main-stat EE masquée dans la gear band (`a4108db`). Layout
+direction B (toolbar + popovers) : brief `docs/design/builder-redesign-brief.md` ; logique
+(reducer/solve/persistance) préservée.
 
 ### Session 2026-06-25 — gros chantiers (détail dans git)
 
