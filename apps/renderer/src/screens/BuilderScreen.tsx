@@ -915,10 +915,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
          *  stays visible) stacked over the gear band. */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           <div
-            className="flex min-h-0 flex-1 gap-2"
-            // Grow to fill the left column but cap at the chosen row count so the
-            // gear band below stays visible; still SHRINKs on short screens.
-            style={{ maxHeight: resultRows * RESULT_ROW_H + 46 }}
+            className="flex shrink-0 gap-2"
+            // Fixed height at the chosen row count — the table keeps its size and
+            // it's the gear band below that yields (scrolls) when space is tight,
+            // not the table.
+            style={{ height: resultRows * RESULT_ROW_H + 46 }}
           >
             <ResultsTable
               builds={displayedResults}
@@ -936,7 +937,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               heatmap={heatmap}
             />
           </div>
-          <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} />
+          {/* Gear band takes the remaining height and scrolls if the window is
+              too short — so the results table above never has to shrink. */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} />
+          </div>
         </div>
         {/* Right column — spans the FULL height (next to both the results table
          *  AND the gear band) so Current→Projected · Sub tick · Damage · Library
