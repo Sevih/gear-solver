@@ -30,8 +30,38 @@ export const REPO_ROOT = normalize(join(here, "..", "..", ".."));
  *  every consumer back to the matching repo directory. */
 const RES = IS_DEV ? REPO_ROOT : process.resourcesPath;
 
-/** Derived game data — `data/derived/*.json` consumed by the renderer. */
-export const DERIVED = IS_DEV ? join(REPO_ROOT, "data", "derived") : join(RES, "data", "derived");
+/**
+ * Persistent cache root for assets + game data synced from the outerpedia repo.
+ *  - dev : `<repo>/.cache/outerpedia` (gitignored — the repo trees take over)
+ *  - prod: `<userData>/outerpedia-cache` (install dir stays read-only)
+ * Everything synced from GitHub at launch lands here so the app updates with
+ * game patches without shipping a new build.
+ */
+export const CACHE_ROOT = IS_DEV ? join(REPO_ROOT, ".cache", "outerpedia") : join(app.getPath("userData"), "outerpedia-cache");
+
+/** Image cache root — `img-cache.ts` writes assets under `<dir>/images/...`. */
+export const IMG_CACHE_DIR = CACHE_ROOT;
+
+/** Persisted last-synced repo commit SHA (the data-sync gate + image pin). */
+export const REPO_SHA_STATE = join(CACHE_ROOT, "repo-sha.json");
+
+/** Raw game tables build.mjs consumes. Dev uses the committed repo tree; prod
+ *  downloads them into the writable cache. */
+export const GAME_DIR = IS_DEV ? join(REPO_ROOT, "data", "game") : join(CACHE_ROOT, "game");
+
+/** Mirror of the outerpedia-only build inputs (data/equipment, json2 extras,
+ *  damage-calc/buffs). Null in dev (build.mjs reads the checkout via
+ *  findOuterpedia); a downloaded mirror in prod. */
+export const SYNC_DIR: string | null = IS_DEV ? null : join(CACHE_ROOT, "synced");
+
+/** Derived game data — `data/derived/*.json` consumed by the renderer. Dev uses
+ *  the committed repo tree; prod uses the writable cache (rebuilt on each repo
+ *  update, seeded from BUNDLED_DERIVED on first launch). */
+export const DERIVED = IS_DEV ? join(REPO_ROOT, "data", "derived") : join(CACHE_ROOT, "derived");
+
+/** Read-only derived tree shipped in the installer (extraResources). Used only
+ *  in prod as the first-launch seed for the writable DERIVED cache. */
+export const BUNDLED_DERIVED = join(RES, "data", "derived");
 
 /** Capture pipeline scripts + cert + mitmproxy addon. PowerShell entrypoints
  *  are `capture.ps1` / `disarm.ps1`. */
@@ -71,15 +101,6 @@ export const BUNDLED_MITMDUMP = IS_DEV
 export const BUNDLED_PROD_CERT_DIR = IS_DEV
   ? join(REPO_ROOT, "apps", "desktop", "resources", "prod-cert")
   : join(RES, "prod-cert");
-
-/** Curated `outerpedia-v2/public/images` subset bundled into the packaged
- *  app (equipment / ui / characters/faceicon / characters/portrait /
- *  characters/ee). The Electron prod server serves /img/* straight from
- *  here when the file exists, and falls back to a 302 to outerpedia.com for
- *  anything we didn't ship (new patch gear, characters added since the last
- *  release, …). In dev this points at a stub that never has files; the
- *  Vite middleware handles its own mount via findOuterpediaImagesDev. */
-export const BUNDLED_IMG = IS_DEV ? join(REPO_ROOT, "apps", "desktop", "resources", "img") : join(RES, "img");
 
 /** Outerpedia-v2 public images checkout - only used in dev (the Vite
  *  middleware already mounts these). Prod uses the BUNDLED_IMG subset

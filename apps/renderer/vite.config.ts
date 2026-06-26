@@ -9,14 +9,20 @@ import { dirname, extname, join, normalize } from "node:path";
 import { detectEmulators, pickEmulator, pickPort, preflight } from "../desktop/src/emulator-detect.js";
 import { proxyReco } from "../desktop/src/reco-proxy.js";
 import { syncGameData } from "../desktop/src/data-sync.js";
+import { serveImg } from "../desktop/src/img-cache.js";
+import { getCurrentRef, resolveLatestSha, setCurrentRef, readShaState } from "../desktop/src/repo-source.js";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const DERIVED = join(root, "data", "derived");
+const GAME_DIR = join(root, "data", "game");
 const STAT_LOCKS = join(root, "data", "stat-locks.json");
 const CAPTURE_DIR = join(root, "tools", "capture");
 const CAPTURED = join(CAPTURE_DIR, "out");
 const CAPTURE_PS1 = join(CAPTURE_DIR, "capture.ps1");
 const DISARM_PS1 = join(CAPTURE_DIR, "disarm.ps1");
+// Persistent cache for assets/data synced from the outerpedia repo (gitignored).
+const CACHE_DIR = join(root, ".cache", "outerpedia");
+const REPO_SHA_STATE = join(CACHE_DIR, "repo-sha.json");
 
 // Outerpedia-v2 checkout — serves the public/images/* assets at /img/ so
 // equipment art, class icons, effect badges and character portraits render
@@ -112,12 +118,26 @@ function captureStatus(res: ServerResponse): void {
  *  GET /api/capture/status) that spawn the PowerShell pipeline. */
 function localData(): Plugin {
   const mounts: Record<string, string> = { "/gamedata/": DERIVED, "/captured/": CAPTURED };
-  if (OUTERPEDIA_IMAGES) mounts["/img/"] = OUTERPEDIA_IMAGES;
   return {
     name: "gear-solver-local-data",
     configureServer(server) {
+      // Pin /img/* fetches to the repo's latest SHA (once, at startup) so the
+      // CDN URLs are cacheable. Dev usually serves from the local checkout
+      // anyway; on failure getCurrentRef() stays "main". Fire-and-forget.
+      void resolveLatestSha().then((sha) => setCurrentRef(sha ?? readShaState(REPO_SHA_STATE)?.sha ?? "main"));
       server.middlewares.use((req: IncomingMessage, res: ServerResponse, next) => {
         const url = (req.url ?? "").split("?")[0]!;
+
+        // /img/* — local checkout → disk cache → GitHub CDN → webp → 302.
+        // Shared with the Electron prod server (server.ts) so dev/prod match.
+        if (url.startsWith("/img/")) {
+          void serveImg(req, res, url.slice("/img/".length), {
+            cacheDir: CACHE_DIR,
+            localCheckoutDir: OUTERPEDIA_IMAGES,
+            getRef: getCurrentRef,
+          }).catch(() => { if (!res.headersSent) { res.statusCode = 500; res.end("image error"); } });
+          return;
+        }
 
         if (url === "/api/capture/run" && req.method === "POST") {
           detectArgs().then((args) => streamPs(res, CAPTURE_PS1, args))
@@ -130,9 +150,9 @@ function localData(): Plugin {
           return;
         }
         if (url === "/api/capture/status" && req.method === "GET") return captureStatus(res);
-        // Manual "Sync game data" — copy raw tables from outerpedia + rebuild.
+        // Manual "Sync game data" — pull raw tables from the outerpedia repo + rebuild.
         if (url === "/api/data/sync" && req.method === "POST") {
-          syncGameData({ repoRoot: root, derivedDir: DERIVED, force: true })
+          syncGameData({ repoRoot: root, gameDir: GAME_DIR, syncDir: null, derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
             .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
             .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
           return;

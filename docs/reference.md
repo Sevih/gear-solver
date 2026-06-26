@@ -474,7 +474,18 @@ dans `buf`, `workersDone` incrémenté à tort, flush prématuré.
 ### 3.1 Tables in-game référencées
 
 Toutes les tables sources vivent dans `data/game/` (copie locale, pas de
-fetch runtime). Re-copiées via `data/sync.ps1` depuis un checkout d'outerpedia-v2.
+fetch runtime côté renderer). Rafraîchies **au lancement** par `data-sync.ts`
+(`apps/desktop/src`) en deux modes :
+- **checkout** (dev / machine mainteneur) — copie depuis un checkout local
+  d'outerpedia, gardé par mtime, zéro réseau ;
+- **repo** (build packagé) — télécharge les 29 tables + inputs de build depuis
+  le repo public `Sevih/outerpediaV2` via le CDN jsDelivr, gaté sur le SHA du
+  dernier commit (`api.github.com/.../commits/main`), puis relance `build.mjs`.
+  Permet de suivre les patchs **sans publier de nouveau build**. Dégrade
+  proprement hors-ligne (utilise le `data/derived` déjà en cache).
+
+`build.mjs` lit ses dirs via env (`OUTERPEDIA_GAME_DIR` / `OUTERPEDIA_SYNC_DIR`
+/ `OUTERPEDIA_DERIVED_DIR`) — défauts = `data/game` + `data/derived` + checkout.
 
 **Tables critiques pour la math** :
 - `CharacterTemplet.json` — base stats, skill blocks, class passive
@@ -528,9 +539,16 @@ Ghidra/IDA). Adresses connues :
 
 ### 3.5 Sources externes
 
-- **outerpedia-v2** (sibling repo) — sert les images via `/img/*` (Vite
-  middleware en dev, fetch direct ou bundle en prod). Path autodétecté
-  depuis `OUTERPEDIA_PATH` env ou checkouts connus.
+- **outerpedia-v2** (repo public `Sevih/outerpediaV2`) — source des images ET
+  des tables de jeu. Le handler `/img/*` partagé (`img-cache.ts`, utilisé par
+  le middleware Vite **et** le serveur Electron prod) résout en cascade :
+  checkout local (dev, via `OUTERPEDIA_PATH`) → **cache disque** persistant →
+  **CDN GitHub** (jsDelivr → raw.githubusercontent) + écriture en cache →
+  fallback `.png`→`.webp` → 302 vers `outerpedia.com` en dernier recours.
+  Chaque asset n'est donc fetché qu'une fois. Cache : `.cache/outerpedia` en
+  dev (gitignoré), `<userData>/outerpedia-cache` en prod. Le préfetch fond
+  (prod) réchauffe le subset `ui/` + `equipment/` (webp) une fois par SHA.
+  Coordonnées repo + SHA + CDN centralisés dans `repo-source.ts`.
 - **Mémoire user (Claude)** — formules détaillées + historique de
   validation. Pas dans le repo, accessible via les notes Claude :
   - `game_stat_compose_formula` — derivation détaillée CalcFinalStat

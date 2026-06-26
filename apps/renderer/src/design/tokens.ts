@@ -81,7 +81,7 @@ export interface SlotMeta {
   id: SlotId;
   label: string;
   short: string;
-  /** In-game inventory tab icon filename — served at /img/ui/inven/<icon>.png.
+  /** In-game inventory tab icon filename — served at /img/ui/inven/<icon>.webp.
    *  Naming gotchas: boots ↔ "Shoes", talisman ↔ "Oopart". */
   icon: string;
 }

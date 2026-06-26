@@ -109,6 +109,11 @@
 - [ ] Bake prod du `data/` (`extraResources` → `process.resourcesPath`) · `electron build`/installeur
       lance serveur local + renderer · auto-update contre release signée + feed réels · bouton capture
       natif en packagé (sans `npm run dev`).
+- [ ] **Vérif sync repo en prod packagé** (plumbing posé, items 5-10 du plan asset-sync) — 1er lancement
+      online : seed `data/derived` bundlé → sync SHA → download tables+buffs → rebuild ; images peuplent
+      le cache à la demande + préfetch `ui/`+`equipment/`. Vérifier `/img/*` ne tape jsDelivr/raw que sur
+      miss (127.0.0.1 ensuite, 302 outerpedia.com seulement si CDN down) · 2e lancement SHA inchangé =
+      instantané · simuler un patch (`OUTERPEDIA_REF` autre branche) · offline cold-cache = pas de crash.
 
 > ✅ **À NE PAS toucher (Inventory)** : virtualisation par lignes + reflow `ResizeObserver`, indexation
 > `charsByUid` en `Map`, auto-prune des chips indisponibles, `memo` sur `GearTile` (callback stable),
@@ -117,6 +122,18 @@
 ---
 
 ## Livré
+
+### Session 2026-06-26 — assets & game-data sync depuis le repo GitHub
+
+**🔴 Images + game-data sourcés du repo `Sevih/outerpediaV2` (sync au lancement)** — déclencheur :
+404 sur `CT_Slot_Lock.png` → `/img/*` ne venait pas du projet (checkout local en dev, 302 outerpedia.com
+en prod, bundle d'images cassé `outerpedia-v2` → installeur sans aucune image). Nouveau modèle : handler
+`/img/*` partagé (`img-cache.ts`) checkout→cache disque→CDN jsDelivr/raw→fallback webp→302 ; `data-sync.ts`
+dual-mode (checkout mtime-gated / download CDN SHA-gated via `api.github.com/commits/main`) ; `build.mjs`
+dirs via env ; `main.ts` seed derived + pin SHA + préfetch fond ui/equipment ; coords centralisées
+`repo-source.ts` ; cache `.cache/outerpedia` (dev) / `<userData>/outerpedia-cache` (prod). Refs `.png`
+hardcodées → `.webp`. extraResources : images cassées retirées, `build.mjs`/`calc-stats.mjs` shippés.
+→ l'app suit les patchs **sans nouveau build**, dépendance internet/site minimisée (1 fetch par asset à vie).
 
 ### Session 2026-06-25 — gros chantiers (détail dans git)
 

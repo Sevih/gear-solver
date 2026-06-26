@@ -13,8 +13,11 @@ import { dirname, join } from "node:path";
 import { computeCharacterIngredients } from "./calc-stats.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const GAME = join(here, "game");
-const DERIVED = join(here, "derived");
+// Dirs are env-overridable so the packaged app can build from the synced cache
+// (data-sync.ts passes OUTERPEDIA_GAME_DIR / OUTERPEDIA_DERIVED_DIR), while a
+// plain `node data/build.mjs` keeps using the repo's data/game + data/derived.
+const GAME = process.env.OUTERPEDIA_GAME_DIR || join(here, "game");
+const DERIVED = process.env.OUTERPEDIA_DERIVED_DIR || join(here, "derived");
 mkdirSync(DERIVED, { recursive: true });
 
 // Memoize per-file: BuffTemplet (4×), ItemTemplet (2×), CharacterTemplet (2×)
@@ -46,10 +49,24 @@ function findOuterpedia() {
   return null;
 }
 const OUTERPEDIA = findOuterpedia();
+// In the packaged app there's no checkout — data-sync.ts downloads the same
+// build inputs into OUTERPEDIA_SYNC_DIR, mirroring their repo-relative paths.
+// Resolve a repo-relative path against the sync dir first, then the checkout.
+const SYNC_DIR = process.env.OUTERPEDIA_SYNC_DIR || null;
+function resolveOuterpediaPath(rel) {
+  if (SYNC_DIR) {
+    const p = join(SYNC_DIR, rel);
+    if (existsSync(p)) return p;
+  }
+  if (OUTERPEDIA) {
+    const p = join(OUTERPEDIA, rel);
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
 function loadOuterpedia(rel) {
-  if (!OUTERPEDIA) return null;
-  const p = join(OUTERPEDIA, rel);
-  if (!existsSync(p)) return null;
+  const p = resolveOuterpediaPath(rel);
+  if (!p) return null;
   return JSON.parse(readFileSync(p, "utf-8"));
 }
 
@@ -882,9 +899,8 @@ save("codex-curve.json", ingredientsResult.codexByLevel);
 const SCALING_STAT_TO_KEY = { ST_ATTACK: "atk", ST_DEF: "def", ST_HP: "hp" };
 const DMG_SEC_STATS = new Set(["atk", "def", "hp"]);
 function readDmgScaling(charId) {
-  if (!OUTERPEDIA) return {};
-  const f = join(OUTERPEDIA, "public", "damage-calc", "buffs", `${charId}.json`);
-  if (!existsSync(f)) return {};
+  const f = resolveOuterpediaPath(`public/damage-calc/buffs/${charId}.json`);
+  if (!f) return {};
   try {
     const buffs = JSON.parse(readFileSync(f, "utf-8"))?.buffs ?? [];
     let dmgStat = null;

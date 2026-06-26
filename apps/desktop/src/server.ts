@@ -28,12 +28,15 @@ import {
 import { dirname, extname, join, normalize } from "node:path";
 import {
   BUNDLED_ADB,
-  BUNDLED_IMG,
   BUNDLED_MITMDUMP,
   BUNDLED_PROD_CERT_DIR,
   CAPTURE_DIR,
   CAPTURE_OUT,
   DERIVED,
+  GAME_DIR,
+  SYNC_DIR,
+  IMG_CACHE_DIR,
+  REPO_SHA_STATE,
   REPO_ROOT,
   IS_DEV,
   STAT_LOCKS,
@@ -44,11 +47,8 @@ import { detectEmulators, pickEmulator, pickPort, preflight } from "./emulator-d
 import { dlog, dwarn } from "./log.js";
 import { proxyReco } from "./reco-proxy.js";
 import { syncGameData } from "./data-sync.js";
-
-/** Public outerpedia.com image base — used in prod only to short-circuit
- *  every `/img/*` request to the publicly hosted asset. Override at runtime
- *  via OUTERPEDIA_IMAGE_BASE when shipping a staging build. */
-const OUTERPEDIA_IMAGE_BASE = process.env.OUTERPEDIA_IMAGE_BASE ?? "https://outerpedia.com/images";
+import { serveImg } from "./img-cache.js";
+import { getCurrentRef } from "./repo-source.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -294,10 +294,10 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   if (url === "/api/capture/status" && req.method === "GET") {
     return captureStatus(res);
   }
-  // Manual "Sync game data" — copy raw tables from outerpedia + rebuild derived.
+  // Manual "Sync game data" — pull raw tables from the outerpedia repo + rebuild.
   if (url === "/api/data/sync" && req.method === "POST") {
     dlog("server", "manual data sync requested");
-    syncGameData({ repoRoot: REPO_ROOT, derivedDir: DERIVED, force: true })
+    syncGameData({ repoRoot: IS_DEV ? REPO_ROOT : process.resourcesPath, gameDir: GAME_DIR, syncDir: SYNC_DIR, derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
       .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
       .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
     return;
@@ -405,40 +405,19 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
-  // --- /img/* — bundled subset first, then 302 to outerpedia.com fallback ---
-  // The packaged build ships a curated tree (equipment / ui / characters
-  // faceicon|portrait|ee) so the inventory grid pulls icons off local disk
-  // instead of hammering outerpedia.com for every tile on every launch.
-  // Anything outside that subset (new gear added in a game patch, alt
-  // character art, …) falls through to the public CDN so we don't have to
-  // ship a new installer for every Outerplane content drop.
+  // --- /img/* — disk cache + GitHub CDN, shared with the Vite dev middleware.
+  // serveImg resolves: dev local checkout → disk cache → CDN (jsDelivr/raw) +
+  // cache → webp fallback → 302 outerpedia.com last resort. Pinned to the same
+  // repo SHA the game data was built from so icons match the data snapshot. ---
   if (url.startsWith("/img/")) {
-    if (IS_DEV) {
-      const local = findOuterpediaImagesDev();
-      if (local && tryMount(req, res, url, "/img/", local, "long")) return;
-      // fall through to 302 if the local checkout isn't there
-    } else if (existsSync(BUNDLED_IMG)) {
-      const rel = decodeURIComponent(url.slice("/img/".length));
-      const file = normalize(join(BUNDLED_IMG, rel));
-      if (file.startsWith(BUNDLED_IMG) && existsSync(file) && statSync(file).isFile()) {
-        serveStatic(req, res, file, "long");
-        return;
-      }
-      // file not bundled — fall through to outerpedia.com 302
-    }
-    const path = url.slice("/img/".length);
-    // The path is interpolated into a Location header — reject anything
-    // outside safe URL-path chars so a CR/LF or `:` can't inject a header or
-    // swing the redirect off `OUTERPEDIA_IMAGE_BASE` (response-splitting /
-    // open-redirect). Encoded image paths only ever use these chars.
-    if (!/^[\w./%-]*$/.test(path)) {
-      res.statusCode = 400;
-      res.end("bad image path");
-      return;
-    }
-    res.statusCode = 302;
-    res.setHeader("Location", `${OUTERPEDIA_IMAGE_BASE}/${path}`);
-    res.end();
+    void serveImg(req, res, url.slice("/img/".length), {
+      cacheDir: IMG_CACHE_DIR,
+      localCheckoutDir: IS_DEV ? findOuterpediaImagesDev() : null,
+      getRef: getCurrentRef,
+    }).catch((err: unknown) => {
+      dwarn("server", "serveImg failed:", err instanceof Error ? err.message : String(err));
+      if (!res.headersSent) { res.statusCode = 500; res.end("image error"); }
+    });
     return;
   }
 

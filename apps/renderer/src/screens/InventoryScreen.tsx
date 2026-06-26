@@ -329,7 +329,7 @@ function FilterButton({
       title="Filters"
       className="relative inline-flex h-9 items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 text-[12px] font-medium text-white transition-colors hover:bg-white/6"
     >
-      <img src="/img/ui/inven/CM_Btn_Filter.png" alt="" className="h-5 w-5" />
+      <img src="/img/ui/inven/CM_Btn_Filter.webp" alt="" className="h-5 w-5" />
       Filter
       {count > 0 && (
         <span className="grid h-4 min-w-4 place-items-center rounded-full bg-cyan-500/30 px-1 font-mono text-[10px] font-bold text-cyan-100">
@@ -404,7 +404,7 @@ function FilterModal({
             always one glance away, no scrolling. */}
         <div className="flex items-center gap-4 border-b border-white/8 px-4 py-3">
           <div className="flex items-center gap-2">
-            <img src="/img/ui/inven/CM_Btn_Filter.png" alt="" className="h-5 w-5" />
+            <img src="/img/ui/inven/CM_Btn_Filter.webp" alt="" className="h-5 w-5" />
             <span className="text-[13px] font-semibold text-white">Filters</span>
           </div>
           <div className="ml-8 flex flex-1 items-center gap-4">
@@ -678,7 +678,7 @@ interface GearItemProps {
  *                 character portrait — too noisy at this density).
  *    - bottom-left, above the EquipmentIcon's own T<n> tier badge: the
  *                 in-game CT_Slot_Lock sprite, sourced from outerpedia-v2's
- *                 datamine and served at /img/ui/inven/CT_Slot_Lock.png.
+ *                 datamine and served at /img/ui/inven/CT_Slot_Lock.webp.
  *  Selection is conveyed by a soft cyan halo (ring + outer glow) rather
  *  than a hard border so the focus reads as ambient light, not a frame. */
 const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect }: GearItemProps) {
@@ -721,7 +721,7 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect 
           tiny corner indicator. */}
       {piece.locked && (
         <img
-          src="/img/ui/inven/CT_Slot_Lock.png"
+          src="/img/ui/inven/CT_Slot_Lock.webp"
           alt="Locked"
           className="pointer-events-none absolute left-2.5 bottom-10.5 h-4.5 w-4.5"
         />
@@ -1180,7 +1180,7 @@ function ItemDetail({
         <div className="flex items-center gap-1.5">
           {piece.locked && (
             <img
-              src="/img/ui/inven/CT_Slot_Lock.png"
+              src="/img/ui/inven/CT_Slot_Lock.webp"
               alt="Locked"
               title="Locked in-game"
               className="h-4 w-4 shrink-0"

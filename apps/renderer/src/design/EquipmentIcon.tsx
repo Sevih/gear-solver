@@ -47,7 +47,7 @@ export function SlotIcon({
   if (!meta) return null;
   return (
     <img
-      src={`/img/ui/inven/${meta.icon}.png`}
+      src={`/img/ui/inven/${meta.icon}.webp`}
       alt=""
       className={cx("shrink-0 object-contain", className)}
       style={{ width: size, height: size }}

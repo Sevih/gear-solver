@@ -6,6 +6,9 @@ build/
 *.tsbuildinfo
 coverage/
 
+# synced asset/data cache (images + game data pulled from the outerpedia repo)
+.cache/
+
 # Electron desktop — packaged builds + downloaded bundled binaries (mitmdump,
 # adb, …) + the prod-only mitmproxy CA (private key inside, NEVER commit).
 # Both bin/ and prod-cert/ are reproducible from scripts/fetch-binaries.mjs.

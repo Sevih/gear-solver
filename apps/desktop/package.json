@@ -52,6 +52,14 @@
         "to": "data/derived"
       },
       {
+        "from": "../../data/build.mjs",
+        "to": "data/build.mjs"
+      },
+      {
+        "from": "../../data/calc-stats.mjs",
+        "to": "data/calc-stats.mjs"
+      },
+      {
         "from": "../renderer/dist",
         "to": "renderer/dist"
       },
@@ -84,26 +92,6 @@
         "filter": [
           "**/*"
         ]
-      },
-      {
-        "from": "../../../outerpedia-v2/public/images/equipment",
-        "to": "img/equipment"
-      },
-      {
-        "from": "../../../outerpedia-v2/public/images/ui",
-        "to": "img/ui"
-      },
-      {
-        "from": "../../../outerpedia-v2/public/images/characters/faceicon",
-        "to": "img/characters/faceicon"
-      },
-      {
-        "from": "../../../outerpedia-v2/public/images/characters/portrait",
-        "to": "img/characters/portrait"
-      },
-      {
-        "from": "../../../outerpedia-v2/public/images/characters/ee",
-        "to": "img/characters/ee"
       }
     ],
     "win": {
