@@ -198,7 +198,6 @@ function MIcon({ children }: { children: React.ReactNode }) {
 }
 const IC_ELEMENT = <MIcon><path d="M12 3c.6 3.2 3.5 4.4 3.5 7.5a3.5 3.5 0 0 1-7 0c0-1.3.5-2.3 1.3-3.2" /></MIcon>;
 const IC_CLASS = <MIcon><path d="M12 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6z" /></MIcon>;
-const IC_RARITY = <MIcon><path d="M12 3.5l2.5 5.3 5.5.6-4 3.8 1 5.6-5-2.8-5 2.8 1-5.6-4-3.8 5.5-.6z" /></MIcon>;
 const IC_SLOT = <MIcon><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 12h16M12 4v16" /></MIcon>;
 const IC_SETS = <MIcon><path d="M12 3 3 8l9 5 9-5z" /><path d="M3 13l9 5 9-5" /></MIcon>;
 
@@ -446,7 +445,21 @@ export function HomeScreen({
               <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
                 <div className="flex flex-col gap-1">
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Heroes owned</span>
-                  <Num className="text-[28px] font-bold" color="#fbbf24">{stats.heroes.toLocaleString()}</Num>
+                  <div className="flex items-end gap-2">
+                    <Num className="text-[28px] font-bold leading-none" color="#fbbf24">{stats.heroes.toLocaleString()}</Num>
+                    {stats.stars.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pb-0.5">
+                        {stats.stars.map((r) => (
+                          <span key={r.star} className="flex items-center gap-0.5" title={`${r.count} × ${r.star}★`}>
+                            {Array.from({ length: r.star }).map((_, i) => (
+                              <img key={i} src="/img/ui/star/CM_icon_star_y.webp" alt="" className="h-2.5 w-2.5" />
+                            ))}
+                            <Num className="text-[10px] font-semibold text-zinc-300">{r.count}</Num>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Gear pieces</span>
@@ -528,8 +541,9 @@ export function HomeScreen({
             </div>
           </Card>
 
-          {/* breakdown row — roster + gear */}
-          <div className="flex items-stretch gap-3.5">
+          {/* breakdown row — roster + gear. items-start so each card keeps its
+              natural height (no forced-stretch empty space under Gear). */}
+          <div className="flex items-start gap-3.5">
             {/* roster */}
             <Card className="flex min-w-0 flex-1 flex-col gap-3.5">
               <SectionLabel icon={IC_ROSTER} tint="#c4b5fd" right={<Num className="text-[10px] text-zinc-400">{stats.heroes.toLocaleString()} heroes</Num>}>Roster</SectionLabel>
@@ -545,23 +559,6 @@ export function HomeScreen({
                   <BarRow key={c.label} label={c.label} labelW={50} count={c.count} w={c.w} color="#6b7280" iconSrc={`/img/ui/class/CM_Class_${c.label}.webp`} />
                 ))}
               </div>
-              {stats.stars.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <SubLabel icon={IC_RARITY}>By rarity</SubLabel>
-                  <div className="flex gap-2">
-                    {stats.stars.map((r) => (
-                      <div key={r.star} className="flex flex-1 flex-col items-center gap-1 rounded-lg border border-white/6 bg-white/3 px-1 py-2">
-                        <span className="flex items-center gap-0.5">
-                          {Array.from({ length: r.star }).map((_, i) => (
-                            <img key={i} src="/img/ui/star/CM_icon_star_y.webp" alt="" className="h-3 w-3" />
-                          ))}
-                        </span>
-                        <Num className="text-[16px] font-bold text-zinc-200">{r.count}</Num>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </Card>
 
             {/* gear breakdown */}
@@ -599,7 +596,7 @@ export function HomeScreen({
                   )}
                 </div>
               </div>
-              <div className="mt-auto flex gap-2">
+              <div className="flex gap-2">
                 <Stat label="Ascended" value={stats.ascended} gradient />
                 <Stat label="+15 maxed" value={stats.maxed} />
                 <Stat label="Locked" value={stats.locked} />
