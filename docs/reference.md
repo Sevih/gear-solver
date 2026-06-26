@@ -487,12 +487,12 @@ fetch runtime côté renderer). Rafraîchies **au lancement** par `data-sync.ts`
 `build.mjs` lit ses dirs via env (`OUTERPEDIA_GAME_DIR` / `OUTERPEDIA_SYNC_DIR`
 / `OUTERPEDIA_DERIVED_DIR`) — défauts = `data/game` + `data/derived` + checkout.
 
-`sub-ticks.json` (dérivé) : valeurs par tick des subs par étoile (5★/6★) — ATK/DEF/HP
-flat+% **plus** CHC/CHD/DMG UP% — extraites de `subStatPools` (outerpedia
-`data/equipment/item-stats-detail.json` — les **subs**, à ne pas confondre avec les
-mains de `statRanges.json`). Alimente deux encadrés Builder : "Sub tick value"
-(rentabilité flat vs %, `lib/subValue.ts`) et "Damage / tick" (gain de dégâts marginal
-par sub offensif via `computeCheapRatings`, `lib/dmgValue.ts`).
+`sub-ticks.json` (dérivé) : valeurs par tick des subs ATK/DEF/HP flat+% par étoile
+(5★/6★), extraites de `subStatPools` (outerpedia `data/equipment/item-stats-detail.json`
+— les **subs**, à ne pas confondre avec les mains de `statRanges.json`). Alimente
+l'encadré Builder "Sub tick value" (rentabilité flat vs %, `lib/subValue.ts`). Le 2ᵉ
+encadré "Damage / +1%" (`lib/dmgValue.ts`) compare le gain de dégâts de +1% des stats
+de scaling/CHD/DMG inc via `computeCheapRatings` (modèle dégâts RE binaire 1.4.9).
 
 **Tables critiques pour la math** :
 - `CharacterTemplet.json` — base stats, skill blocks, class passive

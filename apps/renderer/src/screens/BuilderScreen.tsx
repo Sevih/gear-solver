@@ -78,12 +78,12 @@ interface SelectedComposition {
    *  tick scales against (gear-independent). Powers the flat-vs-% panel. */
   baseFlat: { atk: number; def: number; hp: number };
   /** Hero's damage-scaling stat (ATK default; DEF/HP exceptions) + secondary
-   *  additive scalings — fed to `computeCheapRatings` for the dmg-per-tick panel. */
+   *  additive scalings — fed to `computeCheapRatings` for the damage panel. */
   dmgStat: "atk" | "def" | "hp";
   dmgSec?: Array<{ stat: "atk" | "def" | "hp"; ratio: number }>;
-  /** (1 + buffRate) amplifier on the dmg stat's gear contributions: a %dmg-stat
-   *  tick raises the final stat by `base × pct% × dmgAmp`. */
-  dmgAmp: number;
+  /** Per-stat (1 + buffRate) amplifier: a +1% sub on a scaling stat raises the
+   *  final stat by `base × 1% × dmgAmp[stat]`. */
+  dmgAmp: { atk: number; def: number; hp: number };
 }
 
 /** Hero display name aligned with the Builds tab: "Nickname Name" when the
@@ -853,7 +853,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const sumFlat = (s: { baseValue: number; evoValue: number; awakValue: number }) => s.baseValue + s.evoValue + s.awakValue;
     const baseFlat = { atk: sumFlat(composed.scaling.atk), def: sumFlat(composed.scaling.def), hp: sumFlat(composed.scaling.hp) };
     const dmgStat = meta.dmgStat ?? "atk";
-    const dmgAmp = 1 + (composed.scaling[dmgStat]?.buffPct ?? 0) / 100;
+    const amp = (k: "atk" | "def" | "hp") => 1 + (composed.scaling[k]?.buffPct ?? 0) / 100;
+    const dmgAmp = { atk: amp("atk"), def: amp("def"), hp: amp("hp") };
     return { current, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp };
   }, [inventory, game, selected, userGeasLevels, userCodexLevel]);
 
@@ -941,7 +942,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
             width="w-full"
           />
           <SubValuePanel baseFlat={composition?.baseFlat ?? null} subTicks={game?.subTicks} width="w-full" />
-          <DmgPerTickPanel comp={composition ?? null} subTicks={game?.subTicks} width="w-full" />
+          <DmgPer1PctPanel comp={composition ?? null} width="w-full" />
           <RightSidebar
             canSave={selectedBuild != null}
             canSavePreset={selectedUid != null}
@@ -1836,48 +1837,47 @@ function SubValuePanel({ baseFlat, subTicks, width = "w-full" }: {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Damage / tick — which offensive sub tick adds the most expected damage
+ * Damage / +1% — expected-damage gain from +1% of each relevant stat
  * ───────────────────────────────────────────────────────────────────────── */
-const DMG_TICK_ICON: Record<string, { iconKey: string; label: string }> = {
-  atk: { iconKey: "atk", label: "ATK%" },
-  def: { iconKey: "def", label: "DEF%" },
-  hp: { iconKey: "hp", label: "HP%" },
-  crc: { iconKey: "critRate", label: "CHC" },
+const DMG_STAT_ICON: Record<string, { iconKey: string; label: string }> = {
+  atk: { iconKey: "atk", label: "ATK" },
+  def: { iconKey: "def", label: "DEF" },
+  hp: { iconKey: "hp", label: "HP" },
   chd: { iconKey: "critDmg", label: "CHD" },
   dmgUp: { iconKey: "dmgUp", label: "DMG UP%" },
 };
 
-/** Marginal expected-damage gain per 6★ offensive sub tick for the picked hero
- *  (dmg stat % vs CHC vs CHD vs DMG UP), ranked, best in cyan. Reuses the
- *  validated `computeCheapRatings` model — so e.g. a crit-capped hero correctly
- *  shows ~0% for CHC. The dmg-stat %-tick raises the final stat by
- *  base × pct% × (1+buffRate); CHC/CHD/DMG-UP are additive (+tick). */
-function DmgPerTickPanel({ comp, subTicks, width = "w-full" }: {
+/** Expected-damage gain from **+1%** of each relevant stat for the picked hero:
+ *  the hero's scaling stat(s) (ATK / DEF / HP per `dmgStat` + `dmgSec`) vs CHD vs
+ *  DMG inc, ranked, best in cyan. A "1%" of a scaling stat = a 1% sub →
+ *  `base × 1% × (1+buffRate)` added to the final; CHD / DMG-UP are additive (+1).
+ *  Reuses the validated `computeCheapRatings` model so crit interactions
+ *  (e.g. CHD worth less below the crit cap) fall out correctly. */
+function DmgPer1PctPanel({ comp, width = "w-full" }: {
   comp: SelectedComposition | null;
-  subTicks: GameData["subTicks"] | undefined;
   width?: string;
 }) {
-  const tier = subTicks?.["6"];
-  if (!comp || !tier) return null;
+  if (!comp) return null;
   const { current, baseFlat, dmgStat, dmgSec, dmgAmp } = comp;
-  const dmgPct = tier[`${dmgStat}Pct`];
-  const candidates: DmgTickCandidate[] = [];
-  if (dmgPct) candidates.push({ key: dmgStat, label: DMG_TICK_ICON[dmgStat]!.label, field: dmgStat, delta: (baseFlat[dmgStat] * dmgPct.step) / 100 * dmgAmp });
-  if (tier.crc) candidates.push({ key: "crc", label: "CHC", field: "crc", delta: tier.crc.step });
-  if (tier.chd) candidates.push({ key: "chd", label: "CHD", field: "chd", delta: tier.chd.step });
-  if (tier.dmgUp) candidates.push({ key: "dmgUp", label: "DMG UP%", field: "dmgUp", delta: tier.dmgUp.step });
+  // Scaling stats = main dmg stat + any additive secondary stats (deduped).
+  const scalingStats = Array.from(new Set<"atk" | "def" | "hp">([dmgStat, ...(dmgSec?.map((s) => s.stat) ?? [])]));
+  const candidates: DmgTickCandidate[] = scalingStats.map((s) => ({
+    key: s, label: DMG_STAT_ICON[s]!.label, field: s, delta: (baseFlat[s] * dmgAmp[s]) / 100, // 1% sub of that stat
+  }));
+  candidates.push({ key: "chd", label: "CHD", field: "chd", delta: 1 });
+  candidates.push({ key: "dmgUp", label: "DMG UP%", field: "dmgUp", delta: 1 });
   const gains = dmgTickGains(current, dmgStat, dmgSec, candidates);
   if (gains.length === 0) return null;
   const bestKey = gains[0]!.gainPct > 0 ? gains[0]!.key : null;
   return (
     <Panel
-      title="Damage / tick"
-      hint="Expected-damage gain per 6★ offensive sub tick for this hero (in-game crit / DMG± / PEN model). Cyan = the most valuable offensive sub to roll. A CHC near 0% means the hero is already crit-capped."
+      title="Damage / +1%"
+      hint="Expected-damage gain from +1% of each stat for this hero — the hero's scaling stat(s), CHD and DMG inc. For a scaling stat, +1% = a 1% sub (base × 1%, through the hero's multipliers); CHD / DMG inc = +1 point. Cyan = where 1% buys the most damage. Uses the in-game crit / DMG± / PEN model."
       width={width}
     >
       <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">
         {gains.map((g) => {
-          const icon = DMG_TICK_ICON[g.key]!;
+          const icon = DMG_STAT_ICON[g.key]!;
           const best = g.key === bestKey;
           return (
             <Fragment key={g.key}>

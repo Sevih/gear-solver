@@ -70,12 +70,13 @@
       le `(1+buffRate)` s'annule) → verdict = fonction de la base seule. Valeurs par tick = `subStatPools`
       d'outerpedia (`item-stats-detail.json`) → dérivé `sub-ticks.json` ; logique pure `lib/subValue.ts` (+5 tests).
       6★ : ATK 40/4% · DEF 40/4% · HP 73/3% (bascule vers % au-dessus de base 1000 / 1000 / 2433).
-- [x] 🟢 **Rentabilité dégâts par tick (subs offensifs)** — 2ᵉ encadré **"Damage / tick"** : gain de dégâts
-      attendu par tick de sub 6★ pour le héros — stat de dégât % (ATK/DEF/HP selon `dmgStat`) vs **CHC** vs
-      **CHD** vs **DMG UP%**, classé, meilleur en cyan (CHC ≈ 0 % si crit-cap). Réutilise le modèle de dégâts
-      validé `computeCheapRatings` (crit/DMG±/PEN, formules 1.4.9) : on bump une stat d'un tick et on recompare
-      `.dmg`. Le tick % de la stat de dégât monte le final de `base × pct% × (1+buffRate)` ; CHC/CHD/DMG UP
-      sont additifs. Ticks 6★ : CHC 3 % · CHD 4 % · DMG UP 2 %. Logique pure `lib/dmgValue.ts` (+4 tests).
+- [x] 🟢 **Rentabilité dégâts par +1% (subs offensifs)** — 2ᵉ encadré **"Damage / +1%"** : gain de dégâts
+      attendu pour **+1%** de chaque stat pertinente (unité uniforme, pas le tick) — la/les **stat(s) de scaling
+      du héros** (ATK/DEF/HP selon `dmgStat` + secondaires `dmgSec`) vs **CHD** vs **DMG inc**, classé, meilleur
+      en cyan. Pour une stat de scaling, +1% = un sub 1% → `base × 1% × (1+buffRate)` (amplificateur par stat
+      depuis `scaling.buffPct`) ; CHD/DMG inc = +1 point. Réutilise le modèle validé `computeCheapRatings`
+      (crit/DMG±/PEN, formules 1.4.9) : bump +1% et recompare `.dmg`. Logique pure `lib/dmgValue.ts` (+4 tests).
+      Ex. gros attaquant : 1% ATK ≻ DMG inc ≻ CHD ; support à faible base : DMG inc ≻ ATK.
 
 ### À vérifier EN JEU
 - [ ] **Cap de Quality ne scale pas avec les étoiles** — `computeQuality` fixe `max = 14 + reforge.n`
