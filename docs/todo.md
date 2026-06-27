@@ -61,7 +61,8 @@
       le cache à la demande + préfetch `ui/`+`equipment/`. Vérifier `/img/*` ne tape jsDelivr/raw que sur
       miss (127.0.0.1 ensuite, 302 outerpedia.com seulement si CDN down) · 2e lancement SHA inchangé =
       instantané · simuler un patch (`OUTERPEDIA_REF` autre branche) · offline cold-cache = pas de crash.
-
+- [ ] **Support Mobile et emulateur** faire en sorte de pouvoir recuperer les datas peux importe l'
+      emulateur ou le mobile
 ---
 
 > ✅ **À NE PAS toucher (Inventory)** : virtualisation par lignes + reflow `ResizeObserver`, indexation

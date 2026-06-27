@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, RolledStat, StatScaling } from "@gear-solver/core";
-import { allocateComboBudget, cpStatWeights, keepTopN, keepTopPct } from "../src/lib/solver/engine.js";
+import { allocateComboBudget, cpStatWeights, keepTopN, keepTopPct, magnitudeScoreOf, priorityScoreOf } from "../src/lib/solver/engine.js";
 import { computeFinalStats, type FinalStats, type FinalStatsBaseline, type ScalingMap } from "../src/lib/composeBuild.js";
 import { makeCpEvaluator } from "../src/lib/solver/cp.js";
 
@@ -105,6 +105,43 @@ describe("keepTopN", () => {
     // keep top 1 → "9"; "1" is pinned (the hero's current piece) and survives.
     const out = keepTopN([piece("1"), piece("9"), piece("5")], score, 1, NO_REQ, new Set(["1"]));
     expect(out.map((p) => p.uid).sort()).toEqual(["1", "9"]);
+  });
+});
+
+const condMain = (stat: string, value: number, combatOnly: boolean): RolledStat =>
+  ({ stat, value, percent: false, ticks: 1, combatOnly } as unknown as RolledStat);
+
+describe("priorityScoreOf (the priority auto-prune scorer)", () => {
+  it("scores a piece by its priority-weighted rolls; off-priority rolls add 0", () => {
+    const score = priorityScoreOf({ atk: 10 });
+    const atkPiece = piece("a", { subs: [flatSub("atk", 300)] });
+    const defPiece = piece("d", { subs: [flatSub("def", 300)] });
+    expect(score(atkPiece)).toBeGreaterThan(0);
+    expect(score(defPiece)).toBe(0); // def carries no priority weight
+    expect(score(atkPiece)).toBeGreaterThan(score(defPiece));
+  });
+
+  it("skips combat-only main options (conditional +15 stats aren't on the sheet)", () => {
+    const score = priorityScoreOf({ atk: 10 });
+    const base = piece("m", { subs: [flatSub("atk", 300)] });
+    const withCond = { ...base, main: [condMain("atk", 1000, true)] } as GearPiece;
+    const withReal = { ...base, main: [condMain("atk", 1000, false)] } as GearPiece;
+    expect(score(withCond)).toBeLessThan(score(withReal)); // the real main counts, the cond one doesn't
+    expect(score(withCond)).toBe(score(base)); // cond main contributes nothing
+  });
+});
+
+describe("magnitudeScoreOf (Score-without-priority bound)", () => {
+  it("sums normalized roll magnitude regardless of priority; empty scores 0", () => {
+    const full = piece("f", { subs: [flatSub("atk", 300), flatSub("def", 300)] });
+    const lean = piece("l", { subs: [flatSub("atk", 300)] });
+    expect(magnitudeScoreOf(piece("e", { subs: [] }))).toBe(0);
+    expect(magnitudeScoreOf(full)).toBeGreaterThan(magnitudeScoreOf(lean));
+  });
+
+  it("skips combat-only main options like the priority scorer", () => {
+    const withCond = { ...piece("c", { subs: [] }), main: [condMain("atk", 1000, true)] } as GearPiece;
+    expect(magnitudeScoreOf(withCond)).toBe(0);
   });
 });
 

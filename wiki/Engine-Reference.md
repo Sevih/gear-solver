@@ -420,24 +420,30 @@ in the hot loop.
 - **Any mode** + non-empty priority → `priority × value / norm`
   for both modes (the user priority dominates, the CP flag is ignored).
 
-### 2.8 Top-% prune (`engine.ts::topPctPrune`)
+### 2.8 Combo-budget prune (`engine.ts`, inside `precomputeContext`)
 
-Heuristic to shrink the search space. For each slot:
-1. Score each piece in isolation (same ROLL_NORMS as above).
-2. Sort desc.
-3. Keep the first `⌈N × topPct / 100⌉`.
+Heuristic to bound the search space. **Crucial**: a *percentage* prune per slot
+does NOT bound the product (30% of seven ~40-50 pools is still ~7e8 combos —
+measured: 703M / 142s in Score mode with a priority set). So we use an **absolute
+combo budget**: `allocateComboBudget` water-fills per-slot keep-counts so
+`∏ keep ≤ COMBO_BUDGET × topPct/30` (small slots kept whole, the surplus flowing to
+the big armor slots). The Top% slider scales the budget; at 100% it short-circuits
+to exhaustive.
 
-Automatically disabled when `priority` is empty (arbitrary ranking → keep
-everything). If active with topPct=30 on 7 slots of 150 pieces each:
-`150^7 ≈ 10^15` → `45^7 ≈ 10^11` permutations (10⁴× reduction).
+The budget applies to **every** branch; only the per-slot **ranking** differs (a
+`scoreOf` passed to `keepTopN`):
+1. **explicit priority** (Score or CP) → `priorityScoreOf`: `Σ priority × value /
+   ROLL_NORMS` over the non-combat-only rolls.
+2. **CP, no priority** → CP proxy (`cpEval` of the piece in the current build) +
+   **pin** the equipped piece (the solve can never return a CP below the equipped one).
+3. **Score, no priority** → `magnitudeScoreOf` (raw roll magnitude): no objective,
+   but the product still has to be bounded.
 
-**Required-set protection** (`topPctPrunePreserving`): pieces belonging to a
-`req-2pc` or `req-4pc` set always survive, even if their priority score would
-not rank them in the top-%. Without this guard, a low-priority piece that is a
-member of a required set would be eliminated from the pool → `checkSetsFeasible`
-would silently kill every combo and the user would see "no builds" without a
-clue. The protected pieces add to the top-% (dedup by UID), so the effective
-pool can slightly exceed `⌈N × pct/100⌉` — intentional.
+**Required-set protection** + **pin**: `keepTopN` always re-adds pieces belonging to
+a `req-2pc`/`req-4pc` set (and pinned UIDs), even outside the budget. Without it, a
+low-score member of a required set would be eliminated → `checkSetsFeasible` would
+silently kill every combo ("no builds" without a clue). The effective pool can thus
+slightly exceed the budget share — intentional.
 
 ### 2.9 Reforge simulation (`engine.ts::simulateReforges`)
 

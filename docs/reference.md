@@ -419,25 +419,30 @@ appels `resolveStat` dans le hot loop.
 - **N'importe quel mode** + priority non-vide → `priority × value / norm`
   pour les deux modes (la priorité utilisateur domine, le flag CP est ignoré).
 
-### 2.8 Top-% prune (`engine.ts::topPctPrune`)
+### 2.8 Prune par budget de combos (`engine.ts`, dans `precomputeContext`)
 
-Heuristique pour réduire la search space. Pour chaque slot :
-1. Score chaque pièce isolément (mêmes ROLL_NORMS qu'au-dessus).
-2. Trie desc.
-3. Garde les `⌈N × topPct / 100⌉` premières.
+Heuristique pour borner la search space. **Crucial** : un prune *en pourcentage*
+par slot ne borne PAS le produit (30 % de sept pools ~40-50 = encore ~7e8 combos,
+mesuré : 703 M / 142 s en mode Score avec priorité). On utilise donc un **budget
+de combos absolu** : `allocateComboBudget` water-fill les keep-counts par slot pour
+que `∏ keep ≤ COMBO_BUDGET × topPct/30` (petits slots gardés entiers, le surplus
+coule vers les gros slots d'armure). Le slider Top% scale le budget ; à 100 % on
+court-circuite vers exhaustif.
 
-Désactivé automatiquement quand `priority` est vide (rang arbitraire → on
-garde tout). Si actif avec topPct=30 sur 7 slots de 150 pièces chacun :
-`150^7 ≈ 10^15` → `45^7 ≈ 10^11` permutations (réduction 10⁴×).
+Le budget s'applique à **toutes** les branches ; seul le **classement par slot**
+diffère (un `scoreOf` passé à `keepTopN`) :
+1. **priorité explicite** (Score ou CP) → `priorityScoreOf` : `Σ priority × value /
+   ROLL_NORMS` sur les rolls non combat-only.
+2. **CP sans priorité** → proxy CP (`cpEval` de la pièce dans le build courant) +
+   **pin** de la pièce équipée (le solve ne peut jamais rendre un CP < l'équipé).
+3. **Score sans priorité** → `magnitudeScoreOf` (magnitude brute des rolls) : pas
+   d'objectif, mais le produit doit rester borné.
 
-**Protection des sets requis** (`topPctPrunePreserving`) : les pièces
-appartenant à un set `req-2pc` ou `req-4pc` survivent toujours, même si
-leur score de priorité ne les classerait pas dans le top-%. Sans cette
-garde, une pièce low-priority membre d'un set requis serait éliminée du
-pool → `checkSetsFeasible` tuerait silencieusement chaque combo et
-l'utilisateur verrait "no builds" sans indice. Les pièces protégées
-s'ajoutent au top-% (déduplication par UID), donc le pool effectif peut
-légèrement dépasser `⌈N × pct/100⌉` — intentionnel.
+**Protection des sets requis** + **pin** : `keepTopN` rajoute toujours les pièces
+membres d'un set `req-2pc`/`req-4pc` (et les UID pinnés), même hors budget. Sans ça,
+une pièce low-score membre d'un set requis serait éliminée → `checkSetsFeasible`
+tuerait silencieusement chaque combo ("no builds" sans indice). Le pool effectif peut
+donc légèrement dépasser la part du budget — intentionnel.
 
 ### 2.9 Reforge simulation (`engine.ts::simulateReforges`)
 

@@ -69,6 +69,32 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — 🟠 budget combos unifié (Score AVEC priorité n'était PAS borné) + instrumentation
+
+**Le bug** (diagnostiqué via le nouveau « Copy Debug Info », cf. ci-dessous) : un solve **SOLVE (Score)
+avec priorité** sur un vrai compte = **703 836 000 combos / 142 s**. Le budget-combos absolu n'existait
+que pour le **mode CP sans priorité** ; toutes les autres branches passaient par `topPctPrunePreserving`,
+un prune **en pourcentage par slot** qui **ne borne pas le PRODUIT** (30 % de sept pools ~40-50 = encore
+~7e8 combos). Le ⏱ ne le montrait pas non plus (il démarrait au fan-out, masquant le precompute).
+
+**Le fix** — `precomputeContext` ([engine.ts](../apps/renderer/src/lib/solver/engine.ts)) : le prune Top% est
+**unifié sur `allocateComboBudget`** (`∏ keep ≤ COMBO_BUDGET × topPct/30`) pour **toutes** les branches ;
+seul le **classement par slot** diffère :
+- **priorité explicite** (Score ou CP) → `priorityScoreOf` (score par-roll pondéré, combat-only exclus) ;
+- **CP sans priorité** → proxy CP (`cpEval` sur le build courant) + pin de la pièce équipée (inchangé) ;
+- **Score sans priorité** → `magnitudeScoreOf` (magnitude brute des rolls) — pas d'objectif mais le produit
+  doit rester borné (sinon cartésien complet).
+
+`topPctPrune` / `topPctPrunePreserving` supprimés (morts) ; `CP_COMBO_BUDGET` → `COMBO_BUDGET` (général).
+La protection des sets requis + le pin passent par `keepTopN` pour les trois objectifs identiquement.
+**Effet attendu** : Score+priorité 142 s → ~1-2 s (budget 8 M @ Top% 30). +4 tests `cpPrune.test.ts`
+(`priorityScoreOf`/`magnitudeScoreOf` : pondération, exclusion combat-only, magnitude). 215 → **219**.
+
+**Instrumentation** (commit précédent, même session) : ⏱ honnête (démarre à l'entrée de `solve()`, inclut
+le precompute) + bouton **« Copy Debug Info »** dans le footer Builder (visible si `gs.debug.solver`),
+qui copie un snapshot JSON par solve : `precomputeMs` vs `searchMs`, mode, topPct, `hasPriority`,
+`equippedScope`, tailles de pools, P/S, détail par worker, et (CP) top-CP vs CP équipé (`debugCurCp`).
+
 ### Session 2026-06-27 — Builds advice : lot restant (1)/(2) + tolérance crit cap
 
 Trois affinages de `computeAdvice` (`lib/buildAdvice.ts`, module pur testé standalone) :

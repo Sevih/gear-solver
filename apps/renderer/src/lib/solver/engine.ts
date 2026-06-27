@@ -350,25 +350,44 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     chainPassive: req.userSkills.chainPassive,
   };
 
-  // Top-% per-slot prune. Needs a ranking signal:
-  //   - explicit substat priority  → rank by it (SOLVE or SOLVE CP);
-  //   - else SOLVE CP              → rank by a CP-weighted proxy (below);
-  //   - else SOLVE (Score) w/o priority → no signal, skip (every piece scores 0).
+  // Combo-budget per-slot prune (bounds ∏ poolSizes — see below). Needs a
+  // ranking signal per slot:
+  //   - explicit substat priority      → rank by it (SOLVE or SOLVE CP);
+  //   - else SOLVE CP                   → rank by a CP-weighted proxy;
+  //   - else SOLVE (Score) w/o priority → rank by raw roll magnitude (no
+  //     objective, but the product still has to be bounded).
   //
   // Required-set protection: pieces belonging to a `req-2pc` / `req-4pc`
   // set are never elided by the prune, regardless of score. Without this
   // guard, a low-scoring set member could be dropped and `checkSetsFeasible`
   // would silently return 0 results (the user sees "no builds" without a clue
-  // why). Protected pieces survive on top of the regular top-% slice, so the
-  // effective pool size may exceed ceil(N × pct/100) by their count.
+  // why). Protected pieces survive on top of the budget slice.
   const hasPriority = Object.values(filters.priority).some((v) => v !== 0);
   if (filters.topPct < 100) {
     const requiredSetIds = planSetIds(setPlans);
+    // Absolute combo budget — a per-slot PERCENTAGE never bounds the PRODUCT. 30%
+    // of seven ~40-50-piece pools is still ~7e8 combos (measured on a real
+    // account: 703M / 142s in Score mode with a priority set). `allocateComboBudget`
+    // water-fills per-slot keep-counts so ∏ keep ≤ budget (small slots kept whole,
+    // the surplus flowing to the big armor slots); the Top% slider scales the
+    // budget (30 = default target; 100 already short-circuited to exhaustive
+    // above). Applies to BOTH objectives — only the per-slot RANKING differs. Set
+    // members are preserved by `keepTopN` regardless of rank, else a low-ranked
+    // required-set piece could drop and `checkSetsFeasible` would silently return
+    // 0 builds.
+    const capSlots = (["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const)
+      .filter((s) => !lockedSlots.has(s));
+    const budget = COMBO_BUDGET * (filters.topPct / 30);
+    const keeps = allocateComboBudget(capSlots.map((s) => pools[s].length), budget);
     if (hasPriority) {
-      // User intent wins — rank each slot by the explicit priority.
-      for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const) {
-        pools[slot] = topPctPrunePreserving(pools[slot], filters.priority, filters.topPct, requiredSetIds);
-      }
+      // Explicit substat priority (SOLVE or SOLVE CP) — rank each slot by the
+      // per-roll priority score. The build score is largely additive over
+      // per-piece scores, so the highest-scoring pieces per slot make the best
+      // builds; the budget just drops the long tail of weak combos.
+      const scoreOf = priorityScoreOf(filters.priority);
+      capSlots.forEach((slot, i) => {
+        pools[slot] = keepTopN(pools[slot], scoreOf, keeps[i]!, requiredSetIds);
+      });
     } else if (req.mode === "cp") {
       // CP-weighted auto-prune — makes "max CP" tractable without a hand-tuned
       // priority (the default-Top% case the user actually hits). Rank each
@@ -377,34 +396,20 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       // that scales ATK is realistic instead of near-zero — a bare single-piece
       // baseline would under-rank ATK pieces. This is the soft, scalar form of
       // the dominance prune (rank by one CP number instead of requiring ≥ on
-      // every axis), and it's what collapses the cartesian on an unfiltered CP
-      // solve.
-      //
-      // Crucially we cap by an ABSOLUTE combo budget, not a fixed percentage: a
-      // percentage doesn't bound the PRODUCT — 30% of six ~150-piece pools is
-      // still ~10^10 combos (measured: 1.25e9 post-30%-prune on a real account).
-      // `allocateComboBudget` water-fills per-slot keep-counts so ∏ ≤ budget
-      // (small slots kept whole, the surplus flowing to the big armor slots).
-      // The Top% slider scales the budget (30 = default target; 100 already
-      // short-circuited to exhaustive above). Heuristic — set-coupled builds can
-      // be under-ranked (a piece is scored standalone, not for a set it'd help
-      // form with other candidates); raise Top% or require the set for those.
+      // every axis), and it collapses the cartesian on an unfiltered CP solve.
+      // Heuristic — set-coupled builds can be under-ranked (a piece is scored
+      // standalone, not for a set it'd help form); raise Top% or require the set.
       //
       // ooparts (Talisman) IS included: in CP mode every same-slot-count talisman
       // gets the SAME global gem delta, so they differ almost only by their main
       // (flat ATK) — the CP score ranks them by that and the dominated ones drop.
       // Without this the talisman pool (often 60-70) multiplied the whole
-      // cartesian (~68× → 230M combos / ~20s on a real account). EE is still
-      // exempt (single equippable piece, folded post-talisman). Locked slots too.
+      // cartesian. EE is still exempt (single equippable piece, folded post-talisman).
       const cpEval = makeCpEvaluator({
         showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused,
       });
       const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
       const ooEquipped = equipped.find((g) => g.slot === "ooparts") ?? null;
-      const capSlots = (["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const)
-        .filter((s) => !lockedSlots.has(s));
-      const budget = CP_COMBO_BUDGET * (filters.topPct / 30);
-      const keeps = allocateComboBudget(capSlots.map((s) => pools[s].length), budget);
       capSlots.forEach((slot, i) => {
         const others = equipped.filter((g) => g.slot !== slot);
         const scoreOf = (p: GearPiece): number =>
@@ -418,6 +423,16 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
         const cur = equipped.find((g) => g.slot === slot);
         const pin = cur ? new Set([cur.uid]) : undefined;
         pools[slot] = keepTopN(pools[slot], scoreOf, keeps[i]!, requiredSetIds, pin);
+      });
+    } else {
+      // SOLVE (Score) with NO priority — the score is uniformly 0, so there's no
+      // objective to rank by. We still must bound the product (leaving the pools
+      // full is the 7e8-combo cartesian that hangs), so keep the budget's share
+      // of the fullest-rolled pieces per slot (`magnitudeScoreOf`). Results are
+      // inherently arbitrary here (no priority = no objective); this only keeps
+      // the solve from hanging.
+      capSlots.forEach((slot, i) => {
+        pools[slot] = keepTopN(pools[slot], magnitudeScoreOf, keeps[i]!, requiredSetIds);
       });
     }
   }
@@ -655,49 +670,57 @@ export function simulateReforges(piece: GearPiece, priority: Record<string, numb
   return { ...piece, subs };
 }
 
-/** Score each piece in isolation, sort desc, keep the top `ceil(N × pct/100)`.
- *  Score = Σ over piece's rolls of `priority × (value / ROLL_NORMS)`.
- *  Normalization uses `ROLL_NORMS` (per-roll magnitude, e.g. flat atk≈300,
- *  atkPct≈40, crc≈20) NOT `STAT_NORMS` (endgame final magnitude). The two
- *  scoring contexts (per-roll vs final stat) have completely different
- *  scales — using STAT_NORMS here would rank percent rolls 100× too low.
- *
- *  Rolls carry engine keys (`atkPct`, `critRate`, …) while `priority` is
- *  keyed by user keys (`atk`, `crc`, …) — `STAT_TO_PRIORITY` bridges. */
-function topPctPrune(pieces: GearPiece[], priority: Record<string, number>, pct: number): GearPiece[] {
-  if (pieces.length === 0) return pieces;
-  const scored = pieces.map((p) => {
+/** Per-roll priority score for ONE piece: Σ over its rolls of
+ *  `priority[userKey] × value / ROLL_NORMS[engineKey]`. Combat-only main options
+ *  (conditional +15 singularity stats) are skipped — they're not on the sheet the
+ *  score targets. ROLL_NORMS (per-roll magnitude, e.g. flat atk≈300, atkPct≈40,
+ *  crc≈20) NOT STAT_NORMS (endgame final magnitude): the two scales differ ~100×,
+ *  so STAT_NORMS here would rank percent rolls 100× too low. Rolls carry engine
+ *  keys (`atkPct`, `critRate`, …) while `priority` is user-keyed (`atk`, `crc`, …)
+ *  — `STAT_TO_PRIORITY` bridges. Returns a closure so the combo-budget prune can
+ *  rank each slot's pool by one cheap pass. */
+export function priorityScoreOf(priority: Record<string, number>): (p: GearPiece) => number {
+  return (p) => {
     let s = 0;
     for (const r of p.subs) {
-      const pk = STAT_TO_PRIORITY[r.stat] ?? r.stat;
-      const w = priority[pk] ?? 0;
+      const w = priority[STAT_TO_PRIORITY[r.stat] ?? r.stat] ?? 0;
       if (w) s += w * r.value / (ROLL_NORMS[r.stat] ?? 100);
     }
     for (const r of p.main) {
       if (r.combatOnly) continue;
-      const pk = STAT_TO_PRIORITY[r.stat] ?? r.stat;
-      const w = priority[pk] ?? 0;
+      const w = priority[STAT_TO_PRIORITY[r.stat] ?? r.stat] ?? 0;
       if (w) s += w * r.value / (ROLL_NORMS[r.stat] ?? 100);
     }
-    return { p, s };
-  });
-  scored.sort((a, b) => b.s - a.s);
-  const keep = Math.max(1, Math.ceil(pieces.length * pct / 100));
-  return scored.slice(0, keep).map((e) => e.p);
+    return s;
+  };
 }
 
-/** Default combo budget for the CP-weighted auto-prune: the cartesian the solver
- *  is allowed to walk at the default Top% (30). At ~13M combos/s across a modern
- *  worker pool this finishes in ~1s; the Top% slider scales it linearly. */
-const CP_COMBO_BUDGET = 8_000_000;
+/** Priority-agnostic ranking proxy: total normalized roll magnitude of a piece
+ *  (Σ value / ROLL_NORMS over its non-combat rolls). Used ONLY to bound the
+ *  Score-mode-without-priority cartesian — there's no objective to optimize, so
+ *  we keep the fullest-rolled pieces per slot rather than leaving the pool
+ *  unbounded (which is the multi-hundred-million-combo hang). */
+export function magnitudeScoreOf(p: GearPiece): number {
+  let s = 0;
+  for (const r of p.subs) s += r.value / (ROLL_NORMS[r.stat] ?? 100);
+  for (const r of p.main) if (!r.combatOnly) s += r.value / (ROLL_NORMS[r.stat] ?? 100);
+  return s;
+}
+
+/** Default combo budget for the per-slot auto-prune: the cartesian the solver is
+ *  allowed to walk at the default Top% (30). At ~5-13M combos/s across a modern
+ *  worker pool (Score is heavier per combo than CP) this finishes in ~1-2s; the
+ *  Top% slider scales it linearly. Applies to every objective (priority / CP /
+ *  magnitude) — a per-slot percentage can't bound the product. */
+const COMBO_BUDGET = 8_000_000;
 
 /** Generic top-N selector: score every piece with `scoreOf`, keep the top `n`
  *  (clamped to [1, length]), then always re-add protected pieces — members of a
  *  required set (so the set stays feasible even if they score low) and any
  *  `pinUids` (the hero's currently-equipped piece, so the solver can always at
  *  least reproduce the current build → never returns a WORSE result than what's
- *  on the hero). Shared by the CP-weighted auto-prune; the priority prune keeps
- *  its own `topPctPrune` (per-roll normalized scoring). */
+ *  on the hero). Shared by every per-slot auto-prune objective (priority / CP /
+ *  magnitude scoreOf), so all three honor set protection + pinning identically. */
 export function keepTopN(
   pieces: GearPiece[],
   scoreOf: (p: GearPiece) => number,
@@ -782,32 +805,6 @@ export function allocateComboBudget(counts: number[], budget: number): number[] 
     slotsLeft--;
   }
   return keep;
-}
-
-/** Variant of `topPctPrune` that always keeps pieces belonging to a required
- *  set, even when their priority score doesn't make the top-%. Without this,
- *  a `req-4pc` set with low-priority-scoring members would be pruned out and
- *  `checkSetsFeasible` would silently kill every combo. The protected pieces
- *  are added on top of the regular top-% slice (deduped), so the kept pool
- *  may be slightly larger than `ceil(N × pct/100)`. */
-function topPctPrunePreserving(
-  pieces: GearPiece[],
-  priority: Record<string, number>,
-  pct: number,
-  requiredSetIds: Set<string>,
-): GearPiece[] {
-  if (pieces.length === 0 || requiredSetIds.size === 0) {
-    return topPctPrune(pieces, priority, pct);
-  }
-  const kept = topPctPrune(pieces, priority, pct);
-  const keptUids = new Set(kept.map((p) => p.uid));
-  for (const p of pieces) {
-    if (p.armorSetId && requiredSetIds.has(p.armorSetId) && !keptUids.has(p.uid)) {
-      kept.push(p);
-      keptUids.add(p.uid);
-    }
-  }
-  return kept;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

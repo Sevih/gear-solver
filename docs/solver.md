@@ -98,41 +98,44 @@ Le toggle **Allow broken sets** (cf. § Options) renverse ça : à *false*, les 
 doivent eux aussi former un set complet → la whitelist se restreint aux sets requis + *formables*
 (présents dans ≥2 slots armor) et un check leaf rejette les builds à singleton (cf. phase 4).
 
-### Phase 3 — Top-% prune (heuristique)
-Tourne dès que `topPct < 100`, avec **deux clés de ranking** selon le signal dispo :
-
-**a) Priorité explicite (SOLVE ou SOLVE CP)** — l'intention utilisateur gagne. Score chaque pièce par
-```
-score(piece) = Σ_rolls priority[user_key] × (value / STAT_NORMS[user_key])
-```
-**Normalisation cruciale** : sans elle, les pièces à grosse magnitude (HP +200)
-écrasent toujours les pièces crit (CHC +5) à priorité égale. Le mapping
-engine→user (`STAT_TO_PRIORITY` dans `ratings.ts`) garantit que `atkPct` rolls
-et `atk` flats partagent la même bucket priority `atk`.
-
-**b) SOLVE CP sans priorité (auto-prune CP-pondéré + budget combos)** — c'est le
-cas par défaut réel (« max CP » sans rien tuner). Chaque candidat est classé par
-**le CP qu'il donne s'il est posé dans le build actuel du héros** (`cpEval(
-computeFinalStats(baseline, scaling, [autres pièces équipées, candidat]))`) : le
-baseline = les pièces équipées des **autres** slots, donc la chaîne crit/pen/spd
-qui scale l'ATK est réaliste (un baseline mono-pièce sous-classerait l'ATK).
-C'est la **forme *soft* du dominance prune** (classer par un scalaire CP au lieu
-d'exiger ≥ sur tous les axes).
-
-**Cap par budget combos, pas par pourcentage** : un % ne borne pas le **produit**
-— 30 % de six pools de ~150 = encore ~`10^10` (mesuré : **1,25 G** post-prune-30 %
-sur un vrai compte). `allocateComboBudget` répartit (water-filling) un nombre de
-pièces à garder **par slot** pour que `∏ ≤ budget` (slots petits gardés entiers,
-le surplus va aux gros slots armor), puis `keepTopN` garde le top-K CP. Budget
-défaut `CP_COMBO_BUDGET = 8 M` (≈ 1 s de solve), **scalé par le slider Top%**
+### Phase 3 — Prune par budget de combos (heuristique)
+Tourne dès que `topPct < 100`. **Point clé** : le cap est un **budget de combos
+ABSOLU**, pas un pourcentage par slot — un % ne borne pas le **produit** (30 % de
+sept pools de ~40-50 = encore ~`7e8` ; mesuré : **703 M / 142 s** en mode Score
+avec priorité). `allocateComboBudget` répartit (water-filling) un nombre de pièces
+à garder **par slot** pour que `∏ keep ≤ budget` (slots petits gardés entiers, le
+surplus va aux gros slots armor). Budget défaut `COMBO_BUDGET = 8 M` (≈ 1-2 s de
+solve — Score est plus coûteux par combo que CP), **scalé par le slider Top%**
 (`budget = 8M × topPct/30` ; `topPct = 100` rebascule en exhaustif). Talisman/EE
-+ slots `keepCurrent` exemptés. Préservation des sets requis dans `keepTopN`.
-**Limite assumée** : une pièce est notée *standalone* — un membre qui ne brille
-qu'en complétant un set (formé avec d'autres candidats) peut être sous-classé ;
-monter le Top% ou exiger le set pour ces cas.
+inclus ; slots `keepCurrent` exemptés.
 
-**c) SOLVE (Score) sans priorité** — aucun signal (chaque pièce score 0), prune
-**sauté** : on garde tout (le ranking serait arbitraire).
+Le budget s'applique à **toutes** les branches ; seule la **clé de ranking par
+slot** (un `scoreOf` passé à `keepTopN`) diffère :
+
+**a) Priorité explicite (SOLVE ou SOLVE CP)** — `priorityScoreOf` :
+```
+score(piece) = Σ_rolls priority[user_key] × (value / ROLL_NORMS[engine_key])
+```
+**Normalisation cruciale** : `ROLL_NORMS` (magnitude *par-roll*) — pas `STAT_NORMS`
+(magnitude finale endgame) ; les deux échelles diffèrent ~100×. Sans elle, les
+rolls flat à grosse magnitude écrasent les rolls % à priorité égale. Le mapping
+engine→user (`STAT_TO_PRIORITY`) fait partager à `atkPct` et `atk` flat la même
+bucket priority `atk`. Les main-options *combat-only* (+15 singularité conditionnels)
+sont ignorées (pas sur la feuille de stats visée).
+
+**b) SOLVE CP sans priorité** — `cpEval` : chaque candidat classé par **le CP qu'il
+donne posé dans le build actuel du héros** (autres slots = pièces équipées), donc la
+chaîne crit/pen/spd qui scale l'ATK est réaliste. **Forme *soft* du dominance prune**.
+**Pin** de la pièce équipée → le solve ne rend jamais un CP < l'équipé. **Limite
+assumée** : pièce notée *standalone* → un membre qui ne brille qu'en complétant un
+set peut être sous-classé ; monter le Top% ou exiger le set.
+
+**c) SOLVE (Score) sans priorité** — `magnitudeScoreOf` (magnitude brute des rolls) :
+pas d'objectif (le score serait 0 partout), mais le produit **doit** rester borné
+(sinon cartésien complet) → on garde les pièces les mieux rollées par slot.
+
+Protection des sets requis (membres `req-2pc`/`req-4pc`) + pin : ré-ajoutés par
+`keepTopN` hors budget pour les trois clés identiquement.
 
 ### Phase 4 — Cartesian + set-prune
 Énumération nested loop : `weapon × helmet × armor × gloves × boots × accessory × ooparts`.
