@@ -69,6 +69,26 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — Builds advice : lot restant (1)/(2) + tolérance crit cap
+
+Trois affinages de `computeAdvice` (`lib/buildAdvice.ts`, module pur testé standalone) :
+
+- **(1) Bruit Missing supprimé sur persos WIP** — `Missing: …` ne sort plus que quand le héros est
+  **quasi-complet** (`≤ MISSING_ADVICE_MAX = 2` slots vides). Au-delà (banc / work-in-progress) la ligne
+  reste silencieuse — lister 4-5 slots vides est du bruit, pas un conseil actionnable. Le reste des règles
+  reste différé dès qu'une pièce manque (layout d'armure non figé).
+- **(2) Pièces sous le cap d'enhance** — nouvelle ligne agrégée `N pieces below max enhance` (tone `info`),
+  dans la boucle existante de la règle 6 (upgrade headroom). Cap = **+10** normal, **+15** une fois ascended
+  (miroir du contrat `GearPiece.enhanceLevel` 0..10/10..15). Gear principal seulement (gemmes exemptées).
+- **Tolérance crit cap (règle 4)** — le crit chance ne warn plus qu'au-delà de **102 %** (marge anti
+  crit-resist : on overcap volontairement 1-2 pts, donc 100-102 % n'est pas gaspillé). PEN reste à 100 %.
+  `capWaste` prend désormais le cap en paramètre ; le message reflète le seuil réel (`… over the 102% cap`).
+
+`buildAdvice.test.ts` 11 → **16 tests** (missing quasi-complet vs WIP silencieux, under-enhance agrégé +
+non-flag d'une pièce max, crit toléré à 101 / warn à 103.5). **Reste — (3) lot secondaire** (off-scaling
+main vs `meta.dmgStat`, basse qualité, « 4pc dispo en inventaire ») : différé, nécessite de threader
+`inventory.gear` + `meta.dmgStat` dans `AdviceInput`.
+
 ### Session 2026-06-27 — Home : vues Gear breakdown (Class / All sets / Talisman) + toggle
 
 La carte **Gear breakdown** (Home) gagne un **toggle** segmenté 4 vues (`gearView`) : **Overview** (inchangé :

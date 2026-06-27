@@ -32,12 +32,22 @@ describe("computeAdvice — rule 1 (missing / no gear)", () => {
     expect(computeAdvice(entry, null)).toEqual([]);
   });
 
-  it("flags missing main-gear slots and defers the other rules", () => {
-    const equipped = new Map<SlotId, unknown>([["weapon", true], ["helmet", true]]);
+  it("flags missing slots on a nearly-complete hero and defers the other rules", () => {
+    // Only Gloves + Boots missing (≤ MISSING_ADVICE_MAX) → actionable nudge.
+    const equipped = new Map<SlotId, unknown>(
+      ["weapon", "accessory", "helmet", "armor"].map((s) => [s as SlotId, true]),
+    );
     // crc over cap would normally warn, but rule 1 returns early.
     const out = computeAdvice({ equipped, rawPieces: [], stats: { crc: 130 } as never }, null);
     expect(out).toHaveLength(1);
-    expect(out[0]).toEqual({ tone: "warn", text: "Missing: Accessory, Armor, Gloves, Boots" });
+    expect(out[0]).toEqual({ tone: "warn", text: "Missing: Gloves, Boots" });
+  });
+
+  it("stays silent when a hero is missing more than MISSING_ADVICE_MAX slots (WIP/bench)", () => {
+    // Only weapon + helmet equipped → 4 gaps → no Missing noise, no other advice.
+    const equipped = new Map<SlotId, unknown>([["weapon", true], ["helmet", true]]);
+    const out = computeAdvice({ equipped, rawPieces: [], stats: { crc: 130 } as never }, null);
+    expect(out).toEqual([]);
   });
 });
 
@@ -62,14 +72,24 @@ describe("computeAdvice — rules 2/3 (set composition)", () => {
 });
 
 describe("computeAdvice — rule 4 (wasted caps)", () => {
-  it("flags CRC and PEN over the 100% cap with the rounded waste", () => {
+  it("flags CRC past the 102% tolerance and PEN past 100% with the rounded waste", () => {
     const out = computeAdvice(fullEntry([], { crc: 112.5, pen: 104 } as never), null);
-    expect(out).toContainEqual({ tone: "warn", text: "Crit rate 112.5% — 12.5% wasted over the 100% cap" });
+    expect(out).toContainEqual({ tone: "warn", text: "Crit rate 112.5% — 10.5% wasted over the 102% cap" });
     expect(out).toContainEqual({ tone: "warn", text: "Penetration 104% — 4% wasted over the 100% cap" });
   });
 
-  it("does not warn at or a hair over the cap (rounded waste must be > 0)", () => {
-    const out = computeAdvice(fullEntry([], { crc: 100, pen: 100.02 } as never), null);
+  it("tolerates crit rate up to 102% (anti crit-resist buffer) — no warn at 101", () => {
+    const out = computeAdvice(fullEntry([], { crc: 101, pen: 100 } as never), null);
+    expect(out.some((a) => a.text.includes("Crit rate"))).toBe(false);
+  });
+
+  it("warns once crit rate clears the 102% tolerance", () => {
+    const out = computeAdvice(fullEntry([], { crc: 103.5, pen: 100 } as never), null);
+    expect(out).toContainEqual({ tone: "warn", text: "Crit rate 103.5% — 1.5% wasted over the 102% cap" });
+  });
+
+  it("does not warn at or a hair over a cap (rounded waste must be > 0)", () => {
+    const out = computeAdvice(fullEntry([], { crc: 102, pen: 100.02 } as never), null);
     expect(out.some((a) => a.text.includes("wasted"))).toBe(false);
   });
 });
@@ -114,5 +134,24 @@ describe("computeAdvice — rule 6 (upgrade headroom, aggregated)", () => {
       mkPiece({ uid: `m${i}`, slot: s as GearPiece["slot"], reforgeCount: s === "weapon" ? 1 : 9 }));
     const out = computeAdvice({ equipped, rawPieces: raw, stats: null }, null);
     expect(out).toContainEqual({ tone: "info", text: "1 piece with unused reforges" });
+  });
+
+  it("aggregates pieces below their enhance cap (+15 ascended, +10 normal)", () => {
+    const SLOTS: SlotId[] = ["weapon", "accessory", "helmet", "armor", "gloves", "boots"];
+    const equipped = new Map<SlotId, unknown>(SLOTS.map((s) => [s, true]));
+    // weapon: ascended at +12 (< 15) → under; accessory: normal at +8 (< 10) →
+    // under; the rest are maxed (ascended +15) → not under.
+    const raw = SLOTS.map((s, i) => {
+      if (s === "weapon") return mkPiece({ uid: `m${i}`, slot: s as GearPiece["slot"], ascended: true, enhanceLevel: 12 });
+      if (s === "accessory") return mkPiece({ uid: `m${i}`, slot: s as GearPiece["slot"], ascended: false, reforgeCount: 6, enhanceLevel: 8 });
+      return mkPiece({ uid: `m${i}`, slot: s as GearPiece["slot"] });
+    });
+    const out = computeAdvice({ equipped, rawPieces: raw, stats: null }, null);
+    expect(out).toContainEqual({ tone: "info", text: "2 pieces below max enhance" });
+  });
+
+  it("does not flag a maxed piece (+15 ascended) as below max enhance", () => {
+    const out = computeAdvice(fullEntry(), null);
+    expect(out.some((a) => a.text.includes("below max enhance"))).toBe(false);
   });
 });

@@ -603,7 +603,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/translateReco.test.ts` | 10 tests — reco→patch : mains (OR-union), effets (icônes required, null skip+warn), sets (combo→plan 1:1, combo non-résolu droppé entier), priorité substats (tiers→poids, collision de bucket, clé inconnue) |
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick` : verdict des deux côtés de la bascule, équivalent-flat exact, égalité pile à la bascule, garde tick %=0 |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains` : tri décroissant, monotonie delta→gain, CHC nul si crit-cap, base 0 → vide |
-| `apps/renderer/test/buildAdvice.test.ts` | 11 tests — `computeAdvice` (Builds) : no-gear silencieux, missing + early-return, sets (singleton / 3-of-4), caps gaspillés crc/pen (seuil arrondi >0), gem slots vides Talisman/EE + tip +5, upgrade agrégé (reforges non utilisés / 6★ non ascensionné), singularier/pluraliser |
+| `apps/renderer/test/buildAdvice.test.ts` | 16 tests — `computeAdvice` (Builds) : no-gear silencieux, missing quasi-complet (≤2) vs WIP silencieux (early-return), sets (singleton / 3-of-4), caps gaspillés — crit toléré ≤102 / PEN >100 (seuil arrondi >0), gem slots vides Talisman/EE + tip +5, upgrade agrégé (reforges non utilisés / 6★ non ascensionné / sous cap d'enhance), singularier/pluraliser |
 
 Run : `npm test --workspaces --if-present`. **Total : 186 tests** (core 22 : parse 11 + equip 11 · renderer 164 : solver 74, solveChunk 3, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, subValue 5, dmgValue 4, buildAdvice 11).
 

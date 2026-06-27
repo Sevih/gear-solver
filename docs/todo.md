@@ -25,11 +25,12 @@
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 ### 🟡/⚪ UX-cohérence & nits
-- [~] 🟡 **`Advices` (tab Builds)** — lot prioritaire livré (`lib/buildAdvice.ts` : caps gaspillés, gems
-      vides, upgrade agrégé ; cf. changelog). **Reste** : (1) bruit Missing sur persos peu équipés ·
-      (2) pièces non max-enhance (cap +N ambigu, à valider) · (3) lot secondaire (main off-scaling vs
-      `meta.dmgStat`, basse qualité, « 4pc dispo en inventaire ») — nécessite de passer l'inventaire complet
-      à `computeAdvice`.
+- [~] 🟡 **`Advices` (tab Builds)** — lot prioritaire + (1)/(2) livrés (`lib/buildAdvice.ts` : caps gaspillés,
+      gems vides, upgrade agrégé ; **(1)** bruit Missing supprimé sur persos WIP — `Missing` ne sort que ≤ 2
+      slots manquants ; **(2)** ligne agrégée « N pieces below max enhance » (cap +10, +15 si ascended) ;
+      cf. changelog). **Reste — (3) lot secondaire** (main off-scaling vs `meta.dmgStat`, basse qualité,
+      « 4pc dispo en inventaire ») : nécessite de **passer l'inventaire complet** à `computeAdvice` (thread
+      `inventory.gear` + `meta.dmgStat` dans `AdviceInput`) — plus gros changement, différé.
 - [~] ⚪ **Optims mineures Inventory (si profilage)** — double virtualisation + fusion des 7 `useMemo`
       d'availability livrées (cf. changelog). **Reste** : `computeQuality` est encore recalculé dans
       `matchesFilters` (chip quality actif) et le panneau de détail — un précalcul partagé (`toUiPiece` /

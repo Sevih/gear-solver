@@ -602,7 +602,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/translateReco.test.ts` | 10 tests — reco→patch: mains (OR-union), effects (icons required, null skip+warn), sets (combo→plan 1:1, unresolved combo dropped entirely), substat priority (tiers→weights, bucket collision, unknown key) |
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick`: verdict on both sides of the crossover, exact flat-equivalent, equality exactly at the crossover, %=0 tick guard |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains`: descending sort, delta→gain monotonicity, CHC null if crit-cap, base 0 → empty |
-| `apps/renderer/test/buildAdvice.test.ts` | 11 tests — `computeAdvice` (Builds): no-gear silent, missing + early-return, sets (singleton / 3-of-4), wasted caps crc/pen (rounded threshold >0), empty gem slots Talisman/EE + reach-+5 tip, aggregated upgrade (unused reforges / 6★ not ascended), singular/plural wording |
+| `apps/renderer/test/buildAdvice.test.ts` | 16 tests — `computeAdvice` (Builds): no-gear silent, missing on a near-complete hero (≤2) vs silent WIP (early-return), sets (singleton / 3-of-4), wasted caps — crit tolerated ≤102 / PEN >100 (rounded threshold >0), empty gem slots Talisman/EE + reach-+5 tip, aggregated upgrade (unused reforges / 6★ not ascended / below enhance cap), singular/plural wording |
 
 Run: `npm test --workspaces --if-present`. **Total: 186 tests** (core 22: parse 11 + equip 11 · renderer 164: solver 74, solveChunk 3, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, subValue 5, dmgValue 4, buildAdvice 11).
 

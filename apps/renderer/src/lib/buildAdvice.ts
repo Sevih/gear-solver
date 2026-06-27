@@ -38,6 +38,13 @@ const ADVICE_REQUIRED_SLOTS: ReadonlyArray<SlotId> = [
   "weapon", "accessory", "helmet", "armor", "gloves", "boots",
 ];
 
+/** "Missing slots" only fires as an actionable nudge when a hero is NEARLY
+ *  complete (this many gaps or fewer). A hero missing more than that is a
+ *  work-in-progress / bench unit — listing 4-5 empty slots is noise, not
+ *  advice — so the rule stays silent (the rest is still deferred, the armor
+ *  layout isn't settled). */
+const MISSING_ADVICE_MAX = 2;
+
 /** Display labels for the slots used in advice messages (design SlotId keys —
  *  resolve a core GearSlot through `toDesignSlot` first). Includes the two
  *  gem-bearing slots for the gem-slot rule. */
@@ -53,19 +60,24 @@ const ADVICE_SLOT_LABEL: Record<string, string> = {
  *  intent, e.g. "off-stat main" on the variable slots).
  *
  *  Rules:
- *   1. Missing main-gear pieces — flag the empty slots on a partially-equipped
- *      hero. Fully-unequipped heroes are already labeled "No gear" on the
- *      card, so they stay silent. When pieces are missing we stop there: the
- *      armor layout isn't settled yet, so set advice would be noise.
+ *   1. Missing main-gear pieces — flag the empty slots on a NEARLY-complete
+ *      hero (≤ MISSING_ADVICE_MAX gaps). Fully-unequipped heroes are already
+ *      labeled "No gear", and a hero missing most of its gear is a WIP/bench
+ *      unit whose long Missing list is noise — both stay silent. Any missing
+ *      piece still stops the rest: the armor layout isn't settled, so set
+ *      advice would be noise.
  *   2. Lone set piece — a single piece of an armor set grants no bonus (no
  *      1pc tier exists in-game), so it's a wasted slot.
  *   3. 3/4 of a 4pc-capable set — the 4th piece completes the 4pc bonus.
- *   4. Wasted stat caps — CRC / PEN over 100% is dead weight (both hard-cap at
- *      100% in the damage model; the overflow could be reallocated).
+ *   4. Wasted stat caps — CRC / PEN overflow is dead weight (both hard-cap at
+ *      100% in the damage model; the overflow could be reallocated). CRC keeps
+ *      a +2% tolerance (warn past 102%) as an anti-crit-resist buffer; PEN
+ *      warns past 100%.
  *   5. Gem slots — empty gem slots on the Talisman / EE are free stats left on
  *      the table; the 5th slot stays locked until the piece reaches +5.
- *   6. Upgrade headroom — main-gear pieces with unused reforges, and 6★ pieces
- *      not yet ascended, each aggregated into one line to avoid card spam.
+ *   6. Upgrade headroom — main-gear pieces with unused reforges, 6★ pieces not
+ *      yet ascended, and pieces below their enhance cap (+10, or +15 once
+ *      ascended), each aggregated into one line to avoid card spam.
  *
  *  Rules 4-6 only run on a fully-main-equipped hero (rule 1 returns early
  *  otherwise) so they never fire on a half-built roster. Set tiers are read
@@ -78,10 +90,16 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
 
   const out: AdviceItem[] = [];
 
-  // Rule 1 — missing main-gear pieces.
+  // Rule 1 — missing main-gear pieces. Only surface the "finish these" nudge
+  // when the hero is nearly complete (≤ MISSING_ADVICE_MAX gaps); a roster
+  // hero missing most of its gear is a WIP/bench unit and a long Missing list
+  // is noise. Either way the rest is deferred — incomplete armor makes set/cap
+  // advice meaningless.
   const missing = ADVICE_REQUIRED_SLOTS.filter((s) => !equipped.has(s));
   if (missing.length > 0) {
-    out.push({ tone: "warn", text: `Missing: ${missing.map((s) => ADVICE_SLOT_LABEL[s] ?? s).join(", ")}` });
+    if (missing.length <= MISSING_ADVICE_MAX) {
+      out.push({ tone: "warn", text: `Missing: ${missing.map((s) => ADVICE_SLOT_LABEL[s] ?? s).join(", ")}` });
+    }
     return out; // armor layout incomplete — defer the rest
   }
 
@@ -108,15 +126,18 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
   }
 
   // Rule 4 — wasted stat caps. CRC and PEN both hard-cap at 100% in the damage
-  // model; any overflow is dead weight that could be reallocated. Rounded waste
-  // must be > 0 so a float a hair over 100 doesn't print a "0% wasted" line.
+  // model; any overflow is dead weight that could be reallocated. Crit rate
+  // keeps a +2% tolerance (warn only past 102%): players intentionally overcap
+  // a couple points as a buffer against enemy crit-resist, so 100-102% isn't
+  // truly wasted. PEN has no such buffer (cap 100%). Rounded waste must be > 0
+  // so a float a hair over the cap doesn't print a "0% wasted" line.
   if (entry.stats) {
-    const capWaste = (label: string, v: number) => {
-      const waste = round1(v - 100);
-      if (waste > 0) out.push({ tone: "warn", text: `${label} ${round1(v)}% — ${waste}% wasted over the 100% cap` });
+    const capWaste = (label: string, v: number, cap: number) => {
+      const waste = round1(v - cap);
+      if (waste > 0) out.push({ tone: "warn", text: `${label} ${round1(v)}% — ${waste}% wasted over the ${cap}% cap` });
     };
-    capWaste("Crit rate", entry.stats.crc);
-    capWaste("Penetration", entry.stats.pen);
+    capWaste("Crit rate", entry.stats.crc, 102);
+    capWaste("Penetration", entry.stats.pen, 100);
   }
 
   // Rule 5 — gem slots on the gem-bearing pieces (Talisman / EE). `gemSlots` is
@@ -138,16 +159,22 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
   // into one line so a roster of half-finished gear doesn't spam the card.
   // `maxReforgesOf` is the solver's own in-game budget (no duplicated formula).
   // Gem pieces are skipped — gems aren't reforged/ascended like gear.
+  // The enhance cap is +10 for a normal piece, +15 once ascended (Singularity
+  // extends the bar past +10), mirroring `GearPiece.enhanceLevel`'s 0..10/10..15
+  // contract — so a piece below its own cap still has main-stat headroom.
   let unusedReforges = 0;
   let unascended6 = 0;
+  let underEnhanced = 0;
   for (const p of rawPieces) {
     if (p.gemSlots) continue;
     const ds = toDesignSlot(p.slot);
     if (!ds || !ADVICE_REQUIRED_SLOTS.includes(ds)) continue;
     if (p.reforgeCount < maxReforgesOf(p)) unusedReforges++;
     if (p.star === 6 && !p.ascended) unascended6++;
+    if (p.enhanceLevel < (p.ascended ? 15 : 10)) underEnhanced++;
   }
   if (unascended6 > 0) out.push({ tone: "info", text: `${unascended6} 6★ piece${unascended6 > 1 ? "s" : ""} not yet ascended` });
+  if (underEnhanced > 0) out.push({ tone: "info", text: `${underEnhanced} piece${underEnhanced > 1 ? "s" : ""} below max enhance` });
   if (unusedReforges > 0) out.push({ tone: "info", text: `${unusedReforges} piece${unusedReforges > 1 ? "s" : ""} with unused reforges` });
 
   return out;
