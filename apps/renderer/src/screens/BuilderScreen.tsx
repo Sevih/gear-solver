@@ -627,6 +627,15 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     return m;
   }, [inventory]);
 
+  // Index characters by uid so the result gear cards can resolve each piece's
+  // `equippedBy` to a character — surfacing whether applying a recommended
+  // piece would steal it off another hero.
+  const charsByUid = useMemo(() => {
+    const m = new Map<string, Character>();
+    if (inventory) for (const c of inventory.characters) m.set(c.uid, c);
+    return m;
+  }, [inventory]);
+
   useEffect(() => {
     // Dispose on unmount so the worker pool tears down with the screen.
     return () => { orchestratorRef.current?.dispose(); orchestratorRef.current = null; };
@@ -773,25 +782,43 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // Saved-builds handlers — `selectedUid` gates everything; the UI hides /
   // disables the controls when no hero is picked so we don't have to thread
   // null-checks past these helpers' callers.
+  // Save build AND its filter preset in one action — a build is only meaningful
+  // alongside the filters that produced it, so the two are persisted together
+  // under the same name (no separate "save preset" step).
   const saveCurrentBuild = () => {
     if (!selectedBuild || !selectedUid) return;
     const placeholder = `Build ${(savedBuildsMap[selectedUid]?.length ?? 0) + 1}`;
     setNamePrompt({
-      title: "Save build",
+      title: "Save build + filter preset",
       placeholder,
       onConfirm: (name) => {
-        const entry: SavedBuild = {
+        const finalName = name.trim() || placeholder;
+        const createdAt = Date.now();
+        const buildEntry: SavedBuild = {
           id: crypto.randomUUID(),
-          name: name.trim() || placeholder,
+          name: finalName,
           heroUid: selectedUid,
           mode: lastSolveMode,
           build: selectedBuild,
           reforge: resultsReforge,
-          createdAt: Date.now(),
+          createdAt,
         };
-        const next = addSavedBuild(savedBuildsMap, entry);
-        setSavedBuildsMap(next);
-        persistSavedBuilds(next);
+        const nextBuilds = addSavedBuild(savedBuildsMap, buildEntry);
+        setSavedBuildsMap(nextBuilds);
+        persistSavedBuilds(nextBuilds);
+        // Filter preset snapshot (same name) — see `saveCurrentPreset`'s former
+        // note on the shallow `excludedHeroes` re-materialization being safe
+        // against the immutable reducer.
+        const presetEntry: FilterPreset = {
+          id: crypto.randomUUID(),
+          name: finalName,
+          heroUid: selectedUid,
+          filters: { ...filters, excludedHeroes: new Set(filters.excludedHeroes) },
+          createdAt,
+        };
+        const nextPresets = addFilterPreset(filterPresetsMap, presetEntry);
+        setFilterPresetsMap(nextPresets);
+        persistFilterPresets(nextPresets);
       },
     });
   };
@@ -817,32 +844,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setLastSolveMode(b.mode);
   };
 
-  // Filter-preset handlers.
-  const saveCurrentPreset = () => {
-    if (!selectedUid) return;
-    const placeholder = `Preset ${(filterPresetsMap[selectedUid]?.length ?? 0) + 1}`;
-    setNamePrompt({
-      title: "Save preset",
-      placeholder,
-      onConfirm: (name) => {
-        const entry: FilterPreset = {
-          id: crypto.randomUUID(),
-          name: name.trim() || placeholder,
-          heroUid: selectedUid,
-          // Shallow snapshot: only `excludedHeroes` (a Set) is re-materialized;
-          // `statFilters` / `mainPicks` / `setPicks` stay shared references.
-          // Safe today because the reducer is immutable (every action returns
-          // fresh objects, never mutates in place) — revisit with a
-          // structuredClone if a future action ever edits state in place.
-          filters: { ...filters, excludedHeroes: new Set(filters.excludedHeroes) },
-          createdAt: Date.now(),
-        };
-        const next = addFilterPreset(filterPresetsMap, entry);
-        setFilterPresetsMap(next);
-        persistFilterPresets(next);
-      },
-    });
-  };
+  // Filter-preset handlers. Presets are created alongside builds (see
+  // `saveCurrentBuild`); these handle loading and removal.
   const loadPreset = (p: FilterPreset) => {
     dispatch({ type: "loadPreset", filters: { ...p.filters, excludedHeroes: new Set(p.filters.excludedHeroes) } });
   };
@@ -868,6 +871,29 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const [recoPicker, setRecoPicker] = useState<StructuredCharacterReco | null>(null);
   // Clear stale reco feedback when the hero changes.
   useEffect(() => { setRecoStatus(null); setRecoPicker(null); }, [selectedUid]);
+
+  // Switching heroes is a clean slate: the previous hero's filters AND results
+  // don't carry over (different gear, different goals — keeping them is
+  // misleading). Cancel any in-flight solve first so its async `onResult` can't
+  // repopulate the just-cleared table for the wrong hero. Skips the initial
+  // mount (nothing to reset yet, and it would clobber a future pre-populated
+  // filter set keyed off `initialHeroUid`).
+  const heroChangeReset = useRef(true);
+  useEffect(() => {
+    if (heroChangeReset.current) { heroChangeReset.current = false; return; }
+    orchestratorRef.current?.cancel();
+    dispatch({ type: "resetAll" });
+    setSolving(false);
+    setSolveResults([]);
+    setSelectedBuildIdx(null);
+    setDisplayFilter(null);
+    setSolveError(null);
+    setLastSolveMs(null);
+    setLastDebugInfo(null);
+    setResultsReforge({ reforgeMode: "disable", priority: {} });
+    setSolveProgress({ permutations: 0, searched: 0, poolSizes: null });
+    setLastSolveMode("score");
+  }, [selectedUid]);
 
   const applyRecoBuild = (name: string, build: StructuredRecoBuild) => {
     // Resolve each recommended item to its unique effect key (setId) via the
@@ -1019,7 +1045,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           {/* Gear band takes the remaining height and scrolls if the window is
               too short — so the results table above never has to shrink. */}
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} />
+            <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} selfUid={selectedUid} />
           </div>
         </div>
         {/* Right column — spans the FULL height (next to both the results table
@@ -1036,9 +1062,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           <DmgPer1PctPanel comp={composition ?? null} width="w-full" />
           <RightSidebar
             canSave={selectedBuild != null}
-            canSavePreset={selectedUid != null}
             onSaveBuild={saveCurrentBuild}
-            onSavePreset={saveCurrentPreset}
             canGetPreset={selectedUid != null}
             onGetPreset={() => void getPreset()}
             recoBusy={recoBusy}
@@ -3593,16 +3617,14 @@ function RecoBuildPicker({ reco, onPick, onClose }: {
  * Right sidebar — Save build / save preset actions + per-hero library
  * ───────────────────────────────────────────────────────────────────────── */
 function RightSidebar({
-  canSave, canSavePreset,
-  onSaveBuild, onSavePreset,
+  canSave,
+  onSaveBuild,
   canGetPreset, onGetPreset, recoBusy, recoStatus,
   savedBuilds, onRestoreBuild, onRemoveBuild,
   presets, onLoadPreset, onRemovePreset,
 }: {
   canSave: boolean;
-  canSavePreset: boolean;
   onSaveBuild: () => void;
-  onSavePreset: () => void;
   canGetPreset: boolean;
   onGetPreset: () => void;
   recoBusy: boolean;
@@ -3617,13 +3639,12 @@ function RightSidebar({
 }) {
   return (
     <aside className="flex w-full shrink-0 flex-col gap-2">
-      <Panel title="Library" hint="Get preset pulls the outerpedia build reco for this hero (mains / sets / effects / substat priority). Save build / preset bookmark your current setup. Per-hero, persisted in localStorage." width="w-full">
+      <Panel title="Library" hint="Get preset pulls the outerpedia build reco for this hero (mains / sets / effects / substat priority). Save build also saves its filter preset under the same name. Per-hero, persisted in localStorage." width="w-full">
         <div className="grid grid-cols-1 gap-1">
           <ActionButton tone="primary" disabled={!canGetPreset || recoBusy} onClick={onGetPreset}>
             {recoBusy ? "Fetching…" : "Get preset"}
           </ActionButton>
-          <ActionButton disabled={!canSave} onClick={onSaveBuild}>Save build</ActionButton>
-          <ActionButton disabled={!canSavePreset} onClick={onSavePreset}>Save filter preset</ActionButton>
+          <ActionButton disabled={!canSave} onClick={onSaveBuild}>Save build + filter preset</ActionButton>
         </div>
         {recoStatus && (
           <div className={cx(
@@ -3851,7 +3872,7 @@ function FilterBig({ label, value, title }: { label: string; value: number; titl
  * Bottom gear band — one card per main slot for the selected result
  * ───────────────────────────────────────────────────────────────────────── */
 function BottomGearBand({
-  build, pieceByUid, game, reforge,
+  build, pieceByUid, game, reforge, charsByUid, selfUid,
 }: {
   build: SolveBuild | null;
   pieceByUid: Map<string, GearPiece>;
@@ -3861,6 +3882,11 @@ function BottomGearBand({
    *  so its main/substats match the build's projected `finalStats` instead of
    *  the pieces' current rolls (the engine scored the projected clones). */
   reforge: ReforgeContext;
+  /** Roster indexed by uid — resolves each piece's `equippedBy` to a character. */
+  charsByUid: Map<string, Character>;
+  /** The hero this build was solved for — pieces equipped on it are "current",
+   *  pieces on anyone else would be stolen when this build is applied. */
+  selfUid: string | null;
 }) {
   // Map engine slot → display piece for the selected build. The result's
   // `pieceUids` carries slot order (engine names); we re-key by GearSlot and,
@@ -3869,13 +3895,13 @@ function BottomGearBand({
   // "disable" mode, or when there's nothing left to project), so identity
   // inequality is a reliable "was projected" signal for the badge.
   const pieceBySlot = useMemo(() => {
-    const map = new Map<string, { piece: GearPiece; reforged: boolean }>();
+    const map = new Map<string, { piece: GearPiece; reforged: boolean; equippedBy: string | null }>();
     if (!build) return map;
     for (const uid of build.pieceUids) {
       const original = pieceByUid.get(uid);
       if (!original?.slot) continue;
       const piece = game ? projectPieceForReforge(original, game, reforge.reforgeMode, reforge.priority) : original;
-      map.set(original.slot, { piece, reforged: piece !== original });
+      map.set(original.slot, { piece, reforged: piece !== original, equippedBy: original.equippedBy });
     }
     return map;
   }, [build, pieceByUid, game, reforge]);
@@ -3897,7 +3923,12 @@ function BottomGearBand({
           : slot === "exclusive"
             ? build?.gemAllocation.ee
             : undefined;
-        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} reforgeMode={reforge.reforgeMode} />;
+        // Resolve where the piece currently lives: on this hero (current),
+        // on someone else (would be stolen), or unequipped (free).
+        const equippedBy = entry?.equippedBy ?? null;
+        const equippedSelf = equippedBy != null && equippedBy === selfUid;
+        const equippedOther = equippedBy != null && equippedBy !== selfUid ? (charsByUid.get(equippedBy) ?? null) : null;
+        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} reforgeMode={reforge.reforgeMode} equippedSelf={equippedSelf} equippedOther={equippedOther} hasEquipInfo={!!entry} />;
       })}
     </div>
   );
@@ -3914,7 +3945,7 @@ const SLOT_MAIN_PLACEHOLDER: Record<string, string> = {
 /** Compact mirror of the Inventory tab's `ItemDetail` panel — same section
  *  flow (header / icon+label / main stat / substats). Renders em-dash
  *  placeholders when no piece is wired (no build selected yet). */
-function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }: {
+function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, equippedSelf, equippedOther, hasEquipInfo }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
@@ -3926,6 +3957,14 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }:
   reforged?: boolean;
   /** Reforge mode driving the projection — labels the badge (classic/ascended). */
   reforgeMode?: ReforgeMode;
+  /** Piece is already equipped on the hero this build is for ("current"). */
+  equippedSelf?: boolean;
+  /** Character currently wearing the piece, when it's someone other than this
+   *  hero — applying the build would unequip it from them. Null if free/self. */
+  equippedOther?: Character | null;
+  /** True when a piece (with resolved equip state) backs this card — gates the
+   *  "free" tag so empty placeholder cards stay clean. */
+  hasEquipInfo?: boolean;
 }) {
   const slotMeta = SLOT_BY[slot];
   const def = piece && game ? game.equipment[String(piece.itemId)] : null;
@@ -3947,9 +3986,35 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode }:
   return (
     <div className="flex w-56 shrink-0 flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-1 px-3 py-2.5">
       <div className="flex items-center gap-1.5">
-        <span className={cx("truncate font-display text-[13px] font-semibold", name ? "text-white" : "text-white/65")}>
+        <span className={cx("min-w-0 flex-1 truncate font-display text-[13px] font-semibold", name ? "text-white" : "text-white/65")}>
           {name ?? "—"}
         </span>
+        {/* Equip state — the headline of this fix: whether applying the build
+         *  would steal the piece off another hero. "on <name>" is the warning
+         *  case; "equipped" (this hero) and "free" are reassuring. */}
+        {equippedOther ? (
+          <span
+            title={`Currently equipped on ${equippedOther.name ?? `#${equippedOther.charId}`} — applying this build unequips it from them`}
+            className="flex shrink-0 items-center gap-1 rounded border border-amber-400/40 bg-amber-500/15 px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider text-amber-200"
+          >
+            <CharacterPortrait charId={equippedOther.charId} name={equippedOther.name ?? undefined} size={14} className="rounded-sm" />
+            <span className="max-w-20 truncate normal-case">{equippedOther.name ?? `#${equippedOther.charId}`}</span>
+          </span>
+        ) : equippedSelf ? (
+          <span
+            title="Already equipped on this hero"
+            className="shrink-0 rounded border border-emerald-400/30 bg-emerald-500/12 px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider text-emerald-300"
+          >
+            equipped
+          </span>
+        ) : hasEquipInfo ? (
+          <span
+            title="Not equipped on any hero"
+            className="shrink-0 rounded border border-white/12 px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider text-white/45"
+          >
+            free
+          </span>
+        ) : null}
       </div>
 
       <div className="flex items-start gap-3">

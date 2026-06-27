@@ -69,6 +69,23 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — 🟡 UX Builder : état d'équipement sur les cartes, reset au changement de héros, save build+preset fusionnés
+
+Trois nits UX sur le Builder ([`BuilderScreen.tsx`](../apps/renderer/src/screens/BuilderScreen.tsx)) :
+
+- **État d'équipement sur les gear cards de résultat** — chaque carte du `BottomGearBand` affiche
+  désormais un badge : 🟠 `[portrait] <nom>` quand la pièce est **équipée sur un autre héros**
+  (appliquer le build la lui retirerait), 🟢 `equipped` si déjà sur le héros courant, `free` sinon.
+  Résolu via une map `charsByUid` + `selfUid`, sur l'`equippedBy` de la pièce **originale** (pas le
+  clone reforge). Le portrait à 14px (< `PORTRAIT_OVERLAY_MIN`) = face icon nue, propre.
+- **Reset au changement de héros** — un effet sur `selectedUid` annule le solve en cours, remet les
+  **filtres** à `INITIAL_FILTERS` (`resetAll`) et vide **tous les résultats** (table, sélection,
+  displayFilter, reforge, progress, debug, mode). `useRef` skippe le mount initial. L'annulation
+  empêche un `onResult` asynchrone de repeupler la table pour le mauvais héros.
+- **Save build + filter preset fusionnés** — « Save build » persiste désormais **les deux** (SavedBuild
+  + FilterPreset, même nom + `createdAt`) en une confirmation ; bouton + handler `saveCurrentPreset`
+  séparés supprimés. Le panneau « Filter presets » reste pour charger/supprimer.
+
 ### Session 2026-06-27 — 🟡 unification des clés de stats (registre source-de-vérité)
 
 **Le problème** : le même concept portait 2 noms selon la couche — ENGINE (`critRate`/`critDmg`/
