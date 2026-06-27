@@ -93,8 +93,8 @@ Deux trous sur le preview de mode reforge ([`engine.ts`](../apps/renderer/src/li
   arme/accessoire, DMG- sur les 4 armures, à la **meilleure valeur** de `singularity-options.json`
   (DMG+ 50 %, DMG- 25 %). Route via `fromBuff` → compte dans **score + CP + carte**, pas juste
   l'affichage. Une pièce **déjà ascended** conserve son **vrai roll** (jamais écrasé par le plafond).
-  +5 tests (slots DMG+/DMG-, classic = pas de passif, non-écrasement, Talisman/EE intouchés, **vérif
-  de cohérence** valeur ↔ donnée).
+  +5 tests (slots DMG+/DMG-, classic = pas de passif, non-écrasement d'un vrai roll, Talisman/EE
+  intouchés).
 - **Visibilité des ticks de reforge** — sur une carte projetée, impossible de voir *quel* sub avait
   proc ni de *combien*. Le `BottomGearBand` calcule le **delta de ticks** (projeté − capturé, aligné
   1:1 car `simulateReforges` clone les subs dans l'ordre) → badge cyan `+N` par sub reforgé.

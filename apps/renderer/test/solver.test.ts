@@ -23,9 +23,6 @@ import {
 } from "../src/lib/composeBuild.js";
 import type { StatScaling } from "@gear-solver/core";
 import { projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 import type { SolveBuild } from "../src/lib/solver/types.js";
 import { calcBattlePower, makeCpEvaluator } from "../src/lib/solver/cp.js";
 import { aggregateGemDelta, allocateGems, buildGemPool, gemSlotsOf, scoreGemPool } from "../src/lib/solver/gems.js";
@@ -812,13 +809,12 @@ describe("simulateReforges", () => {
 const FLAT_ENHANCE = { enhanceFactor: 0, tierFactor: 0, maxEnhanceLevel: 15, singularity: { activation: 0, steps: [] }, expCurves: {} };
 const ENH_GAME = { enhance: FLAT_ENHANCE } as unknown as GameData;
 
-/** Max unconditional value (display %, stored ×10) for a Singularity `st` —
- *  the ceiling the projection should grant. Read straight from the table so
- *  this test fails if the data changes and the hardcoded engine constant drifts. */
-const SING_DATA: Record<string, { st: string; v: number; combatOnly?: boolean }> =
-  JSON.parse(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../../data/derived/singularity-options.json"), "utf8"));
-const maxUncond = (st: string) =>
-  Math.max(...Object.values(SING_DATA).filter((o) => o.st === st && !o.combatOnly).map((o) => o.v)) / 10;
+// Best-grade unconditional Singularity values the ascended preview should grant
+// (display %, = max `v`/10 in singularity-options.json: DMG+ v=500, DMG- v=250).
+// Mirrors `SINGULARITY_CEILING` in engine.ts; the engine comment cross-refs the
+// data table as the source of truth.
+const CEIL_DMGUP = 50;
+const CEIL_DMGREDUCE = 25;
 
 function gearPiece(slot: string, opts: { ascended?: boolean; main?: RolledStat[]; subs?: RolledStat[] } = {}): GearPiece {
   return {
@@ -835,7 +831,7 @@ describe("projectPieceForReforge — ascended Singularity passive", () => {
     const sing = out.main.find((m) => m.source === "singularity");
     expect(sing).toBeDefined();
     expect(sing!.stat).toBe("dmgUp");
-    expect(sing!.value).toBe(maxUncond("ST_DMG_BOOST")); // 50%
+    expect(sing!.value).toBe(CEIL_DMGUP); // 50%
     expect(sing!.percent).toBe(true);
     expect(sing!.fromBuff).toBe(true);
     expect(sing!.combatOnly).toBe(false);
@@ -848,7 +844,7 @@ describe("projectPieceForReforge — ascended Singularity passive", () => {
       const out = projectPieceForReforge(gearPiece(slot), ENH_GAME, "ascended", {});
       const sing = out.main.find((m) => m.source === "singularity");
       expect(sing?.stat).toBe("dmgReduce");
-      expect(sing?.value).toBe(maxUncond("ST_DMG_REDUCE_RATE")); // 25%
+      expect(sing?.value).toBe(CEIL_DMGREDUCE); // 25%
     }
   });
 
