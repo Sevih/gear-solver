@@ -69,6 +69,15 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — log de confirmation codex + geas/quirk au disarm
+
+`capture.ps1` confirmait l'inventaire + les héros, mais le **codex** (`/archive/info`) et les **geas/quirk**
+(`/gift/info`) — capturés *après* sa sortie (pipeline armé, le joueur ouvre les écrans Codex/Gift) — n'avaient
+aucune confirmation côté app. `disarm.ps1` décode et résume maintenant ces deux catchs (best-effort python,
+streamé dans le log au clic Disarm) : `codex captured + decoded: N reward tiers (levels …)` /
+`geas/quirk captured + decoded: N gift nodes`, ou un message « NOT captured — ouvre l'écran … puis disarm » si
+le fichier manque.
+
 ### Session 2026-06-27 — talisman inclus dans le budget combos CP (cut du dernier multiplicateur)
 
 Après le budget combos sur les 6 slots gear, le **talisman restait non-capé** (mesuré sur D.Luna : pools gear

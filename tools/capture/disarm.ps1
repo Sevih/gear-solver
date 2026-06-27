@@ -48,4 +48,32 @@ MuteAdb reverse --remove tcp:9002
 MuteAdb shell settings delete global http_proxy
 MuteAdb shell settings put global http_proxy ":0"
 
+# --- codex + geas summary -------------------------------------------------
+# These two land only AFTER capture.ps1 exits (the pipeline stays armed so the
+# user can open the Hero Archive / Codex and Gift screens in-game). capture.ps1
+# already confirmed inventory + heroes; disarm is the natural moment to confirm
+# the codex (/archive/info) and geas/quirk (/gift/info) catch, mirroring that
+# summary. Best-effort via python (may be absent in a packaged build).
+Write-Host ">  Codex + geas summary:" -ForegroundColor Cyan
+$summary = @"
+import json,os
+o=r'$Out'
+def load(n):
+  p=os.path.join(o,n)
+  return json.load(open(p,encoding='utf-8')) if os.path.exists(p) else None
+ar=load('user_archive.json'); gf=load('user_gift.json')
+if ar:
+  r=ar.get('ArchiveItemRewardInfo',[]); lv=[x.get('RewardLevel') for x in r]
+  print('   codex captured + decoded: %d reward tiers (levels %s)'%(len(r),lv))
+else:
+  print('   codex NOT captured - open the Hero Archive (Codex) screen in-game, then disarm')
+if gf:
+  print('   geas/quirk captured + decoded: %d gift nodes'%len(gf.get('GiftList',[])))
+else:
+  print('   geas/quirk NOT captured - open the Gift screen in-game, then disarm')
+"@
+$tmp = Join-Path $env:TEMP "op_disarm_summary.py"
+$summary | Out-File -Encoding utf8 $tmp
+try { & python $tmp 2>$null } catch {}
+
 Write-Host "v  Pipeline disarmed. Game traffic is back to normal (system cert persists until emulator reboot)." -ForegroundColor Green

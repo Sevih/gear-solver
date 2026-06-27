@@ -24,7 +24,8 @@
       la notation standalone peut sous-classer un membre de set couplé (garde set-aware) ; (c) *optionnel* : B&B CP exact.
 - [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
-
+- [ ] 🔴 **instaure le principe de priorité** on a un reglage "equiped item" qui autoriser ou non l'utilisation des items des autres 
+      personnages. on pourrait mettre en place un reglage qui autorise l'utilisation  uniquement sur les personnage de priorité inférieur
 ### 🟡/⚪ UX-cohérence & nits
 - [~] 🟡 **`Advices` (tab Builds)** — lot prioritaire livré (`lib/buildAdvice.ts` : caps gaspillés, gems
       vides, upgrade agrégé ; cf. changelog). **Reste** : (1) bruit Missing sur persos peu équipés ·
@@ -40,12 +41,6 @@
       plafonne vers ~4 ticks, pas 6) → un sub ne devient doré qu'**après 2 reforges dessus**, jamais au
       socle. Le « max » par-sub n'est pas `stars`. À **redéfinir** (vrai cap par-sub) ou **retirer le tint**.
       Purement cosmétique — n'affecte ni la Quality ni le filtre Min quality.
-- [ ] ⚪ **Ajouter les logs pour le catch des Quirk / Codex** actuellement on n'as que la 
-      confirmation pour l'inventaire et les personnage : 
-      Inventory captured + decoded
-      1649 gear pieces (270 equipped, 1379 free)
-      116 characters
-      Mais rien pour le catch codex/quirk
 ### Persistence
 - [~] **Snapshot `data/` versioning** — stamp + expo livrés (`build.mjs` → `version.json` `{ hash, builtAt }`,
       affiché Settings → Data ; cf. changelog). **Reste (différé — touche les caches Builder)** : comparer le
