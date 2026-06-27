@@ -9,6 +9,7 @@ import { LogView } from "./design/LogView.js";
 import { SettingsModal } from "./design/SettingsModal.js";
 import { HomeScreen } from "./screens/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
+import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
 // bundle drops to just the shell + the first screen the user opens.
@@ -73,6 +74,10 @@ export function App() {
   const [inv, setInv] = useState<Inventory | null>(null);
   const [userGeas, setUserGeas] = useState<UserGeasLevels | null>(null);
   const [userCodex, setUserCodex] = useState<number | null>(null);
+  // Account-global hero priority ranks — edited in Builds, read by the Builder
+  // for the "Equipped items → ≤ lower priority" scope. Owned here so an edit in
+  // Builds is live in the (kept-mounted) Builder.
+  const [heroPriority, setHeroPriority] = usePersistedState<HeroPriority>(HERO_PRIORITY_KEY, {});
   const [status, setStatus] = useState("");
   const [capStatus, setCapStatus] = useState<CaptureStatus | null>(null);
   const [emulator, setEmulator] = useState<EmulatorStatus | null>(null);
@@ -301,7 +306,7 @@ export function App() {
             </ScreenErrorBoundary>
           )}
           {tab === "Inventory" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} /></ScreenErrorBoundary>}
-          {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} /></ScreenErrorBoundary>}
+          {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a
               solve can finish in the background. The `h-full` wrapper keeps the
@@ -309,7 +314,7 @@ export function App() {
           {builderMounted.current && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
               </ScreenErrorBoundary>
             </div>
           )}

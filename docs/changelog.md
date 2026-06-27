@@ -69,6 +69,25 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — 🔴 principe de priorité des héros (scope d'items « ≤ inférieure »)
+
+Nouveau modèle de **priorité par héros** : un **entier unique** par perso (`HeroPriority` = `charUid → int`,
+`gs.priority.rank`), `null` par défaut, et **`null` < tout entier** (non-classé = priorité la plus basse ;
+entier plus grand = plus prioritaire). Store pur `lib/storage/heroPriority.ts` : `setHeroRank` garantit
+l'**unicité** (poser un rank déjà pris **échange** les deux héros), `priorityValue`/`isLowerPriority` (strict ;
+deux non-classés ne se volent pas). +11 tests `heroPriority.test.ts`.
+
+**Solveur** : le toggle binaire `includeEquippedOnOthers` devient un **scope 3-états** `equippedScope` (`none`
+= héros seul + libre · `lower` = **+ héros strictement moins prioritaires** (jamais un égal/supérieur) · `all`
+= tout, défaut legacy). `allow()` (`engine.ts`) et `buildGemPool` (`gems.ts`) lisent le scope + `heroPriority`
+(porté dans `SolveRequest`). Presets migrés (`includeEquippedOnOthers` true/absent → `all`, false → `none`).
++1 test gem-pool « lower ».
+
+**UI** : `App` possède `heroPriority` (persisté) et le passe à **Builds** (édition) + **Builder** (solve, live
+car le Builder reste monté). **Builds** : éditeur **Rank** par carte (input entier, unicité/échange) + toggle
+**# Rank** dans la barre de filtres pour trier par priorité (classés high→low, non-classés en dernier).
+**Builder → Options** : contrôle segmenté **Equipped items** Aucun / ≤ Lower / Tous. Suite : 222 tests verts.
+
 ### Session 2026-06-27 — refonte de la toolbar Builder (2 lignes, SOLVE fusionné, portrait)
 
 La toolbar (héros + actions + filtres) tenait sur **une seule ligne** qui wrappait. Repassée en **2 lignes** dans

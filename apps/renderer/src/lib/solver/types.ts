@@ -6,6 +6,15 @@ import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import type { FinalStats } from "../composeBuild.js";
 import type { PrecomputedSolveContext, ReforgeMode } from "./engine.js";
 import type { CheapRatings } from "./ratings.js";
+import type { HeroPriority } from "../storage/heroPriority.js";
+
+/** How much of the OTHER heroes' equipped gear the solver may pull into the
+ *  candidate pool (the selected hero's own gear + free gear is always in):
+ *   - `"none"`  — own + free only;
+ *   - `"lower"` — also gear on heroes of STRICTLY lower priority (see
+ *                 `heroPriority`) — never strips an equal/higher-priority hero;
+ *   - `"all"`   — any equipped gear (legacy behavior). */
+export type EquippedScope = "none" | "lower" | "all";
 
 /** Sort objective for the solver:
  *  - `"score"` (SOLVE)    — Σ priority × normalized stat
@@ -37,7 +46,11 @@ export interface SolveFilters {
      *  (+10 / 6 ticks) | "ascended" (+15 / 9 ticks). Replaces the old
      *  `useReforged` boolean. */
     reforgeMode: ReforgeMode;
-    includeEquippedOnOthers: boolean;
+    /** Which equipped gear (on OTHER heroes) may enter the pool — see
+     *  `EquippedScope`. Replaces the old `includeEquippedOnOthers` boolean
+     *  (true → "all", false → "none"); "lower" reads `heroPriority`. Absent →
+     *  treated as "all" for back-compat with older payloads. */
+    equippedScope?: EquippedScope;
     keepCurrent: boolean;
     /** When false, every armor piece in a build must belong to a completed set
      *  (no singleton / null-set filler) — and the armor pools are pre-pruned to
@@ -90,6 +103,10 @@ export interface SolveRequest {
   game: GameData;
   userGeasLevels: UserGeasLevels | null;
   userCodexLevel: number | null;
+  /** Account-global hero priority ranks (charUid → unique int; absent =
+   *  unranked = lowest). Read by `allow()` only when `options.equippedScope`
+   *  is `"lower"` — gear on a strictly-lower-priority hero may be pooled. */
+  heroPriority: HeroPriority;
   /** Captured per-character skill levels. `chainPassive` is the auto-leveled
    *  Skill_5 row (not user-controllable) but it contributes additively to
    *  CP via the `skillSum` term, so feeding 0 would under-report CP for any

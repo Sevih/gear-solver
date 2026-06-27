@@ -125,7 +125,7 @@ describe("pruneDominatedForCp — grouping", () => {
 /* ── End-to-end: the prune preserves the top of the CP ranking ─────────────── */
 
 const FILTERS: SolveFilters = {
-  options: { onlyMaxed: false, reforgeMode: "disable", includeEquippedOnOthers: true, keepCurrent: false, allowBrokenSets: true },
+  options: { onlyMaxed: false, reforgeMode: "disable", equippedScope: "all", keepCurrent: false, allowBrokenSets: true },
   excludedHeroes: [], statFilters: {}, ratingFilters: {}, priority: {}, topPct: 100,
   mainPicks: {}, setPlans: [], excludedSets: [], weaponEffectPicks: {}, accessoryEffectPicks: {}, minQuality: null,
 };
@@ -136,7 +136,7 @@ function makeCtx(pools: Pools, mode: SolveMode): SolveContext {
   const req: SolveRequest = {
     type: "solve", solveId: 1, mode, heroUid: "hero",
     inventory: { gear: [], characters: [], presets: [] } as unknown as Inventory,
-    game: GAME, userGeasLevels: null, userCodexLevel: null, userSkills: SKILLS,
+    game: GAME, userGeasLevels: null, userCodexLevel: null, heroPriority: {}, userSkills: SKILLS,
     filters: FILTERS, topK: 1000, chunkIndex: 0, chunkCount: 1,
   };
   return {

@@ -31,7 +31,8 @@ import { dmgTickGains, type DmgTickCandidate } from "../lib/dmgValue.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
 import { resolveWorkerCount, SolverOrchestrator } from "../lib/solver/orchestrator.js";
-import type { PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
+import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
+import type { HeroPriority } from "../lib/storage/heroPriority.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
 import { fetchReco } from "../lib/reco/fetchReco.js";
 import { usePersistedState } from "../hooks/usePersistedState.js";
@@ -52,6 +53,9 @@ interface BuilderScreenProps {
   userGeasLevels: UserGeasLevels | null;
   /** Resolved codex level 0..11 — composer fallback if null. */
   userCodexLevel: number | null;
+  /** Account-global hero priority ranks (owned by App, edited in Builds) — fed
+   *  to the solver for the "Equipped items → ≤ lower priority" scope. */
+  heroPriority: HeroPriority;
   /** Hero UID to preselect on mount — set when the user clicks "Optimize →"
    *  on the Builds tab. Read once via the `selectedUid` initializer. */
   initialHeroUid?: string | null;
@@ -254,9 +258,11 @@ interface SolverOptions {
    *  "disable" scores gear as captured; "classic"/"ascended" project each
    *  piece to the +10 / +15 endgame (main re-scale + substat reforge ticks). */
   reforgeMode: ReforgeMode;
-  /** Include gear equipped on OTHER heroes in the candidate pool. The
-   *  selected hero's own gear is always in. */
-  includeEquippedOnOthers: boolean;
+  /** Which equipped gear (on OTHER heroes) may enter the candidate pool — the
+   *  selected hero's own + free gear is always in. "none" = own+free only;
+   *  "lower" = also heroes of strictly lower priority (never strips an
+   *  equal/higher hero); "all" = any equipped gear (legacy). */
+  equippedScope: EquippedScope;
   /** Lock the selected hero's currently-equipped pieces — only fill empty
    *  slots and leave the rest alone. */
   keepCurrent: boolean;
@@ -291,6 +297,13 @@ const REFORGE_MODES: ReadonlyArray<{ value: ReforgeMode; label: string; hint: st
   { value: "disable",  label: "Off",      hint: "Reforge preview off — score gear exactly as captured." },
   { value: "classic",  label: "Classic",  hint: "Project every piece to the +10 endgame (6 reforge ticks): main stats re-scaled, substats max-rolled by priority." },
   { value: "ascended", label: "Ascended", hint: "Project every piece to the +15 Singularity endgame (9 reforge ticks): main stats re-scaled, substats max-rolled by priority." },
+];
+
+/** UI metadata for the Options "Equipped items" scope (see `EquippedScope`). */
+const EQUIPPED_SCOPES: ReadonlyArray<{ value: EquippedScope; label: string; hint: string }> = [
+  { value: "none",  label: "None",    hint: "Only the selected hero's own gear + free (unequipped) gear." },
+  { value: "lower", label: "≤ Lower", hint: "Also gear on heroes ranked strictly lower than this one in Builds (unranked = lowest). Never strips an equal/higher-priority hero." },
+  { value: "all",   label: "All",     hint: "Any equipped gear, regardless of which hero wears it (legacy)." },
 ];
 
 type MinMax = { min?: number; max?: number };
@@ -346,7 +359,7 @@ function formatCombos(n: number): string {
 }
 
 const INITIAL_FILTERS: SolverFilters = {
-  options: { onlyMaxed: false, reforgeMode: "disable", includeEquippedOnOthers: true, keepCurrent: false, allowBrokenSets: true },
+  options: { onlyMaxed: false, reforgeMode: "disable", equippedScope: "all", keepCurrent: false, allowBrokenSets: true },
   excludedHeroes: new Set(),
   statFilters: {},
   ratingFilters: {},
@@ -365,8 +378,9 @@ const INITIAL_FILTERS: SolverFilters = {
 };
 
 type SolverAction =
-  | { type: "setOption"; key: Exclude<keyof SolverOptions, "reforgeMode">; value: boolean }
+  | { type: "setOption"; key: Exclude<keyof SolverOptions, "reforgeMode" | "equippedScope">; value: boolean }
   | { type: "setReforgeMode"; value: ReforgeMode }
+  | { type: "setEquippedScope"; value: EquippedScope }
   | { type: "setMinQuality"; value: QualityTier | null }
   | { type: "toggleHeroExcluded"; uid: string }
   | { type: "setStatFilter"; stat: string; bound: "min" | "max"; value: number | undefined }
@@ -404,6 +418,8 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
       return { ...state, options: { ...state.options, [action.key]: action.value } };
     case "setReforgeMode":
       return { ...state, options: { ...state.options, reforgeMode: action.value } };
+    case "setEquippedScope":
+      return { ...state, options: { ...state.options, equippedScope: action.value } };
     case "setMinQuality":
       return { ...state, minQuality: action.value };
     case "toggleHeroExcluded": {
@@ -533,7 +549,7 @@ function buildPassesFilters(
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, initialHeroUid, onInitialHeroConsumed, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, initialHeroUid, onInitialHeroConsumed, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
@@ -682,6 +698,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       game,
       userGeasLevels,
       userCodexLevel,
+      heroPriority,
       userSkills: {
         first: selected.skills.first,
         second: selected.skills.second,
@@ -1383,7 +1400,7 @@ function BuilderToolbar({
   // (include-equipped flipped off, keep-current on, broken-sets disallowed,
   // plus each excluded hero).
   const optionCount =
-    (filters.options.includeEquippedOnOthers ? 0 : 1) +
+    (filters.options.equippedScope !== "all" ? 1 : 0) +
     (filters.options.keepCurrent ? 1 : 0) +
     (filters.options.allowBrokenSets ? 0 : 1) +
     (filters.minQuality ? 1 : 0) +
@@ -2080,11 +2097,30 @@ function OptionsPanel({
   game: GameData | null;
   dispatch: Dispatch<SolverAction>;
 }) {
-  const set = (key: Exclude<keyof SolverOptions, "reforgeMode">) => (v: boolean) => dispatch({ type: "setOption", key, value: v });
+  const set = (key: Exclude<keyof SolverOptions, "reforgeMode" | "equippedScope">) => (v: boolean) => dispatch({ type: "setOption", key, value: v });
   return (
     <Panel title="Options" hint="Pool toggles. Equipped items + Exclude equipped together drive what gear the solver may touch. (Reforged / Maxed-only live as quick toggles in the toolbar.)" width="w-52">
       <div className="space-y-0.5">
-        <ToggleRow label="Equipped items" hint="Include gear equipped on other heroes (own hero always in)." checked={options.includeEquippedOnOthers} onChange={set("includeEquippedOnOthers")} />
+        <div className="flex items-center justify-between gap-2 py-0.5">
+          <HoverHint className="text-[11px] text-white/80" name="Equipped items" text="Which gear equipped on OTHER heroes the solver may pull in (your own hero's gear is always in). None = own + free only · ≤ Lower = also heroes ranked below this one in Builds (never strips an equal/higher hero) · All = any equipped gear." />
+          <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/4 p-0.5">
+            {EQUIPPED_SCOPES.map((s) => {
+              const on = (options.equippedScope ?? "all") === s.value;
+              return (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => dispatch({ type: "setEquippedScope", value: s.value })}
+                  aria-pressed={on}
+                  title={s.hint}
+                  className={cx("h-5 rounded px-1.5 text-[10px] font-semibold transition-colors", on ? "bg-cyan-400/20 text-cyan-200" : "text-white/65 hover:text-white/85")}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <ToggleRow label="Keep current" hint="Lock current pieces (only fill empty slots). Gems are still re-allocated — useful for 'keep my gear, tell me which gems to socket'." checked={options.keepCurrent} onChange={set("keepCurrent")} />
         <ToggleRow label="Allow broken sets" hint="On (default): a partial set requirement (e.g. a single 2pc) lets any gear fill the free armor slots. Off: every armor piece must complete a 2pc/4pc — the solver also prunes set-less pieces from the pool, so a fully-constrained requirement (2pc+2pc / 4pc) searches far fewer combos." checked={options.allowBrokenSets} onChange={set("allowBrokenSets")} />
       </div>

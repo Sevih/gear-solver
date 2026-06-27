@@ -73,7 +73,14 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
       minQuality: f.minQuality ?? null,
       // `allowBrokenSets` was added later — a legacy preset's options lack it.
       // Default to true (legacy behavior) so the toggle/badge render correctly.
-      options: { ...f.options, allowBrokenSets: f.options?.allowBrokenSets ?? true },
+      // `equippedScope` replaced the `includeEquippedOnOthers` boolean — migrate
+      // an old preset (true/absent → "all", false → "none").
+      options: {
+        ...f.options,
+        allowBrokenSets: f.options?.allowBrokenSets ?? true,
+        equippedScope: f.options?.equippedScope
+          ?? ((f.options as { includeEquippedOnOthers?: boolean })?.includeEquippedOnOthers === false ? "none" : "all"),
+      },
     },
   };
 }

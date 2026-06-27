@@ -100,7 +100,8 @@ function talismanWithGems(gemIds: number[]): GearPiece {
  *  by tests that aren't exercising the eligibility filter itself. */
 const ALL_GEMS: Parameters<typeof buildGemPool>[1] = {
   heroUid: "hero-a",
-  includeEquippedOnOthers: true,
+  equippedScope: "all",
+  heroPriority: {},
   excludedHeroes: new Set(),
 };
 
@@ -140,7 +141,7 @@ describe("buildGemPool", () => {
     const someone = { ...talismanWithGems([15049, 15053]), uid: "t-other", equippedBy: "hero-b" };
     const unequipped = { ...talismanWithGems([15037]), uid: "t-free", equippedBy: null };
     const inv = { gear: [mine, someone, unequipped], characters: [], presets: [] } as Inventory;
-    const opts = { heroUid: "hero-a", includeEquippedOnOthers: false, excludedHeroes: new Set<string>() };
+    const opts = { heroUid: "hero-a", equippedScope: "none" as const, heroPriority: {}, excludedHeroes: new Set<string>() };
     const pool = buildGemPool(inv, opts);
     expect(pool.get(15001)).toBe(1); // hero-a's own gems
     expect(pool.get(15004)).toBe(1);
@@ -156,7 +157,8 @@ describe("buildGemPool", () => {
     const inv = { gear: [a, b, c], characters: [], presets: [] } as Inventory;
     const opts = {
       heroUid: "hero-a",
-      includeEquippedOnOthers: true,
+      equippedScope: "all" as const,
+      heroPriority: {},
       excludedHeroes: new Set(["hero-c"]),
     };
     const pool = buildGemPool(inv, opts);
@@ -173,12 +175,33 @@ describe("buildGemPool", () => {
     const inv = { gear: [mine], characters: [], presets: [] } as Inventory;
     const opts = {
       heroUid: "hero-a",
-      includeEquippedOnOthers: true,
+      equippedScope: "all" as const,
+      heroPriority: {},
       excludedHeroes: new Set(["hero-a"]), // user ticked himself by mistake
     };
     const pool = buildGemPool(inv, opts);
     expect(pool.get(15001)).toBe(1);
     expect(pool.get(15004)).toBe(1);
+  });
+
+  it("equippedScope 'lower' takes gems from strictly-lower-priority heroes only", () => {
+    // hero-a is the target (rank 5). lower (rank 2) is fair game; higher
+    // (rank 9) and equal-unranked heroes are off-limits. Own + free always in.
+    const mine = { ...talismanWithGems([15001]), uid: "t-mine", equippedBy: "hero-a" };
+    const lower = { ...talismanWithGems([15004]), uid: "t-low", equippedBy: "hero-low" };
+    const higher = { ...talismanWithGems([15049]), uid: "t-high", equippedBy: "hero-high" };
+    const free = { ...talismanWithGems([15037]), uid: "t-free", equippedBy: null };
+    const inv = { gear: [mine, lower, higher, free], characters: [], presets: [] } as Inventory;
+    const pool = buildGemPool(inv, {
+      heroUid: "hero-a",
+      equippedScope: "lower",
+      heroPriority: { "hero-a": 5, "hero-low": 2, "hero-high": 9 },
+      excludedHeroes: new Set(),
+    });
+    expect(pool.get(15001)).toBe(1); // own
+    expect(pool.get(15037)).toBe(1); // free
+    expect(pool.get(15004)).toBe(1); // lower-priority hero → allowed
+    expect(pool.get(15049)).toBeUndefined(); // higher-priority hero → off-limits
   });
 });
 

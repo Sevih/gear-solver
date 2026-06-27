@@ -18,14 +18,18 @@
 import type { GameData, GearPiece, Inventory } from "@gear-solver/core";
 import { resolveStat } from "@gear-solver/core";
 import { ROLL_NORMS, STAT_TO_PRIORITY } from "./ratings.js";
+import { isLowerPriority, type HeroPriority } from "../storage/heroPriority.js";
+import type { EquippedScope } from "./types.js";
 
 /** Eligibility filter for the gem pool. Mirrors the piece-pool rule used by
- *  the engine's `allow()`: gear of the current hero is always in; gear
- *  equipped on other heroes is only counted when `includeEquippedOnOthers`
- *  is on; gear equipped on an explicitly-excluded hero is never counted. */
+ *  the engine's `allow()`: gear of the current hero is always in; gear equipped
+ *  on other heroes is gated by `equippedScope` ("none" excludes all, "lower"
+ *  keeps only strictly-lower-priority heroes via `heroPriority`, "all" keeps
+ *  everything); gear on an explicitly-excluded hero is never counted. */
 export interface GemPoolOptions {
   heroUid: string;
-  includeEquippedOnOthers: boolean;
+  equippedScope: EquippedScope;
+  heroPriority: HeroPriority;
   excludedHeroes: Set<string>;
 }
 
@@ -39,11 +43,13 @@ export function buildGemPool(inv: Inventory, opts: GemPoolOptions): Map<number, 
   const pool = new Map<number, number>();
   for (const g of inv.gear) {
     if (g.slot !== "ooparts" && g.slot !== "exclusive") continue;
-    if (!opts.includeEquippedOnOthers && g.equippedBy && g.equippedBy !== opts.heroUid) continue;
-    // Selected hero is exempt from the excluded-hero check — see engine.ts
-    // `allow()` rationale. The user might tick himself in the picker; that
-    // shouldn't drop his own Talisman/EE gems from the pool.
-    if (g.equippedBy && g.equippedBy !== opts.heroUid && opts.excludedHeroes.has(g.equippedBy)) continue;
+    // Equipped on another hero — gated like the piece pool. Selected hero is
+    // exempt (the user might tick himself; that shouldn't drop his own gems).
+    if (g.equippedBy && g.equippedBy !== opts.heroUid) {
+      if (opts.equippedScope === "none") continue;
+      if (opts.equippedScope === "lower" && !isLowerPriority(opts.heroPriority, g.equippedBy, opts.heroUid)) continue;
+      if (opts.excludedHeroes.has(g.equippedBy)) continue;
+    }
     for (const id of g.gemSlots ?? []) {
       if (!id) continue;
       pool.set(id, (pool.get(id) ?? 0) + 1);

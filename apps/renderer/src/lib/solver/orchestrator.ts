@@ -11,6 +11,7 @@
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import SolverWorker from "../../workers/solver.worker.ts?worker";
 import { debug, debugEnabled } from "../log.js";
+import type { HeroPriority } from "../storage/heroPriority.js";
 import { precomputeContext } from "./engine.js";
 import type {
   PoolSizes,
@@ -74,6 +75,8 @@ export interface SolveArgs {
   game: GameData;
   userGeasLevels: UserGeasLevels | null;
   userCodexLevel: number | null;
+  /** Account-global hero priority ranks (for the "≤ lower priority" scope). */
+  heroPriority: HeroPriority;
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
   /** Per-worker local top-K (orchestrator merges → returns top-N). Default 1000. */
@@ -191,6 +194,7 @@ export class SolverOrchestrator {
       heroUid: args.heroUid,
       userGeasLevels: args.userGeasLevels,
       userCodexLevel: args.userCodexLevel,
+      heroPriority: args.heroPriority,
       userSkills: args.userSkills,
       filters: args.filters,
       topK,

@@ -28,6 +28,7 @@ import {
 } from "../composeBuild.js";
 import { calcBattlePower, makeCpEvaluator } from "./cp.js";
 import { debug, debugEnabled } from "../log.js";
+import { isLowerPriority } from "../storage/heroPriority.js";
 import { aggregateGemDelta, allocateGems, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
@@ -212,16 +213,24 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     ? QUALITY_TIERS.indexOf(filters.minQuality as QualityTier)
     : -1;
 
+  const equippedScope = filters.options.equippedScope ?? "all";
+  const heroPriority = req.heroPriority ?? {};
   // Per-slot filter helper. Returns true if the piece is allowed in this slot.
   const allow = (g: GearPiece, slot: string): boolean => {
     if (g.slot !== slot) return false;
-    if (!filters.options.includeEquippedOnOthers && g.equippedBy && g.equippedBy !== heroUid) return false;
-    // Exempt the selected hero from the excluded-heroes check — the picker
-    // lists every character so the user CAN tick himself, but doing so would
-    // drop his own currently-equipped gear from the pool (contradicts the
-    // documented invariant "selected hero's own gear is always in"). The
-    // gem pool gets the same exemption via its own `heroUid` opt.
-    if (g.equippedBy && g.equippedBy !== heroUid && excludedSet.has(g.equippedBy)) return false;
+    // Equipped on ANOTHER hero — own + free gear is always in. The scope gates
+    // the rest: "none" excludes all; "lower" keeps only gear on a strictly
+    // lower-priority hero (so equal/higher heroes are never stripped); "all"
+    // keeps everything (legacy). Excluded heroes are out regardless. The
+    // selected hero is exempt from both checks — the picker lists every
+    // character so the user CAN tick himself, but doing so must not drop his
+    // own equipped gear (invariant: own gear is always in). The gem pool
+    // mirrors this via its own `heroUid` opt.
+    if (g.equippedBy && g.equippedBy !== heroUid) {
+      if (equippedScope === "none") return false;
+      if (equippedScope === "lower" && !isLowerPriority(heroPriority, g.equippedBy, heroUid)) return false;
+      if (excludedSet.has(g.equippedBy)) return false;
+    }
     if (filters.options.onlyMaxed && g.enhanceLevel < 15) return false;
     // Quality gate — only on slots that have a quality tier (null → keep).
     if (minQualityRank >= 0) {
@@ -491,12 +500,14 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // fallback (scores collapse to 0 → socketed gems preserved).
   //
   // Gem pool eligibility mirrors `allow()` for pieces: gear on other heroes
-  // only counts when `includeEquippedOnOthers` is on, and excluded heroes
-  // are skipped outright. Otherwise the solver could recommend gems that
-  // require unequipping a Talisman/EE on a hero the user just opted out of.
+  // honors the same equipped scope (own + free always in; "lower" only takes
+  // gems off strictly-lower-priority heroes; "none" excludes all others) and
+  // excluded heroes. Otherwise the solver could recommend gems that require
+  // unequipping a Talisman/EE on a hero the user just opted out of / outranks.
   const gemPool = buildGemPool(inv, {
     heroUid,
-    includeEquippedOnOthers: filters.options.includeEquippedOnOthers,
+    equippedScope,
+    heroPriority,
     excludedHeroes: excludedSet,
   });
   const gemPriority = hasPriority

@@ -1,5 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
+import { priorityValue, setHeroRank, type HeroPriority } from "../lib/storage/heroPriority.js";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
@@ -235,6 +236,9 @@ interface RosterFilters {
   /** Regression-lock filter — "all" (default), "locked" (only chars with at
    *  least one locked stat), "drift" (only chars with a drifted locked stat). */
   locks: LockMode;
+  /** Sort the roster by priority rank (ranked high→low first, unranked last)
+   *  instead of the default CP-desc. */
+  byRank?: boolean;
 }
 
 // Persist the roster filters across reloads — the two Set<>-typed fields need
@@ -312,6 +316,21 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
           );
         })}
       </div>
+      <button
+        type="button"
+        onClick={() => setF({ ...f, byRank: !f.byRank })}
+        aria-pressed={!!f.byRank}
+        title={f.byRank
+          ? "Sorted by priority rank (high→low, unranked last) — click for default CP sort"
+          : "Sort by priority rank (set each hero's rank on its card) — click to enable"}
+        className={cx(
+          "inline-flex h-7 items-center gap-1.5 rounded-md border bg-black/30 px-2 text-[11px]",
+          f.byRank ? "border-cyan-400/40 text-cyan-300" : "border-white/7 text-zinc-400 hover:text-zinc-200",
+        )}
+      >
+        <span aria-hidden className="font-mono">#</span>
+        <span>Rank</span>
+      </button>
       {debug && (
         <button
           type="button"
@@ -514,9 +533,48 @@ interface BuildCardProps {
   onChangeNote: (uid: string, value: string) => void;
   /** Jump to the Builder tab with this card's hero preselected. */
   onOptimize: (heroUid: string) => void;
+  /** This hero's priority rank (null = unranked = lowest). */
+  rank: number | null;
+  /** Set this hero's rank (null clears). Uniqueness/swap handled upstream. */
+  onSetRank: (uid: string, rank: number | null) => void;
 }
 
 const NOTE_MAX = 200;
+
+/** Priority-rank editor on a build card. A unique integer per hero (higher =
+ *  higher priority); empty = unranked = lowest. Setting a rank another hero
+ *  holds swaps them (handled by `setHeroRank`). Drives the Builder's "Equipped
+ *  items → ≤ lower priority" scope. Local draft so typing doesn't fight the
+ *  store; commits on blur / Enter. */
+function RankInput({ uid, rank, onSetRank }: { uid: string; rank: number | null; onSetRank: (uid: string, rank: number | null) => void }) {
+  const [draft, setDraft] = useState(rank == null ? "" : String(rank));
+  // Re-sync when the stored rank changes out from under us (e.g. a swap caused
+  // by ranking another hero to this one's number).
+  useEffect(() => { setDraft(rank == null ? "" : String(rank)); }, [rank]);
+  const commit = () => {
+    const t = draft.trim();
+    if (t === "") { onSetRank(uid, null); return; }
+    const n = parseInt(t, 10);
+    onSetRank(uid, Number.isFinite(n) ? n : null);
+  };
+  return (
+    <label
+      className="flex items-center gap-1"
+      title="Priority rank — higher = more important, unique per hero (typing a taken number swaps them). Empty = unranked = lowest. Drives the Builder's '≤ lower priority' equipped-items scope."
+    >
+      <span className="text-[8.5px] uppercase tracking-wider text-white/45">Rank</span>
+      <input
+        type="number"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+        placeholder="—"
+        className="w-11 rounded border border-white/10 bg-black/30 px-1 py-0.5 text-center font-mono text-[10.5px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
+      />
+    </label>
+  );
+}
 
 /** Free-form per-hero note. Capped at NOTE_MAX chars — the textarea hard-stops
  *  via maxLength but we also show a small counter that goes amber past 90%.
@@ -573,7 +631,7 @@ function AdviceList({ items }: { items: AdviceItem[] }) {
  *  lock toggles, so unaffected cards skip the render entirely). All handlers
  *  use the functional updater form of `setLocks` so they never depend on
  *  the current `locks` map and stay referentially stable. */
-const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, debug, note, onChangeNote, onOptimize }: BuildCardProps) {
+const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, debug, note, onChangeNote, onOptimize, rank, onSetRank }: BuildCardProps) {
   const { char, equipped, stats, baseline, scaling, rawPieces, level, bp, meta, displayCharId, displayName, presetName } = entry;
   // Auto-detected observations — recomputed only when the entry identity
   // changes (composedRoster ref stays stable across filter/lock toggles).
@@ -672,6 +730,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
             {bp.toLocaleString()}
           </div>
         )}
+        <RankInput uid={char.uid} rank={rank} onSetRank={onSetRank} />
         {presetName && (
           <div
             className="max-w-22 truncate rounded-md border border-white/12 bg-white/4 px-1.5 py-0.5 text-center text-[10px] text-white"
@@ -788,6 +847,11 @@ interface BuildsScreenProps {
   /** Resolved codex level 0..11 from the captured `/archive/info` reward
    *  count. Null falls back to the composer's default (currently max). */
   userCodexLevel: number | null;
+  /** Account-global hero priority ranks (charUid → unique int; absent =
+   *  unranked = lowest). Edited here, read by the Builder. */
+  heroPriority: HeroPriority;
+  /** App's setter for the priority map (functional updates supported). */
+  onHeroPriorityChange: Dispatch<SetStateAction<HeroPriority>>;
   /** When true, surface the stat-lock / drift / copy-dump UI used for
    *  stat-formula regression work. Default off — Settings → Debug. */
   debug: boolean;
@@ -796,7 +860,12 @@ interface BuildsScreenProps {
   onOptimize: (heroUid: string) => void;
 }
 
-export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, debug, onOptimize }: BuildsScreenProps) {
+export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, onHeroPriorityChange, debug, onOptimize }: BuildsScreenProps) {
+  // Set a hero's priority rank (null clears) — uniqueness/swap handled by the
+  // store. Functional update so it's stable for the memoized cards.
+  const setRank = useCallback((uid: string, rank: number | null) => {
+    onHeroPriorityChange((prev) => setHeroRank(prev, uid, rank));
+  }, [onHeroPriorityChange]);
   // Roster filter state — name search + element/class multi-toggles. Empty
   // sets mean "no filter on this axis". Session-scoped (sessionStorage): stable
   // while tab-hopping but reset to "no filter" on the next app launch, so the
@@ -947,8 +1016,14 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
         return lockedKs.some((k) => round1(stats[k] - (lockedSnap![k] ?? 0)) !== 0);
       })
       .sort((a, b) => {
-        // CP desc as primary. Heroes with no resolved BP (game data missing
-        // for their charId, missing TransStar row, …) sink to the bottom.
+        // Rank sort (opt-in): ranked heroes high→low first, unranked (-∞) last,
+        // CP-desc as the tiebreaker. Otherwise CP desc as primary — heroes with
+        // no resolved BP (missing game data / TransStar row) sink to the bottom.
+        if (filters.byRank) {
+          const ar = priorityValue(heroPriority, a.char.uid);
+          const br = priorityValue(heroPriority, b.char.uid);
+          if (br !== ar) return br - ar;
+        }
         const ap = a.bp ?? -Infinity;
         const bp_ = b.bp ?? -Infinity;
         if (bp_ !== ap) return bp_ - ap;
@@ -957,7 +1032,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
     // `lockedStats` is read in the filter but intentionally gated via `locksDep`
     // so an "all"-filter lock toggle doesn't recompute — see locksDep above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [composedRoster, filters, locksDep, debug]);
+  }, [composedRoster, filters, locksDep, debug, heroPriority]);
 
   // Heroes in the current (filtered) view with at least one piece equipped —
   // matches the tab badge's semantics (App counts distinct equipped chars).
@@ -1012,6 +1087,8 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
               note={notes[entry.char.uid] ?? ""}
               onChangeNote={setNote}
               onOptimize={onOptimize}
+              rank={heroPriority[entry.char.uid] ?? null}
+              onSetRank={setRank}
             />
           ))
         )}
