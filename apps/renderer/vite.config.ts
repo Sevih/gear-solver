@@ -338,7 +338,11 @@ const desktopPkg = JSON.parse(readFileSync(fileURLToPath(new URL("../desktop/pac
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), localData()],
-  server: { port: 5173 },
+  // `strictPort` so a leftover Vite (zombie holding 5173 from a previous run)
+  // makes the new dev server FAIL LOUDLY instead of silently sliding to 5174 —
+  // Electron hard-loads localhost:5173 (main.ts DEV_URL), so a silent port shift
+  // would connect it to the stale server and serve old code after a "restart".
+  server: { port: 5173, strictPort: true },
   define: {
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(desktopPkg.version),
   },
