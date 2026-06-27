@@ -151,6 +151,11 @@ export interface PrecomputedSolveContext {
    *  (new code), and the values vs `poolSizes` show whether `keepTopN` actually
    *  trimmed (a keep of 11 against a pool of 38 = trimmed). */
   debugKeeps?: number[] | null;
+  /** The required-set ids (`planSetIds(setPlans)`) the prune must preserve, or
+   *  null (debug off / topPct=100). When non-empty, `keepTopN` re-adds ALL armor
+   *  members of these sets on top of the budget slice — so a big list explains an
+   *  armor pool that stays full despite a small keep-count. */
+  debugRequiredSets?: string[] | null;
 }
 
 /** Per-worker context — the precomputed bundle plus a back-pointer to the
@@ -370,8 +375,10 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // why). Protected pieces survive on top of the budget slice.
   const hasPriority = Object.values(filters.priority).some((v) => v !== 0);
   let debugKeeps: number[] | null = null;
+  let debugRequiredSets: string[] | null = null;
   if (filters.topPct < 100) {
     const requiredSetIds = planSetIds(setPlans);
+    if (debugEnabled("solver")) debugRequiredSets = Array.from(requiredSetIds);
     // Absolute combo budget — a per-slot PERCENTAGE never bounds the PRODUCT. 30%
     // of seven ~40-50-piece pools is still ~7e8 combos (measured on a real
     // account: 703M / 142s in Score mode with a priority set). `allocateComboBudget`
@@ -583,6 +590,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     excludedAccessoryEffects,
     debugCurCp,
     debugKeeps,
+    debugRequiredSets,
   };
 }
 
@@ -724,12 +732,22 @@ export function magnitudeScoreOf(p: GearPiece): number {
 const COMBO_BUDGET = 8_000_000;
 
 /** Generic top-N selector: score every piece with `scoreOf`, keep the top `n`
- *  (clamped to [1, length]), then always re-add protected pieces — members of a
- *  required set (so the set stays feasible even if they score low) and any
- *  `pinUids` (the hero's currently-equipped piece, so the solver can always at
- *  least reproduce the current build → never returns a WORSE result than what's
- *  on the hero). Shared by every per-slot auto-prune objective (priority / CP /
- *  magnitude scoreOf), so all three honor set protection + pinning identically. */
+ *  (clamped to [1, length]), then re-add the few protected pieces the budget
+ *  must not drop:
+ *   - For each required set, only its SINGLE top-scoring member not already in
+ *     the slice. A slot holds one piece, and a set needs `count` pieces across
+ *     DISTINCT armor slots — so keeping ONE member per set per slot already makes
+ *     any count (up to 4) formable. Keeping ALL members (the old behaviour) blew
+ *     the combo budget: with a required set the armor pools stayed at their full
+ *     pre-prune size (a "Speed 4pc" reco on a speed-rich account re-added every
+ *     Speed piece → ∏ back to ~2e9 / minutes). The best members are in the top-N
+ *     anyway (the priority that defines the build scores them high), so the
+ *     dropped tail is low-value gear.
+ *   - Every `pinUid` (the hero's currently-equipped piece) so the solver can
+ *     always at least reproduce the current build → never a WORSE result.
+ *  Shared by every per-slot auto-prune objective (priority / CP / magnitude), so
+ *  all three honor set feasibility + pinning identically while staying bounded
+ *  to `keep + #requiredSets + #pins`. */
 export function keepTopN(
   pieces: GearPiece[],
   scoreOf: (p: GearPiece) => number,
@@ -744,11 +762,18 @@ export function keepTopN(
   const kept = scored.slice(0, keep).map((e) => e.p);
   if (requiredSetIds.size === 0 && !pinUids?.size) return kept;
   const keptUids = new Set(kept.map((p) => p.uid));
-  for (const p of pieces) {
+  // Required sets already represented in the top-N slice need no extra member.
+  const coveredSets = new Set<string>();
+  for (const p of kept) if (p.armorSetId && requiredSetIds.has(p.armorSetId)) coveredSets.add(p.armorSetId);
+  // Walk in score order so each set's promoted member is its best, and a pin is
+  // added once. At most one member per still-uncovered required set + every pin.
+  for (const { p } of scored) {
     if (keptUids.has(p.uid)) continue;
-    if ((p.armorSetId && requiredSetIds.has(p.armorSetId)) || pinUids?.has(p.uid)) {
+    const uncoveredSet = p.armorSetId != null && requiredSetIds.has(p.armorSetId) && !coveredSets.has(p.armorSetId);
+    if (uncoveredSet || pinUids?.has(p.uid)) {
       kept.push(p);
       keptUids.add(p.uid);
+      if (uncoveredSet) coveredSets.add(p.armorSetId!);
     }
   }
   return kept;

@@ -106,6 +106,30 @@ describe("keepTopN", () => {
     const out = keepTopN([piece("1"), piece("9"), piece("5")], score, 1, NO_REQ, new Set(["1"]));
     expect(out.map((p) => p.uid).sort()).toEqual(["1", "9"]);
   });
+
+  it("preserves only the TOP member of a required set below the cut, not all (budget bound)", () => {
+    const score = (p: GearPiece) => Number(p.uid);
+    // keep top 1 → "9" (no set). Rage set has 3 members below the cut (8,3,2):
+    // only the best ("8") is promoted; "3" and "2" are dropped so the pool stays
+    // bounded instead of re-adding every set member.
+    const pool = [
+      piece("9"),
+      piece("8", { armorSetId: "Rage" }),
+      piece("3", { armorSetId: "Rage" }),
+      piece("2", { armorSetId: "Rage" }),
+    ];
+    const out = keepTopN(pool, score, 1, new Set(["Rage"]));
+    expect(out.map((p) => p.uid).sort()).toEqual(["8", "9"]);
+  });
+
+  it("does not add a redundant set member when the set is already in the top-N", () => {
+    const score = (p: GearPiece) => Number(p.uid);
+    // keep top 2 → "9","8" ("8" is Rage → set already covered). The lower Rage
+    // members "3"/"2" are NOT promoted.
+    const pool = [piece("9"), piece("8", { armorSetId: "Rage" }), piece("3", { armorSetId: "Rage" })];
+    const out = keepTopN(pool, score, 2, new Set(["Rage"]));
+    expect(out.map((p) => p.uid).sort()).toEqual(["8", "9"]);
+  });
 });
 
 const condMain = (stat: string, value: number, combatOnly: boolean): RolledStat =>

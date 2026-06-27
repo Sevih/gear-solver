@@ -62,6 +62,9 @@ export interface SolveDebugInfo {
    *  accessory, ooparts), or null at topPct=100. Proves the budget prune ran and
    *  shows whether each slot was trimmed vs its pre-prune pool. */
   keeps: number[] | null;
+  /** Required-set ids the prune preserves — a big list explains an armor pool
+   *  that stays full despite a small keep-count (keepTopN re-adds set members). */
+  requiredSets: string[] | null;
   perWorker: Array<{ w: number; perm: number; searched: number }>;
 }
 
@@ -301,6 +304,7 @@ export class SolverOrchestrator {
           poolSizes: this.poolSizes, precomputeMs,
           curCp: precomputed.debugCurCp ?? null,
           keeps: precomputed.debugKeeps ?? null,
+          requiredSets: precomputed.debugRequiredSets ?? null,
           searchMs: 0, totalMs: 0, permutations: 0, searched: 0,
           merged: 0, returned: 0, topCp: null, topScore: null, perWorker: [],
         }
