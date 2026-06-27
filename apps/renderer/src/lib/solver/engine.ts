@@ -145,6 +145,12 @@ export interface PrecomputedSolveContext {
    *  below current = a search/recall bug; a current below the in-game number =
    *  a compose/CP gap). CP mode only (null in Score mode). */
   debugCurCp?: number | null;
+  /** The combo-budget keep-counts per slot (order: weapon, helmet, armor,
+   *  gloves, boots, accessory, ooparts), or null when topPct=100 / debug off.
+   *  A version+behaviour probe: its presence proves the combo-budget prune ran
+   *  (new code), and the values vs `poolSizes` show whether `keepTopN` actually
+   *  trimmed (a keep of 11 against a pool of 38 = trimmed). */
+  debugKeeps?: number[] | null;
 }
 
 /** Per-worker context — the precomputed bundle plus a back-pointer to the
@@ -316,7 +322,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
 
   // Reforge simulation — if the user toggled "Use reforged stats", clone
   // each piece with its remaining reforge attempts greedily allocated to
-  // the highest-priority substats. Happens BEFORE topPctPrune so the prune
+  // the highest-priority substats. Happens BEFORE the combo-budget prune so it
   // ranks pieces by their best-case reforged value, not their current state.
   //
   // ooparts (Talisman) and exclusive (EE) are deliberately excluded —
@@ -363,6 +369,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // would silently return 0 results (the user sees "no builds" without a clue
   // why). Protected pieces survive on top of the budget slice.
   const hasPriority = Object.values(filters.priority).some((v) => v !== 0);
+  let debugKeeps: number[] | null = null;
   if (filters.topPct < 100) {
     const requiredSetIds = planSetIds(setPlans);
     // Absolute combo budget — a per-slot PERCENTAGE never bounds the PRODUCT. 30%
@@ -379,6 +386,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       .filter((s) => !lockedSlots.has(s));
     const budget = COMBO_BUDGET * (filters.topPct / 30);
     const keeps = allocateComboBudget(capSlots.map((s) => pools[s].length), budget);
+    if (debugEnabled("solver")) debugKeeps = keeps;
     if (hasPriority) {
       // Explicit substat priority (SOLVE or SOLVE CP) — rank each slot by the
       // per-roll priority score. The build score is largely additive over
@@ -574,6 +582,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     excludedWeaponEffects,
     excludedAccessoryEffects,
     debugCurCp,
+    debugKeeps,
   };
 }
 

@@ -58,6 +58,10 @@ export interface SolveDebugInfo {
   topScore: number | null;
   /** CP of the currently-equipped build (CP mode only) — compare to topCp. */
   curCp: number | null;
+  /** Combo-budget keep-counts per slot (weapon, helmet, armor, gloves, boots,
+   *  accessory, ooparts), or null at topPct=100. Proves the budget prune ran and
+   *  shows whether each slot was trimmed vs its pre-prune pool. */
+  keeps: number[] | null;
   perWorker: Array<{ w: number; perm: number; searched: number }>;
 }
 
@@ -225,7 +229,7 @@ export class SolverOrchestrator {
     const topK = args.topK ?? 1000;
     // Build the precompute ONCE on the main thread — broadcast to every
     // worker via `precomputed`. Without this, each worker repeats the same
-    // composeCharStats + per-slot filter + simulateReforges + topPctPrune +
+    // composeCharStats + per-slot filter + simulateReforges + combo-budget prune +
     // buildGemPool work (8× CPU on a 7-worker pool). The orchestrator pays
     // one structured-clone cost when postMessage'ing the bundle to each
     // worker; the engine work skipped is much heavier than the clone.
@@ -296,6 +300,7 @@ export class SolverOrchestrator {
           workers: this.workers.length, chunks: chunkCount, maxPoolHit,
           poolSizes: this.poolSizes, precomputeMs,
           curCp: precomputed.debugCurCp ?? null,
+          keeps: precomputed.debugKeeps ?? null,
           searchMs: 0, totalMs: 0, permutations: 0, searched: 0,
           merged: 0, returned: 0, topCp: null, topScore: null, perWorker: [],
         }
