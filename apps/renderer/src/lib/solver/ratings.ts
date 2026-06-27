@@ -20,6 +20,7 @@
  * build as "dmg = 0" instead of `ATK × 1.0`. PEN was ignored entirely.
  */
 import type { FinalStats } from "../composeBuild.js";
+import { ROLL_NORMS, STAT_NORMS, STAT_TO_PRIORITY } from "../statRegistry.js";
 
 export interface CheapRatings {
   /** HP × SPD — bulky-and-fast composite (proxy, not a damage formula). */
@@ -81,6 +82,9 @@ const DR_FLOOR = 0.3;
 export function computeCheapRatings(
   s: FinalStats,
   dmgStat: "atk" | "def" | "hp" = "atk",
+  // `dmgSec.stat` is a DATA-sourced secondary-scaling key (from
+  // data/derived/characters.json); `"crc"` there is the character's crit-rate
+  // scaling axis and is mapped to the renamed `critRate` FinalStats field below.
   dmgSec?: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd" | "eff" | "crc"; ratio: number }>,
   noCrit = false,
 ): CheapRatings {
@@ -90,7 +94,7 @@ export function computeCheapRatings(
   // rate = Max(rate, 300)`). Inverting the rate gives the EHP multiplier:
   // a defender with 50% dmgRed effectively doubles their EHP. The DR_FLOOR
   // mirror means dmgRed past ~70% stops contributing (rate clamps to 300).
-  const dmgRedTaken = Math.max(DR_FLOOR, 1 - s.dmgRed / 100);
+  const dmgRedTaken = Math.max(DR_FLOOR, 1 - s.dmgReduce / 100);
   const ehp = s.hp * (1 + s.def / 1000) / dmgRedTaken;
   const ehps = ehp * s.spd;
   // CRC capped at 100% in-game — overflow is wasted. dmgUp (attacker's
@@ -99,8 +103,8 @@ export function computeCheapRatings(
   // EHP intake (above). This was the subtle bug in the first pass.
   // No-crit heroes can never land a crit → pCrit collapses to 0, so the CHD
   // term drops out of every offensive rating.
-  const pCrit = noCrit ? 0 : Math.min(s.crc, 100) / 100;
-  const chdMult = s.chd / 100;
+  const pCrit = noCrit ? 0 : Math.min(s.critRate, 100) / 100;
+  const chdMult = s.critDmg / 100;
   const dmgUpMod = s.dmgUp / 100;
   // E[DR] / 1000 — normal hit = 1.0, crit = CHD/100, weighted by pCrit.
   // Then +dmgUp/100 from the attacker's DMGBoost buff chain.
@@ -121,7 +125,7 @@ export function computeCheapRatings(
   let dmgBase = dmgStat === "def" ? s.def : dmgStat === "hp" ? s.hp : s.atk;
   if (dmgSec) {
     for (const { stat, ratio } of dmgSec) {
-      dmgBase += (stat === "def" ? s.def : stat === "hp" ? s.hp : stat === "spd" ? s.spd : stat === "eff" ? s.eff : stat === "crc" ? s.crc : s.atk) * ratio;
+      dmgBase += (stat === "def" ? s.def : stat === "hp" ? s.hp : stat === "spd" ? s.spd : stat === "eff" ? s.eff : stat === "crc" ? s.critRate : s.atk) * ratio;
     }
   }
   const dmg = dmgBase * drFactor * penMult;
@@ -132,81 +136,14 @@ export function computeCheapRatings(
   return { hps, ehp, ehps, dmg, dmgs, mcd, mcds, dmgh };
 }
 
-/** Endgame-ish reference values used to normalize wildly-different stat
- *  magnitudes (HP in tens of thousands, SPD in low hundreds, CHC in percent)
- *  so a single weighted-sum Score is meaningful across stats. Numbers are
- *  intentionally round — the ranking is what matters, not the absolute Score.
- *  Exported so the per-piece pruner and gem scorer normalize against the
- *  same baseline — otherwise the ranking shifts unintuitively across
- *  scoring contexts. Keyed by USER priority keys (the same shape the
- *  reducer's `priority` dict uses); engine keys go through `STAT_TO_PRIORITY`
- *  first. */
-export const STAT_NORMS: Record<string, number> = {
-  atk: 4000,
-  def: 3000,
-  hp: 30000,
-  spd: 250,
-  crc: 100,
-  chd: 250,
-  critDmgRed: 100,
-  pen: 100,
-  dmgUp: 100,
-  dmgRed: 100,
-  eff: 250,
-  res: 300,
-};
-
-/** Engine `StatType` (as stored on `RolledStat.stat` and gem-resolved
- *  stats) → user-facing priority key (as stored on `priority` and
- *  `STAT_NORMS`). Flat / percent rolls of the same axis share a priority
- *  bucket — the user picks "I want ATK" once, the solver scores both
- *  atk and atkPct rolls against that single weight. */
-export const STAT_TO_PRIORITY: Record<string, string> = {
-  atk: "atk", atkPct: "atk",
-  def: "def", defPct: "def",
-  hp: "hp", hpPct: "hp",
-  spd: "spd",
-  critRate: "crc",
-  critDmg: "chd",
-  critDmgReduce: "critDmgRed",
-  pen: "pen",
-  dmgUp: "dmgUp",
-  dmgReduce: "dmgRed",
-  eff: "eff",
-  effRes: "res",
-};
-
-/** Per-ROLL normalization — sized for a single substat / gem contribution,
- *  NOT for endgame final stats (those are `STAT_NORMS`). A max-rolled %ATK
- *  on a single sub is ~6%; a max-rolled flat ATK is ~50. Using `STAT_NORMS`
- *  (atk=4000, sized for full character ATK) for per-roll scoring would
- *  rank percent rolls 100× lower than flat rolls of comparable in-game
- *  impact, silently dropping percent-heavy pieces from the Top-% prune
- *  and gem allocator.
- *
- *  Keyed by ENGINE `StatType` so flat/percent variants get their own norm
- *  (atk vs atkPct), unlike STAT_NORMS which collapses everything under
- *  the user key. */
-export const ROLL_NORMS: Record<string, number> = {
-  // Flat per-roll ceilings (~max sub on a +15 T4 piece).
-  atk: 300,
-  def: 100,
-  hp: 1500,
-  spd: 20,
-  // Percent per-roll ceilings.
-  atkPct: 40,
-  defPct: 40,
-  hpPct: 40,
-  critRate: 20,
-  critDmg: 40,
-  critDmgReduce: 25,
-  pen: 30,
-  dmgUp: 25,
-  dmgReduce: 25,
-  // EFF/RES are flat on accessory/armor, percent on EE/Talisman — average.
-  eff: 50,
-  effRes: 50,
-};
+// Stat normalization + the roll→axis bridge now live in the single source of
+// truth `../statRegistry.ts` (derived from STAT_AXES). Imported (for local use
+// in computeScore) AND re-exported so the many `from "./ratings.js"` importers
+// (engine, gems, …) keep working unchanged. All keys are the canonical (engine)
+// axis names — `crc`/`chd`/`res`/`dmgRed`/`critDmgRed` were unified to
+// `critRate`/`critDmg`/`effRes`/`dmgReduce`/`critDmgReduce`; `STAT_TO_PRIORITY`
+// now only collapses the flat/% variants.
+export { ROLL_NORMS, STAT_NORMS, STAT_TO_PRIORITY };
 
 /** Aggregate score driving the SOLVE-mode sort. Σ priority × (final / norm)
  *  scaled by 100 for readability (typical values land in 50–500). Negative
@@ -220,9 +157,9 @@ export function computeScore(s: FinalStats, priority: Record<string, number>): n
     const v = (s as unknown as Record<string, number>)[key];
     if (typeof v !== "number") continue;
     // CRC overflow past 100% is wasted in-game — don't reward builds that
-    // stack +crc beyond the cap. STAT_NORMS[crc] = 100, so without this
-    // clamp a 115% CRC build scored +15% on its crc contribution.
-    const effective = key === "crc" ? Math.min(v, 100) : v;
+    // stack +critRate beyond the cap. STAT_NORMS.critRate = 100, so without this
+    // clamp a 115% CRC build scored +15% on its critRate contribution.
+    const effective = key === "critRate" ? Math.min(v, 100) : v;
     const norm = STAT_NORMS[key] ?? 100;
     total += (effective / norm) * w * 100;
   }

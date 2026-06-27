@@ -809,14 +809,14 @@ export function cpStatWeights(
     def: d({ def: cur.def + ROLL_NORMS.def! }),
     hp:  d({ hp:  cur.hp  + ROLL_NORMS.hp! }),
     spd: d({ spd: cur.spd + ROLL_NORMS.spd! }),
-    crc: d({ crc: cur.crc + ROLL_NORMS.critRate! }),
-    chd: d({ chd: cur.chd + ROLL_NORMS.critDmg! }),
+    critRate: d({ critRate: cur.critRate + ROLL_NORMS.critRate! }),
+    critDmg: d({ critDmg: cur.critDmg + ROLL_NORMS.critDmg! }),
     pen: d({ pen: cur.pen + ROLL_NORMS.pen! }),
     dmgUp: d({ dmgUp: cur.dmgUp + ROLL_NORMS.dmgUp! }),
-    dmgRed: d({ dmgRed: cur.dmgRed + ROLL_NORMS.dmgReduce! }),
-    critDmgRed: d({ critDmgRed: cur.critDmgRed + ROLL_NORMS.critDmgReduce! }),
+    dmgReduce: d({ dmgReduce: cur.dmgReduce + ROLL_NORMS.dmgReduce! }),
+    critDmgReduce: d({ critDmgReduce: cur.critDmgReduce + ROLL_NORMS.critDmgReduce! }),
     eff: d({ eff: cur.eff + ROLL_NORMS.eff! }),
-    res: d({ res: cur.res + ROLL_NORMS.effRes! }),
+    effRes: d({ effRes: cur.effRes + ROLL_NORMS.effRes! }),
   };
 }
 
@@ -1035,13 +1035,13 @@ export async function solveChunk(
   const heap = new TopKHeap(topK, mode);
   const tickEvery = options.tickEvery ?? 4096;
 
-  // Crit-cap gem strategy: when the user prioritized crc AND the pool holds
+  // Crit-cap gem strategy: when the user prioritized critRate AND the pool holds
   // crit gems, the per-combo allocation REACHES the 100% CHC cap first (crit
   // gems), then fills by priority. Gated here once per solve so non-crit
-  // builds never enter the slow path. `crc` is the user-facing priority key
-  // (engine `critRate` maps to it via STAT_TO_PRIORITY).
+  // builds never enter the slow path. `critRate` is the canonical priority key
+  // (post stat-key unification — priority/FinalStats share the engine names).
   const hasCritGems = scoredGems.some((g) => g.stat === "critRate" && g.score > 0);
-  const wantCritCap = (filters.priority.crc ?? 0) > 0 && hasCritGems;
+  const wantCritCap = (filters.priority.critRate ?? 0) > 0 && hasCritGems;
 
   // Partition the slot with the largest pool — best load balance.
   const partitionSlot = pickPartitionSlot(pools);
@@ -1226,18 +1226,18 @@ export async function solveChunk(
                   // first, then fill the rest by priority. Recompose only when
                   // the cap-aware allocation actually differs from the default
                   // greedy (it often won't, when crit gems already rank high).
-                  const preGemCrc = fs.crc - defaultCrcGem;
+                  const preGemCrc = fs.critRate - defaultCrcGem;
                   const reached = allocateGemsReachingCap(scoredGems, talismanSlots, eeSlots, preGemCrc);
                   if (!gemDeltaEquals(reached.delta, gemDelta)) {
                     fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, reached.delta ?? undefined, setBonuses);
                     gemAlloc = reached.alloc;
                   }
-                } else if (fs.crc > CRC_OVERSHOOT_CEIL && defaultCrcGem > 0) {
+                } else if (fs.critRate > CRC_OVERSHOOT_CEIL && defaultCrcGem > 0) {
                   // No crc priority (e.g. SOLVE CP raw-gem fallback): just avoid
-                  // overshoot. `fs.crc > 102` ⟺ ≥1 crit gem landed past the cap;
+                  // overshoot. `fs.critRate > 102` ⟺ ≥1 crit gem landed past the cap;
                   // reallocate this combo's pre-gem CHC so wasted crit gems
                   // become useful non-crit ones. Untriggered combos pay nothing.
-                  const capped = allocateGemsCapped(scoredGems, talismanSlots, eeSlots, fs.crc - defaultCrcGem);
+                  const capped = allocateGemsCapped(scoredGems, talismanSlots, eeSlots, fs.critRate - defaultCrcGem);
                   fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, capped.delta ?? undefined, setBonuses);
                   gemAlloc = capped.alloc;
                 }

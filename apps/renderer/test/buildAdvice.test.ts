@@ -38,7 +38,7 @@ describe("computeAdvice — rule 1 (missing / no gear)", () => {
       ["weapon", "accessory", "helmet", "armor"].map((s) => [s as SlotId, true]),
     );
     // crc over cap would normally warn, but rule 1 returns early.
-    const out = computeAdvice({ equipped, rawPieces: [], stats: { crc: 130 } as never }, null);
+    const out = computeAdvice({ equipped, rawPieces: [], stats: { critRate: 130 } as never }, null);
     expect(out).toHaveLength(1);
     expect(out[0]).toEqual({ tone: "warn", text: "Missing: Gloves, Boots" });
   });
@@ -46,7 +46,7 @@ describe("computeAdvice — rule 1 (missing / no gear)", () => {
   it("stays silent when a hero is missing more than MISSING_ADVICE_MAX slots (WIP/bench)", () => {
     // Only weapon + helmet equipped → 4 gaps → no Missing noise, no other advice.
     const equipped = new Map<SlotId, unknown>([["weapon", true], ["helmet", true]]);
-    const out = computeAdvice({ equipped, rawPieces: [], stats: { crc: 130 } as never }, null);
+    const out = computeAdvice({ equipped, rawPieces: [], stats: { critRate: 130 } as never }, null);
     expect(out).toEqual([]);
   });
 });
@@ -73,23 +73,23 @@ describe("computeAdvice — rules 2/3 (set composition)", () => {
 
 describe("computeAdvice — rule 4 (wasted caps)", () => {
   it("flags CRC past the 102% tolerance and PEN past 100% with the rounded waste", () => {
-    const out = computeAdvice(fullEntry([], { crc: 112.5, pen: 104 } as never), null);
+    const out = computeAdvice(fullEntry([], { critRate: 112.5, pen: 104 } as never), null);
     expect(out).toContainEqual({ tone: "warn", text: "Crit rate 112.5% — 10.5% wasted over the 102% cap" });
     expect(out).toContainEqual({ tone: "warn", text: "Penetration 104% — 4% wasted over the 100% cap" });
   });
 
   it("tolerates crit rate up to 102% (anti crit-resist buffer) — no warn at 101", () => {
-    const out = computeAdvice(fullEntry([], { crc: 101, pen: 100 } as never), null);
+    const out = computeAdvice(fullEntry([], { critRate: 101, pen: 100 } as never), null);
     expect(out.some((a) => a.text.includes("Crit rate"))).toBe(false);
   });
 
   it("warns once crit rate clears the 102% tolerance", () => {
-    const out = computeAdvice(fullEntry([], { crc: 103.5, pen: 100 } as never), null);
+    const out = computeAdvice(fullEntry([], { critRate: 103.5, pen: 100 } as never), null);
     expect(out).toContainEqual({ tone: "warn", text: "Crit rate 103.5% — 1.5% wasted over the 102% cap" });
   });
 
   it("does not warn at or a hair over a cap (rounded waste must be > 0)", () => {
-    const out = computeAdvice(fullEntry([], { crc: 102, pen: 100.02 } as never), null);
+    const out = computeAdvice(fullEntry([], { critRate: 102, pen: 100.02 } as never), null);
     expect(out.some((a) => a.text.includes("wasted"))).toBe(false);
   });
 });

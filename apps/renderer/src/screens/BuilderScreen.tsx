@@ -120,18 +120,18 @@ const RESULT_GEAR_SLOTS: SlotId[] = [
 // text fallback. The table headers themselves render the stat icon, not the
 // text, so a long label like "CDMG RED%" never crowds the column.
 const SOLVER_STATS: ReadonlyArray<{ key: string; iconKey: string; label: string; unit: string }> = [
-  { key: "atk",        iconKey: "atk",           label: "ATK",       unit: "" },
-  { key: "def",        iconKey: "def",           label: "DEF",       unit: "" },
-  { key: "hp",         iconKey: "hp",            label: "HP",        unit: "" },
-  { key: "spd",        iconKey: "spd",           label: "SPD",       unit: "" },
-  { key: "crc",        iconKey: "critRate",      label: "CHC",       unit: "%" },
-  { key: "chd",        iconKey: "critDmg",       label: "CHD",       unit: "%" },
-  { key: "critDmgRed", iconKey: "critDmgReduce", label: "CDMG RED%", unit: "%" },
-  { key: "pen",        iconKey: "pen",           label: "PEN%",      unit: "%" },
-  { key: "dmgUp",      iconKey: "dmgUp",         label: "DMG UP%",   unit: "%" },
-  { key: "dmgRed",     iconKey: "dmgReduce",     label: "DMG RED%",  unit: "%" },
-  { key: "eff",        iconKey: "eff",           label: "EFF",       unit: "" },
-  { key: "res",        iconKey: "effRes",        label: "RES",       unit: "" },
+  { key: "atk",           iconKey: "atk",           label: "ATK",       unit: "" },
+  { key: "def",           iconKey: "def",           label: "DEF",       unit: "" },
+  { key: "hp",            iconKey: "hp",            label: "HP",        unit: "" },
+  { key: "spd",           iconKey: "spd",           label: "SPD",       unit: "" },
+  { key: "critRate",      iconKey: "critRate",      label: "CHC",       unit: "%" },
+  { key: "critDmg",       iconKey: "critDmg",       label: "CHD",       unit: "%" },
+  { key: "critDmgReduce", iconKey: "critDmgReduce", label: "CDMG RED%", unit: "%" },
+  { key: "pen",           iconKey: "pen",           label: "PEN%",      unit: "%" },
+  { key: "dmgUp",         iconKey: "dmgUp",         label: "DMG UP%",   unit: "%" },
+  { key: "dmgReduce",     iconKey: "dmgReduce",     label: "DMG RED%",  unit: "%" },
+  { key: "eff",           iconKey: "eff",           label: "EFF",       unit: "" },
+  { key: "effRes",        iconKey: "effRes",        label: "RES",       unit: "" },
 ];
 
 /** Calculated ratings — visible only in the Rating filters panel and as
@@ -229,14 +229,14 @@ const STAT_TOOLTIP: Record<string, { full: string; desc: string }> = {
   def:        { full: "Defense",               desc: "The higher your Defense, the less damage you take from enemies." },
   hp:         { full: "Health",                desc: "You're defeated once your Health falls to zero." },
   spd:        { full: "Speed",                 desc: "The higher your Speed, the more often you can act." },
-  crc:        { full: "Crit Chance",           desc: "Chance for an attack to land a critical hit (dealing Crit Damage)." },
-  chd:        { full: "Crit Damage",           desc: "Increases damage dealt on critical hits." },
-  critDmgRed: { full: "Crit Damage Reduction", desc: "Reduces crit damage taken when hit (caps at 70% combined with Damage Reduction)." },
+  critRate:   { full: "Crit Chance",           desc: "Chance for an attack to land a critical hit (dealing Crit Damage)." },
+  critDmg:    { full: "Crit Damage",           desc: "Increases damage dealt on critical hits." },
+  critDmgReduce: { full: "Crit Damage Reduction", desc: "Reduces crit damage taken when hit (caps at 70% combined with Damage Reduction)." },
   pen:        { full: "Penetration",           desc: "Ignores a portion of the target's Defense when attacking." },
   dmgUp:      { full: "Damage Increase",       desc: "Increases damage dealt when attacking." },
-  dmgRed:     { full: "Damage Reduction",      desc: "Reduces damage taken when hit." },
+  dmgReduce:  { full: "Damage Reduction",      desc: "Reduces damage taken when hit." },
   eff:        { full: "Effectiveness",         desc: "The higher it is, the lower the target's chance to resist your debuffs." },
-  res:        { full: "Resilience",            desc: "The higher it is, the higher your chance to resist debuffs." },
+  effRes:     { full: "Resilience",            desc: "The higher it is, the higher your chance to resist debuffs." },
 };
 
 /** Column-header tooltip text: "Full Name — definition", falling back to the
@@ -2031,17 +2031,19 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
   const { current, baseFlat, dmgStat, dmgSec, dmgAmp, noCrit } = comp;
   // Crit baseline: 100% (the crit cap you build toward, so CHD is valued at full
   // weight) — except for no-crit heroes, evaluated at 0% so CHD reads as dead.
-  const atCap: FinalStats = { ...current, crc: noCrit ? 0 : 100 };
+  const atCap: FinalStats = { ...current, critRate: noCrit ? 0 : 100 };
   // Scaling stats = main dmg stat + any additive secondary stats (deduped).
+  // `crc` here is the DATA-sourced scaling key (dmgStat/dmgSec); it maps to the
+  // `critRate` FinalStats field for the per-tick perturbation below.
   const scalingStats = Array.from(new Set<"atk" | "def" | "hp" | "spd" | "eff" | "crc">([dmgStat, ...(dmgSec?.map((s) => s.stat) ?? [])]));
   const candidates: DmgTickCandidate[] = scalingStats.map((s) => ({
-    key: s, label: DMG_STAT_ICON[s]!.label, field: s,
+    key: s, label: DMG_STAT_ICON[s]!.label, field: (s === "crc" ? "critRate" : s) as keyof FinalStats,
     // ATK/DEF/HP: a 1% sub = base × 1% × (1+buffRate). SPD is flat (so it's per
     // +1 SPD point), EFF/CHC are additive % → also +1 point.
     delta: s === "spd" || s === "eff" || s === "crc" ? 1 : (baseFlat[s] * dmgAmp[s]) / 100,
   }));
   // CHD is dead for no-crit heroes — drop it (it would just read +0.00%).
-  if (!noCrit) candidates.push({ key: "chd", label: "CHD", field: "chd", delta: 1 });
+  if (!noCrit) candidates.push({ key: "chd", label: "CHD", field: "critDmg", delta: 1 });
   candidates.push({ key: "dmgUp", label: "DMG UP%", field: "dmgUp", delta: 1 });
   const gains = dmgTickGains(atCap, dmgStat, dmgSec, candidates);
   if (gains.length === 0) return null;

@@ -217,20 +217,20 @@ describe("CP scorer drives the prune toward high-CP gear", () => {
 
 describe("cpStatWeights (CP-aware gem scoring)", () => {
   const CUR: FinalStats = {
-    atk: 9000, def: 2000, hp: 13000, spd: 200, crc: 70, chd: 250,
-    eff: 100, res: 100, dmgUp: 30, dmgRed: 0, pen: 60, critDmgRed: 0,
+    atk: 9000, def: 2000, hp: 13000, spd: 200, critRate: 70, critDmg: 250,
+    eff: 100, effRes: 100, dmgUp: 30, dmgReduce: 0, pen: 60, critDmgReduce: 0,
   };
   it("weights offensive stats well above dmg-reduce (the bug fix)", () => {
     // The raw value/norm scorer over-picked dmg-reduce gems and dropped CP;
     // the CP weights must rank atk/crit/pen above dmg-reduce.
     const w = cpStatWeights(CUR, cpEval, null);
-    expect(w.atk!).toBeGreaterThan(w.dmgRed!);
-    expect(w.chd!).toBeGreaterThan(w.dmgRed!);
-    expect(w.pen!).toBeGreaterThan(w.dmgRed!);
+    expect(w.atk!).toBeGreaterThan(w.dmgReduce!);
+    expect(w.critDmg!).toBeGreaterThan(w.dmgReduce!);
+    expect(w.pen!).toBeGreaterThan(w.dmgReduce!);
   });
   it("returns a non-negative weight for every priority key", () => {
     const w = cpStatWeights(CUR, cpEval, null);
-    for (const k of ["atk", "def", "hp", "spd", "crc", "chd", "pen", "dmgUp", "dmgRed", "critDmgRed", "eff", "res"]) {
+    for (const k of ["atk", "def", "hp", "spd", "critRate", "critDmg", "pen", "dmgUp", "dmgReduce", "critDmgReduce", "eff", "effRes"]) {
       expect(w[k]!).toBeGreaterThanOrEqual(0);
     }
   });

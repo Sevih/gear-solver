@@ -14,11 +14,11 @@ import type { GameData, GearPiece, StatScaling } from "@gear-solver/core";
 
 export interface FinalStats {
   atk: number; hp: number; def: number; spd: number;
-  crc: number; chd: number; eff: number; res: number;
-  dmgUp: number; dmgRed: number; pen: number;
+  critRate: number; critDmg: number; eff: number; effRes: number;
+  dmgUp: number; dmgReduce: number; pen: number;
   /** Critical Damage Reduction — gear-only (no character baseline). Summed
    *  from `critDmgReduce` substats / mains, displayed as a percent. */
-  critDmgRed: number;
+  critDmgReduce: number;
 }
 
 export type ScalingAxis = "atk" | "def" | "hp" | "eff" | "res";
@@ -279,13 +279,13 @@ function finalStatsFromBuckets(baseline: FinalStatsBaseline, scaling: ScalingMap
     def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0, buffPct.defPct ?? 0),
     hp:  composeMultStat(scaling.hp,  flat.hp  ?? 0, pct.hpPct  ?? 0, buffPct.hpPct  ?? 0),
     spd: baseline.spd + (flat.spd ?? 0) + (buffPct.spd ?? 0) + Math.floor(baseline.spd * (pct.spd ?? 0) / 100),
-    crc: round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0)),
-    chd: round1(baseline.chd + (pct.critDmg  ?? 0) + (buffPct.critDmg  ?? 0)),
+    critRate: round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0)),
+    critDmg:  round1(baseline.chd + (pct.critDmg  ?? 0) + (buffPct.critDmg  ?? 0)),
     eff: composeMultStat(scaling.eff, flat.eff    ?? 0, pct.eff    ?? 0, buffPct.eff    ?? 0),
-    res: composeMultStat(scaling.res, flat.effRes ?? 0, pct.effRes ?? 0, buffPct.effRes ?? 0),
+    effRes: composeMultStat(scaling.res, flat.effRes ?? 0, pct.effRes ?? 0, buffPct.effRes ?? 0),
     dmgUp: round1(baseline.dmgInc + (pct.dmgUp ?? 0) + (flat.dmgUp ?? 0) + (buffPct.dmgUp ?? 0)),
-    dmgRed: round1(baseline.dmgRed + (pct.dmgReduce ?? 0) + (flat.dmgReduce ?? 0) + (buffPct.dmgReduce ?? 0)),
+    dmgReduce: round1(baseline.dmgRed + (pct.dmgReduce ?? 0) + (flat.dmgReduce ?? 0) + (buffPct.dmgReduce ?? 0)),
     pen:    round1(baseline.pen    + (pct.pen ?? 0) + (flat.pen ?? 0) + (buffPct.pen ?? 0)),
-    critDmgRed: round1((pct.critDmgReduce ?? 0) + (flat.critDmgReduce ?? 0) + (buffPct.critDmgReduce ?? 0)),
+    critDmgReduce: round1((pct.critDmgReduce ?? 0) + (flat.critDmgReduce ?? 0) + (buffPct.critDmgReduce ?? 0)),
   };
 }

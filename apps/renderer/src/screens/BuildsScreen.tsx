@@ -103,21 +103,21 @@ const STAT_COLUMNS: ReadonlyArray<ReadonlyArray<StatRowConfig>> = [
     { key: "spd", baselineKey: "spd", iconKey: "spd", percent: false },
   ],
   [
-    { key: "crc",        baselineKey: "chc", iconKey: "critRate",     percent: true },
-    { key: "chd",        baselineKey: "chd", iconKey: "critDmg",      percent: true },
-    { key: "critDmgRed",                     iconKey: "critDmgReduce", percent: true },
+    { key: "critRate",      baselineKey: "chc", iconKey: "critRate",     percent: true },
+    { key: "critDmg",       baselineKey: "chd", iconKey: "critDmg",      percent: true },
+    { key: "critDmgReduce",                     iconKey: "critDmgReduce", percent: true },
   ],
   [
-    { key: "pen",    baselineKey: "pen",    iconKey: "pen",       percent: true },
-    { key: "dmgUp",  baselineKey: "dmgInc", iconKey: "dmgUp",     percent: true },
-    { key: "dmgRed", baselineKey: "dmgRed", iconKey: "dmgReduce", percent: true },
+    { key: "pen",       baselineKey: "pen",    iconKey: "pen",       percent: true },
+    { key: "dmgUp",     baselineKey: "dmgInc", iconKey: "dmgUp",     percent: true },
+    { key: "dmgReduce", baselineKey: "dmgRed", iconKey: "dmgReduce", percent: true },
   ],
   // EFF / RES — in-game character sheet displays them as integers (Effectiveness
   // 203, Resilience 191), not percentages. Gear contributions on EFF/RES are
   // points on the same integer scale, summed plainly.
   [
-    { key: "eff", baselineKey: "eff", iconKey: "eff",    percent: false },
-    { key: "res", baselineKey: "res", iconKey: "effRes", percent: false },
+    { key: "eff",    baselineKey: "eff", iconKey: "eff",    percent: false },
+    { key: "effRes", baselineKey: "res", iconKey: "effRes", percent: false },
   ],
 ];
 

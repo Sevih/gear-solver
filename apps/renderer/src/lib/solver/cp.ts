@@ -64,16 +64,16 @@ function cpBonuses(showUIStar: number, starPlus: number, skills: CpArgs["skills"
  *  per-piece bonus. The final summation order is exactly the original
  *  all-inline formula, so results are bit-for-bit identical. */
 function cpFrom(s: FinalStats, ooparts: GearPiece | null, b: CpBonuses): number {
-  const crcRaw = Math.min(s.crc * 10, 1000); // cap at 100%
-  const chdRaw = s.chd * 10;
+  const crcRaw = Math.min(s.critRate * 10, 1000); // cap at 100%
+  const chdRaw = s.critDmg * 10;
   const penRaw = s.pen * 10;
   const dmgupRaw = s.dmgUp * 10;
-  const dmgredRaw = s.dmgRed * 10;
+  const dmgredRaw = s.dmgReduce * 10;
   // ECDR (Crit Damage Reduction) IS exposed in FinalStats: it's summed from
   // `critDmgReduce` substats / mains in composeBuild. Same ×10 raw convention
   // as the other rate inputs. Builds stacking CDR were previously undervalued
   // (defR collapsed to the dmgredRaw-only contribution).
-  const ecdrRaw = s.critDmgRed * 10;
+  const ecdrRaw = s.critDmgReduce * 10;
   const sumCd = dmgupRaw + chdRaw;
   let critF: number;
   if (sumCd < 2001) {
@@ -88,7 +88,7 @@ function cpFrom(s: FinalStats, ooparts: GearPiece | null, b: CpBonuses): number 
   const effF = 1.7 * s.eff / (s.eff + 130);
   const hdF = 44000 / (s.hp + s.def + 44000);
   const defF = hdF * 0.15 + 1.05;
-  const resR = 1 + 0.25 * s.res / (s.res + 200);
+  const resR = 1 + 0.25 * s.effRes / (s.effRes + 200);
   const defR = 1 + 0.25 * (ecdrRaw + dmgredRaw) / ((ecdrRaw + dmgredRaw) + 200);
   const chain = (1 + effF) * crcF * critF * penF * spdF;
   const atkPart = 0.125 * s.atk * (1 + chain);

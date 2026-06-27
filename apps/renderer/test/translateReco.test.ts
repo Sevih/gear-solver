@@ -89,8 +89,8 @@ describe("translateRecoBuild — substat priority", () => {
     const { patch } = translateRecoBuild(build, resolve);
     expect(patch.priority).toEqual({
       atk: 3,    // tier 0
-      crc: 2,    // tier 1 (critRate → crc)
-      chd: 1,    // tier 2 (critDmg → chd)
+      critRate: 2,    // tier 1 (critRate → crc)
+      critDmg: 1,    // tier 2 (critDmg → chd)
       spd: 1,    // tier 3, clamped to 1
       dmgUp: 1,  // tier 4, clamped to 1
     });
@@ -98,7 +98,7 @@ describe("translateRecoBuild — substat priority", () => {
 
   it("ties within a tier share that tier's weight", () => {
     const { patch } = translateRecoBuild({ SubstatPrio: [["atk", "critRate"], ["spd"]] }, resolve);
-    expect(patch.priority).toEqual({ atk: 3, crc: 3, spd: 2 });
+    expect(patch.priority).toEqual({ atk: 3, critRate: 3, spd: 2 });
   });
 
   it("keeps the best (earliest) tier when a priority bucket repeats", () => {

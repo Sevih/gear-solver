@@ -10,6 +10,8 @@
  */
 import type { ReforgeMode } from "../solver/engine.js";
 import type { SolveBuild, SolveMode } from "../solver/types.js";
+import type { FinalStats } from "../composeBuild.js";
+import { renameLegacyStatKeys } from "../statRegistry.js";
 
 export interface SavedBuild {
   id: string;
@@ -42,12 +44,35 @@ export function loadSavedBuilds(): SavedBuildsMap {
     const raw = localStorage.getItem(KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as unknown;
-    return (parsed && typeof parsed === "object") ? (parsed as SavedBuildsMap) : {};
+    if (!parsed || typeof parsed !== "object") return {};
+    // Stat-key unification migration: builds saved with the old user keys
+    // (crc/chd/res/dmgRed/critDmgRed) on `build.finalStats` and `reforge.priority`
+    // are rewritten to the canonical engine keys so the restored build's stats
+    // display and re-score correctly. Idempotent on already-canonical saves.
+    const out: SavedBuildsMap = {};
+    for (const [uid, list] of Object.entries(parsed as Record<string, SavedBuild[]>)) {
+      if (!Array.isArray(list)) continue;
+      out[uid] = list.map((b) => migrateSavedBuild(b));
+    }
+    return out;
   } catch {
     // Poisoned storage (stale schema or quota error mid-write) — start fresh
     // rather than crashing the screen on mount.
     return {};
   }
+}
+
+/** Rewrite a single saved build's legacy stat keys → canonical (see loader). */
+function migrateSavedBuild(b: SavedBuild): SavedBuild {
+  const fs = b.build?.finalStats as unknown as Record<string, number> | undefined;
+  const next: SavedBuild = {
+    ...b,
+    build: fs ? { ...b.build, finalStats: renameLegacyStatKeys(fs) as unknown as FinalStats } : b.build,
+  };
+  if (b.reforge?.priority) {
+    next.reforge = { ...b.reforge, priority: renameLegacyStatKeys(b.reforge.priority) };
+  }
+  return next;
 }
 
 export function persistSavedBuilds(map: SavedBuildsMap): void {

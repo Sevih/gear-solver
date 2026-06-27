@@ -4,8 +4,8 @@ import type { FinalStats } from "../src/lib/composeBuild.js";
 
 const STATS: FinalStats = {
   atk: 4000, hp: 20000, def: 800, spd: 200,
-  crc: 70, chd: 200, eff: 0, res: 0,
-  dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0,
+  critRate: 70, critDmg: 200, eff: 0, effRes: 0,
+  dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0,
 };
 
 const C = (over: Partial<DmgTickCandidate>): DmgTickCandidate => ({ key: "k", label: "L", field: "atk", delta: 0, ...over });
@@ -14,8 +14,8 @@ describe("dmgTickGains", () => {
   it("ranks candidates by descending damage gain", () => {
     const out = dmgTickGains(STATS, "atk", undefined, [
       C({ key: "atk", field: "atk", delta: 200 }),
-      C({ key: "chd", field: "chd", delta: 4 }),
-      C({ key: "crc", field: "crc", delta: 3 }),
+      C({ key: "chd", field: "critDmg", delta: 4 }),
+      C({ key: "crc", field: "critRate", delta: 3 }),
     ]);
     expect(out.map((o) => o.key)).toHaveLength(3);
     for (let i = 1; i < out.length; i++) expect(out[i - 1]!.gainPct).toBeGreaterThanOrEqual(out[i]!.gainPct);
@@ -29,8 +29,8 @@ describe("dmgTickGains", () => {
   });
 
   it("CHC is dead weight when crit-capped (0 gain)", () => {
-    const capped: FinalStats = { ...STATS, crc: 100 };
-    const out = dmgTickGains(capped, "atk", undefined, [C({ key: "crc", field: "crc", delta: 3 })]);
+    const capped: FinalStats = { ...STATS, critRate: 100 };
+    const out = dmgTickGains(capped, "atk", undefined, [C({ key: "crc", field: "critRate", delta: 3 })]);
     expect(out[0]!.gainPct).toBeCloseTo(0, 6);
   });
 

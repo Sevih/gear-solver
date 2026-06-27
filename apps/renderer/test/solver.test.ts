@@ -227,7 +227,7 @@ describe("scoreGemPool", () => {
     // (or with STAT_NORMS sized for endgame: ATK 50× under CHC). With ROLL_NORMS
     // (atkPct=40, critRate=20) the ratio stays sane.
     const pool = new Map([[15037, 1], [15049, 1]]);
-    const scored = scoreGemPool(pool, { atk: 1, crc: 1 }, game);
+    const scored = scoreGemPool(pool, { atk: 1, critRate: 1 }, game);
     // ATK: 1 × 2.4 / 40 = 0.06
     // CHC: 1 × 3.0 / 20 = 0.15 — CHC wins (more impactful per-roll at endgame)
     // ratio ~2.5× — both gems would be picked, ranking reflects realistic value
@@ -553,8 +553,8 @@ describe("computeCheapRatings", () => {
     // non-crits at 0. Now: ATK 1000, CHC 50%, CHD 200% →
     //   pCrit = 0.5, chdMult = 2.0, drFactor = 1 + 0.5 × (2 − 1) = 1.5
     //   penMult = 1 (PEN=0), dmg = 1000 × 1.5 × 1 = 1500
-    const fs = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 50, chd: 200,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const fs = { atk: 1000, def: 0, hp: 0, spd: 100, critRate: 50, critDmg: 200,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     const r = computeCheapRatings(fs);
     expect(r.dmg).toBe(1500);
     expect(r.dmgs).toBe(150000); // dmg × spd
@@ -566,8 +566,8 @@ describe("computeCheapRatings", () => {
     // Distinct atk/def/hp so the chosen base stat is unambiguous. CHC 0, CHD
     // 100, no dmgUp/pen → drFactor = mcdFactor = 1, penMult = 1, so each rating
     // equals the chosen base stat directly.
-    const fs = { atk: 1000, def: 500, hp: 8000, spd: 100, crc: 0, chd: 100,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const fs = { atk: 1000, def: 500, hp: 8000, spd: 100, critRate: 0, critDmg: 100,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     expect(computeCheapRatings(fs).dmg).toBe(1000);          // default atk
     expect(computeCheapRatings(fs, "atk").dmg).toBe(1000);
     expect(computeCheapRatings(fs, "def").dmg).toBe(500);    // Caren-style
@@ -580,8 +580,8 @@ describe("computeCheapRatings", () => {
 
   it("secondary scalings add stat × ratio to the damage base (D.Stella ATK+HP)", () => {
     // drFactor = 1 (CHC 0, CHD 100, no dmgUp), penMult = 1 → dmg = base.
-    const fs = { atk: 1000, def: 500, hp: 8000, spd: 100, crc: 0, chd: 100,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const fs = { atk: 1000, def: 500, hp: 8000, spd: 100, critRate: 0, critDmg: 100,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     // ATK main + HP×0.03 secondary → 1000 + 8000×0.03 = 1240.
     expect(computeCheapRatings(fs, "atk", [{ stat: "hp", ratio: 0.03 }]).dmg).toBe(1240);
     // DEF main + HP×0.02 → 500 + 160 = 660.
@@ -593,16 +593,16 @@ describe("computeCheapRatings", () => {
   it("CHC=0 still produces damage (every hit is a non-crit at ×1.0)", () => {
     // Pre-fix bug: ATK × 0 × anything = 0 → builds with no CHC ranked at
     // dmg=0 in the table, masking real damage potential.
-    const fs = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 300,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const fs = { atk: 1000, def: 0, hp: 0, spd: 100, critRate: 0, critDmg: 300,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     expect(computeCheapRatings(fs).dmg).toBe(1000); // drFactor = 1.0
   });
 
   it("dmgUp folds into the DR rate (per §3.2 attacker's DMGBoost)", () => {
     // ATK 1000, CHC 0, CHD 100 (irrelevant — no crit), dmgUp 20 → drFactor =
     // 1 + 0 + 0.20 = 1.20 → dmg = 1200.
-    const base = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const base = { atk: 1000, def: 0, hp: 0, spd: 100, critRate: 0, critDmg: 100,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     expect(computeCheapRatings({ ...base, dmgUp: 20 }).dmg).toBeCloseTo(1200);
   });
 
@@ -610,18 +610,18 @@ describe("computeCheapRatings", () => {
     // Subtle bug in the v1 ratings rewrite: dmgRed got subtracted from the
     // attacker's drFactor, as if a build's own DEF-stat would shrink its
     // damage. dmgRed only matters when the build TAKES damage (→ ehp).
-    const base = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
-    expect(computeCheapRatings({ ...base, dmgRed: 0 }).dmg).toBe(
-      computeCheapRatings({ ...base, dmgRed: 50 }).dmg,
+    const base = { atk: 1000, def: 0, hp: 0, spd: 100, critRate: 0, critDmg: 100,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
+    expect(computeCheapRatings({ ...base, dmgReduce: 0 }).dmg).toBe(
+      computeCheapRatings({ ...base, dmgReduce: 50 }).dmg,
     );
   });
 
   it("DR_FLOOR clamps at 30% — DR rate / dmgRed never zeros the rating", () => {
     // §3.2: `rate = Max(rate, 300)`. Pushed via a deeply negative dmgUp
     // (synthetic case — in normal builds dmgUp is ≥ 0).
-    const fs = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
-      eff: 0, res: 0, dmgUp: -200, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const fs = { atk: 1000, def: 0, hp: 0, spd: 100, critRate: 0, critDmg: 100,
+      eff: 0, effRes: 0, dmgUp: -200, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     expect(computeCheapRatings(fs).dmg).toBeCloseTo(300); // 1000 × 0.3
   });
 
@@ -629,16 +629,16 @@ describe("computeCheapRatings", () => {
     // Without PEN, mit = 1000/(2000+1000) = 0.333. PEN 100% drops effDef to
     // 0 → mit = 1.0, ratio = 3.0. PEN 50% → effDef = 1000, mit = 0.5,
     // ratio = 1.5. Critical: pre-fix the rating ignored PEN entirely.
-    const base = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const base = { atk: 1000, def: 0, hp: 0, spd: 100, critRate: 0, critDmg: 100,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     const noPen = computeCheapRatings(base).dmg;
     expect(computeCheapRatings({ ...base, pen: 50 }).dmg).toBeCloseTo(noPen * 1.5);
     expect(computeCheapRatings({ ...base, pen: 100 }).dmg).toBeCloseTo(noPen * 3.0);
   });
 
   it("PEN > 100% wasted (PPR caps at 100% per §1.2)", () => {
-    const base = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 0, chd: 100,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const base = { atk: 1000, def: 0, hp: 0, spd: 100, critRate: 0, critDmg: 100,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     expect(computeCheapRatings({ ...base, pen: 100 }).dmg).toBe(
       computeCheapRatings({ ...base, pen: 130 }).dmg,
     );
@@ -647,8 +647,8 @@ describe("computeCheapRatings", () => {
   it("dmgh applies the same crit + PEN math as dmg, but scaled on HP", () => {
     // HP-scaling skills (Aer S3, Caren heal-as-damage) still hit DEF and
     // benefit from PEN; only the source stat changes.
-    const fs = { atk: 0, def: 0, hp: 10000, spd: 100, crc: 50, chd: 200,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 50, critDmgRed: 0 };
+    const fs = { atk: 0, def: 0, hp: 10000, spd: 100, critRate: 50, critDmg: 200,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 50, critDmgReduce: 0 };
     // drFactor = 1 + 0.5 × (2 − 1) = 1.5, penMult = 1.5, dmgh = 10000 × 1.5 × 1.5 = 22500
     expect(computeCheapRatings(fs).dmgh).toBeCloseTo(22500);
   });
@@ -657,8 +657,8 @@ describe("computeCheapRatings", () => {
     // Pre-fix bug: `DEF/300 + 1` over-credited DEF by ~3.3×. At DEF=600
     // the OLD rating produced 30000 (factor 3.0); the IN-GAME factor is
     // 1.6 → 16000.
-    const fs = { atk: 0, def: 600, hp: 10000, spd: 100, crc: 0, chd: 100,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const fs = { atk: 0, def: 600, hp: 10000, spd: 100, critRate: 0, critDmg: 100,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     expect(computeCheapRatings(fs).ehp).toBe(16000);
   });
 
@@ -666,34 +666,34 @@ describe("computeCheapRatings", () => {
     // dmgRed reduces incoming DR rate per §3.2 (`rate -= DMGReduceRate;
     // rate = Max(rate, 300)`). 50% dmgRed → take 50% damage → EHP × 2.0.
     // 100%+ dmgRed clamps at the floor → take 30% damage → EHP × 3.33.
-    const base = { atk: 0, def: 0, hp: 10000, spd: 100, crc: 0, chd: 100,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const base = { atk: 0, def: 0, hp: 10000, spd: 100, critRate: 0, critDmg: 100,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     expect(computeCheapRatings(base).ehp).toBe(10000); // 1× factor at dmgRed=0
-    expect(computeCheapRatings({ ...base, dmgRed: 50 }).ehp).toBeCloseTo(20000);
-    expect(computeCheapRatings({ ...base, dmgRed: 100 }).ehp).toBeCloseTo(10000 / 0.3); // floored
+    expect(computeCheapRatings({ ...base, dmgReduce: 50 }).ehp).toBeCloseTo(20000);
+    expect(computeCheapRatings({ ...base, dmgReduce: 100 }).ehp).toBeCloseTo(10000 / 0.3); // floored
   });
 });
 
 describe("computeScore", () => {
   it("normalizes against STAT_NORMS — high priority on small-magnitude stat beats low priority on big stat", () => {
-    const fs = { atk: 4000, def: 0, hp: 0, spd: 0, crc: 100, chd: 0,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const fs = { atk: 4000, def: 0, hp: 0, spd: 0, critRate: 100, critDmg: 0,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     // priority: atk=1, crc=3
     // atk contrib = 1 × 4000 / 4000 = 1.0 → ×100 = 100
     // crc contrib = 3 × 100 / 100 = 3.0 → ×100 = 300
     // total = 400
-    expect(computeScore(fs, { atk: 1, crc: 3 })).toBe(400);
+    expect(computeScore(fs, { atk: 1, critRate: 3 })).toBe(400);
   });
 
   it("negative priority subtracts", () => {
-    const fs = { atk: 4000, def: 0, hp: 0, spd: 0, crc: 0, chd: 0,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const fs = { atk: 4000, def: 0, hp: 0, spd: 0, critRate: 0, critDmg: 0,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     expect(computeScore(fs, { atk: -1 })).toBe(-100);
   });
 
   it("returns 0 when priority is empty", () => {
-    const fs = { atk: 9999, def: 0, hp: 0, spd: 0, crc: 0, chd: 0,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+    const fs = { atk: 9999, def: 0, hp: 0, spd: 0, critRate: 0, critDmg: 0,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     expect(computeScore(fs, {})).toBe(0);
   });
 });
@@ -791,7 +791,7 @@ describe("simulateReforges", () => {
       ...piece(6, 0, [{ stat: "critRate", value: 3, percent: true, ticks: 1 }]),
       slot: "exclusive",
     };
-    const out = simulateReforges(ee, { crc: 3 });
+    const out = simulateReforges(ee, { critRate: 3 });
     expect(out).toBe(ee);
     expect(out.subs[0]!.value).toBe(3);
   });
@@ -809,8 +809,8 @@ function buildWithScore(score: number, cp = 0): SolveBuild {
   return {
     pieceUids: [],
     gemAllocation: { talisman: [], ee: [] },
-    finalStats: { atk: 0, def: 0, hp: 0, spd: 0, crc: 0, chd: 0,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 },
+    finalStats: { atk: 0, def: 0, hp: 0, spd: 0, critRate: 0, critDmg: 0,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 },
     ratings: { hps: 0, ehp: 0, ehps: 0, dmg: 0, dmgs: 0, mcd: 0, mcds: 0, dmgh: 0 },
     score, cp, upg: 0,
   };
@@ -855,14 +855,17 @@ describe("TopKHeap", () => {
 });
 
 describe("STAT_TO_PRIORITY", () => {
-  it("maps every engine percent variant to its user key", () => {
+  it("collapses flat/% variants to their canonical axis key (now unified on engine names)", () => {
+    // Post-unification: the only non-identity mappings are the flat/% collapses;
+    // the former crit/dmg/res renames are gone (critRate stays critRate, etc.).
     expect(STAT_TO_PRIORITY.atkPct).toBe("atk");
+    expect(STAT_TO_PRIORITY.defPct).toBe("def");
     expect(STAT_TO_PRIORITY.hpPct).toBe("hp");
-    expect(STAT_TO_PRIORITY.critRate).toBe("crc");
-    expect(STAT_TO_PRIORITY.critDmg).toBe("chd");
-    expect(STAT_TO_PRIORITY.effRes).toBe("res");
-    expect(STAT_TO_PRIORITY.dmgReduce).toBe("dmgRed");
-    expect(STAT_TO_PRIORITY.critDmgReduce).toBe("critDmgRed");
+    expect(STAT_TO_PRIORITY.critRate).toBe("critRate");
+    expect(STAT_TO_PRIORITY.critDmg).toBe("critDmg");
+    expect(STAT_TO_PRIORITY.effRes).toBe("effRes");
+    expect(STAT_TO_PRIORITY.dmgReduce).toBe("dmgReduce");
+    expect(STAT_TO_PRIORITY.critDmgReduce).toBe("critDmgReduce");
   });
 
   it("user keys round-trip to themselves", () => {
@@ -883,8 +886,8 @@ describe("STAT_TO_PRIORITY", () => {
 describe("calcBattlePower", () => {
   const baseStats = {
     atk: 1000, def: 500, hp: 10000, spd: 100,
-    crc: 50, chd: 150, eff: 100, res: 100,
-    dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0,
+    critRate: 50, critDmg: 150, eff: 100, effRes: 100,
+    dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0,
   };
   const args = (skills: { first: number; second: number; ultimate: number; chainPassive: number }) => ({
     stats: baseStats,
@@ -918,8 +921,8 @@ describe("calcBattlePower", () => {
     // user but invisible to the solver — builds stacking CDR were silently
     // undervalued vs equivalent crit/atk builds.
     const skills = { first: 4, second: 0, ultimate: 0, chainPassive: 0 };
-    const noCdr = calcBattlePower({ ...args(skills), stats: { ...baseStats, critDmgRed: 0 } });
-    const withCdr = calcBattlePower({ ...args(skills), stats: { ...baseStats, critDmgRed: 40 } });
+    const noCdr = calcBattlePower({ ...args(skills), stats: { ...baseStats, critDmgReduce: 0 } });
+    const withCdr = calcBattlePower({ ...args(skills), stats: { ...baseStats, critDmgReduce: 40 } });
     expect(withCdr).toBeGreaterThan(noCdr);
   });
 
@@ -935,10 +938,10 @@ describe("calcBattlePower", () => {
     // Sweep a range of stat profiles — crit cap, high CHD, PEN, CDR, off-stat.
     const profiles = [
       baseStats,
-      { ...baseStats, crc: 100, chd: 300, pen: 60 },
-      { ...baseStats, crc: 130, chd: 80, dmgUp: 40, dmgRed: 30, critDmgRed: 25 },
-      { ...baseStats, atk: 4321, def: 1234, hp: 56789, spd: 257, eff: 312, res: 287 },
-      { ...baseStats, atk: 0, def: 0, hp: 0, spd: 0, crc: 0, chd: 0, eff: 0, res: 0 },
+      { ...baseStats, critRate: 100, critDmg: 300, pen: 60 },
+      { ...baseStats, critRate: 130, critDmg: 80, dmgUp: 40, dmgReduce: 30, critDmgReduce: 25 },
+      { ...baseStats, atk: 4321, def: 1234, hp: 56789, spd: 257, eff: 312, effRes: 287 },
+      { ...baseStats, atk: 0, def: 0, hp: 0, spd: 0, critRate: 0, critDmg: 0, eff: 0, effRes: 0 },
     ];
     for (const stats of profiles) {
       expect(evalCp(stats, oo)).toBe(calcBattlePower({ ...consts, stats, ooparts: oo }));
@@ -956,26 +959,26 @@ describe("crc clamp at 100%", () => {
   it("computeCheapRatings clamps CRC at 100% in dmg / dmgs (in-game cap)", () => {
     // Pre-fix bug: 115% CRC was credited as 1.15× damage even though the
     // 15% overflow is wasted in-game.
-    const at100 = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 100, chd: 200,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
-    const at115 = { ...at100, crc: 115 };
+    const at100 = { atk: 1000, def: 0, hp: 0, spd: 100, critRate: 100, critDmg: 200,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
+    const at115 = { ...at100, critRate: 115 };
     expect(computeCheapRatings(at100).dmg).toBe(computeCheapRatings(at115).dmg);
     expect(computeCheapRatings(at100).dmgs).toBe(computeCheapRatings(at115).dmgs);
   });
 
   it("computeScore clamps CRC at 100% — overflow doesn't inflate the score", () => {
-    const fs100 = { atk: 0, def: 0, hp: 0, spd: 0, crc: 100, chd: 0,
-      eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
-    const fs150 = { ...fs100, crc: 150 };
-    expect(computeScore(fs100, { crc: 3 })).toBe(computeScore(fs150, { crc: 3 }));
+    const fs100 = { atk: 0, def: 0, hp: 0, spd: 0, critRate: 100, critDmg: 0,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
+    const fs150 = { ...fs100, critRate: 150 };
+    expect(computeScore(fs100, { critRate: 3 })).toBe(computeScore(fs150, { critRate: 3 }));
   });
 });
 
 describe("computeCheapRatings — noCrit heroes", () => {
   // A no-crit hero can never land a crit, so CHC/CHD must not move its
   // offensive ratings (Rhona / K.Tamamo / G.Nella).
-  const fs = { atk: 1000, def: 0, hp: 0, spd: 100, crc: 80, chd: 250,
-    eff: 0, res: 0, dmgUp: 0, dmgRed: 0, pen: 0, critDmgRed: 0 };
+  const fs = { atk: 1000, def: 0, hp: 0, spd: 100, critRate: 80, critDmg: 250,
+    eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
 
   it("dmg ignores crit → equals the bare non-crit hit (ATK × penMult)", () => {
     // pCrit forced to 0 → drFactor = 1.0 → dmg = ATK = 1000, regardless of CHC/CHD.
@@ -991,8 +994,8 @@ describe("computeCheapRatings — noCrit heroes", () => {
   });
 
   it("CHC/CHD are inert for a noCrit hero — varying them doesn't change dmg", () => {
-    const lowCrit = { ...fs, crc: 0, chd: 100 };
-    const highCrit = { ...fs, crc: 100, chd: 300 };
+    const lowCrit = { ...fs, critRate: 0, critDmg: 100 };
+    const highCrit = { ...fs, critRate: 100, critDmg: 300 };
     expect(computeCheapRatings(lowCrit, "atk", undefined, true).dmg)
       .toBe(computeCheapRatings(highCrit, "atk", undefined, true).dmg);
   });

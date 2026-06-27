@@ -9,6 +9,7 @@
  */
 import type { SolverFilters } from "../../screens/BuilderScreen.js";
 import { setPicksToPlans } from "../solver/setPlans.js";
+import { renameLegacyStatKeys } from "../statRegistry.js";
 
 export interface FilterPreset {
   id: string;
@@ -67,6 +68,11 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
       excludedHeroes: new Set(ex),
       setPlans,
       excludedSets,
+      // Stat-key unification: presets saved with the old user keys (crc/chd/res/
+      // dmgRed/critDmgRed) on `priority`/`statFilters` are rewritten to the
+      // canonical engine keys, else they'd silently no-op against FinalStats.
+      priority: renameLegacyStatKeys(f.priority),
+      statFilters: renameLegacyStatKeys(f.statFilters),
       weaponEffectPicks: sanitizeEffects(f.weaponEffectPicks),
       accessoryEffectPicks: sanitizeEffects(f.accessoryEffectPicks),
       // Field added after some presets were saved — default to no quality gate.
