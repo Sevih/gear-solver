@@ -374,21 +374,29 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       // short-circuited to exhaustive above). Heuristic — set-coupled builds can
       // be under-ranked (a piece is scored standalone, not for a set it'd help
       // form with other candidates); raise Top% or require the set for those.
-      // Talisman / EE are exempt (their gems come from the global allocation, so
-      // per-piece CP ranking would misjudge them); locked slots too.
+      //
+      // ooparts (Talisman) IS included: in CP mode every same-slot-count talisman
+      // gets the SAME global gem delta, so they differ almost only by their main
+      // (flat ATK) — the CP score ranks them by that and the dominated ones drop.
+      // Without this the talisman pool (often 60-70) multiplied the whole
+      // cartesian (~68× → 230M combos / ~20s on a real account). EE is still
+      // exempt (single equippable piece, folded post-talisman). Locked slots too.
       const cpEval = makeCpEvaluator({
         showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused,
       });
       const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
       const ooEquipped = equipped.find((g) => g.slot === "ooparts") ?? null;
-      const gearSlots = (["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const)
+      const capSlots = (["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const)
         .filter((s) => !lockedSlots.has(s));
       const budget = CP_COMBO_BUDGET * (filters.topPct / 30);
-      const keeps = allocateComboBudget(gearSlots.map((s) => pools[s].length), budget);
-      gearSlots.forEach((slot, i) => {
+      const keeps = allocateComboBudget(capSlots.map((s) => pools[s].length), budget);
+      capSlots.forEach((slot, i) => {
         const others = equipped.filter((g) => g.slot !== slot);
         const scoreOf = (p: GearPiece): number =>
-          cpEval(computeFinalStats(composed.noGearStats, composed.scaling, others.concat(p), game), ooEquipped);
+          // For the ooparts slot the candidate IS the talisman, so it's also the
+          // CP evaluator's ooparts arg (its ooBp bonus); elsewhere the equipped
+          // talisman stays fixed.
+          cpEval(computeFinalStats(composed.noGearStats, composed.scaling, others.concat(p), game), slot === "ooparts" ? p : ooEquipped);
         // Pin the currently-equipped piece so the current build is always
         // reachable → the solver can never return a lower CP than the hero
         // already has, even when the piece doesn't rank in the budget's top-K.

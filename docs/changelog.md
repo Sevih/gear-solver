@@ -69,6 +69,16 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — talisman inclus dans le budget combos CP (cut du dernier multiplicateur)
+
+Après le budget combos sur les 6 slots gear, le **talisman restait non-capé** (mesuré sur D.Luna : pools gear
+10-14 mais talisman **68/68** → cartésien `~3,4M × 68 ≈ 230M`, ~20 s). Le talisman était exempté car ses gemmes
+viennent de l'alloc globale — mais en mode CP **tous les talismans du même nombre de slots reçoivent le même delta
+de gemmes**, donc ils ne diffèrent quasi que par leur **main (ATK flat)** : les dominés sont droppables. `ooparts`
+est maintenant inclus dans `allocateComboBudget` / le CP-prune (candidat = aussi l'arg ooparts de `cpEval` pour son
+ooBp ; pin du talisman courant). Le cartésien repasse sous le budget (~8M, ~1 s). EE toujours exempt (1 pièce).
+Tests verts (188).
+
 ### Session 2026-06-27 — CSP stricte sur le serveur prod (warning Electron)
 
 Electron râlait en console (`Insecure Content-Security-Policy` / `unsafe-eval`) parce que le renderer
