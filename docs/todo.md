@@ -39,8 +39,7 @@
       plafonne vers ~4 ticks, pas 6) → un sub ne devient doré qu'**après 2 reforges dessus**, jamais au
       socle. Le « max » par-sub n'est pas `stars`. À **redéfinir** (vrai cap par-sub) ou **retirer le tint**.
       Purement cosmétique — n'affecte ni la Quality ni le filtre Min quality.
-- [ ] 🟡 **`Gear repoartition` tab home, un toogle pour changer la facon des stats afficher pour gear breakdown. Tableau qui donne
-      la repartion arme / accessoire en fonction de la class ou pas. tableau avec tout les sets
+
 ### Persistence
 - [~] **Snapshot `data/` versioning** — stamp + expo livrés (`build.mjs` → `version.json` `{ hash, builtAt }`,
       affiché Settings → Data ; cf. changelog). **Reste (différé — touche les caches Builder)** : comparer le

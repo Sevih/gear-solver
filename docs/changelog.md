@@ -69,6 +69,29 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — Home : vues Gear breakdown (Class / All sets / Talisman) + toggle
+
+La carte **Gear breakdown** (Home) gagne un **toggle** segmenté 4 vues (`gearView`) : **Overview** (inchangé :
+par slot + top 5 sets), **Class**, **All sets**, **Talisman**. Les compteurs d'état (Ascended / +15 / Locked)
+restent épinglés en bas dans chaque vue. Tout est dérivé de `inventory` + `game` dans `computeStats` (aucun fetch).
+
+- **Class** — par classe (Striker/Ranger/Mage/Defender/Healer), deux colonnes **arme / accessoire** (en-têtes =
+  icônes d'onglet inventaire `SLOT_BY`), chaque cellule liste en chips les **effets de passif uniques**
+  (icône `effectIcon`, badge de count si >1, hover = nom + description). **Catalogue complet** des effets *à
+  restriction de classe* (séédé depuis `equipment.json`, count 0 superposé par l'inventaire) → un effet non
+  possédé apparaît grisé, **count 0 en rouge**. Tri : possédés d'abord. Unicité par **nom de passif** (pas
+  l'icône, réutilisée entre effets distincts).
+- **All sets** — grille de **tous les sets d'armure existants** (21, depuis `equipment.json`, pas seulement le
+  possédé), chips icône + count, triés par possédé d'abord, non possédés grisés / 0 rouge. Unicité par **nom de set**.
+- **Talisman** — table croisée **type de talisman (lignes) × main-stat (colonnes)**. Lignes = catalogue des
+  15 talismans (art de l'item `image` encadré du fond de rareté `TI_Slot_Unique` comme l'inventaire, hover =
+  nom + nom de l'effet via `multiTierPassives`), colonnes = les **9 main-stats** ooparts (`atkPct/hpPct/defPct/
+  critRate/critDmg/dmgUp/dmgReduce/eff/effRes`, en-têtes = icônes `STAT`). Cellules = count possédé (heatmap
+  cyan, `·` si 0) + colonne `Σ` + ligne `Total` ; main-stat lue depuis `p.main`.
+
+`HomeScreen.tsx` only (helpers `Segmented`, `EffectChipView`/`ChipWrap`, `ClassEffectRow`/`SlotHead`,
+`OopartsTable`). Typecheck vert (HomeScreen).
+
 ### Session 2026-06-27 — 🔴 principe de priorité des héros (scope d'items « ≤ inférieure »)
 
 Nouveau modèle de **priorité par héros** : un **entier unique** par perso (`HeroPriority` = `charUid → int`,

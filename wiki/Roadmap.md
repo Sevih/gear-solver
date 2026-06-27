@@ -38,7 +38,9 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   Packaged prod still to be verified (M8).
 - **Home dashboard.** Home tab (`HomeScreen.tsx`): account snapshot (2×2),
   gear quality breakdown by tier with explanations, roster breakdowns
-  (element / class / rarity), inline update center (no native popups).
+  (element / class / rarity), a 4-view **Gear breakdown** toggle (Overview /
+  Class effects / full set catalog / Talisman × main-stat cross-tab), inline
+  update center (no native popups).
 - **Shared UI & inspection.** Extracted gear detail panel (`design/GearDetail.tsx`,
   `GearDetailBody`) **reused** by the Inventory (full panel) and the Builds tab
   (hover tooltip, `RichTooltip`). Builder kept mounted across tabs (preserves the

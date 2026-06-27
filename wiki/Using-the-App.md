@@ -15,6 +15,11 @@ Your landing screen. At a glance:
 - **Account snapshot** — heroes owned, gear count, and other quick totals.
 - **Gear quality distribution** — how much of your gear is Excellent / Good / Decent / Poor,
   by tier (same colors as the Inventory quality filter).
+- **Gear breakdown** — a toggle with four views: **Overview** (count by slot + your top armor sets),
+  **Class** (per class, the unique weapon/accessory effects you own as chips — hover for name + effect),
+  **All sets** (the full set catalog, owned-first; unowned are dimmed with a red `0`), and **Talisman**
+  (a talisman × main-stat cross-tab — each talisman framed like in the Inventory, cells are a heatmap of
+  how many you own with that main stat, with row/column totals).
 - **Library** — your saved builds.
 - **Update center** — checks for app updates inline; when one is ready, an **Install** button
   appears (no native pop-ups).

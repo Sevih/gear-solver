@@ -15,13 +15,13 @@
  * fetches beyond the update poll). When nothing is captured yet, the dashboard
  * collapses to a single Capture CTA; the update card still shows.
  */
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { GameData, Inventory } from "@gear-solver/core";
 import type { CaptureStatus } from "../capture.js";
 import type { EmulatorStatus } from "../emulator.js";
 import { cx } from "../design/cx.js";
 import { Spinner } from "../design/Shell.js";
-import { SLOTS, toDesignSlot, type SlotId } from "../design/tokens.js";
+import { SLOTS, SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { gearPieceQualityTier, QUALITY_COLOR, type QualityTier } from "../lib/quality.js";
 import { loadSavedBuilds } from "../lib/storage/savedBuilds.js";
 import { loadFilterPresets } from "../lib/storage/filterPresets.js";
@@ -62,6 +62,10 @@ const QUALITY_METRIC_HINT =
 // Distinct hues cycled across the top owned armor sets (no per-set brand color
 // exists, so a tasteful rotation keeps the bars readable).
 const SET_COLORS = ["#ff6b6b", "#4dabf7", "#fbbf24", "#51cf66", "#c4b5fd", "#22d3ee", "#cc5de8"];
+// The 9 main stats a talisman (ooparts) can roll — fixed pool from the game's
+// OOPARTS main-option groups. Order: offense → crit → dmg → utility → defense.
+// Each key resolves a label + icon via the STAT tokens.
+const TALISMAN_STATS = ["atkPct", "hpPct", "defPct", "critRate", "critDmg", "dmgUp", "dmgReduce", "eff", "effRes"] as const;
 
 interface HomeStats {
   heroes: number;
@@ -73,9 +77,49 @@ interface HomeStats {
   stars: { star: number; count: number }[];
   slots: { id: SlotId; label: string; count: number }[];
   sets: { id: string; name: string; icon: string | null; color: string; count: number; w: string }[];
+  /** Every armor set that exists in the game (not just owned) — for the
+   *  "All sets" grid. `count` is how many owned pieces fall in that set (0 when
+   *  none). Sorted by the in-game set id so the grid is stable. */
+  allSets: { id: string; name: string; icon: string | null; color: string; count: number }[];
+  /** Owned weapons / accessories per class, listed by their unique-option
+   *  effect (icon + name + description) rather than a bare count. Both slots
+   *  are class-locked in-game; the trailing row (id "universal") collects
+   *  unrestricted pieces. */
+  classGear: ClassGearRow[];
+  /** Talisman (ooparts) cross-tab: rows = talisman types, cols = main stats,
+   *  cells = owned count of that type with that main stat. */
+  ooparts: {
+    cols: { key: string; label: string; icon: string | null }[];
+    rows: { key: string; name: string; icon: string | null; effect: string; counts: number[]; total: number }[];
+    colTotals: number[];
+    total: number;
+  };
   ascended: number;
   maxed: number;
   locked: number;
+}
+
+/** One owned unique-option effect, aggregated across the pieces that carry it.
+ *  Reused for owned-set chips too (`color` backs the no-icon swatch). */
+interface EffectChip {
+  key: string;
+  icon: string | null;
+  name: string;
+  desc: string;
+  count: number;
+  color?: string;
+}
+interface ClassGearRow {
+  id: string;
+  label: string;
+  weapons: EffectChip[];
+  accessories: EffectChip[];
+}
+
+/** Strip the in-game `<color=#…>…</color>` rich-text tags so the effect text
+ *  reads cleanly inside a native `title` tooltip. */
+function stripTags(s: string): string {
+  return s.replace(/<\/?color[^>]*>/g, "");
 }
 
 function computeStats(inv: Inventory, game: GameData | null): HomeStats {
@@ -120,38 +164,168 @@ function computeStats(inv: Inventory, game: GameData | null): HomeStats {
   });
   const stars = [...starCount.entries()].map(([star, count]) => ({ star, count })).sort((a, b) => b.star - a.star);
 
-  // Gear — by slot (8 design slots) + top owned armor sets + state counters.
+  // Gear — by slot (8 design slots) + owned armor sets + class-locked
+  // weapon/accessory split + state counters.
   const slotCount = new Map<SlotId, number>();
   const setCount = new Map<string, number>();
   // The set badge icon lives on the equipment def (armorSetIcon), not the set
   // def — capture the first one seen per set group so the breakdown can show
   // the real in-game set icon instead of a colored swatch.
   const setIcon = new Map<string, string | null>();
+  // Weapon / accessory by class, grouped by unique-option effect. We seed the
+  // FULL game catalog first (every effect that exists per class/slot, count 0)
+  // then overlay owned counts in the gear loop below — so unowned effects still
+  // show (dimmed, count 0 in red). Only **class-restricted** weapons/accessories
+  // are catalogued; unrestricted ones are skipped. `classLimit` is the raw
+  // CCT_* enum (matches the CLASSES ids). Effect maps key on the passive name
+  // (see resolveEffect) so identical effects aggregate into one chip.
+  const clsEffects = new Map<string, { wpn: Map<string, EffectChip>; acc: Map<string, EffectChip> }>();
+  const ensureBucket = (ckey: string) => {
+    let b = clsEffects.get(ckey);
+    if (!b) { b = { wpn: new Map(), acc: new Map() }; clsEffects.set(ckey, b); }
+    return b;
+  };
+  // Uniqueness is keyed on the passive NAME, not the icon — icons are reused
+  // across distinct effects (e.g. "Powerful Strength" borrows an accessory
+  // icon), so an icon key would wrongly merge different effects into one chip.
+  const resolveEffect = (itemId: number | string): EffectChip => {
+    const meta = game?.equipment[String(itemId)];
+    const pass = game?.equipmentPassives?.[String(itemId)];
+    const icon = meta?.effectIcon ?? null;
+    const name = pass?.name ?? meta?.name ?? "Effect";
+    const desc = pass?.textByTier?.[0] ? stripTags(pass.textByTier[0]) : "";
+    return { key: name, icon, name, desc, count: 0 };
+  };
+  // Seed the catalog — class-restricted unique-option effects only (need both a
+  // classLimit and a real effect icon).
+  if (game?.equipment) {
+    for (const k in game.equipment) {
+      const e = game.equipment[k];
+      if (!e?.effectIcon || !e.classLimit) continue;
+      const sid = e.slot === "weapon" ? "weapon" : e.slot === "accessory" ? "accessory" : null;
+      if (!sid) continue;
+      const bucket = ensureBucket(e.classLimit);
+      const m = sid === "weapon" ? bucket.wpn : bucket.acc;
+      const eff = resolveEffect(k);
+      if (!m.has(eff.key)) m.set(eff.key, eff);
+    }
+  }
+
+  // Talisman cross-tab counts — name → (main-stat key → owned count).
+  const talStatSet = new Set<string>(TALISMAN_STATS);
+  const talCount = new Map<string, Map<string, number>>();
+
   let ascended = 0, maxed = 0, locked = 0;
   for (const p of inv.gear) {
     const sid = toDesignSlot(p.slot);
     if (sid) slotCount.set(sid, (slotCount.get(sid) ?? 0) + 1);
+    if (sid === "talisman") {
+      const name = game?.equipment[String(p.itemId)]?.name ?? `#${p.itemId}`;
+      const stat = p.main.find((m) => talStatSet.has(m.stat))?.stat;
+      if (stat) {
+        let row = talCount.get(name);
+        if (!row) { row = new Map(); talCount.set(name, row); }
+        row.set(stat, (row.get(stat) ?? 0) + 1);
+      }
+    }
+    if ((sid === "weapon" || sid === "accessory") && p.classLimit) {
+      const bucket = ensureBucket(p.classLimit);
+      const m = sid === "weapon" ? bucket.wpn : bucket.acc;
+      const eff = resolveEffect(p.itemId);
+      const ex = m.get(eff.key);
+      if (ex) ex.count++;
+      else m.set(eff.key, { ...eff, count: 1 });
+    }
     if (p.armorSetId) {
-      setCount.set(p.armorSetId, (setCount.get(p.armorSetId) ?? 0) + 1);
-      if (!setIcon.has(p.armorSetId)) setIcon.set(p.armorSetId, game?.equipment[String(p.itemId)]?.armorSetIcon ?? null);
+      // Key sets by NAME (uniqueness is the set name, not the id/icon).
+      const sname = game?.sets?.[p.armorSetId]?.name ?? `Set ${p.armorSetId}`;
+      setCount.set(sname, (setCount.get(sname) ?? 0) + 1);
+      if (!setIcon.has(sname)) setIcon.set(sname, game?.equipment[String(p.itemId)]?.armorSetIcon ?? null);
     }
     if (p.ascended) ascended++;
     if (p.enhanceLevel >= 15) maxed++;
     if (p.locked) locked++;
   }
   const slots = SLOTS.map((s) => ({ id: s.id, label: s.label, count: slotCount.get(s.id) ?? 0 }));
-  const sortedSets = [...setCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const maxSet = Math.max(1, ...sortedSets.map(([, n]) => n));
-  const sets = sortedSets.map(([id, count], i) => ({
-    id,
-    name: game?.sets?.[id]?.name ?? `Set ${id}`,
-    icon: setIcon.get(id) ?? null,
+
+  // Canonical armor-set catalog — every set that exists in the game (resolved
+  // from the equipment table, not just owned pieces), keyed by set NAME so the
+  // grid is complete and de-duped by name. `id` is kept only to order the grid
+  // stably. Falls back to icons seen on owned pieces when game data is absent.
+  const setCatalog = new Map<string, { id: string; icon: string | null }>();
+  if (game?.equipment) {
+    for (const k in game.equipment) {
+      const e = game.equipment[k];
+      if (!e?.armorSetId) continue;
+      const sname = game.sets?.[e.armorSetId]?.name ?? `Set ${e.armorSetId}`;
+      if (!setCatalog.has(sname)) setCatalog.set(sname, { id: e.armorSetId, icon: e.armorSetIcon ?? null });
+    }
+  }
+  for (const [sname] of setCount) {
+    if (!setCatalog.has(sname)) setCatalog.set(sname, { id: sname, icon: setIcon.get(sname) ?? null });
+  }
+
+  // Overview "Top armor sets" — owned only, by piece count, top 5 with bars.
+  const ownedSorted = [...setCount.entries()].sort((a, b) => b[1] - a[1]);
+  const maxSet = Math.max(1, ...ownedSorted.map(([, n]) => n));
+  const sets = ownedSorted.slice(0, 5).map(([sname, count], i) => ({
+    id: sname,
+    name: sname,
+    icon: setCatalog.get(sname)?.icon ?? null,
     color: SET_COLORS[i % SET_COLORS.length]!,
     count,
     w: `${Math.round((count / maxSet) * 100)}%`,
   }));
+  // All-sets grid — the full catalog, owned first (by piece count), unowned
+  // last; set id breaks ties so the order is stable.
+  const allSets = [...setCatalog.entries()]
+    .sort((a, b) => (setCount.get(b[0]) ?? 0) - (setCount.get(a[0]) ?? 0) || Number(a[1].id) - Number(b[1].id))
+    .map(([sname, info], i) => ({
+      id: sname,
+      name: sname,
+      icon: info.icon,
+      color: SET_COLORS[i % SET_COLORS.length]!,
+      count: setCount.get(sname) ?? 0,
+    }));
 
-  return { heroes, gear, totalGraded, tiers, elements, classes, stars, slots, sets, ascended, maxed, locked };
+  // Class rows — the 5 classes in fixed order (class-restricted gear only, no
+  // Universal row). Chips: owned effects first (by copies owned), then unowned.
+  const mkChips = (m: Map<string, EffectChip> | undefined): EffectChip[] =>
+    m ? [...m.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)) : [];
+  const classGear: ClassGearRow[] = CLASSES.map((c) => {
+    const b = clsEffects.get(c.id);
+    return { id: c.id, label: c.label, weapons: mkChips(b?.wpn), accessories: mkChips(b?.acc) };
+  });
+
+  // Talisman cross-tab. Rows = the full talisman catalog (every ooparts name in
+  // the game, so unowned types still show), columns = the 9 main stats. Owned
+  // counts overlaid; rows sorted by total owned, then name. Each row carries the
+  // item art (`image`) + its unique-effect NAME (from multiTierPassives) for the
+  // icon's hover tooltip.
+  const talCatalog = new Map<string, { icon: string | null; effect: string }>();
+  if (game?.equipment) {
+    for (const k in game.equipment) {
+      const e = game.equipment[k];
+      if (e?.slot !== "ooparts" || !e.name || talCatalog.has(e.name)) continue;
+      talCatalog.set(e.name, { icon: e.image ?? null, effect: game.multiTierPassives?.[k]?.name ?? "" });
+    }
+  }
+  for (const name of talCount.keys()) if (!talCatalog.has(name)) talCatalog.set(name, { icon: null, effect: "" });
+  const oopartsCols = TALISMAN_STATS.map((key) => ({ key, label: STAT[key]?.label ?? key, icon: STAT[key]?.icon ?? null }));
+  const oopartsRows = [...talCatalog.entries()].map(([name, info]) => {
+    const row = talCount.get(name);
+    const counts = TALISMAN_STATS.map((s) => row?.get(s) ?? 0);
+    return { key: name, name, icon: info.icon, effect: info.effect, counts, total: counts.reduce((a, b) => a + b, 0) };
+  }).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  const oopartsColTotals = TALISMAN_STATS.map((_, i) => oopartsRows.reduce((a, r) => a + r.counts[i]!, 0));
+  const ooparts = {
+    cols: oopartsCols,
+    rows: oopartsRows,
+    colTotals: oopartsColTotals,
+    total: oopartsColTotals.reduce((a, b) => a + b, 0),
+  };
+
+  return { heroes, gear, totalGraded, tiers, elements, classes, stars, slots, sets, allSets, classGear, ooparts, ascended, maxed, locked };
 }
 
 /** Relative "3h ago" + absolute local time for the last capture. */
@@ -230,6 +404,27 @@ function SectionLabel({ children, right, icon, tint }: {
 }
 function Num({ children, className, color }: { children: React.ReactNode; className?: string; color?: string }) {
   return <span className={cx("font-mono tabular-nums leading-none", className)} style={color ? { color } : undefined}>{children}</span>;
+}
+/** Compact segmented pill toggle — switches between the breakdown views. */
+function Segmented<T extends string>({ value, onChange, options }: {
+  value: T; onChange: (v: T) => void; options: { id: T; label: string }[];
+}) {
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-lg border border-white/8 bg-white/4 p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          onClick={() => onChange(o.id)}
+          className={cx(
+            "rounded-md px-2 py-0.75 text-[9px] font-bold uppercase tracking-wide transition-colors",
+            value === o.id ? "bg-white/12 text-white" : "text-zinc-400 hover:text-zinc-200",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 /** Small "?" affordance with a native tooltip — discoverable, zero layout cost. */
 function InfoTip({ text }: { text: string }) {
@@ -426,6 +621,10 @@ export function HomeScreen({
   const onCheck = () => { setUpdate((u) => ({ ...u, state: "checking", error: null })); void checkForUpdate(); };
   const onInstall = () => { void installUpdate(); };
 
+  // Gear breakdown view — overview (by slot + top sets), class matrix, or the
+  // full owned-set list. Local UI state, resets each session.
+  const [gearView, setGearView] = useState<"overview" | "class" | "sets" | "ooparts">("overview");
+
   const stats = useMemo(() => (inventory ? computeStats(inventory, game) : null), [inventory, game]);
   // Library counts (saved builds + filter presets) live in localStorage. Read
   // once on mount — they don't change while the user sits on Home.
@@ -594,40 +793,104 @@ export function HomeScreen({
 
             {/* gear breakdown */}
             <Card className="flex min-w-0 flex-[1.3] flex-col gap-3.5">
-              <SectionLabel icon={IC_GEAR} tint="#38bdf8" right={<Num className="text-[10px] text-zinc-400">{stats.gear.toLocaleString()} pieces</Num>}>Gear breakdown</SectionLabel>
-              <div className="flex gap-4">
-                {/* by slot */}
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <SubLabel icon={IC_SLOT}>By slot</SubLabel>
-                  <div className="grid grid-cols-2 gap-x-3.5 gap-y-2">
-                    {stats.slots.map((s) => (
-                      <div key={s.id} className="flex items-center justify-between gap-1.5 border-b border-white/5 pb-1.5">
-                        <span className="text-[11px] text-zinc-400">{s.label}</span>
-                        <Num className="text-[11.5px] font-semibold text-zinc-300">{s.count}</Num>
+              <SectionLabel
+                icon={IC_GEAR}
+                tint="#38bdf8"
+                right={
+                  <Segmented
+                    value={gearView}
+                    onChange={setGearView}
+                    options={[
+                      { id: "overview", label: "Overview" },
+                      { id: "class", label: "Class" },
+                      { id: "sets", label: "All sets" },
+                      { id: "ooparts", label: "Talisman" },
+                    ]}
+                  />
+                }
+              >
+                Gear breakdown
+              </SectionLabel>
+
+              {gearView === "overview" && (
+                <div className="flex gap-4">
+                  {/* by slot */}
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <SubLabel icon={IC_SLOT}>By slot</SubLabel>
+                    <div className="grid grid-cols-2 gap-x-3.5 gap-y-2">
+                      {stats.slots.map((s) => (
+                        <div key={s.id} className="flex items-center justify-between gap-1.5 border-b border-white/5 pb-1.5">
+                          <span className="text-[11px] text-zinc-400">{s.label}</span>
+                          <Num className="text-[11.5px] font-semibold text-zinc-300">{s.count}</Num>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* top sets */}
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <SubLabel icon={IC_SETS}>Top armor sets</SubLabel>
+                    {stats.sets.length > 0 ? stats.sets.map((se) => (
+                      <div key={se.id} className="flex items-center gap-2">
+                        {se.icon
+                          ? <img src={`/img/ui/effect/${se.icon}.webp`} alt="" className="h-4.5 w-4.5 shrink-0" />
+                          : <span className="h-3.5 w-3.5 shrink-0 rounded" style={{ background: se.color }} />}
+                        <span className="w-13 shrink-0 truncate text-[11px] text-zinc-300" title={se.name}>{se.name}</span>
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                          <div className="h-full rounded-full" style={{ width: se.w, background: se.color, opacity: 0.65 }} />
+                        </div>
+                        <Num className="w-7.5 shrink-0 text-right text-[11px] font-semibold text-zinc-300">{se.count}</Num>
                       </div>
-                    ))}
+                    )) : (
+                      <span className="text-[11px] text-zinc-400">No armor sets resolved.</span>
+                    )}
                   </div>
                 </div>
-                {/* top sets */}
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <SubLabel icon={IC_SETS}>Top armor sets</SubLabel>
-                  {stats.sets.length > 0 ? stats.sets.map((se) => (
-                    <div key={se.id} className="flex items-center gap-2">
-                      {se.icon
-                        ? <img src={`/img/ui/effect/${se.icon}.webp`} alt="" className="h-4.5 w-4.5 shrink-0" />
-                        : <span className="h-3.5 w-3.5 shrink-0 rounded" style={{ background: se.color }} />}
-                      <span className="w-13 shrink-0 truncate text-[11px] text-zinc-300" title={se.name}>{se.name}</span>
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
-                        <div className="h-full rounded-full" style={{ width: se.w, background: se.color, opacity: 0.65 }} />
-                      </div>
-                      <Num className="w-7.5 shrink-0 text-right text-[11px] font-semibold text-zinc-300">{se.count}</Num>
+              )}
+
+              {gearView === "class" && (
+                <div className="flex flex-col gap-1">
+                  <SubLabel icon={IC_CLASS}>Owned effects by class</SubLabel>
+                  {/* column headers — inventory tab icons stand in for WPN / ACC */}
+                  <div className="grid grid-cols-[76px_1fr_1fr] items-center gap-x-4 pb-0.5">
+                    <span />
+                    <SlotHead slot="weapon" />
+                    <SlotHead slot="accessory" />
+                  </div>
+                  {stats.classGear.map((r) => (
+                    <ClassEffectRow key={r.id} row={r} />
+                  ))}
+                </div>
+              )}
+
+              {gearView === "sets" && (
+                <div className="flex flex-col gap-2">
+                  <SubLabel icon={IC_SETS}>
+                    All armor sets · {stats.allSets.filter((s) => s.count > 0).length}/{stats.allSets.length} owned
+                  </SubLabel>
+                  {stats.allSets.length > 0 ? (
+                    <div className="grid grid-cols-7 justify-items-center gap-x-2 gap-y-3">
+                      {stats.allSets.map((se) => (
+                        <EffectChipView
+                          key={se.id}
+                          forceCount
+                          chip={{ key: se.id, icon: se.icon, name: se.name, desc: "", count: se.count, color: se.color }}
+                        />
+                      ))}
                     </div>
-                  )) : (
+                  ) : (
                     <span className="text-[11px] text-zinc-400">No armor sets resolved.</span>
                   )}
                 </div>
-              </div>
-              <div className="flex gap-2">
+              )}
+
+              {gearView === "ooparts" && (
+                <div className="flex flex-col gap-2">
+                  <SubLabel icon={IC_SLOT}>Talisman × main stat · {stats.ooparts.total} owned</SubLabel>
+                  <OopartsTable ooparts={stats.ooparts} />
+                </div>
+              )}
+
+              <div className="mt-auto flex gap-2">
                 <Stat label="Ascended" value={stats.ascended} gradient />
                 <Stat label="+15 maxed" value={stats.maxed} />
                 <Stat label="Locked" value={stats.locked} />
@@ -650,6 +913,113 @@ function BarRow({ label, labelW, count, w, color, iconSrc }: { label: string; la
         <div className="h-full rounded-full" style={{ width: w, background: color }} />
       </div>
       <Num className="w-6 shrink-0 text-right text-[11px] font-semibold text-zinc-300">{count}</Num>
+    </div>
+  );
+}
+
+// ── class effect row (owned weapon / accessory effects per class) ────────
+// Weapons and accessories sit in two columns; the inventory tab icon heads
+// each column (see SlotHead) so no WPN / ACC text label is needed.
+function SlotHead({ slot }: { slot: SlotId }) {
+  const meta = SLOT_BY[slot]!;
+  return <img src={`/img/ui/inven/${meta.icon}.webp`} alt={meta.label} title={meta.label} className="h-4.5 w-4.5 opacity-75" />;
+}
+function ClassEffectRow({ row }: { row: ClassGearRow }) {
+  return (
+    <div className="grid grid-cols-[76px_1fr_1fr] items-start gap-x-4 border-b border-white/5 py-2 last:border-0">
+      <span className="flex items-center gap-1.5 pt-0.5 text-[11px] text-zinc-300">
+        <img src={`/img/ui/class/CM_Class_${row.label}.webp`} alt="" className="h-4 w-4 shrink-0" />
+        {row.label}
+      </span>
+      <ChipWrap chips={row.weapons} />
+      <ChipWrap chips={row.accessories} />
+    </div>
+  );
+}
+function ChipWrap({ chips }: { chips: EffectChip[] }) {
+  if (chips.length === 0) return <span className="pt-0.5 text-[10px] text-zinc-600">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {chips.map((c) => <EffectChipView key={c.key} chip={c} forceCount />)}
+    </div>
+  );
+}
+function EffectChipView({ chip, forceCount }: { chip: EffectChip; forceCount?: boolean }) {
+  const owned = chip.count > 0;
+  return (
+    <span
+      title={chip.desc ? `${chip.name} — ${chip.desc}` : chip.name}
+      className="relative inline-flex cursor-help"
+    >
+      {chip.icon
+        ? <img src={`/img/ui/effect/${chip.icon}.webp`} alt={chip.name} className={cx("h-5.5 w-5.5 rounded", !owned && "opacity-30 grayscale")} />
+        : chip.color
+          ? <span className={cx("h-5.5 w-5.5 rounded", !owned && "opacity-30")} style={{ background: chip.color }} />
+          : <span className="grid h-5.5 w-5.5 place-items-center rounded bg-white/8 text-[8px] text-zinc-400">?</span>}
+      {(forceCount || chip.count > 1) && (
+        <span className={cx(
+          "absolute -bottom-1 -right-1 grid min-w-3.5 place-items-center rounded-full px-0.5 text-[8px] font-bold leading-none ring-1",
+          owned ? "bg-zinc-900 text-zinc-200 ring-white/15" : "bg-zinc-950 text-rose-400 ring-rose-500/30",
+        )}>
+          {chip.count}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ── talisman × main-stat cross-tab ───────────────────────────────────────
+// Rows = talisman types (red name when unowned), cols = the 9 main stats.
+// Cells are a light cyan heatmap; 0 reads muted. A totals row/col closes it.
+function OopartsTable({ ooparts }: { ooparts: HomeStats["ooparts"] }) {
+  const { cols, rows, colTotals, total } = ooparts;
+  const max = Math.max(1, ...rows.flatMap((r) => r.counts));
+  const cell = "grid place-items-center py-1 text-[11px] tabular-nums";
+  return (
+    <div className="overflow-x-auto">
+      <div className="grid min-w-fit gap-px" style={{ gridTemplateColumns: `48px repeat(${cols.length}, 30px) 34px` }}>
+        {/* header */}
+        <span />
+        {cols.map((c) => (
+          <span key={c.key} title={c.label} className="grid place-items-center pb-1">
+            {c.icon
+              ? <img src={`/img/ui/effect/${c.icon}.webp`} alt={c.label} className="h-4 w-4" />
+              : <span className="text-[8px] font-bold uppercase tracking-wide text-zinc-400">{c.label}</span>}
+          </span>
+        ))}
+        <span className="grid place-items-center pb-1 text-[8px] font-bold uppercase tracking-wide text-zinc-500">Σ</span>
+
+        {/* rows — item art only; hover reveals name + effect */}
+        {rows.map((r) => (
+          <Fragment key={r.key}>
+            <span className="grid cursor-help place-items-center py-1" title={r.effect ? `${r.name} — ${r.effect}` : r.name}>
+              {/* same framed look as the inventory: rarity slot bg (talismans
+                  are all Unique → red) under the item art. */}
+              <span className={cx("relative h-7 w-7 shrink-0 overflow-hidden rounded", r.total === 0 && "opacity-30 grayscale")}>
+                <img src="/img/ui/bg/TI_Slot_Unique.webp" alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                {r.icon && <img src={`/img/equipment/${r.icon}.webp`} alt={r.name} className="absolute inset-0 h-full w-full object-contain p-0.5" draggable={false} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />}
+              </span>
+            </span>
+            {r.counts.map((n, i) => (
+              <span
+                key={i}
+                className={cx(cell, "rounded", n > 0 ? "font-semibold text-zinc-100" : "text-zinc-700")}
+                style={n > 0 ? { background: `rgba(34,211,238,${Math.min(0.08 + (n / max) * 0.32, 0.4)})` } : undefined}
+              >
+                {n > 0 ? n : "·"}
+              </span>
+            ))}
+            <span className={cx(cell, "font-semibold", r.total > 0 ? "text-zinc-200" : "text-zinc-700")}>{r.total || "·"}</span>
+          </Fragment>
+        ))}
+
+        {/* totals row */}
+        <span className="grid place-items-center py-1 text-[8px] font-bold uppercase tracking-wide text-zinc-500">Total</span>
+        {colTotals.map((n, i) => (
+          <span key={i} className={cx(cell, "font-semibold", n > 0 ? "text-zinc-300" : "text-zinc-700")}>{n || "·"}</span>
+        ))}
+        <span className={cx(cell, "font-bold text-zinc-200")}>{total || "·"}</span>
+      </div>
     </div>
   );
 }
