@@ -88,7 +88,7 @@ seul le **classement par slot** diffère :
 `topPctPrune` / `topPctPrunePreserving` supprimés (morts) ; `CP_COMBO_BUDGET` → `COMBO_BUDGET` (général).
 La protection des sets requis + le pin passent par `keepTopN` pour les trois objectifs identiquement.
 **Effet attendu** : Score+priorité 142 s → ~1-2 s (budget 8 M @ Top% 30). +4 tests `cpPrune.test.ts`
-(`priorityScoreOf`/`magnitudeScoreOf` : pondération, exclusion combat-only, magnitude). 215 → **219**.
+(`priorityScoreOf`/`magnitudeScoreOf` : pondération, exclusion combat-only, magnitude). 237 → **241**.
 
 **Instrumentation** (commit précédent, même session) : ⏱ honnête (démarre à l'entrée de `solve()`, inclut
 le precompute) + bouton **« Copy Debug Info »** dans le footer Builder (visible si `gs.debug.solver`),

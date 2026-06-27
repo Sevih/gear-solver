@@ -341,8 +341,8 @@ Score = round(Σ over priority[key] × (effective(finalStats[key]) / STAT_NORMS[
 ### 2.5 Per-roll scoring (`ROLL_NORMS`)
 
 **Constante séparée** de `STAT_NORMS` (qui sert à Score sur final stats).
-Utilisée par `topPctPrune` et `scoreGemPool` qui scorent des **rolls
-individuels**, pas des totaux endgame.
+Utilisée par `priorityScoreOf`/`magnitudeScoreOf` (prune par budget de combos)
+et `scoreGemPool` qui scorent des **rolls individuels**, pas des totaux endgame.
 
 ```
 roll_score = priority[user_key] × (roll.value / ROLL_NORMS[roll.engine_key])
@@ -599,7 +599,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
 | `packages/core/test/equip.test.ts` | 11 tests — `equipItem`/`unequipItem` : pose sur slot vide, **déplacement** du slot occupé (même perso), no-op (déjà équipé / item inconnu / non-gear), `charUid "0"` = unequip, scope du déplacement (autre perso/autre slot intacts), **immutabilité** de l'entrée |
-| `apps/renderer/test/solver.test.ts`     | 74 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`**, **incremental bucket accumulator equivalence** (`computeFinalStatsFromPrefix` vs full-array) |
+| `apps/renderer/test/solver.test.ts`     | 75 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`**, **incremental bucket accumulator equivalence** (`computeFinalStatsFromPrefix` vs full-array) |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped` : parité sans gemme crit, accept jusqu'à CHC 100 (overshoot ≤102), stop pile à 100, skip total au cap, split talisman/EE, delta null si rien d'utile, score ≤0 jamais pris |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount` : défaut `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, plafond dur 64 |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidélité, maps vides), import merge (dédup par `id`, collision garde l'existant), replace (overwrite), validation du bundle (kind/version/maps) |
@@ -609,8 +609,11 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick` : verdict des deux côtés de la bascule, équivalent-flat exact, égalité pile à la bascule, garde tick %=0 |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains` : tri décroissant, monotonie delta→gain, CHC nul si crit-cap, base 0 → vide |
 | `apps/renderer/test/buildAdvice.test.ts` | 16 tests — `computeAdvice` (Builds) : no-gear silencieux, missing quasi-complet (≤2) vs WIP silencieux (early-return), sets (singleton / 3-of-4), caps gaspillés — crit toléré ≤102 / PEN >100 (seuil arrondi >0), gem slots vides Talisman/EE + tip +5, upgrade agrégé (reforges non utilisés / 6★ non ascensionné / sous cap d'enhance), singularier/pluraliser |
+| `apps/renderer/test/cpPrune.test.ts` | 20 tests — budget-combos & scorers : `keepTopN`/`keepTopPct` (top-N, préservation set requis, pin de la pièce équipée), `priorityScoreOf`/`magnitudeScoreOf` (pondération, exclusion combat-only), `allocateComboBudget` (produit borné, petits slots entiers, ordre d'entrée), proxy CP qui classe le gear fort, `cpStatWeights` (offensif ≫ dmg-reduce, poids ≥ 0) |
+| `apps/renderer/test/heroPriority.test.ts` | 21 tests — store priorité par héros : `rankOrder` / `isLowerPriority` (non-classé < classé, unicité, strict), `reorderRank` / `moveRankBefore` (insertion positionnelle contiguë 1..N, drag, clamp, immutabilité), `fillUnrankedByOrder` (préserve les rangs manuels, complète les non-classés par CP, compacte les trous, ignore les uid périmés) |
+| `apps/renderer/test/dominance.test.ts` | 10 tests — `pruneDominatedForCp` : drop strict, ties/Pareto/groupes gardés, projection reforge, équivalence top-CP end-to-end via `solveChunk` |
 
-Run : `npm test --workspaces --if-present`. **Total : 186 tests** (core 22 : parse 11 + equip 11 · renderer 164 : solver 74, solveChunk 3, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, subValue 5, dmgValue 4, buildAdvice 11).
+Run : `npm test --workspaces --if-present`. **Total : 243 tests** (core 22 : parse 11 + equip 11 · renderer 221 : solver 75, solveChunk 3, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, subValue 5, dmgValue 4, buildAdvice 16, cpPrune 20, heroPriority 21, dominance 10).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 
@@ -670,9 +673,10 @@ apps/renderer/src/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
 │       ├── orchestrator.ts         ← pool de Web Workers, fan-out/in, merge top-N
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + simulateReforges + TopKHeap
+│       ├── setPlans.ts             ← setsFeasible + armorSetWhitelist + allSetsComplete (set OR-of-AND model)
 │       ├── gems.ts                 ← buildGemPool + scoreGemPool + aggregateGemDelta + allocateGems + gemSlotsOf
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + ROLL_NORMS + STAT_TO_PRIORITY
-│       └── cp.ts                   ← calcBattlePower
+│       └── cp.ts                   ← calcBattlePower + makeCpEvaluator
 ├── workers/
 │   └── solver.worker.ts            ← IPC adapter, MessageChannel yield
 └── screens/

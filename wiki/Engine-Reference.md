@@ -344,8 +344,8 @@ Score = round(Σ over priority[key] × (effective(finalStats[key]) / STAT_NORMS[
 ### 2.5 Per-roll scoring (`ROLL_NORMS`)
 
 **Separate constant** from `STAT_NORMS` (which serves Score on final stats).
-Used by `topPctPrune` and `scoreGemPool` which score **individual rolls**, not
-endgame totals.
+Used by `priorityScoreOf`/`magnitudeScoreOf` (combo-budget prune) and
+`scoreGemPool` which score **individual rolls**, not endgame totals.
 
 ```
 roll_score = priority[user_key] × (roll.value / ROLL_NORMS[roll.engine_key])
@@ -599,7 +599,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
 | `packages/core/test/equip.test.ts` | 11 tests — `equipItem`/`unequipItem`: set on empty slot, **displace** the occupied slot (same char), no-op (already equipped / unknown item / non-gear), `charUid "0"` = unequip, displacement scope (other char/other slot untouched), input **immutability** |
-| `apps/renderer/test/solver.test.ts`     | 74 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity**, **incremental bucket accumulator equivalence** |
+| `apps/renderer/test/solver.test.ts`     | 75 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity**, **incremental bucket accumulator equivalence** |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped`: parity without crit gem, accept up to CHC 100 (overshoot ≤102), stop exactly at 100, total skip at cap, talisman/EE split, null delta if nothing useful, score ≤0 never taken |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount`: default `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, hard ceiling 64 |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidelity, empty maps), import merge (dedup by `id`, collision keeps the existing), replace (overwrite), bundle validation (kind/version/maps) |
@@ -609,8 +609,11 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick`: verdict on both sides of the crossover, exact flat-equivalent, equality exactly at the crossover, %=0 tick guard |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains`: descending sort, delta→gain monotonicity, CHC null if crit-cap, base 0 → empty |
 | `apps/renderer/test/buildAdvice.test.ts` | 16 tests — `computeAdvice` (Builds): no-gear silent, missing on a near-complete hero (≤2) vs silent WIP (early-return), sets (singleton / 3-of-4), wasted caps — crit tolerated ≤102 / PEN >100 (rounded threshold >0), empty gem slots Talisman/EE + reach-+5 tip, aggregated upgrade (unused reforges / 6★ not ascended / below enhance cap), singular/plural wording |
+| `apps/renderer/test/cpPrune.test.ts` | 20 tests — combo-budget & scorers: `keepTopN`/`keepTopPct` (top-N, required-set preservation, equipped-piece pin), `priorityScoreOf`/`magnitudeScoreOf` (weighting, combat-only exclusion), `allocateComboBudget` (product bound, small slots kept whole, input order), CP proxy ranking high-CP gear, `cpStatWeights` (offensive ≫ dmg-reduce, weight ≥ 0) |
+| `apps/renderer/test/heroPriority.test.ts` | 21 tests — per-hero priority store: `rankOrder` / `isLowerPriority` (unranked < ranked, uniqueness, strict), `reorderRank` / `moveRankBefore` (contiguous 1..N positional insert, drag, clamp, immutability), `fillUnrankedByOrder` (keeps manual ranks, fills unranked by CP, compacts gaps, ignores stale uids) |
+| `apps/renderer/test/dominance.test.ts` | 10 tests — `pruneDominatedForCp`: strict drop, ties/Pareto/groups kept, reforge projection, end-to-end top-CP equivalence via `solveChunk` |
 
-Run: `npm test --workspaces --if-present`. **Total: 186 tests** (core 22: parse 11 + equip 11 · renderer 164: solver 74, solveChunk 3, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, subValue 5, dmgValue 4, buildAdvice 11).
+Run: `npm test --workspaces --if-present`. **Total: 243 tests** (core 22: parse 11 + equip 11 · renderer 221: solver 75, solveChunk 3, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, subValue 5, dmgValue 4, buildAdvice 16, cpPrune 20, heroPriority 21, dominance 10).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 
