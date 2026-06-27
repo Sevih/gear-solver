@@ -354,10 +354,16 @@ Sized pour un max-roll sur un sub de +15 T4 :
 
 Sans cette séparation, scorer un roll d'ATK% (24% raw → ~2.4 display) avec
 `STAT_NORMS.atk=4000` donnerait un score 50× plus petit qu'un roll de CHC
-+3% scoré avec `STAT_NORMS.crc=100`. Bug réel attrapé par les tests.
++3% scoré avec `STAT_NORMS.critRate=100`. Bug réel attrapé par les tests.
 
-Mapping engine-key → user-key (`STAT_TO_PRIORITY`) : `atkPct → atk`,
-`critRate → crc`, `effRes → res`, etc.
+**Source de vérité unique** : `ROLL_NORMS`/`STAT_NORMS`/`STAT_TO_PRIORITY` sont
+**dérivés** d'un registre unique [`statRegistry.ts`](../apps/renderer/src/lib/statRegistry.ts)
+(`STAT_AXES`, typé contre `StatType`), `ratings.ts` ne fait que les ré-exporter. Les clés
+sont désormais **unifiées** sur les noms ENGINE (plus de `crc`/`chd`/`res`/`dmgRed`/`critDmgRed`
+côté `FinalStats`/`priority` — c'est `critRate`/`critDmg`/`effRes`/`dmgReduce`/`critDmgReduce`),
+donc `STAT_TO_PRIORITY` ne fait plus que le **repli flat/%→axe** (`atkPct → atk`, `defPct → def`,
+`hpPct → hp`) ; tout le reste est identité. Un test (`statRegistry.test.ts`) verrouille la
+couverture + la parité numérique.
 
 ### 2.6 Set bonuses (`composeBuild.ts::computeSetBonuses`)
 

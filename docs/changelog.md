@@ -69,6 +69,36 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — 🟡 unification des clés de stats (registre source-de-vérité)
+
+**Le problème** : le même concept portait 2 noms selon la couche — ENGINE (`critRate`/`critDmg`/
+`effRes`/`dmgReduce`/`critDmgReduce`, sur les rolls/gems/tokens/`ROLL_NORMS`) vs USER (`crc`/`chd`/
+`res`/`dmgRed`/`critDmgRed`, sur `FinalStats`/`priority`/`STAT_NORMS`), pontés ad-hoc par
+`STAT_TO_PRIORITY`. Rien ne **garantissait** que le pont couvrait toutes les clés → bug-surface
+silencieux (une stat ajoutée pouvait no-op sans bruit).
+
+**Le fix** — unification sur les noms ENGINE (le plus large) + **registre unique**
+[`apps/renderer/src/lib/statRegistry.ts`](../apps/renderer/src/lib/statRegistry.ts) (`STAT_AXES`,
+typé contre `StatType` de core) **d'où dérivent** `ROLL_NORMS`/`STAT_NORMS`/`STAT_TO_PRIORITY`/
+`FINAL_STAT_KEYS` — plus de littéraux dupliqués (`ratings.ts` ré-exporte les dérivés). Les champs
+`FinalStats` renommés (`crc→critRate`, `chd→critDmg`, `res→effRes`, `dmgRed→dmgReduce`,
+`critDmgRed→critDmgReduce`) → le compilateur a guidé tous les lecteurs typés (cp, ratings, dmgValue,
+buildAdvice, engine, Builds/Builder). `STAT_TO_PRIORITY` se réduit au seul repli flat/%→axe
+(`atkPct→atk`…). La dualité `atk`/`atkPct` (flat vs %) **reste** (deux variants d'un axe). La
+fusion `atk`/`atkPct` collapse toujours en `atk`.
+
+**Hors périmètre (volontaire)** : le namespace **baseline** (`chc`/`dmgInc`) + `ScalingMap`
+(`res`/`eff`) + la clé **data** `dmgSec.stat: "crc"` (dans `characters.json`, générée) restent —
+mappés au bord (ex. `crc → s.critRate` dans `computeCheapRatings`), pour ne pas régénérer `data/derived`.
+
+**Persistance migrée** (idempotent) : `filterPresets.fromSerialized` (priority + statFilters) et
+`savedBuilds.loadSavedBuilds` (build.finalStats + reforge.priority) réécrivent les anciennes clés via
+`renameLegacyStatKeys` → presets/builds sauvés avant l'unif continuent de marcher.
+
+**Tests** : +`statRegistry.test.ts` (11 — FinalStats ↔ axes, couverture du pont, tokens, **snapshot
+numérique** ROLL_NORMS/STAT_NORMS = parité, migration legacy). Suites existantes mises à jour.
+219 → **232** (renderer) ; core 22 ; **254** total. Typecheck + CP 0-diff verts (renames purs).
+
 ### Session 2026-06-27 — 🟠 budget combos unifié (Score AVEC priorité n'était PAS borné) + instrumentation
 
 **Le bug** (diagnostiqué via le nouveau « Copy Debug Info », cf. ci-dessous) : un solve **SOLVE (Score)
