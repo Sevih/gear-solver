@@ -724,6 +724,11 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
       onDragLeave={dragEnabled ? () => setDragOver(false) : undefined}
       onDrop={dragEnabled ? (e) => { e.preventDefault(); setDragOver(false); onDropRank(uid); } : undefined}
     >
+      {/* Insertion marker — a drop drops the dragged hero BEFORE this row, so
+       *  the cue sits at the top edge. */}
+      {dragEnabled && dragOver && (
+        <div className="pointer-events-none absolute -top-1 left-2 right-2 z-10 h-0.5 rounded-full bg-cyan-400 shadow-[0_0_8px_2px_rgba(34,211,238,0.6)]" />
+      )}
       {/* Rank column — left of the portrait: drag handle (reorder) + the
        *  editable position field. Higher priority = smaller number; rank 1 = top. */}
       <div className="flex shrink-0 flex-col items-center gap-1">
@@ -1077,6 +1082,19 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
   // Surfacing both reconciles the two numbers: the badge is "equipped", the
   // roster lists everyone, so the pill spells out "N equipped · M total".
   const equippedCount = useMemo(() => roster.reduce((n, e) => n + (e.count > 0 ? 1 : 0), 0), [roster]);
+
+  // Seed priority from CP order on first use — when no hero is ranked yet, rank
+  // every hero by CP desc (rank 1 = highest CP) so the list starts ordered and
+  // the user just nudges from there. Self-limiting: once anything is ranked the
+  // map is non-empty and this is a no-op (clearing every hero re-seeds — treated
+  // as a re-init). Uses the full composed roster so it covers all owned heroes.
+  useEffect(() => {
+    if (composedRoster.length === 0 || Object.keys(heroPriority).length > 0) return;
+    const byCp = [...composedRoster].sort((a, b) => (b.bp ?? -Infinity) - (a.bp ?? -Infinity));
+    const seeded: HeroPriority = {};
+    byCp.forEach((e, i) => { seeded[e.char.uid] = i + 1; });
+    onHeroPriorityChange(seeded);
+  }, [composedRoster, heroPriority, onHeroPriorityChange]);
 
   if (!inventory) {
     return <Empty title="No capture yet" subtitle="Arm capture and import your roster to see equipped builds here." />;
