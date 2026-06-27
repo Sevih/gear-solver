@@ -197,7 +197,9 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   - **Classic**: projects to **+10 non-ascended** (main re-scaled via the `scaleMain` mult
     on the core side `projectMainToCeiling`, + substats max-rolled at **6 ticks**).
   - **Ascended**: projects to **+15 ascended** (overrides the real flag → we assume everything
-    ascended; **9 ticks**). Never *downgrades* a piece already above the ceiling.
+    ascended; **9 ticks**) **+ the unconditional Singularity passive** (`addProjectedSingularity`:
+    DMG+ 50% on weapon/accessory, DMG- 25% on armor — the table's best value). An already-ascended
+    piece keeps its **real roll**. Never *downgrades* a piece already above the ceiling.
 
   The main re-scale goes through the ratio of the multipliers (`RolledStat` does not keep
   the base value) — validated against in-game (test `projectMainToCeiling`: 240 → 1380).
@@ -284,7 +286,11 @@ enhance level, slot icon, main stat, subs (with ticks). In addition:
 - **Projected stats**: if the Reforge mode ≠ Off, the displayed main + subs are the projection
   (`projectPieceForReforge` re-simulated on the main thread side) + **classic** / **ascended** badge.
   The card also shows the projected enhance (`+15 · ascended`) since the projected piece
-  carries its target `enhanceLevel`/`ascended`.
+  carries its target `enhanceLevel`/`ascended`, the projected **Singularity passive** (ascended),
+  and a cyan **`+N`** badge per sub showing the reforge ticks the projection added (delta vs the
+  captured piece).
+- **Equip state**: per-card badge — 🟠 portrait + name if the piece is equipped on **another hero**
+  (applying steals it), 🟢 `equipped` if already on the current hero, `free` otherwise.
 
 Em-dash when no build is selected.
 

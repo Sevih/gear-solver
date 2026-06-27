@@ -120,7 +120,7 @@ The renderer auto-imports the latest capture on launch.
 
 ```bash
 npm run typecheck             # all workspaces (strict + noUnusedLocals/Parameters)
-npm test                      # core (22 tests) + renderer (232 tests) = 254
+npm test                      # core (22 tests) + renderer (237 tests) = 259
 ```
 
 The core suite covers the inventory parser and the equip/unequip captured-JSON rewrite

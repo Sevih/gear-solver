@@ -219,7 +219,9 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   - **Classic** : projette à **+10 non-ascended** (main re-scalé via le mult de
     `scaleMain` côté core `projectMainToCeiling`, + substats max-rollés à **6 ticks**).
   - **Ascended** : projette à **+15 ascended** (override le flag réel → on suppose tout
-    ascensionné ; **9 ticks**). Ne *downgrade* jamais une pièce déjà au-dessus du plafond.
+    ascensionné ; **9 ticks**) **+ le passif de singularité inconditionnel** (`addProjectedSingularity` :
+    DMG+ 50 % arme/accessoire, DMG- 25 % armures — meilleure valeur de la table). Une pièce déjà
+    ascended garde son **vrai roll**. Ne *downgrade* jamais une pièce déjà au-dessus du plafond.
 
   Le re-scale du main passe par le ratio des multiplicateurs (`RolledStat` ne garde pas
   la valeur de base) — validé contre l'in-game (test `projectMainToCeiling` : 240 → 1380).
@@ -311,7 +313,11 @@ enhance level, icône slot, main stat, subs (avec ticks). En plus :
 - **Stats projetées** : si le mode Reforge ≠ Off, main + subs affichés sont la projection
   (`projectPieceForReforge` re-simulé côté main thread) + badge **classic** / **ascended**.
   La carte montre aussi l'enhance projeté (`+15 · ascended`) puisque la pièce projetée
-  porte son `enhanceLevel`/`ascended` cible.
+  porte son `enhanceLevel`/`ascended` cible, le **passif de singularité** projeté (ascended), et
+  un badge cyan **`+N`** par sub indiquant les ticks de reforge ajoutés par la projection
+  (delta vs la pièce capturée).
+- **État d'équipement** : badge par carte — 🟠 portrait + nom si la pièce est équipée sur un
+  **autre héros** (l'appliquer la lui retire), 🟢 `equipped` si déjà sur le héros courant, `free` sinon.
 
 Em-dash quand aucun build n'est sélectionné.
 

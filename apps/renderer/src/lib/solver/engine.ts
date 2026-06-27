@@ -70,7 +70,42 @@ export function projectPieceForReforge(
 ): GearPiece {
   if (mode === "disable" || piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
   const plan = REFORGE_PLANS[mode];
-  return simulateReforges(projectMainToCeiling(piece, game, plan.ceiling), priority, plan.budget);
+  const projected = simulateReforges(projectMainToCeiling(piece, game, plan.ceiling), priority, plan.budget);
+  // Ascending also grants the unconditional Singularity passive (DMG+ on
+  // weapon/accessory, DMG- on the four armor pieces) — the defining bonus of
+  // ascension. The classic ceiling (+10) doesn't ascend, so it's ascended-only.
+  return mode === "ascended" ? addProjectedSingularity(projected) : projected;
+}
+
+/** Best-grade unconditional Singularity passive granted at full ascension —
+ *  the optimistic ceiling the ascended preview projects (mirrors the rest of
+ *  the projection's "maxed 6★" framing). Weapon/accessory roll an unconditional
+ *  DMG+ (`ST_DMG_BOOST`), the four armor pieces an unconditional DMG-
+ *  (`ST_DMG_REDUCE_RATE`); these are the top values in `singularity-options.json`
+ *  (DMG+ v=500 → 50%, DMG- v=250 → 25%, both stored ×10 → percent). A
+ *  data-consistency test guards the numbers against table changes. */
+const SINGULARITY_CEILING = { dmgUp: 50, dmgReduce: 25 } as const;
+/** Slots whose unconditional Singularity passive is DMG+ (the rest get DMG-). */
+const SINGULARITY_DMGUP_SLOTS = new Set(["weapon", "accessory"]);
+
+/** Append the projected unconditional Singularity passive to an ascended-
+ *  projected gear piece. No-op when the piece already carries a `singularity`
+ *  main entry (an already-ascended piece keeps its REAL rolled value — we never
+ *  overwrite a known roll with the ceiling). Talisman/EE never reach here
+ *  (`projectPieceForReforge` returns them untouched). */
+function addProjectedSingularity(piece: GearPiece): GearPiece {
+  if (!piece.slot || piece.main.some((m) => m.source === "singularity")) return piece;
+  const isDmgUp = SINGULARITY_DMGUP_SLOTS.has(piece.slot);
+  const entry: RolledStat = {
+    stat: isDmgUp ? "dmgUp" : "dmgReduce",
+    value: isDmgUp ? SINGULARITY_CEILING.dmgUp : SINGULARITY_CEILING.dmgReduce,
+    percent: true,
+    fromBuff: true,
+    source: "singularity",
+    name: isDmgUp ? "DMG Increase to target" : "Reduced DMG Taken from targets",
+    combatOnly: false,
+  };
+  return { ...piece, main: [...piece.main, entry] };
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

@@ -3895,13 +3895,21 @@ function BottomGearBand({
   // "disable" mode, or when there's nothing left to project), so identity
   // inequality is a reliable "was projected" signal for the badge.
   const pieceBySlot = useMemo(() => {
-    const map = new Map<string, { piece: GearPiece; reforged: boolean; equippedBy: string | null }>();
+    const map = new Map<string, { piece: GearPiece; reforged: boolean; equippedBy: string | null; addedTicks: number[] }>();
     if (!build) return map;
     for (const uid of build.pieceUids) {
       const original = pieceByUid.get(uid);
       if (!original?.slot) continue;
       const piece = game ? projectPieceForReforge(original, game, reforge.reforgeMode, reforge.priority) : original;
-      map.set(original.slot, { piece, reforged: piece !== original, equippedBy: original.equippedBy });
+      const reforged = piece !== original;
+      // Per-sub reforge procs the projection added (delta of total ticks vs the
+      // captured piece) — `simulateReforges` clones subs 1:1 in order, so index
+      // alignment holds. Surfaces "which sub got how many extra ticks" on the
+      // card instead of just a silently-higher value.
+      const addedTicks = reforged && piece.subs.length === original.subs.length
+        ? piece.subs.map((s, i) => (s.ticks ?? 0) - (original.subs[i]?.ticks ?? 0))
+        : [];
+      map.set(original.slot, { piece, reforged, equippedBy: original.equippedBy, addedTicks });
     }
     return map;
   }, [build, pieceByUid, game, reforge]);
@@ -3928,7 +3936,7 @@ function BottomGearBand({
         const equippedBy = entry?.equippedBy ?? null;
         const equippedSelf = equippedBy != null && equippedBy === selfUid;
         const equippedOther = equippedBy != null && equippedBy !== selfUid ? (charsByUid.get(equippedBy) ?? null) : null;
-        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} reforgeMode={reforge.reforgeMode} equippedSelf={equippedSelf} equippedOther={equippedOther} hasEquipInfo={!!entry} />;
+        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} reforgeMode={reforge.reforgeMode} equippedSelf={equippedSelf} equippedOther={equippedOther} hasEquipInfo={!!entry} addedTicks={entry?.addedTicks} />;
       })}
     </div>
   );
@@ -3945,7 +3953,7 @@ const SLOT_MAIN_PLACEHOLDER: Record<string, string> = {
 /** Compact mirror of the Inventory tab's `ItemDetail` panel — same section
  *  flow (header / icon+label / main stat / substats). Renders em-dash
  *  placeholders when no piece is wired (no build selected yet). */
-function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, equippedSelf, equippedOther, hasEquipInfo }: {
+function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, equippedSelf, equippedOther, hasEquipInfo, addedTicks }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
@@ -3965,6 +3973,9 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, e
   /** True when a piece (with resolved equip state) backs this card — gates the
    *  "free" tag so empty placeholder cards stay clean. */
   hasEquipInfo?: boolean;
+  /** Reforge procs the projection added per sub (aligned to `piece.subs`) —
+   *  shown as a `+N` badge so the projected ticks are visible, not silent. */
+  addedTicks?: number[];
 }) {
   const slotMeta = SLOT_BY[slot];
   const def = piece && game ? game.equipment[String(piece.itemId)] : null;
@@ -4073,16 +4084,26 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, e
           : <div className="text-[10.5px] italic text-white/55">—</div>
       ) : (
         <div className="space-y-1 font-mono text-[10.5px] tabular-nums">
-          {piece && piece.subs.length > 0 ? piece.subs.map((s, i) => (
+          {piece && piece.subs.length > 0 ? piece.subs.map((s, i) => {
+            const added = addedTicks?.[i] ?? 0;
+            return (
             <div key={i} className={cx("flex items-center gap-1.5", reforged ? "text-cyan-100/90" : "text-white/80")}>
               <StatIcon stat={s.stat} size={12} className="shrink-0" />
               {s.ticks != null && (
                 <span className="rounded border border-white/8 px-1 py-px text-[9.5px] text-white/60">LV{s.ticks}</span>
               )}
+              {added > 0 && (
+                <span
+                  title={`Projection added ${added} reforge tick${added === 1 ? "" : "s"} here`}
+                  className="rounded border border-cyan-400/40 bg-cyan-500/15 px-1 py-px text-[9px] font-semibold text-cyan-300"
+                >
+                  +{added}
+                </span>
+              )}
               <span className="flex-1 truncate">{STAT[s.stat]?.longLabel ?? s.stat}</span>
               <span className="text-white">{s.value}{s.percent ? "%" : ""}</span>
             </div>
-          )) : (
+          ); }) : (
             <div className="text-[10.5px] italic text-white/55">—</div>
           )}
         </div>

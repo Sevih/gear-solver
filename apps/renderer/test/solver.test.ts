@@ -22,7 +22,10 @@ import {
   computeSetBonuses, type FinalStatsBaseline, type GemOverride, type ScalingMap,
 } from "../src/lib/composeBuild.js";
 import type { StatScaling } from "@gear-solver/core";
-import { simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
+import { projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import type { SolveBuild } from "../src/lib/solver/types.js";
 import { calcBattlePower, makeCpEvaluator } from "../src/lib/solver/cp.js";
 import { aggregateGemDelta, allocateGems, buildGemPool, gemSlotsOf, scoreGemPool } from "../src/lib/solver/gems.js";
@@ -794,6 +797,77 @@ describe("simulateReforges", () => {
     const out = simulateReforges(ee, { critRate: 3 });
     expect(out).toBe(ee);
     expect(out.subs[0]!.value).toBe(3);
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * ASCENDED PROJECTION — the reforge preview must also grant the unconditional
+ * Singularity passive (DMG+ on weapon/accessory, DMG- on armor). Without it,
+ * an ascended preview understates the piece's endgame on the card AND in the
+ * score/CP (the buff routes through `buffPct.dmgUp` / `buffPct.dmgReduce`).
+ * ───────────────────────────────────────────────────────────────────────── */
+// Enhance table with zero scaling factors → `projectMainToCeiling` is a no-op
+// (so the main-stat axis doesn't muddy the Singularity assertions); the reforge
+// + Singularity steps are what we exercise here.
+const FLAT_ENHANCE = { enhanceFactor: 0, tierFactor: 0, maxEnhanceLevel: 15, singularity: { activation: 0, steps: [] }, expCurves: {} };
+const ENH_GAME = { enhance: FLAT_ENHANCE } as unknown as GameData;
+
+/** Max unconditional value (display %, stored ×10) for a Singularity `st` —
+ *  the ceiling the projection should grant. Read straight from the table so
+ *  this test fails if the data changes and the hardcoded engine constant drifts. */
+const SING_DATA: Record<string, { st: string; v: number; combatOnly?: boolean }> =
+  JSON.parse(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../../data/derived/singularity-options.json"), "utf8"));
+const maxUncond = (st: string) =>
+  Math.max(...Object.values(SING_DATA).filter((o) => o.st === st && !o.combatOnly).map((o) => o.v)) / 10;
+
+function gearPiece(slot: string, opts: { ascended?: boolean; main?: RolledStat[]; subs?: RolledStat[] } = {}): GearPiece {
+  return {
+    uid: "g", itemId: 1, slot, setId: null, armorSetId: null, rarity: "unique",
+    star: 6, name: "", classLimit: null, breakthrough: 0, reforgeCount: 6,
+    enhanceLevel: 10, singularityLevel: 0, ascended: opts.ascended ?? false,
+    locked: false, equippedBy: null, main: opts.main ?? [], subs: opts.subs ?? [],
+  } as GearPiece;
+}
+
+describe("projectPieceForReforge — ascended Singularity passive", () => {
+  it("grants the max unconditional DMG+ to a weapon", () => {
+    const out = projectPieceForReforge(gearPiece("weapon"), ENH_GAME, "ascended", {});
+    const sing = out.main.find((m) => m.source === "singularity");
+    expect(sing).toBeDefined();
+    expect(sing!.stat).toBe("dmgUp");
+    expect(sing!.value).toBe(maxUncond("ST_DMG_BOOST")); // 50%
+    expect(sing!.percent).toBe(true);
+    expect(sing!.fromBuff).toBe(true);
+    expect(sing!.combatOnly).toBe(false);
+  });
+
+  it("grants DMG+ to an accessory and DMG- to the four armor pieces", () => {
+    const acc = projectPieceForReforge(gearPiece("accessory"), ENH_GAME, "ascended", {});
+    expect(acc.main.find((m) => m.source === "singularity")?.stat).toBe("dmgUp");
+    for (const slot of ["helmet", "armor", "gloves", "boots"]) {
+      const out = projectPieceForReforge(gearPiece(slot), ENH_GAME, "ascended", {});
+      const sing = out.main.find((m) => m.source === "singularity");
+      expect(sing?.stat).toBe("dmgReduce");
+      expect(sing?.value).toBe(maxUncond("ST_DMG_REDUCE_RATE")); // 25%
+    }
+  });
+
+  it("does NOT add the passive in classic mode (only +15 ascended ascends)", () => {
+    const out = projectPieceForReforge(gearPiece("weapon"), ENH_GAME, "classic", {});
+    expect(out.main.some((m) => m.source === "singularity")).toBe(false);
+  });
+
+  it("never overwrites a real rolled Singularity passive on an already-ascended piece", () => {
+    const real: RolledStat = { stat: "dmgUp", value: 31, percent: true, fromBuff: true, source: "singularity" };
+    const out = projectPieceForReforge(gearPiece("weapon", { ascended: true, main: [real] }), ENH_GAME, "ascended", {});
+    const sings = out.main.filter((m) => m.source === "singularity");
+    expect(sings).toHaveLength(1);
+    expect(sings[0]!.value).toBe(31); // kept the real roll, not the 50% ceiling
+  });
+
+  it("leaves Talisman / EE untouched (they don't ascend)", () => {
+    expect(projectPieceForReforge(gearPiece("ooparts"), ENH_GAME, "ascended", {}).main).toHaveLength(0);
+    expect(projectPieceForReforge(gearPiece("exclusive"), ENH_GAME, "ascended", {}).main).toHaveLength(0);
   });
 });
 

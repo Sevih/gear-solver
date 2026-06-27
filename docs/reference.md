@@ -464,6 +464,18 @@ Cap à **LV6 ticks par sub** (observé en réel). Tie-break sur per-tick raw.
 Mutations contenues sur un clone — l'inventaire original n'est jamais
 modifié.
 
+**Projection de mode reforge (`projectPieceForReforge`)** — le preview Builder
+projette chaque pièce vers un plafond endgame : rescale du main
+(`projectMainToCeiling`) + ticks de reforge (`simulateReforges`, budget fixe 6
+classic / 9 ascended). En mode **ascended uniquement**, on ajoute aussi le
+**passif de singularité inconditionnel** (`addProjectedSingularity`) — DMG+
+sur arme/accessoire (`ST_DMG_BOOST`), DMG- sur les 4 armures
+(`ST_DMG_REDUCE_RATE`) — à la **meilleure valeur** de `singularity-options.json`
+(DMG+ 50 %, DMG- 25 %, cohérence verrouillée par test). Route via
+`fromBuff` → `buffPct.dmgUp`/`dmgReduce`, donc compte dans le score ET la CP, pas
+juste l'affichage. Une pièce **déjà ascended** garde son **vrai roll** (jamais
+écrasé par le plafond). Talisman/EE intouchés (pas d'ascension).
+
 **Slot Talisman (ooparts) et EE (exclusive) explicitement exclus** : leur
 `subs` est en réalité la liste des gems socketés (le parser stocke
 `SubOptionList[i]` résolu en gem dans `subs`). Les gems ne sont pas
@@ -605,7 +617,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
 | `packages/core/test/equip.test.ts` | 11 tests — `equipItem`/`unequipItem` : pose sur slot vide, **déplacement** du slot occupé (même perso), no-op (déjà équipé / item inconnu / non-gear), `charUid "0"` = unequip, scope du déplacement (autre perso/autre slot intacts), **immutabilité** de l'entrée |
-| `apps/renderer/test/solver.test.ts`     | 75 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`**, **incremental bucket accumulator equivalence** (`computeFinalStatsFromPrefix` vs full-array) |
+| `apps/renderer/test/solver.test.ts`     | 80 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), **projection ascended du passif de singularité** (DMG+/DMG- par slot, classic = absent, non-écrasement d'un vrai roll, cohérence valeur↔donnée), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`**, **incremental bucket accumulator equivalence** (`computeFinalStatsFromPrefix` vs full-array) |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped` : parité sans gemme crit, accept jusqu'à CHC 100 (overshoot ≤102), stop pile à 100, skip total au cap, split talisman/EE, delta null si rien d'utile, score ≤0 jamais pris |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount` : défaut `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, plafond dur 64 |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidélité, maps vides), import merge (dédup par `id`, collision garde l'existant), replace (overwrite), validation du bundle (kind/version/maps) |
