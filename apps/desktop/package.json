@@ -1,6 +1,6 @@
 {
   "name": "@gear-solver/desktop",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "description": "Electron shell that hosts the gear-solver renderer and the capture pipeline in a single distributable.",
   "author": "Outerpedia",
