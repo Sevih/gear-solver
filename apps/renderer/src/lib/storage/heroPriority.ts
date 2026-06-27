@@ -88,6 +88,18 @@ export function reorderRank(map: HeroPriority, uid: string, pos: number | null):
   return fromOrder(order);
 }
 
+/** Normalize against the roster (given in CP-desc order): keep the already-ranked
+ *  heroes (in their current rank order, compacted — no gaps) and append every
+ *  unranked roster hero after them in CP order, renumbering contiguous 1..N.
+ *  Preserves manual ranks while giving newcomers a sensible default below them.
+ *  Returns `null` when nothing is unranked (all set → caller skips the write). */
+export function fillUnrankedByOrder(map: HeroPriority, rosterByCp: string[]): HeroPriority | null {
+  const unranked = rosterByCp.filter((u) => map[u] == null);
+  if (unranked.length === 0) return null;
+  const ranked = rosterByCp.filter((u) => map[u] != null).sort((a, b) => (map[a] ?? 0) - (map[b] ?? 0));
+  return fromOrder([...ranked, ...unranked]);
+}
+
 /** Drag-to-reorder: insert `draggedUid` immediately BEFORE `targetUid` in rank
  *  order (or at the end when `targetUid` is unranked), then renumber 1..N. */
 export function moveRankBefore(map: HeroPriority, draggedUid: string, targetUid: string): HeroPriority {

@@ -87,10 +87,12 @@ l'**unicité** (poser un rank déjà pris **échange** les deux héros), `rankOr
 car le Builder reste monté). **Builds** : colonne **Rank** à gauche du portrait — poignée de **drag-to-reorder**
 (`⠿`, visible en tri `# Rank`) + champ éditable. Modèle **positionnel contigu 1..N** (`reorderRank` /
 `moveRankBefore`) : taper N ou déposer une row place le héros en position N, tout se renumérote ; vider = non-classé.
-Toggle **# Rank** dans la barre de filtres pour trier par priorité (rang 1 d'abord, non-classés en dernier).
-**Seed par CP** : à la 1re utilisation (aucun héros classé), la priorité est initialisée par **CP décroissant**
-(rang 1 = plus gros CP) → la liste démarre ordonnée. Marqueur d'insertion **cyan en haut de la row** survolée
-pendant un drag. **Builder → Options** : contrôle segmenté **Equipped items** Aucun / ≤ Lower / Tous. Suite : 227 tests verts.
+Toggle **# Rank** dans la barre de filtres pour trier par priorité (rang 1 d'abord). **Normalisation hybride**
+(`fillUnrankedByOrder`) : les rangs **manuels sont préservés** (compactés, sans trou) et les héros **non-classés
+reçoivent un défaut par CP**, ajoutés à la suite (renumérotation contiguë 1..N). No-op si tout est déjà classé →
+ne se déclenche qu'à la 1re utilisation ou après une nouvelle capture, sans jamais écraser un classement géré.
+Marqueur d'insertion **cyan en haut de la row** survolée pendant un drag.
+**Builder → Options** : contrôle segmenté **Equipped items** Aucun / ≤ Lower / Tous. Suite : 232 tests verts.
 
 ### Session 2026-06-27 — refonte de la toolbar Builder (2 lignes, SOLVE fusionné, portrait)
 

@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
-import { moveRankBefore, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
+import { fillUnrankedByOrder, moveRankBefore, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
@@ -1083,17 +1083,15 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
   // roster lists everyone, so the pill spells out "N equipped · M total".
   const equippedCount = useMemo(() => roster.reduce((n, e) => n + (e.count > 0 ? 1 : 0), 0), [roster]);
 
-  // Seed priority from CP order on first use — when no hero is ranked yet, rank
-  // every hero by CP desc (rank 1 = highest CP) so the list starts ordered and
-  // the user just nudges from there. Self-limiting: once anything is ranked the
-  // map is non-empty and this is a no-op (clearing every hero re-seeds — treated
-  // as a re-init). Uses the full composed roster so it covers all owned heroes.
+  // Normalize priority against the roster: keep manual ranks (compacted) and
+  // give any UNRANKED hero a default by CP (appended below the ranked ones).
+  // No-op when everyone's already ranked — so it only fires on first use or
+  // after a new capture, and never fights a fully-managed list.
   useEffect(() => {
-    if (composedRoster.length === 0 || Object.keys(heroPriority).length > 0) return;
-    const byCp = [...composedRoster].sort((a, b) => (b.bp ?? -Infinity) - (a.bp ?? -Infinity));
-    const seeded: HeroPriority = {};
-    byCp.forEach((e, i) => { seeded[e.char.uid] = i + 1; });
-    onHeroPriorityChange(seeded);
+    if (composedRoster.length === 0) return;
+    const byCp = [...composedRoster].sort((a, b) => (b.bp ?? -Infinity) - (a.bp ?? -Infinity)).map((e) => e.char.uid);
+    const next = fillUnrankedByOrder(heroPriority, byCp);
+    if (next) onHeroPriorityChange(next);
   }, [composedRoster, heroPriority, onHeroPriorityChange]);
 
   if (!inventory) {

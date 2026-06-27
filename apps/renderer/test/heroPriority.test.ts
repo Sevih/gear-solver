@@ -9,7 +9,7 @@
  *    previous holder to the setter's old rank (or unranked).
  */
 import { describe, expect, it } from "vitest";
-import { isLowerPriority, moveRankBefore, rankOrder, reorderRank, type HeroPriority } from "../src/lib/storage/heroPriority.js";
+import { fillUnrankedByOrder, isLowerPriority, moveRankBefore, rankOrder, reorderRank, type HeroPriority } from "../src/lib/storage/heroPriority.js";
 
 describe("rankOrder", () => {
   it("returns the rank for a ranked hero, +Infinity for unranked", () => {
@@ -81,5 +81,27 @@ describe("moveRankBefore", () => {
   it("is a no-op when dragging onto itself", () => {
     const m = { a: 1, b: 2 };
     expect(moveRankBefore(m, "a", "a")).toBe(m);
+  });
+});
+
+describe("fillUnrankedByOrder", () => {
+  const byCp = ["a", "b", "c", "d"]; // roster in CP-desc order
+
+  it("returns null when everyone is already ranked (skip the write)", () => {
+    expect(fillUnrankedByOrder({ a: 1, b: 2, c: 3, d: 4 }, byCp)).toBeNull();
+  });
+  it("ranks all by the given order when none are ranked", () => {
+    expect(fillUnrankedByOrder({}, byCp)).toEqual({ a: 1, b: 2, c: 3, d: 4 });
+  });
+  it("keeps manual ranks (order preserved) and appends the unranked by CP", () => {
+    // d manually #1, b #2; a + c unranked → appended in CP order after them.
+    expect(fillUnrankedByOrder({ d: 1, b: 2 }, byCp)).toEqual({ d: 1, b: 2, a: 3, c: 4 });
+  });
+  it("compacts gaps in the existing ranks", () => {
+    expect(fillUnrankedByOrder({ a: 1, b: 5 }, byCp)).toEqual({ a: 1, b: 2, c: 3, d: 4 });
+  });
+  it("ignores stale ranked uids no longer in the roster", () => {
+    // 'z' isn't in the roster → dropped; a,b,c,d filled by CP.
+    expect(fillUnrankedByOrder({ z: 1 }, byCp)).toEqual({ a: 1, b: 2, c: 3, d: 4 });
   });
 });
