@@ -69,6 +69,15 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — refonte de la toolbar Builder (2 lignes, SOLVE fusionné, portrait)
+
+La toolbar (héros + actions + filtres) tenait sur **une seule ligne** qui wrappait. Repassée en **2 lignes** dans
+le même cadre : **ligne 1** = portrait du héros sélectionné (`CharacterPortrait`) + recherche + action SOLVE +
+Filter ; **ligne 2** = Reforge / Maxed only + popovers de filtres + reset. Les boutons **SOLVE / SOLVE CP fusionnés**
+en un **split button** `SolveButton` : le bouton principal lance le mode mémorisé, le ▾ ouvre un menu (Score /
+Combat Power) — choisir un mode le mémorise **et** lance le solve. Mode persistant (`gs.builder.solveMode`, défaut
+CP) ; pendant un solve le bouton devient Cancel. Typecheck + 188 tests verts.
+
 ### Session 2026-06-27 — log de confirmation codex + geas/quirk au disarm
 
 `capture.ps1` confirmait l'inventaire + les héros, mais le **codex** (`/archive/info`) et les **geas/quirk**

@@ -1389,109 +1389,171 @@ function BuilderToolbar({
     (filters.minQuality ? 1 : 0) +
     filters.excludedHeroes.size;
 
+  const selectedHero = selectedUid ? heroes.find((c) => c.uid === selectedUid) ?? null : null;
+  const selectedMeta = selectedHero && game ? game.characters[String(selectedHero.charId)] ?? null : null;
+
   return (
-    <div className="relative flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg border border-white/8 bg-bg-elev-2 px-2.5 py-2">
-      <div className="w-48 shrink-0">
-        <HeroSelect heroes={heroes} game={game} value={selectedUid} onChange={onSelect} />
-      </div>
-      {solving ? (
-        <button
-          type="button"
-          onClick={onCancelSolve}
-          className="h-9 shrink-0 rounded-lg border border-rose-400/40 bg-rose-500/10 px-5 text-[12px] font-bold uppercase tracking-wider text-rose-200 transition-colors hover:bg-rose-500/20"
-        >
-          Cancel
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => onSolve("score")}
-          disabled={!canSolve}
-          style={{
-            background: "linear-gradient(180deg,#22d3ee,#0bb6d4)",
-            boxShadow: "0 0 0 1px rgba(34,211,238,0.5),0 6px 16px -6px rgba(34,211,238,0.6)",
-          }}
-          className="h-9 shrink-0 rounded-lg px-5 text-[12px] font-bold uppercase tracking-wider text-[#06262b] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Solve
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={() => onSolve("cp")}
-        disabled={!canSolve || solving}
-        className="h-9 shrink-0 rounded-lg border border-cyan-400/40 bg-cyan-400/8 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-cyan-300 transition-colors hover:bg-cyan-400/16 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        Solve CP
-      </button>
-      {/* Post-solve client filter: re-applies the stat/rating bands to the
-       *  stored results without re-solving (instant after the first solve). */}
-      <button
-        type="button"
-        onClick={onFilter}
-        disabled={!canFilter || solving}
-        title="Filter the existing results by the stat/rating bands — no re-solve (instant after the first optimization)."
-        className={cx(
-          "h-9 shrink-0 rounded-lg border px-3.5 text-[11px] font-semibold uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-          filterActive
-            ? "border-amber-400/50 bg-amber-400/12 text-amber-200 hover:bg-amber-400/20"
-            : "border-white/12 bg-white/4 text-white/70 hover:text-white",
+    <div className="relative flex shrink-0 flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-2 px-2.5 py-2">
+      {/* Row 1 — selected hero (portrait + search) and the primary actions. */}
+      <div className="flex items-center gap-2">
+        {selectedHero ? (
+          <CharacterPortrait
+            charId={selectedHero.charId}
+            name={displayNameOf(selectedHero, selectedMeta)}
+            cls={selectedMeta?.cls}
+            element={selectedMeta?.element}
+            size={36}
+          />
+        ) : (
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-dashed border-white/12 bg-black/20 text-[14px] text-white/30">?</div>
         )}
-      >
-        Filter
-      </button>
-      {filterActive && (
+        <div className="w-52 shrink-0">
+          <HeroSelect heroes={heroes} game={game} value={selectedUid} onChange={onSelect} />
+        </div>
+        <SolveButton solving={solving} canSolve={canSolve} onSolve={onSolve} onCancelSolve={onCancelSolve} />
+        {/* Post-solve client filter: re-applies the stat/rating bands to the
+         *  stored results without re-solving (instant after the first solve). */}
         <button
           type="button"
-          onClick={onClearFilter}
-          title="Show all stored results again."
-          className="h-9 shrink-0 rounded-lg px-1 text-[11px] text-white/65 hover:text-white/80"
+          onClick={onFilter}
+          disabled={!canFilter || solving}
+          title="Filter the existing results by the stat/rating bands — no re-solve (instant after the first optimization)."
+          className={cx(
+            "h-9 shrink-0 rounded-lg border px-3.5 text-[11px] font-semibold uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+            filterActive
+              ? "border-amber-400/50 bg-amber-400/12 text-amber-200 hover:bg-amber-400/20"
+              : "border-white/12 bg-white/4 text-white/70 hover:text-white",
+          )}
         >
-          ✕
+          Filter
         </button>
-      )}
-      <ToolbarDivider />
-      <ReforgeModeControl value={filters.options.reforgeMode} dispatch={dispatch} />
-      <ToolbarToggle
-        label="Maxed only"
-        on={filters.options.onlyMaxed}
-        onClick={() => dispatch({ type: "setOption", key: "onlyMaxed", value: !filters.options.onlyMaxed })}
-      />
-      <ToolbarDivider />
-      <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
-        <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
-      </PopoverButton>
-      <PopoverButton label="Stat filters" count={statCount} openKey={openKey} myKey="stat" onToggle={toggle} onClose={close}>
-        <StatFiltersPanel filters={filters.statFilters} dispatch={dispatch} />
-      </PopoverButton>
-      <PopoverButton label="Ratings" count={ratingCount} openKey={openKey} myKey="rating" onToggle={toggle} onClose={close}>
-        <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} />
-      </PopoverButton>
-      <PopoverButton label="Priority" count={priorityCount} accent="violet" openKey={openKey} myKey="priority" onToggle={toggle} onClose={close}>
-        <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
-      </PopoverButton>
-      <PopoverButton label="Mains" count={mainCount} openKey={openKey} myKey="mains" onToggle={toggle} onClose={close}>
-        <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} dispatch={dispatch} />
-      </PopoverButton>
-      <PopoverButton label="Sets" count={setCount} accent="violet" align="right" openKey={openKey} myKey="sets" onToggle={toggle} onClose={close}>
-        <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />
-      </PopoverButton>
-      <PopoverButton label="Effects" count={effectCount} align="right" openKey={openKey} myKey="effects" onToggle={toggle} onClose={close}>
-        <WeaponsAccessoriesPanel
-          weapons={weaponEffects}
-          accessories={accessoryEffects}
-          weaponPicks={filters.weaponEffectPicks}
-          accPicks={filters.accessoryEffectPicks}
-          dispatch={dispatch}
+        {filterActive && (
+          <button
+            type="button"
+            onClick={onClearFilter}
+            title="Show all stored results again."
+            className="h-9 shrink-0 rounded-lg px-1 text-[11px] text-white/65 hover:text-white/80"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {/* Row 2 — reforge mode, the quick toggle, and the filter popovers. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <ReforgeModeControl value={filters.options.reforgeMode} dispatch={dispatch} />
+        <ToolbarToggle
+          label="Maxed only"
+          on={filters.options.onlyMaxed}
+          onClick={() => dispatch({ type: "setOption", key: "onlyMaxed", value: !filters.options.onlyMaxed })}
         />
-      </PopoverButton>
+        <ToolbarDivider />
+        <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
+          <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
+        </PopoverButton>
+        <PopoverButton label="Stat filters" count={statCount} openKey={openKey} myKey="stat" onToggle={toggle} onClose={close}>
+          <StatFiltersPanel filters={filters.statFilters} dispatch={dispatch} />
+        </PopoverButton>
+        <PopoverButton label="Ratings" count={ratingCount} openKey={openKey} myKey="rating" onToggle={toggle} onClose={close}>
+          <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} />
+        </PopoverButton>
+        <PopoverButton label="Priority" count={priorityCount} accent="violet" openKey={openKey} myKey="priority" onToggle={toggle} onClose={close}>
+          <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
+        </PopoverButton>
+        <PopoverButton label="Mains" count={mainCount} openKey={openKey} myKey="mains" onToggle={toggle} onClose={close}>
+          <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} dispatch={dispatch} />
+        </PopoverButton>
+        <PopoverButton label="Sets" count={setCount} accent="violet" openKey={openKey} myKey="sets" onToggle={toggle} onClose={close}>
+          <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />
+        </PopoverButton>
+        <PopoverButton label="Effects" count={effectCount} align="right" openKey={openKey} myKey="effects" onToggle={toggle} onClose={close}>
+          <WeaponsAccessoriesPanel
+            weapons={weaponEffects}
+            accessories={accessoryEffects}
+            weaponPicks={filters.weaponEffectPicks}
+            accPicks={filters.accessoryEffectPicks}
+            dispatch={dispatch}
+          />
+        </PopoverButton>
+        <button
+          type="button"
+          onClick={() => dispatch({ type: "resetAll" })}
+          className="ml-auto shrink-0 text-[11px] text-white/70 underline-offset-2 hover:text-white/80 hover:underline"
+        >
+          reset filters
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Split SOLVE button — one primary action that runs the remembered mode
+ *  (Score / Combat Power), plus a ▾ that opens a small menu to switch mode
+ *  (picking a mode both remembers it and runs it). The mode persists across
+ *  sessions (`gs.builder.solveMode`). While solving it becomes a Cancel button. */
+const SOLVE_MODES: { value: SolveMode; label: string; desc: string }[] = [
+  { value: "score", label: "Solve", desc: "Maximize a priority-weighted Score" },
+  { value: "cp", label: "Solve CP", desc: "Maximize in-game Combat Power" },
+];
+function SolveButton({ solving, canSolve, onSolve, onCancelSolve }: {
+  solving: boolean;
+  canSolve: boolean;
+  onSolve: (mode: SolveMode) => void;
+  onCancelSolve: () => void;
+}) {
+  const [mode, setMode] = usePersistedState<SolveMode>("gs.builder.solveMode", "cp");
+  const [open, setOpen] = useState(false);
+  const ref = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
+  if (solving) {
+    return (
       <button
         type="button"
-        onClick={() => dispatch({ type: "resetAll" })}
-        className="ml-auto shrink-0 text-[11px] text-white/70 underline-offset-2 hover:text-white/80 hover:underline"
+        onClick={onCancelSolve}
+        className="h-9 shrink-0 rounded-lg border border-rose-400/40 bg-rose-500/10 px-5 text-[12px] font-bold uppercase tracking-wider text-rose-200 transition-colors hover:bg-rose-500/20"
       >
-        reset filters
+        Cancel
       </button>
+    );
+  }
+  const current = SOLVE_MODES.find((m) => m.value === mode) ?? SOLVE_MODES[1]!;
+  const grad = { background: "linear-gradient(180deg,#22d3ee,#0bb6d4)", boxShadow: "0 0 0 1px rgba(34,211,238,0.5),0 6px 16px -6px rgba(34,211,238,0.6)" };
+  return (
+    <div ref={ref} className="relative flex shrink-0">
+      <button
+        type="button"
+        onClick={() => onSolve(mode)}
+        disabled={!canSolve}
+        style={grad}
+        className="h-9 rounded-l-lg px-5 text-[12px] font-bold uppercase tracking-wider text-[#06262b] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {current.label}
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        disabled={!canSolve}
+        aria-label="Change solve mode"
+        aria-expanded={open}
+        style={grad}
+        className="grid h-9 w-7 place-items-center rounded-r-lg border-l border-[#06262b]/25 text-[10px] text-[#06262b] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {open ? "▴" : "▾"}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-52 overflow-hidden rounded-lg border border-white/10 bg-zinc-900 shadow-2xl shadow-black/70">
+          {SOLVE_MODES.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => { setMode(m.value); setOpen(false); onSolve(m.value); }}
+              className={cx("flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-white/6", m.value === mode && "bg-cyan-500/10")}
+            >
+              <span className="text-[12px] font-bold uppercase tracking-wider text-white">{m.label}</span>
+              <span className="text-[10.5px] leading-snug text-white/60">{m.desc}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
