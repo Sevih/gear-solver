@@ -40,7 +40,9 @@ async function getJSON<T>(url: string): Promise<T | null> {
 
 /** Stamp written by `data/build.mjs` into `data/derived/version.json`. `hash`
  *  is a content hash of every derived file (stable iff the data is unchanged);
- *  `builtAt` is an ISO build timestamp. Both surfaced read-only in Settings →
+ *  `builtAt` is an ISO timestamp of the LAST derived-data change (the write is
+ *  idempotent — a no-op rebuild keeps the prior stamp, so this is the data
+ *  vintage, not wall-clock build time). Both surfaced read-only in Settings →
  *  Data so the user can tell which game-data snapshot is loaded. */
 export interface DataVersion {
   hash: string;

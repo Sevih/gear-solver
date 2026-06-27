@@ -69,6 +69,19 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-27 — ⚪ `version.json` idempotent (fini le dirty perpétuel) + committé au release
+
+`data/derived/version.json` (`{hash, builtAt}`) était réécrit avec un nouveau `builtAt` à **chaque**
+`data:build` / release → toujours dirty, et [`release.mjs`](../scripts/release.mjs) ne stageait que
+`apps/desktop/package.json` (step 6) → le stamp de la release n'était **jamais** dans le commit.
+
+- **Écriture idempotente** ([`build.mjs`](../data/build.mjs)) — on ne réécrit version.json **que si
+  le hash de contenu change**. Le build étant déterministe, un rebuild sans changement de données
+  laisse le fichier byte-identique → working tree propre. `builtAt` devient la **date du dernier vrai
+  changement de données** (le millésime), pas l'heure d'horloge du build.
+- **Release stage `data/derived`** (step 6) — le snapshot dérivé réellement buildé+publié atterrit
+  dans le commit `chore: release vX.Y.Z` (no-op si rien n'a changé grâce à l'idempotence).
+
 ### Session 2026-06-27 — 🟠 Projection reforge ascended : passif de singularité manquant + visibilité des ticks
 
 Deux trous sur le preview de mode reforge ([`engine.ts`](../apps/renderer/src/lib/solver/engine.ts) +

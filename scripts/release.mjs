@@ -180,7 +180,12 @@ try {
 
   // ── COMMIT + PUSH ────────────────────────────────────────────────────
   step(6, `Commit + tag ${tag} + push`);
-  run(`git add apps/desktop/package.json`);
+  // Stage the version bump AND the derived-data snapshot this release built +
+  // published (step 3). The idempotent `version.json` write means this is a
+  // no-op unless the game data genuinely changed since the last commit — in
+  // which case the whole consistent `data/derived` set lands in the release
+  // commit instead of being left dirty in the tree.
+  run(`git add apps/desktop/package.json data/derived`);
   const commitMsg = `chore: release ${tag}`;
   run(`git commit -m "${commitMsg}"`);
   run(`git tag ${tag}`);

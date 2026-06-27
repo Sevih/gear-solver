@@ -1013,11 +1013,29 @@ if (subTickDetail?.subStatPools) {
 }
 
 // Stamp the build: a content hash (stable iff the derived output is unchanged)
-// plus a build timestamp. Written AFTER the digest so version.json itself isn't
+// plus a timestamp. Computed AFTER the digest so version.json itself isn't
 // folded into the hash. The renderer surfaces this (Settings → Data) and it's
 // the hook a future cache-invalidation can compare against.
-const version = { hash: _derivedHash.digest("hex").slice(0, 12), builtAt: new Date().toISOString() };
-writeFileSync(join(DERIVED, "version.json"), JSON.stringify(version));
+//
+// IDEMPOTENT WRITE: a no-op rebuild (same source → same derived content → same
+// hash) leaves version.json byte-identical, so `data:build` / a release rebuild
+// no longer dirties git just from the timestamp. `builtAt` therefore tracks the
+// LAST time the derived data actually changed (its vintage), not wall-clock
+// build time — which is the more useful stamp and keeps the working tree clean.
+const VERSION_PATH = join(DERIVED, "version.json");
+const hash = _derivedHash.digest("hex").slice(0, 12);
+let version;
+let priorHash = null;
+if (existsSync(VERSION_PATH)) {
+  try { priorHash = JSON.parse(readFileSync(VERSION_PATH, "utf-8")).hash ?? null; } catch { /* malformed → rewrite */ }
+}
+if (priorHash === hash) {
+  // Content unchanged — keep the committed stamp (incl. its builtAt) untouched.
+  version = JSON.parse(readFileSync(VERSION_PATH, "utf-8"));
+} else {
+  version = { hash, builtAt: new Date().toISOString() };
+  writeFileSync(VERSION_PATH, JSON.stringify(version));
+}
 
 console.log(
   `derived: options=${Object.keys(options).length} equipment=${Object.keys(equipment).length} ` +
