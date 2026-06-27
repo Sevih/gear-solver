@@ -139,6 +139,12 @@ export interface PrecomputedSolveContext {
    *  excluded set for tertiary checks. */
   excludedWeaponEffects: Set<string>;
   excludedAccessoryEffects: Set<string>;
+  /** CP of the hero's CURRENTLY-equipped build (socketed gems, no override) —
+   *  computed only when `gs.debug.solver` is on, else null. Surfaced so the
+   *  footer's "Copy Debug Info" can show top-CP-vs-current at a glance (a top
+   *  below current = a search/recall bug; a current below the in-game number =
+   *  a compose/CP gap). CP mode only (null in Score mode). */
+  debugCurCp?: number | null;
 }
 
 /** Per-worker context — the precomputed bundle plus a back-pointer to the
@@ -455,20 +461,21 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // curCp ≈ the in-game number but the solve returns less → recall (a pinned
   // piece should now prevent that); if curCp itself is below the in-game number
   // → a compose/CP-calc gap to chase (gems / talisman / EE), not the search.
+  let debugCurCp: number | null = null;
   if (debugEnabled("solver") && req.mode === "cp") {
     const eq = inv.gear.filter((g) => g.equippedBy === heroUid);
     const oo = eq.find((g) => g.slot === "ooparts") ?? null;
     const cpEvalDbg = makeCpEvaluator({
       showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused,
     });
-    const curCp = eq.length
+    debugCurCp = eq.length
       ? cpEvalDbg(computeFinalStats(composed.noGearStats, composed.scaling, eq, game), oo)
       : null;
     const survival = (["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const).map((s) => {
       const cur = eq.find((g) => g.slot === s) ?? null;
       return { slot: s, uid: cur?.uid ?? null, inPool: cur ? pools[s].some((p) => p.uid === cur.uid) : null, kept: pools[s].length };
     });
-    debug("solver", "cp-current-build", { heroUid, curCp, survival });
+    debug("solver", "cp-current-build", { heroUid, curCp: debugCurCp, survival });
   }
 
   // Total counts for the footer (pre-filter) — count any piece in the slot,
@@ -551,6 +558,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     allowBrokenSets,
     excludedWeaponEffects,
     excludedAccessoryEffects,
+    debugCurCp,
   };
 }
 

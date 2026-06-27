@@ -30,7 +30,7 @@ import { flatVsPctTick } from "../lib/subValue.js";
 import { dmgTickGains, type DmgTickCandidate } from "../lib/dmgValue.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
-import { resolveWorkerCount, SolverOrchestrator } from "../lib/solver/orchestrator.js";
+import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../lib/solver/orchestrator.js";
 import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
 import type { HeroPriority } from "../lib/storage/heroPriority.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
@@ -589,6 +589,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   /** Wall-clock of the last completed solve (ms), shown in the footer; null
    *  while solving or before the first solve. */
   const [lastSolveMs, setLastSolveMs] = useState<number | null>(null);
+  /** Per-solve diagnostic from the orchestrator — only populated when
+   *  `gs.debug.solver` is on. Backs the footer's "Copy Debug Info" button. */
+  const [lastDebugInfo, setLastDebugInfo] = useState<SolveDebugInfo | null>(null);
   const [solveError, setSolveError] = useState<string | null>(null);
   const [selectedBuildIdx, setSelectedBuildIdx] = useState<number | null>(null);
   /** Post-solve client filter — a snapshot of the stat/rating bands applied to
@@ -658,7 +661,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     if (!orchestratorRef.current) {
       orchestratorRef.current = new SolverOrchestrator({
         onProgress: (p) => setSolveProgress({ permutations: p.permutations, searched: p.searched, poolSizes: p.poolSizes ?? null }),
-        onResult:   (builds, durationMs) => { setSolveResults(builds); setResultsReforge(solveReforgeRef.current); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); },
+        onResult:   (builds, durationMs, debugInfo) => { setSolveResults(builds); setResultsReforge(solveReforgeRef.current); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); setLastDebugInfo(debugInfo ?? null); },
         onError:    (msg) => { setSolveError(msg); setSolving(false); },
       });
     }
@@ -1067,6 +1070,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         solving={solving}
         workerCount={resolvedWorkers}
         durationMs={lastSolveMs}
+        debugInfo={lastDebugInfo}
       />
       <PromptDialog
         prompt={namePrompt}
@@ -3718,7 +3722,7 @@ function formatTimeAgo(ts: number): string {
  * just laid out left-to-right with `|` separators so it fits on one line.
  * ───────────────────────────────────────────────────────────────────────── */
 function FilterFooter({
-  permutations, searched, poolSizes, resultCount, solving, workerCount, durationMs,
+  permutations, searched, poolSizes, resultCount, solving, workerCount, durationMs, debugInfo,
 }: {
   permutations: number;
   searched: number;
@@ -3731,6 +3735,9 @@ function FilterFooter({
   /** Wall-clock of the last completed solve (ms), or null while solving / before
    *  the first solve. Shown so the user can gauge solver speed at a glance. */
   durationMs: number | null;
+  /** Last solve's diagnostic snapshot — non-null only when `gs.debug.solver`
+   *  is on; drives the "Copy Debug Info" button. */
+  debugInfo: SolveDebugInfo | null;
 }) {
   // Slots rendered in the same order the inventory tab uses so the user's
   // eye-flow is identical across tabs.
@@ -3753,13 +3760,14 @@ function FilterFooter({
       <span className="text-white/20">|</span>
       <FilterBig label="Results" value={resultCount} title="Builds returned to the table (top-N by Score or CP)." />
       <span className="ml-auto inline-flex items-center gap-3">
+        {debugInfo && !solving && <CopyDebugButton info={debugInfo} />}
         {solving && (
           <span className="text-[10px] uppercase tracking-wider text-cyan-300/80 animate-pulse">solving…</span>
         )}
         {!solving && durationMs != null && (
           <span
             className="inline-flex items-center gap-1 text-white/70"
-            title="Wall-clock time of the last completed solve (fan-out → all workers merged)."
+            title="Full wall-clock of the last solve — main-thread precompute + worker search. Enable gs.debug.solver for the precompute/search split via Copy Debug Info."
           >
             <span aria-hidden>⏱</span>
             <span className="text-white/80">{durationMs < 1000 ? `${durationMs} ms` : `${(durationMs / 1000).toFixed(2)} s`}</span>
@@ -3775,6 +3783,42 @@ function FilterFooter({
         </span>
       </span>
     </footer>
+  );
+}
+
+/** "Copy Debug Info" — copies the last solve's diagnostic snapshot as pretty
+ *  JSON to the clipboard. Rendered only when `gs.debug.solver` is on (parent
+ *  passes a non-null snapshot), so it's the in-app alternative to digging the
+ *  console: one click, paste into a bug report. Splits precompute vs search so
+ *  a slow solve is attributable without re-running. */
+function CopyDebugButton({ info }: { info: SolveDebugInfo }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    const text = JSON.stringify(info, null, 2);
+    const done = () => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); };
+    const fallback = () => {
+      // Clipboard API blocked (insecure context / no permission) — hidden
+      // textarea + execCommand so the button still works in the Electron shell.
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select(); document.execCommand("copy");
+        document.body.removeChild(ta); done();
+      } catch { /* give up silently — nothing else to try */ }
+    };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Copy this solve's diagnostic snapshot (timings: precompute vs search, pool sizes, P/S, top vs current CP) as JSON."
+      className="inline-flex items-center gap-1 rounded border border-cyan-400/30 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-cyan-100 hover:bg-cyan-500/20"
+    >
+      <span aria-hidden>⧉</span>
+      <span>{copied ? "Copied!" : "Copy Debug Info"}</span>
+    </button>
   );
 }
 

@@ -14,6 +14,7 @@ import { debug, debugEnabled } from "../log.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
 import { precomputeContext } from "./engine.js";
 import type {
+  EquippedScope,
   PoolSizes,
   SolveBuild,
   SolveFilters,
@@ -22,6 +23,43 @@ import type {
   SolveRequestMsg,
   WorkerOutput,
 } from "./types.js";
+
+/** One-solve diagnostic snapshot — populated only when `gs.debug.solver` is on,
+ *  surfaced to the UI via `onResult` so the footer's "Copy Debug Info" button can
+ *  copy it as JSON. Splits the wall-clock into `precomputeMs` (main-thread pool
+ *  build) vs `searchMs` (worker cartesian) so a slow solve is attributable at a
+ *  glance instead of guessed at from a single total. */
+export interface SolveDebugInfo {
+  hero: string;
+  mode: SolveMode;
+  /** Top-% slider value — drives the CP combo budget / priority prune. */
+  topPct: number;
+  /** Whether an explicit per-stat priority was set (gates the prune branch:
+   *  Score mode WITHOUT a priority skips the auto-prune → full cartesian). */
+  hasPriority: boolean;
+  equippedScope: EquippedScope;
+  workers: number;
+  /** Workers actually dispatched (≤ pool, capped by the partition pool size). */
+  chunks: number;
+  /** Largest partitionable pool — the parallelism ceiling for this solve. */
+  maxPoolHit: number;
+  poolSizes: PoolSizes;
+  /** Main-thread precompute time (compose + per-slot prune + gem scoring). */
+  precomputeMs: number;
+  /** Worker cartesian time (fan-out → all workers merged). */
+  searchMs: number;
+  /** Full wall-clock incl. init broadcast + precompute + search. */
+  totalMs: number;
+  permutations: number;
+  searched: number;
+  merged: number;
+  returned: number;
+  topCp: number | null;
+  topScore: number | null;
+  /** CP of the currently-equipped build (CP mode only) — compare to topCp. */
+  curCp: number | null;
+  perWorker: Array<{ w: number; perm: number; searched: number }>;
+}
 
 /** localStorage key for a manual worker-count override (the future Settings
  *  panel writes here; read once at pool creation). */
@@ -62,9 +100,11 @@ function readWorkerCountOverride(): number | null {
 
 export interface OrchestratorCallbacks {
   onProgress(p: { permutations: number; searched: number; poolSizes?: PoolSizes }): void;
-  /** `durationMs` = wall-clock from fan-out to this flush (whole milliseconds),
-   *  so the UI can show how long the solve actually took. */
-  onResult(builds: SolveBuild[], durationMs: number): void;
+  /** `durationMs` = FULL wall-clock from solve() entry to this flush (whole
+   *  milliseconds, incl. precompute), so the footer ⏱ reflects what the user
+   *  actually waited — not just the worker search. `debug` is the per-solve
+   *  diagnostic snapshot, present only when `gs.debug.solver` is on. */
+  onResult(builds: SolveBuild[], durationMs: number, debug?: SolveDebugInfo): void;
   onError(message: string): void;
 }
 
@@ -116,9 +156,14 @@ export class SolverOrchestrator {
    *  out — otherwise the big constant graphs would ride along every solve. */
   private initedGame: GameData | null = null;
   private initedInventory: Inventory | null = null;
-  /** Wall-clock (performance.now) at the current solve's fan-out — paired with
-   *  flush() to log solve duration when `gs.debug.solver` is on. */
+  /** Wall-clock (performance.now) at solve() entry — paired with flush() so the
+   *  footer ⏱ shows the FULL solve time (incl. precompute), not just search. */
   private startedAt = 0;
+  /** Wall-clock at fan-out (post-precompute) — flush() subtracts it for the
+   *  worker-only `searchMs` split in the debug snapshot. */
+  private fanoutAt = 0;
+  /** Per-solve diagnostic, built across solve()/flush(); null unless debug on. */
+  private debugInfo: SolveDebugInfo | null = null;
 
   constructor(cb: OrchestratorCallbacks) {
     this.cb = cb;
@@ -168,6 +213,9 @@ export class SolverOrchestrator {
     }
     this.solveId++;
     this.active = true;
+    // Start the clock at entry so ⏱ counts precompute too (the main-thread pool
+    // build can be a real chunk of the wait on a big inventory).
+    this.startedAt = performance.now();
     this.mode = args.mode;
     this.topN = args.topN ?? 1000;
     this.buf = [];
@@ -200,6 +248,7 @@ export class SolverOrchestrator {
       topK,
     };
     let precomputed;
+    const preStart = performance.now();
     try {
       const seedReq: SolveRequest = {
         ...leanSeed,
@@ -214,6 +263,7 @@ export class SolverOrchestrator {
       this.cb.onError(err instanceof Error ? err.message : String(err));
       return;
     }
+    const precomputeMs = Math.round(performance.now() - preStart);
     // Surface pool sizes to the UI immediately — no need to wait for the
     // first worker progress event (saves the perceptible "blank footer"
     // window at solve start).
@@ -232,11 +282,28 @@ export class SolverOrchestrator {
     );
     const chunkCount = Math.max(1, Math.min(this.workers.length, maxPoolHit));
     this.activeChunks = chunkCount;
-    this.startedAt = performance.now();
+    this.fanoutAt = performance.now();
+    // Seed the per-solve diagnostic with the fan-out-time facts (the rest is
+    // filled in flush()). Only built when debug is on so a normal solve pays
+    // nothing. `hasPriority` mirrors the engine's prune gate so the snapshot
+    // makes the "Score + no priority = full cartesian" case obvious.
+    this.debugInfo = debugEnabled("solver")
+      ? {
+          hero: args.heroUid, mode: args.mode,
+          topPct: args.filters.topPct,
+          hasPriority: Object.values(args.filters.priority).some((v) => v !== 0),
+          equippedScope: args.filters.options.equippedScope ?? "all",
+          workers: this.workers.length, chunks: chunkCount, maxPoolHit,
+          poolSizes: this.poolSizes, precomputeMs,
+          curCp: precomputed.debugCurCp ?? null,
+          searchMs: 0, totalMs: 0, permutations: 0, searched: 0,
+          merged: 0, returned: 0, topCp: null, topScore: null, perWorker: [],
+        }
+      : null;
     debug("solver", "fan-out", {
       hero: args.heroUid, mode: args.mode, solveId: this.solveId,
       pool: this.workers.length, chunks: chunkCount, maxPoolHit,
-      topK, topN: this.topN, poolSizes: this.poolSizes,
+      topK, topN: this.topN, precomputeMs, poolSizes: this.poolSizes,
     });
     for (let i = 0; i < chunkCount; i++) {
       const w = this.workers[i];
@@ -325,18 +392,21 @@ export class SolverOrchestrator {
     this.buf.sort(cmp);
     const merged = this.buf.length;
     const out = this.buf.slice(0, this.topN);
-    const durationMs = Math.round(performance.now() - this.startedAt);
-    if (debugEnabled("solver")) {
-      debug("solver", "done", {
-        merged, returned: out.length,
-        ms: durationMs,
-        topCp: this.mode === "cp" ? (out[0]?.cp ?? null) : undefined,
-        topScore: this.mode === "score" ? (out[0]?.score ?? null) : undefined,
-        permutations: this.totalPerm(), searched: this.totalSearched(),
-        perWorker: this.stats.map((s, i) => ({ w: i, perm: s.permutations, searched: s.searched })),
-      });
+    const now = performance.now();
+    const totalMs = Math.round(now - this.startedAt);
+    if (this.debugInfo) {
+      this.debugInfo.searchMs = Math.round(now - this.fanoutAt);
+      this.debugInfo.totalMs = totalMs;
+      this.debugInfo.permutations = this.totalPerm();
+      this.debugInfo.searched = this.totalSearched();
+      this.debugInfo.merged = merged;
+      this.debugInfo.returned = out.length;
+      this.debugInfo.topCp = this.mode === "cp" ? (out[0]?.cp ?? null) : null;
+      this.debugInfo.topScore = this.mode === "score" ? (out[0]?.score ?? null) : null;
+      this.debugInfo.perWorker = this.stats.map((s, i) => ({ w: i, perm: s.permutations, searched: s.searched }));
+      debug("solver", "done", this.debugInfo);
     }
-    this.cb.onResult(out, durationMs);
+    this.cb.onResult(out, totalMs, this.debugInfo ?? undefined);
     this.active = false;
   }
 }
