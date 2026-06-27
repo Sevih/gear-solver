@@ -72,10 +72,10 @@
 ### Session 2026-06-27 — 🔴 principe de priorité des héros (scope d'items « ≤ inférieure »)
 
 Nouveau modèle de **priorité par héros** : un **entier unique** par perso (`HeroPriority` = `charUid → int`,
-`gs.priority.rank`), `null` par défaut, et **`null` < tout entier** (non-classé = priorité la plus basse ;
-entier plus grand = plus prioritaire). Store pur `lib/storage/heroPriority.ts` : `setHeroRank` garantit
-l'**unicité** (poser un rank déjà pris **échange** les deux héros), `priorityValue`/`isLowerPriority` (strict ;
-deux non-classés ne se volent pas). +11 tests `heroPriority.test.ts`.
+`gs.priority.rank`), **rank 1 = priorité la plus haute** (nombre plus petit = plus important), `null` par défaut
+= non-classé = priorité la plus basse. Store pur `lib/storage/heroPriority.ts` : `setHeroRank` garantit
+l'**unicité** (poser un rank déjà pris **échange** les deux héros), `rankOrder` (rank, +∞ si non-classé) /
+`isLowerPriority` (strict ; deux non-classés ne se volent pas). +11 tests `heroPriority.test.ts`.
 
 **Solveur** : le toggle binaire `includeEquippedOnOthers` devient un **scope 3-états** `equippedScope` (`none`
 = héros seul + libre · `lower` = **+ héros strictement moins prioritaires** (jamais un égal/supérieur) · `all`

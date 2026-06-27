@@ -185,8 +185,9 @@ describe("buildGemPool", () => {
   });
 
   it("equippedScope 'lower' takes gems from strictly-lower-priority heroes only", () => {
-    // hero-a is the target (rank 5). lower (rank 2) is fair game; higher
-    // (rank 9) and equal-unranked heroes are off-limits. Own + free always in.
+    // rank 1 = highest priority. Target hero-a is rank 5; a bigger rank number
+    // (9) is LOWER priority (fair game); a smaller rank (2) is HIGHER priority
+    // (off-limits). Own + free gear always in.
     const mine = { ...talismanWithGems([15001]), uid: "t-mine", equippedBy: "hero-a" };
     const lower = { ...talismanWithGems([15004]), uid: "t-low", equippedBy: "hero-low" };
     const higher = { ...talismanWithGems([15049]), uid: "t-high", equippedBy: "hero-high" };
@@ -195,13 +196,13 @@ describe("buildGemPool", () => {
     const pool = buildGemPool(inv, {
       heroUid: "hero-a",
       equippedScope: "lower",
-      heroPriority: { "hero-a": 5, "hero-low": 2, "hero-high": 9 },
+      heroPriority: { "hero-a": 5, "hero-low": 9, "hero-high": 2 },
       excludedHeroes: new Set(),
     });
     expect(pool.get(15001)).toBe(1); // own
     expect(pool.get(15037)).toBe(1); // free
-    expect(pool.get(15004)).toBe(1); // lower-priority hero → allowed
-    expect(pool.get(15049)).toBeUndefined(); // higher-priority hero → off-limits
+    expect(pool.get(15004)).toBe(1); // rank 9 = lower priority → allowed
+    expect(pool.get(15049)).toBeUndefined(); // rank 2 = higher priority → off-limits
   });
 });
 

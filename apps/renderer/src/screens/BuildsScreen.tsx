@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
-import { priorityValue, setHeroRank, type HeroPriority } from "../lib/storage/heroPriority.js";
+import { rankOrder, setHeroRank, type HeroPriority } from "../lib/storage/heroPriority.js";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
@@ -541,11 +541,11 @@ interface BuildCardProps {
 
 const NOTE_MAX = 200;
 
-/** Priority-rank editor on a build card. A unique integer per hero (higher =
- *  higher priority); empty = unranked = lowest. Setting a rank another hero
- *  holds swaps them (handled by `setHeroRank`). Drives the Builder's "Equipped
- *  items → ≤ lower priority" scope. Local draft so typing doesn't fight the
- *  store; commits on blur / Enter. */
+/** Priority-rank editor on a build card. A unique integer per hero where
+ *  rank 1 = highest priority (smaller number = more important); empty = unranked
+ *  = lowest. Setting a rank another hero holds swaps them (handled by
+ *  `setHeroRank`). Drives the Builder's "Equipped items → ≤ lower priority"
+ *  scope. Local draft so typing doesn't fight the store; commits on blur/Enter. */
 function RankInput({ uid, rank, onSetRank }: { uid: string; rank: number | null; onSetRank: (uid: string, rank: number | null) => void }) {
   const [draft, setDraft] = useState(rank == null ? "" : String(rank));
   // Re-sync when the stored rank changes out from under us (e.g. a swap caused
@@ -1016,13 +1016,13 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
         return lockedKs.some((k) => round1(stats[k] - (lockedSnap![k] ?? 0)) !== 0);
       })
       .sort((a, b) => {
-        // Rank sort (opt-in): ranked heroes high→low first, unranked (-∞) last,
-        // CP-desc as the tiebreaker. Otherwise CP desc as primary — heroes with
-        // no resolved BP (missing game data / TransStar row) sink to the bottom.
+        // Rank sort (opt-in): rank 1 first → higher numbers → unranked (+∞)
+        // last, CP-desc as the tiebreaker. Otherwise CP desc as primary —
+        // heroes with no resolved BP (missing game data / TransStar row) sink.
         if (filters.byRank) {
-          const ar = priorityValue(heroPriority, a.char.uid);
-          const br = priorityValue(heroPriority, b.char.uid);
-          if (br !== ar) return br - ar;
+          const ar = rankOrder(heroPriority, a.char.uid);
+          const br = rankOrder(heroPriority, b.char.uid);
+          if (ar !== br) return ar - br; // ascending: rank 1 first, unranked last
         }
         const ap = a.bp ?? -Infinity;
         const bp_ = b.bp ?? -Infinity;

@@ -1,9 +1,10 @@
 /**
  * Hero priority ranking — an account-global, persisted map of `charUid → rank`.
  *
- * The rank is a UNIQUE integer per hero (no two heroes share one). A hero with
- * no entry is "unranked", which counts as the LOWEST priority (below every
- * integer). Higher integer = higher priority.
+ * The rank is a UNIQUE integer per hero (no two heroes share one), where
+ * **rank 1 = highest priority** (a smaller number is more important). A hero
+ * with no entry is "unranked", which counts as the LOWEST priority (below every
+ * rank).
  *
  * Drives the Builder's "Equipped items → ≤ lower priority" scope: the solver may
  * pull gear off a hero only when that hero is STRICTLY lower priority than the
@@ -43,17 +44,20 @@ export function persistHeroPriority(map: HeroPriority): void {
   }
 }
 
-/** Hero's rank as a comparable number; unranked → -Infinity (lowest). */
-export function priorityValue(map: HeroPriority, uid: string): number {
+/** Comparable rank order — the stored rank (1 = highest priority), or +Infinity
+ *  for an unranked hero (lowest). SMALLER = higher priority. Use it to sort
+ *  ascending (rank 1 first, unranked last) or to compare priorities. */
+export function rankOrder(map: HeroPriority, uid: string): number {
   const v = map[uid];
-  return typeof v === "number" ? v : -Number.POSITIVE_INFINITY;
+  return typeof v === "number" ? v : Number.POSITIVE_INFINITY;
 }
 
 /** True when `aUid` is STRICTLY lower priority than `bUid` — i.e. hero `b` is
- *  allowed to take gear equipped on hero `a`. Two unranked heroes (-∞ vs -∞)
- *  are NOT comparable as lower, so neither can take from the other. */
+ *  allowed to take gear equipped on hero `a`. Lower priority = bigger rank order
+ *  (rank 1 best, unranked = +∞ worst). Two unranked heroes (∞ vs ∞) are NOT
+ *  comparable as lower, so neither can take from the other. */
 export function isLowerPriority(map: HeroPriority, aUid: string, bUid: string): boolean {
-  return priorityValue(map, aUid) < priorityValue(map, bUid);
+  return rankOrder(map, aUid) > rankOrder(map, bUid);
 }
 
 /** Set `uid`'s rank (null clears it). Enforces uniqueness: if another hero

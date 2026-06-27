@@ -1,34 +1,36 @@
 /**
  * Hero priority store — the rank model behind the Builder's "Equipped items →
- * ≤ lower priority" scope. Locks:
- *  - priorityValue: unranked → -Infinity (lowest), ranked → its integer;
- *  - isLowerPriority: strict; unranked < any ranked; two unranked NOT lower;
+ * ≤ lower priority" scope. Rank 1 = highest priority (smaller number = more
+ * important); unranked = lowest. Locks:
+ *  - rankOrder: ranked → its integer, unranked → +Infinity (worst);
+ *  - isLowerPriority: strict; unranked is lower than any ranked; two unranked
+ *    NOT lower; a smaller rank number outranks a bigger one;
  *  - setHeroRank: clears on null, and enforces UNIQUE ranks by swapping the
  *    previous holder to the setter's old rank (or unranked).
  */
 import { describe, expect, it } from "vitest";
-import { isLowerPriority, priorityValue, setHeroRank, type HeroPriority } from "../src/lib/storage/heroPriority.js";
+import { isLowerPriority, rankOrder, setHeroRank, type HeroPriority } from "../src/lib/storage/heroPriority.js";
 
-describe("priorityValue", () => {
-  it("returns the rank for a ranked hero, -Infinity for unranked", () => {
+describe("rankOrder", () => {
+  it("returns the rank for a ranked hero, +Infinity for unranked", () => {
     const m: HeroPriority = { a: 5 };
-    expect(priorityValue(m, "a")).toBe(5);
-    expect(priorityValue(m, "b")).toBe(-Infinity);
+    expect(rankOrder(m, "a")).toBe(5);
+    expect(rankOrder(m, "b")).toBe(Infinity);
   });
 });
 
 describe("isLowerPriority", () => {
-  const m: HeroPriority = { hi: 9, lo: 3 };
+  const m: HeroPriority = { best: 1, worse: 3 }; // rank 1 = highest priority
   it("ranks unranked below any ranked hero", () => {
-    expect(isLowerPriority(m, "unranked", "lo")).toBe(true);   // -∞ < 3
-    expect(isLowerPriority(m, "lo", "unranked")).toBe(false);  // 3 < -∞ → no
+    expect(isLowerPriority(m, "unranked", "worse")).toBe(true);   // ∞ > 3
+    expect(isLowerPriority(m, "worse", "unranked")).toBe(false);  // 3 > ∞ → no
   });
-  it("compares integers (higher = higher priority)", () => {
-    expect(isLowerPriority(m, "lo", "hi")).toBe(true);   // 3 < 9
-    expect(isLowerPriority(m, "hi", "lo")).toBe(false);  // 9 < 3 → no
+  it("a bigger rank number is lower priority (rank 1 = best)", () => {
+    expect(isLowerPriority(m, "worse", "best")).toBe(true);   // rank 3 lower than rank 1
+    expect(isLowerPriority(m, "best", "worse")).toBe(false);  // rank 1 not lower than rank 3
   });
   it("two unranked heroes are not lower than each other (strict)", () => {
-    expect(isLowerPriority({}, "x", "y")).toBe(false); // -∞ < -∞ → false
+    expect(isLowerPriority({}, "x", "y")).toBe(false); // ∞ > ∞ → false
   });
   it("equal ranks are never 'lower' (uniqueness makes this only matter for null)", () => {
     expect(isLowerPriority({ a: 4, b: 4 }, "a", "b")).toBe(false);
