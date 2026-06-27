@@ -84,9 +84,11 @@ l'**unicité** (poser un rank déjà pris **échange** les deux héros), `rankOr
 +1 test gem-pool « lower ».
 
 **UI** : `App` possède `heroPriority` (persisté) et le passe à **Builds** (édition) + **Builder** (solve, live
-car le Builder reste monté). **Builds** : éditeur **Rank** par carte (input entier, unicité/échange) + toggle
-**# Rank** dans la barre de filtres pour trier par priorité (classés high→low, non-classés en dernier).
-**Builder → Options** : contrôle segmenté **Equipped items** Aucun / ≤ Lower / Tous. Suite : 222 tests verts.
+car le Builder reste monté). **Builds** : colonne **Rank** à gauche du portrait — poignée de **drag-to-reorder**
+(`⠿`, visible en tri `# Rank`) + champ éditable. Modèle **positionnel contigu 1..N** (`reorderRank` /
+`moveRankBefore`) : taper N ou déposer une row place le héros en position N, tout se renumérote ; vider = non-classé.
+Toggle **# Rank** dans la barre de filtres pour trier par priorité (rang 1 d'abord, non-classés en dernier).
+**Builder → Options** : contrôle segmenté **Equipped items** Aucun / ≤ Lower / Tous. Suite : 227 tests verts.
 
 ### Session 2026-06-27 — refonte de la toolbar Builder (2 lignes, SOLVE fusionné, portrait)
 

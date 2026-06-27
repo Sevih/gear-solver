@@ -60,23 +60,40 @@ export function isLowerPriority(map: HeroPriority, aUid: string, bUid: string): 
   return rankOrder(map, aUid) > rankOrder(map, bUid);
 }
 
-/** Set `uid`'s rank (null clears it). Enforces uniqueness: if another hero
- *  already holds that integer, the two SWAP (the previous holder takes `uid`'s
- *  old rank, or becomes unranked if `uid` had none) so ranks stay distinct.
- *  Returns a new map (never mutates the input). */
-export function setHeroRank(map: HeroPriority, uid: string, rank: number | null): HeroPriority {
-  const next: HeroPriority = { ...map };
-  const prev = next[uid];
-  if (rank == null || !Number.isFinite(rank)) {
-    delete next[uid];
-    return next;
-  }
-  const r = Math.trunc(rank);
-  const holder = Object.keys(next).find((k) => k !== uid && next[k] === r);
-  if (holder != null) {
-    if (prev != null) next[holder] = prev;
-    else delete next[holder];
-  }
-  next[uid] = r;
+/** Ranked uids in rank order (rank 1 first), excluding `omit`. */
+function rankedOrder(map: HeroPriority, omit?: string): string[] {
+  return Object.keys(map)
+    .filter((u) => u !== omit)
+    .sort((a, b) => (map[a] ?? 0) - (map[b] ?? 0));
+}
+
+/** Reassign contiguous ranks 1..N to an ordered uid list. */
+function fromOrder(order: string[]): HeroPriority {
+  const next: HeroPriority = {};
+  order.forEach((u, i) => { next[u] = i + 1; });
   return next;
+}
+
+/** Move `uid` to 1-based position `pos` among the ranked heroes (others shift);
+ *  every rank is rewritten contiguous 1..N. `pos == null` / non-finite unranks
+ *  `uid`. Out-of-range positions clamp to [1, N+1]. The positional model: typing
+ *  "2" means "make this hero rank 2", exactly like dropping it there. New map;
+ *  never mutates the input. */
+export function reorderRank(map: HeroPriority, uid: string, pos: number | null): HeroPriority {
+  const order = rankedOrder(map, uid);
+  if (pos != null && Number.isFinite(pos)) {
+    const i = Math.max(0, Math.min(order.length, Math.trunc(pos) - 1));
+    order.splice(i, 0, uid);
+  }
+  return fromOrder(order);
+}
+
+/** Drag-to-reorder: insert `draggedUid` immediately BEFORE `targetUid` in rank
+ *  order (or at the end when `targetUid` is unranked), then renumber 1..N. */
+export function moveRankBefore(map: HeroPriority, draggedUid: string, targetUid: string): HeroPriority {
+  if (draggedUid === targetUid) return map;
+  const order = rankedOrder(map, draggedUid);
+  const ti = order.indexOf(targetUid);
+  order.splice(ti === -1 ? order.length : ti, 0, draggedUid);
+  return fromOrder(order);
 }

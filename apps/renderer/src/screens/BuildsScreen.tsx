@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
-import { rankOrder, setHeroRank, type HeroPriority } from "../lib/storage/heroPriority.js";
+import { moveRankBefore, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
@@ -535,18 +535,23 @@ interface BuildCardProps {
   onOptimize: (heroUid: string) => void;
   /** This hero's priority rank (null = unranked = lowest). */
   rank: number | null;
-  /** Set this hero's rank (null clears). Uniqueness/swap handled upstream. */
-  onSetRank: (uid: string, rank: number | null) => void;
+  /** Move this hero to 1-based position (null clears). Positional, contiguous. */
+  onSetRank: (uid: string, pos: number | null) => void;
+  /** Show the drag handle + accept drops (only when sorting by rank). */
+  dragEnabled: boolean;
+  /** Drag lifecycle for reordering — start grabs this card, drop reorders. */
+  onDragStartRank: (uid: string) => void;
+  onDropRank: (targetUid: string) => void;
 }
 
 const NOTE_MAX = 200;
 
-/** Priority-rank editor on a build card. A unique integer per hero where
- *  rank 1 = highest priority (smaller number = more important); empty = unranked
- *  = lowest. Setting a rank another hero holds swaps them (handled by
- *  `setHeroRank`). Drives the Builder's "Equipped items → ≤ lower priority"
- *  scope. Local draft so typing doesn't fight the store; commits on blur/Enter. */
-function RankInput({ uid, rank, onSetRank }: { uid: string; rank: number | null; onSetRank: (uid: string, rank: number | null) => void }) {
+/** Priority-position editor on a build card. Positional & contiguous (rank 1 =
+ *  highest priority); typing N moves the hero to position N (others shift),
+ *  empty = unranked = lowest. Same effect as dragging it there. Drives the
+ *  Builder's "Equipped items → ≤ lower priority" scope. Local draft so typing
+ *  doesn't fight the store; commits on blur / Enter. */
+function RankInput({ uid, rank, onSetRank }: { uid: string; rank: number | null; onSetRank: (uid: string, pos: number | null) => void }) {
   const [draft, setDraft] = useState(rank == null ? "" : String(rank));
   // Re-sync when the stored rank changes out from under us (e.g. a swap caused
   // by ranking another hero to this one's number).
@@ -559,8 +564,8 @@ function RankInput({ uid, rank, onSetRank }: { uid: string; rank: number | null;
   };
   return (
     <label
-      className="flex items-center gap-1"
-      title="Priority rank — higher = more important, unique per hero (typing a taken number swaps them). Empty = unranked = lowest. Drives the Builder's '≤ lower priority' equipped-items scope."
+      className="flex flex-col items-center gap-0.5"
+      title="Priority rank — 1 = highest (smaller number = more important). Type a position or drag the ⠿ handle to reorder; empty = unranked = lowest. Drives the Builder's '≤ lower priority' equipped-items scope."
     >
       <span className="text-[8.5px] uppercase tracking-wider text-white/45">Rank</span>
       <input
@@ -631,7 +636,7 @@ function AdviceList({ items }: { items: AdviceItem[] }) {
  *  lock toggles, so unaffected cards skip the render entirely). All handlers
  *  use the functional updater form of `setLocks` so they never depend on
  *  the current `locks` map and stay referentially stable. */
-const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, debug, note, onChangeNote, onOptimize, rank, onSetRank }: BuildCardProps) {
+const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, debug, note, onChangeNote, onOptimize, rank, onSetRank, dragEnabled, onDragStartRank, onDropRank }: BuildCardProps) {
   const { char, equipped, stats, baseline, scaling, rawPieces, level, bp, meta, displayCharId, displayName, presetName } = entry;
   // Auto-detected observations — recomputed only when the entry identity
   // changes (composedRoster ref stays stable across filter/lock toggles).
@@ -649,6 +654,8 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
     ? lockedKeys.filter((k) => round1(stats[k] - (locked![k] ?? 0)) !== 0).length
     : 0;
   const uid = char.uid;
+  // Drop-target highlight while a rank drag hovers this row.
+  const [dragOver, setDragOver] = useState(false);
 
   /** Build the enriched `LockEntry` from a `Partial<FinalStats>` snapshot. */
   const wrapEntry = useCallback((s: Partial<FinalStats>): LockEntry => ({
@@ -704,12 +711,35 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
 
   return (
     <div
-      className="relative flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-white/7 bg-bg-elev-2 px-3 py-2.5 backdrop-blur-sm"
+      className={cx(
+        "relative flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border bg-bg-elev-2 px-3 py-2.5 backdrop-blur-sm",
+        dragOver ? "border-cyan-400/60 ring-1 ring-cyan-400/40" : "border-white/7",
+      )}
       // Each row is much shorter than the old card — keep CSS-native
       // virtualization but match the smaller intrinsic height so the browser
       // can skip layout/paint for offscreen rows without over-reserving space.
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 96px" }}
+      // Drop target for rank drag-to-reorder (only meaningful when enabled).
+      onDragOver={dragEnabled ? (e) => { e.preventDefault(); setDragOver(true); } : undefined}
+      onDragLeave={dragEnabled ? () => setDragOver(false) : undefined}
+      onDrop={dragEnabled ? (e) => { e.preventDefault(); setDragOver(false); onDropRank(uid); } : undefined}
     >
+      {/* Rank column — left of the portrait: drag handle (reorder) + the
+       *  editable position field. Higher priority = smaller number; rank 1 = top. */}
+      <div className="flex shrink-0 flex-col items-center gap-1">
+        {dragEnabled && (
+          <span
+            draggable
+            onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStartRank(uid); }}
+            title="Drag to reorder priority (rank 1 = highest)"
+            className="cursor-grab select-none text-[13px] leading-none text-white/35 hover:text-white/70 active:cursor-grabbing"
+          >
+            ⠿
+          </span>
+        )}
+        <RankInput uid={uid} rank={rank} onSetRank={onSetRank} />
+      </div>
+
       <div className="flex shrink-0 flex-col items-center gap-1">
         <CharacterPortrait
           charId={displayCharId}
@@ -730,7 +760,6 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
             {bp.toLocaleString()}
           </div>
         )}
-        <RankInput uid={char.uid} rank={rank} onSetRank={onSetRank} />
         {presetName && (
           <div
             className="max-w-22 truncate rounded-md border border-white/12 bg-white/4 px-1.5 py-0.5 text-center text-[10px] text-white"
@@ -861,10 +890,19 @@ interface BuildsScreenProps {
 }
 
 export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, onHeroPriorityChange, debug, onOptimize }: BuildsScreenProps) {
-  // Set a hero's priority rank (null clears) — uniqueness/swap handled by the
-  // store. Functional update so it's stable for the memoized cards.
-  const setRank = useCallback((uid: string, rank: number | null) => {
-    onHeroPriorityChange((prev) => setHeroRank(prev, uid, rank));
+  // Set a hero's priority position (null clears) — positional model, contiguous
+  // 1..N. Functional updates so the callbacks stay stable for the memoized cards.
+  const setRank = useCallback((uid: string, pos: number | null) => {
+    onHeroPriorityChange((prev) => reorderRank(prev, uid, pos));
+  }, [onHeroPriorityChange]);
+  // Drag-to-reorder: the grabbed hero is held in a ref between dragstart and the
+  // drop on a target row, where it's inserted before the target (renumber 1..N).
+  const dragUid = useRef<string | null>(null);
+  const onDragStartRank = useCallback((uid: string) => { dragUid.current = uid; }, []);
+  const onDropRank = useCallback((targetUid: string) => {
+    const dragged = dragUid.current;
+    dragUid.current = null;
+    if (dragged) onHeroPriorityChange((prev) => moveRankBefore(prev, dragged, targetUid));
   }, [onHeroPriorityChange]);
   // Roster filter state — name search + element/class multi-toggles. Empty
   // sets mean "no filter on this axis". Session-scoped (sessionStorage): stable
@@ -1089,6 +1127,9 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
               onOptimize={onOptimize}
               rank={heroPriority[entry.char.uid] ?? null}
               onSetRank={setRank}
+              dragEnabled={!!filters.byRank}
+              onDragStartRank={onDragStartRank}
+              onDropRank={onDropRank}
             />
           ))
         )}
