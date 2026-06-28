@@ -41,7 +41,9 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      direct par un middleware Vite) et affiche l'inventaire parsé. Fallback fichier manuel.
    - **Onglet Home** (par défaut) : dashboard — snapshot du compte (2×2), répartition qualité
      par tier (couleurs partagées avec l'Inventory), répartition étoiles, Library, et
-     **update center inline** (check/apply des updates repo, sans popups natifs).
+     **update center inline** (check/apply des updates repo, sans popups natifs). Les chiffres du
+     dashboard (tiers qualité, par slot, top sets) sont **cliquables** → ouvrent l'Inventory
+     pré-filtré sur ce facet (`InventoryDrill`, consommé une fois).
    - **Onglet Inventory** : table + filtres + détail pièce (mains, subs, ticks, reforge,
      breakthrough, singularity), score par pièce, indicateur de qualité. Tris/filtres/onglet
      **session-scoped** (`useSessionState`/sessionStorage) → stables au switch d'onglet, remis

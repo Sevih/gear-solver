@@ -980,12 +980,28 @@ function ItemDetail({
 }
 
 // ── screen ──────────────────────────────────────────────────────────────
+
+/** A drill-down request from the Home dashboard — clicking a quality tier /
+ *  slot / armor set there opens the Inventory pre-filtered to exactly that
+ *  facet (filters reset first, so the result is the clean subset the number
+ *  represented). One facet at a time. */
+export interface InventoryDrill {
+  quality?: QualityTier;
+  slot?: SlotId;
+  armorSet?: string;
+}
+
 export interface InventoryScreenProps {
   inventory: Inventory | null;
   game: GameData | null;
+  /** Pending drill from Home — consumed once on change (filters replaced with
+   *  the facet, tab reset to "all"), then `onDrillConsumed` clears it so a
+   *  later plain visit doesn't re-apply a stale filter. */
+  drill?: InventoryDrill | null;
+  onDrillConsumed?: () => void;
 }
 
-export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
+export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed }: InventoryScreenProps) {
   // Session-scoped view state — filters / sort / sub-tab survive remounting on
   // a tab swap (sessionStorage) but reset to their defaults on the next app
   // launch, so each session starts from a clean inventory view rather than last
@@ -1019,6 +1035,21 @@ export function InventoryScreen({ inventory, game }: InventoryScreenProps) {
       return { ...prev, slots: pruned };
     });
   }, [setTabState, setF]);
+
+  // Consume a Home drill-down: replace the filters with the single requested
+  // facet (so the grid shows exactly the subset the clicked number counted),
+  // reset to the "all" tab, drop any selection, then clear the request.
+  useEffect(() => {
+    if (!drill) return;
+    const next = emptyFilters();
+    if (drill.quality) next.quality = new Set([drill.quality]);
+    if (drill.slot) next.slots = new Set([drill.slot]);
+    if (drill.armorSet) next.armorSets = new Set([drill.armorSet]);
+    setF(next);
+    setTabState("all");
+    setSelectedId(null);
+    onDrillConsumed?.();
+  }, [drill, setF, setTabState, onDrillConsumed]);
 
   const toggleSlot = useCallback((s: SlotId) => {
     setF((prev) => {

@@ -48,10 +48,6 @@
       (construction du pool, phase 2) — compose proprement avec l'auto-prune mou (phase 3), ne le casse pas.
 
 ### 🟡/⚪ UX-cohérence & nits
-- [ ] 🟡 **Home : chiffres cliquables → Inventory filtré** — le dashboard affiche des chiffres **morts**
-      (« Poor · 150 », breakdown par slot/set). Les rendre **cliquables = raccourcis de navigation** : clic sur
-      « Poor · 150 » → Inventory pré-filtré quality=Poor ; clic sur « Boots · 12 » → Inventory filtré Boots.
-      Pas de reco, juste : chaque chiffre est une porte vers l'écran où on agit dessus. Effort faible.
 - [ ] 🟡 **Persistance des filtres** : si on a déjà fait une recherche avec un héros, garder les filtres mis en
       place. Évite de devoir se rappeler de tout (« j'avais mis quoi comme réglage ? »).
 - [~] 🟡 **`Advices` (tab Builds)** — lot prioritaire + (1)/(2) livrés (`lib/buildAdvice.ts` : caps gaspillés,

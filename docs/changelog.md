@@ -84,6 +84,20 @@ c'est un **bug de mirroring chez nous** (et chez outerpedia-v2, qui a la même l
   copies doivent le porter pour rester synchrones). `npm run data:build` régénère `equipment-passives.json`
   (+ `version.json`). Scan : 0 passif « [N] chance » brut restant.
 
+### Session 2026-06-28 — 🟡 Home : chiffres du dashboard cliquables → Inventory filtré
+
+Les chiffres du dashboard étaient du texte mort. Cliquer sur un facet **draille** désormais vers
+l'onglet Inventory **pré-filtré** sur exactement ce sous-ensemble.
+
+- **Cibles** ([`HomeScreen.tsx`](../apps/renderer/src/screens/HomeScreen.tsx)) : les **5 tiers de qualité**
+  (« Poor · 150 » → quality=Poor), la répartition **par slot** (« Boots · 12 » → slots=boots), et les
+  **top armor sets** (→ armorSets=set). Boutons (hover + tooltip « click to see… »), désactivés à count 0.
+- **Mécanisme** : `HomeScreen.onDrill(facet)` → `App` pose un `invDrill` + bascule sur l'onglet Inventory →
+  `InventoryScreen` **consomme** le drill (remplace les filtres par le seul facet — donc le grid montre
+  exactement le compte cliqué —, reset tab « all », vide la sélection), puis `onDrillConsumed` le nettoie
+  (un retour ultérieur ne ré-applique pas un filtre périmé). Type `InventoryDrill` exporté par l'Inventory.
+- `App.tsx` (state `invDrill` + wiring Home↔Inventory). Build + 237 tests verts.
+
 ### Session 2026-06-28 — 🟡 Défauts solver alignés sur le jeu réel
 
 `INITIAL_FILTERS` ([`BuilderScreen.tsx`](../apps/renderer/src/screens/BuilderScreen.tsx)) — deux défauts

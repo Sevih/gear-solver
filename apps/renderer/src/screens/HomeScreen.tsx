@@ -23,6 +23,7 @@ import { cx } from "../design/cx.js";
 import { Spinner } from "../design/Shell.js";
 import { SLOTS, SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { gearPieceQualityTier, QUALITY_COLOR, type QualityTier } from "../lib/quality.js";
+import type { InventoryDrill } from "./InventoryScreen.js";
 import { loadSavedBuilds } from "../lib/storage/savedBuilds.js";
 import { loadFilterPresets } from "../lib/storage/filterPresets.js";
 import {
@@ -592,11 +593,14 @@ export interface HomeScreenProps {
   onCapture: () => void;
   onSyncData: () => void;
   onOpenBuilder: () => void;
+  /** Drill into the Inventory tab pre-filtered to a clicked facet (quality
+   *  tier / slot / armor set). Undefined = numbers stay non-interactive. */
+  onDrill?: (d: InventoryDrill) => void;
 }
 
 export function HomeScreen({
   inventory, game, capStatus, emulator, appVersion, busy,
-  onCapture, onSyncData, onOpenBuilder,
+  onCapture, onSyncData, onOpenBuilder, onDrill,
 }: HomeScreenProps) {
   // Poll the update status. Faster while a download is in flight so the % bar
   // animates; idle states tick slowly. Seeded with a static "up to date" using
@@ -759,14 +763,24 @@ export function HomeScreen({
             </div>
             <div className="grid grid-cols-5 gap-3">
               {stats.tiers.map((t) => (
-                <div key={t.tier} title={t.hint} className="flex cursor-help flex-col gap-1">
+                <button
+                  key={t.tier}
+                  type="button"
+                  disabled={!onDrill || t.count === 0}
+                  onClick={() => onDrill?.({ quality: t.tier })}
+                  title={onDrill ? `${t.hint}\n\nClick to see these ${t.label} pieces in the Inventory` : t.hint}
+                  className={cx(
+                    "-mx-1.5 flex flex-col gap-1 rounded-lg px-1.5 py-1 text-left transition-colors",
+                    onDrill && t.count > 0 ? "cursor-pointer hover:bg-white/5" : "cursor-help",
+                  )}
+                >
                   <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: t.color }} />
                     {t.label}
                   </span>
                   <Num className="text-[23px] font-bold" color={t.color}>{t.count.toLocaleString()}</Num>
                   <Num className="text-[10px] text-zinc-400">{t.pct} of pool</Num>
-                </div>
+                </button>
               ))}
             </div>
           </Card>
@@ -819,10 +833,20 @@ export function HomeScreen({
                     <SubLabel icon={IC_SLOT}>By slot</SubLabel>
                     <div className="grid grid-cols-2 gap-x-3.5 gap-y-2">
                       {stats.slots.map((s) => (
-                        <div key={s.id} className="flex items-center justify-between gap-1.5 border-b border-white/5 pb-1.5">
+                        <button
+                          key={s.id}
+                          type="button"
+                          disabled={!onDrill || s.count === 0}
+                          onClick={() => onDrill?.({ slot: s.id })}
+                          title={onDrill ? `Show ${s.label} in the Inventory` : undefined}
+                          className={cx(
+                            "flex items-center justify-between gap-1.5 border-b border-white/5 pb-1.5 text-left transition-colors",
+                            onDrill && s.count > 0 ? "cursor-pointer hover:border-white/20" : "",
+                          )}
+                        >
                           <span className="text-[11px] text-zinc-400">{s.label}</span>
                           <Num className="text-[11.5px] font-semibold text-zinc-300">{s.count}</Num>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -830,16 +854,26 @@ export function HomeScreen({
                   <div className="flex min-w-0 flex-1 flex-col gap-2">
                     <SubLabel icon={IC_SETS}>Top armor sets</SubLabel>
                     {stats.sets.length > 0 ? stats.sets.map((se) => (
-                      <div key={se.id} className="flex items-center gap-2">
+                      <button
+                        key={se.id}
+                        type="button"
+                        disabled={!onDrill}
+                        onClick={() => onDrill?.({ armorSet: se.id })}
+                        title={onDrill ? `Show ${se.name} pieces in the Inventory` : se.name}
+                        className={cx(
+                          "-mx-1 flex items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors",
+                          onDrill ? "cursor-pointer hover:bg-white/5" : "",
+                        )}
+                      >
                         {se.icon
                           ? <img src={`/img/ui/effect/${se.icon}.webp`} alt="" className="h-4.5 w-4.5 shrink-0" />
                           : <span className="h-3.5 w-3.5 shrink-0 rounded" style={{ background: se.color }} />}
-                        <span className="w-13 shrink-0 truncate text-[11px] text-zinc-300" title={se.name}>{se.name}</span>
+                        <span className="w-13 shrink-0 truncate text-[11px] text-zinc-300">{se.name}</span>
                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
                           <div className="h-full rounded-full" style={{ width: se.w, background: se.color, opacity: 0.65 }} />
                         </div>
                         <Num className="w-7.5 shrink-0 text-right text-[11px] font-semibold text-zinc-300">{se.count}</Num>
-                      </div>
+                      </button>
                     )) : (
                       <span className="text-[11px] text-zinc-400">No armor sets resolved.</span>
                     )}

@@ -11,6 +11,7 @@ import { HomeScreen } from "./screens/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
 import { loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, type WorklistEntry } from "./lib/storage/worklist.js";
+import type { InventoryDrill } from "./screens/InventoryScreen.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
 // bundle drops to just the shell + the first screen the user opens.
@@ -119,6 +120,9 @@ export function App() {
   // Builder is live on the Worklist tab. Persisted to localStorage on each change.
   const [worklist, setWorklist] = useState<WorklistEntry[]>(() => loadWorklist());
   const commitWorklist = (next: WorklistEntry[]) => { setWorklist(next); persistWorklist(next); };
+  // Pending Inventory drill-down from a Home dashboard click — set + switch to
+  // the Inventory tab, consumed (and cleared) by InventoryScreen on apply.
+  const [invDrill, setInvDrill] = useState<InventoryDrill | null>(null);
 
   async function refreshInventory(label: string) {
     const r = await autoImport();
@@ -323,10 +327,11 @@ export function App() {
                 onCapture={() => runCapture("capture")}
                 onSyncData={() => void syncGameData()}
                 onOpenBuilder={() => setTab("Builder")}
+                onDrill={(d) => { setInvDrill(d); setTab("Inventory"); }}
               />
             </ScreenErrorBoundary>
           )}
-          {tab === "Inventory" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} /></ScreenErrorBoundary>}
+          {tab === "Inventory" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} drill={invDrill} onDrillConsumed={() => setInvDrill(null)} /></ScreenErrorBoundary>}
           {tab === "Worklist" && (
             <ScreenErrorBoundary>
               <WorklistScreen
