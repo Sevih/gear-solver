@@ -107,6 +107,10 @@ export interface SolveRequest {
    *  unranked = lowest). Read by `allow()` only when `options.equippedScope`
    *  is `"lower"` — gear on a strictly-lower-priority hero may be pooled. */
   heroPriority: HeroPriority;
+  /** Account-global "never use" piece UIDs (Inventory right-click → exclude).
+   *  Dropped from every slot pool in `allow()` before the cartesian. Absent =
+   *  none excluded. Distinct from `filters.excludedHeroes` (per-hero gear). */
+  excludedPieceUids?: string[];
   /** Captured per-character skill levels. `chainPassive` is the auto-leveled
    *  Skill_5 row (not user-controllable) but it contributes additively to
    *  CP via the `skillSum` term, so feeding 0 would under-report CP for any

@@ -80,6 +80,7 @@ Pour chaque slot ∈ {weapon, helmet, armor, gloves, boots, accessory, ooparts} 
 filtre les pièces de l'inventaire :
 - `g.slot === slot`
 - exclu si `includeEquippedOnOthers === false` et équipé sur un autre héros
+- exclu si `g.uid ∈ excludedPieceUids` (exclusion **globale** account-wide, clic-droit Inventory — vérifié en premier)
 - exclu si `g.equippedBy ∈ excludedHeroes`
 - exclu si `onlyMaxed && enhanceLevel < 15`
 - exclu si `classLimit` ≠ classe du héros
@@ -190,6 +191,10 @@ Picker (combobox searchable) + portrait + 4 boutons d'action.
 - **SOLVE CP** : lance le mode CP.
 - **Cancel** : interrompt la solve (les workers retournent leur heap partiel, l'orchestrator merge ce qu'on a).
 - **Reset filters** : `dispatch({type: "resetAll"})` — vide tout le reducer.
+
+**Mémoire de filtres par héros** (session-scoped) : changer de héros **snapshot** les filtres du héros
+sortant et **restaure** ceux de l'entrant (`heroFilters.ts`, `gs.solver.heroFilters` sessionStorage), au
+lieu de tout resetter — distinct des **Filter presets** nommés/durables. Les *résultats* restent vidés.
 
 ### Stats
 Snapshot des `FinalStats` du build actuellement équipé sur le héros (col gauche)

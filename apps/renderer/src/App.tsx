@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { GameData, Inventory, RawUserItem, RawUserCharacter, UserGeasLevels } from "@gear-solver/core";
 import { autoImport, parseFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
@@ -12,6 +12,7 @@ import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
 import { loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/InventoryScreen.js";
+import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
 // bundle drops to just the shell + the first screen the user opens.
@@ -123,6 +124,17 @@ export function App() {
   // Pending Inventory drill-down from a Home dashboard click — set + switch to
   // the Inventory tab, consumed (and cleared) by InventoryScreen on apply.
   const [invDrill, setInvDrill] = useState<InventoryDrill | null>(null);
+  // Account-global "never use" piece UIDs — edited in Inventory (right-click),
+  // consumed by the Builder's solver. Owned here so an Inventory edit is live
+  // for the (kept-mounted) Builder. Durable (localStorage).
+  const [excludedPieces, setExcludedPieces] = useState<Set<string>>(() => loadExcludedPieces());
+  // Stable identity so the memoized Inventory GearTiles don't all re-render on
+  // every App render (only the toggled tile's `excluded` prop changes).
+  const toggleExclude = useCallback((uid: string) => setExcludedPieces((prev) => {
+    const next = toggleExcludedPiece(prev, uid);
+    persistExcludedPieces(next);
+    return next;
+  }), []);
 
   async function refreshInventory(label: string) {
     const r = await autoImport();
@@ -331,7 +343,7 @@ export function App() {
               />
             </ScreenErrorBoundary>
           )}
-          {tab === "Inventory" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} drill={invDrill} onDrillConsumed={() => setInvDrill(null)} /></ScreenErrorBoundary>}
+          {tab === "Inventory" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} drill={invDrill} onDrillConsumed={() => setInvDrill(null)} excludedPieces={excludedPieces} onToggleExclude={toggleExclude} /></ScreenErrorBoundary>}
           {tab === "Worklist" && (
             <ScreenErrorBoundary>
               <WorklistScreen
@@ -351,7 +363,7 @@ export function App() {
           {builderMounted.current && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={(entry) => setWorklist((prev) => { const next = [entry, ...prev]; persistWorklist(next); return next; })} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={(entry) => setWorklist((prev) => { const next = [entry, ...prev]; persistWorklist(next); return next; })} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
               </ScreenErrorBoundary>
             </div>
           )}

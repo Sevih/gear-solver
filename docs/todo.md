@@ -39,14 +39,8 @@
 - [ ] 🟢 **Worklist — ordre/transaction inter-entrées** *(optionnel)* — appliquer A avant B quand B réutilise
       le gear libéré par A. Aujourd'hui chaque diff est relatif au snapshot courant, conflits **signalés**
       mais arbitrés à la main. Sophistication différée (transaction ordonnée re-validée à chaque étape).
-- [ ] 🟢 **Exclusion globale de pièces** — clic-droit sur une pièce (Inventory) → **« exclure du solve »** quand
-      ses stats sont éclatées (propriété de la *pièce*, pas du héros) → **liste globale persistée**, tous les
-      solves la sautent au pool. Distinct du multi-select « Exclude equipped » (par héros). Couche **dure**
-      (construction du pool, phase 2) — compose proprement avec l'auto-prune mou (phase 3), ne le casse pas.
 
 ### 🟡/⚪ UX-cohérence & nits
-- [ ] 🟡 **Persistance des filtres** : si on a déjà fait une recherche avec un héros, garder les filtres mis en
-      place. Évite de devoir se rappeler de tout (« j'avais mis quoi comme réglage ? »).
 - [~] 🟡 **`Advices` (tab Builds)** — lot prioritaire + (1)/(2) livrés (`lib/buildAdvice.ts` : caps gaspillés,
       gems vides, upgrade agrégé ; **(1)** bruit Missing supprimé sur persos WIP — `Missing` ne sort que ≤ 2
       slots manquants ; **(2)** ligne agrégée « N pieces below max enhance » (cap +10, +15 si ascended) ;

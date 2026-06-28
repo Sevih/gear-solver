@@ -267,9 +267,13 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
 
   const equippedScope = filters.options.equippedScope ?? "all";
   const heroPriority = req.heroPriority ?? {};
+  // Account-global "never use" pieces (Inventory right-click → exclude). Built
+  // once; checked first in `allow` so an excluded piece never enters any pool.
+  const excludedPieces = new Set(req.excludedPieceUids ?? []);
   // Per-slot filter helper. Returns true if the piece is allowed in this slot.
   const allow = (g: GearPiece, slot: string): boolean => {
     if (g.slot !== slot) return false;
+    if (excludedPieces.has(g.uid)) return false;
     // Equipped on ANOTHER hero — own + free gear is always in. The scope gates
     // the rest: "none" excludes all; "lower" keeps only gear on a strictly
     // lower-priority hero (so equal/higher heroes are never stripped); "all"

@@ -47,7 +47,8 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
    - **Onglet Inventory** : table + filtres + détail pièce (mains, subs, ticks, reforge,
      breakthrough, singularity), score par pièce, indicateur de qualité. Tris/filtres/onglet
      **session-scoped** (`useSessionState`/sessionStorage) → stables au switch d'onglet, remis
-     au défaut au lancement.
+     au défaut au lancement. **Exclusion globale** d'une pièce du solver : clic-droit sur une tile
+     (ou bouton dans le détail) → liste durable `gs.solver.excludedPieces`, sautée par tous les solves.
    - **Onglet Builds** : carte par héros avec stats composées (`composeBuild` mirror
      in-game CalcFinalStat), comparaison vs locks régression (`data/stat-locks.json`). **Advices**
      auto par carte (`lib/buildAdvice.ts`, pur + testé) : missing/sets, caps gaspillés (crc/pen
@@ -59,7 +60,8 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      **Câblé end-to-end** : cancel mid-solve (`MessageChannel` yield), colonne Upg
      (calculée, triable, filtrable), Exclude-equipped multi-select, simulation de reforge,
      allocation de gemmes recommandée, Save/Remove build + Filter presets par héros
-     (localStorage), bouton Optimize → depuis l'onglet Builds. **Reste monté entre onglets**
+     (localStorage) + **mémoire auto des filtres par héros** (session-scoped : snapshot au switch de
+     héros, restauré au retour), bouton Optimize → depuis l'onglet Builds. **Reste monté entre onglets**
      (`display:none`) → résultats / filtres / héros conservés + solve qui tourne en fond.
      Deux encadrés d'aide par héros : *Sub tick value* (rentabilité flat vs % d'un tick de sub,
      `lib/subValue.ts`) et *Damage / +1%* (gain de dégâts pour +1% des stats de scaling /

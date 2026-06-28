@@ -124,6 +124,8 @@ export interface SolveArgs {
   userCodexLevel: number | null;
   /** Account-global hero priority ranks (for the "≤ lower priority" scope). */
   heroPriority: HeroPriority;
+  /** Account-global "never use" piece UIDs — dropped from every slot pool. */
+  excludedPieceUids?: string[];
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
   /** Per-worker local top-K (orchestrator merges → returns top-N). Default 1000. */
@@ -250,6 +252,7 @@ export class SolverOrchestrator {
       userGeasLevels: args.userGeasLevels,
       userCodexLevel: args.userCodexLevel,
       heroPriority: args.heroPriority,
+      excludedPieceUids: args.excludedPieceUids,
       userSkills: args.userSkills,
       filters: args.filters,
       topK,

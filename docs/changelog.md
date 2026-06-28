@@ -69,6 +69,36 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-28 — 🟢 Exclusion globale de pièces (Inventory → solver)
+
+Clic-droit sur une pièce (Inventory) → **« exclure du solve »** (typiquement des rolls éclatés) → tous
+les solves la sautent. Distinct du multi-select « Exclude equipped » (qui exclut le gear d'un *héros*) :
+ici c'est une propriété de la **pièce**, account-wide.
+
+- **Storage** ([`lib/storage/excludedPieces.ts`](../apps/renderer/src/lib/storage/excludedPieces.ts),
+  `gs.solver.excludedPieces`, **durable** — « cette pièce est nulle » survit à la session), possédé par App.
+- **Engine** : `excludedPieceUids` threadé comme `heroPriority` (SolveArgs → SolveRequest → worker) ;
+  `allow()` rejette `excludedPieces.has(g.uid)` **en premier**, donc la pièce n'entre dans **aucun** pool
+  (couche dure, phase 2 — compose proprement avec l'auto-prune mou phase 3).
+- **UI Inventory** : **clic-droit** sur une tile (raccourci power-user) **+** bouton « Exclude from solver »
+  dans le panneau de détail (surface découvrable). Tile exclue = liseré rose + icône dimmée + badge ⊘.
+  Handler `toggleExclude` stable (`useCallback`, App) → le memo des `GearTile` reste effectif.
+  `App.tsx` (state + wiring Inventory↔Builder), `InventoryScreen.tsx`, engine `types`/`orchestrator`/`engine`.
+  Build + 237 tests verts.
+
+### Session 2026-06-28 — 🟡 Persistance des filtres par héros (Builder, session-scoped)
+
+Changer de héros **résettait** les filtres (« j'avais mis quoi comme réglage ? »). Désormais les filtres
+sont **mémorisés par héros** : on snapshot ceux du héros sortant et on restaure ceux de l'entrant.
+
+- **Storage** ([`lib/storage/heroFilters.ts`](../apps/renderer/src/lib/storage/heroFilters.js),
+  `gs.solver.heroFilters`, **sessionStorage** — reset au lancement, comme les autres états de vue ;
+  distinct des **Filter presets** nommés/durables). Seul `excludedHeroes` (Set) est converti.
+- **Mécanisme** (`BuilderScreen`) : `filtersRef` (miroir live, évite de re-déclencher l'effet à chaque
+  édition), `prevHeroRef` (héros chargé), `heroFiltersRef` (map). Sur changement de héros : save sortant
+  (`cloneFilters`) → `dispatch(loadPreset)` du snapshot entrant **ou** `resetAll` si aucun. **Les résultats**
+  restent vidés (per-hero, stale autrement). Build + 237 tests verts.
+
 ### Session 2026-06-28 — 🔴 Fix mirroring : chance de contre affichée brute (« 187 » → « 18.7% »)
 
 Le passif accessoire **Punishment** affichait « Has a **187** chance to Counterattack » au lieu de

@@ -38,6 +38,7 @@ import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco,
 import { fetchReco } from "../lib/reco/fetchReco.js";
 import { equipPieces } from "../equip.js";
 import type { WorklistChange, WorklistEntry } from "../lib/storage/worklist.js";
+import { loadHeroFilters, persistHeroFilters, cloneFilters, type HeroFiltersMap } from "../lib/storage/heroFilters.js";
 import { usePersistedState } from "../hooks/usePersistedState.js";
 import { QUALITY_TIERS, QUALITY_LABEL, type QualityTier } from "../lib/quality.js";
 import {
@@ -59,6 +60,9 @@ interface BuilderScreenProps {
   /** Account-global hero priority ranks (owned by App, edited in Builds) — fed
    *  to the solver for the "Equipped items → ≤ lower priority" scope. */
   heroPriority: HeroPriority;
+  /** Account-global "never use" piece UIDs (owned by App, edited in Inventory)
+   *  — dropped from every slot pool before the cartesian. */
+  excludedPieceUids?: Set<string>;
   /** Hero UID to preselect on mount — set when the user clicks "Optimize →"
    *  on the Builds tab. Read once via the `selectedUid` initializer. */
   initialHeroUid?: string | null;
@@ -568,7 +572,7 @@ function buildPassesFilters(
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, initialHeroUid, onInitialHeroConsumed, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, initialHeroUid, onInitialHeroConsumed, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
@@ -586,6 +590,14 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialHeroUid]);
   const [filters, dispatch] = useReducer(solverFiltersReducer, INITIAL_FILTERS);
+  // Per-hero filter memory (session-scoped). `filtersRef` mirrors the live
+  // filters so the hero-change effect can snapshot the OUTGOING hero without
+  // depending on `filters` (which would re-fire it on every edit). `prevHeroRef`
+  // tracks whose filters are currently loaded; `heroFiltersRef` is the map.
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  const heroFiltersRef = useRef<HeroFiltersMap>(loadHeroFilters());
+  const prevHeroRef = useRef(selectedUid);
 
   // Solver state — orchestrator stays alive for the screen's lifetime so
   // the worker pool isn't torn down between solves. Lazy-init on first SOLVE.
@@ -732,6 +744,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       userGeasLevels,
       userCodexLevel,
       heroPriority,
+      excludedPieceUids: excludedPieceUids ? Array.from(excludedPieceUids) : undefined,
       userSkills: {
         first: selected.skills.first,
         second: selected.skills.second,
@@ -922,17 +935,25 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // Clear stale reco feedback when the hero changes.
   useEffect(() => { setRecoStatus(null); setRecoPicker(null); }, [selectedUid]);
 
-  // Switching heroes is a clean slate: the previous hero's filters AND results
-  // don't carry over (different gear, different goals — keeping them is
-  // misleading). Cancel any in-flight solve first so its async `onResult` can't
-  // repopulate the just-cleared table for the wrong hero. Skips the initial
-  // mount (nothing to reset yet, and it would clobber a future pre-populated
-  // filter set keyed off `initialHeroUid`).
+  // Switching heroes: RESULTS are a clean slate (per-hero, stale otherwise), but
+  // FILTERS are remembered per hero (session-scoped) — snapshot the outgoing
+  // hero's set, restore the incoming hero's (or defaults if first time), so
+  // returning to a hero brings back "what did I set here again?". Cancel any
+  // in-flight solve first so its async `onResult` can't repopulate the table for
+  // the wrong hero. Skips the initial mount (just records the starting hero, so
+  // a pre-populated filter set keyed off `initialHeroUid` isn't clobbered).
   const heroChangeReset = useRef(true);
   useEffect(() => {
-    if (heroChangeReset.current) { heroChangeReset.current = false; return; }
+    if (heroChangeReset.current) { heroChangeReset.current = false; prevHeroRef.current = selectedUid; return; }
     orchestratorRef.current?.cancel();
-    dispatch({ type: "resetAll" });
+    const prev = prevHeroRef.current;
+    if (prev) {
+      heroFiltersRef.current = { ...heroFiltersRef.current, [prev]: cloneFilters(filtersRef.current) };
+      persistHeroFilters(heroFiltersRef.current);
+    }
+    const saved = selectedUid ? heroFiltersRef.current[selectedUid] : undefined;
+    dispatch(saved ? { type: "loadPreset", filters: cloneFilters(saved) } : { type: "resetAll" });
+    prevHeroRef.current = selectedUid;
     setSolving(false);
     setSolveResults([]);
     setSelectedBuildIdx(null);

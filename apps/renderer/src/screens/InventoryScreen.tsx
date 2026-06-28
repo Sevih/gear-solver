@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
@@ -658,6 +658,10 @@ interface GearItemProps {
   equippedChar: Character | null;
   active: boolean;
   onSelect: (id: string) => void;
+  /** Globally excluded from the solver (right-click toggles it). */
+  excluded?: boolean;
+  /** Stable handler (App-owned, useCallback) so the memo stays effective. */
+  onToggleExclude?: (id: string) => void;
 }
 
 /** Icon-only grid tile — clicking it surfaces the full detail in the left
@@ -671,12 +675,20 @@ interface GearItemProps {
  *                 datamine and served at /img/ui/inven/CT_Slot_Lock.webp.
  *  Selection is conveyed by a soft cyan halo (ring + outer glow) rather
  *  than a hard border so the focus reads as ambient light, not a frame. */
-const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect }: GearItemProps) {
+const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect, excluded, onToggleExclude }: GearItemProps) {
   const onClick = useCallback(() => onSelect(piece.id), [onSelect, piece.id]);
+  // Right-click toggles global solver exclusion — the discoverable surface is
+  // the detail panel's button, this is the power-user shortcut.
+  const onCtx = useCallback((e: MouseEvent) => {
+    if (!onToggleExclude) return;
+    e.preventDefault();
+    onToggleExclude(piece.id);
+  }, [onToggleExclude, piece.id]);
   return (
     <button
       onClick={onClick}
-      title={piece.name}
+      onContextMenu={onCtx}
+      title={excluded ? `${piece.name} — excluded from the solver (right-click to include)` : piece.name}
       className={cx(
         "group relative grid place-items-center rounded-lg border-2 p-0 transition-all",
         // Selection halo: thicker (2px) cyan stroke hugging the tile edge,
@@ -686,13 +698,23 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect 
         // column (see size below).
         active
           ? "border-cyan-300 bg-cyan-500/10 shadow-[0_0_8px_0_rgba(34,211,238,0.9),0_0_22px_4px_rgba(34,211,238,0.5)]"
-          : "border-white/5 bg-white/[0.012] hover:border-white/15 hover:bg-white/3",
+          : excluded
+            ? "border-rose-400/60 bg-rose-500/5"
+            : "border-white/5 bg-white/[0.012] hover:border-white/15 hover:bg-white/3",
       )}
     >
       {/* Icon size tuned to grid column min (96px) minus the 4px border so
           the cyan stroke sits right on the icon's visual edge with no
-          leftover lateral whitespace. */}
-      <EquipmentIcon piece={piece.iconPiece} size={92} />
+          leftover lateral whitespace. Excluded pieces are dimmed. */}
+      <EquipmentIcon piece={piece.iconPiece} size={92} className={excluded ? "opacity-40" : undefined} />
+      {excluded && (
+        <span
+          title="Excluded from the solver (right-click to include)"
+          className="pointer-events-none absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-rose-500/85 text-[10px] font-bold leading-none text-white"
+        >
+          ⊘
+        </span>
+      )}
       {/* "E" sits well inside the icon's top-left art area (not on the tile
           frame) so it reads as an overlay on the gear, not a tile chrome. */}
       {equippedChar && (
@@ -729,12 +751,14 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect 
 const TILE_SIZE = 96;
 const TILE_GAP = 4;
 function VirtualGearGrid({
-  items, selectedId, onSelect, charsByUid,
+  items, selectedId, onSelect, charsByUid, excludedPieces, onToggleExclude,
 }: {
   items: UiPiece[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   charsByUid: Map<string, Character>;
+  excludedPieces?: Set<string>;
+  onToggleExclude?: (id: string) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -798,6 +822,8 @@ function VirtualGearGrid({
                       equippedChar={ec}
                       active={p.id === selectedId}
                       onSelect={onSelect}
+                      excluded={excludedPieces?.has(p.id) ?? false}
+                      onToggleExclude={onToggleExclude}
                     />
                   );
                 })}
@@ -953,8 +979,8 @@ function SlotBar({
  *  populated state shows the full main / sub / equipped char / set / brk
  *  breakdown that used to live in the right-side `GearDrawer`. */
 function ItemDetail({
-  piece, equippedChar, game,
-}: { piece: UiPiece | null; equippedChar: Character | null; game: GameData | null }) {
+  piece, equippedChar, game, excluded, onToggleExclude,
+}: { piece: UiPiece | null; equippedChar: Character | null; game: GameData | null; excluded?: boolean; onToggleExclude?: (uid: string) => void }) {
   if (!piece) {
     return (
       <aside className="flex h-full w-80 shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/6 bg-white/[0.012] px-6 py-8 text-center">
@@ -975,6 +1001,23 @@ function ItemDetail({
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <GearDetailBody piece={piece} game={game} equippedChar={equippedChar} />
       </div>
+      {onToggleExclude && (
+        <div className="shrink-0 border-t border-white/8 px-4 py-2.5">
+          <button
+            type="button"
+            onClick={() => onToggleExclude(piece.id)}
+            title="Globally exclude this piece from every solve (e.g. trash rolls). Also via right-click on the tile."
+            className={cx(
+              "flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors",
+              excluded
+                ? "border-rose-400/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
+                : "border-white/10 bg-white/3 text-white/80 hover:bg-white/6",
+            )}
+          >
+            {excluded ? "⊘ Excluded from solver — include" : "Exclude from solver"}
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
@@ -999,9 +1042,13 @@ export interface InventoryScreenProps {
    *  later plain visit doesn't re-apply a stale filter. */
   drill?: InventoryDrill | null;
   onDrillConsumed?: () => void;
+  /** Account-global solver exclusions (App-owned) + a STABLE toggle handler
+   *  (useCallback) so the memoized `GearTile`s don't re-render on every change. */
+  excludedPieces?: Set<string>;
+  onToggleExclude?: (uid: string) => void;
 }
 
-export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed }: InventoryScreenProps) {
+export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed, excludedPieces, onToggleExclude }: InventoryScreenProps) {
   // Session-scoped view state — filters / sort / sub-tab survive remounting on
   // a tab swap (sessionStorage) but reset to their defaults on the next app
   // launch, so each session starts from a clean inventory view rather than last
@@ -1238,6 +1285,8 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         piece={selected}
         equippedChar={selected?.equippedBy ? charsByUid.get(selected.equippedBy) ?? null : null}
         game={game}
+        excluded={selected ? (excludedPieces?.has(selected.id) ?? false) : false}
+        onToggleExclude={onToggleExclude}
       />
       <div className="min-w-0 flex-1 flex flex-col min-h-0">
         <div className="flex items-center justify-between">
@@ -1255,6 +1304,8 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
           selectedId={selectedId}
           onSelect={onSelect}
           charsByUid={charsByUid}
+          excludedPieces={excludedPieces}
+          onToggleExclude={onToggleExclude}
         />
       </div>
       <FilterModal
