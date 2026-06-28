@@ -97,8 +97,8 @@ export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = f
   );
 }
 
-export type Tab = "Home" | "Inventory" | "Builds" | "Builder";
-const TABS: Tab[] = ["Home", "Inventory", "Builds", "Builder"];
+export type Tab = "Home" | "Inventory" | "Builds" | "Builder" | "Worklist";
+const TABS: Tab[] = ["Home", "Inventory", "Builds", "Builder", "Worklist"];
 
 /** Per-tab activity counts. Renders next to the tab label as a mini pill so
  *  the page-level "Inventory · 1450 pieces" header can disappear without
@@ -109,6 +109,8 @@ export interface TabCounts {
   Inventory: number | null;
   Builds: number | null;
   Builder: number | null;
+  /** Pending (not-yet-applied) gear changes queued in the worklist. */
+  Worklist: number | null;
 }
 
 export interface EmulatorBadgeProps {

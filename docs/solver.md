@@ -284,6 +284,16 @@ Trois sections **câblées** (localStorage, par héros) :
   (`storage/filterPresets.ts`, `loadPreset`).
 - **Restore** — repush un build sauvé dans la table + bottom band.
 
+Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
+- **Equip build** — applique les pièces au héros en réécrivant le snapshot capturé
+  (`equipPieces`, popup de confirmation, jamais d'écriture vers le jeu).
+- **+ Worklist** — pousse le **diff par slot** (slots changés only) sur l'onglet **Worklist**
+  (`screens/WorklistScreen.tsx`, storage `lib/storage/worklist.ts`) : une file inter-héros où
+  chaque changement est une ligne cochable + un **Apply locally** (même `equipPieces`). États
+  *applied / stale / conflict* **dérivés live** de l'inventaire (rien n'est figé) ; **auto-prune à
+  chaque recapture** (`reconcileWorklist` retire les changements faits + entrées vidées). Désactivé
+  quand aucun slot ne change (`equipPlan.moving === 0`).
+
 Equip / Unequip **vers le jeu** restent absents (nécessitent une API jeu inexistante).
 Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le héros).
 

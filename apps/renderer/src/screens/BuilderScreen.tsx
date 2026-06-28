@@ -37,6 +37,7 @@ import type { HeroPriority } from "../lib/storage/heroPriority.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
 import { fetchReco } from "../lib/reco/fetchReco.js";
 import { equipPieces } from "../equip.js";
+import type { WorklistChange, WorklistEntry } from "../lib/storage/worklist.js";
 import { usePersistedState } from "../hooks/usePersistedState.js";
 import { QUALITY_TIERS, QUALITY_LABEL, type QualityTier } from "../lib/quality.js";
 import {
@@ -67,6 +68,9 @@ interface BuilderScreenProps {
   /** Called after "Equip build" rewrote the captured snapshot, so the parent
    *  re-imports the inventory (App's `refreshInventory`). */
   onAfterEquip?: () => void;
+  /** Queue the selected build's per-slot diff onto the cross-hero worklist
+   *  (App owns the list). Undefined disables the "Add to worklist" button. */
+  onAddToWorklist?: (entry: WorklistEntry) => void;
   /** Solver-pool override (Settings → Solver): null = auto. Drives the footer
    *  read-out and forces a worker-pool rebuild when it changes. */
   workerCount?: number | null;
@@ -558,7 +562,7 @@ function buildPassesFilters(
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, initialHeroUid, onInitialHeroConsumed, onAfterEquip, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, initialHeroUid, onInitialHeroConsumed, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
@@ -595,6 +599,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     { permutations: 0, searched: 0, poolSizes: null },
   );
   const [solveResults, setSolveResults] = useState<SolveBuild[]>([]);
+  /** Transient "Added ✓" confirmation on the Add-to-worklist button. */
+  const [worklistAdded, setWorklistAdded] = useState(false);
   /** Wall-clock of the last completed solve (ms), shown in the footer; null
    *  while solving or before the first solve. */
   const [lastSolveMs, setLastSolveMs] = useState<number | null>(null);
@@ -1029,6 +1035,46 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     ? selectedBuild.cp - composition.currentCp
     : null;
 
+  // Queue the selected build's per-slot diff (changed slots only) onto the
+  // cross-hero worklist. Same "changed" definition as the gear-band accent /
+  // `upg` (piece not currently on the hero). No-op when nothing moves.
+  const addToWorklist = () => {
+    if (!selectedBuild || !selectedUid || !selected || !onAddToWorklist) return;
+    const nameOf = (x: GearPiece) => game?.equipment[String(x.itemId)]?.name ?? x.name ?? `Item ${x.itemId}`;
+    const changes: WorklistChange[] = [];
+    for (const uid of selectedBuild.pieceUids) {
+      const p = uid ? pieceByUid.get(uid) : undefined;
+      if (!p?.slot) continue;
+      const current = currentLoadout.get(p.slot) ?? null;
+      if (current?.uid === uid) continue; // unchanged slot — not actionable
+      const main = p.main.find((m) => !m.combatOnly) ?? null;
+      changes.push({
+        slot: p.slot,
+        toUid: uid,
+        toName: nameOf(p),
+        toMain: main ? { stat: main.stat, value: main.value, percent: main.percent } : null,
+        fromUid: current?.uid ?? null,
+        fromName: current ? nameOf(current) : null,
+        done: false,
+      });
+    }
+    if (changes.length === 0) return;
+    const meta = game?.characters[String(selected.charId)] ?? null;
+    onAddToWorklist({
+      id: crypto.randomUUID(),
+      heroUid: selectedUid,
+      heroName: displayNameOf(selected, meta ? { nickname: meta.nickname ?? null } : null),
+      charId: selected.charId,
+      mode: lastSolveMode,
+      cp: selectedBuild.cp ?? null,
+      upg: selectedBuild.upg,
+      changes,
+      createdAt: Date.now(),
+    });
+    setWorklistAdded(true);
+    setTimeout(() => setWorklistAdded(false), 1500);
+  };
+
   /** Selected hero's class (Striker / Mage / …). Null when no hero is picked
    *  yet — the weapon / accessory effect palettes fall back to "all classes"
    *  in that case so the user can scan what's possible. */
@@ -1136,13 +1182,31 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
                   </span>
                 )}
               </div>
-              <EquipBuildButton
-                disabled={!selectedBuild || !selectedUid || !game || equipPlan.moving === 0}
-                moving={equipPlan.moving}
-                steal={equipPlan.steal}
-                heroName={selected?.name ?? null}
-                onEquip={equipSelectedBuild}
-              />
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={addToWorklist}
+                  disabled={!selectedBuild || equipPlan.moving === 0 || !onAddToWorklist}
+                  title="Queue these changes onto the Worklist tab to apply later (across heroes)."
+                  className={cx(
+                    "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[11.5px] font-medium transition-colors",
+                    !selectedBuild || equipPlan.moving === 0 || !onAddToWorklist
+                      ? "cursor-not-allowed border-white/6 bg-white/2 text-white/45"
+                      : worklistAdded
+                        ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+                        : "border-white/8 bg-white/3 text-white hover:bg-white/6",
+                  )}
+                >
+                  {worklistAdded ? "Added ✓" : "+ Worklist"}
+                </button>
+                <EquipBuildButton
+                  disabled={!selectedBuild || !selectedUid || !game || equipPlan.moving === 0}
+                  moving={equipPlan.moving}
+                  steal={equipPlan.steal}
+                  heroName={selected?.name ?? null}
+                  onEquip={equipSelectedBuild}
+                />
+              </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} selfUid={selectedUid} currentLoadout={currentLoadout} />

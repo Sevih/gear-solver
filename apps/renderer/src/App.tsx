@@ -10,6 +10,7 @@ import { SettingsModal } from "./design/SettingsModal.js";
 import { HomeScreen } from "./screens/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
+import { loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, type WorklistEntry } from "./lib/storage/worklist.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
 // bundle drops to just the shell + the first screen the user opens.
@@ -20,6 +21,7 @@ import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority
 const InventoryScreen = lazy(() => import("./screens/InventoryScreen.js").then((m) => ({ default: m.InventoryScreen })));
 const BuildsScreen = lazy(() => import("./screens/BuildsScreen.js").then((m) => ({ default: m.BuildsScreen })));
 const BuilderScreen = lazy(() => import("./screens/BuilderScreen.js").then((m) => ({ default: m.BuilderScreen })));
+const WorklistScreen = lazy(() => import("./screens/WorklistScreen.js").then((m) => ({ default: m.WorklistScreen })));
 
 /** Per-screen error boundary — a throw in a `useMemo`/render (e.g. a bad
  *  filter combo or stale persisted state) used to blank the whole app with
@@ -112,6 +114,11 @@ export function App() {
   // "Optimize →" button, consumed (and cleared) by BuilderScreen on mount so
   // a later normal visit to the Builder doesn't re-preselect a stale hero.
   const [builderHero, setBuilderHero] = useState<string | null>(null);
+  // Cross-hero gear-change queue — built from the Builder ("Add to worklist"),
+  // worked through on the Worklist tab. Owned here so an add in the (kept-mounted)
+  // Builder is live on the Worklist tab. Persisted to localStorage on each change.
+  const [worklist, setWorklist] = useState<WorklistEntry[]>(() => loadWorklist());
+  const commitWorklist = (next: WorklistEntry[]) => { setWorklist(next); persistWorklist(next); };
 
   async function refreshInventory(label: string) {
     const r = await autoImport();
@@ -142,6 +149,18 @@ export function App() {
       setStatus("Game data sync failed.");
     }
   }
+
+  // Auto-prune the worklist whenever the inventory changes (recapture, reload,
+  // local apply, data sync): any queued change whose target piece is now on the
+  // hero is done for real → drop it (and any entry it empties). Source of truth
+  // is the fresh snapshot, not the manual "done" ticks.
+  useEffect(() => {
+    setWorklist((prev) => {
+      const { next, changed } = reconcileWorklist(prev, inv);
+      if (changed) persistWorklist(next);
+      return next;
+    });
+  }, [inv]);
 
   useEffect(() => { void refreshInventory("Auto-import"); }, []);
   useEffect(() => { void getCaptureStatus().then(setCapStatus); }, []);
@@ -223,6 +242,8 @@ export function App() {
           // fly — sparse enough to not need memoization.
           Builds: inv ? new Set(inv.gear.filter((g) => g.equippedBy).map((g) => g.equippedBy)).size : null,
           Builder: null,
+          // Pending (not-yet-applied) gear changes across all queued builds.
+          Worklist: remainingChangeCount(worklist, inv) || null,
         }}
         capture={{
           state: captureState,
@@ -306,6 +327,17 @@ export function App() {
             </ScreenErrorBoundary>
           )}
           {tab === "Inventory" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} /></ScreenErrorBoundary>}
+          {tab === "Worklist" && (
+            <ScreenErrorBoundary>
+              <WorklistScreen
+                inventory={inv}
+                game={game}
+                worklist={worklist}
+                onChange={commitWorklist}
+                onAfterApply={() => void refreshInventory("Applied worklist change")}
+              />
+            </ScreenErrorBoundary>
+          )}
           {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a
@@ -314,7 +346,7 @@ export function App() {
           {builderMounted.current && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={(entry) => setWorklist((prev) => { const next = [entry, ...prev]; persistWorklist(next); return next; })} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
               </ScreenErrorBoundary>
             </div>
           )}

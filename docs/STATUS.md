@@ -68,6 +68,11 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      **Pré-filtrage du pool armor par set** : un set qui contraint tout l'armor (2pc+2pc / 4pc)
      élague les pièces hors-set avant le cartésien ; toggle Options « Allow broken sets » (off →
      chaque pièce armor doit compléter un set, leaf reject des singletons).
+   - **Onglet Worklist** : file inter-héros de changements de gear. Le Builder (« + Worklist »)
+     y pousse le diff par slot du build sélectionné ; chaque changement = ligne cochable +
+     **Apply locally** (`equipPieces` réécrit le snapshot, jamais le jeu). États applied / stale /
+     conflict dérivés live de l'inventaire ; **auto-prune à chaque recapture** (`reconcileWorklist` retire
+     les changements faits + entrées vidées) (`screens/WorklistScreen.tsx`, `lib/storage/worklist.ts`).
    - **Onglet Settings** : modal left-rail à onglets (Setup · Solver · Data · Backup · Debug),
      section Solver (worker count Auto/Manual, result/per-worker count, heatmap), backup
      JSON import/export, sync « game data » manuelle, **version des données dérivées** affichée

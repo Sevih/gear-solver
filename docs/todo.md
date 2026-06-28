@@ -48,19 +48,19 @@
       slot→pièce équipée ; (3) header de la band = **`N slots change`** + **`ΔCP ±X`** (`build.cp − currentCp`,
       `currentCp` = `calcBattlePower` du loadout équipé, ajouté à `composition`). Cf. solver.md § BottomGearBand
       / Stats. **Reste (optionnel)** : alimenter la **worklist** ci-dessous avec ce même diff comme rendu de ligne.
-- [ ] 🟢 **Tab « À faire » (worklist multi-héros)** — j'optimise A, B, C… → chaque build choisi pousse son
-      **diff** (pas le build entier) dans une tab dédiée, groupé par héros, chaque changement = **ligne cochable**.
-      Je fais les swaps in-game et coche « fait » au fur et à mesure. Réutilise le diff par slot ci-dessus comme
-      rendu de ligne. **3 choix de design à trancher** :
-      - **(a) Contention de pièces** — 1 exemplaire par pièce : si le build de A **et** celui de B réclament la
-        pièce X, le **signaler** (`⚠ réclamée par A et B`). La worklist doit raisonner sur l'**allocation
-        globale** des builds en attente, pas isolément.
-      - **(b) Fraîcheur / ordre** — chaque diff est relatif au snapshot au moment du calcul. *Simple (reco
-        pour démarrer)* : conflits signalés, l'user arbitre, entrée badge **périmé / recalculer** si le snapshot
-        a bougé. *Sophistiqué (plus tard)* : transaction ordonnée re-validée à chaque étape.
-      - **(c) Sémantique « fait »** — *(i)* cosmétique (grise la ligne) vs *(ii)* réécrit le snapshot local via
-        `equipPieces`. **Pousser (ii)** : sinon Builds/Inventory affichent l'ancien gear et le prochain solve
-        est faux. Cocher → réalité locale suit → tout reste cohérent. Le plumbing equip est **déjà livré**.
+- [~] 🟢 **Tab « À faire » (worklist multi-héros)** — **LIVRÉ** : onglet **Worklist** (`screens/WorklistScreen.tsx`)
+      + storage `lib/storage/worklist.ts` (blob `gs.worklist`, possédé par App). Bouton **« + Worklist »** dans le
+      Builder (à côté d'Equip build) → pousse le **diff par slot** (slots changés only) du build sélectionné ;
+      l'écran groupe par héros, chaque changement = **ligne cochable** + bouton **Apply locally** (`equipPieces`
+      réécrit le snapshot, jamais le jeu). Les 3 choix de design tranchés :
+      - **(a) Contention** — `claimCount` (toUid → nb d'entrées) ⇒ badge **conflict** + « contested » par ligne.
+      - **(b) Fraîcheur** — **tout dérivé live de l'inventaire** (pas de snapshot stocké) : `applied` (pièce déjà
+        sur le héros → vert), `stale` (toUid absent de l'inventaire → grisé, exclu de l'apply). Self-healing.
+        **Auto-prune à chaque refresh d'inventaire** (recapture / reload / apply / sync) : `reconcileWorklist`
+        retire les changements faits pour de vrai (pièce désormais sur le héros) + les entrées vidées (App `useEffect[inv]`).
+      - **(c) « fait »** — **les deux** : case cochable manuelle (`done`, persisté) **et** `applied` auto-détecté ;
+        **Apply locally** = chemin autoritatif qui réécrit le snapshot. Badge tab = changements restants.
+      **Reste (optionnel)** : ordre/transaction inter-entrées (appliquer A avant B quand B réutilise le gear de A).
 - [ ] 🟢 **Recherche inversée « qui profite de cette pièce ? »** — depuis l'Inventory, sélectionner une pièce
       → liste des héros qui **gagneraient le plus** à l'équiper (Δ CP / score). Flux **inverse** du héros→pièces
       actuel : « j'ai drop une belle pièce, à qui la donner ? » — besoin quotidien non couvert.
