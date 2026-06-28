@@ -39,9 +39,6 @@
 - [ ] 🟢 **Worklist — ordre/transaction inter-entrées** *(optionnel)* — appliquer A avant B quand B réutilise
       le gear libéré par A. Aujourd'hui chaque diff est relatif au snapshot courant, conflits **signalés**
       mais arbitrés à la main. Sophistication différée (transaction ordonnée re-validée à chaque étape).
-- [ ] 🟢 **Suggestions de swap inter-héros** — le solver voit déjà qu'une pièce est « équipée sur un autre héros »
-      (badge orange). Pas suivant : « cette pièce sert **mieux** ici que là » → réallocation au niveau **compte**,
-      pas par héros isolé. C'est précisément ce qu'un humain n'optimise pas de tête.
 - [ ] 🟢 **Exclusion globale de pièces** — clic-droit sur une pièce (Inventory) → **« exclure du solve »** quand
       ses stats sont éclatées (propriété de la *pièce*, pas du héros) → **liste globale persistée**, tous les
       solves la sautent au pool. Distinct du multi-select « Exclude equipped » (par héros). Couche **dure**
