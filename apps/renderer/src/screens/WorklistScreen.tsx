@@ -15,11 +15,12 @@ import type { GameData, Inventory } from "@gear-solver/core";
 import { CharacterPortrait, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
 import { cx } from "../design/cx.js";
 import { SLOT_BY, toDesignSlot } from "../design/tokens.js";
-import { equipPieces } from "../equip.js";
+import { equipAssignments, equipPieces } from "../equip.js";
 import {
   equippedByHero,
   type WorklistEntry,
 } from "../lib/storage/worklist.js";
+import { planWorklist } from "../lib/worklist/plan.js";
 
 interface WorklistScreenProps {
   inventory: Inventory | null;
@@ -32,6 +33,9 @@ interface WorklistScreenProps {
 }
 
 export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApply }: WorklistScreenProps) {
+  const [applyingAll, setApplyingAll] = useState(false);
+  const [applyAllError, setApplyAllError] = useState<string | null>(null);
+
   // Live oracles derived from the current snapshot — recomputed each render so
   // the cards stay truthful as the inventory changes underneath them.
   const equipped = useMemo(() => equippedByHero(inventory), [inventory]);
@@ -40,6 +44,10 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
     if (inventory) for (const g of inventory.gear) s.add(g.uid);
     return s;
   }, [inventory]);
+  // The transaction plan: free-before-use order, contention, cycles, and the
+  // flat assignment list for the atomic "Apply all". Single source of truth for
+  // the cross-entry concerns the per-card view can't see.
+  const plan = useMemo(() => planWorklist(worklist, inventory), [worklist, inventory]);
   // How many entries claim each target piece — > 1 ⇒ contention (a piece is a
   // single physical copy; two heroes can't both wear it).
   const claimCount = useMemo(() => {
@@ -47,6 +55,22 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
     for (const e of worklist) for (const c of e.changes) m.set(c.toUid, (m.get(c.toUid) ?? 0) + 1);
     return m;
   }, [worklist]);
+  // uid → display name, for the contention banner (drawn from the queued diffs).
+  const nameOf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of worklist) for (const c of e.changes) m.set(c.toUid, c.toName);
+    return m;
+  }, [worklist]);
+
+  const applyAll = async () => {
+    if (!game || plan.assignments.length === 0) return;
+    setApplyingAll(true);
+    setApplyAllError(null);
+    const ok = await equipAssignments(game, plan.assignments);
+    setApplyingAll(false);
+    if (ok) onAfterApply();
+    else setApplyAllError("Apply failed — disarm the capture pipeline and retry.");
+  };
 
   if (worklist.length === 0) {
     return (
@@ -61,8 +85,54 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
     );
   }
 
+  const contendedNames = [...plan.contended.keys()].map((uid) => nameOf.get(uid) ?? uid);
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3 px-6 py-5">
+      {/* Transaction header — apply the whole queue across heroes in one go. */}
+      {plan.assignments.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-1 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="font-display text-[13px] font-semibold text-white">
+                {plan.assignments.length} change{plan.assignments.length === 1 ? "" : "s"} across{" "}
+                {plan.heroes} hero{plan.heroes === 1 ? "" : "es"}
+              </div>
+              <div className="font-mono text-[10.5px] text-white/50">
+                {plan.applicable
+                  ? plan.hasDeps
+                    ? "Applied in free-before-use order — a piece is freed before the build that reuses it."
+                    : "No cross-build dependencies — order doesn't matter."
+                  : "Resolve the contested piece below before applying everything."}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void applyAll()}
+              disabled={applyingAll || !game || !plan.applicable}
+              className={cx(
+                "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[11.5px] font-medium transition-colors",
+                applyingAll || !game || !plan.applicable
+                  ? "cursor-not-allowed border-white/6 bg-white/2 text-white/45"
+                  : "border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
+              )}
+              title="Apply every queued change across all heroes in one snapshot rewrite (does NOT touch the game)."
+            >
+              {applyingAll ? "Applying…" : "Apply all"}
+            </button>
+          </div>
+          {/* Contention — unsolvable by ordering, the user must drop/retarget. */}
+          {!plan.applicable && (
+            <div className="rounded-md border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-100/90">
+              <span className="font-semibold">Contested:</span>{" "}
+              {contendedNames.join(", ")} — two builds want the same single copy. Remove or
+              re-optimize one entry, then Apply all.
+            </div>
+          )}
+          {applyAllError && <span className="text-[11px] text-rose-300">{applyAllError}</span>}
+        </div>
+      )}
+
       {worklist.map((entry) => (
         <WorklistCard
           key={entry.id}
@@ -71,6 +141,8 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
           equippedOnHero={equipped.get(entry.heroUid) ?? null}
           invUids={invUids}
           claimCount={claimCount}
+          step={plan.position.get(entry.id) ?? null}
+          cyclic={plan.cyclic.has(entry.id)}
           onChange={onChange}
           worklist={worklist}
           onAfterApply={onAfterApply}
@@ -81,13 +153,18 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
 }
 
 function WorklistCard({
-  entry, game, equippedOnHero, invUids, claimCount, worklist, onChange, onAfterApply,
+  entry, game, equippedOnHero, invUids, claimCount, step, cyclic, worklist, onChange, onAfterApply,
 }: {
   entry: WorklistEntry;
   game: GameData | null;
   equippedOnHero: Set<string> | null;
   invUids: Set<string>;
   claimCount: Map<string, number>;
+  /** 1-based apply position in the free-before-use plan, or null when ordering
+   *  is trivial (no cross-build dependency). */
+  step: number | null;
+  /** Caught in a dependency cycle — no human order, apply atomically. */
+  cyclic: boolean;
   worklist: WorklistEntry[];
   onChange: (next: WorklistEntry[]) => void;
   onAfterApply: () => void;
@@ -141,6 +218,18 @@ function WorklistCard({
     )}>
       {/* Header — hero identity + at-a-glance status. */}
       <div className="flex items-center gap-2.5">
+        {/* Suggested apply order — only shown when builds depend on each other. */}
+        {cyclic ? (
+          <span title="This build and another each free a piece the other needs — no sequential order works. Use Apply all (resolved atomically)."
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/10 text-[11px] text-amber-200">
+            ↻
+          </span>
+        ) : step != null ? (
+          <span title={`Apply step ${step} — frees a piece a later build reuses, so do it first.`}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/10 font-mono text-[11px] font-semibold tabular-nums text-cyan-200">
+            {step}
+          </span>
+        ) : null}
         <CharacterPortrait charId={entry.charId} name={entry.heroName} size={32} className="rounded-md" />
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-[13.5px] font-semibold text-white">{entry.heroName}</div>

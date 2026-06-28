@@ -69,6 +69,38 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-28 — 🟢 Worklist : transaction ordonnée inter-entrées (Apply all)
+
+La worklist signalait les conflits (« contested ») mais laissait l'utilisateur **arbitrer l'ordre à la
+main** ; pas de « tout appliquer ». Ajout d'un **planificateur de transaction** pur + d'un **Apply all**
+atomique multi-héros.
+
+- **Planificateur** ([`lib/worklist/plan.ts`](../apps/renderer/src/lib/worklist/plan.ts),
+  `planWorklist(list, inventory)`) — dérivé live du snapshot :
+  - **Contention** : un uid ciblé par ≥2 héros distincts = une seule copie physique disputée → `contended`,
+    **insoluble par l'ordre** (l'utilisateur retire/retarge une entrée). Bloque Apply all.
+  - **Ordre free-before-use** : arête A→B quand A **libère** (`fromUid` sur son héros) une pièce que B
+    **réclame** (`toUid`) ; tri topologique (Kahn, ties par ordre d'origine) → `order` + `position` 1-based.
+  - **Cycles** : A libère ce que B veut *et* réciproquement → aucun ordre humain valide ; marqués `cyclic`
+    (« ↻ »), **toujours applicables atomiquement** (sémantique de vol d'`equipItem` rend l'état final
+    indépendant de l'ordre pour un batch cohérent). +7 tests `worklistPlan.test.ts`.
+- **Apply atomique multi-héros** ([`equip.ts`](../apps/renderer/src/equip.ts) `equipAssignments`) — fold
+  d'`equipItem` sur des moves `{uid → heroUid}` hétérogènes en **une** réécriture de snapshot.
+- **UI** ([`WorklistScreen.tsx`](../apps/renderer/src/screens/WorklistScreen.tsx)) — barre d'en-tête
+  « N changes across M heroes » + bouton **Apply all** (désactivé tant qu'il y a contention), bannière
+  ambre listant les pièces contestées, badge d'ordre par carte (numéro cyan « step N » quand des
+  dépendances existent, « ↻ » pour un cycle). Le « Apply locally » par carte reste pour le grain fin.
+  Typecheck + build + 244 tests verts.
+
+### Session 2026-06-28 — ⚪ Tint doré d'un sub : seuil réel = 6 reforges
+
+Le tint doré de [`SubstatRow`](../apps/renderer/src/design/GearDetail.tsx) utilisait
+`isMax = s.lv >= stars` : un sub se dorait quand son LV total atteignait le nombre d'**étoiles** — donc à 5
+ticks pour un 5★, etc. Faux : le cap par-sub est de **6 ticks totaux (base + reforges), fixe quel que soit
+le rang**, pas le rang lui-même → `isMax = s.lv >= 6`. (`s.lv` = la somme entre parenthèses `(N base + X
+reforge)`.) Le socle d'un 6★ étant 4/4/3/3, un sub n'atteint 6 qu'après reforges, jamais au socle. `stars`
+n'est plus nécessaire (prop retirée de `SubstatRow`). Purement cosmétique. Typecheck + build verts.
+
 ### Session 2026-06-28 — 🟡 Onboarding : Setup pane → wizard linéaire brand-aware
 
 Le Setup pane (auto-ouvert au 1er lancement) était une **checklist plate** de 4 checks (emulator

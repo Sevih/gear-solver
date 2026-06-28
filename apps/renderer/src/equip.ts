@@ -65,6 +65,25 @@ export async function equipPieces(game: GameData, itemUids: string[], charUid: s
   return writeUserItem(next);
 }
 
+/** Apply a heterogeneous batch of `{ uid → heroUid }` moves in ONE snapshot
+ *  rewrite (fetch once, fold `equipItem` over each, write once). Unlike
+ *  `equipPieces` (all onto one hero), each move can target a different hero —
+ *  the Worklist's "Apply all" across queued builds. `equipItem`'s steal
+ *  semantics make the FINAL state order-independent for a consistent batch (no
+ *  single copy claimed by two heroes), so the caller is free to pass a
+ *  dependency-ordered list for tidiness without depending on it for correctness.
+ *  Returns true once persisted; the caller should re-import the inventory. */
+export async function equipAssignments(
+  game: GameData,
+  moves: ReadonlyArray<{ uid: string; heroUid: string }>,
+): Promise<boolean> {
+  const raw = await fetchRawUserItem();
+  if (!raw) return false;
+  let next = raw;
+  for (const m of moves) if (m.uid) next = equipItem(next, game, m.uid, m.heroUid);
+  return writeUserItem(next);
+}
+
 /** Unequip `itemUid` (set its owner to "0"). No game data needed — the slot is
  *  irrelevant when clearing. */
 export async function unequipPiece(itemUid: string): Promise<boolean> {

@@ -26,14 +26,6 @@
       **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
-### 🟢 Workflow / boucle d'action
-> Le **diff par slot** et la **worklist multi-héros** sont **livrés** (cf. changelog) — la boucle
-> « optimise N héros → récap de quoi faire → applique localement » est en place. Reste à l'élargir :
-
-- [ ] 🟢 **Worklist — ordre/transaction inter-entrées** *(optionnel)* — appliquer A avant B quand B réutilise
-      le gear libéré par A. Aujourd'hui chaque diff est relatif au snapshot courant, conflits **signalés**
-      mais arbitrés à la main. Sophistication différée (transaction ordonnée re-validée à chaque étape).
-
 ### 🟡/⚪ UX-cohérence & nits
 - [~] 🟡 **`Advices` (tab Builds)** — lot prioritaire + (1)/(2) livrés (`lib/buildAdvice.ts` : caps gaspillés,
       gems vides, upgrade agrégé ; **(1)** bruit Missing supprimé sur persos WIP — `Missing` ne sort que ≤ 2
