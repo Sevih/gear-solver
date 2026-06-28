@@ -29,10 +29,10 @@ import { toIconPiece, toUiPiece } from "../design/adapter.js";
 import { flatVsPctTick } from "../lib/subValue.js";
 import { dmgTickGains, type DmgTickCandidate } from "../lib/dmgValue.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
-import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
+import { precomputeContext, projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../lib/solver/orchestrator.js";
-import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
+import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode, SolveRequest } from "../lib/solver/types.js";
 import type { HeroPriority } from "../lib/storage/heroPriority.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
 import { fetchReco } from "../lib/reco/fetchReco.js";
@@ -375,6 +375,29 @@ function formatCombos(n: number): string {
   return String(n);
 }
 
+/** Reducer `SolverFilters` → engine `SolveFilters` (Sets → arrays, empty set
+ *  plans dropped). Shared by the live solve and the pre-solve cartesian estimate
+ *  so both see the exact same pools. */
+function buildSolveFilters(filters: SolverFilters): SolveFilters {
+  return {
+    options: filters.options,
+    excludedHeroes: Array.from(filters.excludedHeroes),
+    statFilters: filters.statFilters,
+    ratingFilters: filters.ratingFilters,
+    priority: filters.priority,
+    topPct: filters.topPct,
+    mainPicks: filters.mainPicks,
+    // Drop empty plans before the engine sees them — an empty plan has no conds,
+    // so `every` is vacuously true and it would nullify the whole OR (everything
+    // matches). The editor keeps an empty plan around only so a tab exists.
+    setPlans: filters.setPlans.filter((p) => p.length > 0),
+    excludedSets: filters.excludedSets,
+    weaponEffectPicks: filters.weaponEffectPicks as SolveFilters["weaponEffectPicks"],
+    accessoryEffectPicks: filters.accessoryEffectPicks as SolveFilters["accessoryEffectPicks"],
+    minQuality: filters.minQuality,
+  };
+}
+
 const INITIAL_FILTERS: SolverFilters = {
   // Safe defaults that reflect how the game is actually played:
   //   reforgeMode "classic" — score gear at the +10 endgame norm (most players
@@ -598,6 +621,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   filtersRef.current = filters;
   const heroFiltersRef = useRef<HeroFiltersMap>(loadHeroFilters());
   const prevHeroRef = useRef(selectedUid);
+  // Primary SOLVE mode (split button), lifted here so the pre-solve cartesian
+  // estimate can prepare pools for the mode that will actually fire (the prune
+  // differs: Score+no-priority = full cartesian, CP = budget-bounded).
+  const [solveMode, setSolveMode] = usePersistedState<SolveMode>("gs.builder.solveMode", "cp");
 
   // Solver state — orchestrator stays alive for the screen's lifetime so
   // the worker pool isn't torn down between solves. Lazy-init on first SOLVE.
@@ -626,6 +653,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
    *  `gs.debug.solver` is on. Backs the footer's "Copy Debug Info" button. */
   const [lastDebugInfo, setLastDebugInfo] = useState<SolveDebugInfo | null>(null);
   const [solveError, setSolveError] = useState<string | null>(null);
+  /** Pre-solve pool sizes — `precomputeContext` run on the main thread (debounced)
+   *  as filters/hero change, so the cartesian guard-rail appears BEFORE clicking
+   *  SOLVE, not after the precompute at solve start. Null until first computed. */
+  const [estimatePools, setEstimatePools] = useState<PoolSizes | null>(null);
   const [selectedBuildIdx, setSelectedBuildIdx] = useState<number | null>(null);
   /** Post-solve client filter — a snapshot of the stat/rating bands applied to
    *  the STORED results (no re-solve). Null = show every stored build. Set by
@@ -718,24 +749,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     // Snapshot the reforge context for this run (shallow-copy the priority so
     // a later filter edit can't mutate what `onResult` reads).
     solveReforgeRef.current = { reforgeMode: filters.options.reforgeMode, priority: { ...filters.priority } };
-    const serializedFilters: SolveFilters = {
-      options: filters.options,
-      excludedHeroes: Array.from(filters.excludedHeroes),
-      statFilters: filters.statFilters,
-      ratingFilters: filters.ratingFilters,
-      priority: filters.priority,
-      topPct: filters.topPct,
-      mainPicks: filters.mainPicks,
-      // Drop empty plans before the engine sees them — an empty plan has no
-      // conds, so `every` is vacuously true and it would nullify the whole OR
-      // (everything matches). The editor keeps an empty plan around only so a
-      // tab exists to fill in.
-      setPlans: filters.setPlans.filter((p) => p.length > 0),
-      excludedSets: filters.excludedSets,
-      weaponEffectPicks: filters.weaponEffectPicks as SolveFilters["weaponEffectPicks"],
-      accessoryEffectPicks: filters.accessoryEffectPicks as SolveFilters["accessoryEffectPicks"],
-      minQuality: filters.minQuality,
-    };
+    const serializedFilters = buildSolveFilters(filters);
     orchestratorRef.current.solve({
       mode,
       heroUid: selectedUid,
@@ -828,19 +842,19 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   }, [solveProgress.poolSizes]);
 
   // Guard-rail — rough size of the cartesian the solver walks (∏ of the
-  // partitionable per-slot pools, post-prune; EE isn't partitioned). poolSizes
-  // arrive the instant a solve starts (precompute runs before the fan-out), so
-  // a huge product surfaces a warning right away instead of after a 100s grind.
+  // partitionable per-slot pools, post-prune; EE isn't partitioned). While
+  // solving the LIVE poolSizes are authoritative; when idle we use the debounced
+  // pre-solve `estimatePools` so the warning shows BEFORE clicking SOLVE.
   // 0 if any slot is empty (the emptyReason banner covers that case).
   const cartesianEstimate = useMemo(() => {
-    const ps = solveProgress.poolSizes;
+    const ps = solving ? solveProgress.poolSizes : (estimatePools ?? solveProgress.poolSizes);
     if (!ps) return 0;
     let n = 1;
     for (const s of ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "talisman"] as const) {
       n *= ps[s]?.hit ?? 0;
     }
     return n;
-  }, [solveProgress.poolSizes]);
+  }, [solving, solveProgress.poolSizes, estimatePools]);
 
   // Saved-builds handlers — `selectedUid` gates everything; the UI hides /
   // disables the controls when no hero is picked so we don't have to thread
@@ -926,6 +940,46 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     if (!inventory) return null;
     return selectedUid ? inventory.characters.find((c) => c.uid === selectedUid) ?? null : null;
   }, [inventory, selectedUid]);
+
+  // Recompute the pre-solve cartesian estimate (debounced) whenever the hero /
+  // filters / mode change while idle. Runs the same `precomputeContext` the
+  // orchestrator runs at solve start — but for the mode that will fire, so the
+  // prune matches. Skips while solving (live poolSizes win) and when not ready.
+  useEffect(() => {
+    // No hero / mid-solve: drop any stale estimate so the guard-rail banner
+    // doesn't linger from a previous hero. Live poolSizes cover the solving case.
+    if (solving || !selectedUid || !inventory || !game || !selected) { setEstimatePools(null); return; }
+    const handle = setTimeout(() => {
+      try {
+        const req: SolveRequest = {
+          type: "solve",
+          solveId: -1,
+          mode: solveMode,
+          heroUid: selectedUid,
+          inventory,
+          game,
+          userGeasLevels,
+          userCodexLevel,
+          heroPriority,
+          excludedPieceUids: excludedPieceUids ? Array.from(excludedPieceUids) : undefined,
+          userSkills: {
+            first: selected.skills.first,
+            second: selected.skills.second,
+            ultimate: selected.skills.ultimate,
+            chainPassive: selected.skills.chainPassive,
+          },
+          filters: buildSolveFilters(filters),
+          topK: 1,
+          chunkIndex: 0,
+          chunkCount: 1,
+        };
+        setEstimatePools(precomputeContext(req).poolSizes);
+      } catch {
+        setEstimatePools(null);
+      }
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [solving, selectedUid, inventory, game, selected, filters, solveMode, heroPriority, excludedPieceUids, userGeasLevels, userCodexLevel]);
 
   // "Get preset" — fetch this hero's outerpedia build reco and overlay it on
   // the current filters (mergePreset). Multiple named builds → a small picker.
@@ -1147,6 +1201,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         dispatch={dispatch}
         solving={solving}
         canSolve={selectedUid != null}
+        solveMode={solveMode}
+        setSolveMode={setSolveMode}
         onSolve={startSolve}
         onCancelSolve={cancelSolve}
         canFilter={solveResults.length > 0 && hasAnyBand}
@@ -1579,7 +1635,7 @@ function BuilderToolbar({
   heroes, game, selectedUid, onSelect,
   armorSets, weaponEffects, accessoryEffects, mainStatCatalogs,
   filters, dispatch,
-  solving, canSolve, onSolve, onCancelSolve,
+  solving, canSolve, solveMode, setSolveMode, onSolve, onCancelSolve,
   canFilter, filterActive, onFilter, onClearFilter,
 }: {
   heroes: Inventory["characters"];
@@ -1594,6 +1650,10 @@ function BuilderToolbar({
   dispatch: Dispatch<SolverAction>;
   solving: boolean;
   canSolve: boolean;
+  /** Primary SOLVE mode (split button) — lifted so the parent's cartesian
+   *  estimate can prepare pools for the mode that will fire. */
+  solveMode: SolveMode;
+  setSolveMode: (m: SolveMode) => void;
   onSolve: (mode: SolveMode) => void;
   onCancelSolve: () => void;
   /** Whether the post-solve Filter action can run (results stored + a band set). */
@@ -1647,7 +1707,7 @@ function BuilderToolbar({
         <div className="w-52 shrink-0">
           <HeroSelect heroes={heroes} game={game} value={selectedUid} onChange={onSelect} />
         </div>
-        <SolveButton solving={solving} canSolve={canSolve} onSolve={onSolve} onCancelSolve={onCancelSolve} />
+        <SolveButton solving={solving} canSolve={canSolve} mode={solveMode} setMode={setSolveMode} onSolve={onSolve} onCancelSolve={onCancelSolve} />
         {/* Post-solve client filter: re-applies the stat/rating bands to the
          *  stored results without re-solving (instant after the first solve). */}
         <button
@@ -1732,13 +1792,14 @@ const SOLVE_MODES: { value: SolveMode; label: string; desc: string }[] = [
   { value: "score", label: "Solve", desc: "Maximize a priority-weighted Score" },
   { value: "cp", label: "Solve CP", desc: "Maximize in-game Combat Power" },
 ];
-function SolveButton({ solving, canSolve, onSolve, onCancelSolve }: {
+function SolveButton({ solving, canSolve, mode, setMode, onSolve, onCancelSolve }: {
   solving: boolean;
   canSolve: boolean;
+  mode: SolveMode;
+  setMode: (m: SolveMode) => void;
   onSolve: (mode: SolveMode) => void;
   onCancelSolve: () => void;
 }) {
-  const [mode, setMode] = usePersistedState<SolveMode>("gs.builder.solveMode", "cp");
   const [open, setOpen] = useState(false);
   const ref = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
   if (solving) {

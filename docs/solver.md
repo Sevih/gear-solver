@@ -388,7 +388,12 @@ Le hint du panneau le dit explicitement : *"Heuristic — too low a Top % drops 
 
 Avec `priority` vide : en **SOLVE Score** le prune est sauté (score 0 partout, ranking arbitraire → on garde tout). En **SOLVE CP**, plus de short-circuit : l'auto-prune CP-pondéré + budget combos (phase 3b) rend « max CP » jouable sans rien tuner.
 
-**Garde-fou** : la BuilderScreen estime le cartésien (`∏ poolSizes`, post-prune ; les `poolSizes` arrivent dès le départ du solve, avant la recherche réelle). Au-dessus de `CARTESIAN_WARN` (50 M), un bandeau avertit que le solve sera lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloquant.
+**Garde-fou** : la BuilderScreen estime le cartésien (`∏ poolSizes`, post-prune). L'estimation est
+calculée **avant le clic** : un `precomputeContext` **debounced (250 ms)** tourne sur le main thread à
+l'idle quand héros/filtres/mode changent (`estimatePools`), **pour le mode du bouton SOLVE qui partira**
+(le prune diffère Score/CP — d'où le `solveMode` remonté du split button). Pendant un solve, les
+`poolSizes` **live** priment. Au-dessus de `CARTESIAN_WARN` (50 M), un bandeau avertit que le solve sera
+lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloquant.
 
 ---
 

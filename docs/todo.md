@@ -26,12 +26,6 @@
       **SharedArrayBuffer** pour le flag
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
-### 🟡 Défauts sûrs & garde-fous solver
-- [ ] 🟡 **Estimer le cartésien AVANT le clic SOLVE** — le bandeau garde-fou (`∏ poolSizes > 50 M`) n'apparaît
-      qu'**après** le start (les `poolSizes` arrivent au démarrage du solve). Recalculer l'estimation **côté client
-      dès que les filtres changent** → l'afficher avant de lancer, pas en post-mortem (« je clique, j'attends, on
-      me dit de baisser Top% »).
-
 ### 🟢 Workflow / boucle d'action
 > Le **diff par slot** et la **worklist multi-héros** sont **livrés** (cf. changelog) — la boucle
 > « optimise N héros → récap de quoi faire → applique localement » est en place. Reste à l'élargir :

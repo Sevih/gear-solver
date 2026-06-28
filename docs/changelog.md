@@ -69,6 +69,22 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-28 — 🟡 Garde-fou cartésien estimé AVANT le clic SOLVE
+
+Le bandeau « ~X combinaisons » n'apparaissait qu'**après** le clic (les `poolSizes` venaient du
+precompute au démarrage du solve) : on cliquait, on attendait, *puis* on apprenait que ce serait lent.
+Désormais il s'affiche **avant**, et se met à jour à mesure qu'on règle les filtres.
+
+- **Mécanisme** ([`BuilderScreen.tsx`](../apps/renderer/src/screens/BuilderScreen.tsx)) : un
+  `precomputeContext` **debounced (250 ms)** tourne sur le main thread quand le héros/filtres/mode
+  changent **à l'idle** → `estimatePools`. `cartesianEstimate` lit le **live** `poolSizes` pendant un
+  solve, l'**estimation** sinon. Réutilise exactement le precompute de l'orchestrator (mêmes pools).
+- **Mode-aware** : le prune diffère (Score+sans-priorité = cartésien complet, CP = budget borné), donc
+  l'estimation prépare les pools pour le **mode du bouton SOLVE qui va partir**. Le `solveMode` du split
+  button a été **remonté** dans le corps du Builder (threadé `BuilderToolbar` → `SolveButton`).
+- Helper `buildSolveFilters` extrait (reducer `SolverFilters` → engine `SolveFilters`), partagé solve +
+  estimation. Estimation droppée hors-héros / pendant un solve. Build + 237 tests verts.
+
 ### Session 2026-06-28 — 🟢 Exclusion globale de pièces (Inventory → solver)
 
 Clic-droit sur une pièce (Inventory) → **« exclure du solve »** (typiquement des rolls éclatés) → tous
