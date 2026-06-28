@@ -69,6 +69,53 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-28 — 🟡 Défauts solver alignés sur le jeu réel
+
+`INITIAL_FILTERS` ([`BuilderScreen.tsx`](../apps/renderer/src/screens/BuilderScreen.tsx)) — deux défauts
+qui trompaient l'utilisateur lambda corrigés :
+
+- **Reforge `disable` → `classic`** : chaque solve note le gear au **+10 endgame** (la norme ; le +15
+  coûte des ressources rares), au lieu du gear **capturé** (+0/+9) — un classement sur un état jamais joué.
+- **Equipped scope `all` → `lower`** : le solver ne pioche que chez les héros **strictement moins**
+  prioritaires (auto-rangés par CP à la capture via `fillUnrankedByOrder`) → ne déshabille **jamais** un
+  héros égal/supérieur. Sans ranking, dégrade en own+free (`isLowerPriority` ∞>∞ = false) — sûr partout.
+  L'ancien `all` (vol silencieux possible) reste un choix **explicite**.
+- **Badge Options recalé** sur la nouvelle baseline (`equippedScope !== "lower"`) → 0 par défaut, se lève
+  sur `None`/`All`. Fallback d'affichage du segment → `"lower"`. Engine inchangé (fallbacks API intacts).
+- Test de régression #7 ([solver.md](solver.md)) annoté : **Reforge Off** requis pour matcher la card Builds
+  (le défaut Classic projette à +10). Tests verts (237 renderer + 22 core).
+
+### Session 2026-06-28 — 🟢 Onglet Worklist (file de changements de gear inter-héros)
+
+Ferme la boucle « optimise N héros → récap de quoi faire ». Nouveau **onglet Worklist**
+([`screens/WorklistScreen.tsx`](../apps/renderer/src/screens/WorklistScreen.tsx)) + storage
+([`lib/storage/worklist.ts`](../apps/renderer/src/lib/storage/worklist.ts), blob `gs.worklist`, possédé
+par App). Bouton **« + Worklist »** dans le Builder (à côté d'Equip build) pousse le **diff par slot**
+(slots changés only) du build sélectionné.
+
+- **Cartes par héros**, chaque changement = **ligne cochable** (`fromName → toName`) + bouton
+  **Apply locally** (`equipPieces` réécrit le snapshot local ; jamais d'écriture vers le jeu).
+- **États dérivés live de l'inventaire** (rien n'est figé) : `applied` (pièce déjà sur le héros → vert),
+  `stale` (toUid absent → grisé, exclu de l'apply), `conflict` (`claimCount` > 1 → deux builds réclament
+  la même pièce). **Self-healing**.
+- **Auto-prune à chaque refresh d'inventaire** (recapture/reload/apply/sync) : `reconcileWorklist` retire
+  les changements faits pour de vrai (pièce désormais sur le héros) + les entrées vidées (App `useEffect[inv]`).
+- **Libellés player-facing** (`toDesignSlot` : `ooparts`→Talisman, `shoes`→Boots) + **main stat affichée
+  sur les lignes talisman** (`toMain`) pour lever l'ambiguïté des noms qui se ressemblent.
+- `Shell.tsx` (onglet + `TabCounts.Worklist` = changements restants), `App.tsx` (state possédé + wiring),
+  `BuilderScreen.tsx` (prop `onAddToWorklist` + handler + bouton). Build + typecheck verts.
+
+### Session 2026-06-28 — 🟢 Diff avant/après par slot (Builder)
+
+Répond à « qu'est-ce que je change, et ça vaut le coup ? » — la brique réutilisée par la Worklist.
+
+- **StatsPanel** : **Δ numérique signé** par axe (`proj − current`, arrondi) en plus du tint vert/rouge.
+- **BottomGearBand** : **liseré cyan** + ligne `← <pièce remplacée>` (ou `+ new slot`) sur chaque slot qui
+  **change** vs l'équipé (définition alignée sur `upg` via une Map `currentLoadout` slot→pièce équipée).
+- **Header de la band** : **`N slots change`** + **`ΔCP ±X`** (`build.cp − currentCp`, `currentCp` =
+  `calcBattlePower` du loadout équipé ajouté à `composition`). Données déjà calculées → surtout du rendu.
+  `BuilderScreen.tsx`. Typecheck vert.
+
 ### Session 2026-06-28 — Builder : déclencheur « Equip build »
 
 Branchement de l'étape 3 de Equip/Unequip côté **Builder** (le core + endpoint writer + client

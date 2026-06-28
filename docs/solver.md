@@ -215,8 +215,9 @@ changement de héros / niveau / awakening :
 
 ### Options
 Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
-- **Reforge** (`reforgeMode`, 3 états, **câblé**) — projette chaque pièce du pool
-  vers un plafond endgame **avant** le top-% prune (`projectPieceForReforge`) :
+- **Reforge** (`reforgeMode`, 3 états, **câblé**, **défaut Classic**) — projette chaque pièce
+  du pool vers un plafond endgame **avant** le top-% prune (`projectPieceForReforge`). Défaut
+  `classic` (+10) car c'est la norme endgame ; `Off` noterait le gear capturé (+0/+9), trompeur.
   - **Off** : gear tel que capturé.
   - **Classic** : projette à **+10 non-ascended** (main re-scalé via le mult de
     `scaleMain` côté core `projectMainToCeiling`, + substats max-rollés à **6 ticks**).
@@ -228,7 +229,11 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   Le re-scale du main passe par le ratio des multiplicateurs (`RolledStat` ne garde pas
   la valeur de base) — validé contre l'in-game (test `projectMainToCeiling` : 240 → 1380).
 - **Only maxed gear** — filtre pool à `enhanceLevel === 15`.
-- **Equipped items** — inclut les pièces équipées sur d'autres héros.
+- **Equipped items** (`equippedScope`, **défaut ≤ Lower**) — quelles pièces équipées sur
+  d'**autres** héros le solver peut piocher. Défaut `lower` : seulement les héros **strictement
+  moins** prioritaires (auto-rangés par CP à la capture) → ne déshabille jamais un héros
+  égal/supérieur. Sans ranking, dégrade en own+free (`isLowerPriority` ∞>∞ = false). `None` = own
+  + free, `All` = n'importe quelle pièce équipée (l'ancien défaut, vol silencieux possible).
 - **Keep current** — verrouille les slots déjà équipés à leur pièce actuelle.
 - **Allow broken sets** (`allowBrokenSets`, défaut **true**) — *true* : un set requis partiel
   (ex. un seul `2pc`) laisse n'importe quelle pièce remplir les slots armor libres (comportement
@@ -511,5 +516,8 @@ Bonus :
 4. Cliquer une ligne → bottom band affiche les 8 pièces.
 5. Mettre `Crc min = 90` puis re-SOLVE → tous les builds retournés satisfont la borne.
 6. Activer `Sharp 4pc required` → helmet/armor/gloves/boots des builds sont tous Sharp.
-7. **Comparaison régression** : SOLVE avec priority vide + Top 100% + Keep current → le top-1 doit avoir les mêmes `FinalStats` que la card du même héros dans l'onglet Builds (à la réallocation gems près, qui en mode priority vide est fallback sur les gems actuels donc ✓ équivalence stricte attendue).
+7. **Comparaison régression** : SOLVE avec priority vide + Top 100% + Keep current + **Reforge Off**
+   (le défaut Classic projette à +10 → ne matcherait pas la card) → le top-1 doit avoir les mêmes
+   `FinalStats` que la card du même héros dans l'onglet Builds (à la réallocation gems près, qui en
+   mode priority vide est fallback sur les gems actuels donc ✓ équivalence stricte attendue).
 8. SOLVE CP → top-1 doit avoir le plus gros CP affiché. Comparer à un solve brute-force séparé sur petite slice.

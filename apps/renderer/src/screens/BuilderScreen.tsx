@@ -372,7 +372,13 @@ function formatCombos(n: number): string {
 }
 
 const INITIAL_FILTERS: SolverFilters = {
-  options: { onlyMaxed: false, reforgeMode: "disable", equippedScope: "all", keepCurrent: false, allowBrokenSets: true },
+  // Safe defaults that reflect how the game is actually played:
+  //   reforgeMode "classic" — score gear at the +10 endgame norm (most players
+  //     stop there; +15 is resource-gated), not the captured +0/+9 state.
+  //   equippedScope "lower" — may only pull gear off STRICTLY lower-priority
+  //     heroes (auto-ranked by CP on capture), never strip an equal/higher one.
+  //     With no ranks it degrades to own+free (isLowerPriority ∞>∞ is false).
+  options: { onlyMaxed: false, reforgeMode: "classic", equippedScope: "lower", keepCurrent: false, allowBrokenSets: true },
   excludedHeroes: new Set(),
   statFilters: {},
   ratingFilters: {},
@@ -1589,11 +1595,11 @@ function BuilderToolbar({
     .reduce((n, m) => n + Object.values(m).filter(Boolean).length, 0);
   const setCount = filters.setPlans.filter((p) => p.length > 0).length + filters.excludedSets.length;
   const effectCount = Object.keys(filters.weaponEffectPicks).length + Object.keys(filters.accessoryEffectPicks).length;
-  // Options badge counts only the constraints NOT surfaced as inline toggles
-  // (include-equipped flipped off, keep-current on, broken-sets disallowed,
-  // plus each excluded hero).
+  // Options badge counts only the constraints that deviate from the defaults
+  // (equipped scope off its "lower" baseline either way, keep-current on,
+  // broken-sets disallowed, min-quality set, plus each excluded hero).
   const optionCount =
-    (filters.options.equippedScope !== "all" ? 1 : 0) +
+    (filters.options.equippedScope !== "lower" ? 1 : 0) +
     (filters.options.keepCurrent ? 1 : 0) +
     (filters.options.allowBrokenSets ? 0 : 1) +
     (filters.minQuality ? 1 : 0) +
@@ -2310,7 +2316,7 @@ function OptionsPanel({
           <HoverHint className="text-[11px] text-white/80" name="Equipped items" text="Which gear equipped on OTHER heroes the solver may pull in (your own hero's gear is always in). None = own + free only · ≤ Lower = also heroes ranked below this one in Builds (never strips an equal/higher hero) · All = any equipped gear." />
           <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/4 p-0.5">
             {EQUIPPED_SCOPES.map((s) => {
-              const on = (options.equippedScope ?? "all") === s.value;
+              const on = (options.equippedScope ?? "lower") === s.value;
               return (
                 <button
                   key={s.value}

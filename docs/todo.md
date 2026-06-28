@@ -27,40 +27,18 @@
       `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
 ### 🟡 Défauts sûrs & garde-fous solver
-- [ ] 🟡 **Défauts qui reflètent le jeu réel** — deux défauts actuels trompent l'utilisateur lambda :
-      **(1) Reforge `Off` → `Classic` (+10)** : la norme endgame est le **+10** (le +15 coûte des ressources
-      rares), or `Off` note le gear **tel que capturé** (souvent +0/+9) → classement sur un état jamais joué.
-      **(2) Equipped scope `All` → appliquer la priorité** : `All` (legacy) laisse le solver **voler
-      silencieusement** le gear d'un héros mieux classé ; le défaut sûr respecte le rang (own + free, ou
-      `≤ Lower priority`). Voler du gear doit rester un choix **explicite**.
 - [ ] 🟡 **Estimer le cartésien AVANT le clic SOLVE** — le bandeau garde-fou (`∏ poolSizes > 50 M`) n'apparaît
       qu'**après** le start (les `poolSizes` arrivent au démarrage du solve). Recalculer l'estimation **côté client
       dès que les filtres changent** → l'afficher avant de lancer, pas en post-mortem (« je clique, j'attends, on
       me dit de baisser Top% »).
 
-### 🟢 Workflow / boucle d'action (lot cohérent)
-> Brique de base = **diff par slot** ; accumulée sur N héros = **worklist** ; le « fait » réutilise
-> `equipPieces` (Equip build, déjà livré côté Builder) sur le snapshot **local** (jamais d'écriture vers le jeu).
+### 🟢 Workflow / boucle d'action
+> Le **diff par slot** et la **worklist multi-héros** sont **livrés** (cf. changelog) — la boucle
+> « optimise N héros → récap de quoi faire → applique localement » est en place. Reste à l'élargir :
 
-- [~] 🟢 **Diff avant/après par slot (Builder)** — **LIVRÉ** : (1) StatsPanel porte le **Δ numérique signé**
-      par axe (en plus du tint vert/rouge) ; (2) la `BottomGearBand` marque chaque **slot qui change** (liseré
-      cyan + ligne `← pièce remplacée` / `+ new slot`), définition alignée sur `upg` via une Map `currentLoadout`
-      slot→pièce équipée ; (3) header de la band = **`N slots change`** + **`ΔCP ±X`** (`build.cp − currentCp`,
-      `currentCp` = `calcBattlePower` du loadout équipé, ajouté à `composition`). Cf. solver.md § BottomGearBand
-      / Stats. **Reste (optionnel)** : alimenter la **worklist** ci-dessous avec ce même diff comme rendu de ligne.
-- [~] 🟢 **Tab « À faire » (worklist multi-héros)** — **LIVRÉ** : onglet **Worklist** (`screens/WorklistScreen.tsx`)
-      + storage `lib/storage/worklist.ts` (blob `gs.worklist`, possédé par App). Bouton **« + Worklist »** dans le
-      Builder (à côté d'Equip build) → pousse le **diff par slot** (slots changés only) du build sélectionné ;
-      l'écran groupe par héros, chaque changement = **ligne cochable** + bouton **Apply locally** (`equipPieces`
-      réécrit le snapshot, jamais le jeu). Les 3 choix de design tranchés :
-      - **(a) Contention** — `claimCount` (toUid → nb d'entrées) ⇒ badge **conflict** + « contested » par ligne.
-      - **(b) Fraîcheur** — **tout dérivé live de l'inventaire** (pas de snapshot stocké) : `applied` (pièce déjà
-        sur le héros → vert), `stale` (toUid absent de l'inventaire → grisé, exclu de l'apply). Self-healing.
-        **Auto-prune à chaque refresh d'inventaire** (recapture / reload / apply / sync) : `reconcileWorklist`
-        retire les changements faits pour de vrai (pièce désormais sur le héros) + les entrées vidées (App `useEffect[inv]`).
-      - **(c) « fait »** — **les deux** : case cochable manuelle (`done`, persisté) **et** `applied` auto-détecté ;
-        **Apply locally** = chemin autoritatif qui réécrit le snapshot. Badge tab = changements restants.
-      **Reste (optionnel)** : ordre/transaction inter-entrées (appliquer A avant B quand B réutilise le gear de A).
+- [ ] 🟢 **Worklist — ordre/transaction inter-entrées** *(optionnel)* — appliquer A avant B quand B réutilise
+      le gear libéré par A. Aujourd'hui chaque diff est relatif au snapshot courant, conflits **signalés**
+      mais arbitrés à la main. Sophistication différée (transaction ordonnée re-validée à chaque étape).
 - [ ] 🟢 **Recherche inversée « qui profite de cette pièce ? »** — depuis l'Inventory, sélectionner une pièce
       → liste des héros qui **gagneraient le plus** à l'équiper (Δ CP / score). Flux **inverse** du héros→pièces
       actuel : « j'ai drop une belle pièce, à qui la donner ? » — besoin quotidien non couvert.
