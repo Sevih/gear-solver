@@ -39,9 +39,6 @@
 - [ ] 🟢 **Worklist — ordre/transaction inter-entrées** *(optionnel)* — appliquer A avant B quand B réutilise
       le gear libéré par A. Aujourd'hui chaque diff est relatif au snapshot courant, conflits **signalés**
       mais arbitrés à la main. Sophistication différée (transaction ordonnée re-validée à chaque étape).
-- [ ] 🟢 **Recherche inversée « qui profite de cette pièce ? »** — depuis l'Inventory, sélectionner une pièce
-      → liste des héros qui **gagneraient le plus** à l'équiper (Δ CP / score). Flux **inverse** du héros→pièces
-      actuel : « j'ai drop une belle pièce, à qui la donner ? » — besoin quotidien non couvert.
 - [ ] 🟢 **Suggestions de swap inter-héros** — le solver voit déjà qu'une pièce est « équipée sur un autre héros »
       (badge orange). Pas suivant : « cette pièce sert **mieux** ici que là » → réallocation au niveau **compte**,
       pas par héros isolé. C'est précisément ce qu'un humain n'optimise pas de tête.
