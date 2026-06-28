@@ -602,6 +602,14 @@ function isPermille(buff) {
   const st = buff.StatType ?? "";
   if (st.includes("_RATE") || st.includes("_DMG")) return true;
   const t = buff.Type ?? "";
+  // Counterattack trigger (e.g. accessory "Punishment"): its `Value` is the
+  // proc CHANCE stored as permille (1000 = 100% → 187 = 18.7%), but it carries
+  // StatType ST_NONE / ApplyingType OAT_NONE so none of the rules above catch
+  // it — without this it renders the raw "187 chance" (the in-game client shows
+  // 18.7%). All buffs of this Type store a permille chance. NB: this same fix is
+  // applied upstream in outerpedia-v2's `_is_permille` (we reimplement it in JS
+  // from the raw tables, so both copies must carry it to stay in sync).
+  if (t === "BT_RUN_FIRST_SKILL_ON_TURN_END_DEFENDER") return true;
   return t === "BT_ADDITIVE_TURN" || t.includes("_ENHANCE");
 }
 

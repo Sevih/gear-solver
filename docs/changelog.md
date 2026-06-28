@@ -69,6 +69,21 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-28 — 🔴 Fix mirroring : chance de contre affichée brute (« 187 » → « 18.7% »)
+
+Le passif accessoire **Punishment** affichait « Has a **187** chance to Counterattack » au lieu de
+**18.7%** (15/18.7/22.5/26.2/30% selon le tier). Vérifié en jeu : le client affiche bien le **%**, donc
+c'est un **bug de mirroring chez nous** (et chez outerpedia-v2, qui a la même logique `_is_permille`).
+
+- **Cause** : le buff de contre (`Type = BT_RUN_FIRST_SKILL_ON_TURN_END_DEFENDER`) stocke sa **chance de
+  proc en permille** (1000 = 100% → 187 = 18.7%) mais porte `StatType ST_NONE` / `ApplyingType OAT_NONE`,
+  donc aucune des règles `isPermille` de [`build.mjs`](../data/build.mjs) ne le captait → valeur brute.
+- **Fix** : `isPermille` traite ce `Type` comme permille (tous ses buffs stockent une chance permille ;
+  seul Punishment alimente un passif gear via `[Value]`). **Même fix appliqué en amont** dans le
+  `_is_permille` d'outerpedia-v2 (on réimplémente la logique en JS depuis les tables brutes → les deux
+  copies doivent le porter pour rester synchrones). `npm run data:build` régénère `equipment-passives.json`
+  (+ `version.json`). Scan : 0 passif « [N] chance » brut restant.
+
 ### Session 2026-06-28 — 🟡 Défauts solver alignés sur le jeu réel
 
 `INITIAL_FILTERS` ([`BuilderScreen.tsx`](../apps/renderer/src/screens/BuilderScreen.tsx)) — deux défauts
