@@ -37,11 +37,6 @@
       d'availability livrées (cf. changelog). **Reste** : `computeQuality` est encore recalculé dans
       `matchesFilters` (chip quality actif) et le panneau de détail — un précalcul partagé (`toUiPiece` /
       map par UID) traverserait la frontière adapter↔quality, différé tant que le profilage ne le réclame pas.
-- [ ] ⚪ **Tint doré d'un sub — seuil faux** (`SubstatRow`, `design/GearDetail.tsx`) — `isMax = s.lv >= stars`
-      dore un sub quand son LV atteint le nombre d'étoiles, mais le socle d'un 6★ est **4/4/3/3** (un sub
-      plafonne vers ~4 ticks, pas 6) → un sub ne devient doré qu'**après 2 reforges dessus**, jamais au
-      socle. Le « max » par-sub n'est pas `stars`. À **redéfinir** (vrai cap par-sub) ou **retirer le tint**.
-      Purement cosmétique — n'affecte ni la Quality ni le filtre Min quality.
 
 ### Persistence
 - [~] **Snapshot `data/` versioning** — stamp + expo livrés (`build.mjs` → `version.json` `{ hash, builtAt }`,

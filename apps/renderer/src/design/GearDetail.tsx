@@ -52,9 +52,11 @@ export function computeQuality(piece: UiPiece): { current: number; max: number; 
 }
 
 /** A single substat row: "LV {n} (base + reforges)  [icon]  label  value".
- *  Gold-tinted once the sub reaches its star-tier max. */
-function SubstatRow({ s, stars }: { s: UiPiece["subs"][number]; stars: number }) {
-  const isMax = stars > 0 && s.lv >= stars;
+ *  Gold-tinted once the sub hits its cap of 6 total ticks (base + reforges) —
+ *  fixed at 6 regardless of the item's star tier. A 6★ socle is 4/4/3/3, so a
+ *  sub only reaches 6 after reforges, never at socle. */
+function SubstatRow({ s }: { s: UiPiece["subs"][number] }) {
+  const isMax = s.lv >= 6;
   const sign = s.value.startsWith("-") ? "" : "+";
   return (
     <div className={cx("flex items-center gap-2 font-mono text-[12px] tabular-nums", isMax ? "text-amber-300" : "text-white")}>
@@ -198,7 +200,7 @@ export function GearDetailBody({ piece, game, equippedChar = null }: GearDetailB
         <GemPanel slots={piece.gemSlots} />
       ) : piece.subs.length > 0 ? (
         <div className="space-y-1">
-          {piece.subs.map((s, i) => <SubstatRow key={i} s={s} stars={piece.stars} />)}
+          {piece.subs.map((s, i) => <SubstatRow key={i} s={s} />)}
         </div>
       ) : null}
 
