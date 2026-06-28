@@ -47,10 +47,9 @@
       `hash` au démarrage vs un `gs.data.hash` stocké et, au changement, **invalider/élaguer** les caches
       localStorage (SavedBuild référençant des `pieceUids` disparus, presets). À faire dans la couche storage /
       au boot, hors UI Builder.
-- [~] **Equip / Unequip** — méthodes core (`equipItem`/`unequipItem`) + endpoint writer
-      `POST /api/captured/user-item` + client renderer (`src/equip.ts`) livrés (cf. changelog). **Reste
-      (étape 3)** : **déclencheur UI** côté Builder/Builds (boutons / assignation par slot) → appelle le client
-      puis `refreshInventory` (`App.tsx`). Vérif round-trip live à faire quand l'UI est branchée.
+- [~] **Equip / Unequip** — méthodes core + endpoint writer + client + **déclencheur Builder « Equip
+      build »** livrés (popup de confirmation → `equipPieces` réécrit le snapshot en 1 passe → `refreshInventory` ;
+      cf. changelog). **Reste (optionnel)** : un déclencheur côté **Builds** (unequip / assignation par slot).
 
 ### Externe — Packaging desktop (vérif sur un vrai build, le plumbing existe)
 - [ ] Bake prod du `data/` (`extraResources` → `process.resourcesPath`) · `electron build`/installeur

@@ -69,6 +69,27 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-28 — Builder : déclencheur « Equip build »
+
+Branchement de l'étape 3 de Equip/Unequip côté **Builder** (le core + endpoint writer + client
+`src/equip.ts` étaient déjà livrés). Au-dessus du **bottom gear band** (le build sélectionné), bouton
+**« Equip build → \<héros\> »** : applique les 8 pièces du build au héros sélectionné en réécrivant le
+snapshot capturé.
+
+- **Atomique** — nouveau `equipPieces(game, uids, charUid)` (client) : fetch du snapshot **1×**, fold de
+  `equipItem` sur chaque uid, write **1×** (`POST /api/captured/user-item`). Pas de round-trip par pièce.
+- **Plan d'équipement** (`equipPlan`, mémo) : ignore les pièces déjà sur ce héros (`moving`), compte celles
+  actuellement sur un autre héros (`steal`, seraient « volées »).
+- **Popup de confirmation** (`EquipConfirm`, même style que `RecoBuildPicker`) — au lieu d'un bouton 2-temps
+  jaune ambigu : récap « moves N pieces onto \<héros\> », ⚠ ambre si `steal > 0`, **Cancel / Equip**.
+  Pendant l'écriture → *Equipping…* (fermeture/Escape/clic-fond bloqués) ; échec/**409 (capture armée)** →
+  message rose inline « disarm first » + **Retry**, la popup reste ouverte.
+- **Succès** → `App.refreshInventory("Equipped build")` (barre de statut + ré-import ; le band repasse les
+  pièces en « sur ce héros », le bouton se désactive). Désactivé quand rien ne bouge.
+
+`equip.ts` (+`equipPieces`), `App.tsx` (prop `onAfterEquip`), `BuilderScreen.tsx` (prop, `equipPlan`,
+`equipSelectedBuild`, `EquipBuildButton` + `EquipConfirm`). Typecheck vert (fichiers touchés).
+
 ### Session 2026-06-27 — ⚪ `version.json` idempotent (fini le dirty perpétuel) + committé au release
 
 `data/derived/version.json` (`{hash, builtAt}`) était réécrit avec un nouveau `builtAt` à **chaque**

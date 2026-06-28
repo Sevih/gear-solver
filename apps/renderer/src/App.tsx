@@ -314,7 +314,7 @@ export function App() {
           {builderMounted.current && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
               </ScreenErrorBoundary>
             </div>
           )}

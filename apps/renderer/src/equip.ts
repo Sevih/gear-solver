@@ -8,8 +8,8 @@
  * (`tools/capture/out/user_item.json`). The caller re-imports the inventory
  * afterwards (e.g. `refreshInventory` in App.tsx) to pick the edit up.
  *
- * NOT yet wired to any UI — a Builder/Builds trigger is the remaining step
- * (see docs/todo.md "Equip / Unequip"). These are the callable methods.
+ * Wired to the Builder via "Equip build" (applies a solved build's pieces to
+ * the selected hero in one atomic snapshot rewrite — see `equipPieces`).
  */
 import { equipItem, unequipItem, type GameData, type RawUserItem } from "@gear-solver/core";
 
@@ -49,6 +49,20 @@ export async function equipPiece(game: GameData, itemUid: string, charUid: strin
   const raw = await fetchRawUserItem();
   if (!raw) return false;
   return writeUserItem(equipItem(raw, game, itemUid, charUid));
+}
+
+/** Equip several pieces onto `charUid` in ONE snapshot rewrite — fetch once,
+ *  fold `equipItem` over each uid, write once (atomic; no per-piece round-trip).
+ *  Used by the Builder's "Equip build" to apply a whole solved build. Pieces
+ *  currently on another hero are moved (stolen); same-slot duplicates within the
+ *  list resolve in order. Empty/unknown uids are skipped (no-op clones).
+ *  Returns true once persisted; the caller should re-import the inventory. */
+export async function equipPieces(game: GameData, itemUids: string[], charUid: string): Promise<boolean> {
+  const raw = await fetchRawUserItem();
+  if (!raw) return false;
+  let next = raw;
+  for (const uid of itemUids) if (uid) next = equipItem(next, game, uid, charUid);
+  return writeUserItem(next);
 }
 
 /** Unequip `itemUid` (set its owner to "0"). No game data needed — the slot is

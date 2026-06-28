@@ -35,6 +35,7 @@ import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, Solve
 import type { HeroPriority } from "../lib/storage/heroPriority.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
 import { fetchReco } from "../lib/reco/fetchReco.js";
+import { equipPieces } from "../equip.js";
 import { usePersistedState } from "../hooks/usePersistedState.js";
 import { QUALITY_TIERS, QUALITY_LABEL, type QualityTier } from "../lib/quality.js";
 import {
@@ -62,6 +63,9 @@ interface BuilderScreenProps {
   /** Called once on mount after consuming `initialHeroUid`, so the parent can
    *  clear it (a later plain visit to the Builder shouldn't re-preselect). */
   onInitialHeroConsumed?: () => void;
+  /** Called after "Equip build" rewrote the captured snapshot, so the parent
+   *  re-imports the inventory (App's `refreshInventory`). */
+  onAfterEquip?: () => void;
   /** Solver-pool override (Settings → Solver): null = auto. Drives the footer
    *  read-out and forces a worker-pool rebuild when it changes. */
   workerCount?: number | null;
@@ -549,7 +553,7 @@ function buildPassesFilters(
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, initialHeroUid, onInitialHeroConsumed, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, initialHeroUid, onInitialHeroConsumed, onAfterEquip, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
@@ -750,6 +754,35 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const hasAnyBand = Object.keys(filters.statFilters).length > 0 || Object.keys(filters.ratingFilters).length > 0;
 
   const selectedBuild = selectedBuildIdx != null ? displayedResults[selectedBuildIdx] ?? null : null;
+
+  // ── Equip build ──────────────────────────────────────────────────────────
+  // Apply the selected build's pieces to the selected hero by rewriting the
+  // captured snapshot (`equipPieces`), then let App re-import. We surface how
+  // many pieces actually move: skip those already on this hero, and count the
+  // ones that would be taken off another hero ("stolen") so the button can warn.
+  const equipPlan = useMemo(() => {
+    if (!selectedBuild || !selectedUid) return { uids: [] as string[], moving: 0, steal: 0 };
+    const uids: string[] = [];
+    let moving = 0, steal = 0;
+    for (const uid of selectedBuild.pieceUids) {
+      const p = uid ? pieceByUid.get(uid) : undefined;
+      if (!p) continue;
+      uids.push(uid);
+      if (p.equippedBy === selectedUid) continue; // already on this hero
+      moving++;
+      if (p.equippedBy) steal++; // currently on someone else
+    }
+    return { uids, moving, steal };
+  }, [selectedBuild, selectedUid, pieceByUid]);
+
+  // Returns false on a network error or a 409 (capture pipeline armed) so the
+  // button can flag it; on success App re-imports the rewritten snapshot.
+  async function equipSelectedBuild(): Promise<boolean> {
+    if (!game || !selectedUid || equipPlan.uids.length === 0) return false;
+    const ok = await equipPieces(game, equipPlan.uids, selectedUid);
+    if (ok) onAfterEquip?.();
+    return ok;
+  }
 
   // When a solve yields no builds, an empty per-slot pool is almost always
   // the cause (filters too strict, or the hero owns no piece for that slot).
@@ -1044,8 +1077,22 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           </div>
           {/* Gear band takes the remaining height and scrolls if the window is
               too short — so the results table above never has to shrink. */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} selfUid={selectedUid} />
+          <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between px-0.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-white/55">
+                {selectedBuild ? "Selected build" : "No build selected"}
+              </span>
+              <EquipBuildButton
+                disabled={!selectedBuild || !selectedUid || !game || equipPlan.moving === 0}
+                moving={equipPlan.moving}
+                steal={equipPlan.steal}
+                heroName={selected?.name ?? null}
+                onEquip={equipSelectedBuild}
+              />
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} selfUid={selectedUid} />
+            </div>
           </div>
         </div>
         {/* Right column — spans the FULL height (next to both the results table
@@ -3865,6 +3912,94 @@ function FilterBig({ label, value, title }: { label: string; value: number; titl
       <span className="text-white/70">{label}</span>
       <span className="text-white">{value.toLocaleString()}</span>
     </span>
+  );
+}
+
+/** "Equip build" action — applies the selected build's pieces to the hero
+ *  (rewrites the captured snapshot via `equipPieces`). The trigger opens a
+ *  confirmation popup (the act mutates the captured account + may take pieces
+ *  off other heroes), which owns the busy/failed state. `onEquip` resolves false
+ *  on a network error or a 409 (capture pipeline armed) → shown inline in the
+ *  popup so the user can disarm and retry. Disabled when nothing moves. */
+function EquipBuildButton({ disabled, moving, steal, heroName, onEquip }: {
+  disabled: boolean; moving: number; steal: number; heroName: string | null; onEquip: () => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        title="Apply this build to the captured account"
+        className={cx(
+          "rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+          disabled
+            ? "cursor-not-allowed border-white/10 bg-white/4 text-zinc-600"
+            : "border-cyan-400/35 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20",
+        )}
+      >
+        Equip build{heroName ? ` → ${heroName}` : ""}
+      </button>
+      {open && (
+        <EquipConfirm moving={moving} steal={steal} heroName={heroName} onEquip={onEquip} onClose={() => setOpen(false)} />
+      )}
+    </>
+  );
+}
+
+/** Confirmation popup for "Equip build". Spells out how many pieces move and how
+ *  many are taken off other heroes, then commits on confirm. Stays open on
+ *  failure (e.g. capture pipeline armed) with an inline error + retry. */
+function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
+  moving: number; steal: number; heroName: string | null; onEquip: () => Promise<boolean>; onClose: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !busy) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, busy]);
+  const confirm = async () => {
+    setBusy(true); setFailed(false);
+    const ok = await onEquip();
+    setBusy(false);
+    if (ok) onClose(); else setFailed(true);
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => { if (!busy) onClose(); }}>
+      <div className="w-full max-w-sm rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)]" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-1.5 flex items-center justify-between">
+          <h3 className="font-display text-[13px] font-semibold text-white">Equip this build?</h3>
+          <button type="button" onClick={onClose} disabled={busy} className="text-white/65 hover:text-white disabled:opacity-40" aria-label="Close">✕</button>
+        </div>
+        <p className="text-[11.5px] leading-snug text-white/80">
+          Moves <span className="font-semibold text-white">{moving}</span> piece{moving > 1 ? "s" : ""} onto{" "}
+          <span className="font-semibold text-white">{heroName ?? "this hero"}</span> and rewrites your captured account.
+        </p>
+        {steal > 0 && (
+          <p className="mt-1.5 text-[11px] leading-snug text-amber-300/90">
+            ⚠ {steal} piece{steal > 1 ? "s" : ""} {steal > 1 ? "are" : "is"} currently on another hero and will be taken off {steal > 1 ? "them" : "it"}.
+          </p>
+        )}
+        {failed && (
+          <p className="mt-2 rounded-md border border-rose-400/40 bg-rose-500/10 px-2 py-1.5 text-[10.5px] leading-snug text-rose-300">
+            Couldn't write the snapshot. Disarm the capture pipeline first, then retry.
+          </p>
+        )}
+        <div className="mt-3.5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} disabled={busy}
+            className="rounded-md border border-white/10 bg-white/4 px-3 py-1.5 text-[11.5px] font-semibold text-zinc-300 hover:bg-white/8 disabled:opacity-40">
+            Cancel
+          </button>
+          <button type="button" onClick={() => void confirm()} disabled={busy}
+            className="rounded-md border border-cyan-400/40 bg-cyan-500/15 px-3 py-1.5 text-[11.5px] font-semibold text-cyan-200 hover:bg-cyan-500/25 disabled:opacity-50">
+            {busy ? "Equipping…" : failed ? "Retry" : "Equip"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

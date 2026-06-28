@@ -107,6 +107,10 @@ results, the bottom band shows the selected build's pieces.
 - **Click a row** → the **bottom gear band** shows the 8 pieces of that build, including the
   **recommended gem allocation** (with a "swap" badge if it differs from what's socketed) and,
   if a Reforge mode is on, the **projected** max-roll stats.
+- **Equip build** — above the gear band, applies the selected build's pieces to the hero. A
+  confirmation popup spells out how many pieces move (and how many would be taken off other
+  heroes); on confirm it rewrites your captured snapshot and re-imports. Requires the capture
+  pipeline to be **disarmed** (it edits the local snapshot, never the game itself).
 - Two helper panels per hero: **Sub tick value** (is a flat or % substat tick worth more for
   this hero?) and **Damage / +1%** (which stat gives the most damage per +1% — ATK/DEF/HP vs
   Crit Damage vs DMG increase).

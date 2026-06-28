@@ -58,7 +58,9 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   `version.json` `{ hash, builtAt }`, stable content hash; shown in Settings → Data). **Remaining**:
   invalidating localStorage caches when the hash changes (prune SavedBuilds with vanished `pieceUids`).
 - **Equipment editing** — core methods (`equipItem`/`unequipItem`) + `POST /api/captured/user-item`
-  write-back + renderer client ✅ **delivered**; remaining: the Builder/Builds trigger UI.
+  write-back + renderer client ✅ **delivered**; **Builder "Equip build"** trigger ✅ **delivered**
+  (confirm popup → `equipPieces` atomic rewrite → re-import). Remaining (optional): a Builds-tab
+  per-slot unequip.
 - **Production build path** for `data` (bake derived + snapshot into the prod bundle).
 
 ### M8 — Desktop packaging (wired, to verify)
