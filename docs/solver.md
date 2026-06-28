@@ -194,7 +194,9 @@ Picker (combobox searchable) + portrait + 4 boutons d'action.
 ### Stats
 Snapshot des `FinalStats` du build actuellement équipé sur le héros (col gauche)
 vs le build sélectionné dans la table (col droite, em-dash tant qu'aucune ligne
-n'est cliquée). Lecture pure, jamais éditable.
+n'est cliquée). Lecture pure, jamais éditable. La colonne projetée porte un **Δ
+numérique signé** par axe (`proj − current`, arrondi) en plus du tint vert/rouge —
+le « de combien », pas juste le sens.
 
 ### Sub tick value & Damage / +1% (encadrés d'aide par héros)
 Deux panneaux d'info en lecture seule (col droite, sous Stats), recalculés au
@@ -318,6 +320,11 @@ enhance level, icône slot, main stat, subs (avec ticks). En plus :
   (delta vs la pièce capturée).
 - **État d'équipement** : badge par carte — 🟠 portrait + nom si la pièce est équipée sur un
   **autre héros** (l'appliquer la lui retire), 🟢 `equipped` si déjà sur le héros courant, `free` sinon.
+- **Diff par slot** : une carte dont la pièce **diffère du loadout équipé** (même définition que
+  `upg`) porte un **liseré cyan** + une ligne `← <pièce remplacée>` (ou `+ new slot` si le slot
+  était vide). La pièce courante par slot vient de `currentLoadout` (Map slot→pièce équipée). Le
+  header de la band résume le tout : **`N slots change`** + **`ΔCP ±X`** (`build.cp − currentCp`,
+  `currentCp` = `calcBattlePower` du loadout équipé, calculé dans `composition`).
 
 Em-dash quand aucun build n'est sélectionné.
 

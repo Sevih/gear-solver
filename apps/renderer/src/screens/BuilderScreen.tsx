@@ -30,6 +30,7 @@ import { flatVsPctTick } from "../lib/subValue.js";
 import { dmgTickGains, type DmgTickCandidate } from "../lib/dmgValue.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
+import { calcBattlePower } from "../lib/solver/cp.js";
 import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../lib/solver/orchestrator.js";
 import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
 import type { HeroPriority } from "../lib/storage/heroPriority.js";
@@ -82,6 +83,10 @@ interface BuilderScreenProps {
  *  or the composer lacked the ingredients to run. */
 interface SelectedComposition {
   current: FinalStats;
+  /** In-game Battle Power of the hero's CURRENT loadout (CalcBattlePower, same
+   *  evaluator the Builds tab uses) — the baseline a selected build's `cp` is
+   *  diffed against to show ΔCP. Null when the star UI metadata is missing. */
+  currentCp: number | null;
   /** Hero's no-gear base flat (base+evo+awak) for ATK/DEF/HP — what a %-sub
    *  tick scales against (gear-independent). Powers the flat-vs-% panel. */
   baseFlat: { atk: number; def: number; hp: number };
@@ -979,13 +984,50 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     });
     const equippedPieces = inventory.gear.filter((g) => g.equippedBy === selected.uid);
     const current = computeFinalStats(composed.noGearStats, composed.scaling, equippedPieces, game);
+    // Current-loadout Battle Power — same CalcBattlePower the Builds tab computes,
+    // so ΔCP in the gear-band header reads against a faithful baseline. Needs the
+    // TransStar UI metadata (showUIStar/starPlus) + equipped EE/Talisman.
+    const transRow = meta.ingredients.transcendByStar?.[String(selected.stars)] ?? null;
+    const ee = equippedPieces.find((p) => p.slot === "exclusive") ?? null;
+    const ooparts = equippedPieces.find((p) => p.slot === "ooparts") ?? null;
+    const currentCp = transRow
+      ? calcBattlePower({
+          stats: current,
+          showUIStar: transRow.showUIStar ?? 0,
+          starPlus: transRow.starPlus ?? 0,
+          skills: selected.skills,
+          ee,
+          ooparts,
+          fused: selected.fusionCharId !== 0,
+        })
+      : null;
     const sumFlat = (s: { baseValue: number; evoValue: number; awakValue: number }) => s.baseValue + s.evoValue + s.awakValue;
     const baseFlat = { atk: sumFlat(composed.scaling.atk), def: sumFlat(composed.scaling.def), hp: sumFlat(composed.scaling.hp) };
     const dmgStat = meta.dmgStat ?? "atk";
     const amp = (k: "atk" | "def" | "hp") => 1 + (composed.scaling[k]?.buffPct ?? 0) / 100;
     const dmgAmp = { atk: amp("atk"), def: amp("def"), hp: amp("hp") };
-    return { current, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false };
+    return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false };
   }, [inventory, game, selected, userGeasLevels, userCodexLevel]);
+
+  /** Hero's currently-equipped piece per engine slot — the "before" side of the
+   *  gear-band diff. A build's card compares its piece's uid against this to show
+   *  WHICH piece it replaces (vs just flagging the slot as changed). */
+  const currentLoadout = useMemo(() => {
+    const m = new Map<string, GearPiece>();
+    if (selected && inventory) {
+      for (const g of inventory.gear) {
+        if (g.equippedBy === selected.uid && g.slot) m.set(g.slot, g);
+      }
+    }
+    return m;
+  }, [inventory, selected]);
+
+  /** Battle-Power swing of the selected build vs the hero's current loadout —
+   *  the headline number for "is this swap worth it?". Null until both a build
+   *  is selected and the current-loadout CP composed. */
+  const deltaCp = selectedBuild?.cp != null && composition?.currentCp != null
+    ? selectedBuild.cp - composition.currentCp
+    : null;
 
   /** Selected hero's class (Striker / Mage / …). Null when no hero is picked
    *  yet — the weapon / accessory effect palettes fall back to "all classes"
@@ -1078,10 +1120,22 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           {/* Gear band takes the remaining height and scrolls if the window is
               too short — so the results table above never has to shrink. */}
           <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden">
-            <div className="flex shrink-0 items-center justify-between px-0.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-white/55">
-                {selectedBuild ? "Selected build" : "No build selected"}
-              </span>
+            <div className="flex shrink-0 items-center justify-between gap-2 px-0.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-white/55">
+                  {selectedBuild ? "Selected build" : "No build selected"}
+                </span>
+                {selectedBuild && (
+                  <span className="flex items-center gap-2 text-[10px] tabular-nums text-white/45">
+                    <span>{selectedBuild.upg} slot{selectedBuild.upg === 1 ? "" : "s"} change</span>
+                    {deltaCp != null && (
+                      <span className={cx("font-semibold", deltaCp > 0 ? "text-emerald-300" : deltaCp < 0 ? "text-rose-300" : "text-white/50")}>
+                        ΔCP {deltaCp > 0 ? "+" : ""}{Math.round(deltaCp).toLocaleString()}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
               <EquipBuildButton
                 disabled={!selectedBuild || !selectedUid || !game || equipPlan.moving === 0}
                 moving={equipPlan.moving}
@@ -1091,7 +1145,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} selfUid={selectedUid} />
+              <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} selfUid={selectedUid} currentLoadout={currentLoadout} />
             </div>
           </div>
         </div>
@@ -1988,6 +2042,9 @@ function StatsPanelRow({
 }: { stat: typeof SOLVER_STATS[number]; stats: FinalStats | null; projected: FinalStats | null }) {
   const cur = stats ? stats[stat.key as keyof FinalStats] : null;
   const proj = projected ? projected[stat.key as keyof FinalStats] : null;
+  // Signed change the selected build makes on this axis — the "by how much" the
+  // colour alone couldn't convey. Rounded to kill float noise (489.999 → 490).
+  const delta = proj != null && cur != null ? Math.round((proj - cur) * 10) / 10 : null;
   // Color the projected column by delta vs current so the user sees at a
   // glance which axes improve / regress on the selected build.
   let projTone = "text-cyan-300/40";
@@ -2005,8 +2062,15 @@ function StatsPanelRow({
         {cur != null ? `${cur}${stat.unit}` : "—"}
       </span>
       <span className="text-white/65">▸</span>
-      <span className={cx("text-right", projTone)}>
-        {proj != null ? `${proj}${stat.unit}` : "—"}
+      <span className={cx("flex items-baseline justify-end gap-1 text-right", projTone)}>
+        {proj != null ? (
+          <>
+            <span>{`${proj}${stat.unit}`}</span>
+            {delta != null && delta !== 0 && (
+              <span className="text-[8.5px] opacity-70">{delta > 0 ? `+${delta}` : delta}{stat.unit}</span>
+            )}
+          </>
+        ) : "—"}
       </span>
     </>
   );
@@ -4007,7 +4071,7 @@ function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
  * Bottom gear band — one card per main slot for the selected result
  * ───────────────────────────────────────────────────────────────────────── */
 function BottomGearBand({
-  build, pieceByUid, game, reforge, charsByUid, selfUid,
+  build, pieceByUid, game, reforge, charsByUid, selfUid, currentLoadout,
 }: {
   build: SolveBuild | null;
   pieceByUid: Map<string, GearPiece>;
@@ -4022,6 +4086,9 @@ function BottomGearBand({
   /** The hero this build was solved for — pieces equipped on it are "current",
    *  pieces on anyone else would be stolen when this build is applied. */
   selfUid: string | null;
+  /** Hero's current piece per engine slot — the "before" of the per-slot diff:
+   *  a card whose proposed piece differs from this shows what it replaces. */
+  currentLoadout: Map<string, GearPiece>;
 }) {
   // Map engine slot → display piece for the selected build. The result's
   // `pieceUids` carries slot order (engine names); we re-key by GearSlot and,
@@ -4030,7 +4097,7 @@ function BottomGearBand({
   // "disable" mode, or when there's nothing left to project), so identity
   // inequality is a reliable "was projected" signal for the badge.
   const pieceBySlot = useMemo(() => {
-    const map = new Map<string, { piece: GearPiece; reforged: boolean; equippedBy: string | null; addedTicks: number[] }>();
+    const map = new Map<string, { piece: GearPiece; reforged: boolean; equippedBy: string | null; addedTicks: number[]; currentPiece: GearPiece | null; changed: boolean }>();
     if (!build) return map;
     for (const uid of build.pieceUids) {
       const original = pieceByUid.get(uid);
@@ -4044,10 +4111,15 @@ function BottomGearBand({
       const addedTicks = reforged && piece.subs.length === original.subs.length
         ? piece.subs.map((s, i) => (s.ticks ?? 0) - (original.subs[i]?.ticks ?? 0))
         : [];
-      map.set(original.slot, { piece, reforged, equippedBy: original.equippedBy, addedTicks });
+      // Per-slot diff: the proposed piece (by its captured uid, not the reforge
+      // clone) vs whatever the hero wears in this slot now. `changed` mirrors the
+      // engine's `upg` definition (piece uid not currently on the hero).
+      const currentPiece = currentLoadout.get(original.slot) ?? null;
+      const changed = currentPiece?.uid !== uid;
+      map.set(original.slot, { piece, reforged, equippedBy: original.equippedBy, addedTicks, currentPiece, changed });
     }
     return map;
-  }, [build, pieceByUid, game, reforge]);
+  }, [build, pieceByUid, game, reforge, currentLoadout]);
 
   return (
     <div className="flex shrink-0 flex-wrap gap-2">
@@ -4071,7 +4143,12 @@ function BottomGearBand({
         const equippedBy = entry?.equippedBy ?? null;
         const equippedSelf = equippedBy != null && equippedBy === selfUid;
         const equippedOther = equippedBy != null && equippedBy !== selfUid ? (charsByUid.get(equippedBy) ?? null) : null;
-        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} reforgeMode={reforge.reforgeMode} equippedSelf={equippedSelf} equippedOther={equippedOther} hasEquipInfo={!!entry} addedTicks={entry?.addedTicks} />;
+        // "Before" of the diff — the piece this card replaces, when the slot
+        // changes. Null when the slot is unchanged or was empty (→ "new").
+        const changed = entry?.changed ?? false;
+        const cp = entry?.currentPiece ?? null;
+        const replacesName = changed && cp ? (game?.equipment[String(cp.itemId)]?.name ?? cp.name ?? `Item ${cp.itemId}`) : null;
+        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} reforgeMode={reforge.reforgeMode} equippedSelf={equippedSelf} equippedOther={equippedOther} hasEquipInfo={!!entry} addedTicks={entry?.addedTicks} changed={changed} replacesName={replacesName} />;
       })}
     </div>
   );
@@ -4088,7 +4165,7 @@ const SLOT_MAIN_PLACEHOLDER: Record<string, string> = {
 /** Compact mirror of the Inventory tab's `ItemDetail` panel — same section
  *  flow (header / icon+label / main stat / substats). Renders em-dash
  *  placeholders when no piece is wired (no build selected yet). */
-function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, equippedSelf, equippedOther, hasEquipInfo, addedTicks }: {
+function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, equippedSelf, equippedOther, hasEquipInfo, addedTicks, changed, replacesName }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
@@ -4111,6 +4188,12 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, e
   /** Reforge procs the projection added per sub (aligned to `piece.subs`) —
    *  shown as a `+N` badge so the projected ticks are visible, not silent. */
   addedTicks?: number[];
+  /** This slot's piece differs from the hero's current loadout (mirrors `upg`)
+   *  — drives the changed-slot accent + the "replaces …" line. */
+  changed?: boolean;
+  /** Display name of the piece this card replaces, when the slot changes and the
+   *  slot wasn't empty. Null → the slot was empty (card shows "new slot"). */
+  replacesName?: string | null;
 }) {
   const slotMeta = SLOT_BY[slot];
   const def = piece && game ? game.equipment[String(piece.itemId)] : null;
@@ -4130,7 +4213,7 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, e
   const singEffects = piece?.main.filter((m) => m.source === "singularity") ?? [];
   const projLabel = reforgeMode === "ascended" ? "ascended" : reforgeMode === "classic" ? "classic" : "projected";
   return (
-    <div className="flex w-56 shrink-0 flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-1 px-3 py-2.5">
+    <div className={cx("flex w-56 shrink-0 flex-col gap-2 rounded-lg border bg-bg-elev-1 px-3 py-2.5", changed ? "border-cyan-400/40" : "border-white/8")}>
       <div className="flex items-center gap-1.5">
         <span className={cx("min-w-0 flex-1 truncate font-display text-[13px] font-semibold", name ? "text-white" : "text-white/65")}>
           {name ?? "—"}
@@ -4178,6 +4261,17 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, e
             )}
           </div>
           <div className="text-white">{slotMeta?.label ?? slot}</div>
+          {/* Per-slot diff line: what this card replaces in the current loadout.
+           *  Cyan to match the changed-slot accent; full name in the tooltip
+           *  since the card is narrow. Absent on unchanged slots. */}
+          {changed && (
+            <div
+              className="mt-0.5 truncate text-[9.5px] text-cyan-300/85"
+              title={replacesName ? `Replaces ${replacesName}` : "Fills a slot that was empty"}
+            >
+              {replacesName ? `← ${replacesName}` : "+ new slot"}
+            </div>
+          )}
         </div>
       </div>
 
