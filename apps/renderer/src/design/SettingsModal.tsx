@@ -63,6 +63,31 @@ const COPY: Record<CheckId, CheckCopy> = {
 
 const ORDER: CheckId[] = ["emulator-installed", "emulator-running", "adb-connection", "root-toggle"];
 
+/** Brand-specific instructions for the steps whose menu path differs per
+ *  emulator. Falls back to the generic `COPY[id].fix` when the emulator brand
+ *  isn't known yet (nothing detected) or the step has no brand variant. */
+const BRAND_FIX: Record<string, Partial<Record<CheckId, string>>> = {
+  ldplayer: {
+    "adb-connection": 'LDPlayer 9: ⚙ (top-right) → Other settings → set "ADB debugging" to "Open local connection", then restart the instance.',
+    "root-toggle": 'LDPlayer 9: ⚙ → Other settings → turn "Root permission" ON, then restart the instance.',
+  },
+  mumu: {
+    "adb-connection": 'MuMu Player 12: ☰ → Settings → Others → enable "USB debugging (ADB)", then restart the instance.',
+    "root-toggle": 'MuMu Player 12: ☰ → Settings → Others → turn "Root permission" ON, then restart the instance.',
+  },
+  nox: {
+    "adb-connection": 'NoxPlayer: ⚙ Settings → General/Others → enable "ADB debugging", then restart the instance.',
+    "root-toggle": 'NoxPlayer: ⚙ Settings → General → turn "Root" ON, then restart the instance.',
+  },
+};
+
+/** Supported emulators, shown on the install step when none is detected. */
+const EMULATOR_OPTIONS: { label: string; note: string | null }[] = [
+  { label: "LDPlayer 9", note: "recommended" },
+  { label: "MuMu Player 12", note: null },
+  { label: "NoxPlayer", note: null },
+];
+
 /** Solver tuning settings — owned by App (persisted), edited here. */
 export interface SolverSettings {
   /** null = auto (hardwareConcurrency − 1); a number pins the pool size. */
@@ -148,6 +173,11 @@ export function SettingsModal({
     }
   }
 
+  // The header's only entry point is labeled "Setup", and the modal doubles as
+  // the onboarding wizard — so every open lands on the Setup tab (the wizard),
+  // not whatever tab was last left. The other panes stay one rail-click away.
+  useEffect(() => { if (open) setTab("setup"); }, [open]);
+
   // Re-probe whenever the modal opens AND the Setup tab is showing (no point
   // hitting the backend when the user is on Solver/Data/etc.).
   useEffect(() => { if (open && tab === "setup") void probe(); }, [open, tab]);
@@ -209,7 +239,7 @@ export function SettingsModal({
           {/* CONTENT COLUMN */}
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto px-4.5 py-4">
-              {tab === "setup"  && <SetupPane result={result} />}
+              {tab === "setup"  && <SetupPane result={result} loading={loading} />}
               {tab === "solver" && <SolverPane solver={solver} showAdvanced={showAdvanced} onToggleAdvanced={() => setShowAdvanced((v) => !v)} />}
               {tab === "data"   && <DataPane syncing={syncing} setSyncing={setSyncing} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} />}
               {tab === "backup" && <BackupPane importInputRef={importInputRef} />}
@@ -252,51 +282,144 @@ export function SettingsModal({
  * Panes
  * ───────────────────────────────────────────────────────────────────────── */
 
-function SetupPane({ result }: { result: PreflightResult | null }) {
+/** Guided, linear capture-setup wizard. Instead of showing all four checks at
+ *  once, it focuses on the CURRENT blocker (the first not-yet-passing step),
+ *  with brand-aware instructions for the detected emulator, completed steps
+ *  collapsed above and upcoming ones greyed below. "Re-check" (footer) advances
+ *  it. When everything passes it shows the actual capture next-steps. */
+function SetupPane({ result, loading }: { result: PreflightResult | null; loading: boolean }) {
   type DisplayStatus = "ok" | "fail" | "pending";
-  const checks = ORDER.map((id) => {
+  const steps = ORDER.map((id) => {
     const hit = result?.checks.find((c) => c.id === id);
     const status: DisplayStatus = hit ? (hit.ok ? "ok" : "fail") : "pending";
     return { id, status, detail: hit?.detail ?? "" };
   });
+  const ready = result?.ready ?? false;
+  const brand = result?.emulator?.type;
+  const brandLabel = result?.emulator?.label ?? null;
+  const firstOpen = steps.findIndex((s) => s.status !== "ok");
+  const currentIndex = ready || firstOpen < 0 ? steps.length : firstOpen;
+  const doneCount = steps.filter((s) => s.status === "ok").length;
+
   return (
-    <div className="flex flex-col gap-3">
-      <SectionStrip title="Setup status" note={result?.device ? `Target ${result.device}` : null} />
-      <p className="text-[11.5px] leading-relaxed text-zinc-400">
-        First-launch wizard — these four checks must pass before capture can attach. They re-probe each time
-        this window opens and self-dismiss once green.
-      </p>
-      {checks.map((c) => {
-        const copy = COPY[c.id];
-        if (c.status === "fail") {
-          return (
-            <div key={c.id} className="flex items-start gap-2.5 rounded-lg border border-amber-500/32 bg-amber-500/6 px-3 py-2.5">
-              <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.7)]" />
-              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-semibold text-amber-300">{copy.title}</span>
-                  <span className="rounded bg-amber-500/16 px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.08em] text-amber-300">action needed</span>
-                </div>
-                {c.detail && <span className="font-mono text-[10.5px] text-zinc-400">{c.detail}</span>}
-                <p className="text-[12px] leading-snug text-zinc-400">{copy.fix}</p>
-              </div>
-            </div>
-          );
-        }
-        const pending = c.status === "pending";
-        return (
-          <div key={c.id} className={cx("flex items-start gap-2.5 px-0.5", pending && "opacity-65")}>
-            <span className={cx(
-              "mt-1 h-2.5 w-2.5 shrink-0 rounded-full",
-              pending ? "border border-zinc-600 bg-zinc-700" : "bg-emerald-400 shadow-[0_0_7px_rgba(52,211,153,0.5)]",
+    <div className="flex flex-col gap-3.5">
+      <SectionStrip title="Capture setup" note={result?.device ? `Target ${result.device}` : brandLabel} />
+
+      {/* Progress segments — one per step, green = done, cyan = current. */}
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 gap-1">
+          {steps.map((s, i) => (
+            <div key={s.id} className={cx(
+              "h-1.5 flex-1 rounded-full",
+              s.status === "ok" ? "bg-emerald-400"
+              : i === currentIndex && !ready ? "bg-cyan-400"
+              : "bg-white/10",
             )} />
-            <div className="flex flex-col gap-0.5">
-              <span className={cx("text-[13px] font-medium", pending ? "text-zinc-400" : "text-zinc-100")}>{copy.title}</span>
-              {c.detail && <span className="font-mono text-[10.5px] text-zinc-400">{c.detail}</span>}
+          ))}
+        </div>
+        <span className="shrink-0 font-mono text-[10.5px] text-zinc-400">{doneCount}/{steps.length}</span>
+      </div>
+
+      {ready ? (
+        <ReadyCard brandLabel={brandLabel} />
+      ) : (
+        <div className="flex flex-col gap-2">
+          {steps.map((s, i) => {
+            const copy = COPY[s.id];
+            if (s.status === "ok") return <StepDoneRow key={s.id} title={copy.title} />;
+            if (i === currentIndex) {
+              const fix = (brand && BRAND_FIX[brand]?.[s.id]) || copy.fix;
+              return (
+                <CurrentStepCard
+                  key={s.id}
+                  n={i + 1}
+                  total={steps.length}
+                  title={copy.title}
+                  fix={fix}
+                  detail={s.detail}
+                  loading={loading}
+                  showInstall={s.id === "emulator-installed" && !brand}
+                />
+              );
+            }
+            return <StepUpcomingRow key={s.id} n={i + 1} title={copy.title} />;
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepDoneRow({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-2.5 px-0.5 py-0.5">
+      <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-emerald-400/90 text-[10px] font-bold text-emerald-950">✓</span>
+      <span className="text-[12.5px] text-zinc-300">{title}</span>
+    </div>
+  );
+}
+
+function StepUpcomingRow({ n, title }: { n: number; title: string }) {
+  return (
+    <div className="flex items-center gap-2.5 px-0.5 py-0.5 opacity-45">
+      <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-zinc-600 text-[9px] font-mono text-zinc-400">{n}</span>
+      <span className="text-[12.5px] text-zinc-400">{title}</span>
+    </div>
+  );
+}
+
+function CurrentStepCard({
+  n, total, title, fix, detail, loading, showInstall,
+}: { n: number; total: number; title: string; fix: string; detail: string; loading: boolean; showInstall: boolean }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-cyan-400/35 bg-cyan-500/6 px-3.5 py-3">
+      <div className="flex items-center gap-2">
+        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyan-400 text-[11px] font-bold text-cyan-950">{n}</span>
+        <span className="text-[13.5px] font-semibold text-cyan-200">{title}</span>
+        <span className="ml-auto shrink-0 font-mono text-[10px] text-cyan-300/70">step {n} of {total}</span>
+      </div>
+      <p className="text-[12px] leading-relaxed text-zinc-300">{fix}</p>
+      {showInstall && (
+        <div className="flex flex-col gap-1.5 rounded-md border border-white/8 bg-black/20 px-2.5 py-2">
+          {EMULATOR_OPTIONS.map((e) => (
+            <div key={e.label} className="flex items-center gap-2 text-[11.5px] text-zinc-300">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-400/70" />
+              <span className="font-medium">{e.label}</span>
+              {e.note && <span className="rounded bg-cyan-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-cyan-300">{e.note}</span>}
             </div>
-          </div>
-        );
-      })}
+          ))}
+          <p className="mt-0.5 text-[10.5px] leading-snug text-zinc-500">
+            Install at the default location with <b className="text-zinc-400">root enabled</b> · Google Play Games won't
+            work (root disabled). A physical device / other emulator isn't supported yet — broader device support is on
+            the roadmap.
+          </p>
+        </div>
+      )}
+      {detail && <span className="font-mono text-[10.5px] text-zinc-500">{detail}</span>}
+      <span className="text-[11px] text-zinc-500">
+        {loading ? "Re-checking…" : "Do this, then click "}
+        {!loading && <b className="text-cyan-300">Re-check</b>}
+        {!loading && " below."}
+      </span>
+    </div>
+  );
+}
+
+/** Shown once all four checks pass — the actual "now capture" next-steps. */
+function ReadyCard({ brandLabel }: { brandLabel: string | null }) {
+  return (
+    <div className="flex flex-col gap-2.5 rounded-lg border border-emerald-400/35 bg-emerald-500/8 px-3.5 py-3">
+      <div className="flex items-center gap-2">
+        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-400 text-[12px] font-bold text-emerald-950">✓</span>
+        <span className="text-[13.5px] font-semibold text-emerald-200">
+          Ready to capture{brandLabel ? ` · ${brandLabel}` : ""}
+        </span>
+      </div>
+      <ol className="flex flex-col gap-1.5 text-[12px] leading-relaxed text-zinc-300">
+        <li><b className="text-zinc-200">1.</b> Click <b className="text-cyan-300">Arm capture</b> (top-right header).</li>
+        <li><b className="text-zinc-200">2.</b> Open <b className="text-zinc-200">Outerplane</b> in the emulator and play to the lobby — the roster + gear import automatically.</li>
+        <li><b className="text-zinc-200">3.</b> <span className="text-zinc-400">Optional:</span> open the in-game <b className="text-zinc-200">Hero Archive</b> + <b className="text-zinc-200">Gift</b> screens (for codex + geas), then click <b className="text-cyan-300">Disarm</b> to pick them up.</li>
+      </ol>
     </div>
   );
 }

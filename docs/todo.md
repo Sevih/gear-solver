@@ -62,12 +62,9 @@
       cf. changelog). **Reste (optionnel)** : un déclencheur côté **Builds** (unequip / assignation par slot).
       → consommé par la **worklist** (§ Workflow) pour le « fait ».
 
-### Externe — Onboarding & packaging desktop (vérif sur un vrai build, le plumbing existe)
-- [ ] 🟡 **Onboarding wizard capture (multi-émulateur / mobile)** — le Setup pane est une **checklist
-      technique** (ADB / root / cert MITM) qui suppose l'expertise → barrière #1 à l'adoption. Le transformer en
-      **wizard linéaire** qui **détecte ce qui est présent** (LDPlayer / MuMu / Nox / mobile USB) et guide étape
-      par étape. Couplé à « Support Mobile et émulateur » ci-dessous.
-- [ ] **Support Mobile et emulateur** — récupérer les datas peu importe l'émulateur **ou** le mobile.
+### Externe — packaging desktop (vérif sur un vrai build, le plumbing existe)
+- [ ] **Support Mobile et emulateur** — récupérer les datas peu importe l'émulateur **ou** le mobile
+      (le wizard d'onboarding signale déjà que le mobile/physique n'est pas encore supporté — cf. changelog).
 - [ ] Bake prod du `data/` (`extraResources` → `process.resourcesPath`) · `electron build`/installeur
       lance serveur local + renderer · auto-update contre release signée + feed réels · bouton capture
       natif en packagé (sans `npm run dev`).

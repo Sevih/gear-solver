@@ -69,6 +69,27 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-28 — 🟡 Onboarding : Setup pane → wizard linéaire brand-aware
+
+Le Setup pane (auto-ouvert au 1er lancement) était une **checklist plate** de 4 checks (emulator
+installed/running · ADB · root) — du jargon technique balancé d'un coup. Transformé en **wizard guidé**
+qui ne montre que le **blocage courant**, avec instructions **par marque** d'émulateur.
+
+- **Stepper** ([`SettingsModal.tsx`](../apps/renderer/src/design/SettingsModal.tsx) `SetupPane`) : barre de
+  progression `N/4`, étapes franchies repliées (✓), étape courante en carte cyan « step N of 4 » + fix +
+  détail live, étapes à venir grisées. **Re-check** (footer) fait avancer le wizard.
+- **Brand-aware** (`BRAND_FIX`) : les étapes ADB / root affichent le **chemin de menu exact** selon
+  `result.emulator.type` (LDPlayer / MuMu / Nox) au lieu d'un texte générique.
+- **Cas « pas d'émulateur »** : l'étape install liste les 3 émulateurs supportés (LDPlayer recommandé) +
+  note honnête « root requis, Google Play Games KO, mobile/autre émulateur pas encore supporté — roadmap »
+  (le mobile reste l'item séparé « Support Mobile et émulateur »).
+- **Étape finale** (`ReadyCard`, quand `ready`) : les **vraies next-steps** de capture (Arm capture →
+  ouvrir Outerplane → lobby → Disarm pour codex/geas), au lieu de simplement « tout est vert ».
+- **Accès fiable** : le bouton **Setup** (header, seul point d'entrée) ouvre désormais **toujours** sur
+  l'onglet Setup (= le wizard), pas le dernier onglet. Pas de toggle dédié : l'auto-ouverture au lancement
+  reste pilotée par `gs.onboarding.done` (réarmable via Settings → Data → « Reset onboarding prompt »).
+  Build + 237 tests verts.
+
 ### Session 2026-06-28 — 🟡 Garde-fou cartésien estimé AVANT le clic SOLVE
 
 Le bandeau « ~X combinaisons » n'apparaissait qu'**après** le clic (les `poolSizes` venaient du

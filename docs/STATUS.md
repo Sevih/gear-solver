@@ -77,10 +77,12 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      **Apply locally** (`equipPieces` réécrit le snapshot, jamais le jeu). États applied / stale /
      conflict dérivés live de l'inventaire ; **auto-prune à chaque recapture** (`reconcileWorklist` retire
      les changements faits + entrées vidées) (`screens/WorklistScreen.tsx`, `lib/storage/worklist.ts`).
-   - **Onglet Settings** : modal left-rail à onglets (Setup · Solver · Data · Backup · Debug),
-     section Solver (worker count Auto/Manual, result/per-worker count, heatmap), backup
-     JSON import/export, sync « game data » manuelle, **version des données dérivées** affichée
-     (hash + date, lue depuis `data/derived/version.json`).
+   - **Onglet Settings** : modal left-rail à onglets (Setup · Solver · Data · Backup · Debug). **Setup =
+     wizard d'onboarding guidé** (auto-ouvert au 1er lancement) : stepper linéaire qui focalise le blocage
+     courant (emulator install/running · ADB · root), instructions **par marque** (LDPlayer/MuMu/Nox),
+     étape finale = vraies next-steps de capture. Section Solver (worker count Auto/Manual, result/per-worker
+     count, heatmap), backup JSON import/export, sync « game data » manuelle, **version des données dérivées**
+     affichée (hash + date, lue depuis `data/derived/version.json`).
    - **Édition d'équipement (méthodes)** : `equipItem`/`unequipItem` (`packages/core/src/equip.ts`,
      réécrivent le `CharUID` du JSON capturé, déplacement de slot, immuables, +tests) + endpoint
      writer `POST /api/captured/user-item` (`server.ts` + miroir Vite) + client `src/equip.ts`.
