@@ -15,10 +15,13 @@
  * import it too for parity between dev and packaged builds.
  */
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { createConnection } from "node:net";
 
-export type EmulatorType = "ldplayer" | "mumu" | "nox";
+/** `generic` = a device the shared ADB server reported (`adb devices`) that
+ *  doesn't match a known brand layout; `manual` lives on CaptureTarget only. */
+export type EmulatorType = "ldplayer" | "mumu" | "nox" | "generic";
 
 export interface DetectedEmulator {
   type: EmulatorType;
@@ -156,6 +159,117 @@ function runAdb(adbPath: string, args: string[], timeoutMs = 6000): Promise<{ co
   });
 }
 
+/** Parse `adb devices` and return the serials in `device` state. Every
+ *  emulator's bundled adb talks to the SAME host adb server (port 5037), so
+ *  this lists instances of ANY brand that have registered — the brand-agnostic
+ *  detection path. Serials look like `127.0.0.1:5555` (emulators) or
+ *  `emulator-5554` (AVD-style); we hand them back verbatim for `adb -s` /
+ *  capture.ps1 `-Device`. */
+async function listAdbDevices(adbPath: string): Promise<string[]> {
+  const r = await runAdb(adbPath, ["devices"], 6000);
+  if (r.code !== 0) return [];
+  return r.stdout
+    .split(/\r?\n/)
+    .slice(1)                                   // drop the "List of devices attached" header
+    .map((l) => l.trim())
+    .filter((l) => /\sdevice$/.test(l))         // state column == "device" (skip offline/unauthorized)
+    .map((l) => l.split(/\s+/)[0]!)
+    .filter(Boolean);
+}
+
+/** A user-pinned adb + device, set in Settings → Setup → Manual device. Bypasses
+ *  auto-detection entirely — the universal escape hatch for any rooted emulator
+ *  we don't have a brand profile for. */
+export interface ManualDevice {
+  /** Absolute path to an adb.exe to drive. */
+  adbPath: string;
+  /** Device serial / `host:port` passed to `adb -s` and capture.ps1 `-Device`. */
+  device: string;
+}
+
+/** The (adb, device) the capture pipeline should actually target, plus where it
+ *  came from (for the wizard's status line). */
+export interface CaptureTarget {
+  adbPath: string;
+  device: string;
+  source: "manual" | EmulatorType;
+  label: string;
+}
+
+/** Resolve which adb + device to drive, in priority order:
+ *   1. an explicit **manual** override (trusted as long as its adb exists),
+ *   2. a **running known-brand** emulator (LDPlayer/MuMu/Nox on a known port),
+ *   3. **generic** — any device the shared adb server lists (`adb devices`),
+ *      driven by a detected brand's adb or `fallbackAdb` (the bundled adb),
+ *   4. an installed-but-stopped brand (device left blank) so the wizard can
+ *      still say "launch X".
+ *  Returns null when there's nothing to talk to and no adb to probe with. */
+export async function resolveCaptureTarget(
+  manual: ManualDevice | null,
+  fallbackAdb: string | null,
+): Promise<CaptureTarget | null> {
+  if (manual && manual.adbPath && manual.device && existsSync(manual.adbPath)) {
+    return { adbPath: manual.adbPath, device: manual.device, source: "manual", label: "Manual device" };
+  }
+  const detected = await detectEmulators();
+  const running = detected.find((e) => e.running);
+  if (running) {
+    const port = pickPort(running);
+    if (port) return { adbPath: running.adbPath, device: `127.0.0.1:${port}`, source: running.type, label: running.label };
+  }
+  // Generic: drive `adb devices` with whatever adb we can find (a brand's, or
+  // the bundled fallback) and take the first connected device.
+  const probeAdb = detected.find((e) => existsSync(e.adbPath))?.adbPath
+    ?? (fallbackAdb && existsSync(fallbackAdb) ? fallbackAdb : null);
+  if (probeAdb) {
+    const devices = await listAdbDevices(probeAdb);
+    if (devices.length > 0) {
+      return { adbPath: probeAdb, device: devices[0]!, source: "generic", label: "Detected device" };
+    }
+  }
+  if (detected.length > 0) {
+    const e = detected[0]!;
+    const port = pickPort(e);
+    return { adbPath: e.adbPath, device: port ? `127.0.0.1:${port}` : "", source: e.type, label: e.label };
+  }
+  return null;
+}
+
+/** The `-Device` / `-Adb` flags capture.ps1 / disarm.ps1 take for a resolved
+ *  target. Empty when nothing resolved (scripts fall back to their defaults). */
+export function targetScriptArgs(target: CaptureTarget | null): string[] {
+  if (!target) return [];
+  const args: string[] = [];
+  if (target.device) args.push("-Device", target.device);
+  if (target.adbPath) args.push("-Adb", target.adbPath);
+  return args;
+}
+
+/** Load the persisted manual override (null when unset or malformed). */
+export function loadManualDevice(file: string): ManualDevice | null {
+  try {
+    if (!existsSync(file)) return null;
+    const j = JSON.parse(readFileSync(file, "utf-8")) as Partial<ManualDevice>;
+    if (j && typeof j.adbPath === "string" && typeof j.device === "string" && j.adbPath.trim() && j.device.trim()) {
+      return { adbPath: j.adbPath.trim(), device: j.device.trim() };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist (or clear, when `md` is null) the manual override. Best-effort. */
+export function saveManualDevice(file: string, md: ManualDevice | null): void {
+  try {
+    if (md == null) { if (existsSync(file)) rmSync(file, { force: true }); return; }
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({ adbPath: md.adbPath, device: md.device }), "utf-8");
+  } catch {
+    // quota / permission — next save retries.
+  }
+}
+
 export interface PreflightCheck {
   /** Stable id for the wizard to reference (icon, fix instructions). */
   id: "emulator-installed" | "emulator-running" | "adb-connection" | "root-toggle";
@@ -166,7 +280,9 @@ export interface PreflightCheck {
 }
 
 export interface PreflightResult {
-  emulator: DetectedEmulator | null;
+  /** Resolved target identity for the wizard's status line + brand-fix lookup.
+   *  `type` is the source ("manual" / "generic" / a brand); `label` is shown. */
+  emulator: { type: string; label: string } | null;
   device: string | null;
   checks: PreflightCheck[];
   /** All four checks passed — wizard hides itself. */
@@ -177,50 +293,70 @@ export interface PreflightResult {
  *  result the wizard can render row-by-row. Bails early once a check fails
  *  (the next one would always be ✗ — no point probing for root if ADB
  *  isn't even connecting). The wizard shows the failed step in red plus
- *  its specific "how to fix" copy. */
-export async function preflight(): Promise<PreflightResult> {
-  const detected = await detectEmulators();
-  const emu = pickEmulator(detected);
+ *  its specific "how to fix" copy.
+ *
+ *  Target resolution honors a `manual` override and brand-agnostic generic
+ *  detection (see resolveCaptureTarget); `fallbackAdb` is the bundled adb used
+ *  to probe `adb devices` when no brand adb is on disk. */
+export async function preflight(
+  manual: ManualDevice | null = null,
+  fallbackAdb: string | null = null,
+): Promise<PreflightResult> {
+  const target = await resolveCaptureTarget(manual, fallbackAdb);
 
-  const installedOk = emu != null;
+  // 1 — something to talk to: a usable adb + a known device path (manual set,
+  //     brand installed, or a device the adb server reported).
+  const installedOk = target != null && existsSync(target.adbPath);
+  const ident = target ? { type: target.source, label: target.label } : null;
   const checks: PreflightCheck[] = [{
     id: "emulator-installed",
     ok: installedOk,
-    detail: emu ? `${emu.label} detected` : "no supported emulator found on disk",
+    detail: target
+      ? target.source === "manual" ? "manual device configured"
+        : target.source === "generic" ? "device reported by adb"
+        : `${target.label} detected`
+      : "no emulator on disk, no device connected, no manual device set",
   }];
-  if (!installedOk) return { emulator: null, device: null, checks, ready: false };
+  if (!installedOk) return { emulator: ident, device: null, checks, ready: false };
 
-  const runningOk = emu!.running;
-  checks.push({
-    id: "emulator-running",
-    ok: runningOk,
-    detail: runningOk
-      ? `ADB port ${pickPort(emu!)} responding`
-      : `${emu!.label} installed but no instance listening on any known ADB port`,
-  });
-  if (!runningOk) return { emulator: emu, device: null, checks, ready: false };
+  const device = target!.device;
+  const hostPort = /^([\d.]+):(\d+)$/.exec(device);
 
-  const port = pickPort(emu!)!;
-  const device = `127.0.0.1:${port}`;
+  // 2 — instance running. For host:port we TCP-probe the ADB port (an up
+  //     instance listens even before adb authorizes); a generic/USB serial is
+  //     "present" by virtue of having been listed.
+  let runningOk: boolean;
+  let runningDetail: string;
+  if (hostPort) {
+    runningOk = await isPortListening(Number(hostPort[2]));
+    runningDetail = runningOk ? `ADB port ${hostPort[2]} responding` : `nothing listening on ${device}`;
+  } else if (device) {
+    runningOk = true;
+    runningDetail = `device ${device} present`;
+  } else {
+    runningOk = false;
+    runningDetail = `${target!.label} installed but no instance running`;
+  }
+  checks.push({ id: "emulator-running", ok: runningOk, detail: runningDetail });
+  if (!runningOk) return { emulator: ident, device: device || null, checks, ready: false };
 
-  // adb connect is idempotent — if the device is already attached it just
-  // re-confirms. Then `adb -s <device> get-state` should print "device".
-  await runAdb(emu!.adbPath, ["connect", device], 4000);
-  const state = await runAdb(emu!.adbPath, ["-s", device, "get-state"], 4000);
+  // 3 — ADB authorized. `adb connect` is idempotent (host:port only); then
+  //     `adb -s <device> get-state` must print "device".
+  if (hostPort) await runAdb(target!.adbPath, ["connect", device], 4000);
+  const state = await runAdb(target!.adbPath, ["-s", device, "get-state"], 4000);
   const adbOk = state.code === 0 && state.stdout.trim() === "device";
   checks.push({
     id: "adb-connection",
     ok: adbOk,
     detail: adbOk
-      ? `adb get-state = device`
+      ? "adb get-state = device"
       : `adb get-state = ${state.stdout.trim() || "no response"}${state.stderr ? ` (${state.stderr.trim().slice(0, 80)})` : ""}`,
   });
-  if (!adbOk) return { emulator: emu, device, checks, ready: false };
+  if (!adbOk) return { emulator: ident, device, checks, ready: false };
 
-  // `adb shell su -c id` returns `uid=0(root)` when the Root toggle is ON.
-  // Without root, we see `su: not found` or `Permission denied` (depending
-  // on the emulator); both are detected by absence of `uid=0`.
-  const id = await runAdb(emu!.adbPath, ["-s", device, "shell", "su -c id"], 6000);
+  // 4 — root. `adb shell su -c id` returns `uid=0(root)` when the Root toggle
+  //     is ON; without it we get `su: not found` / `Permission denied`.
+  const id = await runAdb(target!.adbPath, ["-s", device, "shell", "su -c id"], 6000);
   const rootOk = /uid=0/.test(id.stdout);
   checks.push({
     id: "root-toggle",
@@ -230,5 +366,5 @@ export async function preflight(): Promise<PreflightResult> {
       : `su returned: ${(id.stdout + id.stderr).trim().slice(0, 100) || "no output"}`,
   });
 
-  return { emulator: emu, device, checks, ready: checks.every((c) => c.ok) };
+  return { emulator: ident, device, checks, ready: checks.every((c) => c.ok) };
 }

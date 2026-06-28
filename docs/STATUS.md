@@ -80,6 +80,8 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
    - **Onglet Settings** : modal left-rail à onglets (Setup · Solver · Data · Backup · Debug). **Setup =
      wizard d'onboarding guidé** (auto-ouvert au 1er lancement) : stepper linéaire qui focalise le blocage
      courant (emulator install/running · ADB · root), instructions **par marque** (LDPlayer/MuMu/Nox),
+     **détection générique** de tout émulateur listé par le serveur ADB partagé + **override « Manual
+     device »** (adb path + device) pour forcer n'importe quel émulateur rooté hors-profil ;
      étape finale = vraies next-steps de capture. Section Solver (worker count Auto/Manual, result/per-worker
      count, heatmap), backup JSON import/export, sync « game data » manuelle, **version des données dérivées**
      affichée (hash + date, lue depuis `data/derived/version.json`).

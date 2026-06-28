@@ -122,3 +122,11 @@ export function findOuterpediaImagesDev(): string | null {
 export const STAT_LOCKS = IS_DEV
   ? join(REPO_ROOT, "data", "stat-locks.json")
   : join(app.getPath("userData"), "stat-locks.json");
+
+/** Manual capture-device override (adb path + device serial) set in
+ *  Settings → Setup. User-specific, never committed — dev keeps it in the
+ *  gitignored cache, prod under userData. Mirrors the path the Vite dev
+ *  middleware computes so the override survives a dev↔packaged swap. */
+export const MANUAL_DEVICE = IS_DEV
+  ? join(REPO_ROOT, ".cache", "manual-device.json")
+  : join(app.getPath("userData"), "manual-device.json");

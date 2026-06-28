@@ -36,6 +36,7 @@ import {
   GAME_DIR,
   SYNC_DIR,
   IMG_CACHE_DIR,
+  MANUAL_DEVICE,
   REPO_SHA_STATE,
   REPO_ROOT,
   IS_DEV,
@@ -43,7 +44,11 @@ import {
   RENDERER_DIST,
   findOuterpediaImagesDev,
 } from "./paths.js";
-import { detectEmulators, pickEmulator, pickPort, preflight } from "./emulator-detect.js";
+import {
+  detectEmulators, pickEmulator, pickPort, preflight,
+  resolveCaptureTarget, targetScriptArgs, loadManualDevice, saveManualDevice,
+  type ManualDevice,
+} from "./emulator-detect.js";
 import { dlog, dwarn } from "./log.js";
 import { proxyReco } from "./reco-proxy.js";
 import { syncGameData } from "./data-sync.js";
@@ -250,23 +255,15 @@ function captureStatus(res: ServerResponse): void {
  *  fall back to their built-in defaults pointing at the LDPlayer-installed
  *  adb + the system mitmproxy + the dev's personal ~/.mitmproxy/ CA.
  *
- *  When an emulator is detected as running, we override `-Adb` with that
- *  emulator's bundled ADB (different protocol versions across LDPlayer /
- *  MuMu / Nox would otherwise mismatch our bundled standard one) and
- *  `-Device 127.0.0.1:<port>` so the script targets the right instance. */
+ *  We resolve a target (manual override > running known brand > generic
+ *  `adb devices` > installed-but-stopped) and override `-Adb` with its ADB
+ *  (protocol versions differ across LDPlayer / MuMu / Nox vs our bundled one)
+ *  and `-Device <serial>` so the script targets the right instance. */
 async function captureScriptArgs(): Promise<string[]> {
-  const detected = await detectEmulators();
-  const chosen = pickEmulator(detected);
-  const deviceArgs: string[] = [];
-  let adbOverride: string | null = null;
-  if (chosen) {
-    const port = pickPort(chosen);
-    if (port) deviceArgs.push("-Device", `127.0.0.1:${port}`);
-    adbOverride = chosen.adbPath;
-  }
-  if (IS_DEV) return [...deviceArgs, ...(adbOverride ? ["-Adb", adbOverride] : [])];
+  const target = await resolveCaptureTarget(loadManualDevice(MANUAL_DEVICE), BUNDLED_ADB);
+  if (IS_DEV) return targetScriptArgs(target);
   return [
-    "-Adb", adbOverride ?? BUNDLED_ADB,
+    "-Adb", target?.adbPath || BUNDLED_ADB,
     "-Mitmdump", BUNDLED_MITMDUMP,
     "-Out", CAPTURE_OUT,
     // -MitmConfDir tells mitmdump where to load the matching CA from; -CertDir
@@ -275,7 +272,7 @@ async function captureScriptArgs(): Promise<string[]> {
     // fetch-binaries.mjs holds both files side by side.
     "-MitmConfDir", BUNDLED_PROD_CERT_DIR,
     "-CertDir", BUNDLED_PROD_CERT_DIR,
-    ...deviceArgs,
+    ...(target?.device ? ["-Device", target.device] : []),
   ];
 }
 
@@ -295,6 +292,29 @@ function isLocalRequest(req: IncomingMessage): boolean {
     } catch { return false; }
   }
   return true;
+}
+
+/** Buffer a request body (capped) and hand the caller the parsed JSON. On
+ *  overflow / parse error it answers 413/400 itself and never calls `ok`. */
+function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: number, ok: (body: unknown) => void): void {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  let aborted = false;
+  req.on("data", (c: Buffer) => {
+    if (aborted) return;
+    size += c.length;
+    if (size > maxBytes) { aborted = true; res.statusCode = 413; res.end("payload too large"); req.destroy(); return; }
+    chunks.push(c);
+  });
+  req.on("end", () => {
+    if (aborted) return;
+    try {
+      ok(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
+    } catch (err) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: (err as Error).message }));
+    }
+  });
 }
 
 function handle(req: IncomingMessage, res: ServerResponse): void {
@@ -407,12 +427,36 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   // --- onboarding preflight — sequence of checks (emulator installed,
   // running, ADB connecting, root toggle ON) driven by the wizard UI. ---
   if (url === "/api/preflight" && req.method === "GET") {
-    preflight().then((result) => {
+    preflight(loadManualDevice(MANUAL_DEVICE), BUNDLED_ADB).then((result) => {
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify(result));
     }).catch((err: Error) => {
       res.statusCode = 500;
       res.end(`preflight failed: ${err.message}`);
+    });
+    return;
+  }
+  // --- manual capture-device override (Settings → Setup → Manual device).
+  // GET returns the persisted {adbPath, device} or null; POST persists it
+  // ({clear:true} wipes it). Lets any rooted emulator we lack a brand profile
+  // for be driven by hand. ---
+  if (url === "/api/capture/manual-device" && req.method === "GET") {
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(loadManualDevice(MANUAL_DEVICE)));
+    return;
+  }
+  if (url === "/api/capture/manual-device" && req.method === "POST") {
+    readJsonBody(req, res, 100_000, (body) => {
+      const b = body as { adbPath?: unknown; device?: unknown; clear?: unknown };
+      if (b.clear === true) { saveManualDevice(MANUAL_DEVICE, null); res.statusCode = 204; res.end(); return; }
+      const adbPath = typeof b.adbPath === "string" ? b.adbPath.trim() : "";
+      const device = typeof b.device === "string" ? b.device.trim() : "";
+      if (!adbPath || !device) { res.statusCode = 400; res.end(JSON.stringify({ error: "adbPath and device are required" })); return; }
+      const md: ManualDevice = { adbPath, device };
+      saveManualDevice(MANUAL_DEVICE, md);
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(md));
     });
     return;
   }

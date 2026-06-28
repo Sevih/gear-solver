@@ -45,11 +45,11 @@ interface CheckCopy {
 const COPY: Record<CheckId, CheckCopy> = {
   "emulator-installed": {
     title: "Android emulator installed",
-    fix: "Install LDPlayer 9 (recommended), MuMu Player 12, or NoxPlayer at its default location. The capture pipeline needs a rooted x86 Android emulator — Google Play Games is not supported (Google disables root).",
+    fix: "Install LDPlayer 9 (recommended), MuMu Player 12, or NoxPlayer at its default location. Any other rooted x86 Android emulator works too — it's auto-detected if running, or pin it under Manual device below. Google Play Games is not supported (Google disables root).",
   },
   "emulator-running": {
     title: "Emulator instance running",
-    fix: "Open your emulator and start an instance. The detector probes every common ADB port for LDPlayer / MuMu / Nox — if none responds, no instance is up.",
+    fix: "Open your emulator and start an instance. The detector probes the common LDPlayer / MuMu / Nox ports and also lists anything the shared ADB server reports — if nothing shows, no instance is up (or set it under Manual device below).",
   },
   "adb-connection": {
     title: "ADB Debug = Local Connection",
@@ -239,7 +239,7 @@ export function SettingsModal({
           {/* CONTENT COLUMN */}
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto px-4.5 py-4">
-              {tab === "setup"  && <SetupPane result={result} loading={loading} />}
+              {tab === "setup"  && <SetupPane result={result} loading={loading} onProbe={() => void probe()} />}
               {tab === "solver" && <SolverPane solver={solver} showAdvanced={showAdvanced} onToggleAdvanced={() => setShowAdvanced((v) => !v)} />}
               {tab === "data"   && <DataPane syncing={syncing} setSyncing={setSyncing} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} />}
               {tab === "backup" && <BackupPane importInputRef={importInputRef} />}
@@ -287,7 +287,7 @@ export function SettingsModal({
  *  with brand-aware instructions for the detected emulator, completed steps
  *  collapsed above and upcoming ones greyed below. "Re-check" (footer) advances
  *  it. When everything passes it shows the actual capture next-steps. */
-function SetupPane({ result, loading }: { result: PreflightResult | null; loading: boolean }) {
+function SetupPane({ result, loading, onProbe }: { result: PreflightResult | null; loading: boolean; onProbe: () => void }) {
   type DisplayStatus = "ok" | "fail" | "pending";
   const steps = ORDER.map((id) => {
     const hit = result?.checks.find((c) => c.id === id);
@@ -346,6 +346,121 @@ function SetupPane({ result, loading }: { result: PreflightResult | null; loadin
           })}
         </div>
       )}
+
+      <ManualDeviceSection onSaved={onProbe} sourceLabel={result?.emulator?.label ?? null} sourceType={result?.emulator?.type ?? null} />
+    </div>
+  );
+}
+
+/** Advanced escape hatch: pin an explicit adb path + device so capture works on
+ *  ANY rooted emulator (or a non-default install) the auto-detector misses. The
+ *  three known brands are auto-detected; this is the "everything else" lever.
+ *  Persisted server-side (`/api/capture/manual-device`); saving re-runs preflight. */
+function ManualDeviceSection({ onSaved, sourceLabel, sourceType }: { onSaved: () => void; sourceLabel: string | null; sourceType: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [adbPath, setAdbPath] = useState("");
+  const [device, setDevice] = useState("");
+  const [active, setActive] = useState(false);    // an override is currently persisted
+  const [busy, setBusy] = useState(false);
+
+  // Load the persisted override once, so the fields reflect reality on open.
+  useEffect(() => {
+    let alive = true;
+    void fetch("/api/capture/manual-device").then((r) => r.ok ? r.json() : null).then((md: { adbPath: string; device: string } | null) => {
+      if (!alive || !md) return;
+      setAdbPath(md.adbPath); setDevice(md.device); setActive(true); setOpen(true);
+    }).catch(() => { /* backend not up — leave empty */ });
+    return () => { alive = false; };
+  }, []);
+
+  const save = async () => {
+    if (!adbPath.trim() || !device.trim()) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/capture/manual-device", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adbPath: adbPath.trim(), device: device.trim() }),
+      });
+      if (r.ok) { setActive(true); onSaved(); }
+    } catch { /* ignore — user can retry */ } finally { setBusy(false); }
+  };
+  const clear = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/capture/manual-device", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clear: true }),
+      });
+      if (r.ok || r.status === 204) { setActive(false); onSaved(); }
+    } catch { /* ignore */ } finally { setBusy(false); }
+  };
+
+  // When an override is active, the resolved source is "manual" — surface that.
+  const overriding = active && sourceType === "manual";
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-white/6 pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-fit items-center gap-1.5 text-[11px] font-semibold text-zinc-400 hover:text-zinc-200"
+      >
+        <span className={cx("inline-block text-[9px] transition-transform", open && "rotate-90")}>▸</span>
+        <span className="tracking-[0.04em]">Manual device (other emulator)</span>
+        {active && <span className="rounded bg-cyan-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-cyan-300">active</span>}
+      </button>
+
+      {open && (
+        <div className="flex flex-col gap-2.5 rounded-lg border border-white/8 bg-black/20 px-3 py-2.5">
+          <p className="text-[11.5px] leading-relaxed text-zinc-400">
+            LDPlayer / MuMu / Nox are auto-detected — and any running emulator the shared ADB server lists is
+            picked up automatically. Use this only to <b className="text-zinc-300">force</b> a specific adb +
+            device (a non-default install, or a brand we don't profile). It must still be a <b className="text-zinc-300">rooted</b> emulator.
+          </p>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wider text-zinc-500">adb.exe path</span>
+            <input
+              type="text" value={adbPath} onChange={(e) => setAdbPath(e.target.value)} spellCheck={false}
+              placeholder="C:\\Program Files\\BlueStacks_nxt\\HD-Adb.exe"
+              className="rounded-md border border-white/12 bg-zinc-900 px-2.5 py-1.5 font-mono text-[11.5px] text-zinc-200 placeholder:text-zinc-600 focus:border-cyan-400/50 focus:outline-none"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10.5px] font-semibold uppercase tracking-wider text-zinc-500">device (host:port or serial)</span>
+            <input
+              type="text" value={device} onChange={(e) => setDevice(e.target.value)} spellCheck={false}
+              placeholder="127.0.0.1:5555"
+              className="rounded-md border border-white/12 bg-zinc-900 px-2.5 py-1.5 font-mono text-[11.5px] text-zinc-200 placeholder:text-zinc-600 focus:border-cyan-400/50 focus:outline-none"
+            />
+            <span className="text-[10px] text-zinc-500">
+              Find it with <span className="font-mono text-zinc-400">adb devices</span> — e.g. <span className="font-mono text-zinc-400">127.0.0.1:5555</span>. Your emulator's settings also show its ADB port.
+            </span>
+          </label>
+          <div className="flex items-center gap-2 pt-0.5">
+            <button
+              type="button" onClick={() => void save()} disabled={busy || !adbPath.trim() || !device.trim()}
+              className={cx(
+                "inline-flex h-7 items-center rounded-md border px-3 text-[11.5px] font-semibold transition-colors",
+                busy || !adbPath.trim() || !device.trim()
+                  ? "cursor-not-allowed border-white/6 bg-white/2 text-zinc-500"
+                  : "border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
+              )}
+            >{busy ? "Saving…" : "Save & re-check"}</button>
+            {active && (
+              <button
+                type="button" onClick={() => void clear()} disabled={busy}
+                className="inline-flex h-7 items-center rounded-md border border-white/10 bg-zinc-900 px-3 text-[11.5px] text-zinc-400 hover:bg-white/6 hover:text-zinc-200"
+              >Clear</button>
+            )}
+            {overriding && <span className="font-mono text-[10.5px] text-cyan-300/80">using manual override</span>}
+            {active && !overriding && sourceLabel && (
+              <span className="font-mono text-[10.5px] text-amber-300/80" title="The override is saved but its adb path doesn't exist — auto-detection took over.">
+                override saved, but {sourceLabel} is in use
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -390,8 +505,8 @@ function CurrentStepCard({
           ))}
           <p className="mt-0.5 text-[10.5px] leading-snug text-zinc-500">
             Install at the default location with <b className="text-zinc-400">root enabled</b> · Google Play Games won't
-            work (root disabled). A physical device / other emulator isn't supported yet — broader device support is on
-            the roadmap.
+            work (root disabled). Other rooted emulators work too — auto-detected if running, or pinned under
+            <b className="text-zinc-400"> Manual device</b> below. Physical phones aren't supported yet (roadmap).
           </p>
         </div>
       )}

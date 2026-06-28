@@ -69,6 +69,30 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-28 — 🟢 Capture : support multi-émulateur (générique + override manuel)
+
+La capture ne ciblait que 3 marques codées en dur (LDPlayer/MuMu/Nox, chemins adb + ports). Élargi pour
+fonctionner avec **n'importe quel émulateur rooté**, sans toucher au mobile (limite root, hors scope ici).
+
+- **Détection générique** ([`emulator-detect.ts`](../apps/desktop/src/emulator-detect.ts)) — le serveur ADB
+  est partagé (port 5037), donc `adb devices` liste **toute** instance connectée, marque inconnue comprise.
+  Nouveau `resolveCaptureTarget(manual, fallbackAdb)` résout la cible par priorité : **override manuel** →
+  **marque connue en cours** → **générique** (`adb devices` via l'adb d'une marque ou l'adb bundlé) →
+  marque installée-mais-éteinte. `targetScriptArgs` produit les `-Device`/`-Adb` partagés dev+prod.
+- **Override « Manual device »** — `loadManualDevice`/`saveManualDevice` (fichier `manual-device.json` sous
+  `.cache` en dev / `userData` en prod, [`paths.ts`](../apps/desktop/src/paths.ts) `MANUAL_DEVICE`) + endpoints
+  `GET`/`POST /api/capture/manual-device` (miroir [`server.ts`](../apps/desktop/src/server.ts) +
+  [`vite.config.ts`](../apps/renderer/vite.config.ts)). Court-circuite l'auto-détection : adb path + device
+  saisis à la main pour forcer un émulateur hors-profil.
+- **`preflight` cible-aware** — réécrit pour honorer override + générique tout en gardant les 4 checks
+  (installed / running / adb / root) ; le check « running » TCP-probe le port pour un `host:port`, sinon
+  considère un serial listé comme présent. `captureScriptArgs`/`detectArgs` passent par le même resolver.
+- **UI wizard** ([`SettingsModal.tsx`](../apps/renderer/src/design/SettingsModal.tsx)) — section repliable
+  **Manual device** (champs adb.exe + device, Save & re-check / Clear, badge « active »/« using manual
+  override »), copies d'install mises à jour (« autres émulateurs supportés — auto-détectés ou via Manual
+  device ; physique pas encore »). Typecheck renderer + desktop, build, 244 tests verts. **À valider en
+  runtime sur un vrai émulateur non-LDPlayer** (code desktop non testable hors app).
+
 ### Session 2026-06-28 — 🟢 Worklist : transaction ordonnée inter-entrées (Apply all)
 
 La worklist signalait les conflits (« contested ») mais laissait l'utilisateur **arbitrer l'ordre à la

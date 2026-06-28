@@ -50,8 +50,11 @@
       → consommé par la **worklist** (§ Workflow) pour le « fait ».
 
 ### Externe — packaging desktop (vérif sur un vrai build, le plumbing existe)
-- [ ] **Support Mobile et emulateur** — récupérer les datas peu importe l'émulateur **ou** le mobile
-      (le wizard d'onboarding signale déjà que le mobile/physique n'est pas encore supporté — cf. changelog).
+- [~] **Support Mobile et emulateur** — **émulateurs : LIVRÉ** (détection générique via `adb devices` +
+      override « Manual device » → tout émulateur rooté marche, plus seulement LDPlayer/MuMu/Nox ; cf.
+      changelog — à **valider sur un vrai ému** non-profilé). **Reste : mobile/physique** — bloqué par le
+      root (téléphone rooté = ADB USB + cert via module Magisk à câbler ; non-rooté = hors de portée, c'est
+      une limite physique pas un manque de code). Le wizard signale déjà « physique pas supporté ».
 - [ ] Bake prod du `data/` (`extraResources` → `process.resourcesPath`) · `electron build`/installeur
       lance serveur local + renderer · auto-update contre release signée + feed réels · bouton capture
       natif en packagé (sans `npm run dev`).

@@ -6,7 +6,10 @@ import { spawn } from "node:child_process";
 import { createReadStream, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, extname, join, normalize } from "node:path";
-import { detectEmulators, pickEmulator, pickPort, preflight } from "../desktop/src/emulator-detect.js";
+import {
+  detectEmulators, pickEmulator, pickPort, preflight,
+  resolveCaptureTarget, targetScriptArgs, loadManualDevice, saveManualDevice,
+} from "../desktop/src/emulator-detect.js";
 import { proxyReco } from "../desktop/src/reco-proxy.js";
 import { syncGameData } from "../desktop/src/data-sync.js";
 import { serveImg } from "../desktop/src/img-cache.js";
@@ -23,6 +26,9 @@ const DISARM_PS1 = join(CAPTURE_DIR, "disarm.ps1");
 // Persistent cache for assets/data synced from the outerpedia repo (gitignored).
 const CACHE_DIR = join(root, ".cache", "outerpedia");
 const REPO_SHA_STATE = join(CACHE_DIR, "repo-sha.json");
+// Manual capture-device override — same dev path paths.ts computes (REPO/.cache)
+// so the override is shared between `npm run dev` and a dev Electron run.
+const MANUAL_DEVICE = join(root, ".cache", "manual-device.json");
 
 // Outerpedia-v2 checkout — serves the public/images/* assets at /img/ so
 // equipment art, class icons, effect badges and character portraits render
@@ -89,15 +95,9 @@ function streamPs(res: ServerResponse, script: string, extraArgs: string[] = [])
  *  MuMu / Nox work without the user editing capture.ps1's hardcoded
  *  LDPlayer paths. */
 async function detectArgs(): Promise<string[]> {
-  const detected = await detectEmulators();
-  const chosen = pickEmulator(detected);
-  const args: string[] = [];
-  if (chosen) {
-    args.push("-Adb", chosen.adbPath);
-    const port = pickPort(chosen);
-    if (port) args.push("-Device", `127.0.0.1:${port}`);
-  }
-  return args;
+  // No bundled adb in dev — generic probe relies on a brand's adb being on disk.
+  const target = await resolveCaptureTarget(loadManualDevice(MANUAL_DEVICE), null);
+  return targetScriptArgs(target);
 }
 
 function captureStatus(res: ServerResponse): void {
@@ -215,10 +215,36 @@ function localData(): Plugin {
           return;
         }
         if (url === "/api/preflight" && req.method === "GET") {
-          preflight().then((result) => {
+          preflight(loadManualDevice(MANUAL_DEVICE), null).then((result) => {
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify(result));
           }).catch((err: Error) => { res.statusCode = 500; res.end(`preflight failed: ${err.message}`); });
+          return;
+        }
+        // Manual capture-device override — mirrors the Electron server.
+        if (url === "/api/capture/manual-device" && req.method === "GET") {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(loadManualDevice(MANUAL_DEVICE)));
+          return;
+        }
+        if (url === "/api/capture/manual-device" && req.method === "POST") {
+          const chunks: Buffer[] = [];
+          req.on("data", (c: Buffer) => chunks.push(c));
+          req.on("end", () => {
+            try {
+              const b = JSON.parse(Buffer.concat(chunks).toString("utf-8")) as { adbPath?: unknown; device?: unknown; clear?: unknown };
+              if (b.clear === true) { saveManualDevice(MANUAL_DEVICE, null); res.statusCode = 204; res.end(); return; }
+              const adbPath = typeof b.adbPath === "string" ? b.adbPath.trim() : "";
+              const device = typeof b.device === "string" ? b.device.trim() : "";
+              if (!adbPath || !device) { res.statusCode = 400; res.end(JSON.stringify({ error: "adbPath and device are required" })); return; }
+              saveManualDevice(MANUAL_DEVICE, { adbPath, device });
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ adbPath, device }));
+            } catch (err) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: (err as Error).message }));
+            }
+          });
           return;
         }
         // Stat regression locks — persisted at data/stat-locks.json (committable
