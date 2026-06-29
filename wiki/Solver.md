@@ -191,15 +191,19 @@ hero / level / awakening change:
 
 ### Options
 The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select:
-- **Reforge** (`reforgeMode`, 3 states, **wired**) — projects each piece of the pool
-  to an endgame ceiling **before** the top-% prune (`projectPieceForReforge`):
+- **Reforge** (`reforgeMode`, **4 states**, **wired**, **default +10R6**) — projects each piece of
+  the pool to an endgame ceiling **before** the top-% prune (`projectPieceForReforge`). Labels =
+  enhancement + reforge count (R):
   - **Off**: gear as captured.
-  - **Classic**: projects to **+10 non-ascended** (main re-scaled via the `scaleMain` mult
-    on the core side `projectMainToCeiling`, + substats max-rolled at **6 ticks**).
-  - **Ascended**: projects to **+15 ascended** (overrides the real flag → we assume everything
-    ascended; **9 ticks**) **+ the unconditional Singularity passive** (`addProjectedSingularity`:
-    DMG+ 50% on weapon/accessory, DMG- 25% on armor — the table's best value). An already-ascended
-    piece keeps its **real roll**. Never *downgrades* a piece already above the ceiling.
+  - **+10R6** (`classic`): projects to **+10 non-ascended** (main re-scaled via `projectMainToCeiling`,
+    + substats max-rolled at **6 ticks**).
+  - **+10R9** (`ascended10`): the **exact same +10 ceiling as +10R6** but **9 ticks** — ascending
+    (50 chips) grants the **+3 reforges** and unlocks +15, nothing else. **No passive**, main stat
+    unchanged. The cost-conscious tier: skips the steep +10→+15 enhancement (chips at 90/80/70/60/40%).
+  - **+15R9** (`ascended`): projects to **+15 ascended** (overrides the real flag; **9 ticks**) **+ the
+    unconditional Singularity passive** (`addProjectedSingularity`: DMG+ 50% on weapon/accessory, DMG-
+    25% on armor — the table's best value). **Passive and the +11→+15 main-stat steps are +15-only.** An
+    already-ascended piece keeps its **real roll**. Never *downgrades* a piece already above the ceiling.
 
   The main re-scale goes through the ratio of the multipliers (`RolledStat` does not keep
   the base value) — validated against in-game (test `projectMainToCeiling`: 240 → 1380).
@@ -284,11 +288,10 @@ enhance level, slot icon, main stat, subs (with ticks). In addition:
 - **Talisman / EE**: the gem allocation recommended by the build (stat + value,
   **swap** badge if it differs from the socketed gems).
 - **Projected stats**: if the Reforge mode ≠ Off, the displayed main + subs are the projection
-  (`projectPieceForReforge` re-simulated on the main thread side) + **classic** / **ascended** badge.
-  The card also shows the projected enhance (`+15 · ascended`) since the projected piece
-  carries its target `enhanceLevel`/`ascended`, the projected **Singularity passive** (ascended),
-  and a cyan **`+N`** badge per sub showing the reforge ticks the projection added (delta vs the
-  captured piece).
+  (`projectPieceForReforge` re-simulated on the main thread side) + **+10R6** / **+10R9** / **+15R9** badge.
+  The card also shows the projected enhance since the projected piece carries its target
+  `enhanceLevel`/`ascended`, the projected **Singularity passive** (**+15R9 only**), and a cyan **`+N`**
+  badge per sub showing the reforge ticks the projection added (delta vs the captured piece).
 - **Equip state**: per-card badge — 🟠 portrait + name if the piece is equipped on **another hero**
   (applying steals it), 🟢 `equipped` if already on the current hero, `free` otherwise.
 

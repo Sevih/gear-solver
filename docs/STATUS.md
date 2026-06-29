@@ -68,7 +68,12 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      CHD / DMG inc, calculé à 100% crit, SPD/EFF/CHC en secondaires, no-crit détecté,
      `lib/dmgValue.ts`). Table de résultats : colonnes Set / arme / accessoire, menu
      show/hide colonnes, bouton Filter (re-filtre client-side), filtre Min quality, hauteur
-     plafonnée (15 lignes). Reforge 3 modes (disable/classic/ascended) + gems cap-reaching.
+     plafonnée (15 lignes). **Reforge 4 modes** (Off / +10R6 / +10R9 / +15R9 — enhancement +
+     nb de reforges ; +10R9 = +10 ascended pour les 3 reforges, sans passif +15) + gems cap-reaching.
+     **Gear cards résultat** = fork de la carte détail Inventaire (`ResultGearDetail.tsx`,
+     portrait héros rond en haut-droite, substats `LV n (Base+Actuelle+Extrapolé)`, étoiles
+     violettes à +9 reforges) + **carte « Effects »** sous le panneau stats (passif arme/acc +
+     sets actifs, desc au survol via `HoverCard`).
      **Pré-filtrage du pool armor par set** : un set qui contraint tout l'armor (2pc+2pc / 4pc)
      élague les pièces hors-set avant le cartésien ; toggle Options « Allow broken sets » (off →
      chaque pièce armor doit compléter un set, leaf reject des singletons).

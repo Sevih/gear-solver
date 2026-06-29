@@ -17,15 +17,17 @@
 import { Fragment, memo, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
-import { composeCharStats, expToLevel, resolveStat } from "@gear-solver/core";
-import { CharacterPortrait, SlotIcon, SlotMini, StatIcon } from "../design/EquipmentIcon.js";
+import { composeCharStats, expToLevel } from "@gear-solver/core";
+import { CharacterPortrait, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
 import { Pill } from "../design/Chips.js";
 import { cx } from "../design/cx.js";
 import { HoverHint } from "../design/HoverHint.js";
+import { HoverCard } from "../design/HoverCard.js";
 import { GameText } from "../design/GameText.js";
 import { RichTooltip } from "../design/RichTooltip.js";
-import { SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
-import { toIconPiece, toUiPiece } from "../design/adapter.js";
+import { SLOT_BY, toDesignSlot, type SlotId } from "../design/tokens.js";
+import { toUiPiece } from "../design/adapter.js";
+import { ResultItemDetail } from "../design/ResultGearDetail.js";
 import { flatVsPctTick } from "../lib/subValue.js";
 import { dmgTickGains, type DmgTickCandidate } from "../lib/dmgValue.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
@@ -63,6 +65,9 @@ interface BuilderScreenProps {
   /** Account-global "never use" piece UIDs (owned by App, edited in Inventory)
    *  — dropped from every slot pool before the cartesian. */
   excludedPieceUids?: Set<string>;
+  /** Toggle a piece in/out of the global exclusion set (App owns it) — wired to
+   *  the results gear-card footer so a trash roll can be excluded from results. */
+  onToggleExclude?: (uid: string) => void;
   /** Hero UID to preselect on mount — set when the user clicks "Optimize →"
    *  on the Builds tab. Read once via the `selectedUid` initializer. */
   initialHeroUid?: string | null;
@@ -311,9 +316,10 @@ function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; p
 /** UI metadata for the reforge-mode segmented control — order = cycle order,
  *  label = chip text, hint = tooltip. */
 const REFORGE_MODES: ReadonlyArray<{ value: ReforgeMode; label: string; hint: string }> = [
-  { value: "disable",  label: "Off",      hint: "Reforge preview off — score gear exactly as captured." },
-  { value: "classic",  label: "Classic",  hint: "Project every piece to the +10 endgame (6 reforge ticks): main stats re-scaled, substats max-rolled by priority." },
-  { value: "ascended", label: "Ascended", hint: "Project every piece to the +15 Singularity endgame (9 reforge ticks): main stats re-scaled, substats max-rolled by priority." },
+  { value: "disable",    label: "Off",    hint: "Reforge preview off — score gear exactly as captured." },
+  { value: "classic",    label: "+10R6",  hint: "+10, not ascended (6 reforge ticks). Main stats re-scaled, substats max-rolled by priority." },
+  { value: "ascended10", label: "+10R9",  hint: "+10, ascended for the reforges only (9 ticks). Same main stat as +10R6 — ascending just adds 3 reforges and unlocks +15. No Singularity passive (that's +15 only). The cost-conscious endgame: skips the steep +10→+15 enhancement." },
+  { value: "ascended",   label: "+15R9",  hint: "+15 full Singularity (9 reforge ticks). Adds the +11→+15 main-stat steps AND the unconditional Singularity passive (DMG± on weapon/acc vs armor) on top of +10R9." },
 ];
 
 /** UI metadata for the Options "Equipped items" scope (see `EquippedScope`). */
@@ -595,7 +601,7 @@ function buildPassesFilters(
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, initialHeroUid, onInitialHeroConsumed, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
@@ -1292,7 +1298,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} selfUid={selectedUid} currentLoadout={currentLoadout} />
+              <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} selfUid={selectedUid} currentLoadout={currentLoadout} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} />
             </div>
           </div>
         </div>
@@ -1306,6 +1312,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
             projected={selectedBuild?.finalStats ?? null}
             width="w-full"
           />
+          <BuildEffectsPanel build={selectedBuild} pieceByUid={pieceByUid} game={game} />
           <SubValuePanel baseFlat={composition?.baseFlat ?? null} subTicks={game?.subTicks} width="w-full" />
           <DmgPer1PctPanel comp={composition ?? null} width="w-full" />
           <RightSidebar
@@ -1861,7 +1868,7 @@ function ToolbarDivider() {
   return <span className="h-6 w-px shrink-0 bg-white/10" />;
 }
 
-/** Reforge-mode segmented control — Off / Classic / Ascended. Replaces the
+/** Reforge-mode segmented control — Off / +10R6 / +10R9 / +15R9. Replaces the
  *  old binary "Reforged" toggle: each chip projects pool pieces to a different
  *  endgame ceiling (see REFORGE_MODES). The active chip is highlighted; the
  *  whole strip carries a label so it reads as one control. */
@@ -2012,6 +2019,108 @@ function Panel({ title, hint, hintWidth, action, children, width }: {
       </header>
       <div className="mt-1.5">{children}</div>
     </section>
+  );
+}
+
+/** Aggregated build effects shown under the stats panel: the weapon's and the
+ *  accessory's unique-option passive (icon + name, description on hover) and
+ *  each ACTIVE armor set (icon + name + active 2/4-pc description on hover).
+ *  These were moved off the individual gear cards into this single card. */
+function BuildEffectsPanel({ build, pieceByUid, game }: {
+  build: SolveBuild | null;
+  pieceByUid: Map<string, GearPiece>;
+  game: GameData | null;
+}) {
+  const effects = useMemo(() => {
+    if (!build || !game) return null;
+    const pieces = build.pieceUids.map((u) => pieceByUid.get(u)).filter((p): p is GearPiece => !!p);
+
+    // Weapon / accessory unique-option passive (via the same UiPiece adapter).
+    const passiveOf = (slot: string) => {
+      const p = pieces.find((x) => x.slot === slot);
+      if (!p) return null;
+      const ui = toUiPiece(p, game);
+      return ui.passive ? { icon: ui.effectIcon, name: ui.passive.name ?? "Passive", text: ui.passive.text } : null;
+    };
+    const weapon = passiveOf("weapon");
+    const accessory = passiveOf("accessory");
+
+    // Active armor sets: count pieces per armorSetId (active at ≥2). The 6★ tier
+    // (level 2) wording applies only when EVERY piece in the set is bt≥4 —
+    // mirrors composeBuild's computeSetBonuses.
+    const counts = new Map<string, { count: number; bt4: number; sample: GearPiece }>();
+    for (const p of pieces) {
+      if (!p.armorSetId) continue;
+      const e = counts.get(p.armorSetId);
+      if (e) { e.count++; if (p.breakthrough >= 4) e.bt4++; }
+      else counts.set(p.armorSetId, { count: 1, bt4: p.breakthrough >= 4 ? 1 : 0, sample: p });
+    }
+    const sets: Array<{ id: string; name: string; icon: string | null; pc: number; descs: Array<{ tag: string; desc: string }> }> = [];
+    for (const [setId, { count, bt4, sample }] of counts) {
+      if (count < 2) continue;
+      const def = game.sets?.[setId];
+      if (!def) continue;
+      const targetLevel = bt4 === count ? 2 : 1;
+      const level = def.levels.find((l) => l.level === targetLevel) ?? [...def.levels].sort((a, b) => b.level - a.level)[0];
+      if (!level) continue;
+      const descs: Array<{ tag: string; desc: string }> = [];
+      if (count >= 2 && level.p2_desc) descs.push({ tag: "2-pc", desc: level.p2_desc });
+      if (count >= 4 && level.p4_desc) descs.push({ tag: "4-pc", desc: level.p4_desc });
+      if (descs.length === 0) continue;
+      sets.push({ id: setId, name: def.name ?? "Set", icon: toUiPiece(sample, game).setIcon, pc: count >= 4 ? 4 : 2, descs });
+    }
+
+    if (!weapon && !accessory && sets.length === 0) return null;
+    return { weapon, accessory, sets };
+  }, [build, pieceByUid, game]);
+
+  if (!effects) return null;
+  return (
+    <Panel title="Effects" width="w-full">
+      <div className="space-y-1">
+        {effects.weapon && <EffectRow icon={effects.weapon.icon} name={effects.weapon.name} content={<GameText text={effects.weapon.text} />} />}
+        {effects.accessory && <EffectRow icon={effects.accessory.icon} name={effects.accessory.name} content={<GameText text={effects.accessory.text} />} />}
+        {effects.sets.map((s) => (
+          <EffectRow
+            key={s.id}
+            icon={s.icon}
+            name={s.name}
+            badge={`${s.pc}pc`}
+            content={
+              <div className="space-y-1.5">
+                {s.descs.map((d) => (
+                  <div key={d.tag}>
+                    <span className="mr-1 font-mono text-[10px] font-semibold text-white/60">{d.tag}</span>
+                    <GameText text={d.desc} />
+                  </div>
+                ))}
+              </div>
+            }
+          />
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+/** One row of the Effects card: icon + name (+ optional pc badge); the
+ *  description surfaces in a popover on hover/focus. */
+function EffectRow({ icon, name, content, badge }: {
+  icon: string | null;
+  name: string;
+  content: ReactNode;
+  badge?: string;
+}) {
+  return (
+    <HoverCard content={content}>
+      <div className="flex items-center gap-2 rounded px-1 py-0.5 hover:bg-white/5">
+        {icon
+          ? <img src={`/img/ui/effect/${icon}.webp`} alt="" className="h-5 w-5 shrink-0" />
+          : <span className="h-5 w-5 shrink-0" />}
+        <span className="min-w-0 flex-1 truncate text-[11.5px] text-white">{name}</span>
+        {badge && <span className="shrink-0 rounded border border-white/12 px-1 py-px font-mono text-[9px] text-white/55">{badge}</span>}
+      </div>
+    </HoverCard>
   );
 }
 
@@ -4223,7 +4332,7 @@ function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
  * Bottom gear band — one card per main slot for the selected result
  * ───────────────────────────────────────────────────────────────────────── */
 function BottomGearBand({
-  build, pieceByUid, game, reforge, charsByUid, selfUid, currentLoadout,
+  build, pieceByUid, game, reforge, charsByUid, selfUid, currentLoadout, excludedPieceUids, onToggleExclude,
 }: {
   build: SolveBuild | null;
   pieceByUid: Map<string, GearPiece>;
@@ -4241,6 +4350,10 @@ function BottomGearBand({
   /** Hero's current piece per engine slot — the "before" of the per-slot diff:
    *  a card whose proposed piece differs from this shows what it replaces. */
   currentLoadout: Map<string, GearPiece>;
+  /** Global exclusion set + toggle — drives the inventory-style card's exclude
+   *  footer so a trash roll can be excluded right from the results. */
+  excludedPieceUids?: Set<string>;
+  onToggleExclude?: (uid: string) => void;
 }) {
   // Map engine slot → display piece for the selected build. The result's
   // `pieceUids` carries slot order (engine names); we re-key by GearSlot and,
@@ -4300,196 +4413,67 @@ function BottomGearBand({
         const changed = entry?.changed ?? false;
         const cp = entry?.currentPiece ?? null;
         const replacesName = changed && cp ? (game?.equipment[String(cp.itemId)]?.name ?? cp.name ?? `Item ${cp.itemId}`) : null;
-        return <GearCard key={slot} slot={slot} piece={piece} game={game} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} reforgeMode={reforge.reforgeMode} equippedSelf={equippedSelf} equippedOther={equippedOther} hasEquipInfo={!!entry} addedTicks={entry?.addedTicks} changed={changed} replacesName={replacesName} />;
+        // The character currently wearing the piece (any owner) — mirrors the
+        // Inventory card's header portrait. Excluded = this piece is in the
+        // global "never use" set, for the card's exclude-footer state.
+        const equippedChar = equippedBy ? (charsByUid.get(equippedBy) ?? null) : null;
+        const excluded = piece ? (excludedPieceUids?.has(piece.uid) ?? false) : false;
+        // Talisman / EE: show the SOLVER'S gem allocation (what the displayed
+        // stats assume in SOLVE CP), not the captured piece's sockets — override
+        // the gem-bearing piece's slots so the inventory-style GemPanel renders
+        // the recommendation. (The alloc is slot-aligned, 0 = empty.)
+        const pieceForCard = piece && recommendedGems && recommendedGems.some((id) => id > 0)
+          ? { ...piece, gemSlots: recommendedGems }
+          : piece;
+        return <GearCard key={slot} slot={slot} piece={pieceForCard} game={game} equippedChar={equippedChar} excluded={excluded} onToggleExclude={onToggleExclude} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} reforgeMode={reforge.reforgeMode} equippedSelf={equippedSelf} equippedOther={equippedOther} hasEquipInfo={!!entry} addedTicks={entry?.addedTicks} changed={changed} replacesName={replacesName} />;
       })}
     </div>
   );
 }
 
-/** Per-slot in-game allowed main stat — same fixed mapping the Inventory
- *  detail panel uses for its main-stat line label when no piece is present. */
-const SLOT_MAIN_PLACEHOLDER: Record<string, string> = {
-  weapon: "atk", helmet: "hp", armor: "def",
-  gloves: "atk", boots: "spd", accessory: "hp",
-  exclusive: "atk", talisman: "atk",
-};
-
-/** Compact mirror of the Inventory tab's `ItemDetail` panel — same section
- *  flow (header / icon+label / main stat / substats). Renders em-dash
- *  placeholders when no piece is wired (no build selected yet). */
-function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, equippedSelf, equippedOther, hasEquipInfo, addedTicks, changed, replacesName }: {
+/** A SOLVE-results gear card. Renders the FULL duplicated Inventory inspect
+ *  panel (`ResultItemDetail`: same container, scroll wrapper, equipped-char
+ *  portrait, exclude footer, empty state) so the results look pixel-identical to
+ *  the Inventory tab's left card. The piece (already reforge-projected upstream
+ *  in `BottomGearBand`) goes through the same `toUiPiece` adapter.
+ *
+ *  STEP 1: intentionally identical to the inventory card. The remaining
+ *  Builder-specific chrome (per-slot diff, reforge-projection badges, recommended
+ *  gems) is still threaded in via props — kept so the band wiring is unchanged —
+ *  but not yet rendered; it gets layered back on in the follow-up "pimp" passes. */
+function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedTicks }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
-  /** Build's recommended gem allocation for this slot (Talisman/EE only),
-   *  OptionIDs with 0 = empty. Undefined for non-gem slots. */
+  /** Character currently wearing the piece (any owner) — header portrait. */
+  equippedChar?: Character | null;
+  /** This piece is in the global exclusion set — exclude-footer state. */
+  excluded?: boolean;
+  /** Toggle the piece's exclusion (App-owned). Gates the exclude footer. */
+  onToggleExclude?: (uid: string) => void;
+  // ── Remaining Builder-specific props, passed by the band, reserved for pimp ──
   recommendedGems?: number[];
-  /** True when `piece` was projected (main re-scale + reforge ticks), not the
-   *  current rolls — flags the substat list with a mode badge. */
   reforged?: boolean;
-  /** Reforge mode driving the projection — labels the badge (classic/ascended). */
   reforgeMode?: ReforgeMode;
-  /** Piece is already equipped on the hero this build is for ("current"). */
   equippedSelf?: boolean;
-  /** Character currently wearing the piece, when it's someone other than this
-   *  hero — applying the build would unequip it from them. Null if free/self. */
   equippedOther?: Character | null;
-  /** True when a piece (with resolved equip state) backs this card — gates the
-   *  "free" tag so empty placeholder cards stay clean. */
   hasEquipInfo?: boolean;
-  /** Reforge procs the projection added per sub (aligned to `piece.subs`) —
-   *  shown as a `+N` badge so the projected ticks are visible, not silent. */
   addedTicks?: number[];
-  /** This slot's piece differs from the hero's current loadout (mirrors `upg`)
-   *  — drives the changed-slot accent + the "replaces …" line. */
   changed?: boolean;
-  /** Display name of the piece this card replaces, when the slot changes and the
-   *  slot wasn't empty. Null → the slot was empty (card shows "new slot"). */
   replacesName?: string | null;
 }) {
-  const slotMeta = SLOT_BY[slot];
-  const def = piece && game ? game.equipment[String(piece.itemId)] : null;
-  const name = piece ? (def?.name ?? piece.name ?? `Item ${piece.itemId}`) : null;
-  const mainStat = piece?.main.find((m) => !m.combatOnly) ?? null;
-  const mainStatKey = mainStat?.stat ?? SLOT_MAIN_PLACEHOLDER[slot] ?? "atk";
-  const mainStatMeta = STAT[mainStatKey];
-  // SlotMini wants the design's IconPiece shape (stars/enhance/bt/singularity);
-  // go through the same adapter the Inventory tab uses so the tile renders
-  // with the right rarity / breakthrough / image overlays.
-  const iconPiece = piece && game ? toIconPiece(toUiPiece(piece, game)) : null;
-  // Talisman / EE carry gems, not rollable substats — their card shows the
-  // build's gems only (not the socketed set rendered AS substats too).
-  const gemSlot = slot === "talisman" || slot === "exclusive";
-  // Singularity +15 passive (weapon/acc unconditional DMG+, armor DMG-) — shown
-  // on the card so the user sees what the ascended piece grants beyond its main.
-  const singEffects = piece?.main.filter((m) => m.source === "singularity") ?? [];
-  const projLabel = reforgeMode === "ascended" ? "ascended" : reforgeMode === "classic" ? "classic" : "projected";
+  // Adapt the (reforge-projected) engine piece through the same adapter the
+  // Inventory tab uses, then render the duplicated inspect panel verbatim.
+  const ui = piece && game ? toUiPiece(piece, game) : null;
   return (
-    <div className={cx("flex w-56 shrink-0 flex-col gap-2 rounded-lg border bg-bg-elev-1 px-3 py-2.5", changed ? "border-cyan-400/40" : "border-white/8")}>
-      <div className="flex items-center gap-1.5">
-        <span className={cx("min-w-0 flex-1 truncate font-display text-[13px] font-semibold", name ? "text-white" : "text-white/65")}>
-          {name ?? "—"}
-        </span>
-        {/* Equip state — the headline of this fix: whether applying the build
-         *  would steal the piece off another hero. "on <name>" is the warning
-         *  case; "equipped" (this hero) and "free" are reassuring. */}
-        {equippedOther ? (
-          <span
-            title={`Currently equipped on ${equippedOther.name ?? `#${equippedOther.charId}`} — applying this build unequips it from them`}
-            className="flex shrink-0 items-center gap-1 rounded border border-amber-400/40 bg-amber-500/15 px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider text-amber-200"
-          >
-            <CharacterPortrait charId={equippedOther.charId} name={equippedOther.name ?? undefined} size={14} className="rounded-sm" />
-            <span className="max-w-20 truncate normal-case">{equippedOther.name ?? `#${equippedOther.charId}`}</span>
-          </span>
-        ) : equippedSelf ? (
-          <span
-            title="Already equipped on this hero"
-            className="shrink-0 rounded border border-emerald-400/30 bg-emerald-500/12 px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider text-emerald-300"
-          >
-            equipped
-          </span>
-        ) : hasEquipInfo ? (
-          <span
-            title="Not equipped on any hero"
-            className="shrink-0 rounded border border-white/12 px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider text-white/45"
-          >
-            free
-          </span>
-        ) : null}
-      </div>
-
-      <div className="flex items-start gap-3">
-        <SlotMini slot={slot} piece={iconPiece} size={56} />
-        <div className="min-w-0 flex-1 text-[11px] leading-tight">
-          <div className={cx("flex flex-wrap items-center gap-1.5 italic", piece ? "text-white/70" : "text-white/65")}>
-            <span>{piece ? `+${piece.enhanceLevel}${piece.ascended ? " · ascended" : ""}` : "—"}</span>
-            {reforged && (
-              <span
-                className="rounded border border-cyan-400/40 bg-cyan-500/15 px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider not-italic text-cyan-300"
-                title="Extrapolated to this reforge target: the main stat is re-scaled and substats are reforged to here — NOT your current rolls."
-              >
-                ▲ {projLabel}
-              </span>
-            )}
-          </div>
-          <div className="text-white">{slotMeta?.label ?? slot}</div>
-          {/* Per-slot diff line: what this card replaces in the current loadout.
-           *  Cyan to match the changed-slot accent; full name in the tooltip
-           *  since the card is narrow. Absent on unchanged slots. */}
-          {changed && (
-            <div
-              className="mt-0.5 truncate text-[9.5px] text-cyan-300/85"
-              title={replacesName ? `Replaces ${replacesName}` : "Fills a slot that was empty"}
-            >
-              {replacesName ? `← ${replacesName}` : "+ new slot"}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* The EE's main stat is fixed (ATK% — only one option exists), so it's
-       *  pure noise on the card; skip it for the exclusive slot. Main value goes
-       *  cyan when extrapolated (re-scaled by the reforge projection). */}
-      {slot !== "exclusive" && (
-        <div className="flex items-center gap-2 font-mono text-[12px] tabular-nums">
-          <StatIcon stat={mainStatKey} size={16} className="shrink-0" />
-          <span className="flex-1 text-white">{mainStatMeta?.longLabel ?? mainStatKey}</span>
-          <span className={cx("font-semibold", !mainStat ? "text-white/65" : reforged ? "text-cyan-300" : "text-white")}>
-            {mainStat ? `${mainStat.value}${mainStat.percent ? "%" : ""}` : "—"}
-          </span>
-        </div>
-      )}
-
-      {/* Singularity +15 passive. The UNCONDITIONAL "to target" DMG+ (weapon/acc)
-       *  / DMG- (armor) is on the character sheet (amber, applies). The
-       *  CONDITIONAL variants (vs an element, vs a singularity buff) are
-       *  combat-only — the stat layer excludes them, so the card shows them
-       *  muted + a "cond" tag and their own label (e.g. "DMG Increase vs Earth")
-       *  so they're never mistaken for applied stats. */}
-      {singEffects.map((e, i) => {
-        const cond = !!e.combatOnly;
-        return (
-          <div key={`sing-${i}`} className={cx("flex items-center gap-1.5 font-mono text-[10.5px] tabular-nums", cond ? "text-white/45" : "text-amber-200/90")} title={e.name ?? undefined}>
-            <span className={cx("rounded border px-1 py-px text-[8.5px] font-semibold uppercase tracking-wider not-italic", cond ? "border-white/15 text-white/40" : "border-amber-400/30 bg-amber-500/10 text-amber-200")}>+15</span>
-            <span className="flex-1 truncate">{e.name ?? STAT[e.stat]?.longLabel ?? e.stat}</span>
-            {cond && <span className="shrink-0 text-[8px] font-semibold uppercase tracking-wider text-white/35">cond</span>}
-            <span className={cx("font-semibold", cond ? "text-white/50" : "text-amber-100")}>+{e.value}{e.percent ? "%" : ""}</span>
-          </div>
-        );
-      })}
-
-      {/* Gem slots (Talisman / EE) show the build's gems ONLY; gear shows substats. */}
-      {gemSlot ? (
-        piece && game
-          ? <GemsSection recommended={recommendedGems} piece={piece} game={game} />
-          : <div className="text-[10.5px] italic text-white/55">—</div>
-      ) : (
-        <div className="space-y-1 font-mono text-[10.5px] tabular-nums">
-          {piece && piece.subs.length > 0 ? piece.subs.map((s, i) => {
-            const added = addedTicks?.[i] ?? 0;
-            return (
-            <div key={i} className={cx("flex items-center gap-1.5", reforged ? "text-cyan-100/90" : "text-white/80")}>
-              <StatIcon stat={s.stat} size={12} className="shrink-0" />
-              {s.ticks != null && (
-                <span className="rounded border border-white/8 px-1 py-px text-[9.5px] text-white/60">LV{s.ticks}</span>
-              )}
-              {added > 0 && (
-                <span
-                  title={`Projection added ${added} reforge tick${added === 1 ? "" : "s"} here`}
-                  className="rounded border border-cyan-400/40 bg-cyan-500/15 px-1 py-px text-[9px] font-semibold text-cyan-300"
-                >
-                  +{added}
-                </span>
-              )}
-              <span className="flex-1 truncate">{STAT[s.stat]?.longLabel ?? s.stat}</span>
-              <span className="text-white">{s.value}{s.percent ? "%" : ""}</span>
-            </div>
-          ); }) : (
-            <div className="text-[10.5px] italic text-white/55">—</div>
-          )}
-        </div>
-      )}
-    </div>
+    <ResultItemDetail
+      piece={ui}
+      equippedChar={equippedChar ?? null}
+      game={game}
+      excluded={excluded}
+      onToggleExclude={onToggleExclude}
+      addedTicks={addedTicks}
+    />
   );
 }
 
@@ -4498,55 +4482,6 @@ function GearCard({ slot, piece, game, recommendedGems, reforged, reforgeMode, e
  *  recommendation with a "swap" badge; otherwise show the piece's currently-
  *  socketed gems, marked "current". The displayed stats are computed WITH the
  *  shown gems (SOLVE CP), so they stay consistent. */
-function GemsSection({ recommended, piece, game }: {
-  recommended?: number[];
-  piece: GearPiece;
-  game: GameData;
-}) {
-  const recIds = (recommended ?? []).filter((id) => id > 0);
-  const currentIds = (piece.gemSlots ?? []).filter((id) => id > 0);
-  const usingRec = recIds.length > 0;
-  // Multiset equality (slot order is irrelevant — gems are interchangeable).
-  const sortedEq = (a: number[], b: number[]): boolean => {
-    if (a.length !== b.length) return false;
-    const sa = [...a].sort((x, y) => x - y);
-    const sb = [...b].sort((x, y) => x - y);
-    return sa.every((v, i) => v === sb[i]);
-  };
-  const isSwap = usingRec && !sortedEq(recIds, currentIds);
-  const gems = usingRec
-    ? recIds.map((id) => resolveStat(id, 1, game.options)).filter((r): r is NonNullable<typeof r> => r != null)
-    : piece.subs.map((s) => ({ stat: s.stat, value: s.value, percent: s.percent }));
-  return (
-    <div className="space-y-1 border-t border-white/8 pt-2">
-      <div className="flex items-center gap-1.5">
-        <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-white/60">Gems</span>
-        {isSwap && (
-          <span className="rounded border border-amber-400/40 bg-amber-500/15 px-1 py-px text-[9px] font-semibold uppercase tracking-wider text-amber-300">
-            swap
-          </span>
-        )}
-        {!usingRec && gems.length > 0 && (
-          <span className="text-[9px] uppercase tracking-wider text-white/40">current</span>
-        )}
-      </div>
-      {gems.length > 0 ? (
-        <div className="space-y-1 font-mono text-[10.5px] tabular-nums">
-          {gems.map((g, i) => (
-            <div key={i} className="flex items-center gap-1.5 text-white/80">
-              <StatIcon stat={g.stat} size={12} className="shrink-0" />
-              <span className="flex-1 truncate text-white/80">{STAT[g.stat]?.longLabel ?? g.stat}</span>
-              <span className="text-white">{g.value}{g.percent ? "%" : ""}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-[10.5px] italic text-white/55">— no gems —</div>
-      )}
-    </div>
-  );
-}
-
 function Empty({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-24 text-center">

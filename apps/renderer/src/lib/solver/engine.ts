@@ -43,18 +43,30 @@ function engineToDesign(slot: string): string {
 }
 
 /** Reforge-mode preview: how aggressively to project each pool piece toward
- *  an endgame ceiling before scoring. `disable` keeps pieces as captured;
- *  `classic` / `ascended` project main stats + substat reforge ticks to the
- *  6★ non-ascended (+10, 6 ticks) / 6★ ascended (+15, 9 ticks) endgame. */
-export type ReforgeMode = "disable" | "classic" | "ascended";
+ *  an endgame ceiling before scoring. `disable` keeps pieces as captured; the
+ *  others project main stats + substat reforge ticks to a 6★ endgame:
+ *   - `classic`    → +10, NOT ascended, 6 reforge ticks            (label "+10R6")
+ *   - `ascended10` → +10, ascended for the reforges only, 9 ticks  (label "+10R9")
+ *   - `ascended`   → +15 full Singularity, 9 ticks + passive       (label "+15R9")
+ *  Ascending (50 chips) grants +3 reforges (R6→R9) and unlocks +10→+15 — nothing
+ *  else. The Singularity passive (DMG± on weapon/acc vs armor) AND the +11→+15
+ *  main-stat steps unlock ONLY at +15. So `ascended10` is `classic`'s exact
+ *  ceiling (+10 main stat) with 3 extra reforges and NO passive — the
+ *  cost-conscious endgame that skips the steep +10→+15 enhancement (chips at
+ *  90/80/70/60/40%). Only `ascended` (+15) adds the steps + passive on top. */
+export type ReforgeMode = "disable" | "classic" | "ascended10" | "ascended";
 
 /** Per-mode projection plan — the enhance ceiling fed to `projectMainToCeiling`
  *  (main-stat re-scale) and the fixed reforge budget fed to `simulateReforges`
  *  (substat ticks). Budgets are fixed (not derived from the piece's real star)
- *  so every piece is previewed as a maxed 6★. */
+ *  so every piece is previewed as a maxed 6★. `ceiling.ascended` is a MAIN-STAT
+ *  formula flag (use the Singularity main-stat path) AND gates the passive — so
+ *  `ascended10` keeps `ascended: false` (its +10 main stat is unchanged by
+ *  ascending; only the reforge budget grows). */
 const REFORGE_PLANS: Record<Exclude<ReforgeMode, "disable">, { ceiling: ReforgeCeiling; budget: number }> = {
-  classic:  { ceiling: { enhanceLevel: 10, ascended: false, singularityLevel: 0 }, budget: 6 },
-  ascended: { ceiling: { enhanceLevel: 15, ascended: true,  singularityLevel: 5 }, budget: 9 },
+  classic:    { ceiling: { enhanceLevel: 10, ascended: false, singularityLevel: 0 }, budget: 6 },
+  ascended10: { ceiling: { enhanceLevel: 10, ascended: false, singularityLevel: 0 }, budget: 9 },
+  ascended:   { ceiling: { enhanceLevel: 15, ascended: true,  singularityLevel: 5 }, budget: 9 },
 };
 
 /** Project a single pool piece to its reforge-mode ceiling: main-stat re-scale
@@ -71,10 +83,11 @@ export function projectPieceForReforge(
   if (mode === "disable" || piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
   const plan = REFORGE_PLANS[mode];
   const projected = simulateReforges(projectMainToCeiling(piece, game, plan.ceiling), priority, plan.budget);
-  // Ascending also grants the unconditional Singularity passive (DMG+ on
-  // weapon/accessory, DMG- on the four armor pieces) — the defining bonus of
-  // ascension. The classic ceiling (+10) doesn't ascend, so it's ascended-only.
-  return mode === "ascended" ? addProjectedSingularity(projected) : projected;
+  // The unconditional Singularity passive (DMG+ on weapon/accessory, DMG- on the
+  // four armor pieces) unlocks ONLY at +15 — not at ascension. So only the +15
+  // plan carries `ceiling.ascended`; +10R9 (ascended for reforges) and +10R6
+  // both go without it.
+  return plan.ceiling.ascended ? addProjectedSingularity(projected) : projected;
 }
 
 /** Best-grade unconditional Singularity passive granted at full ascension —
@@ -103,6 +116,13 @@ function addProjectedSingularity(piece: GearPiece): GearPiece {
     fromBuff: true,
     source: "singularity",
     name: isDmgUp ? "DMG Increase to target" : "Reduced DMG Taken from targets",
+    // Rich-text desc with the colored grade letter, verbatim from the top-grade
+    // option in singularity-options.json (DMG+ id 300126 / DMG- id 310066, both
+    // grade "S+") so the projected passive renders with the same colored grade
+    // letter as a real rolled one (GearDetail / ResultGearDetail render `desc`).
+    desc: isDmgUp
+      ? '<color=#ff00ff>S+</color> DMG dealt to targets increases by <color=#0D99DA>50%</color>'
+      : '<color=#ff00ff>S+</color> DMG taken from targets decreases by <color=#0D99DA>25%</color>',
     combatOnly: false,
   };
   return { ...piece, main: [...piece.main, entry] };
@@ -723,7 +743,12 @@ export function simulateReforges(piece: GearPiece, priority: Record<string, numb
     target.ticks = (target.ticks ?? 0) + 1;
     target.reforgeTicks = (target.reforgeTicks ?? 0) + 1;
   }
-  return { ...piece, subs };
+  // Bump reforgeCount to the projected investment ceiling so the displayed
+  // quality denominator matches (max = 14 base ticks + reforgeCount). Otherwise
+  // the projection adds reforge ticks the captured count doesn't know about and
+  // quality reads as an impossible >100% (e.g. 19/14). Some subs may cap at LV6
+  // before the budget is spent, so `current` can still be < max (e.g. 19/23).
+  return { ...piece, subs, reforgeCount: maxReforges };
 }
 
 /** Per-roll priority score for ONE piece: Σ over its rolls of

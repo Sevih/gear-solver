@@ -853,6 +853,13 @@ describe("projectPieceForReforge — ascended Singularity passive", () => {
     expect(out.main.some((m) => m.source === "singularity")).toBe(false);
   });
 
+  it("does NOT add the passive in +10R9 (ascended10) — it unlocks only at +15", () => {
+    // Ascending grants the +3 reforges but NOT the Singularity passive; that's
+    // a +15-only unlock. So +10R9 must stay passive-free like +10R6.
+    const out = projectPieceForReforge(gearPiece("weapon"), ENH_GAME, "ascended10", {});
+    expect(out.main.some((m) => m.source === "singularity")).toBe(false);
+  });
+
   it("never overwrites a real rolled Singularity passive on an already-ascended piece", () => {
     const real: RolledStat = { stat: "dmgUp", value: 31, percent: true, fromBuff: true, source: "singularity" };
     const out = projectPieceForReforge(gearPiece("weapon", { ascended: true, main: [real] }), ENH_GAME, "ascended", {});
@@ -865,6 +872,32 @@ describe("projectPieceForReforge — ascended Singularity passive", () => {
     expect(projectPieceForReforge(gearPiece("ooparts"), ENH_GAME, "ascended", {}).main).toHaveLength(0);
     expect(projectPieceForReforge(gearPiece("exclusive"), ENH_GAME, "ascended", {}).main).toHaveLength(0);
   });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * REFORGE BUDGET PER MODE — the R count baked into each label. classic = R6,
+ * the two ascended modes = R9 (ascension's +3). +10R9 differs from +10R6 ONLY
+ * by these 3 extra reforge ticks (same +10 main, no passive).
+ * ───────────────────────────────────────────────────────────────────────── */
+describe("projectPieceForReforge — reforge budget per mode", () => {
+  // 4 subs at LV1 (cap 6 → 5 ticks of headroom each = 20 total), so the only
+  // limit on distributed reforges is the mode's fixed budget. Empty priority +
+  // equal per-tick → ties resolve by capacity; total added ticks == budget.
+  const fourSubs = (): RolledStat[] => [
+    { stat: "atkPct", value: 1, percent: true, ticks: 1 },
+    { stat: "critRate", value: 1, percent: true, ticks: 1 },
+    { stat: "critDmg", value: 1, percent: true, ticks: 1 },
+    { stat: "effRes", value: 1, percent: true, ticks: 1 },
+  ];
+  // reforgeCount 0 → the whole budget is `remaining` (simulateReforges spends
+  // `budget − piece.reforgeCount`), so the distributed total equals the budget.
+  const totalReforge = (mode: "classic" | "ascended10" | "ascended") =>
+    projectPieceForReforge({ ...gearPiece("weapon", { subs: fourSubs() }), reforgeCount: 0 }, ENH_GAME, mode, {})
+      .subs.reduce((n, s) => n + (s.reforgeTicks ?? 0), 0);
+
+  it("classic (+10R6) distributes 6 ticks", () => expect(totalReforge("classic")).toBe(6));
+  it("ascended10 (+10R9) distributes 9 ticks — ascension's +3", () => expect(totalReforge("ascended10")).toBe(9));
+  it("ascended (+15R9) distributes 9 ticks", () => expect(totalReforge("ascended")).toBe(9));
 });
 
 /* ─────────────────────────────────────────────────────────────────────────

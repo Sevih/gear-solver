@@ -69,6 +69,68 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-29 — 🟢 Builder : cartes résultat alignées sur l'Inventaire + carte « Effects »
+
+Refonte des **gear cards des résultats SOLVE** (bandeau du bas) pour qu'elles aient l'apparence de la carte
+détail de l'Inventaire, puis dégraissage + agrégation des effets de build.
+
+- **Fork de la carte Inventaire** ([`ResultGearDetail.tsx`](../apps/renderer/src/design/ResultGearDetail.tsx),
+  nouveau) — duplicata isolé de `GearDetailBody`/`ItemDetail` (`ResultGearDetailBody` / `ResultItemDetail`)
+  pour pouvoir « pimper » les cartes résultat sans toucher l'Inventaire. La gear card du Builder rend ce fork
+  via le même `toUiPiece` (portrait du héros équipé **en haut-droite, rond** · footer Exclude câblé App →
+  Builder → band).
+- **Dégraissage** (carte résultat) : image −30 %, qualité réduite au `current/max + label` coloré, **substats
+  `LV n (Base + Actuelle + Extrapolé)`** (l'extrapolé de la projection en cyan, via `addedTicks` threadé),
+  effet d'item = juste la desc, passif singularity sans le libellé « Active Effect at +15 », **EE** = image +
+  gems uniquement, nom sur 2 lignes avec dégradé singularity **vertical**, ligne rareté/slot retirée, mains à
+  droite de l'icône.
+- **Carte « Effects »** ([`BuilderScreen.tsx`](../apps/renderer/src/screens/BuilderScreen.tsx)
+  `BuildEffectsPanel`, sous le panneau stats) — agrège **passif d'arme + d'accessoire + effets de set actifs**
+  (icône + nom, **desc au survol**). Hover via un nouveau [`HoverCard.tsx`](../apps/renderer/src/design/HoverCard.tsx)
+  (toute la ligne survolable, popover en portal). Ces effets sont **retirés des gear cards** (le passif
+  singularity y reste).
+
+### Session 2026-06-29 — 🔴 Fixes Builder résultats (reforge / gemmes / singularity / étoiles)
+
+- **Compteur de reforge non mis à jour** → qualité impossible (`19/14 Perfect`). `simulateReforges`
+  ([`engine.ts`](../apps/renderer/src/lib/solver/engine.ts)) pose maintenant `reforgeCount = budget` sur la
+  pièce projetée → qualité `current / (14 + budget)` (ex. `23/23`, ou `19/23` si des subs plafonnent à LV6).
+  Purement display (le `reforgeCount` n'entre pas dans le CP/score).
+- **Étoiles de l'item par reforge** — corollaire du fix ci-dessus : `iconPiece.reforge = reforgeCount` →
+  `splitStars(6, 9)` = **6 étoiles violettes** (singularity) à 9 reforges, **orange** à 6. Donc **violet à
+  +9, orange sinon**, sans code supplémentaire.
+- **Lettre de grade colorée du passif singularity** absente sur pièce projetée — `addProjectedSingularity`
+  posait le `name` mais pas la `desc` rich-text. Ajout du `desc` verbatim du top-grade (`S+` magenta, ids
+  300126 / 310066 de `singularity-options.json`) → GameText rend la lettre colorée comme une vraie pièce.
+- **Gemmes EE/talisman vides** — la carte montrait les gemmes *socketées capturées* au lieu de l'**allocation
+  du solver** (en CP). Override des `gemSlots` de la pièce gem-bearing par `build.gemAllocation` (slot-aligné)
+  avant l'adaptation. Fallback sur les gemmes capturées si le solver n'en alloue aucune.
+- **Analyse « Ether Blade gagne le CP » → pas un bug.** Le CP est stat-only et ignore les passifs (effets
+  conditionnels de combat) ; les 2 mains d'une arme sont fixées par star+slot (identiques entre armes du même
+  star), donc le solver départage sur les **substats projetés**. Une arme qui troque de l'ATK contre HP/crit/
+  SPD peut légitimement sortir devant selon le héros. Conclusion : comportement attendu, aucun changement.
+
+### Session 2026-06-29 — 🟢 Reforge : 4e mode « +10R9 » + libellés enhancement/reforge
+
+Le segmented control Reforge n'offrait que **+10 (classic)** et **+15 (ascended)** — il manquait le
+palier d'investissement **réel et rentable** : ascender une pièce (50 high-precision chips) débloque les
+**+3 reforges** ET le +15, mais pousser +10→+15 coûte *bien plus* (chips à 90/80/70/60/40 % de réussite).
+Beaucoup de joueurs ascendent pour les reforges et s'arrêtent à +10.
+
+- **Nouveau mode `ascended10`** ([`engine.ts`](../apps/renderer/src/lib/solver/engine.ts) `REFORGE_PLANS`) —
+  **même plafond +10 que `classic`** (main stat identique) mais **budget 9 reforges** au lieu de 6.
+  **Crucial** : l'ascension ne donne PAS le passif de singularité — celui-ci (DMG± inconditionnel) **se
+  débloque uniquement au +15**. Donc `ascended10` reste `ceiling.ascended: false` (main +10) et le passif
+  est gaté sur `ceiling.ascended`, exclusif à `ascended` (+15). +4 tests (`solver.test.ts` : budget 6/9/9
+  par mode, absence de passif en `ascended10`).
+- **Libellés repensés** ([`BuilderScreen.tsx`](../apps/renderer/src/screens/BuilderScreen.tsx)
+  `REFORGE_MODES`) — **Off / +10R6 / +10R9 / +15R9** (enhancement + nombre de reforges), bien plus
+  parlants que classic/ascended. Badge de carte + `projLabel` mis à jour, défaut inchangé (`classic` =
+  +10R6). Ids internes (`classic`/`ascended`) conservés → presets/builds sauvés rétrocompatibles ; seul
+  `ascended10` est nouveau (aucune migration).
+- Docs synchronisées ([solver.md](solver.md), [wiki/Solver.md](../wiki/Solver.md), `types.ts`). Typecheck
+  + build + 248 tests verts.
+
 ### Session 2026-06-28 — 🟢 Capture : support multi-émulateur (générique + override manuel)
 
 La capture ne ciblait que 3 marques codées en dur (LDPlayer/MuMu/Nox, chemins adb + ports). Élargi pour

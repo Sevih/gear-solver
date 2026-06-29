@@ -42,9 +42,10 @@ export type EffectConstraint = "required" | "excluded";
 export interface SolveFilters {
   options: {
     onlyMaxed: boolean;
-    /** Reforge-mode preview: "disable" (gear as captured) | "classic"
-     *  (+10 / 6 ticks) | "ascended" (+15 / 9 ticks). Replaces the old
-     *  `useReforged` boolean. */
+    /** Reforge-mode preview: "disable" (gear as captured) | "classic" (+10R6,
+     *  6 ticks, no passive) | "ascended10" (+10R9 — +10R6's main stat with 3
+     *  extra reforges, still no passive) | "ascended" (+15R9, 9 ticks + the +15
+     *  Singularity passive). Replaces the old `useReforged` boolean. */
     reforgeMode: ReforgeMode;
     /** Which equipped gear (on OTHER heroes) may enter the pool — see
      *  `EquippedScope`. Replaces the old `includeEquippedOnOthers` boolean

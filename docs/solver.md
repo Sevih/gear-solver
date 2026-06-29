@@ -220,16 +220,20 @@ changement de héros / niveau / awakening :
 
 ### Options
 Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
-- **Reforge** (`reforgeMode`, 3 états, **câblé**, **défaut Classic**) — projette chaque pièce
+- **Reforge** (`reforgeMode`, **4 états**, **câblé**, **défaut +10R6**) — projette chaque pièce
   du pool vers un plafond endgame **avant** le top-% prune (`projectPieceForReforge`). Défaut
-  `classic` (+10) car c'est la norme endgame ; `Off` noterait le gear capturé (+0/+9), trompeur.
+  `classic` (+10R6) car c'est la norme endgame ; `Off` noterait le gear capturé (+0/+9), trompeur.
+  Libellés = enhancement + nombre de reforges (R) :
   - **Off** : gear tel que capturé.
-  - **Classic** : projette à **+10 non-ascended** (main re-scalé via le mult de
-    `scaleMain` côté core `projectMainToCeiling`, + substats max-rollés à **6 ticks**).
-  - **Ascended** : projette à **+15 ascended** (override le flag réel → on suppose tout
-    ascensionné ; **9 ticks**) **+ le passif de singularité inconditionnel** (`addProjectedSingularity` :
-    DMG+ 50 % arme/accessoire, DMG- 25 % armures — meilleure valeur de la table). Une pièce déjà
-    ascended garde son **vrai roll**. Ne *downgrade* jamais une pièce déjà au-dessus du plafond.
+  - **+10R6** (`classic`) : projette à **+10 non-ascended** (main re-scalé via `projectMainToCeiling`,
+    + substats max-rollés à **6 ticks**).
+  - **+10R9** (`ascended10`) : **exactement le même plafond +10 que +10R6** mais **9 ticks** — l'ascension
+    (50 chips) donne les **+3 reforges** et débloque le +15, sans rien d'autre. **Pas de passif**, main stat
+    inchangé. Le palier rentable : on saute le coûteux +10→+15 (chips à 90/80/70/60/40 %).
+  - **+15R9** (`ascended`) : projette à **+15 ascended** (override le flag réel ; **9 ticks**) **+ le passif
+    de singularité inconditionnel** (`addProjectedSingularity` : DMG+ 50 % arme/accessoire, DMG- 25 %
+    armures — meilleure valeur de la table). **Passif et steps de main +11→+15 = +15 uniquement.** Une pièce
+    déjà ascended garde son **vrai roll**. Ne *downgrade* jamais une pièce déjà au-dessus du plafond.
 
   Le re-scale du main passe par le ratio des multiplicateurs (`RolledStat` ne garde pas
   la valeur de base) — validé contre l'in-game (test `projectMainToCeiling` : 240 → 1380).
@@ -333,11 +337,10 @@ enhance level, icône slot, main stat, subs (avec ticks). En plus :
 - **Talisman / EE** : l'allocation de gemmes recommandée par le build (stat + valeur,
   badge **swap** si elle diffère des gemmes socketées).
 - **Stats projetées** : si le mode Reforge ≠ Off, main + subs affichés sont la projection
-  (`projectPieceForReforge` re-simulé côté main thread) + badge **classic** / **ascended**.
-  La carte montre aussi l'enhance projeté (`+15 · ascended`) puisque la pièce projetée
-  porte son `enhanceLevel`/`ascended` cible, le **passif de singularité** projeté (ascended), et
-  un badge cyan **`+N`** par sub indiquant les ticks de reforge ajoutés par la projection
-  (delta vs la pièce capturée).
+  (`projectPieceForReforge` re-simulé côté main thread) + badge **+10R6** / **+10R9** / **+15R9**.
+  La carte montre aussi l'enhance projeté puisque la pièce projetée porte son `enhanceLevel`/`ascended`
+  cible, le **passif de singularité** projeté (**+15R9 uniquement**), et un badge cyan **`+N`** par sub
+  indiquant les ticks de reforge ajoutés par la projection (delta vs la pièce capturée).
 - **État d'équipement** : badge par carte — 🟠 portrait + nom si la pièce est équipée sur un
   **autre héros** (l'appliquer la lui retire), 🟢 `equipped` si déjà sur le héros courant, `free` sinon.
 - **Diff par slot** : une carte dont la pièce **diffère du loadout équipé** (même définition que
@@ -527,7 +530,7 @@ Bonus :
 5. Mettre `Crc min = 90` puis re-SOLVE → tous les builds retournés satisfont la borne.
 6. Activer `Sharp 4pc required` → helmet/armor/gloves/boots des builds sont tous Sharp.
 7. **Comparaison régression** : SOLVE avec priority vide + Top 100% + Keep current + **Reforge Off**
-   (le défaut Classic projette à +10 → ne matcherait pas la card) → le top-1 doit avoir les mêmes
+   (le défaut +10R6 projette à +10 → ne matcherait pas la card) → le top-1 doit avoir les mêmes
    `FinalStats` que la card du même héros dans l'onglet Builds (à la réallocation gems près, qui en
    mode priority vide est fallback sur les gems actuels donc ✓ équivalence stricte attendue).
 8. SOLVE CP → top-1 doit avoir le plus gros CP affiché. Comparer à un solve brute-force séparé sur petite slice.
