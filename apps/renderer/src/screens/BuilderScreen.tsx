@@ -630,7 +630,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // Primary SOLVE mode (split button), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
   // differs: Score+no-priority = full cartesian, CP = budget-bounded).
-  const [solveMode, setSolveMode] = usePersistedState<SolveMode>("gs.builder.solveMode", "cp");
+  // Solve-button mode defaults to "Solve" (score) and is NOT persisted — every
+  // visit starts on Solve rather than remembering a prior "Solve CP".
+  const [solveMode, setSolveMode] = useState<SolveMode>("score");
 
   // Solver state — orchestrator stays alive for the screen's lifetime so
   // the worker pool isn't torn down between solves. Lazy-init on first SOLVE.
@@ -2443,7 +2445,10 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
   candidates.push({ key: "dmgUp", label: "DMG UP%", field: "dmgUp", delta: 1 });
   const gains = dmgTickGains(atCap, dmgStat, dmgSec, candidates);
   if (gains.length === 0) return null;
-  const bestKey = gains[0]!.gainPct > 0 ? gains[0]!.key : null;
+  // Highlight EVERY stat tied for the highest gain (same displayed +X.XX%), not
+  // just the single top one — equal-weight stats are all colored. `gains` is
+  // sorted, so the max is gains[0]; we compare on the displayed precision.
+  const bestStr = gains[0]!.gainPct > 0 ? gains[0]!.gainPct.toFixed(2) : null;
   return (
     <Panel
       title={`Damage / +1% · ${noCrit ? "no crit" : "100% crit"}`}
@@ -2472,7 +2477,7 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
       <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tabular-nums">
         {gains.map((g) => {
           const icon = DMG_STAT_ICON[g.key]!;
-          const best = g.key === bestKey;
+          const best = bestStr != null && g.gainPct.toFixed(2) === bestStr;
           return (
             <Fragment key={g.key}>
               <StatIcon stat={icon.iconKey} size={12} />

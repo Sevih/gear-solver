@@ -9,7 +9,7 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @gear-solver/renderer",
+    "dev": "npm run desktop:dev",
     "build": "npm run build -w @gear-solver/core && npm run build -w @gear-solver/renderer",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",

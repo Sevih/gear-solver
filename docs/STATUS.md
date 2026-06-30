@@ -78,10 +78,11 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      élague les pièces hors-set avant le cartésien ; toggle Options « Allow broken sets » (off →
      chaque pièce armor doit compléter un set, leaf reject des singletons).
    - **Onglet Worklist** : file inter-héros de changements de gear. Le Builder (« + Worklist »)
-     y pousse le diff par slot du build sélectionné ; chaque changement = ligne cochable +
-     **Apply locally** (`equipPieces` réécrit le snapshot, jamais le jeu). États applied / stale /
-     conflict dérivés live de l'inventaire ; **auto-prune à chaque recapture** (`reconcileWorklist` retire
-     les changements faits + entrées vidées) (`screens/WorklistScreen.tsx`, `lib/storage/worklist.ts`).
+     y pousse le diff par slot du build sélectionné ; chaque changement = ligne cochable **avec image +
+     stats + localisation actuelle** (perso qui porte l'item ou Inventory, résolu live par `toUid`) +
+     **Apply locally** / **Apply all** (`equipPieces` / `equipAssignments` réécrivent le snapshot, jamais le
+     jeu). États applied / stale / conflict / gone dérivés live de l'inventaire ; **auto-prune à chaque
+     recapture** (`reconcileWorklist`) (`screens/WorklistScreen.tsx`, `lib/storage/worklist.ts`).
    - **Onglet Settings** : modal left-rail à onglets (Setup · Solver · Data · Backup · Debug). **Setup =
      wizard d'onboarding guidé** (auto-ouvert au 1er lancement) : stepper linéaire qui focalise le blocage
      courant (emulator install/running · ADB · root), instructions **par marque** (LDPlayer/MuMu/Nox),

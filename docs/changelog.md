@@ -69,6 +69,28 @@
 
 ## Journal de session (Livré)
 
+### Session 2026-06-30 — 🟠 Retours terrain (install en direct) + ergonomie Builder
+
+Observé une install/capture en temps réel chez quelqu'un — deux frictions, plus quelques ajustements UX.
+
+- **Timeout Arm capture 150s → 360s** ([`capture.ps1`](../tools/capture/capture.ps1) `$TimeoutSec`) — un
+  **premier** lancement du jeu (patch + login) peut prendre ~5 min ; 150s était trop court. Au-delà du
+  timeout le pipeline **reste armé** de toute façon (la capture se fait quand le lobby charge, le status poll
+  récupère le sentinel).
+- **Worklist — lignes enrichies** ([`WorklistScreen.tsx`](../apps/renderer/src/screens/WorklistScreen.tsx)) :
+  le **nom seul ne permet pas d'identifier** une copie physique. Chaque ligne affiche désormais, résolu
+  **live** depuis l'inventaire (`toUid`) : **image** de l'item (`EquipmentIcon`, étoiles/enhance), **stats**
+  (main(s) + substats), et **localisation actuelle** (portrait + nom du perso qui le porte, ou « in
+  Inventory »). Maps `pieceByUid`/`charByUid` (depuis `inventory.gear` + `inventory.characters`). Statut
+  « gone » ajouté pour une pièce disparue ; le `c.toMain` stocké devient redondant (stats live).
+- **Bouton SOLVE par défaut « Solve » (score), non persisté** ([`BuilderScreen.tsx`](../apps/renderer/src/screens/BuilderScreen.tsx)) —
+  `usePersistedState("gs.builder.solveMode", "cp")` → `useState("score")`. Chaque ouverture repart sur
+  « Solve » au lieu de mémoriser un « Solve CP » précédent.
+- **Damage / +1% — égalités colorées** : le panneau ne coloriait que la stat de plus haut gain ; il colore
+  maintenant **toutes les stats à poids égal** (même `+X.XX%` affiché, comparaison sur la précision affichée).
+- **`npm run dev` = `npm run desktop:dev`** ([`package.json`](../package.json)) — `dev` délègue au lancement
+  full desktop (Vite + Electron). Le renderer seul reste via `npm run dev -w @gear-solver/renderer`.
+
 ### Session 2026-06-29 — 🟢 Builder : cartes résultat alignées sur l'Inventaire + carte « Effects »
 
 Refonte des **gear cards des résultats SOLVE** (bandeau du bas) pour qu'elles aient l'apparence de la carte

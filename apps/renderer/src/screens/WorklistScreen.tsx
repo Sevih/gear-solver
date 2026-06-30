@@ -11,8 +11,9 @@
  * and a target that vanished from the inventory (post data-sync) reads as stale.
  */
 import { useMemo, useState } from "react";
-import type { GameData, Inventory } from "@gear-solver/core";
-import { CharacterPortrait, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
+import type { Character, GameData, GearPiece, Inventory } from "@gear-solver/core";
+import { CharacterPortrait, EquipmentIcon, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
+import { toUiPiece } from "../design/adapter.js";
 import { cx } from "../design/cx.js";
 import { SLOT_BY, toDesignSlot } from "../design/tokens.js";
 import { equipAssignments, equipPieces } from "../equip.js";
@@ -43,6 +44,19 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
     const s = new Set<string>();
     if (inventory) for (const g of inventory.gear) s.add(g.uid);
     return s;
+  }, [inventory]);
+  // Live piece + roster lookups so each change row can show the target item's
+  // image, stats, and CURRENT owner (the name alone isn't enough to identify a
+  // physical copy in-game).
+  const pieceByUid = useMemo(() => {
+    const m = new Map<string, GearPiece>();
+    if (inventory) for (const g of inventory.gear) m.set(g.uid, g);
+    return m;
+  }, [inventory]);
+  const charByUid = useMemo(() => {
+    const m = new Map<string, Character>();
+    if (inventory) for (const c of inventory.characters) m.set(c.uid, c);
+    return m;
   }, [inventory]);
   // The transaction plan: free-before-use order, contention, cycles, and the
   // flat assignment list for the atomic "Apply all". Single source of truth for
@@ -141,6 +155,8 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
           equippedOnHero={equipped.get(entry.heroUid) ?? null}
           invUids={invUids}
           claimCount={claimCount}
+          pieceByUid={pieceByUid}
+          charByUid={charByUid}
           step={plan.position.get(entry.id) ?? null}
           cyclic={plan.cyclic.has(entry.id)}
           onChange={onChange}
@@ -153,13 +169,16 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
 }
 
 function WorklistCard({
-  entry, game, equippedOnHero, invUids, claimCount, step, cyclic, worklist, onChange, onAfterApply,
+  entry, game, equippedOnHero, invUids, claimCount, pieceByUid, charByUid, step, cyclic, worklist, onChange, onAfterApply,
 }: {
   entry: WorklistEntry;
   game: GameData | null;
   equippedOnHero: Set<string> | null;
   invUids: Set<string>;
   claimCount: Map<string, number>;
+  /** Live inventory lookups — target piece (image + stats) and its current owner. */
+  pieceByUid: Map<string, GearPiece>;
+  charByUid: Map<string, Character>;
   /** 1-based apply position in the free-before-use plan, or null when ordering
    *  is trivial (no cross-build dependency). */
   step: number | null;
@@ -173,7 +192,8 @@ function WorklistCard({
   const [applyError, setApplyError] = useState<string | null>(null);
 
   // Per-change live state — applied (target already on hero), stale (target
-  // gone from the inventory), or conflicting (claimed by another entry too).
+  // gone from the inventory), or conflicting (claimed by another entry too) —
+  // plus the live piece (image + stats) and its current owner.
   const rows = entry.changes.map((c) => {
     const applied = equippedOnHero?.has(c.toUid) ?? false;
     const stale = !invUids.has(c.toUid);
@@ -181,7 +201,10 @@ function WorklistCard({
     // Engine slot → player-facing design slot (ooparts → Talisman, shoes →
     // Boots) for the label + icon; the game never shows "ooparts".
     const ds = toDesignSlot(c.slot) ?? c.slot;
-    return { c, applied, stale, conflict, ds };
+    const piece = pieceByUid.get(c.toUid) ?? null;
+    const ui = piece && game ? toUiPiece(piece, game) : null;
+    const owner = piece?.equippedBy ? (charByUid.get(piece.equippedBy) ?? null) : null;
+    return { c, applied, stale, conflict, ds, ui, hasPiece: !!piece, owner };
   });
   const remaining = rows.filter((r) => !r.applied && !r.stale).length;
   const allApplied = rows.every((r) => r.applied || r.stale);
@@ -254,13 +277,14 @@ function WorklistCard({
         )}
       </div>
 
-      {/* Change lines — one per changed slot. */}
+      {/* Change lines — one per changed slot. Each shows the TARGET item's image,
+       *  stats, and current owner, since the name alone can't identify a copy. */}
       <div className="flex flex-col divide-y divide-white/5">
-        {rows.map(({ c, applied, stale, conflict, ds }) => (
+        {rows.map(({ c, applied, stale, conflict, ds, ui, hasPiece, owner }) => (
           <label
             key={c.slot}
             className={cx(
-              "flex cursor-pointer items-center gap-2.5 py-1.5 text-[12px]",
+              "flex cursor-pointer items-start gap-2.5 py-2",
               stale && "opacity-45",
             )}
           >
@@ -269,34 +293,59 @@ function WorklistCard({
               checked={applied || c.done}
               disabled={applied || stale}
               onChange={(e) => toggleDone(c.slot, e.target.checked)}
-              className="h-3.5 w-3.5 shrink-0 accent-cyan-400"
+              className="mt-1 h-3.5 w-3.5 shrink-0 accent-cyan-400"
             />
-            <SlotIcon slot={ds} size={16} className="shrink-0 opacity-80" />
-            <span className="w-14 shrink-0 text-[10px] uppercase tracking-wider text-white/45">
-              {SLOT_BY[ds]?.label ?? ds}
-            </span>
-            <span className="flex min-w-0 flex-1 items-center gap-1.5">
-              {c.fromName ? (
-                <span className="min-w-0 truncate text-white/45 line-through">{c.fromName}</span>
-              ) : (
-                <span className="text-white/35 italic">(empty)</span>
+            {/* Item image (or slot-type fallback when the piece is gone). */}
+            {ui ? (
+              <EquipmentIcon piece={ui.iconPiece} size={40} className="shrink-0" />
+            ) : (
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/8 bg-black/20">
+                <SlotIcon slot={ds} size={20} className="opacity-50" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              {/* Slot · item name · status. */}
+              <div className="flex items-center gap-1.5">
+                <span className="shrink-0 text-[9.5px] uppercase tracking-wider text-white/45">{SLOT_BY[ds]?.label ?? ds}</span>
+                <span className={cx("min-w-0 truncate text-[12.5px] font-medium", applied ? "text-emerald-300" : "text-white")}>{c.toName}</span>
+                {applied ? (
+                  <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-emerald-300">applied</span>
+                ) : conflict ? (
+                  <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-amber-300">contested</span>
+                ) : stale ? (
+                  <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-white/40">gone</span>
+                ) : null}
+              </div>
+              {/* Stats — main(s) then substats (the deterministic identifier). */}
+              {ui && (ui.main.length > 0 || ui.subs.length > 0) && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 font-mono text-[10.5px] tabular-nums">
+                  {ui.main.map((m, i) => (
+                    <span key={`m${i}`} className="flex items-center gap-0.5 text-white/90">
+                      <StatIcon stat={m.stat} size={11} className="shrink-0" />{m.value}
+                    </span>
+                  ))}
+                  {ui.subs.map((s, i) => (
+                    <span key={`s${i}`} className="flex items-center gap-0.5 text-white/55">
+                      <StatIcon stat={s.stat} size={11} className="shrink-0" />{s.value}
+                    </span>
+                  ))}
+                </div>
               )}
-              <span className="shrink-0 text-cyan-300/70">→</span>
-              <span className={cx("min-w-0 truncate", applied ? "text-emerald-300" : "text-white")}>{c.toName}</span>
-              {/* Talisman main is variable and names can collide — show it so the
-               *  right talisman is identifiable in-game. */}
-              {ds === "talisman" && c.toMain && (
-                <span className="flex shrink-0 items-center gap-0.5 text-[10.5px] text-white/55" title="Main stat">
-                  <StatIcon stat={c.toMain.stat} size={11} />
-                  {c.toMain.value}{c.toMain.percent ? "%" : ""}
-                </span>
-              )}
-            </span>
-            {applied ? (
-              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">applied</span>
-            ) : conflict ? (
-              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-amber-300">contested</span>
-            ) : null}
+              {/* Where the item currently lives + what it replaces on the hero. */}
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-white/55">
+                {owner ? (
+                  <span className="flex items-center gap-1">
+                    <CharacterPortrait charId={owner.charId} name={owner.name ?? undefined} size={14} className="rounded-sm" />
+                    <span className="text-white/70">on {owner.name ?? `#${owner.charId}`}</span>
+                  </span>
+                ) : hasPiece ? (
+                  <span className="text-white/50">in Inventory</span>
+                ) : null}
+                {c.fromName && (
+                  <span className="text-white/35">· replaces <span className="line-through">{c.fromName}</span></span>
+                )}
+              </div>
+            </div>
           </label>
         ))}
       </div>
