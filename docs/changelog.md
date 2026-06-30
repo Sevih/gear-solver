@@ -69,18 +69,24 @@
 
 ## [Unreleased]
 
-### Session 2026-06-30 — 🔧 Tooling : notes de release GitHub depuis le changelog
+### Session 2026-06-30 — 🔧 Tooling : notes de release GitHub face-joueur (fichier dédié)
 
-Les releases GitHub n'affichaient que « chore: release vX.Y.Z » — aucune note. Le changelog est désormais
-**la source des notes de release**.
+Les releases GitHub n'affichaient que « chore: release vX.Y.Z » — aucune note. Première passe : j'avais
+branché **ce changelog** comme source → mais il est en **français** et plein de détail dev (noms de fichiers,
+`npm run dev`, nombres de tests) — illisible pour un joueur. Corrigé : un **fichier dédié, anglais,
+face-joueur** porte les notes publiques ; ce changelog reste le **journal dev** non publié.
 
-- **Changelog versionné** : section `## [Unreleased]` en tête ; les `### Session …` s'y accumulent. Les
-  entrées historiques regroupées sous `## [1.3.0] — 2026-06-30`, `## [1.1.1] — 2026-06-29`, `## [≤ 1.1.0]`.
-- **`scripts/release.mjs`** : lit la section `[Unreleased]` **avant** de la tamponner (`readUnreleasedNotes`),
-  la renomme en `## [X.Y.Z] — date` + recrée une `[Unreleased]` vide (`stampChangelog`), commit le changelog
-  avec le bump, et **publie cette section comme notes GitHub** (`gh release edit --notes-file`). Fallback sur
-  les sujets de commits si `[Unreleased]` est vide.
-- **Process** : écrire les entrées sous `[Unreleased]` au fil de l'eau ; `npm run release minor` fait le reste.
+- **[`docs/release-notes.md`](release-notes.md)** (nouveau) — notes **curées, en anglais, orientées
+  utilisateur** (ce qui change pour le joueur, zéro jargon). Section `## [Unreleased]` au sommet où l'on écrit
+  les notes de la prochaine version ; **c'est la source des notes GitHub**.
+- **`scripts/release.mjs`** : lit `[Unreleased]` de `release-notes.md` **avant** de la tamponner
+  (`readUnreleasedNotes`), tamponne les **deux** journaux (`stampUnreleased` × release-notes + changelog →
+  `## [X.Y.Z] — date` + `[Unreleased]` vide), les commit avec le bump, et **publie la section anglaise comme
+  notes GitHub** (`gh release edit --notes-file`). Fallback sur les sujets de commits si vide.
+- **Changelog versionné** : ce fichier garde la structure `## [Unreleased]` / `## [1.3.0]` / `## [1.1.1]` /
+  `## [≤ 1.1.0]` (tamponné en parallèle), mais **n'est plus publié**.
+- **Process** : entrées dev FR ici, notes joueur EN dans `release-notes.md` ; `npm run release minor` tamponne
+  et publie les deux.
 
 ## [1.3.0] — 2026-06-30
 

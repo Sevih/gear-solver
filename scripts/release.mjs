@@ -19,9 +19,10 @@
  *   5. electron-builder --publish always → uploads installer + latest.yml
  *      to a DRAFT release on GitHub (provider config in apps/desktop pkg)
  *   6. git add + commit "chore: release vX.Y.Z" + tag + push (--follow-tags)
- *   7. Promote the draft to a live release via gh + post auto-generated
- *      notes built from the `${prevTag}..HEAD~1` commit log (skip with
- *      --no-undraft, which leaves the draft body empty for manual editing)
+ *   7. Promote the draft to a live release via gh + post the curated,
+ *      player-facing notes from docs/release-notes.md ([Unreleased] section).
+ *      Falls back to the `${prevTag}..HEAD~1` commit log when that section is
+ *      empty (skip undraft with --no-undraft to edit the body manually).
  */
 import { execSync } from "node:child_process";
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
@@ -30,12 +31,17 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DESKTOP_PKG = join(ROOT, "apps", "desktop", "package.json");
+// Two version-anchored journals, both stamped at release:
+//  - release-notes.md = curated, English, PLAYER-facing → source of the GitHub notes.
+//  - changelog.md     = detailed, French, DEV-facing engineering journal (not published).
+const RELEASE_NOTES = join(ROOT, "docs", "release-notes.md");
 const CHANGELOG = join(ROOT, "docs", "changelog.md");
-const UNRELEASED_PLACEHOLDER = "_(rien en attente — les nouvelles entrées de session se mettent ici)_";
+const NOTES_PLACEHOLDER = "_Nothing yet — user-facing notes for the next release go here._";
+const CHANGELOG_PLACEHOLDER = "_(rien en attente — les nouvelles entrées de session se mettent ici)_";
 
 /** Read the body under `## [Unreleased]` (until the next `## ` heading),
  *  excluding the italic placeholder. Returns "" when there's only a placeholder
- *  (nothing real to release-note). This is the curated, hand-written changelog —
+ *  (nothing real to release-note). This is the curated, hand-written copy —
  *  preferred over raw commit subjects for the GitHub release body. */
 function readUnreleasedNotes(path) {
   let text;
@@ -48,19 +54,20 @@ function readUnreleasedNotes(path) {
     if (/^##\s+/.test(lines[i])) { end = i; break; }
   }
   const body = lines.slice(start + 1, end).join("\n").trim();
-  // Only a placeholder (leading italic `_…_`, no real `### ` entry) → empty.
-  if (!body || (!/^###\s/m.test(body) && body.startsWith("_"))) return "";
+  // A lone italic placeholder (`_…_`, no real `- `/`### ` entry) counts as empty.
+  if (!body || (!/^(###\s|[-*]\s)/m.test(body) && body.startsWith("_"))) return "";
   return body;
 }
 
-/** Stamp the changelog at release time: turn the `## [Unreleased]` content into
- *  a `## [X.Y.Z] — date` section and leave a fresh, empty Unreleased on top. */
-function stampChangelog(path, version, dateStr) {
+/** Stamp a version-anchored journal at release time: turn its `## [Unreleased]`
+ *  content into a `## [X.Y.Z] — date` section and leave a fresh, empty
+ *  Unreleased on top (with its own placeholder). */
+function stampUnreleased(path, version, dateStr, placeholder) {
   let text;
   try { text = readFileSync(path, "utf-8"); } catch { return; }
   const stamped = text.replace(
     /^##\s+\[Unreleased\][^\n]*\n/m,
-    `## [Unreleased]\n\n${UNRELEASED_PLACEHOLDER}\n\n## [${version}] — ${dateStr}\n`,
+    `## [Unreleased]\n\n${placeholder}\n\n## [${version}] — ${dateStr}\n`,
   );
   writeFileSync(path, stamped);
 }
@@ -184,20 +191,21 @@ try {
   // 404 expected — no existing release.
 }
 
-// Curated release notes come from the changelog's [Unreleased] section. Read it
-// BEFORE stamping (stamping renames the heading), then stamp so the release
-// commit carries the version-anchored changelog.
+// Curated, player-facing notes come from release-notes.md's [Unreleased]
+// section. Read it BEFORE stamping (stamping renames the heading), then stamp
+// BOTH journals so the release commit carries them version-anchored.
 const dateStr = new Date().toISOString().slice(0, 10);
-const unreleasedBody = readUnreleasedNotes(CHANGELOG);
+const unreleasedBody = readUnreleasedNotes(RELEASE_NOTES);
 if (!DRY_RUN) {
   pkgJson.version = toVersion;
   writeFileSync(DESKTOP_PKG, JSON.stringify(pkgJson, null, 2) + "\n");
-  stampChangelog(CHANGELOG, toVersion, dateStr);
+  stampUnreleased(RELEASE_NOTES, toVersion, dateStr, NOTES_PLACEHOLDER);
+  stampUnreleased(CHANGELOG, toVersion, dateStr, CHANGELOG_PLACEHOLDER);
 }
 ok(`apps/desktop/package.json updated`);
 ok(unreleasedBody
-  ? `changelog [Unreleased] → [${toVersion}] (will be the release notes)`
-  : `changelog has no [Unreleased] entries — notes fall back to the commit log`);
+  ? `release-notes [Unreleased] → [${toVersion}] (will be the release notes)`
+  : `release-notes has no [Unreleased] entries — notes fall back to the commit log`);
 
 // Past this point a failure leaves the local package.json bumped but with
 // no matching artefact. We track when GitHub state becomes real (step 5
@@ -228,7 +236,7 @@ try {
   // no-op unless the game data genuinely changed since the last commit — in
   // which case the whole consistent `data/derived` set lands in the release
   // commit instead of being left dirty in the tree.
-  run(`git add apps/desktop/package.json data/derived docs/changelog.md`);
+  run(`git add apps/desktop/package.json data/derived docs/release-notes.md docs/changelog.md`);
   const commitMsg = `chore: release ${tag}`;
   run(`git commit -m "${commitMsg}"`);
   run(`git tag ${tag}`);
@@ -244,9 +252,9 @@ try {
     if (!hasGh) {
       skip("gh CLI not installed — promote manually at https://github.com/Sevih/gear-solver/releases");
     } else {
-      // Release notes: prefer the curated changelog ([Unreleased] section,
-      // captured before stamping). Fall back to the commit subjects when the
-      // changelog had nothing staged.
+      // Release notes: prefer the curated player-facing notes (release-notes.md
+      // [Unreleased] section, captured before stamping). Fall back to the commit
+      // subjects when that section had nothing staged.
       let notesBody = "";
       if (unreleasedBody) {
         notesBody = `${unreleasedBody}\n`;
