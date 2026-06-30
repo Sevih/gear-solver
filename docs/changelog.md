@@ -67,7 +67,22 @@
 
 ---
 
-## Journal de session (Livré)
+## [Unreleased]
+
+### Session 2026-06-30 — 🔧 Tooling : notes de release GitHub depuis le changelog
+
+Les releases GitHub n'affichaient que « chore: release vX.Y.Z » — aucune note. Le changelog est désormais
+**la source des notes de release**.
+
+- **Changelog versionné** : section `## [Unreleased]` en tête ; les `### Session …` s'y accumulent. Les
+  entrées historiques regroupées sous `## [1.3.0] — 2026-06-30`, `## [1.1.1] — 2026-06-29`, `## [≤ 1.1.0]`.
+- **`scripts/release.mjs`** : lit la section `[Unreleased]` **avant** de la tamponner (`readUnreleasedNotes`),
+  la renomme en `## [X.Y.Z] — date` + recrée une `[Unreleased]` vide (`stampChangelog`), commit le changelog
+  avec le bump, et **publie cette section comme notes GitHub** (`gh release edit --notes-file`). Fallback sur
+  les sujets de commits si `[Unreleased]` est vide.
+- **Process** : écrire les entrées sous `[Unreleased]` au fil de l'eau ; `npm run release minor` fait le reste.
+
+## [1.3.0] — 2026-06-30
 
 ### Session 2026-06-30 — 🟠 Retours terrain (install en direct) + ergonomie Builder
 
@@ -90,6 +105,8 @@ Observé une install/capture en temps réel chez quelqu'un — deux frictions, p
   maintenant **toutes les stats à poids égal** (même `+X.XX%` affiché, comparaison sur la précision affichée).
 - **`npm run dev` = `npm run desktop:dev`** ([`package.json`](../package.json)) — `dev` délègue au lancement
   full desktop (Vite + Electron). Le renderer seul reste via `npm run dev -w @gear-solver/renderer`.
+
+## [1.1.1] — 2026-06-29
 
 ### Session 2026-06-29 — 🟢 Builder : cartes résultat alignées sur l'Inventaire + carte « Effects »
 
@@ -152,6 +169,8 @@ Beaucoup de joueurs ascendent pour les reforges et s'arrêtent à +10.
   `ascended10` est nouveau (aucune migration).
 - Docs synchronisées ([solver.md](solver.md), [wiki/Solver.md](../wiki/Solver.md), `types.ts`). Typecheck
   + build + 248 tests verts.
+
+## [≤ 1.1.0] — historique (2026-06-28 et antérieur)
 
 ### Session 2026-06-28 — 🟢 Capture : support multi-émulateur (générique + override manuel)
 

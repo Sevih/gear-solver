@@ -30,6 +30,40 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DESKTOP_PKG = join(ROOT, "apps", "desktop", "package.json");
+const CHANGELOG = join(ROOT, "docs", "changelog.md");
+const UNRELEASED_PLACEHOLDER = "_(rien en attente — les nouvelles entrées de session se mettent ici)_";
+
+/** Read the body under `## [Unreleased]` (until the next `## ` heading),
+ *  excluding the italic placeholder. Returns "" when there's only a placeholder
+ *  (nothing real to release-note). This is the curated, hand-written changelog —
+ *  preferred over raw commit subjects for the GitHub release body. */
+function readUnreleasedNotes(path) {
+  let text;
+  try { text = readFileSync(path, "utf-8"); } catch { return ""; }
+  const lines = text.split("\n");
+  const start = lines.findIndex((l) => /^##\s+\[Unreleased\]/i.test(l));
+  if (start === -1) return "";
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^##\s+/.test(lines[i])) { end = i; break; }
+  }
+  const body = lines.slice(start + 1, end).join("\n").trim();
+  // Only a placeholder (leading italic `_…_`, no real `### ` entry) → empty.
+  if (!body || (!/^###\s/m.test(body) && body.startsWith("_"))) return "";
+  return body;
+}
+
+/** Stamp the changelog at release time: turn the `## [Unreleased]` content into
+ *  a `## [X.Y.Z] — date` section and leave a fresh, empty Unreleased on top. */
+function stampChangelog(path, version, dateStr) {
+  let text;
+  try { text = readFileSync(path, "utf-8"); } catch { return; }
+  const stamped = text.replace(
+    /^##\s+\[Unreleased\][^\n]*\n/m,
+    `## [Unreleased]\n\n${UNRELEASED_PLACEHOLDER}\n\n## [${version}] — ${dateStr}\n`,
+  );
+  writeFileSync(path, stamped);
+}
 
 // ── small helpers ──────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -150,11 +184,20 @@ try {
   // 404 expected — no existing release.
 }
 
+// Curated release notes come from the changelog's [Unreleased] section. Read it
+// BEFORE stamping (stamping renames the heading), then stamp so the release
+// commit carries the version-anchored changelog.
+const dateStr = new Date().toISOString().slice(0, 10);
+const unreleasedBody = readUnreleasedNotes(CHANGELOG);
 if (!DRY_RUN) {
   pkgJson.version = toVersion;
   writeFileSync(DESKTOP_PKG, JSON.stringify(pkgJson, null, 2) + "\n");
+  stampChangelog(CHANGELOG, toVersion, dateStr);
 }
 ok(`apps/desktop/package.json updated`);
+ok(unreleasedBody
+  ? `changelog [Unreleased] → [${toVersion}] (will be the release notes)`
+  : `changelog has no [Unreleased] entries — notes fall back to the commit log`);
 
 // Past this point a failure leaves the local package.json bumped but with
 // no matching artefact. We track when GitHub state becomes real (step 5
@@ -185,7 +228,7 @@ try {
   // no-op unless the game data genuinely changed since the last commit — in
   // which case the whole consistent `data/derived` set lands in the release
   // commit instead of being left dirty in the tree.
-  run(`git add apps/desktop/package.json data/derived`);
+  run(`git add apps/desktop/package.json data/derived docs/changelog.md`);
   const commitMsg = `chore: release ${tag}`;
   run(`git commit -m "${commitMsg}"`);
   run(`git tag ${tag}`);
@@ -201,28 +244,34 @@ try {
     if (!hasGh) {
       skip("gh CLI not installed — promote manually at https://github.com/Sevih/gear-solver/releases");
     } else {
-      // Generate release notes from the commit range. `HEAD~1` excludes the
-      // `chore: release ${tag}` commit we just made — that's plumbing, not
-      // a user-visible change. Falls back to the whole history when there's
-      // no previous tag (first release).
-      const range = prevTag ? `${prevTag}..HEAD~1` : "HEAD~1";
+      // Release notes: prefer the curated changelog ([Unreleased] section,
+      // captured before stamping). Fall back to the commit subjects when the
+      // changelog had nothing staged.
       let notesBody = "";
-      try {
-        const log = runSilent(`git log ${range} --pretty=format:%s`);
-        const lines = log.split("\n")
-          .map((l) => l.trim())
-          .filter(Boolean)
-          .filter((l) => !/^chore: release/i.test(l))            // shouldn't appear, defensive
-          .filter((l) => !/^Merge (branch|pull request)/i.test(l)) // drop merge noise
-          .map((l) => `- ${l.replace(/\s*\[no-discord\]\s*$/i, "")}`); // strip outerpedia tag
-        if (lines.length > 0) {
-          notesBody = `## What's new in ${tag}\n\n${lines.join("\n")}\n`;
-          if (prevTag) {
-            notesBody += `\n**Full changelog:** https://github.com/Sevih/gear-solver/compare/${prevTag}...${tag}\n`;
+      if (unreleasedBody) {
+        notesBody = `${unreleasedBody}\n`;
+        if (prevTag) notesBody += `\n**Full changelog:** https://github.com/Sevih/gear-solver/compare/${prevTag}...${tag}\n`;
+      } else {
+        // `HEAD~1` excludes the `chore: release ${tag}` commit (plumbing). Falls
+        // back to the whole history when there's no previous tag (first release).
+        const range = prevTag ? `${prevTag}..HEAD~1` : "HEAD~1";
+        try {
+          const log = runSilent(`git log ${range} --pretty=format:%s`);
+          const lines = log.split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .filter((l) => !/^chore: release/i.test(l))            // shouldn't appear, defensive
+            .filter((l) => !/^Merge (branch|pull request)/i.test(l)) // drop merge noise
+            .map((l) => `- ${l.replace(/\s*\[no-discord\]\s*$/i, "")}`); // strip outerpedia tag
+          if (lines.length > 0) {
+            notesBody = `## What's new in ${tag}\n\n${lines.join("\n")}\n`;
+            if (prevTag) {
+              notesBody += `\n**Full changelog:** https://github.com/Sevih/gear-solver/compare/${prevTag}...${tag}\n`;
+            }
           }
+        } catch (err) {
+          console.error(`  \x1b[33m! Couldn't gather commit log: ${err?.message ?? err}\x1b[0m`);
         }
-      } catch (err) {
-        console.error(`  \x1b[33m! Couldn't gather commit log: ${err?.message ?? err}\x1b[0m`);
       }
       const NOTES_FILE = join(ROOT, ".release-notes.tmp.md");
       const hasNotes = notesBody.length > 0;
