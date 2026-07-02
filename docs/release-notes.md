@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.4.0] — 2026-07-02
+
 - **Solver honours demanding stat minimums** — setting a high minimum (e.g. a
   steep Effectiveness or Speed floor) no longer returns "no builds" when a valid
   build actually exists. The pre-search filtering was dropping the very pieces

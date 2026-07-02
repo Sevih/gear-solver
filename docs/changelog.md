@@ -69,6 +69,10 @@
 
 ## [Unreleased]
 
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
+## [1.4.0] — 2026-07-02
+
 ### Session 2026-07-02 — 🔴 Solver : `min` de stat rendu infaisable par le prune + tri Builds explicite
 
 - **Bug — un `min` de stat exigeant renvoyait 0 build** ([engine.ts](../apps/renderer/src/lib/solver/engine.ts)
