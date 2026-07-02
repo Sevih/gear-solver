@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, RolledStat, StatScaling } from "@gear-solver/core";
-import { allocateComboBudget, cpStatWeights, keepTopN, keepTopPct, magnitudeScoreOf, priorityScoreOf } from "../src/lib/solver/engine.js";
+import { allocateComboBudget, cpStatWeights, keepTopN, keepTopPct, keepTopUnion, magnitudeScoreOf, priorityScoreOf } from "../src/lib/solver/engine.js";
 import { computeFinalStats, type FinalStats, type FinalStatsBaseline, type ScalingMap } from "../src/lib/composeBuild.js";
 import { makeCpEvaluator } from "../src/lib/solver/cp.js";
 
@@ -129,6 +129,41 @@ describe("keepTopN", () => {
     const pool = [piece("9"), piece("8", { armorSetId: "Rage" }), piece("3", { armorSetId: "Rage" })];
     const out = keepTopN(pool, score, 2, new Set(["Rage"]));
     expect(out.map((p) => p.uid).sort()).toEqual(["8", "9"]);
+  });
+});
+
+describe("keepTopUnion (min-stat floor retention)", () => {
+  // Objective ranks by spd; the eff piece scores 0 on it and would be pruned.
+  const objective = priorityScoreOf({ spd: 100 });
+  const spdPiece = piece("spd", { subs: [flatSub("spd", 20)] });
+  const effPiece = piece("eff", { subs: [flatSub("eff", 20)] }); // high eff, no spd
+  const pool = [spdPiece, effPiece];
+
+  it("with no floor scorers behaves exactly like keepTopN by the objective", () => {
+    const out = keepTopUnion(pool, objective, [], 1, NO_REQ);
+    expect(out.map((p) => p.uid)).toEqual(["spd"]); // eff dropped, same as keepTopN
+    expect(keepTopN(pool, objective, 1, NO_REQ).map((p) => p.uid)).toEqual(["spd"]);
+  });
+
+  it("retains the top piece of a min-constrained stat the objective would drop", () => {
+    // A min-eff floor scorer must rescue the eff piece the spd objective drops —
+    // this is exactly the reported bug (min eff 570 → 0 builds unless forced).
+    const floorEff = priorityScoreOf({ eff: 1 });
+    const out = keepTopUnion(pool, objective, [floorEff], 1, NO_REQ);
+    expect(out.map((p) => p.uid).sort()).toEqual(["eff", "spd"]);
+  });
+
+  it("keeps the union size within the budget (≈ ⌈n/(k+1)⌉·(k+1))", () => {
+    // 4 distinct pieces, keep n=2 split across objective + 1 floor → per=1 each,
+    // union ≤ 2. Objective (spd) picks the top spd, floor (eff) the top eff.
+    const big = [
+      piece("s2", { subs: [flatSub("spd", 30)] }),
+      piece("s1", { subs: [flatSub("spd", 10)] }),
+      piece("e2", { subs: [flatSub("eff", 30)] }),
+      piece("e1", { subs: [flatSub("eff", 10)] }),
+    ];
+    const out = keepTopUnion(big, objective, [priorityScoreOf({ eff: 1 })], 2, NO_REQ);
+    expect(out.map((p) => p.uid).sort()).toEqual(["e2", "s2"]);
   });
 });
 

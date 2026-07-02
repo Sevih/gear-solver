@@ -316,21 +316,40 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
           );
         })}
       </div>
-      <button
-        type="button"
-        onClick={() => setF({ ...f, byRank: !f.byRank })}
-        aria-pressed={!!f.byRank}
-        title={f.byRank
-          ? "Sorted by priority rank (high→low, unranked last) — click for default CP sort"
-          : "Sort by priority rank (set each hero's rank on its card) — click to enable"}
-        className={cx(
-          "inline-flex h-7 items-center gap-1.5 rounded-md border bg-black/30 px-2 text-[11px]",
-          f.byRank ? "border-cyan-400/40 text-cyan-300" : "border-white/7 text-zinc-400 hover:text-zinc-200",
-        )}
-      >
-        <span aria-hidden className="font-mono">#</span>
-        <span>Rank</span>
-      </button>
+      {/* Sort selector — explicit CP / Rank segmented control (was a single
+          "# Rank" toggle that read like a filter and hid that CP was the sort). */}
+      <div className="inline-flex items-center gap-1.5">
+        <span className="font-mono uppercase tracking-wider text-zinc-400">Sort</span>
+        <div role="radiogroup" aria-label="Sort roster" className="inline-flex h-7 items-center rounded-md border border-white/7 bg-black/30 p-0.5">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={!f.byRank}
+            onClick={() => { if (f.byRank) setF({ ...f, byRank: false }); }}
+            title="Sort by Combat Power (highest first) — the default"
+            className={cx(
+              "inline-flex h-6 items-center rounded px-2 text-[11px] transition-colors",
+              !f.byRank ? "bg-cyan-500/15 text-cyan-300" : "text-zinc-400 hover:text-zinc-200",
+            )}
+          >
+            CP
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={!!f.byRank}
+            onClick={() => { if (!f.byRank) setF({ ...f, byRank: true }); }}
+            title="Sort by priority rank (rank 1 first, unranked last, CP as tiebreaker) — set each hero's rank on its card"
+            className={cx(
+              "inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] transition-colors",
+              f.byRank ? "bg-cyan-500/15 text-cyan-300" : "text-zinc-400 hover:text-zinc-200",
+            )}
+          >
+            <span aria-hidden className="font-mono">#</span>
+            <span>Rank</span>
+          </button>
+        </div>
+      </div>
       {debug && (
         <button
           type="button"

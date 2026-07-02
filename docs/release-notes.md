@@ -12,7 +12,12 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Solver honours demanding stat minimums** — setting a high minimum (e.g. a
+  steep Effectiveness or Speed floor) no longer returns "no builds" when a valid
+  build actually exists. The pre-search filtering was dropping the very pieces
+  needed to reach the floor; it now keeps them.
+- **Clearer roster sort in Builds** — a "Sort: CP / Rank" selector makes both
+  orderings explicit (CP was the default hidden behind a single toggle).
 
 ## [1.3.0] — 2026-06-30
 

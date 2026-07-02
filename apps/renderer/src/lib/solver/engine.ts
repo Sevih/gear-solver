@@ -453,6 +453,17 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     const budget = COMBO_BUDGET * (filters.topPct / 30);
     const keeps = allocateComboBudget(capSlots.map((s) => pools[s].length), budget);
     if (debugEnabled("solver")) debugKeeps = keeps;
+    // Hard MIN-stat constraints need per-slot floor retention on TOP of the
+    // objective ranking (see `keepTopUnion`) — else the prune drops the pieces a
+    // floor needs and the solve returns nothing though a feasible build exists.
+    // One floor scorer per min-constrained stat, ranking pieces by that stat's
+    // own roll magnitude (`priorityScoreOf` with a single unit weight bridges the
+    // roll keys → the FinalStats/priority key). Only MIN bounds matter: a MAX
+    // bound is honored by the in-loop filter, and dropping over-cap pieces early
+    // is harmless. Applies to every objective branch below.
+    const floorScorers = Object.entries(filters.statFilters)
+      .filter(([, b]) => b?.min != null)
+      .map(([k]) => priorityScoreOf({ [k]: 1 }));
     if (hasPriority) {
       // Explicit substat priority (SOLVE or SOLVE CP) — rank each slot by the
       // per-roll priority score. The build score is largely additive over
@@ -460,7 +471,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       // builds; the budget just drops the long tail of weak combos.
       const scoreOf = priorityScoreOf(filters.priority);
       capSlots.forEach((slot, i) => {
-        pools[slot] = keepTopN(pools[slot], scoreOf, keeps[i]!, requiredSetIds);
+        pools[slot] = keepTopUnion(pools[slot], scoreOf, floorScorers, keeps[i]!, requiredSetIds);
       });
     } else if (req.mode === "cp") {
       // CP-weighted auto-prune — makes "max CP" tractable without a hand-tuned
@@ -496,7 +507,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
         // already has, even when the piece doesn't rank in the budget's top-K.
         const cur = equipped.find((g) => g.slot === slot);
         const pin = cur ? new Set([cur.uid]) : undefined;
-        pools[slot] = keepTopN(pools[slot], scoreOf, keeps[i]!, requiredSetIds, pin);
+        pools[slot] = keepTopUnion(pools[slot], scoreOf, floorScorers, keeps[i]!, requiredSetIds, pin);
       });
     } else {
       // SOLVE (Score) with NO priority — the score is uniformly 0, so there's no
@@ -506,7 +517,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       // inherently arbitrary here (no priority = no objective); this only keeps
       // the solve from hanging.
       capSlots.forEach((slot, i) => {
-        pools[slot] = keepTopN(pools[slot], magnitudeScoreOf, keeps[i]!, requiredSetIds);
+        pools[slot] = keepTopUnion(pools[slot], magnitudeScoreOf, floorScorers, keeps[i]!, requiredSetIds);
       });
     }
   }
@@ -838,6 +849,45 @@ export function keepTopN(
       kept.push(p);
       keptUids.add(p.uid);
       if (uncoveredSet) coveredSets.add(p.armorSetId!);
+    }
+  }
+  return kept;
+}
+
+/** Constraint-aware retention for the combo-budget prune. The prune ranks each
+ *  slot by the build OBJECTIVE (priority / CP / magnitude), which optimizes a
+ *  weighted SUM — but a hard `min` on stat X needs a per-build FLOOR on X that a
+ *  sum-ranking doesn't preserve: a piece great at another wanted stat but weak in
+ *  X outscores the moderate-X piece the floor needs, so the X-rich pieces get
+ *  dropped and the solve returns NOTHING even though a feasible build exists (the
+ *  full pool would find it). Reproduced: priority spd+chc+eff, min eff 570 → 0
+ *  builds, yet forcing a 2pc-eff set (which whitelists the eff pieces back in)
+ *  finds them.
+ *
+ *  Fix: keep the UNION of the objective's top slice AND one top slice per
+ *  min-constrained stat (each scored by that stat's own roll magnitude). The
+ *  budget `n` is split evenly across the objective + the `floorScorers`, so the
+ *  union size stays ≤ `n` (≈ `⌈n/(k+1)⌉·(k+1)`) and the ∏-keep budget still
+ *  holds. With ≥1 kept per slot per constrained stat, the MAX reachable value of
+ *  each constrained stat survives the prune → its floor is reachable whenever the
+ *  unpruned pool could reach it. No floor scorers (no min filters) → identical to
+ *  a plain `keepTopN` by the objective. */
+export function keepTopUnion(
+  pieces: GearPiece[],
+  objectiveScore: (p: GearPiece) => number,
+  floorScorers: Array<(p: GearPiece) => number>,
+  n: number,
+  requiredSetIds: Set<string>,
+  pinUids?: Set<string>,
+): GearPiece[] {
+  if (floorScorers.length === 0) return keepTopN(pieces, objectiveScore, n, requiredSetIds, pinUids);
+  const scorers = [objectiveScore, ...floorScorers];
+  const per = Math.max(1, Math.ceil(n / scorers.length));
+  const keptUids = new Set<string>();
+  const kept: GearPiece[] = [];
+  for (const scoreOf of scorers) {
+    for (const p of keepTopN(pieces, scoreOf, per, requiredSetIds, pinUids)) {
+      if (!keptUids.has(p.uid)) { keptUids.add(p.uid); kept.push(p); }
     }
   }
   return kept;

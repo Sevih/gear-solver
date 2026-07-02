@@ -69,6 +69,24 @@
 
 ## [Unreleased]
 
+### Session 2026-07-02 — 🔴 Solver : `min` de stat rendu infaisable par le prune + tri Builds explicite
+
+- **Bug — un `min` de stat exigeant renvoyait 0 build** ([engine.ts](../apps/renderer/src/lib/solver/engine.ts)
+  `keepTopUnion`). Le prune combo-budget (avant le cartésien) classe chaque slot par le **score objectif** (somme
+  pondérée de la priorité — ex. spd+chc+eff). Une pièce forte en spd mais nulle en eff sort devant une pièce eff
+  modérée → les pièces eff tombent → aucun build n'atteint le **plancher eff 570** → aucun résultat, alors que
+  forcer un set 2pc-eff (qui whitelist ces pièces) en trouvait. **Fix** : le prune garde par slot **l'union du
+  top-objectif ET du top de chaque stat sous contrainte `min`** (un scorer par stat min, via `priorityScoreOf`
+  avec un poids unitaire). Budget réparti sur objectif + scorers → **union ≤ budget par slot**, donc `∏ keep`
+  reste borné (pas de hang). Avec ≥1 pièce gardée par slot par stat min, le **max atteignable de chaque stat
+  contrainte survit** au prune → plancher atteignable dès que le pool complet le permettait. Appliqué aux 3
+  branches (priorité / CP / magnitude) ; seuls les `min` comptent (un `max` est honoré par le filtre in-loop).
+  Sans filtre min → identique à avant. +3 tests `cpPrune.test.ts`.
+- **Tri Builds « CP / Rank » explicite** ([BuildsScreen.tsx](../apps/renderer/src/screens/BuildsScreen.tsx)) — le
+  tri par rang existait déjà mais via un **unique bouton toggle « # Rank »** noyé dans la rangée « Filter » (se
+  lisait comme un filtre ; CP, le défaut, sans indicateur). Remplacé par un **segmented « Sort : CP | Rank »**,
+  même état `byRank` (persistance conservée), les deux options visibles.
+
 ### Session 2026-06-30 — 🔧 Tooling : notes de release GitHub face-joueur (fichier dédié)
 
 Les releases GitHub n'affichaient que « chore: release vX.Y.Z » — aucune note. Première passe : j'avais
