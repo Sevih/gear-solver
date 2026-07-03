@@ -126,7 +126,24 @@ _(rien en attente — les nouvelles entrées de session se mettent ici)_
 
 ## [1.5.3] — 2026-07-03
 
-_(rien en attente — les nouvelles entrées de session se mettent ici)_
+### Session 2026-07-03 (soir) — 🟢 Solver : recall du prune (Top % 60) + collapse talisman
+
+- **Collapse des variantes talisman dans les résultats** (`collapseTalismanVariants`,
+  [engine.ts](../apps/renderer/src/lib/solver/engine.ts), appliqué au merge de l'orchestrator **avant**
+  la tranche top-N) — retour terrain : le top-1000 était régulièrement le même combo 6-gear × des dizaines
+  de talismans quasi identiques (les gemmes sont une allocation globale → les variantes ne diffèrent presque
+  que par le main du talisman), noyant les builds réellement différents. Max **3 builds par signature
+  6-gear** (weapon..accessory + EE) ; les talismans alternatifs restent visibles aux rangs 2-3. Le buffer
+  mergé (workers × topK) est collapsé puis tranché → les places libérées vont à d'autres combos. +3 tests.
+  Investigation associée « gemmes crit > 100 % » : l'allocateur est bien cap-aware sur les chemins actifs
+  (dépassement > 102 % → réallocation cappée ; 100-102 = la gemme qui franchit le cap, utile) — les cas
+  restants sont les gemmes **capturées** socketées (aucune allocation solveur → gardées telles quelles) et
+  le CHC combat (buffs conditionnels) vs feuille. À réexaminer sur repro avec priorités actives.
+- **Top % : défaut 30 → 60** — retour terrain : à 30 le vrai meilleur build se trouvait régulièrement
+  juste au-delà de la tranche élaguée (l'utilisateur « corrigeait » en empilant des stat filters, qui
+  rétrécissent les pools avant le budget). Le budget étant normalisé à `8M × topPct/30`, 60 → ~16 M
+  combos parcourus (quelques secondes) pour un recall nettement meilleur ; 100 reste l'exhaustif.
+  Docs recalées (solver.md, wiki/Solver.md, commentaire engine).
 
 ## [1.5.2] — 2026-07-03
 
@@ -154,22 +171,6 @@ _(rien en attente — les nouvelles entrées de session se mettent ici)_
   verrouillant la table des planchers.
 - **⚪ Bouton « ≤ Lower » sur 2 lignes** (segmented Equipped items, panneau Options) — l'espace
   sécable du label wrappait dans le panneau étroit → `whitespace-nowrap` + `shrink-0`.
-- **Collapse des variantes talisman dans les résultats** (`collapseTalismanVariants`,
-  [engine.ts](../apps/renderer/src/lib/solver/engine.ts), appliqué au merge de l'orchestrator **avant**
-  la tranche top-N) — retour terrain : le top-1000 était régulièrement le même combo 6-gear × des dizaines
-  de talismans quasi identiques (les gemmes sont une allocation globale → les variantes ne diffèrent presque
-  que par le main du talisman), noyant les builds réellement différents. Max **3 builds par signature
-  6-gear** (weapon..accessory + EE) ; les talismans alternatifs restent visibles aux rangs 2-3. Le buffer
-  mergé (workers × topK) est collapsé puis tranché → les places libérées vont à d'autres combos. +3 tests.
-  Investigation associée « gemmes crit > 100 % » : l'allocateur est bien cap-aware sur les chemins actifs
-  (dépassement > 102 % → réallocation cappée ; 100-102 = la gemme qui franchit le cap, utile) — les cas
-  restants sont les gemmes **capturées** socketées (aucune allocation solveur → gardées telles quelles) et
-  le CHC combat (buffs conditionnels) vs feuille. À réexaminer sur repro avec priorités actives.
-- **Top % : défaut 30 → 60** — retour terrain : à 30 le vrai meilleur build se trouvait régulièrement
-  juste au-delà de la tranche élaguée (l'utilisateur « corrigeait » en empilant des stat filters, qui
-  rétrécissent les pools avant le budget). Le budget étant normalisé à `8M × topPct/30`, 60 → ~16 M
-  combos parcourus (quelques secondes) pour un recall nettement meilleur ; 100 reste l'exhaustif.
-  Docs recalées (solver.md, wiki/Solver.md, commentaire engine).
 - Docs synchronisées ([solver.md](solver.md) phase 2 + Options, [wiki/Solver.md](../wiki/Solver.md),
   [wiki/Using-the-App.md](../wiki/Using-the-App.md), `types.ts`). Typecheck + 286 tests verts.
 
