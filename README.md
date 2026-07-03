@@ -49,8 +49,10 @@ Read on. The rest of this README plus [docs/](docs) cover the stack, build, and 
   Two modes: SOLVE (priority-weighted Score) and SOLVE CP (in-game Combat Power).
 - **Library** of saved builds + filter presets per hero (localStorage).
 - **Edits** equip assignments locally by rewriting the captured snapshot — `equipItem`/
-  `unequipItem` (core) + a `POST /api/captured/user-item` write-back. No game writes; a
-  Builder/Builds trigger UI is the remaining step.
+  `unequipItem` (core) + a `POST /api/captured/user-item` write-back, triggered from the
+  Builder's "Equip build → hero" button (confirmation popup) and the Worklist's per-entry /
+  Apply-all actions. Changes only touch the local captured snapshot — nothing is ever
+  pushed to the game.
 
 ---
 
@@ -75,8 +77,8 @@ gear-solver/
 ```
 
 > The GitHub wiki is **auto-published from `wiki/`** (`.github/workflows/publish-wiki.yml`, on
-> push to `main`). Edit `wiki/*.md` in a PR — never the wiki UI. The French `docs/` stay the
-> maintainer's authoritative source.
+> pushes to `main` that touch `wiki/**`). Edit `wiki/*.md` in a PR — never the wiki UI. The
+> French `docs/` stay the maintainer's authoritative source.
 
 ---
 
@@ -99,10 +101,11 @@ npm run desktop:build
 npm --workspace @gear-solver/desktop run dist
 ```
 
-Renderer-only dev (without the Electron shell — useful for UI iteration):
+Renderer-only dev (without the Electron shell — useful for UI iteration; note that the
+root `npm run dev` is an alias for `desktop:dev`, so target the workspace explicitly):
 
 ```bash
-npm run dev                   # http://localhost:5173
+npm run dev -w @gear-solver/renderer   # http://localhost:5173
 ```
 
 Capture (run once you have a fresh account state to import):
@@ -120,7 +123,7 @@ The renderer auto-imports the latest capture on launch.
 
 ```bash
 npm run typecheck             # all workspaces (strict + noUnusedLocals/Parameters)
-npm test                      # core (22 tests) + renderer (237 tests) = 259
+npm test                      # core (22 tests) + renderer (251 tests) = 273
 ```
 
 The core suite covers the inventory parser and the equip/unequip captured-JSON rewrite
@@ -157,12 +160,13 @@ See [docs/architecture.md](docs/architecture.md) for the layer split rationale, 
 
 ## Status
 
-Data capture, parser, stat composer, solver, the Home dashboard, Inventory/Builds/Builder
-screens, the tabbed Settings modal, persistence (saved builds + filter presets) and JSON
-backup import/export are all live. Session-scoped view state (Inventory/Builds sorts+filters
-reset each launch), Builds advice rules, the equip/unequip captured-JSON rewrite methods +
-write-back endpoint, and a `data/derived` version stamp (surfaced in Settings → Data) have
-landed. Backlog (a Builder/Builds trigger UI for equip, localStorage cache invalidation on a
-data-version change, CP-equivalence + mid-tree-pruning validation tests, production build path
-for `data/`, end-to-end verification of the Electron packaged build) is tracked in
-[docs/todo.md](docs/todo.md).
+Data capture, parser, stat composer, solver, the Home dashboard, Inventory/Builds/Builder/
+Worklist screens, the tabbed Settings modal, persistence (saved builds + filter presets) and
+JSON backup import/export are all live. Session-scoped view state (Inventory/Builds
+sorts+filters reset each launch), Builds advice rules, the equip/unequip captured-JSON rewrite
+methods + write-back endpoint with their trigger UI (Builder "Equip build" + Worklist apply —
+local snapshot only), the production build path for `data/` (bundled `extraResources` +
+first-launch seed of the writable cache), packaged releases with auto-update, and a
+`data/derived` version stamp (surfaced in Settings → Data) have landed. Backlog (localStorage
+cache invalidation on a data-version change, CP-equivalence + mid-tree-pruning validation
+tests) is tracked in [docs/todo.md](docs/todo.md).

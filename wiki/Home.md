@@ -5,8 +5,9 @@ characters from the game, then solves for the best builds per hero with a parall
 in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not a web service.
 
 > **This wiki is auto-published from the [`wiki/`](https://github.com/Sevih/gear-solver/tree/main/wiki)
-> directory in the repo** (English) by a GitHub Action on every push to `main`. Edit the files
-> there via a PR — **don't edit pages in the GitHub wiki UI**, the next publish would overwrite them.
+> directory in the repo** (English) by a GitHub Action on every push to `main` that touches
+> `wiki/**`. Edit the files there via a PR — **don't edit pages in the GitHub wiki UI**, the
+> next publish would overwrite them.
 > The French [`docs/`](https://github.com/Sevih/gear-solver/tree/main/docs) remain the
 > maintainer's authoritative source.
 
@@ -34,8 +35,10 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
   (in-game Combat Power). → [Solver](Solver)
 - **Library** of saved builds + filter presets per hero (localStorage).
 - **Edits** equip assignments locally by rewriting the captured snapshot — `equipItem`/
-  `unequipItem` (core) + a `POST /api/captured/user-item` write-back (no game writes; a
-  Builder/Builds trigger UI is the remaining step). → [Engine Reference](Engine-Reference)
+  `unequipItem` (core) + a `POST /api/captured/user-item` write-back, triggered from the
+  Builder's "Equip build → hero" button and the Worklist's apply actions. Changes only touch
+  the local captured snapshot — nothing is ever pushed to the game. →
+  [Engine Reference](Engine-Reference)
 
 ## Pages
 
@@ -44,7 +47,7 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
 | Page | What's in it |
 |------|--------------|
 | [Getting Started](Getting-Started) | Prerequisites, first-launch wizard, importing your account (capture) |
-| [Using the App](Using-the-App) | The four tabs (Home / Inventory / Builds / Builder), optimizing a hero, settings, updates |
+| [Using the App](Using-the-App) | The five tabs (Home / Inventory / Builds / Builder / Worklist), optimizing a hero, settings, updates |
 | [FAQ & Troubleshooting](FAQ) | Capture issues, post-patch fixes, Builder tips, backups |
 
 **🔧 Internals (dev)**

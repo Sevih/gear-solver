@@ -34,8 +34,9 @@ export interface SolveDebugInfo {
   mode: SolveMode;
   /** Top-% slider value — drives the CP combo budget / priority prune. */
   topPct: number;
-  /** Whether an explicit per-stat priority was set (gates the prune branch:
-   *  Score mode WITHOUT a priority skips the auto-prune → full cartesian). */
+  /** Whether an explicit per-stat priority was set (selects the prune ranking:
+   *  priority → priorityScoreOf; else a CP proxy in CP mode or raw roll
+   *  magnitude in Score mode — the combo budget bounds all three). */
   hasPriority: boolean;
   equippedScope: EquippedScope;
   workers: number;

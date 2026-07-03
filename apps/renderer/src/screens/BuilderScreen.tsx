@@ -416,10 +416,10 @@ const INITIAL_FILTERS: SolverFilters = {
   statFilters: {},
   ratingFilters: {},
   priority: {},
-  // Default to a per-slot top-30% prune, not 100% (= keep everything). On a
-  // real account the full cartesian is billions of combos; SOLVE CP ranks each
-  // slot by a CP proxy so the 30% bites even without a hand-set priority, and
-  // SOLVE (Score) needs a priority for it to apply. Drag to 100 = exhaustive.
+  // Default to Top% 30, not 100 (= keep everything). On a real account the
+  // full cartesian is billions of combos; the combo budget bites even without
+  // a hand-set priority (SOLVE CP ranks each slot by a CP proxy, SOLVE Score
+  // falls back to raw roll magnitude). Drag to 100 = exhaustive.
   topPct: 30,
   mainPicks: {},
   setPlans: [[]],
@@ -629,7 +629,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const prevHeroRef = useRef(selectedUid);
   // Primary SOLVE mode (split button), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
-  // differs: Score+no-priority = full cartesian, CP = budget-bounded).
+  // RANKING differs: Score ranks by priority — or raw roll magnitude without
+  // one — while CP uses a CP proxy; the combo budget bounds both).
   // Solve-button mode defaults to "Solve" (score) and is NOT persisted — every
   // visit starts on Solve rather than remembering a prior "Solve CP".
   const [solveMode, setSolveMode] = useState<SolveMode>("score");

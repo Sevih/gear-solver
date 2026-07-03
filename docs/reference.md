@@ -4,7 +4,7 @@ Doc dense unifiée pour quiconque doit reprendre le moteur à froid. Couvre :
 1. **Le pipeline complet** (capture → parse → compose → solve), avec les
    fonctions et fichiers qui font chaque étape.
 2. **Les formules** (compose final stat, CP, ratings, score, gems, reforge,
-   top-%) avec leur conventions d'unités et leur validation.
+   prune par budget de combos) avec leur conventions d'unités et leur validation.
 3. **Les sources** (tables jeu → tables dérivées → consommateurs, plus
    références aux dumps libil2cpp.so).
 
@@ -132,7 +132,7 @@ Pipeline détaillé dans [solver.md](solver.md). Résumé :
 - **Orchestrator** (main thread) — pool de Web Workers, partition, fan-out/in.
 - **Worker** — instance d'engine, calcul d'un chunk.
 - **Engine** — `prepareContext + solveChunk + finalizeBuilds`. Phases 1-6 :
-  précompute → pools → top-% → cartesian + set-prune → compose + ratings + heap → CP.
+  précompute → pools → prune budget → cartesian + set-prune → compose + ratings + heap → CP.
 
 ### 1.7 Édition d'équipement (`packages/core/src/equip.ts`)
 
@@ -300,7 +300,7 @@ Conventions :
 - `CRC` et `CHD` sont en **DISPLAY percent** (35 = 35%) ; le diviseur /100 les
   rend décimaux pour les produits.
 - **CRC cappée à 100%** in-game — overflow wasted. La valeur brute reste
-  dans `FinalStats.crc` pour l'affichage UI.
+  dans `FinalStats.critRate` pour l'affichage UI.
 - **PEN cappée à 100%** — `PPR` (PiercePowerRate) cappe à 1000‰ in-game (§1.2).
   Le `PiercePower` flat n'est pas modélisé (rare sur les builds).
 - **Plancher 30% du DR** — `CheckDamageRate` clampe `rate = Max(rate, 300)`
@@ -314,7 +314,7 @@ CHC ») retombe sur le hit non-crit (`mcdFactor === drFactor`) puisqu'il n'y a p
 de plafond crit à atteindre. Sans ça le solveur récompensait de la CHC/CHD qu'un
 no-crit ne peut jamais encaisser. `noCrit` vient de `meta.noCrit`, propagé via le
 contexte de solve comme `dmgStat`/`dmgSec`. **CP non affecté** : `calcBattlePower`
-reste un miroir fidèle de l'in-game (qui utilise le crc brut), donc SOLVE CP
+reste un miroir fidèle de l'in-game (qui utilise le critRate brut), donc SOLVE CP
 optimise bien le nombre CP réel du jeu.
 
 **Pas inclus** dans les ratings (defender-dependent, hors scope build-trait) :
@@ -326,11 +326,11 @@ contre un `TARGET_DEF` constant pour permettre le ranking PEN-vs-autres-stats.
 
 ```
 Score = round(Σ over priority[key] × (effective(finalStats[key]) / STAT_NORMS[key]) × 100)
-  where effective(v) = key === "crc" ? min(v, 100) : v
+  where effective(v) = key === "critRate" ? min(v, 100) : v
 ```
 
-- `priority` : keyed par user keys (`atk`, `crc`, `chd`, …), valeurs `-1..3`.
-- `STAT_NORMS` : valeurs de référence endgame (atk=4000, hp=30000, crc=100, …).
+- `priority` : keyed par clés engine (`atk`, `critRate`, `critDmg`, …), valeurs `-1..3`.
+- `STAT_NORMS` : valeurs de référence endgame (atk=4000, hp=30000, critRate=100, …).
 - Normalisation rend les stats de magnitude différentes (HP en milliers vs
   CHC en pourcents) comparables.
 - Échelle ×100 pour rendre les Scores lisibles (~50-500 typique).
@@ -395,11 +395,12 @@ dédié + le test solveChunk 0-diff end-to-end.
 **Pool** : multiset des OptionIDs (15001..15054) socketés sur les Talisman
 + EE éligibles de l'inventaire. **Éligibilité miroir de la sélection des
 pièces** (`allow()` côté engine) : le gear du héros courant est toujours
-inclus ; le gear équipé sur un autre héros n'est compté que si
-`includeEquippedOnOthers` est on ; le gear sur un héros exclu n'est jamais
-compté. Sans ce gating, le solver pouvait proposer des gemmes qui exigent
-physiquement de désé­quiper le Talisman/EE d'un héros que l'utilisateur
-venait juste d'exclure.
+inclus ; le gear équipé sur un autre héros est gaté par `equippedScope`
+(`none` = exclu, `lower` = seulement si le porteur est strictement plus bas
+dans le ranking de priorité via `isLowerPriority`, `all` = inclus) ; le gear
+sur un héros exclu n'est jamais compté. Sans ce gating, le solver pouvait
+proposer des gemmes qui exigent physiquement de désé­quiper le Talisman/EE
+d'un héros que l'utilisateur venait juste d'exclure.
 
 **Scoring** : `score = priority[user_key] × (value / ROLL_NORMS[engine_key])`.
 Trié desc.
@@ -416,12 +417,14 @@ appels `resolveStat` dans le hot loop.
   `aggregateGemDelta` retourne `null` → `computeFinalStats` sans override →
   fallback sur les `subs` des pieces (= gems actuellement socketés).
   Préserve la stat in-game-équivalente quand le joueur n'a pas exprimé d'intention.
-- **SOLVE CP** + priority vide → `scoreGemPool` reçoit `allowZeroPriority: true`
-  → bascule sur `score = value / ROLL_NORMS[engine_key]` (magnitude per-roll
-  brute). Le greedy pick alors les meilleurs gems indépendamment des stats.
-  Nécessaire parce que "max CP" sous-entend "use the best gems available" —
-  préserver les gems actuels désactiverait silencieusement l'optimisation
-  gem pour le cas d'usage typique du mode CP.
+- **SOLVE CP** + priority vide → l'engine passe à `scoreGemPool` le vecteur
+  de poids CP `cpStatWeights(...)` (ΔCP pour un bump d'un ROLL_NORM de chaque
+  stat, évalué sur le build courant) en guise de priorité — `allowZeroPriority`
+  reste `false` (l'option existe encore dans `gems.ts` mais rien ne l'active
+  sur le chemin de solve). Le greedy pick alors les gems qui rapportent le
+  plus de CP. Nécessaire parce que "max CP" sous-entend "use the best gems
+  available" — préserver les gems actuels désactiverait silencieusement
+  l'optimisation gem pour le cas d'usage typique du mode CP.
 - **N'importe quel mode** + priority non-vide → `priority × value / norm`
   pour les deux modes (la priorité utilisateur domine, le flag CP est ignoré).
 
@@ -444,11 +447,13 @@ diffère (un `scoreOf` passé à `keepTopN`) :
 3. **Score sans priorité** → `magnitudeScoreOf` (magnitude brute des rolls) : pas
    d'objectif, mais le produit doit rester borné.
 
-**Protection des sets requis** + **pin** : `keepTopN` rajoute toujours les pièces
-membres d'un set `req-2pc`/`req-4pc` (et les UID pinnés), même hors budget. Sans ça,
-une pièce low-score membre d'un set requis serait éliminée → `checkSetsFeasible`
-tuerait silencieusement chaque combo ("no builds" sans indice). Le pool effectif peut
-donc légèrement dépasser la part du budget — intentionnel.
+**Protection des sets requis** + **pin** : `keepTopN` rajoute le **meilleur membre**
+(top-score) de chaque set `req-2pc`/`req-4pc` manquant à la slice, plus les UID pinnés
+(branche 2 uniquement), même hors budget. Rajouter TOUS les membres (l'ancien
+comportement) explosait le budget de combos. Sans cette protection, une pièce
+low-score membre d'un set requis serait éliminée → `checkSetsFeasible` tuerait
+silencieusement chaque combo ("no builds" sans indice). Le pool effectif peut
+donc dépasser la part du budget d'au plus une pièce par set requis — intentionnel.
 
 ### 2.9 Reforge simulation (`engine.ts::simulateReforges`)
 
@@ -617,7 +622,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
 | `packages/core/test/equip.test.ts` | 11 tests — `equipItem`/`unequipItem` : pose sur slot vide, **déplacement** du slot occupé (même perso), no-op (déjà équipé / item inconnu / non-gear), `charUid "0"` = unequip, scope du déplacement (autre perso/autre slot intacts), **immutabilité** de l'entrée |
-| `apps/renderer/test/solver.test.ts`     | 80 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), **projection ascended du passif de singularité** (DMG+/DMG- par slot, classic = absent, non-écrasement d'un vrai roll, Talisman/EE intouchés), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`**, **incremental bucket accumulator equivalence** (`computeFinalStatsFromPrefix` vs full-array) |
+| `apps/renderer/test/solver.test.ts`     | 84 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), **projection ascended du passif de singularité** (DMG+/DMG- par slot, classic = absent, non-écrasement d'un vrai roll, Talisman/EE intouchés), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`**, **incremental bucket accumulator equivalence** (`computeFinalStatsFromPrefix` vs full-array) |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped` : parité sans gemme crit, accept jusqu'à CHC 100 (overshoot ≤102), stop pile à 100, skip total au cap, split talisman/EE, delta null si rien d'utile, score ≤0 jamais pris |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount` : défaut `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, plafond dur 64 |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidélité, maps vides), import merge (dédup par `id`, collision garde l'existant), replace (overwrite), validation du bundle (kind/version/maps) |
@@ -627,11 +632,13 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick` : verdict des deux côtés de la bascule, équivalent-flat exact, égalité pile à la bascule, garde tick %=0 |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains` : tri décroissant, monotonie delta→gain, CHC nul si crit-cap, base 0 → vide |
 | `apps/renderer/test/buildAdvice.test.ts` | 16 tests — `computeAdvice` (Builds) : no-gear silencieux, missing quasi-complet (≤2) vs WIP silencieux (early-return), sets (singleton / 3-of-4), caps gaspillés — crit toléré ≤102 / PEN >100 (seuil arrondi >0), gem slots vides Talisman/EE + tip +5, upgrade agrégé (reforges non utilisés / 6★ non ascensionné / sous cap d'enhance), singularier/pluraliser |
-| `apps/renderer/test/cpPrune.test.ts` | 20 tests — budget-combos & scorers : `keepTopN`/`keepTopPct` (top-N, préservation set requis, pin de la pièce équipée), `priorityScoreOf`/`magnitudeScoreOf` (pondération, exclusion combat-only), `allocateComboBudget` (produit borné, petits slots entiers, ordre d'entrée), proxy CP qui classe le gear fort, `cpStatWeights` (offensif ≫ dmg-reduce, poids ≥ 0) |
+| `apps/renderer/test/cpPrune.test.ts` | 23 tests — budget-combos & scorers : `keepTopN`/`keepTopPct` (top-N, préservation set requis, pin de la pièce équipée), `priorityScoreOf`/`magnitudeScoreOf` (pondération, exclusion combat-only), `allocateComboBudget` (produit borné, petits slots entiers, ordre d'entrée), proxy CP qui classe le gear fort, `cpStatWeights` (offensif ≫ dmg-reduce, poids ≥ 0) |
 | `apps/renderer/test/heroPriority.test.ts` | 21 tests — store priorité par héros : `rankOrder` / `isLowerPriority` (non-classé < classé, unicité, strict), `reorderRank` / `moveRankBefore` (insertion positionnelle contiguë 1..N, drag, clamp, immutabilité), `fillUnrankedByOrder` (préserve les rangs manuels, complète les non-classés par CP, compacte les trous, ignore les uid périmés) |
 | `apps/renderer/test/dominance.test.ts` | 10 tests — `pruneDominatedForCp` : drop strict, ties/Pareto/groupes gardés, projection reforge, équivalence top-CP end-to-end via `solveChunk` |
+| `apps/renderer/test/statRegistry.test.ts` | 11 tests — registre de stats : `FINAL_STAT_KEYS` ↔ champs `FinalStats` (aucune clé legacy crc/chd/res…), pont `STAT_TO_PRIORITY` (couvre chaque variante `ROLL_NORMS`, cibles = vrais axes, identité hors collapses flat/%), tokens design complets, snapshot numérique `ROLL_NORMS`/`STAT_NORMS`, migration des clés legacy (idempotente, ordre préservé, entrée nullish) |
+| `apps/renderer/test/worklistPlan.test.ts` | 7 tests — `planWorklist` (planification de transaction) : plan vide sans inventaire/entrées, entrées indépendantes (pas de deps), ordre **free-before-use** (l'entrée qui libère une pièce passe d'abord), **contention** (une copie voulue par deux héros) flaggée — même héros ×2 ≠ contention, cycles free/need marqués mais applicables atomiquement, exclusion des changes applied (déjà équipé) / stale (disparu de l'inventaire) |
 
-Run : `npm test --workspaces --if-present`. **Total : 243 tests** (core 22 : parse 11 + equip 11 · renderer 221 : solver 75, solveChunk 3, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, subValue 5, dmgValue 4, buildAdvice 16, cpPrune 20, heroPriority 21, dominance 10).
+Run : `npm test --workspaces --if-present`. **Total : 273 tests** (core 22 : parse 11 + equip 11 · renderer 251 : solver 84, solveChunk 3, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, subValue 5, dmgValue 4, buildAdvice 16, cpPrune 23, heroPriority 21, dominance 10, statRegistry 11, worklistPlan 7).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 

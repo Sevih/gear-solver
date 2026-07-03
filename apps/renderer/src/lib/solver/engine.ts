@@ -207,9 +207,9 @@ export interface PrecomputedSolveContext {
    *  trimmed (a keep of 11 against a pool of 38 = trimmed). */
   debugKeeps?: number[] | null;
   /** The required-set ids (`planSetIds(setPlans)`) the prune must preserve, or
-   *  null (debug off / topPct=100). When non-empty, `keepTopN` re-adds ALL armor
-   *  members of these sets on top of the budget slice — so a big list explains an
-   *  armor pool that stays full despite a small keep-count. */
+   *  null (debug off / topPct=100). When non-empty, `keepTopN` re-adds the single
+   *  top-scoring member of each of these sets missing from the budget slice — so
+   *  a pool can exceed its keep-count by at most one piece per listed set. */
   debugRequiredSets?: string[] | null;
 }
 
@@ -1535,9 +1535,10 @@ function compileFilterSpecs(filters: Record<string, { min?: number; max?: number
     const hasMin = f.min != null;
     const hasMax = f.max != null;
     if (!hasMin && !hasMax) continue;
-    // CP and upg are handled separately by the caller — `cp` because it's
-    // only available in SOLVE CP mode or at finalize, `upg` because it's
-    // informational only (not a real solver-time filter).
+    // CP and upg are handled separately by the caller — neither fits a
+    // compiled hot-loop spec (`cp` is expensive and mode-dependent, `upg`
+    // needs the hero's equipped loadout), but when set BOTH are applied
+    // in-loop before the heap push (see solveChunk), not just at finalize.
     if (key === "cp" || key === "upg") continue;
     out.push({ key, min: hasMin ? f.min! : -Infinity, max: hasMax ? f.max! : Infinity });
   }

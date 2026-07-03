@@ -16,7 +16,7 @@ Pour le **mapping OptionID/ItemID/CharID → tables dérivées** et les
 |-------|------------|
 | `ItemUID` | id d'instance unique (string) |
 | `CharUID` | UID du héros équipé ; `"0"` = libre. Réécrit **localement** par les méthodes d'édition d'équipement (`equipItem`/`unequipItem`, `packages/core/src/equip.ts`) — voir [reference.md §1.7](reference.md#17-édition-déquipement-packagescoresrcequipts) ; rien n'est envoyé au jeu |
-| `ItemID` | template id → `data/derived/equipment.json` (slot, set, rarity, image, effectIcon, classLimit) |
+| `ItemID` | template id → `data/derived/equipment.json` (slot, setId, grade, image, effectIcon, classLimit, …) — le champ domaine `GearPiece.rarity` est mappé depuis `grade` par `parse.ts` |
 | `BreakLimitLevel` | breakthrough T0–T4 |
 | `SmeltingCount` | nombre de reforges déjà spent |
 | `SingularityLevel` / `Step` / `OptionID` | Singularity Ascension (+11→+15) |
@@ -51,7 +51,9 @@ pièce d'équipement). Les stackables (orbes / matériaux) sont droppés.
   pour avoir le row matching le niveau de la pièce.
 - Singularity (`SingularityOptionID`) → ajouté en `fromBuff: true, source: "singularity"`.
 - EE level-gated passives (`game.eePassives[ItemID]`) → ajoutés quand
-  `enhanceLevel >= levelThreshold`, `source: "eePassive"`.
+  `levelThreshold <= 1 || enhanceLevel >= levelThreshold` (un passif à seuil 1
+  est toujours actif dès qu'équipé, même à +0 — cf. `parse.ts`),
+  `source: "eePassive"`.
 
 Scaling main pour pièces non-talisman : voir [reference.md §1.3](reference.md#13-parse-packagescoresrcparsets).
 
@@ -70,7 +72,8 @@ du `CharUID` de chaque item (`parse.ts` : `equippedBy = CharUID === "0" ? null :
 
 **Presets** : `PresetList` vit dans **`/user/item`** (pas `/user/character`) —
 array de `{PresetType, Num, Name (base64), ItemUIDList[8], Favorites}` (shape complète
-dans `raw.ts` `RawPreset` ; le parser ne lit aujourd'hui que `Name` + `ItemUIDList`).
+dans `raw.ts` `RawPreset` ; le parser lit aujourd'hui `Num` (→ `Preset.num`), `Name` et
+`ItemUIDList` — seuls `PresetType` et `Favorites` restent non lus).
 Ordre des 8 slots : Weapon, Accessory, Helmet, Armor, Gloves, Boots, EE, Talisman.
 Les noms sont base64-encoded UTF-8 (Cf. `decodeBase64Utf8` dans parse.ts).
 

@@ -3,8 +3,8 @@
 How to drive gear-solver day to day. New here? Start with [Getting Started](Getting-Started)
 to import your account first.
 
-The window has four tabs — **Home**, **Inventory**, **Builds**, **Builder** — plus a
-**Settings** modal (gear icon, top-right) and the capture controls in the header.
+The window has five tabs — **Home**, **Inventory**, **Builds**, **Builder**, **Worklist** —
+plus a **Settings** modal (gear icon, top-right) and the capture controls in the header.
 
 ---
 
@@ -13,8 +13,8 @@ The window has four tabs — **Home**, **Inventory**, **Builds**, **Builder** �
 Your landing screen. At a glance:
 
 - **Account snapshot** — heroes owned, gear count, and other quick totals.
-- **Gear quality distribution** — how much of your gear is Excellent / Good / Decent / Poor,
-  by tier (same colors as the Inventory quality filter).
+- **Gear quality distribution** — how much of your gear is Perfect / Excellent / Good /
+  Decent / Poor, by tier (same colors as the Inventory quality filter).
 - **Gear breakdown** — a toggle with four views: **Overview** (count by slot + your top armor sets),
   **Class** (per class, the unique weapon/accessory effects you own as chips — hover for name + effect),
   **All sets** (the full set catalog, owned-first; unowned are dimmed with a red `0`), and **Talisman**
@@ -57,7 +57,9 @@ way the game does (validated to match the in-game character sheet).
 - **Inspect a piece** — hover an equipped piece to see the same full detail panel as the
   Inventory.
 - **Optimize →** — jumps straight to the **Builder** with that hero pre-selected.
-- **Roster filters** — search by name, filter by element / class / lock state.
+- **Roster filters** — search by name, filter by element / class, sort by **CP** or by
+  **priority rank**. (A lock-state pill also appears if you enable the stat-lock tooling in
+  **Settings → Debug**.)
 - **Notes** — jot a per-hero note (kept across relaunches).
 
 ---
@@ -73,14 +75,16 @@ results, the bottom band shows the selected build's pieces.
 - **SOLVE** — maximizes a **Score** weighted by the substat priorities you set. Use it when you
   know which stats you want.
 - **SOLVE CP** — maximizes the in-game **Combat Power** number. One objective, no tuning needed.
-- **Cancel** stops a running solve (you keep whatever it found so far); **Reset filters** clears
-  everything.
+- **Cancel** stops a running solve. You usually get no partial results — only work chunks
+  that had already fully finished are kept (most cancels happen mid-chunk, so typically
+  none). **Reset filters** clears everything.
 
 ### 2. Tell it what you want (the top panels)
 
 - **Substat priority** — a slider per stat (−1 to 3). Higher = the solver values it more.
 - **Top %** — a speed/quality dial. Lower = faster but may skip the absolute-best build; the
-  hint warns you when it's set too low. (Only active once you've set at least one priority.)
+  hint warns you when it's set too low. (In **SOLVE CP** it always applies — each slot is
+  ranked by a CP proxy. In **SOLVE** it only kicks in once you've set at least one priority.)
 - **Main stats** — for Weapon / Accessory / Talisman, click the main-stat icons you'll accept.
 - **Sets** — click an armor-set icon to cycle: require 2-pc → require 4-pc → exclude → off.
   Pair it with **Allow broken sets** in Options if you want to force a set *and* still let the
@@ -91,10 +95,15 @@ results, the bottom band shows the selected build's pieces.
 
 ### 3. Options
 
-- **Reforge** — Off / **Classic** (preview pieces at +10, fully reforged) / **Ascended**
-  (preview at +15 ascended). Lets you compare builds as if the gear were maxed.
+- **Reforge** — four modes: **Off** / **+10R6** (preview pieces at +10, not ascended — 6
+  reforge ticks) / **+10R9** (preview at +10 ascended — 9 ticks, same main stat as +10R6, no
+  Singularity passive) / **+15R9** (preview at +15 fully ascended — 9 ticks plus the
+  Singularity passive). Lets you compare builds as if the gear were maxed.
 - **Only maxed gear** — restrict to +15 pieces.
-- **Include equipped on others** — also consider gear currently on other heroes.
+- **Equipped items** — a three-way control for which gear worn by *other* heroes the solver
+  may pull in: **None** (only the hero's own gear + free gear), **≤ Lower** (default — also
+  gear on heroes ranked strictly lower in the Builds priority ranking; with no ranks set this
+  degrades to own + free gear), or **All** (any equipped gear).
 - **Keep current** — lock the slots the hero already has equipped.
 - **Exclude equipped** — drop gear worn by specific heroes you pick.
 
@@ -111,6 +120,8 @@ results, the bottom band shows the selected build's pieces.
   confirmation popup spells out how many pieces move (and how many would be taken off other
   heroes); on confirm it rewrites your captured snapshot and re-imports. Requires the capture
   pipeline to be **disarmed** (it edits the local snapshot, never the game itself).
+- **+ Worklist** — next to Equip build; queues the selected build's gear changes onto the
+  **Worklist** tab instead of applying them right away.
 - Two helper panels per hero: **Sub tick value** (is a flat or % substat tick worth more for
   this hero?) and **Damage / +1%** (which stat gives the most damage per +1% — ATK/DEF/HP vs
   Crit Damage vs DMG increase).
@@ -119,10 +130,31 @@ results, the bottom band shows the selected build's pieces.
 
 In the right sidebar (**Library**):
 
-- **Save / Remove build** — bookmark the selected build for this hero.
-- **Filter presets** — save and reload a whole set of filters per hero.
+- **Save / Remove build** — bookmark the selected build for this hero. Saving a build also
+  saves the filters that produced it as a **filter preset** under the same name — one action,
+  no separate "save preset" step.
+- **Filter presets** — reload (or remove) a saved set of filters per hero, independently of
+  the build it was saved with.
 - **Restore** — push a saved build back into the table + gear band.
 - **Get Preset** — import a recommended build from Outerpedia as a starting filter set.
+
+---
+
+## Worklist — queued gear changes
+
+A cross-hero to-do list of gear swaps, fed from the Builder's **+ Worklist** button. Each
+queued build becomes a card for its hero, with one checkable line per changed slot — the
+target piece's image, stats, and where it currently lives (which hero wears it, or Inventory).
+
+- **Work through it in-game** — tick each line off as you equip it for real; on your next
+  capture, changes that are already done are pruned automatically.
+- **Apply locally** — per card, rewrites your captured snapshot with that hero's swaps (never
+  the game itself), so the rest of the app reflects them.
+- **Apply all** — applies every queued change across all heroes in one go, in an order that
+  frees a piece before the build that reuses it.
+- The list stays truthful on its own: lines flip to **applied** when the piece lands on the
+  hero, **contested** when two queued builds want the same single copy (resolve one before
+  Apply all), and **gone** when the piece vanished from your inventory.
 
 ---
 

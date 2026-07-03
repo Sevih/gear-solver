@@ -94,7 +94,9 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
    - **Édition d'équipement (méthodes)** : `equipItem`/`unequipItem` (`packages/core/src/equip.ts`,
      réécrivent le `CharUID` du JSON capturé, déplacement de slot, immuables, +tests) + endpoint
      writer `POST /api/captured/user-item` (`server.ts` + miroir Vite) + client `src/equip.ts`.
-     **Pas encore d'UI déclencheur** (Builder/Builds) — c'est l'étape restante.
+     **UI déclencheur livrée** : bouton **« Equip build »** côté Builder (popup de confirmation →
+     `equipPieces` réécrit le snapshot → re-import) + **Apply locally / Apply all** de l'onglet
+     Worklist.
    - **Perf solver** : pool dimensionné à la machine (`hardwareConcurrency − 1`), `game` +
      inventaire envoyés aux workers **une fois** (init), compteur « ⚙ N workers » dans le footer.
 
@@ -143,10 +145,11 @@ npm run data:build       # régénère data/derived depuis data/game
   installeur, auto-update contre une release signée + feed). **Inclut la vérif de la sync
   repo en prod** : 1er lancement online seed→SHA→download→rebuild, cache image à la demande,
   2e lancement SHA inchangé instantané, offline cold-cache sans crash.
-- **Édition d'équipement — UI déclencheur** : les méthodes core (`equipItem`/`unequipItem`),
-  l'endpoint writer `POST /api/captured/user-item` et le client renderer sont **livrés** ; reste
-  à brancher des boutons / assignation par slot côté Builder/Builds (édite le JSON capturé local,
-  on n'écrit jamais vers le jeu — API inexistante).
+- **Édition d'équipement** : les méthodes core (`equipItem`/`unequipItem`), l'endpoint writer
+  `POST /api/captured/user-item`, le client renderer **et l'UI déclencheur** (bouton « Equip
+  build » du Builder + Apply locally / Apply all du Worklist) sont **livrés** — édition du JSON
+  capturé local uniquement, on n'écrit jamais vers le jeu (API inexistante). Reste (optionnel) :
+  un unequip par slot côté Builds.
 - **Invalidation de cache au patch** : le stamp `version.json` (`{ hash, builtAt }`) est **livré**
   (affiché Settings → Data) ; reste à **comparer le hash** au lancement pour élaguer les caches
   localStorage (SavedBuild aux `pieceUids` disparus).

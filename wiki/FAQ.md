@@ -52,8 +52,10 @@ CP is heavier to compute than Score. Lower the **Top %**, add a few **filters** 
 search, or use **SOLVE** with priorities if you just want a stat profile.
 
 **A solve is taking too long.**
-Click **Cancel** — you keep the best results found so far. Then tighten **Top %** / filters, or
-raise the worker count in **Settings → Solver** (Auto already uses most of your CPU).
+Click **Cancel** to stop it. Note you usually get *no* partial results — only work chunks that
+had already fully finished are kept, which is typically none. Then tighten **Top %** / filters,
+or raise the worker count in **Settings → Solver** (Auto already uses most of your CPU), and
+re-solve.
 
 **What's the "Upg" column?**
 How many gear slots a build changes vs what the hero currently wears. Low Upg = a small upgrade
@@ -64,8 +66,11 @@ you can equip with few swaps; high Upg = a bigger reshuffle.
 - Use **SOLVE CP** when you just want the highest in-game Combat Power.
 
 **Can the app equip gear onto my heroes for me?**
-Not from the UI yet. gear-solver shows you the optimal build; you equip it in-game. (The
-groundwork for editing equipment locally exists but isn't wired to a button.)
+Locally, yes: the Builder's **Equip build** button applies the selected build to your captured
+snapshot (after a confirmation popup), and the **Worklist** tab has **Apply locally** /
+**Apply all** for queued changes. What it *can't* do is push changes into the actual game —
+there's no game API for that, so these only edit the local snapshot. Use the Worklist as a
+checklist while you equip the pieces in-game yourself.
 
 ---
 

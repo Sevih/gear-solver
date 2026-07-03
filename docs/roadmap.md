@@ -54,7 +54,10 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   `{ hash, builtAt }`, hash de contenu stable ; affiché Settings → Data). **Reste** : l'invalidation
   des caches localStorage au changement de hash (élaguer les SavedBuild aux `pieceUids` disparus).
 - **Édition d'équipement** — méthodes core (`equipItem`/`unequipItem`) + writer
-  `POST /api/captured/user-item` + client renderer ✅ **livrés** ; reste le déclencheur UI (Builder/Builds).
+  `POST /api/captured/user-item` + client renderer ✅ **livrés** ; déclencheur UI ✅ **livré**
+  (bouton **« Equip build »** du Builder : popup de confirmation → réécriture atomique
+  `equipPieces` → re-import ; + flows Apply locally / Apply all de l'onglet Worklist).
+  Reste (optionnel) : un unequip par slot côté Builds.
 - **Production build path** pour `data` (bake derived + snapshot dans le bundle prod).
 
 ### M8 — Packaging desktop (câblé, à vérifier)

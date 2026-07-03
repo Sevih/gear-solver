@@ -28,14 +28,16 @@ Four layers, connected by plain JSON:
   panels, and [reference.md](reference.md) for the full formula + data-pipeline reference.
 - **apps/desktop** — Electron shell that hosts the renderer. `main.ts` boots a local
   server (`server.ts`) that serves `data/derived` + the capture output, exposes the
-  capture/emulator IPC, and accepts a `POST /api/captured/user-item` write-back (the renderer
+  capture/emulator HTTP endpoints (`/api/capture/*`, `/api/emulators` — there is no Electron
+  IPC/preload, the renderer talks plain HTTP), and accepts a `POST /api/captured/user-item` write-back (the renderer
   rewrites the captured snapshot for equip/unequip edits — the transform itself lives in core,
   so the server stays a dumb writer); in dev the Vite middleware covers the same role. At launch it
   **syncs images + game data from the public `Sevih/outerpediaV2` repo** (`data-sync.ts`
   dual-mode checkout/repo, SHA-gated ; shared `/img/*` handler `img-cache.ts` cascading
   checkout→disk cache→CDN→302) so the app follows game patches **without a new build**.
-  Packaging (electron-builder `extraResources` for `data/`, `setupAutoUpdate`) is wired but
-  not yet verified end-to-end on a real packaged build.
+  Packaging is live: `scripts/release.mjs` builds and publishes the installer via
+  electron-builder (`--publish always`, `extraResources` for `data/`), and packaged builds
+  auto-update in production (`updater.ts` / `setupAutoUpdate`).
 
 ## Why this split
 

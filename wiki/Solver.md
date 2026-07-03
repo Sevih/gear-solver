@@ -20,13 +20,13 @@ BuilderScreen.tsx (React, main thread)
   │
   ├─ SolverOrchestrator           ← Web Worker pool (hardwareConcurrency-1, override gs.solver.workerCount)
   │     │
-  │     │  fan-out (postMessage)
+  │     │  phases 1-3 : precomputeContext (main thread, 1×)
+  │     │               hero precompute + pools + budget prune
+  │     │  fan-out (postMessage, precompute broadcast via req.precomputed)
   │     ▼
   │  ┌─────────────────────────────────────────────┐
   │  │ solver.worker.ts × W   (parallel, no IPC)   │
   │  │   └─ engine.ts                              │
-  │  │       phases 1-2 : prepareContext           │
-  │  │       phase 3   : top-% prune              │
   │  │       phase 4   : cartesian + set-prune    │
   │  │       phase 5   : compose + ratings + heap │
   │  │       phase 6   : finalize CP (top-N)      │
@@ -57,8 +57,9 @@ Two optimizations cut the per-combo cost in SOLVE CP: (1) a **prepared CP
 evaluator** (`makeCpEvaluator`) captures the constant bonuses (star/skill/EE/fusion)
 once → no per-combo `CpArgs` allocation and no constant re-derivation, **bit-identical**
 to `calcBattlePower`; (2) the **cheap ratings are deferred** to `finalizeBuilds` (top-N
-only) when no rating filter is set — symmetric to SOLVE's lazy CP, since the heap is
-sorted by CP, not by the ratings.
+only) when no rating-band filter **other than Score** is set (a Score band does not
+disable the deferral — Score derives from `FinalStats`, not the ratings) — symmetric
+to SOLVE's lazy CP, since the heap is sorted by CP, not by the ratings.
 
 The user CP filter (`cp min/max`) is applied **in the loop** as soon as it
 is active — including in SOLVE mode, where CP is then computed per combo. This is required
@@ -70,7 +71,12 @@ at finalize become idempotent no-ops.
 
 ---
 
-## 3. Detailed pipeline (1 worker, on its chunk)
+## 3. Detailed pipeline
+
+Phases 1-3 (`precomputeContext`) run **once on the main thread** (orchestrator)
+and the result is broadcast to the workers via `SolveRequest.precomputed` — a
+worker only recomputes them (fallback, same code) when the precompute is absent.
+Phases 4-6 run **inside each worker, on its chunk**.
 
 ### Phase 1 — Hero precompute
 - `composeCharStats(hero)` → `baseline` (no-gear stats) + `scaling` (per-axis CalcFinalStat ingredients for ATK/DEF/HP/EFF/RES). Reused for every combo.
@@ -81,12 +87,12 @@ at finalize become idempotent no-ops.
 For each slot ∈ {weapon, helmet, armor, gloves, boots, accessory, ooparts}:
 filters the inventory pieces:
 - `g.slot === slot`
-- excluded if `includeEquippedOnOthers === false` and equipped on another hero
+- excluded per `equippedScope` (`none`/`lower`/`all`) if equipped on **another** hero — `lower` gated via `isLowerPriority(heroPriority, …)` (cf. § Options, Equipped items)
 - excluded if `g.equippedBy ∈ excludedHeroes`
 - excluded if `onlyMaxed && enhanceLevel < 15`
 - excluded if `classLimit` ≠ the hero's class
 - excluded if **main pick** is active for this slot and `g.main[0].stat ∉ picks`
-- excluded if **effect chip** (weapon/accessory) marked `excluded`; or marked `required` and the icon does not match
+- excluded if **effect chip** (weapon/accessory) marked `excluded`; or marked `required` and the piece's `setId` (the `UniqueOptionID` effect identity) does not match — the comparison is **deliberately** on `setId`, not `effectIcon` (distinct effects can share an icon, e.g. the Recklessness family)
 - excluded if `armorSetId ∈ excludedSets`
 
 **`keepCurrent`** toggle: if the piece currently equipped by the hero exists for this slot, the pool is restricted to `[currentPiece]` (the solver does not touch the slot). Such locked slots are **exempt** from the set-prune below.
@@ -100,18 +106,49 @@ complete the build. The **Allow broken sets** toggle (cf. § Options) flips this
 *false*, the free slots must also form a complete set → the whitelist narrows to required
 + *formable* sets (present in ≥2 armor slots) and a leaf check rejects singleton builds (cf. phase 4).
 
-### Phase 3 — Top-% prune (heuristic)
-If the user has set at least one non-zero priority AND `topPct < 100`:
-score each piece of the pool by
-```
-score(piece) = Σ_rolls priority[user_key] × (value / STAT_NORMS[user_key])
-```
-sort desc, keep the `⌈N × pct / 100⌉` best. **Normalization is crucial**:
-without it, high-magnitude pieces (HP +200) always crush crit pieces
-(CHC +5) at equal priority.
+### Phase 3 — Combo-budget prune (heuristic)
+Runs whenever `topPct < 100`. **Key point**: the cap is an **ABSOLUTE combo
+budget**, not a per-slot percentage — a % does not bound the **product** (30% of
+seven ~40-50-piece pools is still ~`7e8`; measured: **703M / 142s** in Score mode
+with a priority set). `allocateComboBudget` distributes (water-filling) a keep
+count **per slot** so that `∏ keep ≤ budget` (small slots kept whole, the surplus
+flows to the big armor slots). Default budget `COMBO_BUDGET = 8M` (≈ 1-2 s of
+solve — Score is more expensive per combo than CP), **scaled by the Top% slider**
+(`budget = 8M × topPct/30`; `topPct = 100` short-circuits back to exhaustive).
+Talisman included, the **EE never** (no EE pool — single equipped piece, always
+exempt); `keepCurrent` slots exempt.
 
-The engine→user mapping (`STAT_TO_PRIORITY` in `ratings.ts`) guarantees that
-`atkPct` rolls and `atk` flats share the same priority bucket `atk`.
+The budget applies to **every** branch; only the **per-slot ranking key** (a
+`scoreOf` passed to `keepTopN`) differs:
+
+**a) Explicit priority (SOLVE or SOLVE CP)** — `priorityScoreOf`:
+```
+score(piece) = Σ_rolls priority[user_key] × (value / ROLL_NORMS[engine_key])
+```
+**Normalization is crucial**: `ROLL_NORMS` (*per-roll* magnitude) — not
+`STAT_NORMS` (endgame final magnitude); the two scales differ ~100×. Without it,
+high-magnitude flat rolls always crush % rolls at equal priority. The engine→user
+mapping (`STAT_TO_PRIORITY`) makes `atkPct` rolls and `atk` flats share the same
+priority bucket `atk`. *Combat-only* main options (conditional +15 singularity)
+are ignored (not on the targeted stat sheet).
+
+**b) SOLVE CP without priority** — `cpEval`: each candidate is ranked by **the CP
+it yields dropped into the hero's current build** (other slots = the equipped
+pieces), so the crit/pen/spd chain that scales ATK is realistic. **A *soft* form
+of the dominance prune.** The equipped piece is **pinned** → the solve never
+returns a CP below the equipped one. **Known limitation**: pieces are scored
+*standalone* — a member that only shines by completing a set can be under-ranked;
+raise Top% or require the set.
+
+**c) SOLVE (Score) without priority** — `magnitudeScoreOf` (raw roll magnitude):
+no objective (the score would be 0 everywhere), but the product **must** stay
+bounded (else full cartesian) → we keep the fullest-rolled pieces per slot.
+
+Required-set protection: for each `req-2pc`/`req-4pc` set not already represented
+in the budget slice, `keepTopN` re-adds **its single top-scoring member** outside
+the budget — identically for all three keys. Re-adding *all* members (the old
+behavior) blew the budget back up. The equipped-piece **pin** exists only in
+branch (b) (SOLVE CP without priority).
 
 ### Phase 4 — Cartesian + set-prune
 Nested-loop enumeration: `weapon × helmet × armor × gloves × boots × accessory × ooparts`.
@@ -131,9 +168,9 @@ For each combo that passes phase 4:
 3. **Cheap ratings**: 8 simple products (HpS, Ehp, EhpS, Dmg, DmgS, Mcd, McdS, DmgH).
    For a **`noCrit`** hero (`meta.noCrit`, propagated into the context), `computeCheapRatings`
    gets `noCrit=true` → `pCrit=0` (the CHD term drops out) and `mcd` falls back to the
-   non-crit hit: CHC/CHD no longer inflate its ratings. In SOLVE CP with no rating filter,
-   the 8 products are **deferred** to `finalizeBuilds` (top-N only) — the heap sorts by CP.
-   CP itself stays a faithful in-game mirror (its formula uses raw crc).
+   non-crit hit: CHC/CHD no longer inflate its ratings. In SOLVE CP with no rating-band
+   filter other than Score, the 8 products are **deferred** to `finalizeBuilds` (top-N
+   only) — the heap sorts by CP. CP itself stays a faithful in-game mirror (its formula uses raw crc).
 4. **Score**: `Σ priority × (final / STAT_NORMS) × 100`.
 5. **Rating filter**: same as the stat filter, on ratings + score.
 6. **CP / upg**: CP is computed in SOLVE CP, OR in SOLVE as soon as a CP filter is set
@@ -192,7 +229,7 @@ hero / level / awakening change:
 ### Options
 The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select:
 - **Reforge** (`reforgeMode`, **4 states**, **wired**, **default +10R6**) — projects each piece of
-  the pool to an endgame ceiling **before** the top-% prune (`projectPieceForReforge`). Labels =
+  the pool to an endgame ceiling **before** the combo-budget prune (phase 3) (`projectPieceForReforge`). Labels =
   enhancement + reforge count (R):
   - **Off**: gear as captured.
   - **+10R6** (`classic`): projects to **+10 non-ascended** (main re-scaled via `projectMainToCeiling`,
@@ -208,7 +245,12 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   The main re-scale goes through the ratio of the multipliers (`RolledStat` does not keep
   the base value) — validated against in-game (test `projectMainToCeiling`: 240 → 1380).
 - **Only maxed gear** — filters the pool to `enhanceLevel === 15`.
-- **Equipped items** — includes pieces equipped on other heroes.
+- **Equipped items** (`equippedScope`, **3 states**, **default ≤ Lower**) — which pieces
+  equipped on **other** heroes the solver may pull. Default `lower`: only heroes of
+  **strictly lower** priority (auto-ranked by CP at capture, via `isLowerPriority`) → never
+  strips an equal/higher hero. Without a ranking it degrades to own+free (`isLowerPriority`
+  ∞>∞ = false). `None` = own + free, `All` = any equipped piece (the old default, silent
+  stealing possible).
 - **Keep current** — locks the already-equipped slots to their current piece.
 - **Allow broken sets** (`allowBrokenSets`, default **true**) — *true*: a partial set
   requirement (e.g. a single `2pc`) lets any gear fill the free armor slots (legacy
@@ -227,11 +269,16 @@ because they depend on the equipped loadout / a costly computation not available
 
 ### Substat priority
 - Per-stat slider (12 stats): integer value `-1..3`. Stored in `priority` (user keys: `atk`, `crc`, `chd`, ...).
-- **Top %** slider: `5..100`. Drives the phase 3 prune.
+- **Top %** slider: `5..100`, **default 30**. Drives the phase 3 prune.
+  At 100 = exhaustive. Without a priority, it still bites in **both** modes:
+  CP-weighted auto-prune in SOLVE CP (phase 3b), raw roll magnitude
+  (`magnitudeScoreOf`) in SOLVE Score (phase 3c).
 - **(clear)** button: `dispatch({type: "clearPriority"})`.
 
-When priority is uniformly 0: the pool is not pruned and the **gems
-are not reallocated** (fallback on the gems currently socketed — cf. § Gems).
+When priority is uniformly 0: the pool is **still pruned** (phases 3b/3c, same
+combo budget). Gems: in SOLVE CP they **are reallocated** using the CP weights
+(`cpStatWeights` — cf. § Gems); only SOLVE Score keeps the currently socketed
+gems (no reallocation).
 
 ### Main stats
 Three rows (Weapon / Accessory / Talisman). Each row shows the mains
@@ -301,9 +348,9 @@ Em-dash when no build is selected.
 
 ## 5. Gems — greedy sub-solver
 
-**Pool**: multiset of the non-null `gemSlots[]` of all Talismans + EE in the inventory (gems are swappable in-game, so we aggregate globally).
+**Pool**: multiset of the non-null `gemSlots[]` of the **eligible** Talismans + EE in the inventory (gems are swappable in-game). Eligibility (`buildGemPool`) mirrors the piece-pool rule: the current hero's gear is always in; gear equipped on another hero is gated by `equippedScope` (`none`/`lower`/`all`); gear on an excluded hero is never counted. Without this gate, the solver would propose gems that require unequipping the Talisman/EE of an out-of-scope hero.
 
-**Scoring**: for each gem, `score = priority × (value / STAT_NORMS)`. Normalized to allow cross-stat comparison. Sorted desc.
+**Scoring**: for each gem, `score = priority × (value / ROLL_NORMS)`. Normalized to allow cross-stat comparison. Sorted desc. **In SOLVE CP without a user priority**, the "priority" passed is not empty but the **CP weights** (`cpStatWeights`: ΔCP of a ROLL_NORM-sized bump of each stat, evaluated at the current build). Otherwise (raw `value/norm` ranking), the allocator preferred dmg-reduce/flat gems (big magnitude, ~0 CP) over atk/crit/pen gems → a CP solve could return **less** CP than the equipped build. A stat already at its CP cap (e.g. CRC ~100%) gets a ~0 weight.
 
 **Allocation (default, fast path)**: greedy, K = `talismanSlots + eeSlots` (4 or 5 depending on `enhanceLevel`). We take the K first gems with `score > 0`. Pre-computed **once per talismanSlots variant** (4 or 5) in `prepareContext` — no re-computation in the hot loop.
 
@@ -315,11 +362,11 @@ The combo's pre-gem CHC is recovered from `fs.crc − defaultCrcGem` (crit rate 
 
 **Pre-aggregation**: the gem contribution is converted into `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`. The compose just adds these deltas to the buckets after the piece aggregation. Avoids `resolveStat` × 10 gems × N combos.
 
-**`null` fallback**: if the priority is empty (no gem has a `score > 0`),
-the delta is `null` → the solver does not pass a `gemOverride` → the compose
+**`null` fallback**: in **SOLVE Score without a priority**, the priority is empty
+(no gem has a `score > 0`) → the delta is `null` → no `gemOverride` → the compose
 uses the **gems currently socketed on the Talisman + EE** (via `piece.subs`).
-This is intentional: without user intent, we respect the player's state
-rather than estimate 0 gems and under-value CP.
+This is intentional: without user intent, we respect the player's state.
+(SOLVE CP no longer falls into this: it uses the CP weights above.)
 
 ---
 
@@ -327,17 +374,19 @@ rather than estimate 0 gems and under-value CP.
 
 A typical inventory: 150 pieces per slot × 7 slots = `150^7 ≈ 10^15` permutations. Inaccessible.
 
-The top-% prune brings this down to `(150 × pct/100)^7`:
-- 100% → 10^15 (unusable)
-- 50% → ~10^13
-- 30% → ~10^11
-- 10% → ~10^8 (usable, 1-5s)
-- 5% → ~10^6 (very fast, but may skip the optimal build)
+The Top% slider drives an **absolute combo budget** (phase 3): `budget = 8M × topPct/30`,
+water-filled per slot (`allocateComboBudget`) so that `∏ keep ≤ budget`:
+- 100% → exhaustive (short-circuit, no prune)
+- 30% (default) → 8M combos (~1-2 s)
+- 10% → ~2.7M
+- 5% → ~1.3M (very fast, but may skip the optimal build)
 
-The panel hint says so explicitly: *"Heuristic — too low a Top % drops optimal builds"*. It's a pure recall vs speed trade-off.
+The panel hint says so explicitly: *"Heuristic — too low a Top % drops optimal builds"*. It's a pure recall vs speed trade-off. **Caution**: a *per-slot percentage* Top% would not bound the **product** — on a real account, 30%/slot still leaves ~`10^10` combos (measured: 1.25G post-30%-prune, still >100 s). That's why the budget bounds `∏` directly, **whatever the mode** → a ~1-2 s solve on any account.
 
-With empty `priority`, the score is arbitrary — the prune is **disabled**
-automatically (each piece scores 0, random ranking, so we keep everything).
+With empty `priority`, the budget still bites: in **SOLVE Score** the ranking
+falls back to raw roll magnitude (`magnitudeScoreOf`, phase 3c) — results are
+arbitrary without an objective, but the solve doesn't hang. In **SOLVE CP**, the
+CP-weighted auto-prune (phase 3b) makes "max CP" playable with nothing tuned.
 
 ---
 
@@ -382,7 +431,8 @@ automatically (each piece scores 0, random ranking, so we keep everything).
    computed per combo), two mitigations: (a) a **prepared CP evaluator**
    (`makeCpEvaluator`) — constant bonuses captured once, no per-combo `CpArgs`
    allocation nor constant re-derivation (bit-identical); (b) **deferred cheap ratings**
-   to finalize (top-N) when no rating filter is set — the heap sorts by CP, so the 8
+   to finalize (top-N) when no rating-band filter other than Score is set (a Score band
+   doesn't count — it derives from `FinalStats`) — the heap sorts by CP, so the 8
    ratings products only feed the display.
 
 8. **Responsive cancel via MessageChannel** — `solveChunk` is async, yields at each
@@ -468,5 +518,8 @@ Bonus:
 4. Click a row → the bottom band shows the 8 pieces.
 5. Set `Crc min = 90` then re-SOLVE → all returned builds satisfy the bound.
 6. Enable `Sharp 4pc required` → the builds' helmet/armor/gloves/boots are all Sharp.
-7. **Regression comparison**: SOLVE with empty priority + Top 100% + Keep current → the top-1 must have the same `FinalStats` as the card of the same hero in the Builds tab (modulo gem reallocation, which in empty-priority mode falls back on the current gems, so ✓ strict equivalence is expected).
+7. **Regression comparison**: SOLVE with empty priority + Top 100% + Keep current + **Reforge Off**
+   (the default +10R6 projects to +10 → would not match the card) → the top-1 must have the same
+   `FinalStats` as the card of the same hero in the Builds tab (modulo gem reallocation, which in
+   empty-priority mode falls back on the current gems, so ✓ strict equivalence is expected).
 8. SOLVE CP → the top-1 must have the highest CP displayed. Compare against a separate brute-force solve on a small slice.
