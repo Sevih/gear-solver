@@ -29,6 +29,10 @@ _Nothing yet — user-facing notes for the next release go here._
 - **Top % now defaults to 60** (was 30) — the search covers twice as many
   combinations out of the box, so the best builds show up without having to
   stack stat filters first. Set it to 100 for a fully exhaustive search.
+- **Less talisman noise in the results** — the table no longer fills up with
+  the same gear combo repeated across dozens of near-identical talismans: at
+  most 3 talisman variants are kept per gear combo, freeing the list for
+  genuinely different builds.
 
 ## [1.5.1] — 2026-07-03
 

@@ -1515,6 +1515,30 @@ export async function solveChunk(
   return { builds: heap.toSorted(), permutations, searched };
 }
 
+/** Collapse talisman/gem near-duplicates in a SORTED build list: keep at most
+ *  `k` builds per 6-gear signature (`pieceUids` minus the trailing talisman —
+ *  weapon..accessory + EE, which is fixed per hero anyway). Without this, the
+ *  top-N is routinely the same armor/weapon/accessory combo × dozens of
+ *  near-identical talismans (gems are a global allocation, so talisman variants
+ *  differ almost only by their main) — drowning genuinely different builds out
+ *  of the result table. Keeping the best `k` per signature still shows the top
+ *  talisman alternatives while freeing the tail for other gear combos. The list
+ *  must already be sorted by the active objective (the kept ones are the best).
+ *  Pure; exported for tests — the orchestrator applies it before the top-N slice. */
+export function collapseTalismanVariants(builds: SolveBuild[], k: number): SolveBuild[] {
+  if (k <= 0 || builds.length === 0) return builds;
+  const perSig = new Map<string, number>();
+  const out: SolveBuild[] = [];
+  for (const b of builds) {
+    const sig = b.pieceUids.slice(0, -1).join("|");
+    const n = perSig.get(sig) ?? 0;
+    if (n >= k) continue;
+    perSig.set(sig, n + 1);
+    out.push(b);
+  }
+  return out;
+}
+
 /** Post-process the top-K from `solveChunk`:
  *  - SOLVE mode, no CP filter : compute CP for each surviving build for the
  *    UI's CP column (skipped in the hot loop for cost). When a CP filter IS

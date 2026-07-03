@@ -12,7 +12,7 @@ import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import SolverWorker from "../../workers/solver.worker.ts?worker";
 import { debug, debugEnabled } from "../log.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
-import { precomputeContext } from "./engine.js";
+import { collapseTalismanVariants, precomputeContext } from "./engine.js";
 import type {
   EquippedScope,
   EstimateRequestMsg,
@@ -120,6 +120,12 @@ export interface OrchestratorCallbacks {
 /** Args for the pre-solve pool-size estimate — a solve minus the result-set
  *  knobs (no topK/topN: nothing is searched, only the precompute runs). */
 export type EstimateArgs = Omit<SolveArgs, "topK" | "topN">;
+
+/** How many builds are kept per 6-gear signature when collapsing talisman
+ *  variants at merge time (see `collapseTalismanVariants`). 3 keeps the top
+ *  talisman alternatives comparable without letting one gear combo flood the
+ *  result table. */
+const TALISMAN_VARIANTS_KEPT = 3;
 
 /** Minimum interval between `onProgress` emissions. Workers each post ~every
  *  100ms, so a 30-worker pool pushed up to ~300 React state updates/s through
@@ -527,7 +533,12 @@ export class SolverOrchestrator {
       : (a: SolveBuild, b: SolveBuild) => b.score - a.score;
     this.buf.sort(cmp);
     const merged = this.buf.length;
-    const out = this.buf.slice(0, this.topN);
+    // Talisman-variant collapse BEFORE the top-N slice: the merged heap is
+    // routinely one gear combo × dozens of near-identical talismans (gems are
+    // a global allocation), which would fill the whole top-N with noise. Keep
+    // the best few per 6-gear signature so the table surfaces genuinely
+    // different builds; the runner-up talismans stay visible at ranks 2-3.
+    const out = collapseTalismanVariants(this.buf, TALISMAN_VARIANTS_KEPT).slice(0, this.topN);
     const now = performance.now();
     const totalMs = Math.round(now - this.startedAt);
     if (this.debugInfo) {

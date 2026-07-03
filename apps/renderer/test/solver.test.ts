@@ -22,7 +22,7 @@ import {
   computeSetBonuses, type FinalStatsBaseline, type GemOverride, type ScalingMap,
 } from "../src/lib/composeBuild.js";
 import type { StatScaling } from "@gear-solver/core";
-import { maxedFloorOf, meetsMaxedFloor, projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
+import { collapseTalismanVariants, maxedFloorOf, meetsMaxedFloor, projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
 import type { SolveBuild } from "../src/lib/solver/types.js";
 import { calcBattlePower, makeCpEvaluator } from "../src/lib/solver/cp.js";
 import { aggregateGemDelta, allocateGems, buildGemPool, gemSlotsOf, scoreGemPool } from "../src/lib/solver/gems.js";
@@ -1243,5 +1243,33 @@ describe("simulateReforges — 6★ ascended budget", () => {
     const crc = sim.subs.find((s) => s.stat === "critRate")!;
     expect(atk.ticks).toBe(6);
     expect(crc.ticks).toBe(5); // 9 total − 4 into atk
+  });
+});
+
+describe("collapseTalismanVariants — talisman-noise dedup at merge", () => {
+  /** Build with a given 6-gear signature + talisman uid (talisman is LAST). */
+  const bld = (gear: string, talisman: string, score: number): SolveBuild =>
+    ({ ...buildWithScore(score), pieceUids: [...gear.split(","), talisman] });
+
+  it("keeps at most k builds per 6-gear signature, in sorted order", () => {
+    // Same gear combo × 5 talismans (sorted desc) — only the best 3 survive.
+    const sorted = [90, 80, 70, 60, 50].map((s, i) => bld("w,h,a,g,b,acc", `t${i}`, s));
+    const out = collapseTalismanVariants(sorted, 3);
+    expect(out.map((b) => b.score)).toEqual([90, 80, 70]);
+  });
+
+  it("different gear signatures don't collapse into each other", () => {
+    const sorted = [
+      bld("w1,h,a,g,b,acc", "t1", 90),
+      bld("w2,h,a,g,b,acc", "t1", 85), // different weapon → own signature
+      bld("w1,h,a,g,b,acc", "t2", 80),
+    ];
+    const out = collapseTalismanVariants(sorted, 1);
+    expect(out.map((b) => b.score)).toEqual([90, 85]); // one per signature
+  });
+
+  it("k ≤ 0 disables the collapse", () => {
+    const sorted = [bld("w,h,a,g,b,acc", "t1", 90), bld("w,h,a,g,b,acc", "t2", 80)];
+    expect(collapseTalismanVariants(sorted, 0)).toBe(sorted);
   });
 });

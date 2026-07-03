@@ -188,7 +188,10 @@ For each combo that passes phase 4:
 
 ### Orchestrator side
 - Receives `{builds, permutations, searched}` from each worker.
-- Merges the top-Ks into a global buffer, final sort, slices the top-N (1000 by default), forwards to React.
+- Merges the top-Ks into a global buffer, final sort, **collapses talisman variants**
+  (`collapseTalismanVariants`: at most 3 builds per 6-gear signature — gems are a global
+  allocation, so same-gear talismans differ almost only by their main and used to drown the
+  top-N), slices the top-N (1000 by default), forwards to React.
 - Aggregates `permutations` + `searched` for the footer (sum of the per-worker counters).
 
 ---

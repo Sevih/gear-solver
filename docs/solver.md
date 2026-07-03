@@ -185,7 +185,10 @@ Pour chaque combo qui passe phase 4 :
 
 ### Côté orchestrator
 - Reçoit `{builds, permutations, searched}` de chaque worker.
-- Merge des top-K en un buffer global, sort final, slice top-N (1000 par défaut), forward à React.
+- Merge des top-K en un buffer global, sort final, **collapse des variantes talisman**
+  (`collapseTalismanVariants` : max 3 builds par signature 6-gear — les gemmes étant une allocation
+  globale, les talismans d'un même gear ne diffèrent quasi que par leur main et noyaient le top-N),
+  slice top-N (1000 par défaut), forward à React.
 - Aggregate `permutations` + `searched` pour le footer (somme des compteurs per-worker).
 - Les événements progress sont **throttlés globalement (~10 Hz)** avant `onProgress` — chaque worker
   poste ~toutes les 100 ms, donc un pool de 30 workers poussait jusqu'à ~300 setState/s. Les compteurs
