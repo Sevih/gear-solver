@@ -1,6 +1,7 @@
 /**
- * CP-weighted auto-prune support — `keepTopPct` (the generic top-% selector the
- * SOLVE-CP-without-priority path uses) plus the CP scoring it's fed. These lock:
+ * CP-weighted auto-prune support — `keepTopN` (the generic top-N selector every
+ * combo-budget prune branch uses; `keepTopPct` is a test-local % wrapper over
+ * it) plus the CP scoring it's fed. These lock:
  *  - keepTopPct keeps the top ceil(N × pct/100) by score, with a ≥1 floor;
  *  - required-set members survive even when they score below the cut (so a
  *    `req` plan can't be silently starved of pieces);
@@ -13,7 +14,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, RolledStat, StatScaling } from "@gear-solver/core";
-import { allocateComboBudget, cpStatWeights, keepTopN, keepTopPct, keepTopUnion, magnitudeScoreOf, priorityScoreOf } from "../src/lib/solver/engine.js";
+import { allocateComboBudget, cpStatWeights, keepTopN, keepTopUnion, magnitudeScoreOf, priorityScoreOf } from "../src/lib/solver/engine.js";
 import { computeFinalStats, type FinalStats, type FinalStatsBaseline, type ScalingMap } from "../src/lib/composeBuild.js";
 import { makeCpEvaluator } from "../src/lib/solver/cp.js";
 
@@ -51,6 +52,18 @@ function piece(uid: string, opts: { armorSetId?: string | null; subs?: RolledSta
 }
 
 const NO_REQ = new Set<string>();
+
+/** Top-% wrapper over `keepTopN` — keeps `ceil(N × pct/100)`. Was an engine
+ *  export until the combo-budget prune replaced every % call site; kept here
+ *  as a test-local helper so the percentage semantics stay pinned. */
+function keepTopPct(
+  pieces: GearPiece[],
+  scoreOf: (p: GearPiece) => number,
+  pct: number,
+  requiredSetIds: Set<string>,
+): GearPiece[] {
+  return keepTopN(pieces, scoreOf, Math.ceil(pieces.length * pct / 100), requiredSetIds);
+}
 
 describe("keepTopPct", () => {
   it("keeps the top ceil(N × pct/100) by score", () => {

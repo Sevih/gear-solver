@@ -155,7 +155,38 @@ export interface InitMessage {
  *  to the engine, so engine signatures are unchanged. */
 export type SolveRequestMsg = Omit<SolveRequest, "game" | "inventory">;
 
-export type WorkerInput = SolveRequestMsg | CancelMessage | InitMessage;
+/** Pre-solve pool-size estimate — main thread → the orchestrator's dedicated
+ *  estimate worker. Runs the exact `precomputeContext` a solve would (same
+ *  filters + mode → same prunes, so the guard-rail numbers match what the
+ *  solve will actually walk) but returns ONLY the per-slot pool sizes.
+ *  Rides outside the solve lifecycle: matched by its own `estimateId`,
+ *  never touches the worker's solve generation. Same lean shape as
+ *  `SolveRequestMsg` (game/inventory cached via `InitMessage`). */
+export interface EstimateRequestMsg {
+  type: "estimate";
+  /** Monotonic per-estimate id — the orchestrator keeps only the latest
+   *  pending estimate and drops stale responses. */
+  estimateId: number;
+  mode: SolveMode;
+  heroUid: string;
+  userGeasLevels: UserGeasLevels | null;
+  userCodexLevel: number | null;
+  heroPriority: HeroPriority;
+  excludedPieceUids?: string[];
+  userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
+  filters: SolveFilters;
+}
+
+/** Estimate response. `poolSizes` is null when the precompute threw (e.g. the
+ *  hero is missing compose ingredients) — the Builder then hides the banner
+ *  instead of surfacing an error for a background computation. */
+export interface EstimateResultMsg {
+  type: "estimate";
+  estimateId: number;
+  poolSizes: PoolSizes | null;
+}
+
+export type WorkerInput = SolveRequestMsg | CancelMessage | InitMessage | EstimateRequestMsg;
 
 /** One ranked build returned by the solver. UIDs only — main thread looks
  *  up the full piece data from its inventory map for the table + bottom band. */
@@ -217,4 +248,4 @@ export interface SolveError {
   message: string;
 }
 
-export type WorkerOutput = SolveProgress | SolveResult | SolveError;
+export type WorkerOutput = SolveProgress | SolveResult | SolveError | EstimateResultMsg;

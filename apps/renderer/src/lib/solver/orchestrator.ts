@@ -15,6 +15,7 @@ import type { HeroPriority } from "../storage/heroPriority.js";
 import { precomputeContext } from "./engine.js";
 import type {
   EquippedScope,
+  EstimateRequestMsg,
   PoolSizes,
   SolveBuild,
   SolveFilters,
@@ -116,6 +117,17 @@ export interface OrchestratorCallbacks {
   onError(message: string): void;
 }
 
+/** Args for the pre-solve pool-size estimate — a solve minus the result-set
+ *  knobs (no topK/topN: nothing is searched, only the precompute runs). */
+export type EstimateArgs = Omit<SolveArgs, "topK" | "topN">;
+
+/** Minimum interval between `onProgress` emissions. Workers each post ~every
+ *  100ms, so a 30-worker pool pushed up to ~300 React state updates/s through
+ *  the callback — the aggregate is throttled here instead (≤ ~10 renders/s;
+ *  the counters are cumulative so dropped intermediates lose nothing, and
+ *  `flush()` emits the exact final totals). */
+const PROGRESS_EMIT_MS = 100;
+
 export interface SolveArgs {
   mode: SolveMode;
   heroUid: string;
@@ -174,6 +186,20 @@ export class SolverOrchestrator {
   private fanoutAt = 0;
   /** Per-solve diagnostic, built across solve()/flush(); null unless debug on. */
   private debugInfo: SolveDebugInfo | null = null;
+  /** Wall-clock of the last `onProgress` emission — the per-worker progress
+   *  messages are aggregated then throttled to `PROGRESS_EMIT_MS` here. */
+  private lastProgressAt = 0;
+  /** Dedicated worker for the pre-solve pool-size estimate — separate from the
+   *  solve pool so a debounced estimate at hero-pick time doesn't force the
+   *  whole pool (and W structured-clones of game+inventory) into existence
+   *  before the first solve. Lazily created; owns its own init identity. */
+  private estimateWorker: Worker | null = null;
+  private estInitedGame: GameData | null = null;
+  private estInitedInventory: Inventory | null = null;
+  /** Latest pending estimate — a newer request supersedes (stale responses
+   *  are dropped by id), and a solve() clears it. */
+  private pendingEstimate: { id: number; cb: (poolSizes: PoolSizes | null) => void } | null = null;
+  private estimateId = 0;
 
   constructor(cb: OrchestratorCallbacks) {
     this.cb = cb;
@@ -218,6 +244,9 @@ export class SolverOrchestrator {
    *  the id check in `handle()` and be dropped. */
   solve(args: SolveArgs): void {
     if (this.active) this.cancelInternal();
+    // A solve supersedes any pending estimate — its live poolSizes take over,
+    // and a late estimate response must not overwrite them.
+    this.pendingEstimate = null;
     this.ensurePool();
     // One-shot `init`: ship the constant game + inventory to every worker only
     // when they changed (first solve, or a re-capture swapped the inventory).
@@ -289,7 +318,7 @@ export class SolverOrchestrator {
     // first worker progress event (saves the perceptible "blank footer"
     // window at solve start).
     this.poolSizes = precomputed.poolSizes;
-    this.cb.onProgress({ permutations: 0, searched: 0, poolSizes: this.poolSizes });
+    this.emitProgress();
     // Cap the worker count to the partitioned pool size. `solveChunk` splits
     // the largest pool (pickPartitionSlot), so a pool of N items can keep at
     // most N workers busy — any extra worker gets an empty slice and burns a
@@ -364,14 +393,79 @@ export class SolverOrchestrator {
     this.active = false;
   }
 
+  /** Run the pre-solve pool-size estimate on the dedicated estimate worker.
+   *  Debounced by the caller; a newer call supersedes the pending one (only
+   *  the latest response reaches its callback). No-op while a solve is
+   *  active — the live poolSizes are authoritative there and the Builder
+   *  skips estimating anyway. The callback gets `null` when the precompute
+   *  failed (background computation — never an error banner). */
+  estimate(args: EstimateArgs, cb: (poolSizes: PoolSizes | null) => void): void {
+    if (this.active) return;
+    const w = this.ensureEstimateWorker(args.game, args.inventory);
+    const id = ++this.estimateId;
+    this.pendingEstimate = { id, cb };
+    const msg: EstimateRequestMsg = {
+      type: "estimate",
+      estimateId: id,
+      mode: args.mode,
+      heroUid: args.heroUid,
+      userGeasLevels: args.userGeasLevels,
+      userCodexLevel: args.userCodexLevel,
+      heroPriority: args.heroPriority,
+      excludedPieceUids: args.excludedPieceUids,
+      userSkills: args.userSkills,
+      filters: args.filters,
+    };
+    w.postMessage(msg);
+  }
+
+  /** Lazily create the estimate worker + keep its cached game/inventory in
+   *  sync (same one-shot `init` contract as the solve pool, tracked
+   *  separately — one clone instead of W at hero-pick time). */
+  private ensureEstimateWorker(game: GameData, inventory: Inventory): Worker {
+    if (!this.estimateWorker) {
+      const w = new SolverWorker();
+      w.onmessage = (e: MessageEvent<WorkerOutput>) => this.handle(-1, e.data);
+      // An estimate crash is non-fatal background noise — drop the pending
+      // callback (the Builder just keeps its previous estimate) and let the
+      // next request recreate the worker if needed.
+      w.onerror = () => { this.pendingEstimate = null; };
+      this.estimateWorker = w;
+      this.estInitedGame = null;
+      this.estInitedInventory = null;
+    }
+    if (this.estInitedGame !== game || this.estInitedInventory !== inventory) {
+      this.estimateWorker.postMessage({ type: "init", game, inventory });
+      this.estInitedGame = game;
+      this.estInitedInventory = inventory;
+    }
+    return this.estimateWorker;
+  }
+
   /** Tear down all workers — called when the BuilderScreen unmounts. */
   dispose(): void {
     this.cancelInternal();
     for (const w of this.workers) w.terminate();
     this.workers = [];
+    this.estimateWorker?.terminate();
+    this.estimateWorker = null;
+    this.estInitedGame = null;
+    this.estInitedInventory = null;
+    this.pendingEstimate = null;
   }
 
   private handle(workerIdx: number, ev: WorkerOutput): void {
+    // Estimates ride outside the solve lifecycle (own id, no solveId) —
+    // handle them before the solve-staleness gate. Only the latest pending
+    // request's response is delivered; anything else is stale and dropped.
+    if (ev.type === "estimate") {
+      if (this.pendingEstimate && ev.estimateId === this.pendingEstimate.id) {
+        const { cb } = this.pendingEstimate;
+        this.pendingEstimate = null;
+        cb(ev.poolSizes);
+      }
+      return;
+    }
     // Drop stale outputs from a superseded run. Without this, an old
     // `result` arriving after we've kicked off a new solve would corrupt
     // the new buf (mixed builds, partial workersDone, premature flush).
@@ -379,11 +473,11 @@ export class SolverOrchestrator {
     if (ev.type === "progress") {
       this.stats[workerIdx] = { permutations: ev.permutations, searched: ev.searched };
       if (ev.poolSizes && !this.poolSizes) this.poolSizes = ev.poolSizes;
-      this.cb.onProgress({
-        permutations: this.totalPerm(),
-        searched: this.totalSearched(),
-        poolSizes: this.poolSizes,
-      });
+      // Aggregate throttle — every worker posts ~each 100ms, so the raw
+      // per-message callback scaled to ~10×W React updates/s on big pools.
+      // Counters are cumulative, so skipped emissions lose nothing; flush()
+      // emits the exact final totals.
+      if (performance.now() - this.lastProgressAt >= PROGRESS_EMIT_MS) this.emitProgress();
     } else if (ev.type === "result") {
       this.stats[workerIdx] = { permutations: ev.permutations, searched: ev.searched };
       this.buf.push(...ev.builds);
@@ -393,6 +487,16 @@ export class SolverOrchestrator {
       this.cb.onError(ev.message);
       this.cancel();
     }
+  }
+
+  /** Emit the aggregated progress snapshot and stamp the throttle clock. */
+  private emitProgress(): void {
+    this.lastProgressAt = performance.now();
+    this.cb.onProgress({
+      permutations: this.totalPerm(),
+      searched: this.totalSearched(),
+      poolSizes: this.poolSizes,
+    });
   }
 
   private totalPerm(): number {
@@ -409,6 +513,10 @@ export class SolverOrchestrator {
 
   /** Sort the merged buf by the active mode's key and surface top-N. */
   private flush(): void {
+    // Final progress with the exact totals — the throttle may have swallowed
+    // the workers' last increments, and the footer's P/S should land on the
+    // true final counts, not the last emitted snapshot.
+    this.emitProgress();
     const cmp = this.mode === "cp"
       ? (a: SolveBuild, b: SolveBuild) => (b.cp ?? 0) - (a.cp ?? 0)
       : (a: SolveBuild, b: SolveBuild) => b.score - a.score;

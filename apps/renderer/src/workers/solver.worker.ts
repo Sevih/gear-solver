@@ -29,7 +29,7 @@
  */
 import type { GameData, Inventory } from "@gear-solver/core";
 import type { SolveRequest, WorkerInput, WorkerOutput } from "../lib/solver/types.js";
-import { finalizeBuilds, prepareContext, solveChunk } from "../lib/solver/engine.js";
+import { finalizeBuilds, precomputeContext, prepareContext, solveChunk } from "../lib/solver/engine.js";
 
 interface WorkerCtx {
   onmessage: ((e: MessageEvent<WorkerInput>) => void) | null;
@@ -58,6 +58,35 @@ ctx.onmessage = (e) => {
   }
   if (msg.type === "cancel") {
     currentGen++;
+    return;
+  }
+  if (msg.type === "estimate") {
+    // Pre-solve pool-size estimate — synchronous & short (~10-100ms), runs the
+    // exact solve precompute so the Builder's guard-rail matches what a solve
+    // would walk. Does NOT touch `currentGen`: it rides outside the solve
+    // lifecycle (the orchestrator sends estimates to a dedicated worker and
+    // never while a solve is active). Errors (hero missing ingredients, …)
+    // degrade to a null poolSizes — a background estimate must never surface
+    // an error banner.
+    if (!cachedGame || !cachedInventory) {
+      post({ type: "estimate", estimateId: msg.estimateId, poolSizes: null });
+      return;
+    }
+    try {
+      const req: SolveRequest = {
+        ...msg,
+        type: "solve",
+        solveId: -1,
+        game: cachedGame,
+        inventory: cachedInventory,
+        topK: 1,
+        chunkIndex: 0,
+        chunkCount: 1,
+      };
+      post({ type: "estimate", estimateId: msg.estimateId, poolSizes: precomputeContext(req).poolSizes });
+    } catch {
+      post({ type: "estimate", estimateId: msg.estimateId, poolSizes: null });
+    }
     return;
   }
   if (msg.type === "solve") {

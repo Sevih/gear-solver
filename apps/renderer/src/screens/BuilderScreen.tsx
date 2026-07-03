@@ -31,10 +31,10 @@ import { ResultItemDetail } from "../design/ResultGearDetail.js";
 import { flatVsPctTick } from "../lib/subValue.js";
 import { dmgTickGains, type DmgTickCandidate } from "../lib/dmgValue.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
-import { precomputeContext, projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
+import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../lib/solver/orchestrator.js";
-import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode, SolveRequest } from "../lib/solver/types.js";
+import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
 import type { HeroPriority } from "../lib/storage/heroPriority.js";
 import { ARMOR_SLOTS, planSlots } from "../lib/solver/setPlans.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
@@ -737,6 +737,20 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     }
   }, [workerCount]);
 
+  // Lazily create the orchestrator — shared by SOLVE and the debounced
+  // pre-solve estimate (which runs on the orchestrator's dedicated estimate
+  // worker, so the main thread never pays the precompute).
+  const getOrchestrator = (): SolverOrchestrator => {
+    if (!orchestratorRef.current) {
+      orchestratorRef.current = new SolverOrchestrator({
+        onProgress: (p) => setSolveProgress({ permutations: p.permutations, searched: p.searched, poolSizes: p.poolSizes ?? null }),
+        onResult:   (builds, durationMs, debugInfo) => { setSolveResults(builds); setResultsReforge(solveReforgeRef.current); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); setLastDebugInfo(debugInfo ?? null); },
+        onError:    (msg) => { setSolveError(msg); setSolving(false); },
+      });
+    }
+    return orchestratorRef.current;
+  };
+
   const startSolve = (mode: SolveMode) => {
     // The SOLVE button is only gated on `selectedUid`, so it can be clicked
     // while game data is still loading — surface that instead of bailing
@@ -751,13 +765,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       setSolveError("Selected hero was not found in the captured roster.");
       return;
     }
-    if (!orchestratorRef.current) {
-      orchestratorRef.current = new SolverOrchestrator({
-        onProgress: (p) => setSolveProgress({ permutations: p.permutations, searched: p.searched, poolSizes: p.poolSizes ?? null }),
-        onResult:   (builds, durationMs, debugInfo) => { setSolveResults(builds); setResultsReforge(solveReforgeRef.current); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); setLastDebugInfo(debugInfo ?? null); },
-        onError:    (msg) => { setSolveError(msg); setSolving(false); },
-      });
-    }
+    const orchestrator = getOrchestrator();
     setSolving(true);
     setSolveError(null);
     setSolveResults([]);
@@ -770,7 +778,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     // a later filter edit can't mutate what `onResult` reads).
     solveReforgeRef.current = { reforgeMode: filters.options.reforgeMode, priority: { ...filters.priority } };
     const serializedFilters = buildSolveFilters(filters);
-    orchestratorRef.current.solve({
+    orchestrator.solve({
       mode,
       heroUid: selectedUid,
       inventory,
@@ -962,43 +970,38 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   }, [inventory, selectedUid]);
 
   // Recompute the pre-solve cartesian estimate (debounced) whenever the hero /
-  // filters / mode change while idle. Runs the same `precomputeContext` the
-  // orchestrator runs at solve start — but for the mode that will fire, so the
-  // prune matches. Skips while solving (live poolSizes win) and when not ready.
+  // filters / mode change while idle. Runs the same `precomputeContext` a solve
+  // would — but for the mode that will fire, so the prune matches — on the
+  // orchestrator's DEDICATED estimate worker: on a big inventory the CP-mode
+  // precompute (reforge sim + per-piece CP ranking + dominance) costs 100ms+,
+  // which used to jank the main thread on every filter edit. Skips while
+  // solving (live poolSizes win) and when not ready; a stale response is
+  // dropped by the orchestrator (latest estimate wins).
   useEffect(() => {
     // No hero / mid-solve: drop any stale estimate so the guard-rail banner
     // doesn't linger from a previous hero. Live poolSizes cover the solving case.
     if (solving || !selectedUid || !inventory || !game || !selected) { setEstimatePools(null); return; }
     const handle = setTimeout(() => {
-      try {
-        const req: SolveRequest = {
-          type: "solve",
-          solveId: -1,
-          mode: solveMode,
-          heroUid: selectedUid,
-          inventory,
-          game,
-          userGeasLevels,
-          userCodexLevel,
-          heroPriority,
-          excludedPieceUids: excludedPieceUids ? Array.from(excludedPieceUids) : undefined,
-          userSkills: {
-            first: selected.skills.first,
-            second: selected.skills.second,
-            ultimate: selected.skills.ultimate,
-            chainPassive: selected.skills.chainPassive,
-          },
-          filters: buildSolveFilters(filters),
-          topK: 1,
-          chunkIndex: 0,
-          chunkCount: 1,
-        };
-        setEstimatePools(precomputeContext(req).poolSizes);
-      } catch {
-        setEstimatePools(null);
-      }
+      getOrchestrator().estimate({
+        mode: solveMode,
+        heroUid: selectedUid,
+        inventory,
+        game,
+        userGeasLevels,
+        userCodexLevel,
+        heroPriority,
+        excludedPieceUids: excludedPieceUids ? Array.from(excludedPieceUids) : undefined,
+        userSkills: {
+          first: selected.skills.first,
+          second: selected.skills.second,
+          ultimate: selected.skills.ultimate,
+          chainPassive: selected.skills.chainPassive,
+        },
+        filters: buildSolveFilters(filters),
+      }, (poolSizes) => setEstimatePools(poolSizes));
     }, 250);
     return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [solving, selectedUid, inventory, game, selected, filters, solveMode, heroPriority, excludedPieceUids, userGeasLevels, userCodexLevel]);
 
   // "Get preset" — fetch this hero's outerpedia build reco and overlay it on

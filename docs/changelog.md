@@ -33,6 +33,34 @@
   d'erreur sur le run courant ; et un crash pendant un solve actif laissait `workersDone` ne jamais atteindre
   `activeChunks` (UI en attente infinie). Fix : gate sur `active` + `cancel()` (flush des partiels, UI libérée).
 
+### 🟠 Perf — audit Builder (2026-07-03)
+- ✅ 🟠 **Alloc gem cap-aware mémoïsée par `preGemCrc`** — le slow path crit-cap (`wantCritCap`) et
+  l'anti-overshoot re-lançaient l'allocateur (tableaux frais + parcours du pool) à **chaque combo**, alors
+  que le résultat est pur en (pool constant, slots constants, `preGemCrc`) et que le CHC pré-gemme ne prend
+  qu'une poignée de valeurs distinctes sur des millions de combos. Cache `capAllocCache` par run
+  `solveChunk`, keyed `(talismanSlots, preGemCrc)` (offset numérique, floats exacts en Map). L'anti-overshoot
+  gagne aussi le check `gemDeltaEquals` avant recompose (miroir du chemin cap-reaching — une allocation
+  identique au greedy par défaut ne recompose plus pour rien).
+- ✅ 🟠 **Estimation pré-solve hors main thread** — le `precomputeContext` debounced du garde-fou (reforge-sim
+  + ranking CP par pièce + dominance O(n²) en mode CP = 100 ms+ de jank par édition de filtre sur gros
+  inventaire) tourne maintenant sur un **worker d'estimation dédié** de l'orchestrateur (message `estimate`
+  hors cycle de solve : id anti-stale, latest-wins, un échec rend `null` → bandeau masqué, jamais d'erreur ;
+  worker séparé du pool pour ne pas payer W clones de game/inventaire au pick du héros — un seul init).
+- ✅ 🟠 **Partition : slot externe préféré** — `pickPartitionSlot` tranchait le plus gros pool ; quand c'était
+  le **talisman** (boucle interne, fréquent), chaque worker re-parcourait tout l'arbre weapon..accessory et
+  re-payait ×W le travail hoisté par nœud accessory (set tallies, `computeSetBonuses`,
+  `aggregatePrefixBuckets`). Désormais : le slot le plus **externe** dont le pool ≥ 4× le nombre de chunks
+  (slices ⌈N/W⌉ équilibrées à ≤ 25 %), fallback plus-gros-pool. +1 test d'équivalence union-des-chunks ==
+  mono-chunk (`solveChunk.test.ts`).
+- ✅ 🟠 **Throttle global du progress** — chaque worker postait ~toutes les 100 ms et chaque message
+  déclenchait `onProgress` → jusqu'à ~300 setState/s à 30 workers. L'orchestrateur agrège et émet à ≤ ~10 Hz
+  (`PROGRESS_EMIT_MS`) ; compteurs cumulatifs donc rien de perdu, et `flush()` émet les **totaux exacts**
+  (le footer P/S ne rate plus les derniers incréments avalés par le throttle — petit fix au passage).
+- ✅ ⚪ **Nits** — `keepTopPct` sans appelant prod retiré du moteur (déplacé en helper local de
+  `cpPrune.test.ts` pour garder la sémantique % verrouillée) · l'inline `enhanceLevel >= 5 ? 5 : 4` de la hot
+  loop appelle `gemSlotsOf` · `TopKHeap` calcule `heapKey` une fois au push et stocke `{key, build}` (les
+  sifts comparent un nombre).
+
 ### 🟠 Perf solver
 - ✅ **Pruning par dominance (SOLVE CP)** — la CP étant monotone-croissante en chaque stat finale (et chaque
   stat finale en chaque entrée de bucket `flat/pct/buffPct`), une pièce dont la contribution est dominée

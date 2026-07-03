@@ -187,6 +187,10 @@ Pour chaque combo qui passe phase 4 :
 - Reçoit `{builds, permutations, searched}` de chaque worker.
 - Merge des top-K en un buffer global, sort final, slice top-N (1000 par défaut), forward à React.
 - Aggregate `permutations` + `searched` pour le footer (somme des compteurs per-worker).
+- Les événements progress sont **throttlés globalement (~10 Hz)** avant `onProgress` — chaque worker
+  poste ~toutes les 100 ms, donc un pool de 30 workers poussait jusqu'à ~300 setState/s. Les compteurs
+  sont cumulatifs (rien n'est perdu en sautant des émissions) et le flush final émet les totaux exacts.
+- Porte aussi un **worker d'estimation dédié** (hors pool) pour le garde-fou pré-solve — cf. § Top-%.
 
 ---
 
@@ -379,7 +383,12 @@ Em-dash quand aucun build n'est sélectionné.
 1. **Étage 1** — dépenser des gems crit pour **atteindre** le cap CHC à 100 % (en priorité, même si l'atk score plus haut), overshoot ≤ un gem 3 %.
 2. **Étage 2** — remplir le reste **par priorité** (en sautant tout gem crit, désormais gaspillé).
 
-Le pré-gem CHC du combo est récupéré depuis `fs.crc − defaultCrcGem` (le crit rate est purement additif). On ne **recompose** que si le delta cap-aware diffère du greedy par défaut (`gemDeltaEquals`) — souvent identique quand les gems crit rankent déjà haut. Le cas sans priorité crc (ex. fallback SOLVE CP) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.crc > 102`).
+Le pré-gem CHC du combo est récupéré depuis `fs.crc − defaultCrcGem` (le crit rate est purement additif). On ne **recompose** que si le delta cap-aware diffère du greedy par défaut (`gemDeltaEquals`) — souvent identique quand les gems crit rankent déjà haut. Le cas sans priorité crc (ex. fallback SOLVE CP) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.crc > 102`) — lui aussi gated par `gemDeltaEquals` avant recompose.
+
+Les deux allocateurs sont **mémoïsés par `(talismanSlots, preGemCrc)`** (`capAllocCache`, par run
+`solveChunk`) : purs en (pool, slots, preGemCrc) avec pool + slots EE constants par solve, et le CHC
+pré-gemme (compose `round1` moins une constante par variant) ne prend qu'une poignée de valeurs
+distinctes sur des millions de combos — le slow path ne re-parcourt donc plus le pool par combo.
 
 **Pré-agrégation** : la contribution gem est convertie en `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`. La compose ajoute juste ces deltas aux buckets après l'agrégation des pièces. Évite `resolveStat` × 10 gems × N combos.
 
@@ -406,8 +415,11 @@ Le hint du panneau le dit explicitement : *"Heuristic — too low a Top % drops 
 Avec `priority` vide, le budget mord quand même : en **SOLVE Score** le ranking retombe sur la magnitude brute des rolls (`magnitudeScoreOf`, phase 3c) — résultats arbitraires faute d'objectif, mais le solve ne pend pas. En **SOLVE CP**, l'auto-prune CP-pondéré (phase 3b) rend « max CP » jouable sans rien tuner.
 
 **Garde-fou** : la BuilderScreen estime le cartésien (`∏ poolSizes`, post-prune). L'estimation est
-calculée **avant le clic** : un `precomputeContext` **debounced (250 ms)** tourne sur le main thread à
-l'idle quand héros/filtres/mode changent (`estimatePools`), **pour le mode du bouton SOLVE qui partira**
+calculée **avant le clic** : un `precomputeContext` **debounced (250 ms)** tourne sur le **worker
+d'estimation dédié de l'orchestrateur** (message `estimate`, hors cycle de solve, réponses périmées
+droppées par id ; un échec rend `null` → bandeau masqué, jamais d'erreur pour un calcul de fond — sur
+gros inventaire le précompute CP coûte 100 ms+, ce qui jankait le main thread à chaque édition de
+filtre) quand héros/filtres/mode changent (`estimatePools`), **pour le mode du bouton SOLVE qui partira**
 (le prune diffère Score/CP — d'où le `solveMode` remonté du split button). Pendant un solve, les
 `poolSizes` **live** priment. Au-dessus de `CARTESIAN_WARN` (50 M), un bandeau avertit que le solve sera
 lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloquant.
@@ -427,10 +439,19 @@ lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloqu
    debug `solver` (`pool`) affiche le nombre résolu + `hardwareConcurrency`.
 
 3. **Partition embarrassingly parallel** — chaque worker prend une slice du
-   slot le plus grand. Aucune comm inter-worker, merge final O(W × K). Le nombre
-   de workers réellement sollicités est cappé à la taille du pool partitionné
+   **slot le plus externe dont le pool est confortablement plus grand que le
+   nombre de workers** (≥ 4×, pour des slices ⌈N/W⌉ équilibrées à ≤ 25 % près) ;
+   fallback : le plus gros pool (l'ancien choix, meilleures slices quand rien
+   n'est assez grand). Trancher un slot externe donne à chaque worker son
+   sous-arbre disjoint ; trancher le slot **interne** (talisman — souvent le
+   plus gros pool) faisait re-parcourir tout l'arbre weapon..accessory à chaque
+   worker et re-payer ×W le travail hoisté par nœud accessory (set tallies,
+   `computeSetBonuses`, `aggregatePrefixBuckets`), amorti sur ⌈N/W⌉ feuilles au
+   lieu de N. Aucune comm inter-worker, merge final O(W × K). Le nombre de
+   workers réellement sollicités est cappé à la taille du plus gros pool
    (`chunkCount = clamp(1, W, maxPoolHit)`) — inutile d'envoyer une slice vide à
-   un worker quand le pool a moins d'items que de workers.
+   un worker quand le pool a moins d'items que de workers. Test d'équivalence
+   union-des-chunks == mono-chunk dans `solveChunk.test.ts`.
 
 4. **`pieces` array hoisted + mutée en place** — évite 10M+ allocations dans
    la boucle inner. Sûr car `computeFinalStats` ne garde pas la référence.
@@ -483,6 +504,15 @@ lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloqu
     moins game/inventory) + le précalcul des pools. Le worker re-fusionne les constantes
     cachées → `SolveRequest` complet, donc **le moteur est inchangé**. Indispensable au
     scaling worker-count (§7.2) : sans ça, N clones de `game` par solve domineraient.
+
+13. **Alloc gem cap-aware mémoïsée par `preGemCrc`** — cf. § Gems : le slow path
+    crit-cap / anti-overshoot ne réalloue plus par combo, il lit un cache keyed
+    par `(talismanSlots, preGemCrc)` (une poignée de valeurs distinctes sur des
+    millions de combos).
+
+14. **Clé de heap en cache** — `TopKHeap` calcule `heapKey` une fois au push et
+    stocke `{key, build}` ; chaque comparaison de sift lit un nombre au lieu de
+    re-brancher sur le mode × log K.
 
 ---
 

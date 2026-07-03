@@ -6,48 +6,21 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **0 🔴 ouvert** (les 2 🔴 + 3 cas limites de l'audit Builder 2026-07-03 sont corrigés — cf. changelog).
+> **0 🔴 ouvert** (l'audit Builder 2026-07-03 — 2 🔴, 3 cas limites, 5 perfs 🟠 + nits ⚪ —
+> est entièrement livré ; cf. changelog).
 
 ---
 
 ## Reste à faire
 
-### 🟠 Perf — audit Builder (2026-07-03)
-- [ ] 🟠 **Mémoïser `allocateGemsReachingCap` par `preGemCrc`** — dans le chemin
-      `wantCritCap` (`engine.ts:1338-1348`), chaque combo alloue tableaux +
-      `Array(scored.length)` et re-parcourt le pool, alors que le résultat ne dépend que
-      d'un scalaire (`preGemCrc`, pool constant). Un cache
-      `Map<preGemCrc quantisé, CappedAllocation>` éliminerait quasi tout le slow path
-      (des millions de combos partagent une poignée de valeurs).
-- [ ] 🟠 **Sortir l'estimation pré-solve du main thread** — le `precomputeContext`
-      debounced (`BuilderScreen.tsx:956-990`) fait, en mode CP : reforge-sim de tout le
-      pool + `computeFinalStats` + CP **par pièce candidate** + dominance O(n²) → 100 ms+
-      de jank par changement de filtre sur gros inventaire. Pousser dans un worker, ou ne
-      calculer que les tailles de pools sans le prune CP.
-- [ ] 🟠 **`pickPartitionSlot` : préférer un slot externe** — si le plus gros pool est le
-      talisman (boucle la plus interne, fréquent), chaque worker re-parcourt tout le
-      cartésien externe et re-paye ×W le travail hoisté (set tracking,
-      `computeSetBonuses`, `aggregatePrefixBuckets`). Préférer le plus gros pool parmi
-      weapon/helmet/armor quand il est ≥ au nombre de workers.
-- [ ] 🟠 **Throttle global du progress côté orchestrateur** — chaque worker poste toutes
-      les ~100 ms et chaque message déclenche `setSolveProgress`
-      (`orchestrator.ts:368-375`) : à 15-30 workers → 150-300 re-renders/s de l'écran
-      pendant un solve. Agréger à ~10 Hz dans `handle()`.
-- [ ] 🟠 **Anti-overshoot : comparer avant de recomposer** — la branche
-      `fs.critRate > 102` (`engine.ts:1349-1356`) recompose sans `gemDeltaEquals`,
-      contrairement au chemin `wantCritCap` ; quand `preGemCrc < 100` l'allocation cappée
-      rend souvent le même delta → compose gaspillée. Le check est une ligne.
-- [ ] ⚪ **Nits** : `keepTopPct` n'a plus d'appelant hors tests (`engine.ts:897-904`) —
-      supprimer ou marquer test-only · `talisman.enhanceLevel >= 5 ? 5 : 4` duplique
-      `gemSlotsOf` dans la hot loop · `TopKHeap` pourrait mettre en cache la clé au push.
-
 ### 🟢 Tests manquants — audit Builder (2026-07-03)
 - [ ] 🟢 **Crit-cap slow path de bout en bout** — rien ne teste le trigger `wantCritCap`
       + recompose dans `solveChunk` (le chemin par-combo `allocateGemsReachingCap` +
-      `gemDeltaEquals`).
+      `gemDeltaEquals` + le memo `capAllocCache`).
 - [ ] 🟢 **Flux orchestrateur** — cancel / supersede / `solveId` anti-stale /
-      `workersDone === activeChunks` / crash worker (`onerror` → cancel) : aucun test,
-      et c'est là que vivaient les bugs corrigés par l'audit (cf. changelog).
+      `workersDone === activeChunks` / crash worker (`onerror` → cancel) / flux
+      `estimate` (id anti-stale, null-on-error) : aucun test, et c'est là que vivaient
+      les bugs corrigés par l'audit (cf. changelog).
 
 ### 🟠 Perf solver
 - [~] **Solver CP trop lent** — diagnostic sur vrai compte : Top% 100 défaut + aucune priorité = **cartésien

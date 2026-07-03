@@ -18,7 +18,7 @@ import { finalizeBuilds, solveChunk, type SolveContext } from "../src/lib/solver
 import { computeFinalStats, type FinalStatsBaseline, type ScalingMap } from "../src/lib/composeBuild.js";
 import { calcBattlePower } from "../src/lib/solver/cp.js";
 import { computeCheapRatings } from "../src/lib/solver/ratings.js";
-import type { SetPlan, SolveFilters, SolveMode, SolveRequest } from "../src/lib/solver/types.js";
+import type { SetPlan, SolveBuild, SolveFilters, SolveMode, SolveRequest } from "../src/lib/solver/types.js";
 
 const GAME = { options: {}, equipment: {}, sets: {}, equipmentPassives: {}, multiTierPassives: {},
   gems: {}, singularityOptions: {}, eePassives: {}, characters: {},
@@ -118,6 +118,41 @@ describe("solveChunk — mid-tree set pruning", () => {
     const req = await solveChunk(makeCtx(pools, [[{ setId: "A", count: 4 }]], "score"), 0, 1, 1000);
     expect(req.permutations).toBe(0);
     expect(req.builds).toHaveLength(0);
+  });
+});
+
+describe("solveChunk — chunk partition equivalence", () => {
+  it("the union of N chunks equals the single-chunk run (no combo lost or duplicated)", async () => {
+    // Weapon pool is ≥ 4× the chunk count, so the picker slices the OUTER
+    // weapon axis (the new preference); talisman is the largest pool (the old
+    // largest-pool choice). Whichever slot gets sliced, the union across
+    // chunks must reproduce the mono-chunk run exactly.
+    const pools: Pools = {
+      weapon: Array.from({ length: 8 }, (_, i) =>
+        piece("weapon", `w${i}`, { main: [{ stat: "atkPct", value: 10 + i, percent: true } as RolledStat] })),
+      helmet: [piece("helmet", "h1")],
+      armor: [piece("armor", "a1")],
+      gloves: [piece("gloves", "g1")],
+      boots: [piece("boots", "b1")],
+      accessory: [piece("accessory", "ac1")],
+      ooparts: Array.from({ length: 10 }, (_, i) =>
+        piece("ooparts", `t${i}`, { subs: [{ stat: "atk", value: 10 * (i + 1), percent: false, ticks: 1 } as RolledStat] })),
+    };
+    const mono = await solveChunk(makeCtx(pools, [], "cp"), 0, 1, 1000);
+    expect(mono.permutations).toBe(80); // 8 weapons × 10 talismans
+
+    const chunkCount = 2;
+    const parts = [];
+    for (let i = 0; i < chunkCount; i++) {
+      parts.push(await solveChunk(makeCtx(pools, [], "cp"), i, chunkCount, 1000));
+    }
+    const key = (b: SolveBuild) => b.pieceUids.join("|");
+    const monoKeys = new Set(mono.builds.map(key));
+    const unionKeys = new Set(parts.flatMap((p) => p.builds.map(key)));
+    expect(unionKeys).toEqual(monoKeys);
+    expect(parts.reduce((n, p) => n + p.permutations, 0)).toBe(mono.permutations);
+    // Both chunks did real work (the sliced axis kept every worker busy).
+    for (const p of parts) expect(p.permutations).toBeGreaterThan(0);
   });
 });
 

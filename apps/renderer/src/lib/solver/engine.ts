@@ -29,7 +29,7 @@ import {
 import { calcBattlePower, makeCpEvaluator } from "./cp.js";
 import { debug, debugEnabled } from "../log.js";
 import { isLowerPriority } from "../storage/heroPriority.js";
-import { aggregateGemDelta, allocateGems, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type ScoredGem } from "./gems.js";
+import { aggregateGemDelta, allocateGems, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type CappedAllocation, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
 import { allSetsComplete, armorSetWhitelist, planSetIds, setsFeasible } from "./setPlans.js";
@@ -893,16 +893,6 @@ export function keepTopUnion(
   return kept;
 }
 
-/** Top-% wrapper over `keepTopN` — keeps `ceil(N × pct/100)`. */
-export function keepTopPct(
-  pieces: GearPiece[],
-  scoreOf: (p: GearPiece) => number,
-  pct: number,
-  requiredSetIds: Set<string>,
-): GearPiece[] {
-  return keepTopN(pieces, scoreOf, Math.ceil(pieces.length * pct / 100), requiredSetIds);
-}
-
 /** CP weight per user priority key = ΔCP from adding one ROLL_NORM-sized bump of
  *  that stat to a reference build (clamped ≥0). Lets SOLVE CP score gems by their
  *  CP impact instead of raw magnitude: without it the allocator grabs big-number
@@ -1051,31 +1041,34 @@ function heapKey(b: SolveBuild, mode: SolveMode): number {
 }
 
 /** Fixed-capacity min-heap keyed by `heapKey`. push() drops the smallest
- *  element when full. Exported so the regression tests can hit it directly
- *  without spinning the whole engine; the solver still uses it internally. */
+ *  element when full. The key is computed ONCE at push and cached alongside
+ *  the build — each sift comparison is then a plain number read instead of a
+ *  `heapKey` call (mode branch + null-coalesce) × log K per push. Exported so
+ *  the regression tests can hit it directly without spinning the whole
+ *  engine; the solver still uses it internally. */
 export class TopKHeap {
-  private a: SolveBuild[] = [];
+  private a: Array<{ key: number; b: SolveBuild }> = [];
   constructor(private k: number, private mode: SolveMode) {}
   push(b: SolveBuild): void {
+    const key = heapKey(b, this.mode);
     if (this.a.length < this.k) {
-      this.a.push(b);
+      this.a.push({ key, b });
       this.up(this.a.length - 1);
     } else {
       // Only displace the min if the new entry beats it.
-      const min = this.a[0]!;
-      if (heapKey(b, this.mode) > heapKey(min, this.mode)) {
-        this.a[0] = b;
+      if (key > this.a[0]!.key) {
+        this.a[0] = { key, b };
         this.down(0);
       }
     }
   }
   toSorted(): SolveBuild[] {
-    return this.a.slice().sort((x, y) => heapKey(y, this.mode) - heapKey(x, this.mode));
+    return this.a.slice().sort((x, y) => y.key - x.key).map((e) => e.b);
   }
   private up(i: number): void {
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (heapKey(this.a[i]!, this.mode) < heapKey(this.a[p]!, this.mode)) {
+      if (this.a[i]!.key < this.a[p]!.key) {
         [this.a[i], this.a[p]] = [this.a[p]!, this.a[i]!];
         i = p;
       } else break;
@@ -1087,8 +1080,8 @@ export class TopKHeap {
       const l = 2 * i + 1;
       const r = 2 * i + 2;
       let m = i;
-      if (l < n && heapKey(this.a[l]!, this.mode) < heapKey(this.a[m]!, this.mode)) m = l;
-      if (r < n && heapKey(this.a[r]!, this.mode) < heapKey(this.a[m]!, this.mode)) m = r;
+      if (l < n && this.a[l]!.key < this.a[m]!.key) m = l;
+      if (r < n && this.a[r]!.key < this.a[m]!.key) m = r;
       if (m === i) break;
       [this.a[i], this.a[m]] = [this.a[m]!, this.a[i]!];
       i = m;
@@ -1159,8 +1152,23 @@ export async function solveChunk(
   const hasCritGems = scoredGems.some((g) => g.stat === "critRate" && g.score > 0);
   const wantCritCap = (filters.priority.critRate ?? 0) > 0 && hasCritGems;
 
-  // Partition the slot with the largest pool — best load balance.
-  const partitionSlot = pickPartitionSlot(pools);
+  // Memo for the per-combo cap-aware gem allocations. Both allocators are
+  // pure in (scored pool, slot counts, preGemCrc); the pool and EE slot count
+  // are solve constants and talismanSlots ∈ {4,5}, so the result depends only
+  // on (talismanSlots, preGemCrc) — and preGemCrc (a round1'd composed CHC
+  // minus a per-variant constant) takes a handful of distinct values across
+  // millions of combos. Without this, every wantCritCap combo re-ran the
+  // allocator (fresh arrays + a full pool walk) just to rebuild an allocation
+  // it had already produced. Key = raw preGemCrc + a variant offset (floats
+  // compare exactly in a Map; the offset is far above any reachable CHC so
+  // the 4/5-slot variants can't collide). The two allocators never share a
+  // solve (`wantCritCap` is constant per run), so one cache serves both.
+  const capAllocCache = new Map<number, CappedAllocation>();
+
+  // Partition axis — outermost comfortably-large slot (falls back to the
+  // largest pool); see `pickPartitionSlot` for the duplication-vs-balance
+  // trade-off.
+  const partitionSlot = pickPartitionSlot(pools, chunkCount);
   const partitioned = partition(pools[partitionSlot], chunkIndex, chunkCount);
 
   // Precompute "other slots" we'll iterate inside the partition — same
@@ -1337,7 +1345,7 @@ export async function solveChunk(
                 // gem resolve. `null` delta = no priority set → no override,
                 // talisman+EE pieces contribute their currently-socketed
                 // gems via their `subs` (correct in-game-equivalent stats).
-                const talismanSlots = talisman.enhanceLevel >= 5 ? 5 : 4;
+                const talismanSlots = gemSlotsOf(talisman);
                 const gemDelta = gemDeltaByTalismanSlots.get(talismanSlots) ?? null;
                 let gemAlloc = gemAllocByTalismanSlots.get(talismanSlots) ?? { talisman: [], ee: [] };
                 let fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, gemDelta ?? undefined, setBonuses);
@@ -1354,7 +1362,12 @@ export async function solveChunk(
                   // the cap-aware allocation actually differs from the default
                   // greedy (it often won't, when crit gems already rank high).
                   const preGemCrc = fs.critRate - defaultCrcGem;
-                  const reached = allocateGemsReachingCap(scoredGems, talismanSlots, eeSlots, preGemCrc);
+                  const cacheKey = talismanSlots * 1_000_000 + preGemCrc;
+                  let reached = capAllocCache.get(cacheKey);
+                  if (!reached) {
+                    reached = allocateGemsReachingCap(scoredGems, talismanSlots, eeSlots, preGemCrc);
+                    capAllocCache.set(cacheKey, reached);
+                  }
                   if (!gemDeltaEquals(reached.delta, gemDelta)) {
                     fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, reached.delta ?? undefined, setBonuses);
                     gemAlloc = reached.alloc;
@@ -1364,9 +1377,20 @@ export async function solveChunk(
                   // overshoot. `fs.critRate > 102` ⟺ ≥1 crit gem landed past the cap;
                   // reallocate this combo's pre-gem CHC so wasted crit gems
                   // become useful non-crit ones. Untriggered combos pay nothing.
-                  const capped = allocateGemsCapped(scoredGems, talismanSlots, eeSlots, fs.critRate - defaultCrcGem);
-                  fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, capped.delta ?? undefined, setBonuses);
-                  gemAlloc = capped.alloc;
+                  const preGemCrc = fs.critRate - defaultCrcGem;
+                  const cacheKey = talismanSlots * 1_000_000 + preGemCrc;
+                  let capped = capAllocCache.get(cacheKey);
+                  if (!capped) {
+                    capped = allocateGemsCapped(scoredGems, talismanSlots, eeSlots, preGemCrc);
+                    capAllocCache.set(cacheKey, capped);
+                  }
+                  // Mirror the cap-reaching path: when the capped allocation
+                  // lands on the exact same delta as the default greedy, the
+                  // recompose would be a bit-identical no-op — skip it.
+                  if (!gemDeltaEquals(capped.delta, gemDelta)) {
+                    fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, capped.delta ?? undefined, setBonuses);
+                    gemAlloc = capped.alloc;
+                  }
                 }
 
                 if (!passesSpecs(fs, statFilterSpecs)) continue;
@@ -1511,10 +1535,27 @@ function decSet(map: Map<string, number>, id: string): void {
   else map.set(id, n);
 }
 
-/** Choose the slot to partition across workers — the largest pool gives
- *  the best load balance (each worker gets ⌈N/W⌉ items, all subsequent
- *  loops the same). Defaults to weapon when the pools are uniform. */
-function pickPartitionSlot(pools: SolveContext["pools"]): keyof SolveContext["pools"] {
+/** Minimum pool-size-to-worker ratio for an outer slot to be preferred as the
+ *  partition axis. Slices of ⌈N/W⌉ vs ⌊N/W⌋ differ by at most 1, so at N ≥ 4W
+ *  the wall-clock imbalance between workers is ≤ 25% — an acceptable trade for
+ *  not duplicating the hoisted per-node work (see `pickPartitionSlot`). */
+const PARTITION_BALANCE_FACTOR = 4;
+
+/** Choose the slot to partition across workers. Preference: the OUTERMOST
+ *  loop whose pool is comfortably larger than the worker count (≥ 4×, so
+ *  ⌈N/W⌉ slices stay balanced). Partitioning an outer slot gives each worker
+ *  its own disjoint subtree; partitioning the INNERMOST slot (talisman —
+ *  often the largest pool) instead makes every worker re-walk the full
+ *  weapon..accessory tree and re-pay the hoisted per-accessory work
+ *  (set tallies, `computeSetBonuses`, `aggregatePrefixBuckets`) W times,
+ *  amortizing it over only ⌈N/W⌉ leaves instead of N. Fallback when nothing
+ *  is comfortably big: the largest pool (finest slices = best balance —
+ *  the old behavior). */
+function pickPartitionSlot(pools: SolveContext["pools"], chunkCount: number): keyof SolveContext["pools"] {
+  const order = ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const;
+  for (const k of order) {
+    if (pools[k].length >= chunkCount * PARTITION_BALANCE_FACTOR) return k;
+  }
   let best: keyof SolveContext["pools"] = "weapon";
   let max = pools.weapon.length;
   for (const k of ["helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const) {
