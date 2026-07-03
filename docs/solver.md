@@ -287,7 +287,9 @@ car ils dépendent du loadout équipé / d'un calcul coûteux non disponible à 
 
 ### Substat priority
 - Slider par stat (12 stats) : valeur entière `-1..3`. Stockée dans `priority` (clés user : `atk`, `crc`, `chd`, ...).
-- Slider **Top %** : `5..100`, **défaut 30** (plus 100). Pilote la phase 3 prune.
+- Slider **Top %** : `5..100`, **défaut 60** (retour terrain : à 30 le vrai meilleur build se trouvait
+  régulièrement juste au-delà de la tranche élaguée — budget ~16 M combos à 60, quelques secondes).
+  Pilote la phase 3 prune ; `100` = exhaustif.
   À 100 = exhaustif. Sans priorité, il mord quand même dans les **deux** modes :
   auto-prune CP-pondéré en SOLVE CP (phase 3b), magnitude brute des rolls
   (`magnitudeScoreOf`) en SOLVE Score (phase 3c).

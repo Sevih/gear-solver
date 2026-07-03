@@ -490,8 +490,10 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     // account: 703M / 142s in Score mode with a priority set). `allocateComboBudget`
     // water-fills per-slot keep-counts so ∏ keep ≤ budget (small slots kept whole,
     // the surplus flowing to the big armor slots); the Top% slider scales the
-    // budget (30 = default target; 100 already short-circuited to exhaustive
-    // above). Applies to BOTH objectives — only the per-slot RANKING differs. Set
+    // budget (normalized so 30 → 8M; the UI default is 60 → ~16M — field
+    // feedback showed 30's slice regularly missing the true best build; 100
+    // already short-circuited to exhaustive above). Applies to BOTH objectives
+    // — only the per-slot RANKING differs. Set
     // members are preserved by `keepTopN` regardless of rank, else a low-ranked
     // required-set piece could drop and `checkSetsFeasible` would silently return
     // 0 builds.

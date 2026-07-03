@@ -26,6 +26,9 @@ _Nothing yet — user-facing notes for the next release go here._
   reforges · +10R9: +10 with 9+ reforges · +15R9: +15 with 9+ reforges.
   Previously it always demanded +15, which wrongly excluded +10 endgame gear.
 - Fixed the "≤ Lower" button wrapping onto two lines in the Options panel.
+- **Top % now defaults to 60** (was 30) — the search covers twice as many
+  combinations out of the box, so the best builds show up without having to
+  stack stat filters first. Set it to 100 for a fully exhaustive search.
 
 ## [1.5.1] — 2026-07-03
 

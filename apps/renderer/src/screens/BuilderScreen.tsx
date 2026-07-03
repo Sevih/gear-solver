@@ -426,7 +426,11 @@ const INITIAL_FILTERS: SolverFilters = {
   // full cartesian is billions of combos; the combo budget bites even without
   // a hand-set priority (SOLVE CP ranks each slot by a CP proxy, SOLVE Score
   // falls back to raw roll magnitude). Drag to 100 = exhaustive.
-  topPct: 30,
+  // 60 (was 30): the combo-budget prune is a lossy heuristic — field feedback
+  // showed the true best build regularly living just past the 30% slice (users
+  // "fixed" it by stacking stat filters). 60 doubles the walked budget (~16M
+  // combos, still a few seconds) for materially better recall; 100 = exhaustive.
+  topPct: 60,
   mainPicks: {},
   setPlans: [[]],
   excludedSets: [],

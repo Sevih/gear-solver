@@ -150,6 +150,11 @@ _(rien en attente — les nouvelles entrées de session se mettent ici)_
   verrouillant la table des planchers.
 - **⚪ Bouton « ≤ Lower » sur 2 lignes** (segmented Equipped items, panneau Options) — l'espace
   sécable du label wrappait dans le panneau étroit → `whitespace-nowrap` + `shrink-0`.
+- **Top % : défaut 30 → 60** — retour terrain : à 30 le vrai meilleur build se trouvait régulièrement
+  juste au-delà de la tranche élaguée (l'utilisateur « corrigeait » en empilant des stat filters, qui
+  rétrécissent les pools avant le budget). Le budget étant normalisé à `8M × topPct/30`, 60 → ~16 M
+  combos parcourus (quelques secondes) pour un recall nettement meilleur ; 100 reste l'exhaustif.
+  Docs recalées (solver.md, wiki/Solver.md, commentaire engine).
 - Docs synchronisées ([solver.md](solver.md) phase 2 + Options, [wiki/Solver.md](../wiki/Solver.md),
   [wiki/Using-the-App.md](../wiki/Using-the-App.md), `types.ts`). Typecheck + 286 tests verts.
 

@@ -280,7 +280,9 @@ because they depend on the equipped loadout / a costly computation not available
 
 ### Substat priority
 - Per-stat slider (12 stats): integer value `-1..3`. Stored in `priority` (user keys: `atk`, `crc`, `chd`, ...).
-- **Top %** slider: `5..100`, **default 30**. Drives the phase 3 prune.
+- **Top %** slider: `5..100`, **default 60** (field feedback: at 30 the true best build regularly
+  sat just past the pruned slice — ~16M-combo budget at 60, still a few seconds). Drives the
+  phase 3 prune; `100` = exhaustive.
   At 100 = exhaustive. Without a priority, it still bites in **both** modes:
   CP-weighted auto-prune in SOLVE CP (phase 3b), raw roll magnitude
   (`magnitudeScoreOf`) in SOLVE Score (phase 3c).
