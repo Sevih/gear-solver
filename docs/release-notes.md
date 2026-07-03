@@ -14,6 +14,10 @@
 
 _Nothing yet — user-facing notes for the next release go here._
 
+## [1.5.3] — 2026-07-03
+
+_Nothing yet — user-facing notes for the next release go here._
+
 ## [1.5.2] — 2026-07-03
 
 - **The solver now respects your Worklist** — pieces already reserved by a queued

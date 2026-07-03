@@ -124,6 +124,10 @@
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
 
+## [1.5.3] — 2026-07-03
+
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
 ## [1.5.2] — 2026-07-03
 
 ### Session 2026-07-03 — 🔴 Solver : réservations worklist + refonte « Maxed only » (+ nit ≤ Lower)
