@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.5.2] — 2026-07-03
+
 - **The solver now respects your Worklist** — pieces already reserved by a queued
   build are treated as if equipped on that hero. Solving your next hero won't
   propose gear a higher-priority hero's pending build has claimed (same
