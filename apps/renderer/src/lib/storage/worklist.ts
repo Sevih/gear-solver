@@ -143,6 +143,28 @@ export function reconcileWorklist(
   return changed ? { next, changed } : { next: list, changed: false };
 }
 
+/** Map pieceUid → heroUid of the worklist entry claiming it, for changes NOT
+ *  yet applied (once applied, the real `equippedBy` covers it). Fed to the
+ *  solver so a piece already promised to hero A behaves as if EQUIPPED on A
+ *  when solving hero B — the "Equipped items" scope then applies naturally:
+ *  `lower` lets a higher-ranked hero override a lower-ranked hero's claim
+ *  (same rule as stealing equipped gear) and never touches an equal/higher
+ *  one; `none` keeps all claimed pieces out; `all` ignores claims like it
+ *  ignores equipment. Newest entry wins a double-claim (list is newest-first);
+ *  claims on pieces gone from the inventory are harmless (never matched). */
+export function worklistClaims(list: WorklistEntry[], inventory: Inventory | null): Record<string, string> {
+  const equipped = equippedByHero(inventory);
+  const claims: Record<string, string> = {};
+  for (const e of list) {
+    const onHero = equipped.get(e.heroUid);
+    for (const c of e.changes) {
+      if (onHero?.has(c.toUid)) continue;
+      if (!(c.toUid in claims)) claims[c.toUid] = e.heroUid;
+    }
+  }
+  return claims;
+}
+
 /** Total changes still NOT applied (target piece not yet on the hero) across
  *  the whole worklist — the Worklist tab's badge count. Null when no inventory
  *  is loaded (can't tell what's applied yet). */

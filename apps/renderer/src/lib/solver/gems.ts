@@ -31,6 +31,10 @@ export interface GemPoolOptions {
   equippedScope: EquippedScope;
   heroPriority: HeroPriority;
   excludedHeroes: Set<string>;
+  /** pieceUid → claiming heroUid (worklist reservations). A claimed Talisman/EE
+   *  counts as equipped on the claiming hero — same owner override as the piece
+   *  pool, so gems sitting on a reserved piece aren't proposed to another hero. */
+  worklistClaims?: Record<string, string>;
 }
 
 /** Multiset of OptionIDs the player can re-socket. Pool = union of every
@@ -43,12 +47,14 @@ export function buildGemPool(inv: Inventory, opts: GemPoolOptions): Map<number, 
   const pool = new Map<number, number>();
   for (const g of inv.gear) {
     if (g.slot !== "ooparts" && g.slot !== "exclusive") continue;
-    // Equipped on another hero — gated like the piece pool. Selected hero is
-    // exempt (the user might tick himself; that shouldn't drop his own gems).
-    if (g.equippedBy && g.equippedBy !== opts.heroUid) {
+    // Owned by another hero — physically equipped or worklist-claimed — gated
+    // like the piece pool. Selected hero is exempt (the user might tick
+    // himself; that shouldn't drop his own gems).
+    const owner = opts.worklistClaims?.[g.uid] ?? g.equippedBy;
+    if (owner && owner !== opts.heroUid) {
       if (opts.equippedScope === "none") continue;
-      if (opts.equippedScope === "lower" && !isLowerPriority(opts.heroPriority, g.equippedBy, opts.heroUid)) continue;
-      if (opts.excludedHeroes.has(g.equippedBy)) continue;
+      if (opts.equippedScope === "lower" && !isLowerPriority(opts.heroPriority, owner, opts.heroUid)) continue;
+      if (opts.excludedHeroes.has(owner)) continue;
     }
     for (const id of g.gemSlots ?? []) {
       if (!id) continue;

@@ -139,6 +139,9 @@ export interface SolveArgs {
   heroPriority: HeroPriority;
   /** Account-global "never use" piece UIDs — dropped from every slot pool. */
   excludedPieceUids?: string[];
+  /** Worklist reservations (pieceUid → claiming heroUid) — a claimed piece is
+   *  treated as equipped on the claiming hero for the scope/rank rules. */
+  worklistClaims?: Record<string, string>;
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
   /** Per-worker local top-K (orchestrator merges → returns top-N). Default 1000. */
@@ -293,6 +296,7 @@ export class SolverOrchestrator {
       userCodexLevel: args.userCodexLevel,
       heroPriority: args.heroPriority,
       excludedPieceUids: args.excludedPieceUids,
+      worklistClaims: args.worklistClaims,
       userSkills: args.userSkills,
       filters: args.filters,
       topK,
@@ -413,6 +417,7 @@ export class SolverOrchestrator {
       userCodexLevel: args.userCodexLevel,
       heroPriority: args.heroPriority,
       excludedPieceUids: args.excludedPieceUids,
+      worklistClaims: args.worklistClaims,
       userSkills: args.userSkills,
       filters: args.filters,
     };

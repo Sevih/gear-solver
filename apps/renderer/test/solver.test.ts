@@ -22,7 +22,7 @@ import {
   computeSetBonuses, type FinalStatsBaseline, type GemOverride, type ScalingMap,
 } from "../src/lib/composeBuild.js";
 import type { StatScaling } from "@gear-solver/core";
-import { projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
+import { maxedFloorOf, meetsMaxedFloor, projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
 import type { SolveBuild } from "../src/lib/solver/types.js";
 import { calcBattlePower, makeCpEvaluator } from "../src/lib/solver/cp.js";
 import { aggregateGemDelta, allocateGems, buildGemPool, gemSlotsOf, scoreGemPool } from "../src/lib/solver/gems.js";
@@ -203,6 +203,38 @@ describe("buildGemPool", () => {
     expect(pool.get(15037)).toBe(1); // free
     expect(pool.get(15004)).toBe(1); // rank 9 = lower priority → allowed
     expect(pool.get(15049)).toBeUndefined(); // rank 2 = higher priority → off-limits
+  });
+
+  it("worklist claim overrides ownership — a FREE piece claimed by a higher-rank hero is off-limits", () => {
+    // hero-high's queued build reserved the free talisman; solving hero-a
+    // (lower rank) under "lower" scope must not touch it — the claim behaves
+    // exactly like equipment on hero-high. A claim by a LOWER-rank hero stays
+    // fair game (hero-a would outrank the reservation, same as stealing gear).
+    const claimedByHigher = { ...talismanWithGems([15049]), uid: "t-resv-high", equippedBy: null };
+    const claimedByLower = { ...talismanWithGems([15004]), uid: "t-resv-low", equippedBy: null };
+    const inv = { gear: [claimedByHigher, claimedByLower], characters: [], presets: [] } as Inventory;
+    const pool = buildGemPool(inv, {
+      heroUid: "hero-a",
+      equippedScope: "lower",
+      heroPriority: { "hero-a": 5, "hero-low": 9, "hero-high": 2 },
+      excludedHeroes: new Set(),
+      worklistClaims: { "t-resv-high": "hero-high", "t-resv-low": "hero-low" },
+    });
+    expect(pool.get(15049)).toBeUndefined(); // reserved by rank 2 → off-limits
+    expect(pool.get(15004)).toBe(1);         // reserved by rank 9 → still takeable
+  });
+
+  it("worklist claim by the solving hero itself keeps the piece in (own gear invariant)", () => {
+    const mineByClaim = { ...talismanWithGems([15001]), uid: "t-claim-self", equippedBy: null };
+    const inv = { gear: [mineByClaim], characters: [], presets: [] } as Inventory;
+    const pool = buildGemPool(inv, {
+      heroUid: "hero-a",
+      equippedScope: "none",
+      heroPriority: {},
+      excludedHeroes: new Set(),
+      worklistClaims: { "t-claim-self": "hero-a" },
+    });
+    expect(pool.get(15001)).toBe(1); // claimed for the solving hero → own gear
   });
 });
 
@@ -898,6 +930,46 @@ describe("projectPieceForReforge — reforge budget per mode", () => {
   it("classic (+10R6) distributes 6 ticks", () => expect(totalReforge("classic")).toBe(6));
   it("ascended10 (+10R9) distributes 9 ticks — ascension's +3", () => expect(totalReforge("ascended10")).toBe(9));
   it("ascended (+15R9) distributes 9 ticks", () => expect(totalReforge("ascended")).toBe(9));
+});
+
+describe("maxedFloorOf / meetsMaxedFloor — the 'Maxed only' investment floor", () => {
+  // A piece at a given (enhance, reforgeCount) state.
+  const at = (enhanceLevel: number, reforgeCount: number): GearPiece =>
+    ({ ...gearPiece("weapon"), enhanceLevel, reforgeCount });
+
+  it("toggle off or reforge 'disable' → no gate (pieces in their current state)", () => {
+    expect(maxedFloorOf(false, "ascended")).toBeNull();
+    expect(maxedFloorOf(true, "disable")).toBeNull();
+    expect(meetsMaxedFloor(at(0, 0), "weapon", null)).toBe(true); // +0 piece admitted
+  });
+
+  it("+10R6: admits +10r6 and better, rejects below on either axis", () => {
+    const floor = maxedFloorOf(true, "classic")!;
+    expect(meetsMaxedFloor(at(10, 6), "weapon", floor)).toBe(true);  // exactly the floor
+    expect(meetsMaxedFloor(at(15, 9), "weapon", floor)).toBe(true);  // "or better"
+    expect(meetsMaxedFloor(at(9, 6), "weapon", floor)).toBe(false);  // enhance short
+    expect(meetsMaxedFloor(at(10, 5), "weapon", floor)).toBe(false); // reforges short
+  });
+
+  it("+10R9: needs 9 reforges done — a +10r6 non-ascended piece is out", () => {
+    const floor = maxedFloorOf(true, "ascended10")!;
+    expect(meetsMaxedFloor(at(10, 9), "weapon", floor)).toBe(true);  // ascended-for-reforges
+    expect(meetsMaxedFloor(at(15, 9), "weapon", floor)).toBe(true);
+    expect(meetsMaxedFloor(at(10, 6), "weapon", floor)).toBe(false);
+  });
+
+  it("+15R9: only +15 with 9 reforges", () => {
+    const floor = maxedFloorOf(true, "ascended")!;
+    expect(meetsMaxedFloor(at(15, 9), "weapon", floor)).toBe(true);
+    expect(meetsMaxedFloor(at(10, 9), "weapon", floor)).toBe(false); // +10 ascended, not +15
+    expect(meetsMaxedFloor(at(15, 6), "weapon", floor)).toBe(false);
+  });
+
+  it("talisman is gated on enhance only (gems replace reforge)", () => {
+    const floor = maxedFloorOf(true, "ascended")!;
+    expect(meetsMaxedFloor(at(15, 0), "ooparts", floor)).toBe(true);
+    expect(meetsMaxedFloor(at(10, 0), "ooparts", floor)).toBe(false);
+  });
 });
 
 /* ─────────────────────────────────────────────────────────────────────────

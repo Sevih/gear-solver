@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Inventory } from "@gear-solver/core";
 import { planWorklist } from "../src/lib/worklist/plan.js";
-import type { WorklistChange, WorklistEntry } from "../src/lib/storage/worklist.js";
+import { worklistClaims, type WorklistChange, type WorklistEntry } from "../src/lib/storage/worklist.js";
 
 // --- Minimal fixtures. The planner only reads `gear[].uid` / `gear[].equippedBy`
 //     and the entries' (heroUid, changes[{slot,toUid,fromUid}]) — everything else
@@ -104,5 +104,36 @@ describe("planWorklist — transaction planning", () => {
     const plan = planWorklist(list, inv([{ uid: "P", owner: "h1" }, { uid: "R" }]));
     expect(plan.assignments.map((m) => m.uid)).toEqual(["R"]);
     expect(plan.heroes).toBe(1);
+  });
+});
+
+describe("worklistClaims — solver reservations", () => {
+  it("maps each unapplied change's target to its claiming hero", () => {
+    const list = [
+      entry("a", "h1", [change("weapon", "P"), change("helmet", "Q")]),
+      entry("b", "h2", [change("gloves", "R")]),
+    ];
+    const claims = worklistClaims(list, inv([{ uid: "P" }, { uid: "Q" }, { uid: "R" }]));
+    expect(claims).toEqual({ P: "h1", Q: "h1", R: "h2" });
+  });
+
+  it("skips changes already applied (target on the hero) — real equippedBy covers those", () => {
+    const list = [entry("a", "h1", [change("weapon", "P"), change("helmet", "Q")])];
+    const claims = worklistClaims(list, inv([{ uid: "P", owner: "h1" }, { uid: "Q" }]));
+    expect(claims).toEqual({ Q: "h1" }); // P applied → no claim
+  });
+
+  it("newest entry wins a double-claim (list is newest-first)", () => {
+    const list = [
+      entry("new", "h2", [change("weapon", "P")]),
+      entry("old", "h1", [change("weapon", "P")]),
+    ];
+    const claims = worklistClaims(list, inv([{ uid: "P" }]));
+    expect(claims).toEqual({ P: "h2" });
+  });
+
+  it("returns an empty map with no inventory", () => {
+    expect(worklistClaims([entry("a", "h1", [change("weapon", "P")])], null)).toEqual({ P: "h1" });
+    expect(worklistClaims([], inv([]))).toEqual({});
   });
 });

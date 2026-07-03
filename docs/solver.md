@@ -86,10 +86,10 @@ sur son chunk**.
 Pour chaque slot ∈ {weapon, helmet, armor, gloves, boots, accessory, ooparts} :
 filtre les pièces de l'inventaire :
 - `g.slot === slot`
-- exclu selon `equippedScope` (`none`/`lower`/`all`) si équipé sur un **autre** héros — `lower` gate via `isLowerPriority(heroPriority, …)` (cf. § Options, Equipped items)
+- exclu selon `equippedScope` (`none`/`lower`/`all`) si équipé sur un **autre** héros — `lower` gate via `isLowerPriority(heroPriority, …)` (cf. § Options, Equipped items). Le « propriétaire » est le **claim worklist s'il existe, sinon `equippedBy`** : une pièce réservée par le build en attente d'un autre héros (`worklistClaims`, uid → héros réclamant, changes non appliqués seulement) est traitée comme équipée sur lui — le scope + rank s'appliquent aux réservations comme au gear réel
 - exclu si `g.uid ∈ excludedPieceUids` (exclusion **globale** account-wide, clic-droit Inventory — vérifié en premier)
-- exclu si `g.equippedBy ∈ excludedHeroes`
-- exclu si `onlyMaxed && enhanceLevel < 15`
+- exclu si `g.equippedBy ∈ excludedHeroes` (idem via le propriétaire effectif)
+- exclu si sous le **plancher « Maxed only »** (`meetsMaxedFloor`) : le toggle = **zéro extrapolation** — le mode reforge devient un plancher d'investissement (pièces **déjà** à cet état ou mieux, notées sur leurs vrais rolls, projection sautée). Off → aucun gate ; +10R6 → enhance ≥ 10 & reforges ≥ 6 ; +10R9 → ≥ 10 & ≥ 9 ; +15R9 → ≥ 15 & ≥ 9. Talisman : plancher enhance seul (pas de reforge sur gemmes)
 - exclu si `classLimit` ≠ classe du héros
 - exclu si **main pick** actif pour ce slot et `g.main[0].stat ∉ picks`
 - exclu si **effect chip** (weapon/accessory) marqué `excluded` ; ou marqué `required` et le `setId` de la pièce (identité d'effet `UniqueOptionID`) ne match pas — la comparaison est **délibérément** sur `setId`, pas sur `effectIcon` (des effets distincts partagent une icône, ex. la famille Recklessness)
@@ -252,12 +252,23 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
 
   Le re-scale du main passe par le ratio des multiplicateurs (`RolledStat` ne garde pas
   la valeur de base) — validé contre l'in-game (test `projectMainToCeiling` : 240 → 1380).
-- **Only maxed gear** — filtre pool à `enhanceLevel === 15`.
+- **Maxed only** (`onlyMaxed`) — **zéro extrapolation** : le mode reforge devient un **plancher
+  d'investissement** et la projection est **sautée** (pièces notées sur leurs vrais rolls, y compris
+  sur les gear cards — le contexte d'affichage est snapshoté en `disable`). Planchers
+  (`maxedFloorOf`/`meetsMaxedFloor`) : Off → aucun (pièces telles quelles, peu importe le niveau) ·
+  +10R6 → enhance ≥ 10 & ≥ 6 reforges · +10R9 → ≥ 10 & ≥ 9 · +15R9 → +15 & ≥ 9. « Ou mieux » garde
+  ses meilleurs rolls (une +15R9 dans un solve +10R6 n'est pas redescendue au plafond +10). Talisman :
+  enhance seul ; l'EE du héros n'est jamais filtré. (Remplace l'ancien cut plat `enhanceLevel < 15`,
+  aveugle au mode.)
 - **Equipped items** (`equippedScope`, **défaut ≤ Lower**) — quelles pièces équipées sur
   d'**autres** héros le solver peut piocher. Défaut `lower` : seulement les héros **strictement
   moins** prioritaires (auto-rangés par CP à la capture) → ne déshabille jamais un héros
   égal/supérieur. Sans ranking, dégrade en own+free (`isLowerPriority` ∞>∞ = false). `None` = own
   + free, `All` = n'importe quelle pièce équipée (l'ancien défaut, vol silencieux possible).
+  Le scope s'applique au **propriétaire effectif** = claim worklist ?? `equippedBy` : une pièce
+  réservée par le build en attente d'un autre héros compte comme équipée sur lui (une entrée
+  appliquée/retirée libère ses claims — dérivés live par `worklistClaims`). Le **gem pool**
+  (`buildGemPool`) suit la même règle.
 - **Keep current** — verrouille les slots déjà équipés à leur pièce actuelle.
 - **Allow broken sets** (`allowBrokenSets`, défaut **true**) — *true* : un set requis partiel
   (ex. un seul `2pc`) laisse n'importe quelle pièce remplir les slots armor libres (comportement

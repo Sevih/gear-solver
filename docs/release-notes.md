@@ -12,7 +12,16 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **The solver now respects your Worklist** — pieces already reserved by a queued
+  build are treated as if equipped on that hero. Solving your next hero won't
+  propose gear a higher-priority hero's pending build has claimed (same
+  priority-rank rules as for actually-equipped gear).
+- **"Maxed only" reworked** — it now means *no extrapolation*: the solver only
+  uses pieces already at the selected reforge mode's investment level (or
+  better), scored on their real rolls. Off: any piece as-is · +10R6: +10 with 6+
+  reforges · +10R9: +10 with 9+ reforges · +15R9: +15 with 9+ reforges.
+  Previously it always demanded +15, which wrongly excluded +10 endgame gear.
+- Fixed the "≤ Lower" button wrapping onto two lines in the Options panel.
 
 ## [1.5.1] — 2026-07-03
 

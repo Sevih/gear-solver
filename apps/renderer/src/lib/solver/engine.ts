@@ -69,6 +69,30 @@ const REFORGE_PLANS: Record<Exclude<ReforgeMode, "disable">, { ceiling: ReforgeC
   ascended:   { ceiling: { enhanceLevel: 15, ascended: true,  singularityLevel: 5 }, budget: 9 },
 };
 
+/** Investment floor the "Maxed only" toggle enforces, or null when nothing is
+ *  gated (toggle off, or reforge mode "disable" = pieces in their current
+ *  state whatever the level). Non-null → the solve admits only pieces ALREADY
+ *  at the mode's state or better, taken as-is (no projection):
+ *    +10R6 → enhance ≥ 10 & ≥ 6 reforges · +10R9 → ≥ 10 & ≥ 9 (implies
+ *    ascended) · +15R9 → ≥ 15 & ≥ 9. Exported for tests. */
+export function maxedFloorOf(onlyMaxed: boolean, mode: ReforgeMode): { ceiling: ReforgeCeiling; budget: number } | null {
+  return onlyMaxed && mode !== "disable" ? REFORGE_PLANS[mode] : null;
+}
+
+/** Does the piece meet the "Maxed only" investment floor? Talisman is gated on
+ *  enhance only (gems replace reforge there); EE never reaches the pool filter
+ *  but is exempted for symmetry. Null floor = nothing gated. */
+export function meetsMaxedFloor(
+  g: GearPiece,
+  slot: string,
+  floor: { ceiling: ReforgeCeiling; budget: number } | null,
+): boolean {
+  if (!floor) return true;
+  if (g.enhanceLevel < floor.ceiling.enhanceLevel) return false;
+  if (slot !== "ooparts" && slot !== "exclusive" && g.reforgeCount < floor.budget) return false;
+  return true;
+}
+
 /** Project a single pool piece to its reforge-mode ceiling: main-stat re-scale
  *  (`projectMainToCeiling`) + substat reforge ticks (`simulateReforges`) at the
  *  mode's fixed endgame budget. `disable` and Talisman/EE return the piece
@@ -290,24 +314,43 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // Account-global "never use" pieces (Inventory right-click → exclude). Built
   // once; checked first in `allow` so an excluded piece never enters any pool.
   const excludedPieces = new Set(req.excludedPieceUids ?? []);
+  // Worklist reservations — a piece claimed by another hero's queued build is
+  // treated as if EQUIPPED on that hero (its future state), so the scope/rank
+  // rules below apply to reservations exactly like to real equipment. A claim
+  // overrides the physical `equippedBy` (the claim is where the piece is going).
+  const worklistClaims = req.worklistClaims ?? {};
+  // "Only maxed" = NO extrapolation: the solve only uses pieces ALREADY at the
+  // reforge mode's investment state, taken as-is (the projection below is
+  // skipped). The mode acts as the FLOOR ("or better" is fine — a +15R9 piece
+  // qualifies for a +10R6 solve and is scored on its real, higher rolls):
+  //   - off  → no gate (pieces in their current state, whatever the level);
+  //   - +10R6 → enhance ≥ 10 AND ≥ 6 reforges done;
+  //   - +10R9 → enhance ≥ 10 AND ≥ 9 reforges done (implies ascended);
+  //   - +15R9 → enhance ≥ 15 (implies ascended) AND ≥ 9 reforges done.
+  // Talisman is gated on enhance only (gems replace reforge there); the hero's
+  // own EE never goes through `allow`. Replaces the old flat `enhance < 15`
+  // cut, which was mode-blind (it excluded +10 endgame gear from +10 solves).
+  const reforgeMode = filters.options.reforgeMode ?? "disable";
+  const maxedFloor = maxedFloorOf(filters.options.onlyMaxed, reforgeMode);
   // Per-slot filter helper. Returns true if the piece is allowed in this slot.
   const allow = (g: GearPiece, slot: string): boolean => {
     if (g.slot !== slot) return false;
     if (excludedPieces.has(g.uid)) return false;
-    // Equipped on ANOTHER hero — own + free gear is always in. The scope gates
-    // the rest: "none" excludes all; "lower" keeps only gear on a strictly
-    // lower-priority hero (so equal/higher heroes are never stripped); "all"
-    // keeps everything (legacy). Excluded heroes are out regardless. The
-    // selected hero is exempt from both checks — the picker lists every
-    // character so the user CAN tick himself, but doing so must not drop his
-    // own equipped gear (invariant: own gear is always in). The gem pool
-    // mirrors this via its own `heroUid` opt.
-    if (g.equippedBy && g.equippedBy !== heroUid) {
+    // Owned by ANOTHER hero — physically equipped OR reserved by a worklist
+    // claim. Own + free gear is always in. The scope gates the rest: "none"
+    // excludes all; "lower" keeps only gear on a strictly lower-priority hero
+    // (so equal/higher heroes are never stripped); "all" keeps everything
+    // (legacy). Excluded heroes are out regardless. The selected hero is exempt
+    // from both checks — the picker lists every character so the user CAN tick
+    // himself, but doing so must not drop his own equipped gear (invariant:
+    // own gear is always in). The gem pool mirrors this via its own opts.
+    const owner = worklistClaims[g.uid] ?? g.equippedBy;
+    if (owner && owner !== heroUid) {
       if (equippedScope === "none") return false;
-      if (equippedScope === "lower" && !isLowerPriority(heroPriority, g.equippedBy, heroUid)) return false;
-      if (excludedSet.has(g.equippedBy)) return false;
+      if (equippedScope === "lower" && !isLowerPriority(heroPriority, owner, heroUid)) return false;
+      if (excludedSet.has(owner)) return false;
     }
-    if (filters.options.onlyMaxed && g.enhanceLevel < 15) return false;
+    if (!meetsMaxedFloor(g, slot, maxedFloor)) return false;
     // Quality gate — only on slots that have a quality tier (null → keep).
     if (minQualityRank >= 0) {
       const tier = gearPieceQualityTier(g);
@@ -398,8 +441,12 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // (i.e. SOLVE mode without explicit priority — the fallback that reads
   // talisman subs directly). `simulateReforges` itself also rejects these
   // slots defensively in case a future caller forgets to filter here.
-  const reforgeMode = filters.options.reforgeMode ?? "disable";
-  if (reforgeMode !== "disable") {
+  // Skipped entirely under "Only maxed": the pool was floored to pieces already
+  // AT the mode's investment state, and the whole point of the toggle is zero
+  // extrapolation — pieces are scored on their real, captured rolls. Projecting
+  // here would also DOWN-scale a +15 piece's mains to a +10 ceiling in the
+  // +10R6/+10R9 modes ("or better" must keep its better rolls).
+  if (reforgeMode !== "disable" && !filters.options.onlyMaxed) {
     for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const) {
       pools[slot] = pools[slot].map((p) => projectPieceForReforge(p, game, reforgeMode, filters.priority));
     }
@@ -616,6 +663,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     equippedScope,
     heroPriority,
     excludedHeroes: excludedSet,
+    worklistClaims,
   });
   const gemPriority = hasPriority
     ? filters.priority

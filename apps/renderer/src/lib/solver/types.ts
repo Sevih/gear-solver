@@ -41,6 +41,11 @@ export type EffectConstraint = "required" | "excluded";
  *  arrays for postMessage compatibility). */
 export interface SolveFilters {
   options: {
+    /** "Maxed only" = NO extrapolation: the reforge mode becomes an investment
+     *  FLOOR (pieces already at that state or better), pieces are scored on
+     *  their real captured rolls and the reforge projection is skipped. With
+     *  reforgeMode "disable" there is no gate (any piece, as-is). See the
+     *  mode-aware gate in `precomputeContext.allow()`. */
     onlyMaxed: boolean;
     /** Reforge-mode preview: "disable" (gear as captured) | "classic" (+10R6,
      *  6 ticks, no passive) | "ascended10" (+10R9 — +10R6's main stat with 3
@@ -112,6 +117,13 @@ export interface SolveRequest {
    *  Dropped from every slot pool in `allow()` before the cartesian. Absent =
    *  none excluded. Distinct from `filters.excludedHeroes` (per-hero gear). */
   excludedPieceUids?: string[];
+  /** pieceUid → heroUid of the worklist entry claiming it (unapplied changes
+   *  only — see `worklistClaims` in storage/worklist.ts). A claimed piece is
+   *  treated as if EQUIPPED on the claiming hero, so the `equippedScope` +
+   *  rank rules apply to worklist reservations exactly like to real equipment
+   *  (solving hero B won't take what hero A's queued build reserved, unless
+   *  the scope/rank would let B strip A anyway). Absent = no claims. */
+  worklistClaims?: Record<string, string>;
   /** Captured per-character skill levels. `chainPassive` is the auto-leveled
    *  Skill_5 row (not user-controllable) but it contributes additively to
    *  CP via the `skillSum` term, so feeding 0 would under-report CP for any
@@ -173,6 +185,7 @@ export interface EstimateRequestMsg {
   userCodexLevel: number | null;
   heroPriority: HeroPriority;
   excludedPieceUids?: string[];
+  worklistClaims?: Record<string, string>;
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
 }

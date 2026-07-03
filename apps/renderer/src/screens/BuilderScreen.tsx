@@ -66,6 +66,11 @@ interface BuilderScreenProps {
   /** Account-global "never use" piece UIDs (owned by App, edited in Inventory)
    *  — dropped from every slot pool before the cartesian. */
   excludedPieceUids?: Set<string>;
+  /** Worklist reservations (pieceUid → claiming heroUid, unapplied changes only,
+   *  owned by App) — a claimed piece is treated by the solver as if equipped on
+   *  the claiming hero, so the equipped scope + rank rules honor what earlier
+   *  queued builds already reserved. */
+  worklistClaims?: Record<string, string>;
   /** Toggle a piece in/out of the global exclusion set (App owns it) — wired to
    *  the results gear-card footer so a trash roll can be excluded from results. */
   onToggleExclude?: (uid: string) => void;
@@ -607,7 +612,7 @@ function buildPassesFilters(
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, onToggleExclude, initialHeroUid, onInitialHeroConsumed, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
@@ -775,8 +780,14 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setSolveProgress({ permutations: 0, searched: 0, poolSizes: null });
     setLastSolveMode(mode);
     // Snapshot the reforge context for this run (shallow-copy the priority so
-    // a later filter edit can't mutate what `onResult` reads).
-    solveReforgeRef.current = { reforgeMode: filters.options.reforgeMode, priority: { ...filters.priority } };
+    // a later filter edit can't mutate what `onResult` reads). Under "Only
+    // maxed" the engine skips the projection (pieces scored as-is), so the
+    // display context is "disable" — the cards must show the real rolls the
+    // engine scored, not a re-projected preview.
+    solveReforgeRef.current = {
+      reforgeMode: filters.options.onlyMaxed ? "disable" : filters.options.reforgeMode,
+      priority: { ...filters.priority },
+    };
     const serializedFilters = buildSolveFilters(filters);
     orchestrator.solve({
       mode,
@@ -787,6 +798,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       userCodexLevel,
       heroPriority,
       excludedPieceUids: excludedPieceUids ? Array.from(excludedPieceUids) : undefined,
+      worklistClaims,
       userSkills: {
         first: selected.skills.first,
         second: selected.skills.second,
@@ -991,6 +1003,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         userCodexLevel,
         heroPriority,
         excludedPieceUids: excludedPieceUids ? Array.from(excludedPieceUids) : undefined,
+        worklistClaims,
         userSkills: {
           first: selected.skills.first,
           second: selected.skills.second,
@@ -1002,7 +1015,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     }, 250);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [solving, selectedUid, inventory, game, selected, filters, solveMode, heroPriority, excludedPieceUids, userGeasLevels, userCodexLevel]);
+  }, [solving, selectedUid, inventory, game, selected, filters, solveMode, heroPriority, excludedPieceUids, worklistClaims, userGeasLevels, userCodexLevel]);
 
   // "Get preset" — fetch this hero's outerpedia build reco and overlay it on
   // the current filters (mergePreset). Multiple named builds → a small picker.
@@ -1776,6 +1789,7 @@ function BuilderToolbar({
           label="Maxed only"
           on={filters.options.onlyMaxed}
           onClick={() => dispatch({ type: "setOption", key: "onlyMaxed", value: !filters.options.onlyMaxed })}
+          title="No extrapolation — only pieces ALREADY at the reforge mode's investment state (or better), scored on their real rolls. Off mode: any piece as-is · +10R6: enhance ≥10 & ≥6 reforges · +10R9: enhance ≥10 & ≥9 reforges · +15R9: +15 & ≥9 reforges."
         />
         <ToolbarDivider />
         <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
@@ -1927,12 +1941,13 @@ function ReforgeModeControl({ value, dispatch }: { value: ReforgeMode; dispatch:
 }
 
 /** Compact inline toggle pill (the two always-visible quick options). */
-function ToolbarToggle({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
+function ToolbarToggle({ label, on, onClick, title }: { label: string; on: boolean; onClick: () => void; title?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
+      title={title}
       className={cx(
         "flex h-7 shrink-0 items-center gap-2 rounded-lg border px-2.5 text-[11px] transition-colors",
         on ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-200" : "border-white/10 bg-white/4 text-white/70 hover:text-white",
@@ -2534,7 +2549,7 @@ function OptionsPanel({
       <div className="space-y-0.5">
         <div className="flex items-center justify-between gap-2 py-0.5">
           <HoverHint className="text-[11px] text-white/80" name="Equipped items" text="Which gear equipped on OTHER heroes the solver may pull in (your own hero's gear is always in). None = own + free only · ≤ Lower = also heroes ranked below this one in Builds (never strips an equal/higher hero) · All = any equipped gear." />
-          <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/4 p-0.5">
+          <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-white/10 bg-white/4 p-0.5">
             {EQUIPPED_SCOPES.map((s) => {
               const on = (options.equippedScope ?? "lower") === s.value;
               return (
@@ -2544,7 +2559,7 @@ function OptionsPanel({
                   onClick={() => dispatch({ type: "setEquippedScope", value: s.value })}
                   aria-pressed={on}
                   title={s.hint}
-                  className={cx("h-5 rounded px-1.5 text-[10px] font-semibold transition-colors", on ? "bg-cyan-400/20 text-cyan-200" : "text-white/65 hover:text-white/85")}
+                  className={cx("h-5 whitespace-nowrap rounded px-1.5 text-[10px] font-semibold transition-colors", on ? "bg-cyan-400/20 text-cyan-200" : "text-white/65 hover:text-white/85")}
                 >
                   {s.label}
                 </button>

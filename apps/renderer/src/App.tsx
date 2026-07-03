@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { GameData, Inventory, RawUserItem, RawUserCharacter, UserGeasLevels } from "@gear-solver/core";
 import { autoImport, parseFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
@@ -10,7 +10,7 @@ import { SettingsModal } from "./design/SettingsModal.js";
 import { HomeScreen } from "./screens/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
-import { loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, type WorklistEntry } from "./lib/storage/worklist.js";
+import { loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
 
@@ -121,6 +121,11 @@ export function App() {
   // Builder is live on the Worklist tab. Persisted to localStorage on each change.
   const [worklist, setWorklist] = useState<WorklistEntry[]>(() => loadWorklist());
   const commitWorklist = (next: WorklistEntry[]) => { setWorklist(next); persistWorklist(next); };
+  // Worklist reservations for the solver — pieceUid → claiming heroUid (unapplied
+  // changes only). A claimed piece behaves as if equipped on the claiming hero,
+  // so solving the NEXT hero respects what earlier builds already reserved
+  // (equipped scope + rank rules apply to claims like to real equipment).
+  const solverWorklistClaims = useMemo(() => worklistClaims(worklist, inv), [worklist, inv]);
   // Pending Inventory drill-down from a Home dashboard click — set + switch to
   // the Inventory tab, consumed (and cleared) by InventoryScreen on apply.
   const [invDrill, setInvDrill] = useState<InventoryDrill | null>(null);
@@ -363,7 +368,7 @@ export function App() {
           {builderMounted.current && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} onToggleExclude={toggleExclude} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={(entry) => setWorklist((prev) => { const next = [entry, ...prev]; persistWorklist(next); return next; })} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} onToggleExclude={toggleExclude} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={(entry) => setWorklist((prev) => { const next = [entry, ...prev]; persistWorklist(next); return next; })} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
               </ScreenErrorBoundary>
             </div>
           )}

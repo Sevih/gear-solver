@@ -122,7 +122,32 @@
 
 ## [Unreleased]
 
-_(rien en attente — les nouvelles entrées de session se mettent ici)_
+### Session 2026-07-03 — 🔴 Solver : réservations worklist + refonte « Maxed only » (+ nit ≤ Lower)
+
+- **Le solver ignore la worklist** (bug/QoL) — solve du héros B après avoir mis le build de A en worklist :
+  les pièces réservées par A restaient « libres / volables ». **Fix** : `worklistClaims(list, inv)`
+  ([worklist.ts](../apps/renderer/src/lib/storage/worklist.ts)) dérive live `uid → héros réclamant`
+  (changes **non appliqués** seulement ; l'entrée la plus récente gagne un double-claim), threadé
+  App → Builder → orchestrator/estimate → engine. Dans `allow()` + `buildGemPool`, le **propriétaire
+  effectif = claim ?? equippedBy** → le scope « Equipped items » + rank s'appliquent aux réservations
+  **comme au gear réel** (`≤ Lower` : un héros mieux classé peut encore prendre la pièce réservée d'un
+  moins bien classé ; `None` : jamais ; `All` : claims ignorés comme l'équipement). Appliquer/retirer
+  l'entrée libère les claims automatiquement. +6 tests (`worklistPlan` : helper ; `solver` : gem pool
+  avec réservations, claim par le héros lui-même = own gear).
+- **« Maxed only » repensé — mode-aware, zéro extrapolation** — l'ancien toggle coupait
+  `enhanceLevel < 15` quel que soit le mode reforge (en +10R6 il jetait le gear endgame +10).
+  **Nouvelle sémantique** : le mode reforge devient un **plancher d'investissement** — seules les
+  pièces **déjà** à cet état (ou mieux) entrent, notées sur leurs **vrais rolls** (projection sautée,
+  gear cards comprises — contexte d'affichage snapshoté en `disable`). Planchers : Off → aucun ·
+  +10R6 → enhance ≥ 10 & ≥ 6 reforges · +10R9 → ≥ 10 & ≥ 9 · +15R9 → +15 & ≥ 9. « Ou mieux » garde
+  ses meilleurs rolls (pas de down-scale d'une +15 au plafond +10). Talisman : enhance seul ; EE
+  jamais filtré. Helpers purs `maxedFloorOf`/`meetsMaxedFloor`
+  ([engine.ts](../apps/renderer/src/lib/solver/engine.ts)) + tooltip sur le toggle. +5 tests
+  verrouillant la table des planchers.
+- **⚪ Bouton « ≤ Lower » sur 2 lignes** (segmented Equipped items, panneau Options) — l'espace
+  sécable du label wrappait dans le panneau étroit → `whitespace-nowrap` + `shrink-0`.
+- Docs synchronisées ([solver.md](solver.md) phase 2 + Options, [wiki/Solver.md](../wiki/Solver.md),
+  [wiki/Using-the-App.md](../wiki/Using-the-App.md), `types.ts`). Typecheck + 286 tests verts.
 
 ## [1.5.1] — 2026-07-03
 

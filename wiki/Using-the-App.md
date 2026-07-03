@@ -99,11 +99,17 @@ results, the bottom band shows the selected build's pieces.
   reforge ticks) / **+10R9** (preview at +10 ascended — 9 ticks, same main stat as +10R6, no
   Singularity passive) / **+15R9** (preview at +15 fully ascended — 9 ticks plus the
   Singularity passive). Lets you compare builds as if the gear were maxed.
-- **Only maxed gear** — restrict to +15 pieces.
+- **Maxed only** — no extrapolation: only pieces **already at the reforge mode's investment
+  state (or better)**, scored on their real rolls (no projection). Off: any piece as-is ·
+  +10R6: +10 with ≥ 6 reforges done · +10R9: +10 with ≥ 9 reforges · +15R9: +15 with ≥ 9
+  reforges. Use it to answer "what's my best build with zero further investment?".
 - **Equipped items** — a three-way control for which gear worn by *other* heroes the solver
   may pull in: **None** (only the hero's own gear + free gear), **≤ Lower** (default — also
   gear on heroes ranked strictly lower in the Builds priority ranking; with no ranks set this
-  degrades to own + free gear), or **All** (any equipped gear).
+  degrades to own + free gear), or **All** (any equipped gear). Pieces **reserved by a
+  Worklist entry** count as worn by the claiming hero, so solving your next hero respects
+  what earlier queued builds already grabbed (under **All**, reservations are ignored like
+  equipment is).
 - **Keep current** — lock the slots the hero already has equipped.
 - **Exclude equipped** — drop gear worn by specific heroes you pick.
 
