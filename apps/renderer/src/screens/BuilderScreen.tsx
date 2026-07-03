@@ -1527,8 +1527,17 @@ function armorSetCatalogFromInventory(inventory: Inventory | null, game: GameDat
     const icon = iconBySet.get(id);
     if (!icon) continue;
     const t4 = def.levels.find((l) => l.level === 2);
-    const has2pc = !!(t4?.p2 && t4.p2.st !== "ST_NONE" && t4.p2.v != null);
-    const has4pc = !!(t4?.p4 && t4.p4.st !== "ST_NONE" && t4.p4.v != null);
+    // A bonus "exists" when it has a flat-stat entry OR a description. Some sets'
+    // bonuses are conditional combat effects with NO stat entry (Revenge "ATK
+    // proportional to missing HP", Patience, Fortification, Swiftness, Immunity's
+    // 2pc) — p2/p4 is null / ST_NONE but pX_desc carries the real in-game bonus.
+    // Gating on the stat alone dropped those sets from the palette entirely, so
+    // a player owning Revenge pieces couldn't require the set. Desc presence
+    // mirrors the game's actual bonus tiers (Revenge: p2_desc null / p4_desc set
+    // = "requires at least 4 pieces"). Such a requirement constrains the search
+    // without moving stats/CP — correct, the effect is combat-conditional.
+    const has2pc = !!(t4?.p2 && t4.p2.st !== "ST_NONE" && t4.p2.v != null) || t4?.p2_desc != null;
+    const has4pc = !!(t4?.p4 && t4.p4.st !== "ST_NONE" && t4.p4.v != null) || t4?.p4_desc != null;
     const distinctSlots = slotsBySet.get(id)?.size ?? 0;
     const canForm2pc = owned >= 2 && distinctSlots >= 2;
     const canForm4pc = owned >= 4 && distinctSlots >= 4;
