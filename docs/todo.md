@@ -65,6 +65,19 @@
       changelog — à **valider sur un vrai ému** non-profilé). **Reste : mobile/physique** — bloqué par le
       root (téléphone rooté = ADB USB + cert via module Magisk à câbler ; non-rooté = hors de portée, c'est
       une limite physique pas un manque de code). Le wizard signale déjà « physique pas supporté ».
+- [ ] 🟢 **Capture no-root (explorer quand on aura le temps)** — le root est requis pour **2** choses
+      structurelles : (1) `redir.sh` = `iptables REDIRECT` des ports TCP custom **38001/38002** (le jeu fait du
+      TLS hors-443 via BestHTTP/2, ignore le proxy système → un proxy sans root ne voit rien) ; (2) `bind_cert.sh`
+      = `mount --bind` de notre CA dans le magasin **système** (Android 7+ ne fait pas confiance à un cert *user*
+      par défaut). **Risque anti-cheat** : certains jeux se sabotent si root/CA détectés ; OUTERPLANE ne le fait
+      **pas** aujourd'hui (root toggle OK, pas de cert pinning), mais le root **réduit l'adoption** et un patch
+      pourrait durcir ça. **Pistes** (par coût croissant) : (a) *test pas cher* — OUTERPLANE fait-il confiance à
+      un **user cert** (`network_security_config` permissif) ? si oui → on **supprime** l'étape root `bind_cert.sh`,
+      reste le redirect ; (b) *vrai no-root* — remplacer `iptables` par une capture **VpnService** (style
+      PCAPdroid, sans root) **ou** un redirect **côté hôte Windows** (on pilote déjà l'ému depuis le desktop) ;
+      (c) **import manuel** en fallback partiel (par héros), jamais un compte entier. Détaillé dans
+      [tools/capture/README.md](../tools/capture/README.md) § « Why root is required ». Lié à l'item
+      « Support Mobile et emulateur » (même blocage root).
 - [ ] Bake prod du `data/` (`extraResources` → `process.resourcesPath`) · `electron build`/installeur
       lance serveur local + renderer · auto-update contre release signée + feed réels · bouton capture
       natif en packagé (sans `npm run dev`).

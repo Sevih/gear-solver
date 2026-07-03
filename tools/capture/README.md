@@ -19,6 +19,39 @@ game, and writes decoded JSON to `out/` (`user_item.json`, `user_character.json`
 leaves the pipeline armed: the game stays fully playable and every later data fetch keeps
 decoding into `out/`. Everything below is the manual explanation of what the script does.
 
+## Why root is required (and the no-root outlook)
+
+Capture needs a **rooted emulator** for **two** structural reasons — not one:
+
+1. **Traffic redirect** ([`scripts/redir.sh`](scripts/redir.sh)) — the game data flows over
+   **TLS on non-standard TCP ports** (38001/38002) via Unity BestHTTP/2, which **ignores the
+   Android system proxy**. Intercepting arbitrary-port TCP needs a kernel-level `iptables
+   REDIRECT` (root) — a plain WiFi/HTTP proxy setting (no root) simply never sees those ports.
+2. **Certificate trust** ([`scripts/bind_cert.sh`](scripts/bind_cert.sh)) — our MITM CA must be
+   trusted by the app. On Android 7+ apps trust the **system** store but not user-installed
+   certs (unless a permissive `network_security_config` opts in), so we `mount --bind` the CA
+   into `/system/etc/security/cacerts` (root).
+
+**Anti-cheat risk.** Some games self-sabotage (ban / refuse to launch) when they detect root
+or a foreign CA. OUTERPLANE, as tested, does **neither**: it launches fine with the LDPlayer
+root toggle on, and it does **not pin** its certificate (a system-store CA is enough to MITM).
+So for *this* game the root risk is low today — but the requirement still narrows who can /
+will use the tool, and a game update could tighten this.
+
+**No-root outlook** (see the TODO backlog — explore when time permits):
+- **Cheap experiment first:** does OUTERPLANE trust a **user-installed** CA cert? If yes, the
+  root `bind_cert.sh` step disappears and only the redirect needs root.
+- **Full no-root path:** replace the `iptables` redirect with a **VpnService-based** capturer
+  (PCAPdroid-style, no root) *or* a **host-side (Windows)** transparent redirect — we already
+  drive the emulator from the desktop app, so the redirect could live on the host instead of
+  inside the guest. This is a real project, not a config tweak.
+- **Manual import** as a partial fallback (a few heroes at a time) for users who won't root —
+  never a full-account replacement (hundreds of pieces).
+
+Mobile/physical devices are gated by the same two requirements (see the `Support Mobile et
+emulateur` TODO item): a rooted phone can do it (ADB USB + a Magisk cert module), a non-rooted
+one cannot — a physical limit, not a missing feature.
+
 ## Summary of findings
 
 - The game **splits its traffic**:
