@@ -14,6 +14,10 @@
 
 _Nothing yet — user-facing notes for the next release go here._
 
+## [1.5.0] — 2026-07-03
+
+_Nothing yet — user-facing notes for the next release go here._
+
 ## [1.4.0] — 2026-07-02
 
 - **Solver honours demanding stat minimums** — setting a high minimum (e.g. a

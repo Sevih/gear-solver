@@ -124,6 +124,10 @@
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
 
+## [1.5.0] — 2026-07-03
+
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
 ## [1.4.0] — 2026-07-02
 
 ### Session 2026-07-02 — 🔴 Solver : `min` de stat rendu infaisable par le prune + tri Builds explicite
