@@ -20,7 +20,7 @@
  * build as "dmg = 0" instead of `ATK × 1.0`. PEN was ignored entirely.
  */
 import type { FinalStats } from "../composeBuild.js";
-import { ROLL_NORMS, STAT_NORMS, STAT_TO_PRIORITY } from "../statRegistry.js";
+import { ROLL_NORMS, SCORE_CAP_100, STAT_NORMS, STAT_TO_PRIORITY } from "../statRegistry.js";
 
 export interface CheapRatings {
   /** HP × SPD — bulky-and-fast composite (proxy, not a damage formula). */
@@ -156,10 +156,12 @@ export function computeScore(s: FinalStats, priority: Record<string, number>): n
     if (!w) continue;
     const v = (s as unknown as Record<string, number>)[key];
     if (typeof v !== "number") continue;
-    // CRC overflow past 100% is wasted in-game — don't reward builds that
-    // stack +critRate beyond the cap. STAT_NORMS.critRate = 100, so without this
-    // clamp a 115% CRC build scored +15% on its critRate contribution.
-    const effective = key === "critRate" ? Math.min(v, 100) : v;
+    // CRC / PEN overflow past 100% is wasted in-game (both hard-cap in the
+    // damage model — PPR clamps per §1.2) — don't reward builds stacking past
+    // the cap. Driven by the registry's `capAt100` flag (SCORE_CAP_100) so the
+    // score can never drift from the model again: a hardcoded `critRate` check
+    // here used to miss PEN entirely.
+    const effective = SCORE_CAP_100.has(key) ? Math.min(v, 100) : v;
     const norm = STAT_NORMS[key] ?? 100;
     total += (effective / norm) * w * 100;
   }

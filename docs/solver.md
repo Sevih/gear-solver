@@ -460,9 +460,11 @@ lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloqu
    heap trie par CP, donc les 8 produits ratings ne servent qu'à l'affichage.
 
 8. **Cancel responsive via MessageChannel** — `solveChunk` est async, yield à chaque
-   tick (~4096 combos) via un `MessageChannel.postMessage` round-trip (<1ms vs 4ms
-   pour `setTimeout(0)` throttlé dans les workers). Cancel mid-solve se propage
-   en ≤ tickEvery × t_combo ≈ 20-50ms.
+   tick (~4096 unités de travail : feuilles talisman **+ nœuds boots**, pour que les
+   sous-arbres armor massivement élagués — qui n'atteignent jamais la feuille —
+   drainent quand même la file de messages) via un `MessageChannel.postMessage`
+   round-trip (<1ms vs 4ms pour `setTimeout(0)` throttlé dans les workers). Cancel
+   mid-solve se propage en ≤ tickEvery × t_combo ≈ 20-50ms.
 
 9. **`FilterSpec[]` compilé** — `Object.keys` + `for...in` remplacés par un
    tableau plat itéré par index. Mineur mais cumulé sur des millions de combos.

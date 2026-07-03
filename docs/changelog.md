@@ -8,6 +8,31 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔴 Bugs — audit Builder (2026-07-03)
+- ✅ 🔴 **Deadlock UI : changer `workerCount` pendant un solve** — l'effet `useEffect([workerCount])`
+  (`BuilderScreen.tsx`) disposait le pool sans flush ni reset : `onResult` ne venait jamais, l'écran restait
+  en « solving… » avec un Cancel no-op (ref nulle). Fix : `setSolving(false)` + reset du progress dans l'effet.
+- ✅ 🔴 **`computeScore` ne clampait pas PEN à 100 %** — seul CHC était clampé (check `critRate` en dur) alors
+  que le registre marque `pen` `capAt100` et que le modèle de dégâts plafonne PPR (§1.2) ; un build à 115 % PEN
+  gagnait du score fantôme. Fix : clamp piloté par `SCORE_CAP_100` (dérivé du registre — enfin branché, il
+  était exporté sans consommateur), donc un futur axe cappé ne peut plus rater le clamp. +1 test
+  (`solver.test.ts` : PEN cappé, axes non-cappés inchangés).
+
+### 🟡/⚪ Cas limites — audit Builder (2026-07-03)
+- ✅ 🟡 **Cancel non réactif dans les sous-arbres massivement élagués** — le tick de `solveChunk` ne comptait
+  que les feuilles talisman : un parcours armor N⁴ entièrement rejeté (feasibility / no-broken-sets) ne
+  drainait jamais la file de messages → Cancel ignoré des secondes. Fix : compteur `steps` incrémenté aussi à
+  chaque nœud boots (avant `incSet`, tally cohérent en cas de break) — l'écart max entre ticks est borné par le
+  produit N³ helmet×armor×gloves.
+- ✅ 🟡 **Plan de sets infaisable (> 4 slots) créable dans l'UI** — `cycleSetInPlan` ne bornait pas `Σ count`
+  (`2pc A + 2pc B + 2pc C` = 6 slots → le moteur skippe le plan, pools vidés, `emptyReason` accusait « les
+  filtres »). Fix : le cycle saute tout step qui dépasse les `ARMOR_SLOTS` restants du plan
+  (`nextPlanCount(cur, reach, slotsFree)`), les tooltips des chips annoncent « no room left in this plan », et
+  un bandeau rose signale un plan > 4 slots importé d'un preset/reco legacy.
+- ✅ ⚪ **`worker.onerror` non gaté** — un crash DOM tardif d'un run périmé pouvait afficher une bannière
+  d'erreur sur le run courant ; et un crash pendant un solve actif laissait `workersDone` ne jamais atteindre
+  `activeChunks` (UI en attente infinie). Fix : gate sur `active` + `cancel()` (flush des partiels, UI libérée).
+
 ### 🟠 Perf solver
 - ✅ **Pruning par dominance (SOLVE CP)** — la CP étant monotone-croissante en chaque stat finale (et chaque
   stat finale en chaque entrée de bucket `flat/pct/buffPct`), une pièce dont la contribution est dominée

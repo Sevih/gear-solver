@@ -6,41 +6,11 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **2 🔴 ouverts** (audit Builder 2026-07-03).
+> **0 🔴 ouvert** (les 2 🔴 + 3 cas limites de l'audit Builder 2026-07-03 sont corrigés — cf. changelog).
 
 ---
 
 ## Reste à faire
-
-### 🔴 Bugs — audit Builder (2026-07-03)
-- [ ] 🔴 **Deadlock UI : changer `workerCount` pendant un solve** — l'effet
-      `useEffect([workerCount])` (`BuilderScreen.tsx:721-726`) fait `dispose()` +
-      `orchestratorRef.current = null` sans `setSolving(false)` ni flush : `onResult` ne
-      viendra jamais, l'écran reste en « solving… » et le bouton Cancel est un no-op
-      (`orchestratorRef.current?.cancel()` sur ref nulle). Seul un changement de héros
-      débloque. **Fix** : reset `solving`/progress dans cet effet.
-- [ ] 🔴 **`computeScore` ne clampe pas PEN à 100 %** — `ratings.ts:162-164` clampe CHC
-      mais pas PEN, alors que le registre marque `pen` `capAt100: true` et que
-      `SCORE_CAP_100` (`statRegistry.ts:90`) est exporté **mais jamais utilisé**. Le modèle
-      de dégâts (`computeCheapRatings`) plafonne bien PEN (PPR §1.2) → un build à 115 % PEN
-      gagne du score fantôme et peut être classé devant un build strictement meilleur.
-      **Fix** : `const effective = SCORE_CAP_100.has(key) ? Math.min(v, 100) : v;`.
-
-### 🟡/⚪ Cas limites — audit Builder (2026-07-03)
-- [ ] 🟡 **Cancel non réactif dans les sous-arbres massivement élagués** — le tick
-      (`permutations % tickEvery`) n'incrémente qu'à la feuille talisman
-      (`engine.ts:1319-1320`) ; les itérations d'armor rejetées mid-tree / au leaf
-      « no broken sets » ne tickent jamais → sur de gros pools armor quasi-tous rejetés
-      (ex. `allowBrokenSets=false` sans plan), le worker peut ignorer Cancel plusieurs
-      secondes. **Fix** : compter aussi les nœuds visités (pas seulement les feuilles).
-- [ ] 🟡 **Plan de sets infaisable (> 4 slots) créable dans l'UI** — `cycleSetInPlan` ne
-      borne pas `Σ count` d'un plan (`2pc A + 2pc B + 2pc C` = 6 slots) ; le moteur le
-      skippe correctement (`setPlans.ts:101`) et les pools se vident, mais `emptyReason`
-      accuse « les filtres » au lieu du plan impossible. **Fix** : garde dans le reducer ou
-      badge rouge sur l'onglet du plan.
-- [ ] ⚪ **`worker.onerror` non filtré par `solveId`** — `orchestrator.ts:200` : un crash
-      tardif d'un run périmé peut afficher une bannière d'erreur sur le run courant (les
-      messages `error` structurés passent, eux, par le check `solveId`).
 
 ### 🟠 Perf — audit Builder (2026-07-03)
 - [ ] 🟠 **Mémoïser `allocateGemsReachingCap` par `preGemCrc`** — dans le chemin
@@ -76,8 +46,8 @@
       + recompose dans `solveChunk` (le chemin par-combo `allocateGemsReachingCap` +
       `gemDeltaEquals`).
 - [ ] 🟢 **Flux orchestrateur** — cancel / supersede / `solveId` anti-stale /
-      `workersDone === activeChunks` : aucun test, et c'est là que vivent les deux bugs
-      🔴/⚪ ci-dessus.
+      `workersDone === activeChunks` / crash worker (`onerror` → cancel) : aucun test,
+      et c'est là que vivaient les bugs corrigés par l'audit (cf. changelog).
 
 ### 🟠 Perf solver
 - [~] **Solver CP trop lent** — diagnostic sur vrai compte : Top% 100 défaut + aucune priorité = **cartésien

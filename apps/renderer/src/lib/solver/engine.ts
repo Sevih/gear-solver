@@ -1125,7 +1125,9 @@ export interface SolveChunkOptions {
    *  tick re-checks `shouldContinue` to honor a cancel that arrived
    *  during the drain. */
   yieldToEvents?: () => Promise<void>;
-  /** Per-N permutations to invoke onTick / shouldContinue / yield. */
+  /** Per-N work units (leaf combos + boots-depth armor nodes) to invoke
+   *  onTick / shouldContinue / yield. Counting boots nodes too keeps Cancel
+   *  responsive in heavily-pruned subtrees where few combos reach the leaf. */
   tickEvery?: number;
 }
 
@@ -1243,6 +1245,13 @@ export async function solveChunk(
 
   let permutations = 0;
   let searched = 0;
+  // Tick heartbeat — incremented at every talisman leaf AND every boots-depth
+  // node. The leaf-only counter starved the message queue when the armor
+  // cartesian was massively rejected below boots (set feasibility / no-broken-
+  // sets): an N⁴ armor walk with no surviving leaf never ticked, so a Cancel
+  // could sit unprocessed for seconds. Boots-depth counting bounds the gap
+  // between ticks by the (much smaller) N³ helmet×armor×gloves product.
+  let steps = 0;
   let aborted = false;
 
   const tick = async (): Promise<boolean> => {
@@ -1292,6 +1301,10 @@ export async function solveChunk(
           pieces[3] = gloves;
           for (const boots of slotPools.boots) {
             if (aborted) break;
+            // Heartbeat at boots depth (see `steps`) — placed BEFORE incSet so
+            // a break here leaves the set tally consistent (gloves' decSet
+            // still runs on the way out).
+            if (++steps % tickEvery === 0 && !(await tick())) break;
             if (boots.armorSetId) incSet(setCount, boots.armorSetId);
             if (!checkSetsFeasible(0)) {
               if (boots.armorSetId) decSet(setCount, boots.armorSetId);
@@ -1317,7 +1330,7 @@ export async function solveChunk(
               const prefixBuckets = aggregatePrefixBuckets(pieces.slice(0, 6));
               for (const talisman of slotPools.ooparts) {
                 permutations++;
-                if (permutations % tickEvery === 0 && !(await tick())) break;
+                if (++steps % tickEvery === 0 && !(await tick())) break;
                 pieces[6] = talisman;
 
                 // Pre-aggregated gem delta lookup — O(1), no per-combo

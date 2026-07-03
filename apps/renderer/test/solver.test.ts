@@ -1075,6 +1075,19 @@ describe("crc clamp at 100%", () => {
     const fs150 = { ...fs100, critRate: 150 };
     expect(computeScore(fs100, { critRate: 3 })).toBe(computeScore(fs150, { critRate: 3 }));
   });
+
+  it("computeScore clamps PEN at 100% too — registry capAt100, same as the damage model", () => {
+    // Pre-fix bug: only critRate was hardcoded; a 115% PEN build earned +15%
+    // phantom score on points the damage model (PPR §1.2) treats as wasted.
+    const fs100 = { atk: 0, def: 0, hp: 0, spd: 0, critRate: 0, critDmg: 0,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 100, critDmgReduce: 0 };
+    const fs115 = { ...fs100, pen: 115 };
+    expect(computeScore(fs100, { pen: 3 })).toBe(computeScore(fs115, { pen: 3 }));
+    // Uncapped axes still score their overflow (sanity: the clamp is cap-gated).
+    const chd250 = { ...fs100, pen: 0, critDmg: 250 };
+    const chd300 = { ...chd250, critDmg: 300 };
+    expect(computeScore(chd300, { critDmg: 3 })).toBeGreaterThan(computeScore(chd250, { critDmg: 3 }));
+  });
 });
 
 describe("computeCheapRatings — noCrit heroes", () => {

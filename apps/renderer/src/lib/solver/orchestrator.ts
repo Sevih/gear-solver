@@ -198,7 +198,17 @@ export class SolverOrchestrator {
       const w = new SolverWorker();
       const idx = i;
       w.onmessage = (e: MessageEvent<WorkerOutput>) => this.handle(idx, e.data);
-      w.onerror = (e: ErrorEvent) => this.cb.onError(`worker ${idx}: ${e.message}`);
+      // DOM-level crash (script error, OOM) — unlike the structured `error`
+      // messages, an ErrorEvent carries no solveId, so gate on `active`: a
+      // late crash from a superseded/idle run must not raise a banner over the
+      // current results. During an active solve, also cancel(): a dead worker
+      // never posts its `result`, so `workersDone` would never reach
+      // `activeChunks` and the UI would wait forever.
+      w.onerror = (e: ErrorEvent) => {
+        if (!this.active) return;
+        this.cb.onError(`worker ${idx}: ${e.message}`);
+        this.cancel();
+      };
       this.workers.push(w);
     }
   }

@@ -36,6 +36,7 @@ import { calcBattlePower } from "../lib/solver/cp.js";
 import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../lib/solver/orchestrator.js";
 import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode, SolveRequest } from "../lib/solver/types.js";
 import type { HeroPriority } from "../lib/storage/heroPriority.js";
+import { ARMOR_SLOTS, planSlots } from "../lib/solver/setPlans.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
 import { fetchReco } from "../lib/reco/fetchReco.js";
 import { equipPieces } from "../equip.js";
@@ -514,7 +515,12 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
       const plans = state.setPlans.length > 0 ? state.setPlans : [[]];
       const plan = plans[action.planIdx] ?? [];
       const curCount = plan.find((c) => c.setId === action.setId)?.count ?? 0;
-      const nextCount = nextPlanCount(curCount, action.reach);
+      // Armor slots the plan's OTHER sets already consume — a step that would
+      // push the plan past the 4 armor slots is unreachable in-game (the
+      // engine skips such a plan entirely), so the cycle must skip it too:
+      // with `2pc A + 2pc B` set, C can only stay off, and A can't go 4pc.
+      const othersTotal = plan.reduce((n, c) => n + (c.setId === action.setId ? 0 : c.count), 0);
+      const nextCount = nextPlanCount(curCount, action.reach, ARMOR_SLOTS - othersTotal);
       // Rebuild the plan: drop the set, then re-add at the new count (unless off).
       const rebuilt = plan.filter((c) => c.setId !== action.setId);
       if (nextCount !== 0) rebuilt.push({ setId: action.setId, count: nextCount });
@@ -723,6 +729,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     if (orchestratorRef.current) {
       orchestratorRef.current.dispose();
       orchestratorRef.current = null;
+      // dispose() tears the pool down WITHOUT flushing — if a solve was in
+      // flight, its onResult will never fire, which stranded the screen in
+      // "solving…" with a no-op Cancel (the ref is null). Release the UI here.
+      setSolving(false);
+      setSolveProgress({ permutations: 0, searched: 0, poolSizes: null });
     }
   }, [workerCount]);
 
@@ -2988,6 +2999,9 @@ function SetsPanel({
   const plans = setPlans.length > 0 ? setPlans : [[]];
   const active = Math.min(activePlan, plans.length - 1);
   const activeConds = plans[active] ?? [];
+  // Armor slots the active plan consumes — drives the per-chip "slots free"
+  // computation (chip cycle + tooltip both honor the 4-slot ceiling).
+  const activeTotal = activeConds.reduce((n, c) => n + c.count, 0);
   const excluded = useMemo(() => new Set(excludedSets), [excludedSets]);
   const nameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -3066,15 +3080,28 @@ function SetsPanel({
         <div className="text-[11px] italic text-white/65">No forms-anything set in inventory</div>
       ) : (
         <div className="flex flex-wrap gap-1">
-          {sets.map((s) => (
-            <SetIconChip key={s.id} set={s} state={chipState(s)} mode={mode} onClick={() => onChip(s)} />
-          ))}
+          {sets.map((s) => {
+            // Armor slots still free for THIS set in the active plan (its own
+            // count excluded) — mirrors the reducer's cycle guard so the chip
+            // tooltip announces "plan full" instead of a click doing nothing.
+            const own = activeConds.find((c) => c.setId === s.id)?.count ?? 0;
+            const slotsFree = ARMOR_SLOTS - (activeTotal - own);
+            return <SetIconChip key={s.id} set={s} state={chipState(s)} mode={mode} slotsFree={slotsFree} onClick={() => onChip(s)} />;
+          })}
         </div>
       )}
 
       {mode === "require" && summary && (
         <div className="mt-2 text-[10px] leading-snug text-white/70">
           <span className="text-white/65">Match: </span>{summary}
+        </div>
+      )}
+      {/* A plan over 4 armor slots can never match (the engine skips it) — only
+       *  reachable via an imported preset / reco (the chip cycle now guards
+       *  manual edits), so call it out instead of a silent "no builds". */}
+      {mode === "require" && plans.some((p) => planSlots(p) > ARMOR_SLOTS) && (
+        <div className="mt-2 text-[10px] leading-snug text-rose-300/90">
+          ⚠ A plan requires more than {ARMOR_SLOTS} armor pieces — it can never match. Remove a set from it.
         </div>
       )}
     </Panel>
@@ -3205,11 +3232,14 @@ function nextChipState(s: ChipState | undefined): ChipState {
 }
 
 /** Cycle a set's piece-count within a plan: 0 → 2 → 4 → 0, skipping any step
- *  the inventory can't form (need ≥2/≥4 pieces). Mirrors `nextSetChipState`
- *  minus the `excluded` state (exclusion is a separate, global toggle now). */
-function nextPlanCount(cur: number, reach: SetChipReach): number {
-  const can2 = reach.has2pc && reach.canForm2pc;
-  const can4 = reach.has4pc && reach.canForm4pc;
+ *  the inventory can't form (need ≥2/≥4 pieces) OR that doesn't fit in the
+ *  plan's remaining armor slots (`slotsFree` = 4 minus what the plan's other
+ *  sets already consume — a plan over 4 slots is infeasible in-game and the
+ *  engine skips it entirely). Mirrors `nextSetChipState` minus the `excluded`
+ *  state (exclusion is a separate, global toggle now). */
+function nextPlanCount(cur: number, reach: SetChipReach, slotsFree: number = ARMOR_SLOTS): number {
+  const can2 = reach.has2pc && reach.canForm2pc && slotsFree >= 2;
+  const can4 = reach.has4pc && reach.canForm4pc && slotsFree >= 4;
   if (cur === 0) return can2 ? 2 : can4 ? 4 : 0;
   if (cur === 2) return can4 ? 4 : 0;
   return 0; // was 4
@@ -3224,16 +3254,21 @@ function chipClasses(picked: boolean, excluded: boolean): string {
 }
 
 /** Armor-set chip — icon + piece-count badge (2 / 4 when required, ✕ when
- *  excluded). The cycle skips `req-2pc` for sets without a real 2pc effect. */
-function SetIconChip({ set, state, mode, onClick }: { set: ArmorSetEntry; state: SetChipState; mode: "require" | "exclude"; onClick: () => void }) {
+ *  excluded). The cycle skips `req-2pc` for sets without a real 2pc effect,
+ *  and any step that doesn't fit in the plan's remaining armor slots
+ *  (`slotsFree`, own count excluded — mirrors the reducer's guard). */
+function SetIconChip({ set, state, mode, slotsFree = ARMOR_SLOTS, onClick }: { set: ArmorSetEntry; state: SetChipState; mode: "require" | "exclude"; slotsFree?: number; onClick: () => void }) {
   const picked = state === "req-2pc" || state === "req-4pc";
   const excluded = state === "excluded";
-  const can2pc = set.has2pc && set.canForm2pc;
-  const can4pc = set.has4pc && set.canForm4pc;
+  const can2pc = set.has2pc && set.canForm2pc && slotsFree >= 2;
+  const can4pc = set.has4pc && set.canForm4pc && slotsFree >= 4;
   const stateLabel =
     mode === "exclude"
       ? (state === "excluded" ? "excluded (click to clear)" : "click to exclude")
-    : state === "off" ? (can2pc ? "click to require 2pc" : "click to require 4pc")
+    : state === "off"
+      ? (can2pc ? "click to require 2pc"
+        : can4pc ? "click to require 4pc"
+        : `no room left in this plan (${ARMOR_SLOTS} armor slots max) — clear a set first`)
     : state === "req-2pc" ? (can4pc ? "required 2pc (click to switch to 4pc)" : "required 2pc (click to clear)")
     : "required 4pc (click to clear)";
   return (
