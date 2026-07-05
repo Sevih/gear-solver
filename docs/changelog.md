@@ -122,6 +122,10 @@
 
 ## [Unreleased]
 
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
+## [1.5.4] — 2026-07-05
+
 ### Session 2026-07-04 — ⚪ Label : « Effect Resistance » → « Resilience »
 
 - `longLabel` de `effRes` ([tokens.ts](../apps/renderer/src/design/tokens.ts)) : le jeu appelle la stat
