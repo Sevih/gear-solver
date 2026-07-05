@@ -12,7 +12,8 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- Renamed the "Effect Resistance" stat label to **Resilience**, matching the
+  in-game name.
 
 ## [1.5.3] — 2026-07-03
 

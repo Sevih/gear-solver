@@ -122,7 +122,11 @@
 
 ## [Unreleased]
 
-_(rien en attente — les nouvelles entrées de session se mettent ici)_
+### Session 2026-07-04 — ⚪ Label : « Effect Resistance » → « Resilience »
+
+- `longLabel` de `effRes` ([tokens.ts](../apps/renderer/src/design/tokens.ts)) : le jeu appelle la stat
+  **Resilience**, pas « Effect Resistance » (jargon d'autres gachas). Seule occurrence fautive — le panneau
+  Damage/+1% disait déjà Resilience ; label court « RES » inchangé.
 
 ## [1.5.3] — 2026-07-03
 

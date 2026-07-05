@@ -65,7 +65,8 @@ export const STAT: Record<string, StatTokens> = {
   critRate:  { label: "CRC",   longLabel: "Crit Chance",       kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_CRITICAL" },
   critDmg:   { label: "C.DMG", longLabel: "Crit DMG",          kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_CRITICAL_DMG" },
   eff:       { label: "EFF",   longLabel: "Effectiveness",     kind: "util", color: "#38bdf8", icon: "CM_Stat_Icon_CHANCE" },
-  effRes:    { label: "RES",   longLabel: "Effect Resistance", kind: "util", color: "#38bdf8", icon: "CM_Stat_Icon_RESIST" },
+  // In-game name is "Resilience" (not "Effect Resistance" — that's other games' jargon).
+  effRes:    { label: "RES",   longLabel: "Resilience",        kind: "util", color: "#38bdf8", icon: "CM_Stat_Icon_RESIST" },
   dmgUp:     { label: "DMG+",  longLabel: "DMG Increase",      kind: "off",  color: "#fb923c", icon: "CM_Stat_Icon_DMG_INCREASE" },
   dmgReduce: { label: "DMG-",  longLabel: "DMG Reduction",     kind: "def",  color: "#93c5fd", icon: "CM_Stat_Icon_ENEMY_DMG_REDUCE" },
   pen:       { label: "PEN",   longLabel: "Penetration",       kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_PIERCE_POWER" },
