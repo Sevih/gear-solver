@@ -122,6 +122,10 @@
 
 ## [Unreleased]
 
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
+## [1.5.6] — 2026-07-10
+
 ### Session 2026-07-10 — 🔴 Fix : extraction mitmproxy au premier lancement (régression 1.5.5)
 
 - 🔴 **`Expand-Archive failed on the mitmproxy zip`** en prod juste après le checksum OK : le fichier

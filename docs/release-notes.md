@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.5.6] — 2026-07-10
+
 - **Fixed the first-capture mitmproxy download failing to install** — the
   downloaded archive was extracted with the wrong step and errored out right
   after the checksum passed ("Expand-Archive failed"). Capture now provisions
