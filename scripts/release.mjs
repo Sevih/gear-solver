@@ -23,6 +23,14 @@
  *      player-facing notes from docs/release-notes.md ([Unreleased] section).
  *      Falls back to the `${prevTag}..HEAD~1` commit log when that section is
  *      empty (skip undraft with --no-undraft to edit the body manually).
+ *
+ * Env:
+ *   GH_TOKEN / GITHUB_TOKEN   required — electron-builder publish + gh.
+ *   VT_API_KEY                optional — when set, step 5 auto-submits the
+ *                             installer to VirusTotal and folds the scan link
+ *                             into the release notes. Get a free key at
+ *                             https://www.virustotal.com/gui/my-apikey
+ *                             (free tier: 4 req/min, 500/day — ample per release).
  */
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -142,6 +150,41 @@ function hashInstaller(version) {
   return { name, sha256 };
 }
 
+// Populated by submitToVirusTotal() in step 5; integrityNote() folds the scan
+// link into the notes when the auto-submit succeeded.
+let vtResult = null;
+
+/** Best-effort upload of the freshly-built installer to VirusTotal (v3 API).
+ *  Needs VT_API_KEY in the env; returns `{ guiUrl }` on a successful submit,
+ *  else null. NEVER throws — a VT hiccup must not fail a release. Uses the
+ *  large-file `upload_url` flow since the installer (~100 MB) is over VT's
+ *  32 MB direct-upload cap. The GUI page is keyed by SHA-256 and resolves
+ *  once the (possibly queued) analysis lands. */
+async function submitToVirusTotal(installer) {
+  if (!installer) return null;
+  const key = process.env.VT_API_KEY;
+  if (!key) { skip("VT_API_KEY not set — skipping VirusTotal auto-submit"); return null; }
+  if (DRY_RUN) { skip("dry-run — skipping VirusTotal submit"); return null; }
+  try {
+    const buf = readFileSync(join(INSTALLER_DIR, installer.name));
+    // 1. Large files require a one-time upload URL.
+    const urlRes = await fetch("https://www.virustotal.com/api/v3/files/upload_url", { headers: { "x-apikey": key } });
+    if (!urlRes.ok) throw new Error(`upload_url HTTP ${urlRes.status}`);
+    const uploadUrl = (await urlRes.json()).data;
+    // 2. Multipart upload of the .exe.
+    const form = new FormData();
+    form.append("file", new Blob([buf]), installer.name.replace(/ /g, "-"));
+    const upRes = await fetch(uploadUrl, { method: "POST", headers: { "x-apikey": key }, body: form });
+    if (!upRes.ok) throw new Error(`upload HTTP ${upRes.status}`);
+    const guiUrl = `https://www.virustotal.com/gui/file/${installer.sha256}`;
+    ok(`Submitted to VirusTotal → ${guiUrl}`);
+    return { guiUrl };
+  } catch (err) {
+    console.error(`  \x1b[33m! VirusTotal submit failed (non-fatal): ${err?.message ?? err}\x1b[0m`);
+    return null;
+  }
+}
+
 /** Markdown block appended to the release notes so users can verify the
  *  unsigned installer. Empty string when the exe wasn't found. The GitHub
  *  asset name replaces spaces with hyphens (electron-builder sanitizes the
@@ -150,7 +193,7 @@ function hashInstaller(version) {
 function integrityNote(installer) {
   if (!installer) return "";
   const downloadName = installer.name.replace(/ /g, "-");
-  return [
+  const lines = [
     "",
     "---",
     "",
@@ -165,7 +208,9 @@ function integrityNote(installer) {
     `Get-FileHash ".\\${downloadName}" -Algorithm SHA256`,
     "```",
     "",
-  ].join("\n");
+  ];
+  if (vtResult?.guiUrl) lines.push(`🔍 **VirusTotal scan:** ${vtResult.guiUrl}`, "");
+  return lines.join("\n");
 }
 
 // ── version arithmetic ─────────────────────────────────────────────────
@@ -281,6 +326,9 @@ try {
   const installer = hashInstaller(toVersion);
   if (installer) ok(`Installer SHA-256: ${installer.sha256}`);
   else skip("Installer .exe not found for hashing — notes will omit the checksum");
+
+  // Auto-submit to VirusTotal (best-effort; adds the scan link to the notes).
+  vtResult = await submitToVirusTotal(installer);
 
   // ── COMMIT + PUSH ────────────────────────────────────────────────────
   step(6, `Commit + tag ${tag} + push`);

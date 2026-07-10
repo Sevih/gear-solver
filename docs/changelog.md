@@ -122,7 +122,14 @@
 
 ## [Unreleased]
 
-_(rien en attente — les nouvelles entrées de session se mettent ici)_
+### Session 2026-07-10 — 🤖 Auto-submit VirusTotal au release (outillage)
+
+- `scripts/release.mjs` : quand **`VT_API_KEY`** est présent, l'étape 5 upload l'installeur sur
+  VirusTotal (API v3, flux `upload_url` pour les fichiers > 32 Mo) et injecte le **lien du scan**
+  (`gui/file/<sha256>`) dans les notes de release. Best-effort : une panne VT ne fait jamais échouer
+  le release (skip si clé absente, catch non fatal sinon). Résultat du switch AV : la 1.5.6 sort à
+  **0/66 sur VirusTotal** (la détection Varist `W64/ABApplication` a disparu ; le score 60.9 restant
+  est le *risk rating* comportemental d'Electron, pas une détection).
 
 ## [1.5.6] — 2026-07-10
 
