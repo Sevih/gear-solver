@@ -143,9 +143,13 @@ function hashInstaller(version) {
 }
 
 /** Markdown block appended to the release notes so users can verify the
- *  unsigned installer. Empty string when the exe wasn't found. */
+ *  unsigned installer. Empty string when the exe wasn't found. The GitHub
+ *  asset name replaces spaces with hyphens (electron-builder sanitizes the
+ *  upload), so we show that — it's what the user actually downloads — and
+ *  quote it in the command since it still contains no-space-but-safe chars. */
 function integrityNote(installer) {
   if (!installer) return "";
+  const downloadName = installer.name.replace(/ /g, "-");
   return [
     "",
     "---",
@@ -153,12 +157,12 @@ function integrityNote(installer) {
     "**Verify your download** (the installer isn't code-signed, so Windows/AV may warn — see the README):",
     "",
     "```",
-    `${installer.name}`,
+    `${downloadName}`,
     `SHA-256: ${installer.sha256}`,
     "```",
     "",
     "```powershell",
-    `Get-FileHash .\\${installer.name} -Algorithm SHA256`,
+    `Get-FileHash ".\\${downloadName}" -Algorithm SHA256`,
     "```",
     "",
   ].join("\n");
