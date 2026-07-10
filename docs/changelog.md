@@ -122,7 +122,15 @@
 
 ## [Unreleased]
 
-_(rien en attente — les nouvelles entrées de session se mettent ici)_
+### Session 2026-07-10 — 🔴 Fix : extraction mitmproxy au premier lancement (régression 1.5.5)
+
+- 🔴 **`Expand-Archive failed on the mitmproxy zip`** en prod juste après le checksum OK : le fichier
+  téléchargé était nommé `download.zip.partial`, or **PowerShell `Expand-Archive` refuse toute
+  extension ≠ `.zip`** (« Le seul format pris en charge est .zip »). Reproduit et confirmé sur le vrai
+  zip (`.partial` → exit 1, `.zip` → exit 0, mitmdump.exe extrait). Fix : nom en `download.zip` +
+  `$ErrorActionPreference='Stop'` et remontée de la 1re ligne de stderr dans le message d'erreur
+  ([mitm-provision.ts](../apps/desktop/src/mitm-provision.ts)). Le build (`fetch-binaries.mjs`) n'était
+  pas touché car il utilisait déjà un nom en `.zip`.
 
 ## [1.5.5] — 2026-07-10
 

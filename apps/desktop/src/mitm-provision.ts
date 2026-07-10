@@ -65,7 +65,9 @@ export function ensureMitmdump(log: (line: string) => void): Promise<void> {
 async function provision(log: (line: string) => void): Promise<void> {
   const root = binRoot();
   const destDir = join(root, MITMPROXY_VERSION);
-  const zipPath = join(root, "download.zip.partial");
+  // Must end in `.zip` — PowerShell's Expand-Archive refuses any other
+  // extension outright ("does not match the .zip file extension").
+  const zipPath = join(root, "download.zip");
   const stageDir = join(root, "stage");
   mkdirSync(root, { recursive: true });
 
@@ -77,9 +79,13 @@ async function provision(log: (line: string) => void): Promise<void> {
   rmSync(stageDir, { recursive: true, force: true });
   const r = spawnSync("powershell.exe", [
     "-NoProfile", "-NonInteractive", "-Command",
-    `Expand-Archive -Force -Path "${zipPath}" -DestinationPath "${stageDir}"`,
-  ], { windowsHide: true });
-  if (r.status !== 0) throw new Error("Expand-Archive failed on the mitmproxy zip");
+    `$ErrorActionPreference='Stop'; Expand-Archive -Force -Path "${zipPath}" -DestinationPath "${stageDir}"`,
+  ], { windowsHide: true, encoding: "utf-8" });
+  if (r.status !== 0) {
+    const detail = (r.stderr || "").trim().split("\n")[0] || `exit ${r.status}`;
+    dwarn("capture", "Expand-Archive failed:", detail);
+    throw new Error(`extracting mitmproxy failed: ${detail}`);
+  }
   const staged = join(stageDir, "mitmdump.exe");
   if (!existsSync(staged)) throw new Error("mitmdump.exe missing from the mitmproxy zip");
 
