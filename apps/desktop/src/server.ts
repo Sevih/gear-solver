@@ -28,7 +28,6 @@ import {
 import { dirname, extname, join, normalize } from "node:path";
 import {
   BUNDLED_ADB,
-  BUNDLED_MITMDUMP,
   BUNDLED_PROD_CERT_DIR,
   CAPTURE_DIR,
   CAPTURE_OUT,
@@ -50,6 +49,7 @@ import {
   type ManualDevice,
 } from "./emulator-detect.js";
 import { dlog, dwarn } from "./log.js";
+import { ensureMitmdump, mitmdumpPath } from "./mitm-provision.js";
 import { proxyReco } from "./reco-proxy.js";
 import { syncGameData } from "./data-sync.js";
 import { serveImg } from "./img-cache.js";
@@ -151,6 +151,18 @@ function tryMount(req: IncomingMessage, res: ServerResponse, url: string, prefix
   return true;
 }
 
+/** Flip a response into unbuffered plain-text streaming mode (the capture
+ *  console protocol). Idempotent — the mitmdump provisioning step may have
+ *  already streamed progress lines through the same response before streamPs
+ *  takes over. */
+function beginStream(res: ServerResponse): void {
+  if (res.headersSent) return;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+}
+
 /** Spawn a PowerShell script and stream its stdout/stderr verbatim. The
  *  client (apps/renderer/src/capture.ts) consumes lines and looks for the
  *  `__EXIT__:<code>` sentinel that we emit when the child exits. We listen
@@ -163,10 +175,7 @@ function streamPs(res: ServerResponse, script: string, extraArgs: string[] = [])
     res.end(`script not found: ${script}\n__EXIT__:127\n`);
     return;
   }
-  res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders?.();
+  beginStream(res);
 
   const child = spawn(
     "powershell.exe",
@@ -264,7 +273,7 @@ async function captureScriptArgs(): Promise<string[]> {
   if (IS_DEV) return targetScriptArgs(target);
   return [
     "-Adb", target?.adbPath || BUNDLED_ADB,
-    "-Mitmdump", BUNDLED_MITMDUMP,
+    "-Mitmdump", mitmdumpPath(),
     "-Out", CAPTURE_OUT,
     // -MitmConfDir tells mitmdump where to load the matching CA from; -CertDir
     // tells capture.ps1 where to find the Android-hash cert file to push.
@@ -334,8 +343,13 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   // doesn't throw) we surface a synthetic error stream that the renderer
   // already knows how to display.
   if (url === "/api/capture/run" && req.method === "POST") {
-    captureScriptArgs().then((args) => streamPs(res, join(CAPTURE_DIR, "capture.ps1"), args))
-      .catch((err: Error) => { res.write(`\n[detect error] ${err.message}\n__EXIT__:1\n`); res.end(); });
+    // First run on a machine: pull mitmdump from downloads.mitmproxy.org into
+    // userData (checksum-verified) before arming — progress lines share the
+    // capture console. See mitm-provision.ts for why it isn't bundled.
+    ensureMitmdump((line) => { beginStream(res); res.write(`${line}\n`); })
+      .then(() => captureScriptArgs())
+      .then((args) => streamPs(res, join(CAPTURE_DIR, "capture.ps1"), args))
+      .catch((err: Error) => { beginStream(res); res.write(`\n[setup error] ${err.message}\n__EXIT__:1\n`); res.end(); });
     return;
   }
   if (url === "/api/capture/disarm" && req.method === "POST") {

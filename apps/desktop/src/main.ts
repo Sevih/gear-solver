@@ -143,8 +143,9 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // On quit: first disarm the capture pipeline if it's still armed (otherwise
-// mitmdump.exe survives the Electron process and we can't even rebuild — the
-// bundled exe stays locked), then close the embedded HTTP server. The first
+// mitmdump.exe survives the Electron process — the provisioned exe under
+// userData stays locked, blocking a later version re-provision), then close
+// the embedded HTTP server. The first
 // before-quit pass calls preventDefault to keep the app alive long enough to
 // finish disarm; once that's done we set `cleaningUp` and re-fire app.quit()
 // which lets the second pass through.

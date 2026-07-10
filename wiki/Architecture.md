@@ -39,7 +39,10 @@ Four layers, connected by plain JSON:
   checkout→disk cache→CDN→302) so the app follows game patches **without a new build**.
   Packaging is live: `scripts/release.mjs` builds and publishes the installer via
   electron-builder (`--publish always`, `extraResources` for `data/`), and packaged builds
-  auto-update in production (`updater.ts` / `setupAutoUpdate`).
+  auto-update in production (`updater.ts` / `setupAutoUpdate`). The installer bundles `adb`
+  but **not** the mitmproxy binaries (AV heuristics flag them as a PUA): the packaged app
+  downloads the official checksum-pinned `mitmdump.exe` into `<userData>/bin/mitmproxy/` on the
+  first capture (`mitm-provision.ts`).
 
 ## Why this split
 

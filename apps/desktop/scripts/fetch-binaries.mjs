@@ -1,25 +1,29 @@
 #!/usr/bin/env node
 /**
- * One-shot provisioner for binaries the packaged Electron app bundles.
- * Run before `npm run pack` / `npm run dist`, and any time you want a fresher
- * mitmproxy or platform-tools release.
+ * One-shot provisioner for the build-time binaries of the packaged Electron
+ * app. Run before `npm run pack` / `npm run dist`, and any time you want a
+ * fresher mitmproxy or platform-tools release.
  *
- *   mitmproxy   (mitmdump.exe + bundled Python runtime DLLs)
- *               from the version pinned below — bump MITMPROXY_VERSION to
- *               pull a newer release.
+ *   mitmproxy   (mitmdump.exe only) — BUILD-TIME ONLY: it generates the
+ *               dedicated prod CA below but is NOT bundled in the installer.
+ *               AV heuristics flag the mitmproxy binaries (PUA), so the
+ *               packaged app downloads its own checksum-verified copy on
+ *               first capture instead — see src/mitm-provision.ts and keep
+ *               MITMPROXY_VERSION / MITMPROXY_SHA256 in sync with it.
  *   platform-tools (adb.exe + AdbWinApi / AdbWinUsbApi DLLs)
  *               from Google's always-latest pointer URL; we keep only the
  *               three files we actually need.
  *
  * Output: apps/desktop/resources/bin/{mitmproxy,adb}/ (gitignored). The
- * electron-builder extraResources mapping copies that tree to
- * `<resources>/bin/...` in the packaged build.
+ * electron-builder extraResources mapping copies only the adb tree to
+ * `<resources>/bin/adb` in the packaged build.
  *
  * Windows-only (we shell out to PowerShell's Expand-Archive). The Electron
  * tool ships Windows-only anyway — the capture pipeline depends on LDPlayer
  * / MuMu / NoxPlayer, all Windows.
  */
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -28,7 +32,9 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const BIN = join(here, "..", "resources", "bin");
 
+// Keep both pins in sync with src/mitm-provision.ts (runtime download).
 const MITMPROXY_VERSION = "12.1.2";
+const MITMPROXY_SHA256 = "81c268b4d4965899f59043201bd0707075c5b820310be382b2fd41c554f370a2";
 const MITMPROXY_URL = `https://downloads.mitmproxy.org/${MITMPROXY_VERSION}/mitmproxy-${MITMPROXY_VERSION}-windows-x86_64.zip`;
 const PLATFORM_TOOLS_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip";
 
@@ -65,9 +71,17 @@ async function provisionMitmproxy() {
   }
   const tmp = join(tmpdir(), `mitmproxy-${Date.now()}.zip`);
   await download(MITMPROXY_URL, tmp);
+  const got = createHash("sha256").update(readFileSync(tmp)).digest("hex");
+  if (got !== MITMPROXY_SHA256) {
+    rmSync(tmp, { force: true });
+    throw new Error(`mitmproxy zip checksum mismatch (got ${got}, expected ${MITMPROXY_SHA256}) — update both pins if the release moved`);
+  }
   expand(tmp, dest);
   rmSync(tmp, { force: true });
-  console.log(`[ok] mitmproxy ${MITMPROXY_VERSION} -> ${dest}`);
+  // Only mitmdump.exe is used (prod CA generation); the siblings are the AV
+  // bait we no longer want anywhere near the packaging pipeline.
+  for (const f of ["mitmproxy.exe", "mitmweb.exe"]) rmSync(join(dest, f), { force: true });
+  console.log(`[ok] mitmproxy ${MITMPROXY_VERSION} (mitmdump.exe only, checksum OK) -> ${dest}`);
 }
 
 async function provisionPlatformTools() {

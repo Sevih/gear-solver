@@ -122,7 +122,34 @@
 
 ## [Unreleased]
 
-_(rien en attente — les nouvelles entrées de session se mettent ici)_
+### Session 2026-07-10 — 🛡️ mitmproxy téléchargé au runtime (installeur non flaggé AV)
+
+- **Problème** : l'installeur NSIS embarquait les binaires mitmproxy (`resources/bin/mitmproxy/`) ;
+  VirusTotal remontait 3/63 détections (Varist classait `mitmweb.exe` en `W64/ABApplication` PUA,
+  DrWeb suivait avec une signature générique `Trojan.Siggen31`). Cause réelle confirmée par le rapport
+  Varist : c'est bien l'exe mitmproxy embarqué qui est flaggé, pas une heuristique sur l'installeur.
+- **Fix** : mitmdump n'est plus bundlé. Nouveau [mitm-provision.ts](../apps/desktop/src/mitm-provision.ts) —
+  au **premier** « Arm capture », l'app télécharge le zip officiel depuis `downloads.mitmproxy.org`,
+  **vérifie le SHA-256** épinglé, puis extrait **uniquement** `mitmdump.exe` sous
+  `<userData>/bin/mitmproxy/<version>/` (dir versionné → un bump de version re-provisionne tout seul).
+  La progression passe par la console de capture ([server.ts](../apps/desktop/src/server.ts) `/api/capture/run`).
+- `package.json` : `extraResources` ne bundle plus que `resources/bin/adb` (au lieu de `resources/bin/**`).
+- `fetch-binaries.mjs` reste build-only (génère la CA prod en lançant mitmdump) mais **vérifie le hash**
+  et supprime `mitmproxy.exe` / `mitmweb.exe` après extraction — plus de bait AV dans l'arbre de packaging.
+  Version + hash épinglés en double, à garder synchronisés entre `mitm-provision.ts` et `fetch-binaries.mjs`.
+- **Note** : `adb.exe` reste bundlé (non flaggé) ; le pipeline dev (`tools/capture/*.ps1`) est inchangé
+  et utilise toujours le mitmproxy installé système.
+
+### Session 2026-07-10 — 🔎 Transparence / vérifiabilité (installeur non signé)
+
+- `scripts/release.mjs` : hash l'installeur après le build electron-builder et publie un bloc
+  **SHA-256 + commande `Get-FileHash`** dans les notes de release GitHub (fallback inclus quand il n'y
+  a ni notes curées ni commits, pour que chaque release porte quand même un checksum vérifiable).
+- `README.md` : section « Antivirus / SmartScreen warnings » expliquant l'absence de signature, le
+  pourquoi des avertissements (pilotage émulateur + interception HTTPS via mitmproxy = comportement
+  qui ressemble à du monitoring), le téléchargement mitmproxy vérifié, et comment vérifier le hash.
+- Piste restante (gratuite, gros impact) : signature de code via **SignPath Foundation** (certificat
+  gratuit pour projets OSS) — nécessite candidature + migration du release vers GitHub Actions.
 
 ## [1.5.4] — 2026-07-05
 

@@ -80,8 +80,8 @@
         "to": "tools/capture/scripts"
       },
       {
-        "from": "resources/bin",
-        "to": "bin",
+        "from": "resources/bin/adb",
+        "to": "bin/adb",
         "filter": [
           "**/*"
         ]

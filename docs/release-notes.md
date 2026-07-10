@@ -12,7 +12,15 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Smaller, cleaner installer** — the download is ~80 MB lighter, and it no
+  longer bundles the mitmproxy tool that some antivirus programs mistook for
+  unwanted software. The first time you run a capture, the app downloads
+  mitmproxy from its official site (checksum-verified) into your app data. You
+  need an internet connection for that first capture (already required for the
+  game-data sync at launch).
+- **Verify your download** — each release now publishes the installer's SHA-256
+  so you can confirm the file is intact. The app still isn't code-signed, so
+  Windows may warn on install — see the README for why and how to check the hash.
 
 ## [1.5.4] — 2026-07-05
 

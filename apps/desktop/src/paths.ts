@@ -87,10 +87,9 @@ export const BUNDLED_ADB = IS_DEV
   ? "C:\\LDPlayer\\LDPlayer9\\adb.exe"
   : join(RES, "bin", "adb", "adb.exe");
 
-/** Bundled mitmdump.exe. Same dev/prod split as ADB. */
-export const BUNDLED_MITMDUMP = IS_DEV
-  ? "C:\\Program Files\\mitmproxy\\bin\\mitmdump.exe"
-  : join(RES, "bin", "mitmproxy", "mitmdump.exe");
+// mitmdump.exe is NOT bundled (AV heuristics flag the mitmproxy binaries in
+// the installer) — it is downloaded on first capture into userData. See
+// `mitm-provision.ts` for the pinned version/hash and `mitmdumpPath()`.
 
 /** Bundled mitmproxy CA dir — contains both the `mitmproxy-ca.pem` (private
  *  key + cert, used by mitmdump via `--set confdir=...`) and the

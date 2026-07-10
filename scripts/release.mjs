@@ -25,12 +25,18 @@
  *      empty (skip undraft with --no-undraft to edit the body manually).
  */
 import { execSync } from "node:child_process";
-import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DESKTOP_PKG = join(ROOT, "apps", "desktop", "package.json");
+// electron-builder drops the installer here (directories.output in the desktop
+// package.json). We hash it post-build so the release notes can publish a
+// verifiable SHA-256 — the app isn't code-signed, so a hash users can check is
+// the next best integrity signal.
+const INSTALLER_DIR = join(ROOT, "apps", "desktop", "release");
 // Two version-anchored journals, both stamped at release:
 //  - release-notes.md = curated, English, PLAYER-facing → source of the GitHub notes.
 //  - changelog.md     = detailed, French, DEV-facing engineering journal (not published).
@@ -119,6 +125,43 @@ function restoreVersion(pkgPath, pristineVersion) {
   } catch {
     console.error(`  \x1b[33m! Could not auto-revert version — restore manually: ${pristineVersion}\x1b[0m`);
   }
+}
+
+/** Find the Setup .exe electron-builder just produced for `version` and return
+ *  `{ name, sha256 }`, or null if it isn't there (dry-run, or a build that
+ *  didn't emit an installer). Matches on `Setup` + the version so a stale exe
+ *  from a previous release in the same dir is never picked. */
+function hashInstaller(version) {
+  let entries;
+  try { entries = readdirSync(INSTALLER_DIR); } catch { return null; }
+  const name = entries.find(
+    (f) => /setup/i.test(f) && f.endsWith(".exe") && f.includes(version),
+  );
+  if (!name) return null;
+  const sha256 = createHash("sha256").update(readFileSync(join(INSTALLER_DIR, name))).digest("hex");
+  return { name, sha256 };
+}
+
+/** Markdown block appended to the release notes so users can verify the
+ *  unsigned installer. Empty string when the exe wasn't found. */
+function integrityNote(installer) {
+  if (!installer) return "";
+  return [
+    "",
+    "---",
+    "",
+    "**Verify your download** (the installer isn't code-signed, so Windows/AV may warn — see the README):",
+    "",
+    "```",
+    `${installer.name}`,
+    `SHA-256: ${installer.sha256}`,
+    "```",
+    "",
+    "```powershell",
+    `Get-FileHash .\\${installer.name} -Algorithm SHA256`,
+    "```",
+    "",
+  ].join("\n");
 }
 
 // ── version arithmetic ─────────────────────────────────────────────────
@@ -229,6 +272,12 @@ try {
   run("npm run publish -w @gear-solver/desktop");
   releasedToGitHub = true;
 
+  // Hash the freshly-built installer so step 7 can publish a verifiable
+  // SHA-256 alongside the notes.
+  const installer = hashInstaller(toVersion);
+  if (installer) ok(`Installer SHA-256: ${installer.sha256}`);
+  else skip("Installer .exe not found for hashing — notes will omit the checksum");
+
   // ── COMMIT + PUSH ────────────────────────────────────────────────────
   step(6, `Commit + tag ${tag} + push`);
   // Stage the version bump AND the derived-data snapshot this release built +
@@ -259,6 +308,7 @@ try {
       if (unreleasedBody) {
         notesBody = `${unreleasedBody}\n`;
         if (prevTag) notesBody += `\n**Full changelog:** https://github.com/Sevih/gear-solver/compare/${prevTag}...${tag}\n`;
+        notesBody += integrityNote(installer);
       } else {
         // `HEAD~1` excludes the `chore: release ${tag}` commit (plumbing). Falls
         // back to the whole history when there's no previous tag (first release).
@@ -276,11 +326,15 @@ try {
             if (prevTag) {
               notesBody += `\n**Full changelog:** https://github.com/Sevih/gear-solver/compare/${prevTag}...${tag}\n`;
             }
+            notesBody += integrityNote(installer);
           }
         } catch (err) {
           console.error(`  \x1b[33m! Couldn't gather commit log: ${err?.message ?? err}\x1b[0m`);
         }
       }
+      // Even with no curated notes and an empty commit range, still publish the
+      // checksum block so every release carries a verifiable hash.
+      if (!notesBody && installer) notesBody = `## ${tag}\n${integrityNote(installer)}`;
       const NOTES_FILE = join(ROOT, ".release-notes.tmp.md");
       const hasNotes = notesBody.length > 0;
       if (hasNotes) {

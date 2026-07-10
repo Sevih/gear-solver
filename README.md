@@ -23,6 +23,23 @@ FAQ) walks through everything.
 
 > Needs Windows + LDPlayer (rooted) with OUTERPLANE installed — see the guide for the why and how.
 
+### ⚠️ Antivirus / SmartScreen warnings
+
+The installer is **not code-signed** (a certificate costs money the project doesn't spend), so
+Windows SmartScreen shows an "unknown publisher" prompt — click **More info → Run anyway**. A few
+antivirus engines may also flag it. This is expected for an unsigned Electron app, and specifically:
+
+- The app **drives a rooted Android emulator and intercepts the game's own HTTPS traffic** (via
+  [mitmproxy](https://mitmproxy.org)) to read your account inventory. That behavior looks like what
+  monitoring tools do, so heuristic scanners are cautious about it — it's exactly what the app is
+  documented to do, nothing hidden. See [tools/capture/README.md](tools/capture/README.md).
+- mitmproxy is **downloaded from its official site on first capture** (checksum-verified), not
+  bundled, so the installer itself stays lean.
+
+**Verify your download:** every [release](https://github.com/Sevih/gear-solver/releases) publishes
+the installer's SHA-256. Check it with `Get-FileHash .\Outerpedia-Gear-Solver-Setup-*.exe -Algorithm SHA256`.
+The full source is here and the build is reproducible via `npm run release`.
+
 ## 🔧 Building / contributing?
 
 Read on. The rest of this README plus [docs/](docs) cover the stack, build, and internals:
