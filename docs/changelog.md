@@ -122,6 +122,10 @@
 
 ## [Unreleased]
 
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
+## [1.5.5] — 2026-07-10
+
 ### Session 2026-07-10 — 🛡️ mitmproxy téléchargé au runtime (installeur non flaggé AV)
 
 - **Problème** : l'installeur NSIS embarquait les binaires mitmproxy (`resources/bin/mitmproxy/`) ;

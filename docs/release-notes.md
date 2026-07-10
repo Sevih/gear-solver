@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.5.5] — 2026-07-10
+
 - **Smaller, cleaner installer** — the download is ~80 MB lighter, and it no
   longer bundles the mitmproxy tool that some antivirus programs mistook for
   unwanted software. The first time you run a capture, the app downloads
