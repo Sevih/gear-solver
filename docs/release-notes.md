@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.6.0] — 2026-08-12
+
 - **Game-data updates work again** — the app now pulls its game data from
   Outerpedia's new home, so new heroes and items show up automatically after
   a game patch (the old source had stopped receiving updates). This release
