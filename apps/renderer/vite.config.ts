@@ -17,7 +17,6 @@ import { getCurrentRef, resolveLatestSha, setCurrentRef, readShaState } from "..
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const DERIVED = join(root, "data", "derived");
-const GAME_DIR = join(root, "data", "game");
 const STAT_LOCKS = join(root, "data", "stat-locks.json");
 const CAPTURE_DIR = join(root, "tools", "capture");
 const CAPTURED = join(CAPTURE_DIR, "out");
@@ -30,25 +29,27 @@ const REPO_SHA_STATE = join(CACHE_DIR, "repo-sha.json");
 // so the override is shared between `npm run dev` and a dev Electron run.
 const MANUAL_DEVICE = join(root, ".cache", "manual-device.json");
 
-// Outerpedia-v2 checkout — serves the public/images/* assets at /img/ so
-// equipment art, class icons, effect badges and character portraits render
-// without copying gigabytes into gear-solver. `OUTERPEDIA_PATH` env wins;
-// otherwise autodetected at the two known checkouts (kept parallel with the
-// `findOuterpedia()` helper in data/build.mjs). `normalize` keeps the
-// separator consistent with what path.join produces downstream — otherwise
+// Outerpedia checkout's staged image tree (`.assets-staging/images` — the same
+// files the site's R2 bucket serves) mounted at /img/ so equipment art, class
+// icons, effect badges and character portraits render without copying
+// gigabytes into gear-solver. `OUTERPEDIA_PATH` env wins. `normalize` keeps
+// the separator consistent with what path.join produces downstream — otherwise
 // the file.startsWith(dir) traversal check fails on Windows when one side
 // has forward slashes and the other backslashes.
 function findOuterpediaImages(): string | null {
   const env = process.env.OUTERPEDIA_PATH;
   const candidates = [
-    env ? `${env.replace(/\\/g, "/")}/public/images` : null,
-    "C:/Users/Sevih/Documents/Projet perso/outerpedia-v2/public/images",
-    "C:/Users/Sevih/Documents/dev/outerpedia/public/images",
+    env ? `${env.replace(/\\/g, "/")}/.assets-staging/images` : null,
+    "C:/Users/Sevih/Documents/Projet perso/outerpedia/.assets-staging/images",
   ].filter((p): p is string => Boolean(p));
   for (const p of candidates) if (existsSync(p)) return normalize(p);
   return null;
 }
 const OUTERPEDIA_IMAGES = findOuterpediaImages();
+// Bundled UI sprites (the `ui/inven/*` set absent from R2) — same public/img
+// tree Vite serves statically, but /img/* is intercepted by serveImg below, so
+// it must know where to find them.
+const BUNDLED_IMG = join(root, "apps", "renderer", "public", "img");
 
 /** Spawn a PowerShell script and stream stdout+stderr as plain text. */
 function streamPs(res: ServerResponse, script: string, extraArgs: string[] = []): void {
@@ -128,13 +129,13 @@ function localData(): Plugin {
       server.middlewares.use((req: IncomingMessage, res: ServerResponse, next) => {
         const url = (req.url ?? "").split("?")[0]!;
 
-        // /img/* — local checkout → disk cache → GitHub CDN → webp → 302.
+        // /img/* — bundled sprites → local checkout → disk cache → R2 bucket.
         // Shared with the Electron prod server (server.ts) so dev/prod match.
         if (url.startsWith("/img/")) {
           void serveImg(req, res, url.slice("/img/".length), {
             cacheDir: CACHE_DIR,
+            bundledDir: BUNDLED_IMG,
             localCheckoutDir: OUTERPEDIA_IMAGES,
-            getRef: getCurrentRef,
           }).catch(() => { if (!res.headersSent) { res.statusCode = 500; res.end("image error"); } });
           return;
         }
@@ -168,9 +169,9 @@ function localData(): Plugin {
           res.statusCode = 204;
           return res.end();
         }
-        // Manual "Sync game data" — pull raw tables from the outerpedia repo + rebuild.
+        // Manual "Sync game data" — copy/download the solver artifacts.
         if (url === "/api/data/sync" && req.method === "POST") {
-          syncGameData({ repoRoot: root, gameDir: GAME_DIR, syncDir: null, derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
+          syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
             .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
             .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
           return;

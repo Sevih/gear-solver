@@ -81,11 +81,12 @@
 - [ ] Bake prod du `data/` (`extraResources` → `process.resourcesPath`) · `electron build`/installeur
       lance serveur local + renderer · auto-update contre release signée + feed réels · bouton capture
       natif en packagé (sans `npm run dev`).
-- [ ] **Vérif sync repo en prod packagé** (plumbing posé, items 5-10 du plan asset-sync) — 1er lancement
-      online : seed `data/derived` bundlé → sync SHA → download tables+buffs → rebuild ; images peuplent
-      le cache à la demande + préfetch `ui/`+`equipment/`. Vérifier `/img/*` ne tape jsDelivr/raw que sur
-      miss (127.0.0.1 ensuite, 302 outerpedia.com seulement si CDN down) · 2e lancement SHA inchangé =
-      instantané · simuler un patch (`OUTERPEDIA_REF` autre branche) · offline cold-cache = pas de crash.
+- [ ] **Vérif sync repo en prod packagé** — 1er lancement online : seed `data/derived` bundlé →
+      sync SHA → download des 19 artefacts solver depuis `Sevih/outerpedia` (sans rebuild) ; images
+      peuplent le cache à la demande depuis R2 + préfetch des icônes d'équipement référencées par la
+      donnée. Vérifier `/img/*` ne tape R2 que sur miss (127.0.0.1 ensuite) · 2e lancement SHA
+      inchangé = instantané · simuler un patch (`OUTERPEDIA_REF` autre branche) · offline cold-cache
+      = pas de crash. (Mode REPO déjà smoke-testé hors packaging le 2026-08-12 : download @ 387a58c OK.)
 
 ---
 

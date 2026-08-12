@@ -1,21 +1,25 @@
 /**
- * Outerpedia repo source — single source of truth for fetching game data and
- * image assets from the public GitHub repo `Sevih/outerpediaV2`, so the app
- * stays current with game patches WITHOUT shipping a new build.
+ * Outerpedia repo source — single source of truth for fetching the solver's
+ * derived game data from the public GitHub repo `Sevih/outerpedia`
+ * (`data/generated/solver/*.json`, emitted by outerpedia's datagen), so the
+ * app stays current with game patches WITHOUT shipping a new build.
+ *
+ * Images do NOT come from the repo anymore — they live on the public R2
+ * bucket `img.outerpedia.com` (see img-cache.ts).
  *
  * Electron-free on purpose (no `electron` / path constants imported) so the
  * Vite dev middleware (apps/renderer/vite.config.ts) can import it without
  * pulling in Electron — same constraint as reco-proxy.ts. All disk paths are
  * passed in by the caller.
  *
- * Asset delivery is pinned to an immutable commit SHA (resolved once per
- * launch via the GitHub API) so jsDelivr URLs are infinitely cacheable and the
- * data build + image fetches always agree on the same repo snapshot.
+ * Data delivery is pinned to an immutable commit SHA (resolved once per
+ * launch via the GitHub API) so jsDelivr URLs are infinitely cacheable and
+ * all 19 solver artifacts always come from the same repo snapshot.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const REPO_OWNER = "Sevih";
-const REPO_NAME = "outerpediaV2";
+const REPO_NAME = "outerpedia";
 
 /** Branch used to resolve the latest commit SHA. Override for a staging branch. */
 const REPO_REF = process.env.OUTERPEDIA_REF ?? "main";
@@ -89,28 +93,6 @@ export async function resolveLatestSha(timeoutMs = 5_000): Promise<string | null
   }
 }
 
-/**
- * List every blob path in the repo at `ref` via the GitHub trees API (one
- * request). Returns null on failure. The tree may be flagged `truncated` for
- * very large repos — we return whatever came back (best-effort; used only to
- * warm the image cache, which also works on demand). Used sparingly (once per
- * repo update), so it stays well under the 60/hr unauth API budget.
- */
-export async function listRepoTree(ref: string, timeoutMs = 15_000): Promise<string[] | null> {
-  try {
-    const r = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/git/trees/${ref}?recursive=1`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": "gear-solver" },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!r.ok) return null;
-    const j = (await r.json()) as { tree?: Array<{ path?: string; type?: string }> };
-    if (!Array.isArray(j.tree)) return null;
-    return j.tree.filter((e) => e.type === "blob" && typeof e.path === "string").map((e) => e.path!);
-  } catch {
-    return null;
-  }
-}
-
 export interface ShaState {
   sha: string;
   resolvedAt: number;
@@ -136,11 +118,10 @@ export function writeShaState(file: string, sha: string): void {
   }
 }
 
-// Process-wide "ref" pin shared by the image handler and the data sync so both
-// hit the SAME repo snapshot (an icon referenced by freshly-synced
-// equipment.json always resolves against the matching commit). Defaults to the
-// branch name, which jsDelivr resolves server-side — correct but less cacheable
-// than a pinned SHA, so startup overwrites it with the resolved/cached SHA.
+// Process-wide "ref" pin for the data sync (and the Settings → Data display).
+// Defaults to the branch name, which jsDelivr resolves server-side — correct
+// but less cacheable than a pinned SHA, so startup overwrites it with the
+// resolved/cached SHA. Images are NOT ref-pinned anymore (R2 bucket).
 let currentRef = REPO_REF;
 export function setCurrentRef(ref: string): void {
   currentRef = ref;

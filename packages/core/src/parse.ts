@@ -204,7 +204,7 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
   // DMG_BOOST (weapon/acc) or DMG_REDUCE_RATE (armor) — always on the
   // character sheet, routed through BuffValueRate (fromBuff=true). The
   // conditional `BT_STAT|TARGET_ELEMENT` and `BT_STAT|TARGET_HAS_BUFF`
-  // variants (combat-only) are filtered out in data/build.mjs.
+  // variants (combat-only) are filtered out by the solver generator.
   if (game && item.SingularityOptionID) {
     const sopt = game.singularityOptions?.[String(item.SingularityOptionID)];
     if (sopt) {
@@ -224,7 +224,7 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
   // EE enhance level needed to activate: `1` = always-on once equipped, `10`
   // = unlocks at +10 (e.g. Caren's +20% DEF via `BID_CEQUIP_2000089_ADD`).
   // All entries are `BT_STAT_PREMIUM` permanent self buffs (filter applied
-  // in data/build.mjs), so `fromBuff: true` routes them through
+  // by the solver generator), so `fromBuff: true` routes them through
   // `BuffValueRate` like singularity / talisman mains.
   if (game && meta?.slot === "exclusive") {
     const ePassives = game.eePassives?.[String(item.ItemID)];

@@ -8,7 +8,7 @@
  *  - gear flat is added AFTER the %-multiply (`combined = part1 + gearFlat`),
  *    so a %-tick scales the no-gear base only, independent of equipped gear.
  * See `packages/core/src/compose-stats.ts` `calcFinalStat` for the formula and
- * `data/build.mjs` (sub-ticks.json) for the per-tick values.
+ * outerpedia's solver generator (sub-ticks.json) for the per-tick values.
  */
 export interface FlatVsPct {
   /** Final stat added by one flat tick. */

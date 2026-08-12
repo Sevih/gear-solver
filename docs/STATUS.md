@@ -20,15 +20,16 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
    - `capture.ps1` fait tout et déchiffre en direct vers `tools/capture/out/*.json`.
 
 2. **Données statiques du jeu** (`data/`)
-   - `data/game/` : 29 tables Outerplane copiées (copie locale, pas de dépendance externe).
-   - `data/build.mjs` → `data/derived/` : tables compactes (`options`, `equipment`, `sets`,
-     `characters`, `sub-ticks`, …) que le moteur consomme. Re-générable via `npm run data:build`.
-     Écrit aussi `version.json` `{ hash, builtAt }` — `hash` = hash de contenu **stable** des
-     dérivés (un rebuild no-op ne le bouge pas), affiché dans Settings → Data.
-   - `data/sync.ps1` : re-copie depuis Outerpedia + rebuild (à lancer après un patch du jeu).
-   - **Sync au lancement depuis le repo public `Sevih/outerpediaV2`** (`apps/desktop/src/data-sync.ts`,
-     dual-mode checkout/repo) : images **et** tables suivent les patchs **sans nouveau build** de l'app.
-     Handler `/img/*` partagé (`img-cache.ts`) cascade checkout→cache disque→CDN jsDelivr/raw→302.
+   - La distillation vit **côté outerpedia** (`datagen/generators/solver.ts`, port de l'ancien
+     `build.mjs`/`calc-stats.mjs`) : elle émet 19 artefacts committés à `data/generated/solver/`.
+   - `data/derived/` : miroir committé de ces artefacts (tables compactes `options`, `equipment`,
+     `sets`, `characters`, `sub-ticks`, … que le moteur consomme), rafraîchi via `npm run data:sync`
+     depuis le checkout outerpedia. `version.json` `{ hash, builtAt }` — `hash` = hash de contenu
+     **stable** (affiché dans Settings → Data).
+   - **Sync au lancement depuis le repo public `Sevih/outerpedia`** (`apps/desktop/src/data-sync.ts`,
+     dual-mode checkout/repo, gated sur le SHA) : les tables suivent les patchs **sans nouveau
+     build** de l'app. Images servies depuis le bucket R2 `img.outerpedia.com` — handler `/img/*`
+     partagé (`img-cache.ts`) cascade sprites bundlés→checkout→cache disque→R2.
 
 3. **Moteur** (`packages/core/`, `@gear-solver/core`)
    - Parse l'inventaire capturé en modèle propre avec **vraies valeurs de stats résolues**.
@@ -118,7 +119,7 @@ npm run dev        # http://localhost:5173
 
 # Autres
 npm test                 # tests du moteur
-npm run data:build       # régénère data/derived depuis data/game
+npm run data:sync        # rafraîchit data/derived depuis le checkout outerpedia (solver artifacts)
 ```
 
 ## À RETENIR (gotchas)
@@ -128,7 +129,8 @@ npm run data:build       # régénère data/derived depuis data/game
   `capture.ps1` les ré-applique automatiquement.
 - **Clé XOR** : `ASLDKGFJASPODIFJSOWEI` (même pour tous les endpoints).
 - **Données perso** (`tools/capture/out/`, `dumps/`) : **gitignore**, jamais commitées.
-- **`data/derived` est généré** : ne pas l'éditer à la main, modifier `data/build.mjs`.
+- **`data/derived` est généré** : ne pas l'éditer à la main — la distillation vit dans
+  outerpedia (`datagen/generators/solver.ts`), modifier là-bas puis `npm run data:sync`.
 - **Commentaires TS** : éviter `*/` littéral dans un bloc `/** */` (ça ferme le commentaire).
 
 ## Ce qui RESTE (voir docs/roadmap.md + docs/todo.md pour le détail)
@@ -165,9 +167,8 @@ apps/desktop/     Electron : main.ts, server.ts (serveur local), emulator-detect
 packages/core/    moteur stats : raw.ts, types.ts, gamedata.ts, stats.ts, parse.ts,
                   compose-stats.ts, equip.ts (édition locale), index.ts
 tools/capture/    pipeline de capture (capture.ps1, disarm.ps1, addon.py, scripts/)
-data/game/        tables brutes du jeu (copie)
-data/derived/     tables distillées (générées, kebab-case) — consommées par le moteur
-data/build.mjs    distillation ; data/sync.ps1 resync depuis Outerpedia
+data/derived/     tables distillées (kebab-case) — consommées par le moteur ;
+                  émises par outerpedia (datagen solver), resync via data/sync.mjs
 docs/             architecture.md, data-schema.md, reference.md, roadmap.md, solver.md,
                   todo.md, STATUS.md (ce fichier)
 ```

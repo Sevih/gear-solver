@@ -305,9 +305,9 @@ ok(unreleasedBody
 // release exists on GitHub, reverting locally would just desync things.
 let releasedToGitHub = false;
 try {
-  // ── DATA REBUILD ─────────────────────────────────────────────────────
-  step(3, "Regenerate derived game data");
-  run("node data/build.mjs");
+  // ── DATA REFRESH ─────────────────────────────────────────────────────
+  step(3, "Refresh derived game data from the outerpedia checkout");
+  run("node data/sync.mjs");
 
   // ── BUILD ────────────────────────────────────────────────────────────
   step(4, "Build web + desktop TS");

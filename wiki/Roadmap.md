@@ -32,10 +32,10 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   in **localStorage** (`lib/storage/`). Optimize button → (Builds → Builder).
 - **Desktop Electron.** `apps/desktop` (main + local server + emulator detection) —
   functional in dev.
-- **Repo sync (images + game data).** On launch, the app syncs against the public repo
-  `Sevih/outerpediaV2` (`data-sync.ts` dual-mode checkout/repo SHA-gated; shared `/img/*`
-  handler cascades checkout→cache→CDN→302) → tracks game patches **without a new build**.
-  Packaged prod still to be verified (M8).
+- **Repo sync (game data).** On launch, the app downloads the solver artifacts from the
+  public repo `Sevih/outerpedia` (`data-sync.ts` dual-mode checkout/repo SHA-gated; images via
+  the R2 bucket `img.outerpedia.com`, `/img/*` handler cascades bundled→checkout→cache→R2) →
+  tracks game patches **without a new build**. Packaged prod still to be verified (M8).
 - **Home dashboard.** Home tab (`HomeScreen.tsx`): account snapshot (2×2),
   gear quality breakdown by tier with explanations, roster breakdowns
   (element / class / rarity), a 4-view **Gear breakdown** toggle (Overview /
@@ -112,6 +112,6 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 - **One game, one job.** No team-builder, damage sim, or PvP meta — just gear optimization.
 - **Engine stays pure.** No DOM/Node in `packages/core`; data comes in as plain objects.
 - **Capture stays external.** The app consumes JSON; it never embeds the MITM stack.
-- **Derived data is generated.** Never hand-edit `data/derived`; change `data/build.mjs`.
+- **Derived data is generated.** Never hand-edit `data/derived`; change outerpedia's `datagen/generators/solver.ts` then `npm run data:sync`.
 - **Validate against reality.** New stat/formula work ships with a test pinned to a real
   captured item vs its in-game display.

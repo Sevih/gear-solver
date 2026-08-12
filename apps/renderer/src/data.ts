@@ -38,7 +38,7 @@ async function getJSON<T>(url: string): Promise<T | null> {
   }
 }
 
-/** Stamp written by `data/build.mjs` into `data/derived/version.json`. `hash`
+/** Stamp written by outerpedia's solver generator into `data/derived/version.json`. `hash`
  *  is a content hash of every derived file (stable iff the data is unchanged);
  *  `builtAt` is an ISO timestamp of the LAST derived-data change (the write is
  *  idempotent — a no-op rebuild keeps the prior stamp, so this is the data

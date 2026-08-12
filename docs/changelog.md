@@ -8,6 +8,29 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔧 Migration de la source de données — outerpedia (2026-08-12)
+- ✅ 🔴 **Le solver ne voyait plus les nouveaux persos** — la sync pointait sur le repo mort
+  `Sevih/outerpediaV2` (et des checkouts locaux disparus) : `data/game` était figé à 322 persos quand
+  le jeu en avait 337. Cause : migration du site vers `Sevih/outerpedia` (layout refondu, tables
+  brutes gitignorées dans `.gamedata/`).
+- ✅ **Nouvelle chaîne de données** — la distillation (`build.mjs` + `calc-stats.mjs`) est portée
+  dans outerpedia (`datagen/generators/solver.ts`, commit 387a58c côté outerpedia) qui committe les
+  19 artefacts à `data/generated/solver/`. Côté solver : `data-sync.ts` réécrit en simple
+  téléchargement SHA-gaté (checkout local ou CDN GitHub), plus aucun rebuild client ;
+  `data/sync.mjs` remplace `sync.ps1`+`build.mjs` pour rafraîchir le `data/derived` committé
+  (`npm run data:sync`) ; artefacts re-sérialisés compacts à la sync (le generator émet indenté,
+  ~2,6× plus gros). `data/game/`, `build.mjs`, `calc-stats.mjs`, `sync.ps1` supprimés du repo et
+  du packaging. Download REPO tout-ou-rien (jamais de snapshot mi-vieux/mi-neuf).
+- ✅ **Images via le bucket R2 `img.outerpedia.com`** (le nouveau site ne committe plus d'images) —
+  `img-cache.ts` cascade sprites bundlés → checkout `.assets-staging/images` (dev) → cache disque →
+  R2 ; alias de namespace `ui/effect/*`→`equipment/*` (layout V2 → R2) ; les 10 sprites `ui/inven/*`
+  absents de R2 sont bundlés dans `apps/renderer/public/img/` ; préfetch piloté par la donnée
+  dérivée (icônes d'équipement référencées) au lieu de l'arborescence GitHub ; CSP img-src resserrée
+  à `'self'` (plus de 302 externe). Reco-proxy inchangé (`/api/reco/:id` existe sur le nouveau site).
+- ✅ **Données à jour** — `data/derived` resynchronisé (125 persos dont Lambda/Saeran/H.Delta,
+  3134 items, hash `f872e2e94b4a`). Typecheck + 289 tests verts ; sync CHECKOUT (froid + idempotence)
+  et REPO (download @ 387a58c) smoke-testés.
+
 ### 🔴 Bugs — audit Builder (2026-07-03)
 - ✅ 🔴 **Deadlock UI : changer `workerCount` pendant un solve** — l'effet `useEffect([workerCount])`
   (`BuilderScreen.tsx`) disposait le pool sans flush ni reset : `onResult` ne venait jamais, l'écran restait

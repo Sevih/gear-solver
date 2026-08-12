@@ -34,9 +34,11 @@ Four layers, connected by plain JSON:
   IPC/preload, the renderer talks plain HTTP), and accepts a `POST /api/captured/user-item` write-back (the renderer
   rewrites the captured snapshot for equip/unequip edits — the transform lives in core, so the
   server stays a dumb writer); in dev the Vite middleware covers the same role. At launch it
-  **syncs images + game data from the public `Sevih/outerpediaV2` repo** (`data-sync.ts`
-  dual-mode checkout/repo, SHA-gated ; shared `/img/*` handler `img-cache.ts` cascading
-  checkout→disk cache→CDN→302) so the app follows game patches **without a new build**.
+  **syncs the derived game data from the public `Sevih/outerpedia` repo** (`data-sync.ts`
+  dual-mode checkout/repo, SHA-gated download of the 19 `data/generated/solver/*.json`
+  artifacts emitted by outerpedia's datagen ; shared `/img/*` handler `img-cache.ts`
+  cascading bundled sprites→checkout→disk cache→R2 bucket `img.outerpedia.com`) so the
+  app follows game patches **without a new build**.
   Packaging is live: `scripts/release.mjs` builds and publishes the installer via
   electron-builder (`--publish always`, `extraResources` for `data/`), and packaged builds
   auto-update in production (`updater.ts` / `setupAutoUpdate`). The installer bundles `adb`

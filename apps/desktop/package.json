@@ -52,14 +52,6 @@
         "to": "data/derived"
       },
       {
-        "from": "../../data/build.mjs",
-        "to": "data/build.mjs"
-      },
-      {
-        "from": "../../data/calc-stats.mjs",
-        "to": "data/calc-stats.mjs"
-      },
-      {
         "from": "../renderer/dist",
         "to": "renderer/dist"
       },

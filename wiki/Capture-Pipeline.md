@@ -65,8 +65,8 @@ SubOptionList[]      substats: { OptionID, Level (procs above the initial tick),
 ```
 - Substat `OptionID`s observed: `160001`–`160013` (13 stat types).
 - Main-stat `OptionList` patterns: `(5024,5048)`, `(4024,0)`, `(3024,0)`, `(6024,6048)`, `(24,94/95/96)` …
-- `OptionID` → stat name + per-tick value mapping is **done**: `data/build.mjs` distills it
-  into `data/derived/options.json`, consumed at runtime via `resolveStat(optionId, ticks, game.options)`.
+- `OptionID` → stat name + per-tick value mapping is **done**: outerpedia's solver generator
+  distills it into `data/derived/options.json`, consumed at runtime via `resolveStat(optionId, ticks, game.options)`.
   Cross-checked against in-game display (e.g. a weapon read ATK 61.8% / Crit Chance 12% / Crit
   DMG 24% / DMG Increase 8% / Speed 9).
 

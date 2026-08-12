@@ -45,18 +45,9 @@ export const IMG_CACHE_DIR = CACHE_ROOT;
 /** Persisted last-synced repo commit SHA (the data-sync gate + image pin). */
 export const REPO_SHA_STATE = join(CACHE_ROOT, "repo-sha.json");
 
-/** Raw game tables build.mjs consumes. Dev uses the committed repo tree; prod
- *  downloads them into the writable cache. */
-export const GAME_DIR = IS_DEV ? join(REPO_ROOT, "data", "game") : join(CACHE_ROOT, "game");
-
-/** Mirror of the outerpedia-only build inputs (data/equipment, json2 extras,
- *  damage-calc/buffs). Null in dev (build.mjs reads the checkout via
- *  findOuterpedia); a downloaded mirror in prod. */
-export const SYNC_DIR: string | null = IS_DEV ? null : join(CACHE_ROOT, "synced");
-
 /** Derived game data — `data/derived/*.json` consumed by the renderer. Dev uses
- *  the committed repo tree; prod uses the writable cache (rebuilt on each repo
- *  update, seeded from BUNDLED_DERIVED on first launch). */
+ *  the committed repo tree; prod uses the writable cache (re-downloaded on each
+ *  repo update, seeded from BUNDLED_DERIVED on first launch). */
 export const DERIVED = IS_DEV ? join(REPO_ROOT, "data", "derived") : join(CACHE_ROOT, "derived");
 
 /** Read-only derived tree shipped in the installer (extraResources). Used only
@@ -101,15 +92,21 @@ export const BUNDLED_PROD_CERT_DIR = IS_DEV
   ? join(REPO_ROOT, "apps", "desktop", "resources", "prod-cert")
   : join(RES, "prod-cert");
 
-/** Outerpedia-v2 public images checkout - only used in dev (the Vite
- *  middleware already mounts these). Prod uses the BUNDLED_IMG subset
- *  above + outerpedia.com fallback. */
+/** Bundled UI sprites served under `/img/*` before any network source — the
+ *  few `ui/inven/*` sprites the R2 bucket doesn't carry. They live in
+ *  `apps/renderer/public/img/` (dev) which Vite copies into `dist/img/` (prod). */
+export const BUNDLED_IMG = IS_DEV
+  ? join(REPO_ROOT, "apps", "renderer", "public", "img")
+  : join(RENDERER_DIST, "img");
+
+/** Outerpedia checkout's staged image tree (`.assets-staging/images`, the
+ *  same files the site's R2 bucket serves) — only used in dev as a zero-network
+ *  fast path for `/img/*`. Prod goes disk-cache → R2. */
 export function findOuterpediaImagesDev(): string | null {
   const env = process.env.OUTERPEDIA_PATH;
   const candidates = [
-    env ? `${env.replace(/\\/g, "/")}/public/images` : null,
-    "C:/Users/Sevih/Documents/Projet perso/outerpedia-v2/public/images",
-    "C:/Users/Sevih/Documents/dev/outerpedia/public/images",
+    env ? `${env.replace(/\\/g, "/")}/.assets-staging/images` : null,
+    "C:/Users/Sevih/Documents/Projet perso/outerpedia/.assets-staging/images",
   ].filter((p): p is string => Boolean(p));
   for (const p of candidates) if (existsSync(p)) return normalize(p);
   return null;

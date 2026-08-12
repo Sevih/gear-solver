@@ -1,6 +1,7 @@
 /**
  * Shapes of the distilled game-data tables (data/derived/*.json, produced by
- * data/build.mjs). The app loads these and hands them to the parser.
+ * outerpedia's datagen solver generator, mirrored in data/derived/). The app
+ * loads these and hands them to the parser.
  */
 
 /** ItemOptionTemplet entry. Discriminated by shape:
@@ -52,7 +53,7 @@ export interface EquipmentDef {
   subGroup: string | null;
   /** Item art filename without extension, served at /img/equipment/<image>.webp. */
   image: string | null;
-  /** Unique-option icon filename (curated from outerpedia-v2), served at /img/ui/effect/<effectIcon>.webp. */
+  /** Unique-option icon filename (ItemSpecialOptionTemplet.IconName), served at /img/ui/effect/<effectIcon>.webp. */
   effectIcon: string | null;
   /** Armor 4-piece set icon filename — resolved at build time from the
    *  curated outerpedia-v2 sets.json mapping (the setId-to-icon order is

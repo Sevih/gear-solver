@@ -21,8 +21,8 @@ import { disarmIfArmed, startServer } from "./server.js";
 import { setupAutoUpdate } from "./updater.js";
 import { dlog, dwarn } from "./log.js";
 import { syncGameData } from "./data-sync.js";
-import { BUNDLED_DERIVED, CACHE_ROOT, DERIVED, GAME_DIR, IMG_CACHE_DIR, REPO_SHA_STATE, REPO_ROOT, SYNC_DIR } from "./paths.js";
-import { getCurrentRef, listRepoTree, readShaState, setCurrentRef } from "./repo-source.js";
+import { BUNDLED_DERIVED, CACHE_ROOT, DERIVED, IMG_CACHE_DIR, REPO_SHA_STATE } from "./paths.js";
+import { getCurrentRef, readShaState, setCurrentRef } from "./repo-source.js";
 import { prefetchImages } from "./img-cache.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,26 +32,37 @@ const DEV_URL = process.env.GEAR_SOLVER_DEV_URL ?? "http://localhost:5173";
 
 let httpServer: Server | null = null;
 
-/** Warm the disk image cache with the high-traffic UI + equipment subset (webp
- *  only) for the current repo SHA. Runs at most once per SHA (guarded by a
- *  marker file), in the background, and is fully best-effort. Character art is
+/** Warm the disk image cache with the equipment-icon subset the freshly-synced
+ *  derived data references (item art + unique-option / set badges + gem
+ *  sprites). Runs at most once per derived-data hash (guarded by a marker
+ *  file), in the background, and is fully best-effort. Character art is
  *  intentionally left on-demand. */
 async function warmImageCache(): Promise<void> {
-  const ref = getCurrentRef();
-  if (ref === "main") return; // SHA unresolved — on-demand fetching still works
+  let hash: string | null = null;
+  const rels = new Set<string>();
+  try {
+    hash = (JSON.parse(readFileSync(join(DERIVED, "version.json"), "utf-8")) as { hash?: string }).hash ?? null;
+    const equipment = JSON.parse(readFileSync(join(DERIVED, "equipment.json"), "utf-8")) as
+      Record<string, { image?: string | null; effectIcon?: string | null; armorSetIcon?: string | null }>;
+    for (const e of Object.values(equipment)) {
+      if (e.image) rels.add(`equipment/${e.image}.webp`);
+      if (e.effectIcon) rels.add(`equipment/${e.effectIcon}.webp`);
+      if (e.armorSetIcon) rels.add(`equipment/${e.armorSetIcon}.webp`);
+    }
+    const gems = JSON.parse(readFileSync(join(DERIVED, "gems.json"), "utf-8")) as
+      Record<string, { type?: string; level?: number }>;
+    for (const g of Object.values(gems)) {
+      if (g.type && g.level) rels.add(`items/TI_GEM_${g.type}_${g.level}.webp`);
+    }
+  } catch { return; } // no derived yet — on-demand fetching still works
+  if (!hash || rels.size === 0) return;
   const marker = join(CACHE_ROOT, "prefetch.json");
   try {
-    if (existsSync(marker) && (JSON.parse(readFileSync(marker, "utf-8")) as { sha?: string }).sha === ref) return;
+    if (existsSync(marker) && (JSON.parse(readFileSync(marker, "utf-8")) as { hash?: string }).hash === hash) return;
   } catch { /* corrupt marker → re-prefetch */ }
-  const tree = await listRepoTree(ref);
-  if (!tree) return;
-  const rels = tree
-    .filter((p) => (p.startsWith("public/images/ui/") || p.startsWith("public/images/equipment/")) && p.endsWith(".webp"))
-    .map((p) => p.slice("public/images/".length));
-  if (!rels.length) return;
-  const n = await prefetchImages(IMG_CACHE_DIR, ref, rels, 6);
-  try { writeFileSync(marker, JSON.stringify({ sha: ref, count: n, of: rels.length })); } catch { /* best-effort */ }
-  dlog("server", `image prefetch: ${n}/${rels.length} cached @ ${ref.slice(0, 7)}`);
+  const n = await prefetchImages(IMG_CACHE_DIR, [...rels], 6);
+  try { writeFileSync(marker, JSON.stringify({ hash, count: n, of: rels.size })); } catch { /* best-effort */ }
+  dlog("server", `image prefetch: ${n}/${rels.size} cached @ data ${hash}`);
 }
 
 async function createWindow(): Promise<void> {
@@ -108,17 +119,14 @@ if (!app.requestSingleInstanceLock()) {
       try { cpSync(BUNDLED_DERIVED, DERIVED, { recursive: true }); dlog("server", "seeded derived from bundle"); }
       catch (err) { dwarn("server", "derived seed failed:", err instanceof Error ? err.message : String(err)); }
     }
-    // Pin image fetches to the last-synced SHA before serving anything.
+    // Seed the data-SHA display from the last sync before serving anything.
     setCurrentRef(readShaState(REPO_SHA_STATE)?.sha ?? "main");
-    // Refresh game data: checkout mode (dev) or SHA-gated CDN download (prod).
+    // Refresh game data: checkout copy (dev) or SHA-gated CDN download (prod).
     // Awaited before the window so the renderer loads fresh derived; never fatal.
-    const r = await syncGameData({
-      repoRoot: IS_DEV ? REPO_ROOT : process.resourcesPath,
-      gameDir: GAME_DIR, syncDir: SYNC_DIR, derivedDir: DERIVED,
-      shaStateFile: REPO_SHA_STATE, force: false,
-    }).catch((err: unknown) => { dwarn("server", "data sync failed:", err instanceof Error ? err.message : String(err)); return null; });
+    const r = await syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: false })
+      .catch((err: unknown) => { dwarn("server", "data sync failed:", err instanceof Error ? err.message : String(err)); return null; });
     if (r) dlog("server", `data sync: ${r.status} — ${r.message}`);
-    // Re-pin to the SHA we just built from so icons match the data snapshot.
+    // Re-pin to the SHA we just synced so Settings → Data shows the snapshot.
     setCurrentRef(readShaState(REPO_SHA_STATE)?.sha ?? getCurrentRef());
     await createWindow();
     setupAutoUpdate(IS_DEV);

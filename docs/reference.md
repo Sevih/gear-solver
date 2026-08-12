@@ -29,14 +29,15 @@ Fichiers : [capture.ps1](../tools/capture/capture.ps1),
 [disarm.ps1](../tools/capture/disarm.ps1),
 [addon.py](../tools/capture/addon.py).
 
-### 1.2 Tables dérivées (`data/build.mjs` → `data/derived/`)
+### 1.2 Tables dérivées (datagen outerpedia → `data/derived/`)
 
-Le jeu copie ses tables brutes dans `data/game/*.json` (29 fichiers).
-`data/build.mjs` les distille en tables compactes consommables. La colonne
-Source liste la table `data/game/` réellement chargée par `build.mjs` (plusieurs
+La distillation vit dans le **repo outerpedia** (`datagen/generators/solver.ts`,
+port fidèle de l'ancien `build.mjs` local) : elle lit les tables brutes du jeu et
+émet les tables compactes consommables à `data/generated/solver/`, mirrorées ici
+dans `data/derived/`. La colonne Source liste la table brute réellement chargée (plusieurs
 cibles dérivent de la même table — `ItemSpecialOptionTemplet` notamment) :
 
-| Source `data/game/`                  | Cible `data/derived/`     | Contenu                                                |
+| Source (table brute du jeu)          | Cible `data/derived/`     | Contenu                                                |
 |--------------------------------------|---------------------------|--------------------------------------------------------|
 | `ItemTemplet.json`                   | `equipment.json`          | ItemID → slot/grade/star/setId/armorSetId/name/image/effectIcon/class |
 | `ItemOptionTemplet.json`             | `options.json`            | OptionID → StatOption (`{st, ap, v}`) OU IOT_BUFF reference |
@@ -55,17 +56,16 @@ cibles dérivent de la même table — `ItemSpecialOptionTemplet` notamment) :
 | `CharacterArchiveStatTemplet.json` (via `computeCharacterIngredients`) | `codex-curve.json` | codex level idx 0..11 → {atkPct, defPct, hpPct} |
 | `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data |
 
-Re-générer après un patch jeu : `npm run data:build` (ou `data/sync.ps1`
-si on doit aussi recopier depuis Outerpedia).
+Rafraîchir après un patch jeu : `npm run data:sync` (une fois le
+`datagen:build` + `promote` d'outerpedia passés).
 
-`build.mjs` écrit aussi `data/derived/version.json` `{ hash, builtAt }` : `hash` est un
+Le generator écrit aussi `data/derived/version.json` `{ hash, builtAt }` : `hash` est un
 `sha256` du contenu de **tous** les fichiers dérivés (nom + corps, ordre d'émission fixe),
 donc **stable tant que la donnée est inchangée** (un rebuild no-op ne le bouge pas). Lu côté
 renderer par `loadDataVersion()` ([data.ts](../apps/renderer/src/data.ts)) et affiché en
 lecture seule dans Settings → Data. C'est le crochet d'une future invalidation des caches
 localStorage après un patch (comparer le `hash`, élaguer les SavedBuild aux `pieceUids` disparus).
 
-Fichier : [data/build.mjs](../data/build.mjs).
 
 ### 1.3 Parse (`packages/core/src/parse.ts`)
 
@@ -566,23 +566,21 @@ dans `buf`, `workersDone` incrémenté à tort, flush prématuré.
 
 ### 3.1 Tables in-game référencées
 
-Toutes les tables sources vivent dans `data/game/` (copie locale, pas de
-fetch runtime côté renderer). Rafraîchies **au lancement** par `data-sync.ts`
+Les tables brutes vivent dans le datamine d'outerpedia ; l'app ne voit que les
+19 artefacts dérivés. Rafraîchis **au lancement** par `data-sync.ts`
 (`apps/desktop/src`) en deux modes :
 - **checkout** (dev / machine mainteneur) — copie depuis un checkout local
-  d'outerpedia, gardé par mtime, zéro réseau ;
-- **repo** (build packagé) — télécharge les 29 tables + inputs de build depuis
-  le repo public `Sevih/outerpediaV2` via le CDN jsDelivr, gaté sur le SHA du
-  dernier commit (`api.github.com/.../commits/main`), puis relance `build.mjs`.
-  Permet de suivre les patchs **sans publier de nouveau build**. Dégrade
-  proprement hors-ligne (utilise le `data/derived` déjà en cache).
-
-`build.mjs` lit ses dirs via env (`OUTERPEDIA_GAME_DIR` / `OUTERPEDIA_SYNC_DIR`
-/ `OUTERPEDIA_DERIVED_DIR`) — défauts = `data/game` + `data/derived` + checkout.
+  d'outerpedia (`data/generated/solver/`), gardé par le hash de version.json,
+  zéro réseau ;
+- **repo** (build packagé) — télécharge les 19 artefacts depuis le repo public
+  `Sevih/outerpedia` via le CDN jsDelivr, gaté sur le SHA du dernier commit
+  (`api.github.com/.../commits/main`). Permet de suivre les patchs **sans
+  publier de nouveau build**. Dégrade proprement hors-ligne (utilise le
+  `data/derived` déjà en cache).
 
 `sub-ticks.json` (dérivé) : valeurs par tick des subs ATK/DEF/HP flat+% par étoile
-(5★/6★), extraites de `subStatPools` (outerpedia `data/equipment/item-stats-detail.json`
-— les **subs**, à ne pas confondre avec les mains de `statRanges.json`). Alimente
+(5★/6★), recomposées par le generator solver d'outerpedia depuis `ItemOptionTemplet`
+(les **subs**, à ne pas confondre avec les mains de `statRanges.json`). Alimente
 l'encadré Builder "Sub tick value" (rentabilité flat vs %, `lib/subValue.ts`). Le 2ᵉ
 encadré "Damage / +1%" (`lib/dmgValue.ts`) compare le gain de dégâts de +1% des stats
 de scaling/CHD/DMG inc via `computeCheapRatings` (modèle dégâts RE binaire 1.4.9).
@@ -650,16 +648,19 @@ Ghidra/IDA). Adresses connues :
 
 ### 3.5 Sources externes
 
-- **outerpedia-v2** (repo public `Sevih/outerpediaV2`) — source des images ET
-  des tables de jeu. Le handler `/img/*` partagé (`img-cache.ts`, utilisé par
-  le middleware Vite **et** le serveur Electron prod) résout en cascade :
-  checkout local (dev, via `OUTERPEDIA_PATH`) → **cache disque** persistant →
-  **CDN GitHub** (jsDelivr → raw.githubusercontent) + écriture en cache →
-  fallback `.png`→`.webp` → 302 vers `outerpedia.com` en dernier recours.
-  Chaque asset n'est donc fetché qu'une fois. Cache : `.cache/outerpedia` en
-  dev (gitignoré), `<userData>/outerpedia-cache` en prod. Le préfetch fond
-  (prod) réchauffe le subset `ui/` + `equipment/` (webp) une fois par SHA.
-  Coordonnées repo + SHA + CDN centralisés dans `repo-source.ts`.
+- **outerpedia** (repo public `Sevih/outerpedia`) — source des tables de jeu
+  (artefacts `data/generated/solver/`). Les **images** viennent du bucket R2
+  `img.outerpedia.com`. Le handler `/img/*` partagé (`img-cache.ts`, utilisé
+  par le middleware Vite **et** le serveur Electron prod) résout en cascade :
+  sprites bundlés (`apps/renderer/public/img`, les `ui/inven/*` absents de R2)
+  → checkout local (dev, `.assets-staging/images` via `OUTERPEDIA_PATH`) →
+  **cache disque** persistant → **R2** + écriture en cache → fallback
+  `.png`→`.webp`. Alias de namespace : `ui/effect/*` → `equipment/*` (layout
+  V2 → R2). Chaque asset n'est donc fetché qu'une fois. Cache :
+  `.cache/outerpedia` en dev (gitignoré), `<userData>/outerpedia-cache` en
+  prod. Le préfetch fond (prod) réchauffe les icônes d'équipement référencées
+  par la donnée dérivée, une fois par hash de version. Coordonnées repo + SHA
+  centralisés dans `repo-source.ts`.
 - **Mémoire user (Claude)** — formules détaillées + historique de
   validation. Pas dans le repo, accessible via les notes Claude :
   - `game_stat_compose_formula` — derivation détaillée CalcFinalStat

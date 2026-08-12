@@ -52,7 +52,8 @@ export interface StatTokens {
 }
 
 /** Maps engine StatType → display labels + kind + color + APK icon filename.
- *  Icons live in outerpedia-v2's /images/ui/effect/ folder (served at /img/ui/effect/).
+ *  Icons live on the R2 bucket under /images/equipment/ (served at /img/ui/effect/,
+ *  aliased to equipment/ by img-cache.ts).
  *  `null` when no game-side icon exists for the stat. */
 export const STAT: Record<string, StatTokens> = {
   atk:       { label: "ATK",   longLabel: "Attack",            kind: "off",  color: "#fbbf24", icon: "CM_Stat_Icon_ATK" },

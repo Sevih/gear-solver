@@ -3,8 +3,7 @@
  *  - Built `apps/renderer/dist/*` at `/`
  *  - `/gamedata/*`  → DERIVED game data (data/derived in dev, bundled tree in prod)
  *  - `/captured/*`  → captured account JSON (tools/capture/out in dev, userData in prod)
- *  - `/img/*`       → either the local outerpedia-v2 checkout (dev) or a 302 to
- *                     `https://outerpedia.com/images/*` (prod)
+ *  - `/img/*`       → bundled sprites / disk cache / img.outerpedia.com (R2)
  *  - `/api/capture/{run,disarm,status}` → wraps the PowerShell pipeline
  *  - `/api/stat-locks` GET/POST → stat regression locks
  *
@@ -28,16 +27,14 @@ import {
 import { dirname, extname, join, normalize } from "node:path";
 import {
   BUNDLED_ADB,
+  BUNDLED_IMG,
   BUNDLED_PROD_CERT_DIR,
   CAPTURE_DIR,
   CAPTURE_OUT,
   DERIVED,
-  GAME_DIR,
-  SYNC_DIR,
   IMG_CACHE_DIR,
   MANUAL_DEVICE,
   REPO_SHA_STATE,
-  REPO_ROOT,
   IS_DEV,
   STAT_LOCKS,
   RENDERER_DIST,
@@ -53,7 +50,6 @@ import { ensureMitmdump, mitmdumpPath } from "./mitm-provision.js";
 import { proxyReco } from "./reco-proxy.js";
 import { syncGameData } from "./data-sync.js";
 import { serveImg } from "./img-cache.js";
-import { getCurrentRef } from "./repo-source.js";
 import { getStatus as getUpdateStatus, triggerCheck as triggerUpdateCheck, installUpdate } from "./updater.js";
 
 const MIME: Record<string, string> = {
@@ -85,9 +81,9 @@ function mime(file: string): string {
  * good. The few cross-origin holes are exactly the renderer's real needs:
  *   - style-src/font-src → Google Fonts (Geist + Geist Mono, loaded from
  *     index.html). 'unsafe-inline' on styles covers React's `style={{…}}` attrs.
- *   - img-src outerpedia.com → the `/img/*` route's last-resort 302 to the
- *     public CDN (img-cache.ts); CSP re-checks redirect targets, so it must be
- *     whitelisted. data:/blob: cover canvas/capture-derived images.
+ *   - img-src is same-origin only: every image goes through the `/img/*`
+ *     route (bundled/cache/R2 proxying happens server-side, img-cache.ts).
+ *     data:/blob: cover canvas/capture-derived images.
  * Everything else (game data, captured JSON, reco/update APIs, the solver
  * worker) is same-origin and falls under 'self'.
  */
@@ -96,7 +92,7 @@ const CSP = [
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https://outerpedia.com",
+  "img-src 'self' data: blob:",
   "connect-src 'self'",
   "worker-src 'self' blob:",
   "object-src 'none'",
@@ -360,10 +356,10 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   if (url === "/api/capture/status" && req.method === "GET") {
     return captureStatus(res);
   }
-  // Manual "Sync game data" — pull raw tables from the outerpedia repo + rebuild.
+  // Manual "Sync game data" — pull the solver artifacts from the outerpedia repo.
   if (url === "/api/data/sync" && req.method === "POST") {
     dlog("server", "manual data sync requested");
-    syncGameData({ repoRoot: IS_DEV ? REPO_ROOT : process.resourcesPath, gameDir: GAME_DIR, syncDir: SYNC_DIR, derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
+    syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
       .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
       .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
     return;
@@ -562,15 +558,14 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
-  // --- /img/* — disk cache + GitHub CDN, shared with the Vite dev middleware.
-  // serveImg resolves: dev local checkout → disk cache → CDN (jsDelivr/raw) +
-  // cache → webp fallback → 302 outerpedia.com last resort. Pinned to the same
-  // repo SHA the game data was built from so icons match the data snapshot. ---
+  // --- /img/* — bundled sprites → disk cache → R2 bucket, shared with the
+  // Vite dev middleware. See img-cache.ts for the full cascade + the
+  // ui/effect→equipment namespace alias. ---
   if (url.startsWith("/img/")) {
     void serveImg(req, res, url.slice("/img/".length), {
       cacheDir: IMG_CACHE_DIR,
+      bundledDir: BUNDLED_IMG,
       localCheckoutDir: IS_DEV ? findOuterpediaImagesDev() : null,
-      getRef: getCurrentRef,
     }).catch((err: unknown) => {
       dwarn("server", "serveImg failed:", err instanceof Error ? err.message : String(err));
       if (!res.headersSent) { res.statusCode = 500; res.end("image error"); }

@@ -91,9 +91,10 @@ node levels per account).
 
 ## Re-capture cycle after a game patch
 
-1. `data/sync.ps1` re-copies `data/game/*.json` from the outerpedia-v2 checkout.
-2. `npm run data:build` regenerates the `data/derived/*.json` consumed by the engine (and
-   rewrites `data/derived/version.json` `{ hash, builtAt }` — the `hash` only changes if the
+1. Outerpedia side: `datagen:build` + `promote` regenerate `data/generated/solver/*.json`
+   (the `solver` generator there carries the old local `build.mjs`/`calc-stats.mjs` distillation).
+2. `npm run data:sync` copies those artifacts into `data/derived/*.json` (including
+   `version.json` `{ hash, builtAt }` — the `hash` only changes if the
    data actually moved). Shown in Settings → Data.
 3. Re-capture the account if the version has changed (`tools/capture/capture.ps1`).
 4. Green tests (`npm test --workspaces`).
