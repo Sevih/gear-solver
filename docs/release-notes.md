@@ -12,7 +12,15 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Game-data updates work again** — the app now pulls its game data from
+  Outerpedia's new home, so new heroes and items show up automatically after
+  a game patch (the old source had stopped receiving updates). This release
+  ships with the latest data: Lambda, Homunculus Delta, Saeran and the new
+  gear are all in.
+- **Images load from Outerpedia's new image host** — icons and portraits keep
+  working (and load a bit faster once cached).
+- Update to this version to keep receiving game data — older versions are
+  stuck on the old, frozen source.
 
 ## [1.5.6] — 2026-07-10
 
