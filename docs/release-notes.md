@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.7.0] — 2026-08-13
+
 - **Export your roster** — a new Export button next to the Roster heading on
   Home saves your hero progression as a JSON file: level, skill levels,
   affinity, transcendence, exclusive equipment and core fusion, one entry per

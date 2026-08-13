@@ -165,6 +165,10 @@
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
 
+## [1.7.0] — 2026-08-13
+
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
 ## [1.6.0] — 2026-08-12
 
 ### Session 2026-07-10 — 🤖 Auto-submit VirusTotal au release (outillage)
