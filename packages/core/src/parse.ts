@@ -294,7 +294,8 @@ export function parseInventory(
       ultimate: c.Ultimate,
       chainPassive: c.ChainPassive,
     },
-    fusionCharId: Number((c as { FusionCharID?: unknown }).FusionCharID ?? 0) || 0,
+    fusionCharId: Number(c.FusionCharID ?? 0) || 0,
+    fusionLevel: Number(c.FusionLevel ?? 0) || 0,
   }));
   const presets: Preset[] = (userItem.PresetList ?? []).map((p) => ({
     num: p.Num,

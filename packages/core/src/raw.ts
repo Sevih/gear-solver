@@ -76,6 +76,11 @@ export interface RawCharacter {
   ChainPassive: number;
   LevelMaxStep: number;
   IsLock: number;
+  /** Core-fusion variant id (`27xxxxx`) when this hero has been fused, else 0.
+   *  The CharList entry itself always stays keyed by the BASE `CharID`. */
+  FusionCharID?: number;
+  /** Core-fusion tier 1..5 (0 when not fused). */
+  FusionLevel?: number;
   [k: string]: unknown;
 }
 

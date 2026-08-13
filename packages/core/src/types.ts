@@ -129,6 +129,9 @@ export interface Character {
   /** Non-zero when the char was created by fusing a lower-star instance. Drives
    *  the +5000 BP bonus in CalcBattlePower. */
   fusionCharId: number;
+  /** Core-fusion tier 1..5; 0 when the hero isn't fused. Owning the fused
+   *  variant means tier 1 is already paid — there is no tier 0 in-game. */
+  fusionLevel: number;
 }
 
 /** Saved equipment preset (PresetList from /user/item). Name is decoded from

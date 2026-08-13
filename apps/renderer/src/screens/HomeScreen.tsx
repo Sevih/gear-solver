@@ -23,6 +23,7 @@ import { cx } from "../design/cx.js";
 import { Spinner } from "../design/Shell.js";
 import { SLOTS, SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { gearPieceQualityTier, QUALITY_COLOR, type QualityTier } from "../lib/quality.js";
+import { buildHeroTrackerExport } from "../lib/heroTracker.js";
 import type { InventoryDrill } from "./InventoryScreen.js";
 import { loadSavedBuilds } from "../lib/storage/savedBuilds.js";
 import { loadFilterPresets } from "../lib/storage/filterPresets.js";
@@ -368,6 +369,7 @@ const IC_ROSTER = <SIcon><circle cx="9" cy="8" r="3.4" /><path d="M3 20c0-3.3 2.
 const IC_GEAR = <SIcon><rect x="3.5" y="3.5" width="7" height="7" rx="1.4" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.4" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.4" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.4" /></SIcon>;
 const IC_LIBRARY = <SIcon><path d="M6 3h11a1 1 0 0 1 1 1v17l-6.5-3.6L5 21V4a1 1 0 0 1 1-1z" /></SIcon>;
 const IC_UPDATE = <SIcon><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 4v5h-5" /></SIcon>;
+const IC_EXPORT = <SIcon><path d="M12 3v12" /><path d="M8 11l4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></SIcon>;
 
 // ── micro sub-label (11px) for the "By element / class / …" headers ──────
 function MIcon({ children }: { children: React.ReactNode }) {
@@ -387,6 +389,66 @@ function SubLabel({ icon, children }: { icon: React.ReactNode; children: React.R
     <span className="flex items-center gap-1 text-[8.5px] font-bold uppercase tracking-widest text-zinc-400">
       <span className="text-zinc-400">{icon}</span>{children}
     </span>
+  );
+}
+
+/** "Export" affordance in the Roster header — writes the captured progression
+ *  (levels, skills, affinity, transcend, EE, core fusion) as an
+ *  `outerpedia:hero-tracker` JSON the planner imports. Progression only: no
+ *  gear, no stats, no inventory. Flashes "Saved" so the click has feedback
+ *  even though the download itself is silent. */
+function ExportRosterButton({ inventory, game }: { inventory: Inventory | null; game: GameData | null }) {
+  const [flash, setFlash] = useState<"idle" | "done" | "error">("idle");
+  useEffect(() => {
+    if (flash === "idle") return;
+    const t = setTimeout(() => setFlash("idle"), 2200);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  // Both are required: the roster comes from the capture, the level/affinity
+  // curves from the game data. Missing either → nothing meaningful to write.
+  const count = inventory && game ? inventory.characters.length : 0;
+  const onClick = () => {
+    if (!inventory || !game) return;
+    try {
+      const doc = buildHeroTrackerExport(inventory, game);
+      const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `outerpedia-roster-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke on the next tick so the click has consumed the URL.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setFlash("done");
+    } catch (err) {
+      console.warn("roster export failed:", err);
+      setFlash("error");
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={count === 0}
+      title={count === 0 ? "Capture your account first" : `Export ${count} heroes as a hero-tracker JSON`}
+      className={cx(
+        "flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] transition-colors",
+        count === 0
+          ? "cursor-not-allowed border-white/7 text-zinc-600"
+          : flash === "done"
+            ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-300"
+            : flash === "error"
+              ? "border-rose-400/40 bg-rose-500/10 text-rose-300"
+              : "border-white/10 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200",
+      )}
+    >
+      <span className="[&_svg]:h-3 [&_svg]:w-3">{IC_EXPORT}</span>
+      {flash === "done" ? "Saved" : flash === "error" ? "Failed" : "Export"}
+    </button>
   );
 }
 
@@ -790,7 +852,16 @@ export function HomeScreen({
           <div className="flex items-start gap-3.5">
             {/* roster */}
             <Card className="flex min-w-0 flex-1 flex-col gap-3.5">
-              <SectionLabel icon={IC_ROSTER} tint="#c4b5fd" right={<Num className="text-[10px] text-zinc-400">{stats.heroes.toLocaleString()} heroes</Num>}>Roster</SectionLabel>
+              <SectionLabel
+                icon={IC_ROSTER}
+                tint="#c4b5fd"
+                right={
+                  <span className="flex items-center gap-2">
+                    <ExportRosterButton inventory={inventory} game={game} />
+                    <Num className="text-[10px] text-zinc-400">{stats.heroes.toLocaleString()} heroes</Num>
+                  </span>
+                }
+              >Roster</SectionLabel>
               <div className="flex flex-col gap-2">
                 <SubLabel icon={IC_ELEMENT}>By element</SubLabel>
                 {stats.elements.map((e) => (

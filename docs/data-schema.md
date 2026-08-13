@@ -62,9 +62,24 @@ Scaling main pour pièces non-talisman : voir [reference.md §1.3](reference.md#
 ## `/user/character` → `CharList[]`
 
 Par character : `CharUID, CharID, TransStar (stars), CostumeID, LevelMaxStep,
-IsLock, Exp, FusionCharID`. Les niveaux de skill sont des **champs plats au
-top-level** : `First, Second, Ultimate, ChainPassive` (pas de wrapper `Skills`,
-cf. `parse.ts` qui lit `c.First` … `c.ChainPassive`).
+IsLock, Exp, FusionCharID, FusionLevel`. Les niveaux de skill sont des **champs
+plats au top-level** : `First, Second, Ultimate, ChainPassive` (pas de wrapper
+`Skills`, cf. `parse.ts` qui lit `c.First` … `c.ChainPassive`).
+
+**`TransStar` est bien la transcendance courante**, pas un plafond : c'est
+l'étoile **interne** (`CharacterTranscendentTemplet`), qui démarre à la rareté de
+base du héros (un 3★ non transcendé vaut 3, jamais 0) et monte à 9. Mapping vers
+l'affichage in-game : `1..4 → 1★..4★`, `5 → 4★+1`, `6 → 5★`, `7 → 5★+1`,
+`8 → 5★+2`, `9 → 6★` (dérivable de `showUIStar`/`starPlus` dans
+`characters.json` → `ingredients.transcendByStar`). Un compte end-game peut
+légitimement afficher 9 partout — vérifié sur une capture réelle où les decks
+d'adversaires PvP du même payload portaient 3, 5 et 9.
+
+**Une seule entrée par héros, toujours sous l'ID de base** : un héros core-fusé
+n'a pas de ligne `27xxxxx` dans `CharList`, il porte `FusionCharID` (l'id de la
+variante) et `FusionLevel` (palier 1..5). Les EE se retrouvent dans
+`/user/item` par `ItemID` = l'id du personnage (base `20xxxxx`, fusionné
+`27xxxxx`).
 
 **Slots équipés** : `SlotList` existe dans le payload mais sa **shape est TBD
 (non datae)** et n'est **jamais lue** — l'« équipé-par » est dérivé directement
@@ -76,6 +91,40 @@ dans `raw.ts` `RawPreset` ; le parser lit aujourd'hui `Num` (→ `Preset.num`), 
 `ItemUIDList` — seuls `PresetType` et `Favorites` restent non lus).
 Ordre des 8 slots : Weapon, Accessory, Helmet, Armor, Gloves, Boots, EE, Talisman.
 Les noms sont base64-encoded UTF-8 (Cf. `decodeBase64Utf8` dans parse.ts).
+
+---
+
+## Export « hero-tracker » (Home → Roster → Export)
+
+Document d'échange consommé par le planificateur externe. **Progression
+uniquement** : ni gear, ni stats, ni awakening, ni inventaire — il chiffre un
+*besoin*, pas un manque. Construit par `apps/renderer/src/lib/heroTracker.ts`.
+
+```json
+{ "format": "outerpedia:hero-tracker", "version": 1,
+  "heroes": { "2000043": {
+    "owned": true, "level": 100,
+    "skills": { "s1": 5, "s2": 5, "s3": 4, "chain_passive": 3 },
+    "affinity": 10, "transcend_star": 6, "ee": 10,
+    "core_fusion": { "level": 5, "ee": 0 } } } }
+```
+
+| champ | plage | source capture |
+|---|---|---|
+| `owned` | `true` | seuls les héros possédés sont émis |
+| `level` | 5..120 | `Exp` via `exp-character.json` |
+| `skills.s1/s2/s3/chain_passive` | 1..5 | `First/Second/Ultimate/ChainPassive` |
+| `affinity` | 1..100 | `TrustExp` via `trust-character.json` |
+| `transcend_star` | rareté de base..9 | `TransStar` |
+| `ee` | 0..10 | niveau d'enhance de l'EE `ItemID == CharID` (0 = pas d'EE) |
+| `core_fusion` | absent ou objet | présent ssi `FusionCharID ≠ 0` |
+| `core_fusion.level` | 1..5 | `FusionLevel` (posséder le fusionné = palier 1 payé) |
+| `core_fusion.ee` | 0..10 | EE de la variante `27xxxxx` |
+
+Clé = **l'ID de base**, jamais celui du fusionné. Chaque valeur est clampée dans
+le domaine du jeu (`transcend_star` a pour plancher la rareté de base) pour
+qu'une capture partielle ne puisse pas injecter une valeur hors-domaine chez
+l'importateur. L'enveloppe `format` + `version` est obligatoire côté import.
 
 ---
 

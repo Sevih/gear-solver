@@ -8,6 +8,24 @@
 
 ## Items de backlog clôturés (index)
 
+### 📤 Export roster « hero-tracker » (2026-08-13)
+- ✅ **Bouton Export dans Home → Roster** (à droite du titre) — écrit un JSON
+  `outerpedia:hero-tracker` v1 : un objet par héros possédé, indexé par **l'ID de base**
+  (jamais le `27xxxxx` fusionné), avec `level` / `skills{s1,s2,s3,chain_passive}` /
+  `affinity` / `transcend_star` / `ee` / `core_fusion{level,ee}`. Progression seule :
+  pas de gear, pas de stats, pas d'inventaire. Logique pure dans
+  `apps/renderer/src/lib/heroTracker.ts` (+ 11 tests) ; chaque champ est clampé dans le
+  domaine du jeu, plancher `transcend_star` = rareté de base. Le bouton est désactivé
+  sans capture et flashe Saved/Failed.
+- ✅ **`FusionLevel` remonté jusqu'au type `Character`** (`raw.ts` le déclare, `parse.ts` le
+  lit) — il n'était pas parsé, donc le palier de core fusion était inaccessible côté UI.
+- ✅ 🔍 **`TransStar` confirmé correct, pas un plafond** — l'export sortait 9 pour les 119
+  héros, soupçonné faux. Croisement sur toute la capture : le champ vaut 3, 5 et 9 chez
+  les adversaires PvP du même payload → c'est bien la transcendance courante, et le compte
+  est simplement full 6★. Mapping interne→affiché (5 = 4★+1, 6 = 5★, 9 = 6★) vérifié contre
+  `showUIStar`/`starPlus` de `characters.json`. Documenté dans data-schema.md pour couper
+  court au prochain doute.
+
 ### 🔧 Migration de la source de données — outerpedia (2026-08-12)
 - ✅ 🔴 **Le solver ne voyait plus les nouveaux persos** — la sync pointait sur le repo mort
   `Sevih/outerpediaV2` (et des checkouts locaux disparus) : `data/game` était figé à 322 persos quand
