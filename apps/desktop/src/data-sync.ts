@@ -45,7 +45,7 @@ function findSolverCheckout(): string | null {
   if (process.env.OUTERPEDIA_NO_CHECKOUT) return null;
   const candidates = [
     process.env.OUTERPEDIA_PATH,
-    "C:\\Users\\Sevih\\Documents\\Projet perso\\outerpedia",
+    "C:\\Users\\Sevih\\Documents\\dev\\outerpedia-v3",
   ].filter((p): p is string => Boolean(p));
   for (const p of candidates) {
     if (existsSync(join(p, SOLVER_DIR, "version.json"))) return join(p, SOLVER_DIR);

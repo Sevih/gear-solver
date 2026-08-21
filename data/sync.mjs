@@ -30,7 +30,7 @@ const SOLVER_FILES = [
 
 const candidates = [
   process.env.OUTERPEDIA_PATH,
-  "C:\\Users\\Sevih\\Documents\\Projet perso\\outerpedia",
+  "C:\\Users\\Sevih\\Documents\\dev\\outerpedia-v3",
 ].filter(Boolean);
 const checkout = candidates.map((p) => join(p, "data", "generated", "solver"))
   .find((p) => existsSync(join(p, "version.json")));

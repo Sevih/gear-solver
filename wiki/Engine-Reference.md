@@ -168,6 +168,16 @@ for the slot lookup), then POSTs the full rewritten snapshot to `POST /api/captu
 Reverse-engineered from `CFormula::CalcFinalStat` (libil2cpp.so 1.4.9, RVA
 `0x2C59E48`). Validated 0-diff on 11/11 ATK/DEF/HP stats × 5 chars + EFF/RES
 on G.Beth/Notia (core fusion +50% EFF baseline 120 → 255 in-game).
+Re-checked against the 1.4.14 dump (2026-08-21): same signature, same function
+size (0x9C), RVA moved to `0x2CB1C6C`.
+
+The binary signature carries 13 parameters, two of which are **outside the
+model** (always 0 app-side): `_nSpawnAdvantageRate` (dungeon monster spawn
+bonus, never player-side) and `_nMonadEnchantValue` / `_nMonadEnchantValueRate`
+("Monad Enhancement" nodes of the Monad Gate mode, `MonadGateEnchantNodeTemplet`
+— %/flat ATK/DEF/HP/CRC/CHD/… bonuses carried by
+`CCharacterData.MonadGateEnchantNodeList`, assumed active only inside that mode;
+re-validate against an in-game sheet if a stat lock ever drifts).
 
 **Formula** (rates in per-mille, flats as integers):
 ```
@@ -202,7 +212,8 @@ File: [compose-stats.ts](../packages/core/src/compose-stats.ts) +
 
 ### 2.2 CalcBattlePower (CP)
 
-Reverse-engineered from `CalcBattlePower` (libil2cpp.so 1.4.9), validated 0-diff
+Reverse-engineered from `CalcBattlePower` (libil2cpp.so 1.4.9, RVA `0x2C59EE4`;
+`0x2CB1D08` in 1.4.14, signature unchanged), validated 0-diff
 on 5 chars (LB0/1/2/3). Implementation: [cp.ts](../apps/renderer/src/lib/solver/cp.ts).
 
 **SOLVE CP hot path**: `makeCpEvaluator(consts)` pre-captures the per-solve constant
@@ -263,7 +274,8 @@ Pure products of `FinalStats`, ~10 ns/call. No external dependency.
 **Formulas aligned on the reverse-engineered math of the damage-calc binary
 formulas (1.4.9)** (addresses `CFormula.<CalcDamage>g__CalcDamage|17_0` +
 `CheckDamageRate`), reduced to a build-trait context (no known defender on the
-solver side). Source: outerpedia damage-calc note `binary-formulas-1.4.9.md`.
+solver side). Source: outerpedia damage-calc note `binary-formulas-1.4.9.md`
+(legacy outerpedia checkout, `docs/damage-calc/`).
 
 **Damage pipeline (extract from doc §1 + §3) applied to the offensive ratings**:
 
@@ -585,10 +597,10 @@ stats via `computeCheapRatings` (binary RE damage model 1.4.9).
 **Critical tables for the math**:
 - `CharacterTemplet.json` — base stats, skill blocks, class passive
 - `CharacterEvolutionStatTemplet.json` — evolution rows
-- `TranscendStatTemplet.json` — transcend % bonuses
+- `CharacterTranscendentTemplet.json` — transcend % bonuses
 - `CharacterMaxLevelTemplet.json` — LB modifiers
 - `ArchiveBonusTemplet.json` — codex bonuses
-- `GiftTemplet.json` + nodes — geas
+- `CharacterAwakeningNodeTemplet.json` + `CharacterAwakeningLevelTemplet.json` — geas (nodes + tiers)
 - `ItemEnchantTemplet.json` — enhance/tier/singularity scaling factors
 - `ItemOptionTemplet.json` — base values for substats + gems
 - `BuffTemplet.json` — Talisman main scaling per enhanceLevel
@@ -617,11 +629,11 @@ Builds tab, with a "drift" badge when a stat diverges.
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
 | `packages/core/test/equip.test.ts` | 11 tests — `equipItem`/`unequipItem`: set on empty slot, **displace** the occupied slot (same char), no-op (already equipped / unknown item / non-gear), `charUid "0"` = unequip, displacement scope (other char/other slot untouched), input **immutability** |
-| `apps/renderer/test/solver.test.ts`     | 84 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity**, **incremental bucket accumulator equivalence** |
+| `apps/renderer/test/solver.test.ts`     | 95 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp, **PEN clamp at 100%**), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity**, **incremental bucket accumulator equivalence**, **worklist claims** (a FREE piece claimed by a higher-rank hero is excluded, claimed by the solving hero itself stays in), **"Maxed only" floor** (`maxedFloorOf` / `meetsMaxedFloor`: off / +10R6 / +10R9 / +15R9, talisman gated on enhance only), **`collapseTalismanVariants`** (≤ k builds per 6-gear signature, sorted order, k ≤ 0 = off) |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped`: parity without crit gem, accept up to CHC 100 (overshoot ≤102), stop exactly at 100, total skip at cap, talisman/EE split, null delta if nothing useful, score ≤0 never taken |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount`: default `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, hard ceiling 64 |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidelity, empty maps), import merge (dedup by `id`, collision keeps the existing), replace (overwrite), bundle validation (kind/version/maps) |
-| `apps/renderer/test/solveChunk.test.ts` | 3 tests — end-to-end `solveChunk` (hand-built `SolveContext`): **mid-tree set prune** (req-4pc → 1 scored combo vs 16 brute-force; infeasible → 0), **solver↔Builds 0-diff** |
+| `apps/renderer/test/solveChunk.test.ts` | 4 tests — end-to-end `solveChunk` (hand-built `SolveContext`): **mid-tree set prune** (req-4pc → 1 scored combo vs 16 brute-force; infeasible → 0), **solver↔Builds 0-diff**, **chunk partition equivalence** (union of N chunks = single-chunk run, no combo lost or duplicated) |
 | `apps/renderer/test/setPlans.test.ts`   | 26 tests — chip expansion (`setPicksToPlans`), `planSetIds`, `planSlots`, `planFeasible` (multi-cond sum), `setsFeasible` OR + leaf-validation at `remaining 0`, mono-plan req-4pc parity, **`armorSetWhitelist`** (full vs partial prune × broken on/off), **`allSetsComplete`** |
 | `apps/renderer/test/translateReco.test.ts` | 10 tests — reco→patch: mains (OR-union), effects (icons required, null skip+warn), sets (combo→plan 1:1, unresolved combo dropped entirely), substat priority (tiers→weights, bucket collision, unknown key) |
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick`: verdict on both sides of the crossover, exact flat-equivalent, equality exactly at the crossover, %=0 tick guard |
@@ -631,17 +643,22 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/heroPriority.test.ts` | 21 tests — per-hero priority store: `rankOrder` / `isLowerPriority` (unranked < ranked, uniqueness, strict), `reorderRank` / `moveRankBefore` (contiguous 1..N positional insert, drag, clamp, immutability), `fillUnrankedByOrder` (keeps manual ranks, fills unranked by CP, compacts gaps, ignores stale uids) |
 | `apps/renderer/test/dominance.test.ts` | 10 tests — `pruneDominatedForCp`: strict drop, ties/Pareto/groups kept, reforge projection, end-to-end top-CP equivalence via `solveChunk` |
 | `apps/renderer/test/statRegistry.test.ts` | 11 tests — stat registry (`STAT_AXES`): FinalStats coverage, `STAT_TO_PRIORITY` flat/%→axis bridge, design-token completeness, numeric parity snapshot, legacy-key migration |
-| `apps/renderer/test/worklistPlan.test.ts` | 7 tests — `planWorklist` transaction planning: free-before-use ordering, contention flags (one copy wanted twice), cycles applicable atomically, applied/stale changes excluded, empty plan |
+| `apps/renderer/test/worklistPlan.test.ts` | 11 tests — `planWorklist` transaction planning: free-before-use ordering, contention flags (one copy wanted twice), cycles applicable atomically, applied/stale changes excluded, empty plan; `worklistClaims` (solver reservations): each unapplied change's target → claiming hero, already-applied changes skipped, newest entry wins a double-claim, empty map without inventory |
+| `apps/renderer/test/heroTracker.test.ts` | 11 tests — `buildHeroTrackerExport` (outerpedia hero-tracker export): versioned envelope keyed by base hero id, level/affinity resolved from the XP curves (floors lv5 / aff 1), EE level taken from the owned EE item (best copy, non-EE gear ignored), fused hero under its base id + nested `core_fusion` block (omitted when unfused, tier 1 when the level is missing), `transcend_star` clamped to base rarity and out-of-range values clamped, unknown hero still exported |
 
-Run: `npm test --workspaces --if-present`. **Total: 273 tests** (core 22: parse 11 + equip 11 · renderer 251: solver 84, solveChunk 3, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, worklistPlan 7, subValue 5, dmgValue 4, buildAdvice 16, cpPrune 23, heroPriority 21, dominance 10, statRegistry 11).
+Run: `npm test --workspaces --if-present`. **Total: 300 tests** (core 22: parse 11 + equip 11 · renderer 278: solver 95, solveChunk 4, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, worklistPlan 11, subValue 5, dmgValue 4, buildAdvice 16, cpPrune 23, heroPriority 21, dominance 10, statRegistry 11, heroTracker 11).
 
 ### 3.4 Reverse engineering — libil2cpp.so
 
 Key formulas come from the libil2cpp.so dump (1.4.9 build, decompiled via
-Ghidra/IDA). Known addresses:
-- `CFormula::CalcFinalStat` — RVA `0x2C59E48`
-- `CFormula::CalcBattlePower` — RVA `0x2C59EE4` (approximate, see Claude memory
-  note `game_combat_power_formula`)
+Ghidra/IDA). Known addresses (1.4.9 → 1.4.14, dump of 2026-08-21 in
+`outerpedia-v3/.gamedata/apk/dumped/`):
+- `CFormula::CalcFinalStat` — RVA `0x2C59E48` → `0x2CB1C6C`
+- `CFormula::CalcBattlePower` — RVA `0x2C59EE4` → `0x2CB1D08`
+
+The C# signatures (`dump.cs`) are identical across both builds; only the
+addresses move. Check a new dump by searching `static int CalcFinalStat(` in
+`dump.cs`.
 
 ### 3.5 External sources
 
@@ -658,14 +675,11 @@ Ghidra/IDA). Known addresses:
   prod. The background prefetch (prod) warms the equipment icons referenced by
   the derived data, once per version hash. Repo coordinates + SHA centralized
   in `repo-source.ts`.
-- **User memory (Claude)** — detailed formulas + validation history. Not in the
-  repo, accessible via the Claude notes:
-  - `game_stat_compose_formula` — detailed CalcFinalStat derivation
-  - `game_combat_power_formula` — CP derivation
-  - `game_ee_transcend_inherent` — EE/Transcend always active
-  - `project_gear_solver_stat_locks` — locks workflow
-  - `equipment_ascend_name_gradient` — Singularity ascended design
-  - `equipment_icon_overlay_specs` — +N/T1-T4 overlays
+- **Historical RE notes** — the detailed derivations (CalcFinalStat, CP,
+  inherent EE/Transcend, locks workflow) lived in the Claude memory of the
+  outerpedia-v2 project, since deleted. What remains: this document (§2), the
+  header comments of `compose-stats.ts` / `cp.ts` / `ratings.ts`, and the
+  `dev/legacy/outerpedia/docs/damage-calc/` folder (1.4.9 damage formulas).
 
 ### 3.6 Stat coding conventions
 
