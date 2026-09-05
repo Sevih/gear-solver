@@ -13,6 +13,15 @@
 
 ## Reste à faire
 
+### 🟢 Ratings offensifs — après la colonne « meilleur skill » (2026-09-05)
+- [ ] 🟢 **DPS de rotation pondéré par les cooldowns** — `dmgs` = hit du meilleur skill × SPD,
+      pas une rotation. La donnée damage d'outerpedia porte déjà `levels[].cool` / `startCool`
+      par skill : un `bestSkill`-like « facteur moyen par tour » (S1 filler + S2/S3 quand
+      dispo) est calculable côté générateur. À faire dans le pipeline (nouveau champ), jamais
+      en parsant localement.
+- [ ] ⚪ **DoT dans le meilleur hit** — assumé non modélisé (Gnosis Beth sous-estimée) ; ne
+      traiter que si le moteur damage expose un facteur DoT par skill comparable au hit direct.
+
 ### 🟢 Tests manquants — audit Builder (2026-07-03)
 - [ ] 🟢 **Crit-cap slow path de bout en bout** — rien ne teste le trigger `wantCritCap`
       + recompose dans `solveChunk` (le chemin par-combo `allocateGemsReachingCap` +

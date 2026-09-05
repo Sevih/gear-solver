@@ -269,6 +269,7 @@ mcdFactor= max(0.3, chdMult + dmgUpMod)                     ← suppose pCrit = 
 penPct   = min(PEN, 100) / 100             ← PPR cappe à 100% (§1.2)
 effDef   = TARGET_DEF × (1 − penPct)
 penMult  = (TARGET_DEF + 1000) / (effDef + 1000)            ← ratio mitigation
+skillFactor = bestSkill.factor / 1000      ← meilleur skill du perso (S1/S2/S3 niveau max, bursts inclus) ; 1 si donnée absente
 ```
 
 **Côté défensif** (`ehp`) — `dmgRed` est une stat **defender** (`rate -=
@@ -290,11 +291,11 @@ ranke pareil pour n'importe quel `TARGET_DEF`.
 | `hps`  | `HP × SPD`                             | Bulky-and-fast composite (proxy)        |
 | `ehp`  | `HP × (1 + DEF/1000) / dmgTaken`       | Effective HP — mit DEF + dmgRed defender |
 | `ehps` | `EHP × SPD`                            | Tanky-and-fast                          |
-| `dmg`  | `ATK × drFactor × penMult`             | Expected damage par hit vs DEF=2000     |
-| `dmgs` | `dmg × SPD`                            | DPS                                     |
-| `mcd`  | `ATK × mcdFactor × penMult`            | Max crit (assume 100% CHC, raid-buffs)  |
+| `dmg`  | `ATK × drFactor × penMult × skillFactor` | Hit attendu du MEILLEUR skill vs DEF=2000 |
+| `dmgs` | `dmg × SPD`                            | DPS (pas une rotation — cooldowns ignorés) |
+| `mcd`  | `ATK × mcdFactor × penMult × skillFactor` | Max crit du meilleur skill (assume 100% CHC) |
 | `mcds` | `mcd × SPD`                            | Max DPS                                 |
-| `dmgh` | `HP × drFactor × penMult`              | Damage HP-scaling (Aer S3, Caren, …)    |
+| `dmgh` | `HP × drFactor × penMult`              | Damage HP-scaling (Aer S3, Caren, …) — SANS skillFactor (référence 100 %) |
 
 Conventions :
 - `CRC` et `CHD` sont en **DISPLAY percent** (35 = 35%) ; le diviseur /100 les
@@ -321,6 +322,27 @@ optimise bien le nombre CP réel du jeu.
 Element (×0.8/×1.0/×1.2), Mark (×1.15), EnemyCriticalDamageReduce, MISS
 multiplier, `FinalDamageReduce` buff chain. Le PEN est l'exception : modélisé
 contre un `TARGET_DEF` constant pour permettre le ranking PEN-vs-autres-stats.
+
+**Facteur de skill (`skillFactor`, 2026-09-05)** — la colonne Dmg n'est plus « un hit à
+facteur 100 % » mais **le hit attendu du skill le plus puissant du perso** : `dmg`,
+`dmgs`, `mcd`, `mcds` sont multipliés par `bestSkill.factor / 1000` (`characters.json`,
+émis par le générateur solver d'outerpedia depuis son moteur damage : max sur S1/S2/S3
+**au niveau max**, états burst 1..3 inclus quand ils remplacent le skill burstable, d'un
+facteur = `DamageFactor` du niveau × facteur total de l'état — Σ des events des clips
+résolus, sinon Σ tables comblée à 1000 ‰ sous 990 ; **multi-hit = somme des hits**).
+Le facteur est une **constante par perso** : le classement d'un solve mono-perso ne bouge
+pas d'un iota — la valeur ajoutée est le nombre affiché et la comparaison inter-persos.
+Il s'applique APRÈS `dmgStat`/`dmgSec`/`noCrit` (il multiplie toute la base) ; `dmgh` reste
+la référence HP à facteur 100 %. Repli EXPLICITE : perso sans `bestSkill` (donnée
+absente / snapshot antérieur au champ) → ×1,00 **et** tooltip + badge ambre « ×1 » dans
+l'en-tête de colonne (`lib/dmgSkill.ts`) — jamais un 0 silencieux. Le gagnant (S1/S2/S3,
+« B1..B3 » = burst) est affiché en badge dans l'en-tête Dmg/DmgS et dans les tooltips
+(`ratingTitle`), avec la mention « approximate » si sa chaîne de hits est irrésolue
+(`unresolvedHits`). **Assumé, non modélisé** : les DoT (un perso dont le vrai « meilleur
+hit » est un DoT — Gnosis Beth — est sous-estimé par un facteur de hit direct), les buffs
+et chaînes ; le DPS de rotation pondéré par les cooldowns est un TODO. Validé contre le
+damage calculator d'outerpedia (`buildSkillReport`, mêmes stats, DEF 2000, crit 0 %) :
+Rhona S3 ×1,67, K S2-burst 1 ×2,39, Primine S1 ×0,86 — exacts.
 
 ### 2.4 Score (`ratings.ts::computeScore`)
 

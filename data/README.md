@@ -38,6 +38,9 @@ outerpedia datagen (solver generator)
   `buffId` indirection (IOT_BUFF) resolved per enhance level through `buffs.json`.
 - **`enhance.json`** — main-stat scaling constants + per-(slot, grade, star)
   cumulative Exp curves.
+- **`characters.json`** — per-hero identity, stat ingredients and the damage-model
+  hints: `dmgStat` / `dmgSec` / `noCrit`, plus `bestSkill` = the strongest S1/S2/S3 hit's
+  total factor (‰, max level, bursts included) that scales the Builder's Dmg columns.
 - Plus sets, gems, passives (equipment / multi-tier / EE / singularity),
   characters, and the exp / trust / codex curves.
 

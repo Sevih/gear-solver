@@ -166,6 +166,9 @@ For each combo that passes phase 4:
    - `gemDelta` is pre-aggregated (cf. § Gems).
 2. **Stat filter**: if a `FinalStats[key]` is outside the user `[min, max]`, `continue`.
 3. **Cheap ratings**: 8 simple products (HpS, Ehp, EhpS, Dmg, DmgS, Mcd, McdS, DmgH).
+   Dmg/DmgS/Mcd/McdS are multiplied by the hero's **best-skill factor**
+   (`meta.bestSkill` → `ctx.skillFactor`, ×1 when missing) — constant per solve, the
+   ranking does not change (cf. Engine-Reference § 2.3).
    For a **`noCrit`** hero (`meta.noCrit`, propagated into the context), `computeCheapRatings`
    gets `noCrit=true` → `pCrit=0` (the CHD term drops out) and `mcd` falls back to the
    non-crit hit: CHC/CHD no longer inflate its ratings. In SOLVE CP with no rating-band

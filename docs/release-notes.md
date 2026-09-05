@@ -12,7 +12,12 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Damage column = your hero's strongest skill.** Builder's Dmg / DmgS (and the Mcd /
+  McdS filters) now show the expected hit of the hero's best skill — S1, S2 or S3 at max
+  level, burst states included — instead of a generic 100 % hit. Numbers are comparable
+  across heroes; the ranking of builds for a given hero is unchanged. The column header
+  shows which skill won (hover for the factor); heroes without skill data fall back to
+  ×1 and say so. DoT-based kits are under-estimated (not modeled).
 
 ## [1.7.0] — 2026-08-13
 

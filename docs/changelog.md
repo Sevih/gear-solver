@@ -8,6 +8,30 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎯 Colonne Damage = hit du meilleur skill (2026-09-05)
+- ✅ **`dmg` / `dmgs` / `mcd` / `mcds` × facteur du meilleur skill** — la colonne Dmg du
+  Builder calculait un hit à facteur de skill implicite 100 % ; elle affiche maintenant le
+  hit attendu du skill le plus puissant du perso (max sur S1/S2/S3 au **niveau max**, bursts
+  1..3 inclus quand ils remplacent le skill burstable ; multi-hit = somme des hits).
+  `computeCheapRatings(…, skillFactor)` (5ᵉ paramètre, défaut 1) applique le facteur APRÈS
+  `dmgStat`/`dmgSec`/`noCrit` ; `dmgh` reste la référence HP à 100 %. Constante par perso →
+  **classement mono-perso inchangé** (test d'invariance d'ordre sur 5 builds × 4 ratings ×
+  3 facteurs). Repli EXPLICITE `lib/dmgSkill.ts` : sans donnée → ×1,00 + tooltip ⚠ + badge
+  ambre « ×1 » (jamais un 0 silencieux). Le gagnant (S1/S2/S3, « B1..B3 ») est affiché en
+  badge dans l'en-tête Dmg/DmgS et dans les tooltips (`ratingTitle`), « approximate » si
+  chaîne de hits irrésolue. Assumé : DoT non modélisés (Gnosis Beth sous-estimée), pas de
+  buffs/chaînes. 4 tests `dmgSkill.test.ts` + 4 dans `solver.test.ts`.
+- ✅ **Source = pipeline, pas de parsing local** — outerpedia `datagen/generators/solver.ts`
+  émet `bestSkill { slot, burst?, factor ‰, unresolvedHits? }` par perso, calculé par
+  `solver-best-skill.ts` depuis l'extracteur damage du même build et la règle du moteur
+  `stateTotalFactor` (extraite de `report.ts` — clips résolus → Σ events, sinon Σ tables
+  comblée à 1000 sous 990). Diff des artefacts solver limité au nouveau champ (125/125
+  persos, 25 gagnants burst, 4 irrésolus signalés). `npm run data:sync` → `data/derived/`
+  (version `9ad224f781ad`). Validé contre `buildSkillReport` (DEF 2000, crit 0 %) : Rhona S3
+  ×1,67, K S2-B1 ×2,39, Primine S1 ×0,86 — exacts.
+- 📝 **TODO ouvert** : DPS de rotation pondéré par les cooldowns (`levels[].cool` /
+  `startCool` déjà dans la donnée damage) — hors périmètre, cf. todo.md.
+
 ### 📤 Export roster « hero-tracker » (2026-08-13)
 - ✅ **Bouton Export dans Home → Roster** (à droite du titre) — écrit un JSON
   `outerpedia:hero-tracker` v1 : un objet par héros possédé, indexé par **l'ID de base**

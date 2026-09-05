@@ -276,6 +276,7 @@ mcdFactor= max(0.3, chdMult + dmgUpMod)                     ← assumes pCrit = 
 penPct   = min(PEN, 100) / 100             ← PPR caps at 100% (§1.2)
 effDef   = TARGET_DEF × (1 − penPct)
 penMult  = (TARGET_DEF + 1000) / (effDef + 1000)            ← mitigation ratio
+skillFactor = bestSkill.factor / 1000      ← the hero's best skill (S1/S2/S3 at max level, bursts included); 1 when missing
 ```
 
 **Defensive side** (`ehp`) — `dmgRed` is a **defender** stat (`rate -=
@@ -297,11 +298,11 @@ for any `TARGET_DEF`.
 | `hps`  | `HP × SPD`                             | Bulky-and-fast composite (proxy)        |
 | `ehp`  | `HP × (1 + DEF/1000) / dmgTaken`       | Effective HP — mit DEF + dmgRed defender |
 | `ehps` | `EHP × SPD`                            | Tanky-and-fast                          |
-| `dmg`  | `ATK × drFactor × penMult`             | Expected damage per hit vs DEF=2000     |
-| `dmgs` | `dmg × SPD`                            | DPS                                     |
-| `mcd`  | `ATK × mcdFactor × penMult`            | Max crit (assume 100% CHC, raid-buffs)  |
+| `dmg`  | `ATK × drFactor × penMult × skillFactor` | Expected hit of the BEST skill vs DEF=2000 |
+| `dmgs` | `dmg × SPD`                            | DPS (not a rotation — cooldowns ignored) |
+| `mcd`  | `ATK × mcdFactor × penMult × skillFactor` | Max crit of the best skill (assume 100% CHC) |
 | `mcds` | `mcd × SPD`                            | Max DPS                                 |
-| `dmgh` | `HP × drFactor × penMult`              | Damage HP-scaling (Aer S3, Caren, …)    |
+| `dmgh` | `HP × drFactor × penMult`              | Damage HP-scaling (Aer S3, Caren, …) — NO skillFactor (100 % reference) |
 
 Conventions:
 - `CRC` and `CHD` are in **DISPLAY percent** (35 = 35%); the /100 divisor makes
@@ -327,6 +328,26 @@ SOLVE CP still maximizes the game's real CP number.
 Element (×0.8/×1.0/×1.2), Mark (×1.15), EnemyCriticalDamageReduce, MISS
 multiplier, `FinalDamageReduce` buff chain. PEN is the exception: modeled
 against a constant `TARGET_DEF` to allow PEN-vs-other-stats ranking.
+
+**Skill factor (`skillFactor`, 2026-09-05)** — the Dmg column is no longer "a hit at a
+100 % factor" but **the expected hit of the hero's strongest skill**: `dmg`, `dmgs`,
+`mcd`, `mcds` are multiplied by `bestSkill.factor / 1000` (`characters.json`, emitted by
+outerpedia's solver generator from its damage engine: max over S1/S2/S3 **at max level**,
+burst states 1..3 included when they replace the burstable skill, each skill's factor =
+the level's `DamageFactor` × the state's total hit factor — Σ of the resolved clip events,
+else Σ tables filled to 1000 ‰ under 990; **multi-hit = sum of the hits**). The factor is
+a **per-hero constant**: a single-hero solve's ranking does not move at all — the value is
+the displayed number and the cross-hero comparison. It applies AFTER `dmgStat`/`dmgSec`/
+`noCrit` (it multiplies the whole base); `dmgh` stays the 100 %-factor HP reference.
+EXPLICIT fallback: a hero without `bestSkill` (missing data / snapshot older than the
+field) → ×1.00 **and** a tooltip + amber "×1" badge in the column header
+(`lib/dmgSkill.ts`) — never a silent 0. The winner (S1/S2/S3, "B1..B3" = burst) shows as
+a badge in the Dmg/DmgS headers and in the tooltips (`ratingTitle`), marked "approximate"
+when its hit chain is unresolved (`unresolvedHits`). **Assumed, not modeled**: DoTs (a hero
+whose real "biggest hit" is a DoT — Gnosis Beth — is under-estimated by a direct-hit
+factor), buffs and chains; cooldown-weighted rotation DPS is a TODO. Validated against
+outerpedia's damage calculator (`buildSkillReport`, same stats, DEF 2000, 0 % crit):
+Rhona S3 ×1.67, K S2-burst 1 ×2.39, Primine S1 ×0.86 — exact.
 
 ### 2.4 Score (`ratings.ts::computeScore`)
 
