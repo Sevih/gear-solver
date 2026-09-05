@@ -3,6 +3,12 @@
 Proven method to recover the full account inventory/character data from OUTERPLANE
 (`com.smilegate.outerplane.stove.google`) for the gear solver. **Status: working end-to-end.**
 
+> **Steam client (2026-09-05):** OUTERPLANE is on Steam, and the app has a second capture
+> source for it — a BepInEx plugin hooked into the PC client, **no emulator, root or proxy**.
+> That's the recommended path for PC players; the app picks it in Settings → Setup. See
+> [tools/capture-steam/README.md](../capture-steam/README.md). Everything below is the
+> **emulator** source, kept for players without the Steam client.
+
 ## Quick start (one button)
 
 Prereqs once: LDPlayer 9 running with **ADB debugging = Local connection** and the

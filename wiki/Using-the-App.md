@@ -168,7 +168,8 @@ target piece's image, stats, and where it currently lives (which hero wears it, 
 
 A tabbed modal:
 
-- **Setup** — re-run the emulator / ADB / root checklist.
+- **Setup** — pick the **capture source** (Steam plugin / Android emulator) and re-run its
+  checklist; Steam also has Install / Update / Remove plugin and Launch game here.
 - **Solver** — worker count (Auto = use your CPU; or pin a number), how many results to return,
   results heatmap on/off.
 - **Data** — **Sync game data** (refresh the game tables after a patch), reset the onboarding

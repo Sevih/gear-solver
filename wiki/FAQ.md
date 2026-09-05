@@ -7,21 +7,45 @@ Common questions and fixes for players. For how the app works internally, see
 
 ## Importing my account
 
-**Nothing shows up after I click Arm capture.**
+**Steam or emulator — which source should I use?**
+**Steam** if you have the PC client: nothing to root, nothing to configure, and your account
+re-imports every time you reach the lobby. The emulator path exists for players without the
+Steam client. Switch anytime in **Settings → Setup** (top of the pane).
+
+**(Steam) "Install plugin" says the game must be closed.**
+Two cases lock files in the game folder: the first install of the BepInEx loader, and updating
+a plugin the running game has already loaded. Quit OUTERPLANE, click Install again, relaunch.
+A first install while the game runs *without* any plugin yet is fine — just restart the game
+afterwards so it loads.
+
+**(Steam) The header says "game up, plugin not loaded" / nothing imports.**
+The game was started before the plugin was installed (or BepInEx isn't loading). Restart the
+game. If it persists, look at `BepInEx/LogOutput.log` in the game folder — it should list
+*Gear Solver Capture* and "hooked CWebManager…"; an antivirus quarantining `winhttp.dll` in
+the game folder is the usual culprit.
+
+**(Steam) What does the plugin do to my game?**
+It reads the responses the game already received and copies them to the app's folder. It
+changes nothing in the game, sends nothing to the server, and can be removed from
+**Settings → Setup → Remove plugin**. It is still a third-party mod loaded into the client —
+same category as the emulator interception.
+
+**(Emulator) Nothing shows up after I click Arm capture.**
 Play the game **through to the lobby** (main town screen) — that's when OUTERPLANE sends your
 account + inventory. Then click **Reload** in gear-solver. If it's still empty, check the next
 item.
 
-**The setup checklist won't go green / "ADB connection" or "Root toggle" fails.**
+**(Emulator) The setup checklist won't go green / "ADB connection" or "Root toggle" fails.**
 - Make sure LDPlayer is **running** with OUTERPLANE open.
 - Turn **Root permission ON** in LDPlayer (Settings → Other settings → Root → ON) and **restart
   the instance** — root must be on *before* you capture.
 - Re-open the **Setup** wizard (gear icon) and re-run the checks.
 
 **My hero stats are slightly off vs the in-game character sheet.**
-Two stat sources (Codex and Geas) aren't sent on the lobby screen. With capture still **armed**,
-open the in-game **Hero Archive (Codex)** and **Gift / Geas** screens, then click **Disarm** in
-gear-solver. Your stats will then match exactly.
+Two stat sources (Codex and Geas) aren't sent on the lobby screen. Open the in-game **Hero
+Archive (Codex)** and **Gift / Geas** screens once: on Steam they import as they load; on the
+emulator do it with capture still **armed**, then click **Disarm** in gear-solver. Your stats
+will then match exactly.
 
 **Do you upload my account anywhere?**
 No. Capturing reads the game's network responses **locally on your PC**; saved builds and presets

@@ -5,12 +5,19 @@
 Four layers, connected by plain JSON:
 
 ```
- LDPlayer (game) ─HTTPS─▶ tools/capture (mitmproxy + PS) ─JSON─▶ packages/core ─▶ apps/renderer ◀─hosts─ apps/desktop
-   account data            decrypts & writes out/*.json       parse + score + solve     UI         Electron shell
+ Steam client (game) ─BepInEx─▶ tools/capture-steam (plugin) ─┐
+   account data                  copies decoded JSON as it flows │
+                                                                ├─JSON─▶ packages/core ─▶ apps/renderer ◀─hosts─ apps/desktop
+ LDPlayer (game) ─HTTPS─▶ tools/capture (mitmproxy + PS) ───────┘         parse + score + solve     UI         Electron shell
+   account data            decrypts & writes out/*.json
 ```
 
-- **tools/capture** — external, runs only when you want to (re)import. Produces
-  `out/user_item.json`, `user_character.json`, etc. Not coupled to the app.
+- **tools/capture-steam** — the Steam source: a BepInEx plugin the app installs into the
+  Steam game folder (`/api/steam/install`). It hooks the game's own HTTP layer and writes
+  the same `user_item.json` / `user_character.json` / … into the capture folder while you
+  play — no emulator, root or proxy. See [tools/capture-steam/README.md](../tools/capture-steam/README.md).
+- **tools/capture** — the emulator source: external, runs only when you want to (re)import.
+  Produces `out/user_item.json`, `user_character.json`, etc. Not coupled to the app.
 - **packages/core** — pure TypeScript, no DOM, no Node APIs. The brain: wire types,
   parser (wire → domain model), stat resolution, character stat composition. Reusable
   from a Web Worker, a CLI, or the desktop shell. (The combination solver itself lives
@@ -28,8 +35,8 @@ Four layers, connected by plain JSON:
   panels, and [reference.md](reference.md) for the full formula + data-pipeline reference.
 - **apps/desktop** — Electron shell that hosts the renderer. `main.ts` boots a local
   server (`server.ts`) that serves `data/derived` + the capture output, exposes the
-  capture/emulator HTTP endpoints (`/api/capture/*`, `/api/emulators` — there is no Electron
-  IPC/preload, the renderer talks plain HTTP), and accepts a `POST /api/captured/user-item` write-back (the renderer
+  capture/emulator HTTP endpoints (`/api/capture/*`, `/api/emulators`, and `/api/steam/*` for the
+  Steam source via `steam-capture.ts` — there is no Electron IPC/preload, the renderer talks plain HTTP), and accepts a `POST /api/captured/user-item` write-back (the renderer
   rewrites the captured snapshot for equip/unequip edits — the transform itself lives in core,
   so the server stays a dumb writer); in dev the Vite middleware covers the same role. At launch it
   **syncs the derived game data from the public `Sevih/outerpedia` repo** (`data-sync.ts`
@@ -47,7 +54,8 @@ Four layers, connected by plain JSON:
 ## Why this split
 
 - The risky/fragile part (capture) is isolated; if the game changes its protocol only
-  `tools/capture` is affected.
+  `tools/capture` / `tools/capture-steam` are affected — both write the same files, so the
+  engine and UI don't know which source produced a snapshot.
 - The engine is testable in isolation and portable — it already backs both the web
   renderer and the Electron desktop shell without a rewrite.
 - The UI stays thin.

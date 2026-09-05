@@ -13,36 +13,61 @@ app works under the hood, see [Architecture](Architecture) instead.
 ## 1. What you need
 
 - **Windows** (the app ships as a Windows desktop installer).
-- **LDPlayer** (Android emulator) with:
-  - **OUTERPLANE installed** and logged into your account,
-  - **Root toggle ON** (LDPlayer → Settings → Other settings → Root permission → ON, then restart the instance),
-  - **ADB enabled**.
+- OUTERPLANE, one of two ways — this is your **capture source**:
+  - **Steam (recommended)** — OUTERPLANE installed **from Steam** and logged into your account.
+    Nothing else: the app drops a small capture plugin into the game folder for you.
+  - **Emulator** — **LDPlayer** (Android) with OUTERPLANE installed and logged in, the **Root
+    toggle ON** (LDPlayer → Settings → Other settings → Root permission → ON, then restart the
+    instance) and **ADB enabled**.
 - The gear-solver app itself (installer, or run from source — see the [README](https://github.com/Sevih/gear-solver/blob/main/README.md)).
 
-> Why root + LDPlayer? Importing your account reads the game's own network responses locally on
-> your PC. Nothing is ever sent anywhere — your data stays on your machine. (Details:
-> [Capture Pipeline](Capture-Pipeline).)
+> Either way, importing your account reads the game's own network responses **locally on your
+> PC** — nothing is ever sent anywhere, your data stays on your machine. The Steam plugin reads
+> them from inside the game; the emulator path intercepts them, which is why it needs root.
+> (Details: [Capture Pipeline](Capture-Pipeline).)
 
 ---
 
 ## 2. First launch — the setup wizard
 
 On first launch the app opens a **Setup wizard** (you can re-open it anytime from the gear icon
-in the top-right). It runs a short checklist:
+in the top-right). Pick your **capture source** at the top — the app preselects **Steam** when it
+finds OUTERPLANE in your Steam library — then follow the checklist:
 
+**Steam**
+1. **OUTERPLANE installed via Steam** — found automatically.
+2. **Capture plugin installed** — click **Install plugin** (one time; close the game first if it
+   was already running without the plugin, then restart it).
+3. **Game running with the plugin loaded** — launch the game (the wizard has a button for it).
+
+**Emulator**
 1. **Emulator installed** — LDPlayer detected.
 2. **Emulator running** — your instance is up.
 3. **ADB connection** — the app can talk to the emulator.
 4. **Root toggle** — root permission is ON.
 
-When all four are green, you're ready to import.
+When the checks are green, you're ready to import.
 
 ---
 
 ## 3. Import your account ("capture")
 
-Importing reads your gear + heroes straight from the game. It's a **one-button** flow from the
-header:
+Importing reads your gear + heroes straight from the game.
+
+### Steam source — just play
+
+1. Launch OUTERPLANE from Steam (with the plugin installed).
+2. **Play through to the lobby** (the main town screen). The plugin writes your account +
+   inventory as the game loads them and gear-solver **imports on its own** within a few
+   seconds — no button to press. The header pill reads **Live** while the game runs.
+3. For the extra stats (codex + geas), open the in-game **Hero Archive (Codex)** and
+   **Gift / Geas** screens once — they import as soon as they load.
+
+Re-importing later = just play again: every lobby load refreshes the snapshot.
+
+### Emulator source — arm, play, disarm
+
+It's a **one-button** flow from the header:
 
 1. Launch OUTERPLANE inside LDPlayer.
 2. In gear-solver, click **Arm capture** (top of the window).

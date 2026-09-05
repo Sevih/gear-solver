@@ -12,6 +12,13 @@
 
 ## [Unreleased]
 
+- **Capture from the Steam client — no emulator, no root.** OUTERPLANE is on Steam now, and
+  the app can read your account straight from that client: pick **Steam** as the capture
+  source in Settings → Setup, click **Install plugin** once (a small BepInEx plugin goes into
+  the game folder), then just play — your roster and gear import on their own when the lobby
+  loads, no Arm / Disarm. The emulator pipeline stays available as the other source.
+- **Element and class icons match the game again.** The Steam update changed the in-game
+  icon set; Home, Inventory, Builds and the gear cards now use the new icons.
 - **Damage column = your hero's strongest skill.** Builder's Dmg / DmgS (and the Mcd /
   McdS filters) now show the expected hit of the hero's best skill — S1, S2 or S3 at max
   level, burst states included — instead of a generic 100 % hit. Numbers are comparable

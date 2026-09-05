@@ -21,7 +21,8 @@ install, import your account, optimize a hero. No build step, no command line. T
 **[player wiki](https://github.com/Sevih/gear-solver/wiki)** (Getting Started · Using the App ·
 FAQ) walks through everything.
 
-> Needs Windows + LDPlayer (rooted) with OUTERPLANE installed — see the guide for the why and how.
+> Needs Windows + OUTERPLANE either on **Steam** (the app installs a small capture plugin into
+> the game — no emulator, no root) or in a rooted **LDPlayer** — see the guide for the why and how.
 
 ### ⚠️ Antivirus / SmartScreen warnings
 
@@ -29,10 +30,14 @@ The installer is **not code-signed** (a certificate costs money the project does
 Windows SmartScreen shows an "unknown publisher" prompt — click **More info → Run anyway**. A few
 antivirus engines may also flag it. This is expected for an unsigned Electron app, and specifically:
 
-- The app **drives a rooted Android emulator and intercepts the game's own HTTPS traffic** (via
-  [mitmproxy](https://mitmproxy.org)) to read your account inventory. That behavior looks like what
-  monitoring tools do, so heuristic scanners are cautious about it — it's exactly what the app is
-  documented to do, nothing hidden. See [tools/capture/README.md](tools/capture/README.md).
+- With the **emulator** source, the app **drives a rooted Android emulator and intercepts the
+  game's own HTTPS traffic** (via [mitmproxy](https://mitmproxy.org)) to read your account
+  inventory. That behavior looks like what monitoring tools do, so heuristic scanners are cautious
+  about it — it's exactly what the app is documented to do, nothing hidden. See
+  [tools/capture/README.md](tools/capture/README.md).
+- With the **Steam** source, it writes a [BepInEx](https://github.com/BepInEx/BepInEx) loader + a
+  small plugin into the game folder instead (read-only hook on the game's HTTP layer). See
+  [tools/capture-steam/README.md](tools/capture-steam/README.md).
 - mitmproxy is **downloaded from its official site on first capture** (checksum-verified), not
   bundled, so the installer itself stays lean.
 

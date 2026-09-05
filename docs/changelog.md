@@ -8,6 +8,50 @@
 
 ## Items de backlog clôturés (index)
 
+### 🖼️ Icônes d'élément et de classe — nouveau set du jeu (2026-09-05)
+- ✅ 🟡 **Le jeu a changé ses icônes d'élément et de classe** avec la sortie Steam (27/08) : nouveau set
+  `IG_Turn_Element_*` / `IG_Turn_Class_*` (outerpedia les extrait, les sert dans `images.ts` et les a
+  poussées sur R2 ; les anciens `CM_Element_*` / `CM_Class_*` restent sur disque mais ne sont plus ceux
+  du jeu). Le solver pointait encore sur les anciens noms — 9 références basculées (`EquipmentIcon`,
+  `HomeScreen`, `BuildsScreen`, `InventoryScreen`). Même casse de noms (Fire/Water/… ; Striker/Healer/…),
+  aucun mapping à toucher. Non repris : les `CM_Sub_Class_*` (sous-classes, nouveau concept) — le solver
+  n'affiche pas de sous-classe.
+
+### 🎮 Source de capture Steam — plugin BepInEx (2026-09-05)
+- ✅ 🟢 **Seconde méthode de capture, sans émulateur ni root ni proxy** — le client Steam d'OUTERPLANE
+  (sorti le 27/08) est un build Unity **Mono**, non obfusqué côté réseau (mêmes hosts/ports/clé XOR
+  que l'APK). Un plugin BepInEx (`tools/capture-steam/`, C#, 14 Ko) pose deux postfix Harmony sur
+  `CWebManager` : `Log2InternalWeb(message, cmd)` — stub **vide** laissé par les devs, appelé sur
+  chaque réponse OK avec le JSON **déjà déchiffré** + le path — et `DecryptMsg` en **fallback par
+  forme** (clés racines : `ItemList`+`PresetList` → `user_item`, …) si le stub est inliné par le JIT.
+  Il écrit les mêmes fichiers que `addon.py` (`user_item.json`, …, sentinel `.captured`,
+  `_unknown/`, `seen-paths.log`) + un heartbeat `.steam-plugin.json` (pid, version, captures,
+  `pathHook`). Lecture seule, I/O sur le thread pool, écriture atomique, cibles résolues **par nom**
+  (un rename du jeu = erreur loggée, pas un crash).
+- ✅ **Desktop** — `steam-capture.ts` (pur Node, partagé Vite/Electron) : détection registre
+  `SteamPath` → `libraryfolders.vdf` → `appmanifest_4247320.acf` ; `installSteamPlugin()` télécharge
+  BepInEx 5.4.23.5 (SHA-256 épinglé) si absent, copie le DLL, écrit `outerpedia.gearsolver.capture.cfg`
+  avec `OutDir = CAPTURE_OUT` (autorisé jeu lancé tant que le plugin n'est pas chargé ; refusé si
+  heartbeat live ou BepInEx à poser) ; `steamStatus()` = installé / BepInEx / plugin présent + à jour
+  (hash) + bon dossier / jeu lancé (`tasklist`) / heartbeat → **live** ; `uninstallSteamPlugin()` ;
+  `launchGame()` (`steam://rungameid`). Endpoints `/api/steam/{status,install,uninstall,launch}` dans
+  `server.ts` + miroir Vite ; `download.ts` factorise download vérifié + `Expand-Archive` avec
+  `mitm-provision.ts`. Packaging : `fetch-binaries.mjs` build le plugin (`npm run capture-steam:build`)
+  → `resources/capture-steam/` → extraResources.
+- ✅ **Renderer** — sélecteur de **source** (Settings → Setup, `gs.capture.source`, auto = Steam si le
+  jeu est dans une bibliothèque Steam) ; wizard Steam 3 étapes (jeu trouvé / plugin installé / plugin
+  live) avec Install / Launch / Remove ; header (`SteamBadge` + contrôles sans Arm/Disarm : Install
+  plugin → Launch game → Reload) ; Home (CTA vide + System health par source, chip Live/Idle) ;
+  **auto-import** : poll 5 s du statut + mtime de `user_item.json` quand la source est Steam → le
+  compte se recharge seul en arrivant au lobby.
+- ✅ **Validé en jeu** (build Steam 24947556) : plugin installé via `installSteamPlugin()`
+  (`BepInEx/plugins/GearSolverCapture/`, cfg → `tools/capture/out`), relance du jeu → les deux hooks
+  se posent, le **primaire** (`Log2InternalWeb`) tire réellement (`pathHook: true`, le stub n'est pas
+  inliné par le JIT Mono), 9 endpoints écrits (`user_item` 619 Ko, `user_character`, `user_archive`,
+  `user_gift`, …), auto-import de l'app au lobby sans clic, codex + geas importés à l'ouverture des
+  écrans. Reste (todo) : chemin « BepInEx absent » à tester sur une install vierge, liaison compte
+  mobile ↔ Steam à confirmer côté MAJOR9.
+
 ### 🎯 Colonne Damage = hit du meilleur skill (2026-09-05)
 - ✅ **`dmg` / `dmgs` / `mcd` / `mcds` × facteur du meilleur skill** — la colonne Dmg du
   Builder calculait un hit à facteur de skill implicite 100 % ; elle affiche maintenant le
