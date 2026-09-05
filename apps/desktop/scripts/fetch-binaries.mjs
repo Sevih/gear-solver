@@ -125,7 +125,9 @@ async function provisionPlatformTools() {
 function provisionSteamPlugin() {
   const proj = join(REPO, "tools", "capture-steam");
   console.log(`[dotnet] build ${proj}`);
-  const r = spawnSync("dotnet", ["build", proj, "-c", "Release", "--nologo", "-v", "q"], { stdio: "inherit", shell: true });
+  // Run from the project dir instead of passing its path: the repo lives under
+  // a folder with a space ("Projet perso") and `shell: true` would split it.
+  const r = spawnSync("dotnet.exe", ["build", "-c", "Release", "--nologo", "-v", "q"], { stdio: "inherit", cwd: proj, windowsHide: true });
   if (r.status !== 0) throw new Error("dotnet build of tools/capture-steam failed (is the .NET SDK installed and the game present?)");
   const dll = join(proj, "dist", "GearSolverCapture.dll");
   if (!existsSync(dll)) throw new Error(`plugin DLL not produced: ${dll}`);
