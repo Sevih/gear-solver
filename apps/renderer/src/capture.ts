@@ -1,7 +1,8 @@
 /**
- * Client for the dev-only capture endpoints exposed by the Vite middleware.
- * POSTs to /api/capture/{run,disarm} return a plain-text stream of script
- * output, terminated by a `__EXIT__:<code>` sentinel line.
+ * Client for the streaming capture endpoints (Vite middleware in dev, the
+ * Electron server in prod). POSTs to /api/capture/{run,disarm} (emulator
+ * source) and /api/steam/install (Steam source) return a plain-text stream of
+ * progress lines, terminated by a `__EXIT__:<code>` sentinel line.
  */
 
 export interface CaptureResult {
@@ -10,7 +11,7 @@ export interface CaptureResult {
 
 /** Stream a capture script's output line by line; resolves with the exit code. */
 export async function streamCapture(
-  endpoint: "/api/capture/run" | "/api/capture/disarm",
+  endpoint: "/api/capture/run" | "/api/capture/disarm" | "/api/steam/install",
   onLine: (line: string) => void,
   signal?: AbortSignal,
 ): Promise<CaptureResult> {

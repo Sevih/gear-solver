@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cx } from "./cx.js";
+import { describeSteam, type CaptureSource, type SteamStatus } from "../steam.js";
 
 /** Vivid violet/cyan glow background — matches the design's PageBackground. */
 export function PageBackground({ children }: { children: ReactNode }) {
@@ -37,16 +38,30 @@ export function Spinner({ className = "h-3.5 w-3.5" }: { className?: string }) {
 
 export type CaptureState = "armed" | "idle" | "capturing";
 
+/** What the Steam-source controls need: the last status poll + the two
+ *  actions the header can trigger (install the plugin / launch the game). */
+export interface SteamControls {
+  status: SteamStatus | null;
+  onInstall: () => void;
+  onLaunch: () => void;
+}
+
 interface CaptureControlsProps {
   state: CaptureState;
   onCapture: () => void;
   onDisarm: () => void;
   onReload: () => void;
   busy?: boolean;
+  /** Which acquisition path the controls drive. Emulator = Arm/Disarm around
+   *  the MITM pipeline; Steam = a passive plugin, so the button becomes
+   *  Install / Launch and the pill reports the plugin's liveness. */
+  source?: CaptureSource;
+  steam?: SteamControls;
 }
 
-/** Header-right capture controls — status pill + Arm/Disarm + Reload. */
-export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = false }: CaptureControlsProps) {
+/** Header-right capture controls — status pill + primary action + Reload. */
+export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = false, source = "emulator", steam }: CaptureControlsProps) {
+  if (source === "steam") return <SteamCaptureControls steam={steam} onReload={onReload} busy={busy} />;
   const armed = state === "armed";
   const capturing = state === "capturing";
   const disable = busy || capturing;
@@ -97,6 +112,63 @@ export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = f
   );
 }
 
+/** Steam-source flavour of the header controls. No arm/disarm: the plugin
+ *  captures whenever the game runs. The single primary button is whatever
+ *  unblocks the user next — install the plugin, then launch the game. */
+function SteamCaptureControls({ steam, onReload, busy }: { steam?: SteamControls; onReload: () => void; busy: boolean }) {
+  const s = steam?.status ?? null;
+  const d = describeSteam(s);
+  const live = Boolean(s?.live);
+  const pillText = !s ? "Checking…" : !s.installed ? "Not found" : !s.ready ? "Plugin needed" : live ? "Live" : s.gameRunning ? "Not loaded" : "Waiting for game";
+  const action: { label: string; onClick: () => void; title: string } | null =
+    !s || !s.installed ? null
+    : !s.ready ? { label: busy ? "Installing…" : s.plugin.present ? "Update plugin" : "Install plugin", onClick: steam!.onInstall, title: "Copy the capture plugin (BepInEx) into the Steam game folder" }
+    : !s.gameRunning ? { label: "Launch game", onClick: steam!.onLaunch, title: "Start OUTERPLANE through Steam — snapshots import as soon as you reach the lobby" }
+    : null;
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        title={d.text}
+        className={cx(
+          "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium",
+          live ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+          : d.tone === "warn" ? "border-amber-400/30 bg-amber-500/10 text-amber-200"
+          : "border-white/8 bg-white/3 text-white",
+        )}
+      >
+        <span className={cx("h-1.5 w-1.5 rounded-full", live ? "bg-emerald-400 shadow-[0_0_6px_#34d399]" : d.tone === "warn" ? "bg-amber-400" : "bg-zinc-500")} />
+        {pillText}
+      </span>
+      {action && (
+        <button
+          onClick={action.onClick}
+          disabled={busy}
+          title={action.title}
+          className={cx(
+            "inline-flex h-7 items-center rounded-md border px-3 text-[11px] font-semibold transition-colors",
+            busy ? "cursor-not-allowed border-white/6 bg-white/2 text-white/65"
+            : "border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
+          )}
+        >
+          {action.label}
+        </button>
+      )}
+      <button
+        onClick={onReload}
+        disabled={busy}
+        title="Re-import the latest snapshot from disk"
+        className={cx(
+          "grid h-7 w-7 place-items-center rounded-md border border-white/8 bg-white/3 text-white transition-colors hover:bg-white/6 active:scale-95",
+          busy && "cursor-not-allowed opacity-60",
+        )}
+        aria-label="Reload"
+      >
+        {busy ? <Spinner /> : <ReloadIcon />}
+      </button>
+    </div>
+  );
+}
+
 export type Tab = "Home" | "Inventory" | "Builds" | "Builder" | "Worklist";
 const TABS: Tab[] = ["Home", "Inventory", "Builds", "Builder", "Worklist"];
 
@@ -120,6 +192,37 @@ export interface EmulatorBadgeProps {
   /** Port the backend will target. Null when the emulator is installed but
    *  not currently running. */
   port: number | null;
+}
+
+/** Header pill for the Steam source — what `/api/steam/status` saw. Green
+ *  when the plugin is live in a running game, amber when something needs
+ *  doing (install / launch), gray when the game isn't in any Steam library. */
+export function SteamBadge({ status }: { status: SteamStatus | null }) {
+  const d = describeSteam(status);
+  const tone = d.tone === "live" ? "ready" : d.tone === "ready" ? "ready" : d.tone === "warn" ? "stopped" : "missing";
+  return (
+    <span
+      title={
+        !status ? "Probing the Steam library…"
+        : !status.installed ? "OUTERPLANE isn't installed through Steam on this PC — install it from Steam, or switch the source to Emulator in Setup"
+        : status.gameDir ?? d.text
+      }
+      className={cx(
+        "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium",
+        tone === "ready" && "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
+        tone === "stopped" && "border-amber-400/30 bg-amber-500/10 text-amber-200",
+        tone === "missing" && "border-white/8 bg-white/3 text-white/75",
+      )}
+    >
+      <span className={cx(
+        "h-1.5 w-1.5 rounded-full",
+        tone === "ready" && "bg-emerald-400 shadow-[0_0_6px_#34d399]",
+        tone === "stopped" && "bg-amber-400 shadow-[0_0_6px_#fbbf24]",
+        tone === "missing" && "bg-zinc-500",
+      )} />
+      {d.text}
+    </span>
+  );
 }
 
 /** Header pill that surfaces what the backend's `/api/emulators` saw. Green
@@ -160,6 +263,9 @@ interface GsHeaderProps {
   onTabChange: (tab: Tab) => void;
   capture: CaptureControlsProps;
   emulator: EmulatorBadgeProps;
+  /** Steam-source status for the badge — only rendered when `capture.source`
+   *  is "steam"; the emulator badge shows otherwise. */
+  steam?: SteamStatus | null;
   /** Opens the onboarding wizard manually. Wizard is otherwise auto-shown on
    *  first launch via App-level state. */
   onSetup: () => void;
@@ -174,7 +280,7 @@ interface GsHeaderProps {
   counts: TabCounts;
 }
 
-export function GsHeader({ active, onTabChange, capture, emulator, onSetup, version, gameVersion, counts }: GsHeaderProps) {
+export function GsHeader({ active, onTabChange, capture, emulator, steam = null, onSetup, version, gameVersion, counts }: GsHeaderProps) {
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/6 bg-black/45 px-4 py-2.5 backdrop-blur-md">
       <div className="flex items-center gap-4">
@@ -215,10 +321,10 @@ export function GsHeader({ active, onTabChange, capture, emulator, onSetup, vers
       </div>
 
       <div className="flex items-center gap-2">
-        <EmulatorBadge {...emulator} />
+        {capture.source === "steam" ? <SteamBadge status={steam} /> : <EmulatorBadge {...emulator} />}
         <button
           onClick={onSetup}
-          title="Open the setup checklist (emulator, ADB, root)"
+          title={capture.source === "steam" ? "Open the setup checklist (Steam, capture plugin)" : "Open the setup checklist (emulator, ADB, root)"}
           className="grid h-7 w-7 place-items-center rounded-md border border-white/8 bg-white/3 text-white transition-colors hover:bg-white/6 active:scale-95"
           aria-label="Setup"
         >

@@ -19,6 +19,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import type { GameData, Inventory } from "@gear-solver/core";
 import type { CaptureStatus } from "../capture.js";
 import type { EmulatorStatus } from "../emulator.js";
+import { describeSteam, type CaptureSource, type SteamStatus } from "../steam.js";
 import { cx } from "../design/cx.js";
 import { Spinner } from "../design/Shell.js";
 import { SLOTS, SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
@@ -619,7 +620,50 @@ function UpdateCard({ status, onCheck, onInstall }: {
 }
 
 // ── empty state ──────────────────────────────────────────────────────────
-function EmptyDashboard({ onCapture }: { onCapture: () => void }) {
+/** Source-aware CTA: the emulator path arms the MITM pipeline; the Steam path
+ *  needs the plugin installed once, then the game launched. */
+function EmptyDashboard({ source, steam, busy, onCapture, onSteamInstall, onSteamLaunch }: {
+  source: CaptureSource; steam: SteamStatus | null; busy: boolean;
+  onCapture: () => void; onSteamInstall: () => void; onSteamLaunch: () => void;
+}) {
+  if (source === "steam") {
+    const s = steam;
+    const cta: { label: string; onClick?: () => void } =
+      !s ? { label: "Checking Steam…" }
+      : !s.installed ? { label: "OUTERPLANE not found in Steam" }
+      : !s.ready ? { label: busy ? "Installing…" : s.plugin.present ? "Update the capture plugin" : "Install the capture plugin", onClick: busy ? undefined : onSteamInstall }
+      : !s.gameRunning ? { label: "Launch OUTERPLANE", onClick: onSteamLaunch }
+      : s.live ? { label: "Waiting for the lobby…" }
+      : { label: "Restart the game to load the plugin" };
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-white/8 px-10 py-16 text-center" style={{ background: "#161618" }}>
+        <div className="mb-5 grid h-16 w-16 place-items-center rounded-2xl border border-cyan-400/25 bg-cyan-400/8">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#67e8f9" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="5" width="18" height="14" rx="2.5" /><circle cx="12" cy="12" r="3.4" /><path d="M8 5l1.4-2h5.2L16 5" />
+          </svg>
+        </div>
+        <span className="mb-2 text-[20px] font-bold tracking-tight text-white">No account captured yet</span>
+        <p className="mb-6 max-w-105 text-[13px] leading-relaxed text-zinc-400">
+          Play OUTERPLANE on Steam with the capture plugin installed and this home fills in on its own — heroes, gear quality, breakdowns and your saved build library.
+        </p>
+        <button
+          onClick={cta.onClick}
+          disabled={!cta.onClick}
+          className={cx(
+            "rounded-[10px] px-6.5 py-3 text-[13px] font-bold tracking-tight",
+            cta.onClick
+              ? "bg-linear-to-b from-cyan-400 to-cyan-500 text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.45),0_8px_22px_-8px_rgba(34,211,238,0.7)] hover:brightness-105"
+              : "cursor-default border border-white/10 bg-white/4 text-zinc-400",
+          )}
+        >
+          {cta.label}
+        </button>
+        <div className="mt-6 flex items-center gap-2.5 font-mono text-[11px] text-zinc-400">
+          <span>install plugin</span><span className="text-zinc-400">→</span><span>launch game</span><span className="text-zinc-400">→</span><span>reach the lobby</span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-white/8 px-10 py-16 text-center" style={{ background: "#161618" }}>
       <div className="mb-5 grid h-16 w-16 place-items-center rounded-2xl border border-cyan-400/25 bg-cyan-400/8">
@@ -650,9 +694,15 @@ export interface HomeScreenProps {
   game: GameData | null;
   capStatus: CaptureStatus | null;
   emulator: EmulatorStatus | null;
+  /** Active acquisition path + the Steam source's last status poll. */
+  source: CaptureSource;
+  steam: SteamStatus | null;
   appVersion: string;
   busy: boolean;
   onCapture: () => void;
+  onSteamInstall: () => void;
+  onSteamLaunch: () => void;
+  onReload: () => void;
   onSyncData: () => void;
   onOpenBuilder: () => void;
   /** Drill into the Inventory tab pre-filtered to a clicked facet (quality
@@ -661,8 +711,8 @@ export interface HomeScreenProps {
 }
 
 export function HomeScreen({
-  inventory, game, capStatus, emulator, appVersion, busy,
-  onCapture, onSyncData, onOpenBuilder, onDrill,
+  inventory, game, capStatus, emulator, source, steam, appVersion, busy,
+  onCapture, onSteamInstall, onSteamLaunch, onReload, onSyncData, onOpenBuilder, onDrill,
 }: HomeScreenProps) {
   // Poll the update status. Faster while a download is in flight so the % bar
   // animates; idle states tick slowly. Seeded with a static "up to date" using
@@ -700,12 +750,26 @@ export function HomeScreen({
     return { builds, presets };
   }, []);
 
-  const armed = capStatus?.armed ?? false;
+  const isSteam = source === "steam";
+  // "Armed" (emulator pipeline up) / "Live" (Steam plugin loaded in a running game).
+  const armed = isSteam ? Boolean(steam?.live) : (capStatus?.armed ?? false);
   const lastCap = relTime(capStatus?.userItemMtime ?? null);
   const emuReady = Boolean(emulator?.chosen && emulator?.chosenPort);
   const emuLine = emulator?.chosen
     ? `${emulator.chosen.label}${emulator.chosenPort ? ` · 127.0.0.1:${emulator.chosenPort}` : " · not running"}`
     : "No emulator detected";
+  const steamD = describeSteam(steam);
+  const healthReady = isSteam ? Boolean(steam?.ready) : emuReady;
+  const healthTitle = isSteam
+    ? (steam?.live ? "Capture plugin live" : steam?.ready ? "Plugin ready · launch the game" : steam?.installed ? "Capture plugin needed" : "OUTERPLANE not found in Steam")
+    : (emuReady ? "Capture pipeline ready" : "Setup incomplete");
+  const healthLine = isSteam ? (steam?.gameDir ?? steamD.text) : emuLine;
+  // Steam primary action mirrors the header: install → launch → (live) reload.
+  const steamAction: { label: string; onClick: () => void } | null =
+    !isSteam || !steam || !steam.installed ? null
+    : !steam.ready ? { label: busy ? "Installing…" : steam.plugin.present ? "Update plugin" : "Install plugin", onClick: onSteamInstall }
+    : !steam.gameRunning ? { label: "Launch game", onClick: onSteamLaunch }
+    : { label: "Reload", onClick: onReload };
 
   return (
     <div className="mx-auto flex w-full flex-col gap-3.5 px-3.5 py-3.5" style={{ maxWidth: 1480 }}>
@@ -714,7 +778,7 @@ export function HomeScreen({
           <div className="max-w-md">
             <UpdateCard status={update} onCheck={onCheck} onInstall={onInstall} />
           </div>
-          <EmptyDashboard onCapture={onCapture} />
+          <EmptyDashboard source={source} steam={steam} busy={busy} onCapture={onCapture} onSteamInstall={onSteamInstall} onSteamLaunch={onSteamLaunch} />
         </>
       ) : (
         <>
@@ -761,7 +825,7 @@ export function HomeScreen({
                     armed ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : "border-white/10 bg-white/4 text-zinc-400",
                   )}>
                     <span className={cx("h-1.5 w-1.5 rounded-full", armed ? "bg-emerald-400 shadow-[0_0_7px_#34d399]" : "bg-zinc-500")} />
-                    {armed ? "Armed" : "Idle"}
+                    {isSteam ? (armed ? "Live" : "Idle") : (armed ? "Armed" : "Idle")}
                   </span>
                 </div>
               </div>
@@ -784,17 +848,19 @@ export function HomeScreen({
             </Card>
 
             <Card className="flex min-w-0 flex-[1.1] flex-col gap-3">
-              <SectionLabel icon={IC_HEALTH} tint={emuReady ? "#34d399" : "#fbbf24"}>System health</SectionLabel>
+              <SectionLabel icon={IC_HEALTH} tint={healthReady ? "#34d399" : "#fbbf24"}>System health</SectionLabel>
               <div className="flex items-center gap-2.5">
-                <span className={cx("h-2.5 w-2.5 shrink-0 rounded-full", emuReady ? "bg-emerald-400 shadow-[0_0_8px_#34d399]" : "bg-amber-400 shadow-[0_0_8px_#fbbf24]")} />
+                <span className={cx("h-2.5 w-2.5 shrink-0 rounded-full", healthReady ? "bg-emerald-400 shadow-[0_0_8px_#34d399]" : "bg-amber-400 shadow-[0_0_8px_#fbbf24]")} />
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[13px] font-semibold text-white">{emuReady ? "Capture pipeline ready" : "Setup incomplete"}</span>
-                  <Num className="truncate text-[10.5px] text-zinc-400">{emuLine}</Num>
+                  <span className="text-[13px] font-semibold text-white">{healthTitle}</span>
+                  <Num className="truncate text-[10.5px] text-zinc-400" >{healthLine}</Num>
                 </div>
               </div>
               <div className="mt-auto flex gap-2">
                 <ActBtn className="flex-1" onClick={onSyncData} disabled={busy}>Sync game data</ActBtn>
-                <ActBtn tone="cyan" className="flex-1" onClick={onCapture} disabled={busy}>{busy ? "Capturing…" : armed ? "Re-capture" : "Arm capture"}</ActBtn>
+                {isSteam
+                  ? (steamAction && <ActBtn tone="cyan" className="flex-1" onClick={steamAction.onClick} disabled={busy}>{steamAction.label}</ActBtn>)
+                  : <ActBtn tone="cyan" className="flex-1" onClick={onCapture} disabled={busy}>{busy ? "Capturing…" : armed ? "Re-capture" : "Arm capture"}</ActBtn>}
               </div>
             </Card>
 
@@ -865,13 +931,13 @@ export function HomeScreen({
               <div className="flex flex-col gap-2">
                 <SubLabel icon={IC_ELEMENT}>By element</SubLabel>
                 {stats.elements.map((e) => (
-                  <BarRow key={e.label} label={e.label} labelW={40} count={e.count} w={e.w} color={e.color} iconSrc={`/img/ui/elem/CM_Element_${e.label}.webp`} />
+                  <BarRow key={e.label} label={e.label} labelW={40} count={e.count} w={e.w} color={e.color} iconSrc={`/img/ui/elem/IG_Turn_Element_${e.label}.webp`} />
                 ))}
               </div>
               <div className="flex flex-col gap-2">
                 <SubLabel icon={IC_CLASS}>By class</SubLabel>
                 {stats.classes.map((c) => (
-                  <BarRow key={c.label} label={c.label} labelW={50} count={c.count} w={c.w} color="#6b7280" iconSrc={`/img/ui/class/CM_Class_${c.label}.webp`} />
+                  <BarRow key={c.label} label={c.label} labelW={50} count={c.count} w={c.w} color="#6b7280" iconSrc={`/img/ui/class/IG_Turn_Class_${c.label}.webp`} />
                 ))}
               </div>
             </Card>
@@ -1033,7 +1099,7 @@ function ClassEffectRow({ row }: { row: ClassGearRow }) {
   return (
     <div className="grid grid-cols-[76px_1fr_1fr] items-start gap-x-4 border-b border-white/5 py-2 last:border-0">
       <span className="flex items-center gap-1.5 pt-0.5 text-[11px] text-zinc-300">
-        <img src={`/img/ui/class/CM_Class_${row.label}.webp`} alt="" className="h-4 w-4 shrink-0" />
+        <img src={`/img/ui/class/IG_Turn_Class_${row.label}.webp`} alt="" className="h-4 w-4 shrink-0" />
         {row.label}
       </span>
       <ChipWrap chips={row.weapons} />

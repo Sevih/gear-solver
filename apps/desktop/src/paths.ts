@@ -92,6 +92,17 @@ export const BUNDLED_PROD_CERT_DIR = IS_DEV
   ? join(REPO_ROOT, "apps", "desktop", "resources", "prod-cert")
   : join(RES, "prod-cert");
 
+/** Steam capture plugin (tools/capture-steam) — the BepInEx DLL the app copies
+ *  into the game folder on "Install plugin". Dev reads the local `dotnet build`
+ *  output; prod the tree bundled by scripts/fetch-binaries.mjs (extraResources). */
+export const STEAM_PLUGIN_DLL = IS_DEV
+  ? join(REPO_ROOT, "tools", "capture-steam", "dist", "GearSolverCapture.dll")
+  : join(RES, "capture-steam", "GearSolverCapture.dll");
+
+/** Scratch dir for runtime downloads that aren't worth keeping (the BepInEx
+ *  zip). Dev uses the gitignored cache, prod userData. */
+export const SCRATCH_DIR = IS_DEV ? join(REPO_ROOT, ".cache", "scratch") : join(app.getPath("userData"), "scratch");
+
 /** Bundled UI sprites served under `/img/*` before any network source — the
  *  few `ui/inven/*` sprites the R2 bucket doesn't carry. They live in
  *  `apps/renderer/public/img/` (dev) which Vite copies into `dist/img/` (prod). */

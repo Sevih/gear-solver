@@ -84,6 +84,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/capture-steam",
+        "to": "capture-steam",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

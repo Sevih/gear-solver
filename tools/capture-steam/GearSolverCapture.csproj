@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    BepInEx 5 plugin for the OUTERPLANE Steam client (Unity 2022.3, Mono) —
+    the gear-solver "Steam" capture source.
+
+    It hooks the game's own HTTP layer (CWebManager) and writes every decoded
+    server response the solver cares about (user/item, user/character, …) as
+    plain JSON into the app's capture folder. No proxy, no certificate, no
+    emulator: the game decrypts the payload itself, we just copy the result.
+
+    References are NOT NuGet packages: they are read from the installed game
+    (UnityEngine, Newtonsoft — the game classes are reached by name at runtime) and from BepInEx/core, so
+    we compile against exactly what the game loads. `GameDir` defaults to the
+    Steam install; override with `dotnet build -p:GameDir=...`.
+
+    Output: dist/GearSolverCapture.dll (next to this file). The desktop app
+    copies it into <game>/BepInEx/plugins/GearSolverCapture/ on "Install
+    plugin" — the build itself never touches the game folder.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>GearSolverCapture</AssemblyName>
+    <RootNamespace>GearSolverCapture</RootNamespace>
+    <Version>0.1.0</Version>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
+    <DebugType>none</DebugType>
+    <OutputPath>dist/</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == '' AND Exists('C:/Program Files (x86)/Steam/steamapps/common/OUTERPLANE/OUTERPLANE_Data')">C:/Program Files (x86)/Steam/steamapps/common/OUTERPLANE</GameDir>
+    <GameDir Condition="'$(GameDir)' == '' AND Exists('$(HOME)/.local/share/Steam/steamapps/common/OUTERPLANE/OUTERPLANE_Data')">$(HOME)/.local/share/Steam/steamapps/common/OUTERPLANE</GameDir>
+    <GameDir Condition="'$(GameDir)' == ''">C:/Program Files (x86)/Steam/steamapps/common/OUTERPLANE</GameDir>
+    <ManagedDir>$(GameDir)/OUTERPLANE_Data/Managed</ManagedDir>
+    <BepInExDir>$(GameDir)/BepInEx</BepInExDir>
+  </PropertyGroup>
+
+  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx"><HintPath>$(BepInExDir)/core/BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(BepInExDir)/core/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(ManagedDir)/UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(ManagedDir)/Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <Target Name="CheckGame" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(ManagedDir)/Assembly-CSharp.dll')"
+           Text="Game not found: $(ManagedDir)/Assembly-CSharp.dll — pass -p:GameDir=&lt;…/steamapps/common/OUTERPLANE&gt;." />
+    <Error Condition="!Exists('$(BepInExDir)/core/BepInEx.dll')"
+           Text="BepInEx is not installed in the game ($(BepInExDir)/core) — install BepInEx 5.4.23.x (win x64) there first (the desktop app can do it: Settings → Setup → Steam → Install plugin)." />
+  </Target>
+
+  <!-- Keep dist/ to the single DLL the app ships: drop the .deps.json noise. -->
+  <Target Name="TidyDist" AfterTargets="Build">
+    <Delete Files="$(OutputPath)/GearSolverCapture.deps.json" ContinueOnError="true" />
+    <Message Importance="high" Text="→ $(OutputPath)GearSolverCapture.dll" />
+  </Target>
+
+</Project>

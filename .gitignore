@@ -16,6 +16,11 @@ apps/desktop/release/
 apps/desktop/resources/bin/
 apps/desktop/resources/prod-cert/
 
+# Steam capture plugin — dotnet build output (dist/ is already ignored globally)
+tools/capture-steam/obj/
+tools/capture-steam/bin/
+apps/desktop/resources/capture-steam/
+
 # capture runtime artifacts & PERSONAL account data — never commit
 tools/capture/out/
 tools/capture/dumps/

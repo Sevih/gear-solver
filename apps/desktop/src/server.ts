@@ -4,7 +4,8 @@
  *  - `/gamedata/*`  → DERIVED game data (data/derived in dev, bundled tree in prod)
  *  - `/captured/*`  → captured account JSON (tools/capture/out in dev, userData in prod)
  *  - `/img/*`       → bundled sprites / disk cache / img.outerpedia.com (R2)
- *  - `/api/capture/{run,disarm,status}` → wraps the PowerShell pipeline
+ *  - `/api/capture/{run,disarm,status}` → wraps the PowerShell pipeline (emulator source)
+ *  - `/api/steam/{status,install,uninstall,launch}` → Steam source (BepInEx plugin)
  *  - `/api/stat-locks` GET/POST → stat regression locks
  *
  * Mirrors the Vite-middleware behavior (apps/renderer/vite.config.ts) so the
@@ -38,6 +39,8 @@ import {
   IS_DEV,
   STAT_LOCKS,
   RENDERER_DIST,
+  SCRATCH_DIR,
+  STEAM_PLUGIN_DLL,
   findOuterpediaImagesDev,
 } from "./paths.js";
 import {
@@ -47,6 +50,7 @@ import {
 } from "./emulator-detect.js";
 import { dlog, dwarn } from "./log.js";
 import { ensureMitmdump, mitmdumpPath } from "./mitm-provision.js";
+import { installSteamPlugin, launchGame, steamStatus, uninstallSteamPlugin } from "./steam-capture.js";
 import { proxyReco } from "./reco-proxy.js";
 import { syncGameData } from "./data-sync.js";
 import { serveImg } from "./img-cache.js";
@@ -299,6 +303,22 @@ function isLocalRequest(req: IncomingMessage): boolean {
   return true;
 }
 
+/** Run an async task while streaming its progress lines through the capture
+ *  console protocol (same `__EXIT__:<code>` sentinel as streamPs, so the
+ *  renderer's streamCapture() consumes both). */
+function streamTask(res: ServerResponse, task: (log: (line: string) => void) => Promise<void>): void {
+  beginStream(res);
+  const log = (line: string) => res.write(line + "\n");
+  task(log).then(
+    () => { res.write("\n__EXIT__:0\n"); res.end(); },
+    (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      dwarn("capture", "task failed:", msg);
+      res.write(`x  ${msg}\n__EXIT__:1\n`); res.end();
+    },
+  );
+}
+
 /** Buffer a request body (capped) and hand the caller the parsed JSON. On
  *  overflow / parse error it answers 413/400 itself and never calls `ok`. */
 function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: number, ok: (body: unknown) => void): void {
@@ -421,6 +441,40 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
     res.end(JSON.stringify({ removed }));
     return;
   }
+  // --- Steam source: BepInEx plugin in the Steam client (steam-capture.ts) ---
+  if (url === "/api/steam/status" && req.method === "GET") {
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(steamStatus(CAPTURE_OUT, STEAM_PLUGIN_DLL)));
+    return;
+  }
+  if (url === "/api/steam/install" && req.method === "POST") {
+    streamTask(res, async (log) => {
+      await installSteamPlugin({ captureOut: CAPTURE_OUT, bundledDll: STEAM_PLUGIN_DLL, scratchDir: SCRATCH_DIR, log });
+    });
+    return;
+  }
+  if (url === "/api/steam/uninstall" && req.method === "POST") {
+    readJsonBody(req, res, 10_000, (body) => {
+      const removeBepinex = Boolean((body as { removeBepinex?: unknown })?.removeBepinex);
+      try {
+        const lines: string[] = [];
+        const status = uninstallSteamPlugin({ captureOut: CAPTURE_OUT, bundledDll: STEAM_PLUGIN_DLL, log: (l) => lines.push(l), removeBepinex });
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ status, lines }));
+      } catch (err) {
+        res.statusCode = 409;
+        res.end(JSON.stringify({ error: (err as Error).message }));
+      }
+    });
+    return;
+  }
+  if (url === "/api/steam/launch" && req.method === "POST") {
+    launchGame();
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
   // --- emulator detection — surfaced in the header so the user knows which
   // instance / port we'll target before they click Arm capture. ---
   if (url === "/api/emulators" && req.method === "GET") {

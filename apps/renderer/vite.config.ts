@@ -10,6 +10,7 @@ import {
   detectEmulators, pickEmulator, pickPort, preflight,
   resolveCaptureTarget, targetScriptArgs, loadManualDevice, saveManualDevice,
 } from "../desktop/src/emulator-detect.js";
+import { installSteamPlugin, launchGame, steamStatus, uninstallSteamPlugin } from "../desktop/src/steam-capture.js";
 import { proxyReco } from "../desktop/src/reco-proxy.js";
 import { syncGameData } from "../desktop/src/data-sync.js";
 import { serveImg } from "../desktop/src/img-cache.js";
@@ -28,6 +29,10 @@ const REPO_SHA_STATE = join(CACHE_DIR, "repo-sha.json");
 // Manual capture-device override — same dev path paths.ts computes (REPO/.cache)
 // so the override is shared between `npm run dev` and a dev Electron run.
 const MANUAL_DEVICE = join(root, ".cache", "manual-device.json");
+// Steam capture source — the BepInEx plugin built by `npm run capture-steam:build`
+// (tools/capture-steam/dist) and a scratch dir for the one-time BepInEx download.
+const STEAM_PLUGIN_DLL = join(root, "tools", "capture-steam", "dist", "GearSolverCapture.dll");
+const SCRATCH_DIR = join(root, ".cache", "scratch");
 
 // Outerpedia checkout's staged image tree (`.assets-staging/images` — the same
 // files the site's R2 bucket serves) mounted at /img/ so equipment art, class
@@ -87,6 +92,20 @@ function streamPs(res: ServerResponse, script: string, extraArgs: string[] = [])
   });
 
   res.on("close", () => { if (!child.killed && child.exitCode == null) child.kill(); });
+}
+
+/** Run an async task while streaming its progress lines with the same
+ *  `__EXIT__:<code>` sentinel as streamPs (renderer consumes both alike). */
+function streamTask(res: ServerResponse, task: (log: (line: string) => void) => Promise<void>): void {
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+  const log = (line: string) => res.write(line + "\n");
+  task(log).then(
+    () => { res.write("\n__EXIT__:0\n"); res.end(); },
+    (err: unknown) => { res.write(`x  ${err instanceof Error ? err.message : String(err)}\n__EXIT__:1\n`); res.end(); },
+  );
 }
 
 /** Resolve the args the dev-mode middleware hands capture.ps1 / disarm.ps1.
@@ -204,6 +223,41 @@ function localData(): Plugin {
           }
           res.end(JSON.stringify({ removed }));
           return;
+        }
+        // Steam capture source — mirrors the Electron prod server (steam-capture.ts).
+        if (url === "/api/steam/status" && req.method === "GET") {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(steamStatus(CAPTURED, STEAM_PLUGIN_DLL)));
+          return;
+        }
+        if (url === "/api/steam/install" && req.method === "POST") {
+          streamTask(res, async (log) => {
+            await installSteamPlugin({ captureOut: CAPTURED, bundledDll: STEAM_PLUGIN_DLL, scratchDir: SCRATCH_DIR, log });
+          });
+          return;
+        }
+        if (url === "/api/steam/uninstall" && req.method === "POST") {
+          const chunks: Buffer[] = [];
+          req.on("data", (c: Buffer) => chunks.push(c));
+          req.on("end", () => {
+            res.setHeader("Content-Type", "application/json");
+            try {
+              const raw = Buffer.concat(chunks).toString("utf-8");
+              const removeBepinex = raw ? Boolean((JSON.parse(raw) as { removeBepinex?: unknown }).removeBepinex) : false;
+              const lines: string[] = [];
+              const status = uninstallSteamPlugin({ captureOut: CAPTURED, bundledDll: STEAM_PLUGIN_DLL, log: (l) => lines.push(l), removeBepinex });
+              res.end(JSON.stringify({ status, lines }));
+            } catch (err) {
+              res.statusCode = 409;
+              res.end(JSON.stringify({ error: (err as Error).message }));
+            }
+          });
+          return;
+        }
+        if (url === "/api/steam/launch" && req.method === "POST") {
+          launchGame();
+          res.statusCode = 204;
+          return res.end();
         }
         // Emulator detection — same endpoint as the Electron prod server so the
         // renderer's `useEmulator()` hook works identically across dev/prod.

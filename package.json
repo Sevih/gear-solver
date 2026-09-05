@@ -14,6 +14,7 @@
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "data:sync": "node data/sync.mjs",
+    "capture-steam:build": "dotnet build tools/capture-steam -c Release --nologo -v q",
     "desktop:dev": "concurrently -k -n vite,electron -c cyan,yellow \"npm run dev -w @gear-solver/renderer\" \"wait-on http-get://localhost:5173 && npm run dev -w @gear-solver/desktop\"",
     "desktop:build": "npm run build -w @gear-solver/renderer && npm run build -w @gear-solver/desktop",
     "release": "node scripts/release.mjs"

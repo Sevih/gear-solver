@@ -2,8 +2,10 @@
  * Settings modal — left-rail tabbed panel (ported from the Claude Design
  * "Settings Redesign" brief). Five sections reachable from a vertical nav:
  *
- *  - Setup  — sequential emulator / ADB / root preflight (the first-launch
- *             wizard; self-dismisses once all checks pass).
+ *  - Setup  — capture-source picker (Steam plugin / Android emulator) + the
+ *             matching preflight: Steam = game found / plugin installed / plugin
+ *             live; emulator = install / running / ADB / root. Doubles as the
+ *             first-launch wizard; self-dismisses once the checks pass.
  *  - Solver — worker-pool size, result count (topN), per-worker depth (topK,
  *             advanced), results heatmap. Edits persisted settings owned by App.
  *  - Data   — Sync game data · Reset onboarding · Wipe captured (destructive).
@@ -19,6 +21,7 @@ import { Spinner } from "./Shell.js";
 import { applyBackup, buildBackup } from "../lib/storage/transfer.js";
 import { resolveWorkerCount } from "../lib/solver/orchestrator.js";
 import { loadDataVersion, type DataVersion } from "../data.js";
+import { uninstallSteamPlugin, type CaptureSource, type SteamStatus } from "../steam.js";
 
 export type CheckId = "emulator-installed" | "emulator-running" | "adb-connection" | "root-toggle";
 
@@ -127,6 +130,17 @@ interface Props {
   onToggleDebugSolver: () => void;
   /** Solver tuning settings (Solver tab). */
   solver: SolverSettings;
+  /** Active acquisition path (auto-resolved by App) + setter for the persisted
+   *  preference (null = back to auto). */
+  captureSource: CaptureSource;
+  onCaptureSourceChange: (s: CaptureSource | null) => void;
+  /** Steam source — last status poll, a re-probe, and the two actions. */
+  steam: SteamStatus | null;
+  onRefreshSteam: () => Promise<SteamStatus | null>;
+  onSteamInstall: () => void;
+  onSteamLaunch: () => void;
+  /** An install / capture is streaming — disable the action buttons. */
+  steamBusy: boolean;
 }
 
 /** Per-tab footer note (left side of the contextual footer). */
@@ -149,6 +163,7 @@ const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> =
 export function SettingsModal({
   open, onClose, onReady, onResetOnboarding, onAfterWipe,
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver, solver,
+  captureSource, onCaptureSourceChange, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy,
 }: Props) {
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -156,15 +171,23 @@ export function SettingsModal({
   const [tab, setTab] = useState<SettingsTab>("setup");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const isSteam = captureSource === "steam";
 
+  /** Re-run the active source's checks. Steam: status poll (ready = plugin in
+   *  place); emulator: the four-step ADB preflight. */
   async function probe() {
     setLoading(true);
     try {
-      const r = await fetch("/api/preflight");
-      if (r.ok) {
-        const data = (await r.json()) as PreflightResult;
-        setResult(data);
-        if (data.ready) onReady?.();
+      if (isSteam) {
+        const st = await onRefreshSteam();
+        if (st?.ready) onReady?.();
+      } else {
+        const r = await fetch("/api/preflight");
+        if (r.ok) {
+          const data = (await r.json()) as PreflightResult;
+          setResult(data);
+          if (data.ready) onReady?.();
+        }
       }
     } catch {
       // Backend not reachable; keep prior result so the user can still see history.
@@ -172,6 +195,7 @@ export function SettingsModal({
       setLoading(false);
     }
   }
+  const setupReady = isSteam ? Boolean(steam?.ready) : Boolean(result?.ready);
 
   // The header's only entry point is labeled "Setup", and the modal doubles as
   // the onboarding wizard — so every open lands on the Setup tab (the wizard),
@@ -180,7 +204,8 @@ export function SettingsModal({
 
   // Re-probe whenever the modal opens AND the Setup tab is showing (no point
   // hitting the backend when the user is on Solver/Data/etc.).
-  useEffect(() => { if (open && tab === "setup") void probe(); }, [open, tab]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open && tab === "setup") void probe(); }, [open, tab, captureSource]);
 
   if (!open) return null;
 
@@ -228,7 +253,7 @@ export function SettingsModal({
                   <span className="shrink-0">{t.icon}</span>
                   <span className="flex-1">{t.label}</span>
                   {/* Attention dot on Setup while a check is failing. */}
-                  {t.id === "setup" && result && !result.ready && (
+                  {t.id === "setup" && (isSteam ? steam != null : result != null) && !setupReady && (
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.7)]" />
                   )}
                 </button>
@@ -239,7 +264,14 @@ export function SettingsModal({
           {/* CONTENT COLUMN */}
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto px-4.5 py-4">
-              {tab === "setup"  && <SetupPane result={result} loading={loading} onProbe={() => void probe()} />}
+              {tab === "setup"  && (
+                <div className="flex flex-col gap-3.5">
+                  <SourcePicker source={captureSource} steam={steam} onChange={onCaptureSourceChange} />
+                  {isSteam
+                    ? <SteamSetupPane steam={steam} loading={loading} busy={steamBusy} onInstall={onSteamInstall} onLaunch={onSteamLaunch} onProbe={() => void probe()} />
+                    : <SetupPane result={result} loading={loading} onProbe={() => void probe()} />}
+                </div>
+              )}
               {tab === "solver" && <SolverPane solver={solver} showAdvanced={showAdvanced} onToggleAdvanced={() => setShowAdvanced((v) => !v)} />}
               {tab === "data"   && <DataPane syncing={syncing} setSyncing={setSyncing} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} />}
               {tab === "backup" && <BackupPane importInputRef={importInputRef} />}
@@ -281,6 +313,172 @@ export function SettingsModal({
 /* ─────────────────────────────────────────────────────────────────────────
  * Panes
  * ───────────────────────────────────────────────────────────────────────── */
+
+/** Capture-source switch. Steam = a BepInEx plugin inside the PC client
+ *  (nothing to root, nothing to proxy); Emulator = the rooted-Android MITM
+ *  pipeline. The auto default picks Steam when the game is in a Steam library. */
+function SourcePicker({ source, steam, onChange }: { source: CaptureSource; steam: SteamStatus | null; onChange: (s: CaptureSource | null) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-black/20 px-3 py-2.5">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[12.5px] font-semibold text-white">Capture source</span>
+        <span className="text-[11px] leading-snug text-zinc-400">
+          {source === "steam"
+            ? "Steam client + capture plugin — no emulator, no root, no proxy. Snapshots import while you play."
+            : "Rooted Android emulator + MITM pipeline (LDPlayer / MuMu / Nox). Arm, play to the lobby, Disarm."}
+          {steam && !steam.installed && source === "steam" && <> <b className="text-amber-300">OUTERPLANE isn't in your Steam library.</b></>}
+        </span>
+      </div>
+      <div className="flex shrink-0 overflow-hidden rounded-md border border-white/12">
+        <SegButton label="Steam" on={source === "steam"} onClick={() => onChange("steam")} />
+        <SegButton label="Emulator" on={source === "emulator"} onClick={() => onChange("emulator")} divided />
+      </div>
+    </div>
+  );
+}
+
+/** Steam-source wizard: three checks, the first two gate "ready" (the plugin
+ *  is in place); the third is live status (game running with the plugin
+ *  loaded) shown for feedback, since capture itself needs no click. */
+function SteamSetupPane({ steam, loading, busy, onInstall, onLaunch, onProbe }: {
+  steam: SteamStatus | null; loading: boolean; busy: boolean;
+  onInstall: () => void; onLaunch: () => void; onProbe: () => void;
+}) {
+  const s = steam;
+  const installedOk = Boolean(s?.installed);
+  const pluginOk = Boolean(s?.ready);
+  const liveOk = Boolean(s?.live);
+  const pluginDetail = !s ? "" : !s.bepinex.present ? "BepInEx runtime missing"
+    : !s.plugin.present ? "plugin DLL missing"
+    : !s.plugin.upToDate ? (s.bundleAvailable ? "installed plugin differs from the bundled one" : "bundled plugin not built (dev: npm run capture-steam:build)")
+    : !s.plugin.outDirOk ? `plugin writes to ${s.plugin.outDir ?? "its default folder"}, not ours`
+    : `plugin ok${s.bepinex.version ? ` · BepInEx ${s.bepinex.version}` : ""}`;
+  const liveDetail = !s ? "" : s.live
+    ? `plugin ${s.heartbeat?.version ?? ""} live · ${s.heartbeat?.captures ?? 0} captures${s.heartbeat?.lastPath ? ` · last ${s.heartbeat.lastPath}` : ""}`
+    : s.gameRunning ? "game running, but no plugin heartbeat — restart the game after installing"
+    : "game not running";
+  const steps = [
+    { id: "game", title: "OUTERPLANE installed via Steam", ok: installedOk, detail: s?.gameDir ?? (s ? "not found in any Steam library" : ""),
+      fix: "Install OUTERPLANE from Steam (it's free). We find it through your Steam library folders — no path to type. If you play on an emulator instead, switch the source above." },
+    { id: "plugin", title: "Capture plugin installed", ok: pluginOk, detail: pluginDetail,
+      fix: "Click Install plugin: it drops the BepInEx loader (downloaded once from the official release, checksum-verified) and our GearSolverCapture.dll into the game folder, then points the plugin at this app's capture folder. The game must be closed while installing." },
+    { id: "live", title: "Game running with the plugin loaded", ok: liveOk, detail: liveDetail,
+      fix: "Launch OUTERPLANE from Steam. The plugin loads with the game and writes your roster + gear the moment the lobby loads — the app re-imports on its own." },
+  ] as const;
+  const ready = installedOk && pluginOk;
+  const firstOpen = steps.findIndex((st) => !st.ok);
+  const currentIndex = firstOpen < 0 ? steps.length : firstOpen;
+  const doneCount = steps.filter((st) => st.ok).length;
+  const canInstall = installedOk && !busy && !s?.gameRunning && Boolean(s?.bundleAvailable);
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      <SectionStrip title="Capture setup · Steam" note={s?.buildId ? `build ${s.buildId}` : null} />
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 gap-1">
+          {steps.map((st, i) => (
+            <div key={st.id} className={cx("h-1.5 flex-1 rounded-full", st.ok ? "bg-emerald-400" : i === currentIndex ? "bg-cyan-400" : "bg-white/10")} />
+          ))}
+        </div>
+        <span className="shrink-0 font-mono text-[10.5px] text-zinc-400">{doneCount}/{steps.length}</span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {steps.map((st, i) => {
+          if (st.ok) return <StepDoneRow key={st.id} title={`${st.title}${st.detail ? ` — ${st.detail}` : ""}`} />;
+          if (i !== currentIndex) return <StepUpcomingRow key={st.id} n={i + 1} title={st.title} />;
+          return (
+            <div key={st.id} className="flex flex-col gap-2 rounded-lg border border-cyan-400/35 bg-cyan-500/6 px-3.5 py-3">
+              <div className="flex items-center gap-2">
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyan-400 text-[11px] font-bold text-cyan-950">{i + 1}</span>
+                <span className="text-[13.5px] font-semibold text-cyan-200">{st.title}</span>
+                <span className="ml-auto shrink-0 font-mono text-[10px] text-cyan-300/70">step {i + 1} of {steps.length}</span>
+              </div>
+              <p className="text-[12px] leading-relaxed text-zinc-300">{st.fix}</p>
+              {st.detail && <span className="font-mono text-[10.5px] text-zinc-500">{st.detail}</span>}
+              <div className="flex items-center gap-2 pt-0.5">
+                {st.id === "plugin" && (
+                  <button
+                    type="button" onClick={onInstall} disabled={!canInstall}
+                    title={s?.gameRunning ? "Close OUTERPLANE first — the plugin file is locked while the game runs" : !s?.bundleAvailable ? "Plugin DLL not built on this side" : "Install / update the capture plugin"}
+                    className={cx(
+                      "inline-flex h-7 items-center rounded-md border px-3 text-[11.5px] font-semibold transition-colors",
+                      canInstall ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25" : "cursor-not-allowed border-white/6 bg-white/2 text-zinc-500",
+                    )}
+                  >{busy ? "Installing…" : s?.plugin.present ? "Update plugin" : "Install plugin"}</button>
+                )}
+                {st.id === "live" && !s?.gameRunning && (
+                  <button
+                    type="button" onClick={onLaunch} disabled={busy}
+                    className="inline-flex h-7 items-center rounded-md border border-cyan-400/40 bg-cyan-500/15 px-3 text-[11.5px] font-semibold text-cyan-100 hover:bg-cyan-500/25"
+                  >Launch game</button>
+                )}
+                <span className="text-[11px] text-zinc-500">
+                  {loading ? "Re-checking…" : <>then click <b className="text-cyan-300">Re-check</b> below.</>}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {ready && (
+        <div className="flex flex-col gap-2.5 rounded-lg border border-emerald-400/35 bg-emerald-500/8 px-3.5 py-3">
+          <div className="flex items-center gap-2">
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-400 text-[12px] font-bold text-emerald-950">✓</span>
+            <span className="text-[13.5px] font-semibold text-emerald-200">{liveOk ? "Capturing · plugin live" : "Ready · Steam"}</span>
+          </div>
+          <ol className="flex flex-col gap-1.5 text-[12px] leading-relaxed text-zinc-300">
+            <li><b className="text-zinc-200">1.</b> Launch <b className="text-zinc-200">OUTERPLANE</b> from Steam and play to the lobby — roster + gear import automatically (no Arm, no Reload).</li>
+            <li><b className="text-zinc-200">2.</b> <span className="text-zinc-400">Optional:</span> open the in-game <b className="text-zinc-200">Hero Archive</b> + <b className="text-zinc-200">Gift</b> screens once — codex + geas import as soon as they load.</li>
+            <li><b className="text-zinc-200">3.</b> After a game update, come back here: if the plugin needs a refresh the header says so.</li>
+          </ol>
+        </div>
+      )}
+
+      <SteamRemoveSection steam={s} busy={busy} onDone={onProbe} />
+    </div>
+  );
+}
+
+/** Collapsed "Remove plugin" escape hatch (also strips BepInEx when nothing
+ *  else uses it). Confirms first; refused by the backend while the game runs. */
+function SteamRemoveSection({ steam, busy, onDone }: { steam: SteamStatus | null; busy: boolean; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [working, setWorking] = useState(false);
+  if (!steam?.plugin.present) return null;
+  const remove = async () => {
+    if (!window.confirm("Remove the capture plugin from the Steam game folder? (BepInEx is removed too unless other plugins use it.)")) return;
+    setWorking(true);
+    try {
+      const r = await uninstallSteamPlugin(true);
+      if (!r.ok) window.alert(`Remove failed: ${r.error ?? "unknown error"}`);
+      onDone();
+    } finally { setWorking(false); }
+  };
+  return (
+    <div className="flex flex-col gap-2 border-t border-white/6 pt-3">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-fit items-center gap-1.5 text-[11px] font-semibold text-zinc-400 hover:text-zinc-200">
+        <span className={cx("inline-block text-[9px] transition-transform", open && "rotate-90")}>▸</span>
+        <span className="tracking-[0.04em]">Remove plugin</span>
+      </button>
+      {open && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-black/20 px-3 py-2.5">
+          <p className="text-[11.5px] leading-relaxed text-zinc-400">
+            Deletes <span className="font-mono text-zinc-300">BepInEx/plugins/GearSolverCapture</span> and its config from the game folder. Your captured snapshots stay in the app. Close the game first.
+          </p>
+          <button
+            type="button" onClick={() => void remove()} disabled={busy || working || steam.gameRunning}
+            className={cx(
+              "inline-flex h-7 shrink-0 items-center rounded-md border px-3 text-[11.5px] font-semibold",
+              busy || working || steam.gameRunning ? "cursor-not-allowed border-white/6 bg-white/2 text-zinc-500" : "border-rose-400/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20",
+            )}
+          >{working ? "Removing…" : "Remove"}</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Guided, linear capture-setup wizard. Instead of showing all four checks at
  *  once, it focuses on the CURRENT blocker (the first not-yet-passing step),

@@ -13,6 +13,12 @@
  *   platform-tools (adb.exe + AdbWinApi / AdbWinUsbApi DLLs)
  *               from Google's always-latest pointer URL; we keep only the
  *               three files we actually need.
+ *   capture-steam (GearSolverCapture.dll) — the BepInEx plugin for the Steam
+ *               client, built from tools/capture-steam with the .NET SDK
+ *               (needs the game installed: it compiles against its Unity
+ *               assemblies). Copied to resources/capture-steam/ and bundled
+ *               as `<resources>/capture-steam` (BepInEx itself is downloaded
+ *               at install time by steam-capture.ts, not bundled).
  *
  * Output: apps/desktop/resources/bin/{mitmproxy,adb}/ (gitignored). The
  * electron-builder extraResources mapping copies only the adb tree to
@@ -24,13 +30,15 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BIN = join(here, "..", "resources", "bin");
+const RESOURCES = join(here, "..", "resources");
+const REPO = join(here, "..", "..", "..");
 
 // Keep both pins in sync with src/mitm-provision.ts (runtime download).
 const MITMPROXY_VERSION = "12.1.2";
@@ -110,6 +118,21 @@ async function provisionPlatformTools() {
   rmSync(stage, { recursive: true, force: true });
   rmSync(zip, { force: true });
   console.log(`[ok] platform-tools (adb + DLLs) -> ${dest}`);
+}
+
+/** Build the Steam capture plugin and stage its DLL for extraResources. Always
+ *  rebuilds (2 s) so a plugin source change can't ship stale. */
+function provisionSteamPlugin() {
+  const proj = join(REPO, "tools", "capture-steam");
+  console.log(`[dotnet] build ${proj}`);
+  const r = spawnSync("dotnet", ["build", proj, "-c", "Release", "--nologo", "-v", "q"], { stdio: "inherit", shell: true });
+  if (r.status !== 0) throw new Error("dotnet build of tools/capture-steam failed (is the .NET SDK installed and the game present?)");
+  const dll = join(proj, "dist", "GearSolverCapture.dll");
+  if (!existsSync(dll)) throw new Error(`plugin DLL not produced: ${dll}`);
+  const dest = join(RESOURCES, "capture-steam");
+  mkdirSync(dest, { recursive: true });
+  copyFileSync(dll, join(dest, "GearSolverCapture.dll"));
+  console.log(`[ok] capture-steam plugin -> ${dest}`);
 }
 
 /** Locate an OpenSSL executable. Git for Windows ships one under usr/bin; the
@@ -242,5 +265,6 @@ mkdirSync(BIN, { recursive: true });
 await provisionMitmproxy();
 await provisionPlatformTools();
 await provisionProdCert();
+provisionSteamPlugin();
 provisionWindowsIcon();
 console.log(`[done] all binaries + prod cert + icon provisioned under ${BIN}/..`);
