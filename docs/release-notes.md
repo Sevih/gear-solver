@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.8.0] — 2026-09-05
+
 - **Capture from the Steam client — no emulator, no root.** OUTERPLANE is on Steam now, and
   the app can read your account straight from that client: pick **Steam** as the capture
   source in Settings → Setup, click **Install plugin** once (a small BepInEx plugin goes into
