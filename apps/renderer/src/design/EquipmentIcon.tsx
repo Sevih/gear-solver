@@ -141,7 +141,7 @@ export interface IconPiece {
    *  /img/ui/effect/<setIcon>.webp. Renders in the same top-right slot as
    *  `effectIcon`; armor pieces never carry both, so a single slot suffices. */
   setIcon?: string | null;
-  /** Class restriction display name — served at /img/ui/class/CM_Class_<class>.webp */
+  /** Class restriction display name — served at /img/ui/class/IG_Turn_Class_<class>.webp */
   class?: string | null;
 }
 
@@ -265,7 +265,7 @@ function EquipmentIconImpl({ piece, size = 50, detail = "full", className }: Equ
           style={{ width: overlaySize, height: overlaySize, top: (piece.effectIcon || piece.setIcon) ? overlaySize + 4 : 2 }}
         >
           <img
-            src={`/img/ui/class/CM_Class_${piece.class}.webp`}
+            src={`/img/ui/class/IG_Turn_Class_${piece.class}.webp`}
             alt=""
             className="h-full w-full object-contain"
             loading="lazy"
@@ -524,7 +524,7 @@ function CharacterPortraitImpl({
       />
       {showOverlays && elementFile && (
         <img
-          src={`/img/ui/elem/CM_Element_${elementFile}.webp`}
+          src={`/img/ui/elem/IG_Turn_Element_${elementFile}.webp`}
           alt={elementFile}
           className="pointer-events-none absolute -right-1 -top-1 z-10 object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]"
           style={{ width: "39%", height: "39%" }}
@@ -532,7 +532,7 @@ function CharacterPortraitImpl({
       )}
       {showOverlays && classFile && (
         <img
-          src={`/img/ui/class/CM_Class_${classFile}.webp`}
+          src={`/img/ui/class/IG_Turn_Class_${classFile}.webp`}
           alt={classFile}
           className="pointer-events-none absolute right-0 z-10 object-contain drop-shadow-md"
           style={{ top: "40%", width: "27%", height: "27%" }}

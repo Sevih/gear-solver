@@ -510,7 +510,7 @@ function FilterModal({
                         active={draft.classes.has(c)}
                         onClick={() => setDraft({ ...draft, classes: toggle(draft.classes, c) })}
                       >
-                        <img src={`/img/ui/class/CM_Class_${c}.webp`} alt="" className="h-3.5 w-3.5" />
+                        <img src={`/img/ui/class/IG_Turn_Class_${c}.webp`} alt="" className="h-3.5 w-3.5" />
                         {c}
                       </FPill>
                     ))}

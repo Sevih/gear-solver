@@ -281,7 +281,7 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
               )}
             >
               <img
-                src={`/img/ui/elem/CM_Element_${el.label}.webp`}
+                src={`/img/ui/elem/IG_Turn_Element_${el.label}.webp`}
                 alt={el.label}
                 className="h-4 w-4 object-contain"
                 loading="lazy"
@@ -306,7 +306,7 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
               )}
             >
               <img
-                src={`/img/ui/class/CM_Class_${cl.label}.webp`}
+                src={`/img/ui/class/IG_Turn_Class_${cl.label}.webp`}
                 alt={cl.label}
                 className="h-4 w-4 object-contain"
                 loading="lazy"
