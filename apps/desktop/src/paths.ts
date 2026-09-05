@@ -117,6 +117,8 @@ export function findOuterpediaImagesDev(): string | null {
   const env = process.env.OUTERPEDIA_PATH;
   const candidates = [
     env ? `${env.replace(/\\/g, "/")}/.assets-staging/images` : null,
+    // Both dev machines' checkout locations — first one that exists wins.
+    "C:/Users/Sevih/Documents/Projet perso/outerpedia/.assets-staging/images",
     "C:/Users/Sevih/Documents/dev/outerpedia-v3/.assets-staging/images",
   ].filter((p): p is string => Boolean(p));
   for (const p of candidates) if (existsSync(p)) return normalize(p);

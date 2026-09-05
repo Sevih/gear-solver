@@ -45,6 +45,8 @@ function findSolverCheckout(): string | null {
   if (process.env.OUTERPEDIA_NO_CHECKOUT) return null;
   const candidates = [
     process.env.OUTERPEDIA_PATH,
+    // Both dev machines' checkout locations — first one that exists wins.
+    "C:\\Users\\Sevih\\Documents\\Projet perso\\outerpedia",
     "C:\\Users\\Sevih\\Documents\\dev\\outerpedia-v3",
   ].filter((p): p is string => Boolean(p));
   for (const p of candidates) {
