@@ -1273,3 +1273,54 @@ describe("collapseTalismanVariants — talisman-noise dedup at merge", () => {
     expect(collapseTalismanVariants(sorted, 0)).toBe(sorted);
   });
 });
+
+describe("computeCheapRatings — best-skill factor", () => {
+  const base = { atk: 1000, def: 500, hp: 8000, spd: 100, critRate: 50, critDmg: 200,
+    eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
+
+  it("scales dmg/dmgs/mcd/mcds by the factor, leaves dmgh / hps / ehp / ehps untouched", () => {
+    const one = computeCheapRatings(base, "atk", undefined, false, 1);
+    const r = computeCheapRatings(base, "atk", undefined, false, 1.67);
+    expect(r.dmg).toBeCloseTo(one.dmg * 1.67);
+    expect(r.dmgs).toBeCloseTo(one.dmgs * 1.67);
+    expect(r.mcd).toBeCloseTo(one.mcd * 1.67);
+    expect(r.mcds).toBeCloseTo(one.mcds * 1.67);
+    expect(r.dmgh).toBe(one.dmgh);
+    expect(r.hps).toBe(one.hps);
+    expect(r.ehp).toBe(one.ehp);
+    expect(r.ehps).toBe(one.ehps);
+  });
+
+  it("defaults to ×1 — every existing call site keeps its numbers", () => {
+    expect(computeCheapRatings(base)).toEqual(computeCheapRatings(base, "atk", undefined, false, 1));
+  });
+
+  it("applies AFTER dmgStat / dmgSec / noCrit (multiplies the whole base)", () => {
+    const sec = [{ stat: "hp" as const, ratio: 0.03 }];
+    const one = computeCheapRatings(base, "def", sec, true, 1);
+    const r = computeCheapRatings(base, "def", sec, true, 2);
+    expect(r.dmg).toBeCloseTo(one.dmg * 2);
+    expect(r.mcd).toBe(r.dmg); // noCrit: mcd == dmg still holds under the factor
+  });
+
+  it("never moves the single-hero ranking: same order of builds for any positive factor", () => {
+    const builds = [
+      { ...base, atk: 1200, critRate: 30, critDmg: 180, pen: 0 },
+      { ...base, atk: 1000, critRate: 80, critDmg: 250, pen: 10 },
+      { ...base, atk: 900, critRate: 100, critDmg: 300, pen: 30, spd: 130 },
+      { ...base, atk: 1500, critRate: 5, critDmg: 150, pen: 0, spd: 90 },
+      { ...base, atk: 1100, critRate: 60, critDmg: 220, pen: 50, dmgUp: 15 },
+    ];
+    const order = (f: number, key: "dmg" | "dmgs" | "mcd" | "mcds") =>
+      builds
+        .map((b, i) => ({ i, v: computeCheapRatings(b, "atk", undefined, false, f)[key] }))
+        .sort((a, b) => b.v - a.v)
+        .map((x) => x.i);
+    for (const key of ["dmg", "dmgs", "mcd", "mcds"] as const) {
+      const ref = order(1, key);
+      expect(order(1.67, key)).toEqual(ref);
+      expect(order(0.86, key)).toEqual(ref);
+      expect(order(3.864, key)).toEqual(ref);
+    }
+  });
+});

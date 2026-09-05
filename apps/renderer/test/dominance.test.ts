@@ -144,7 +144,7 @@ function makeCtx(pools: Pools, mode: SolveMode): SolveContext {
     poolSizes: {}, scoredGems: [],
     gemDeltaByTalismanSlots: new Map([[4, null], [5, null]]),
     gemAllocByTalismanSlots: new Map([[4, { talisman: [], ee: [] }], [5, { talisman: [], ee: [] }]]),
-    skills: SKILLS, starMeta: STAR_META, dmgStat: "atk", noCrit: false,
+    skills: SKILLS, starMeta: STAR_META, dmgStat: "atk", noCrit: false, skillFactor: 1,
     setPlans: [] as SetPlan[], excludedSets: new Set(), allowBrokenSets: true,
     excludedWeaponEffects: new Set(), excludedAccessoryEffects: new Set(),
   };

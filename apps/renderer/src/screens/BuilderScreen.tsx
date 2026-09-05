@@ -30,6 +30,7 @@ import { toUiPiece } from "../design/adapter.js";
 import { ResultItemDetail } from "../design/ResultGearDetail.js";
 import { flatVsPctTick } from "../lib/subValue.js";
 import { dmgTickGains, type DmgTickCandidate } from "../lib/dmgValue.js";
+import { dmgSkillInfo, type DmgSkillInfo } from "../lib/dmgSkill.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
@@ -119,6 +120,10 @@ interface SelectedComposition {
   /** Hero can never crit (permanent crit-disable passive) — the dmg panel then
    *  evaluates at 0% crit instead of the crit cap, and CHD reads as dead. */
   noCrit: boolean;
+  /** Best-skill factor the offensive ratings are scaled by (label + ×factor,
+   *  `missing` when the hero has no skill data → ×1.00 fallback). Drives the
+   *  Dmg/DmgS/Mcd/McdS tooltips + header badge. */
+  dmgSkill: DmgSkillInfo;
 }
 
 /** Hero display name aligned with the Builds tab: "Nickname Name" when the
@@ -175,12 +180,27 @@ const SOLVER_RATINGS: ReadonlyArray<{ key: string; label: string; formula: strin
   { key: "hps",  label: "HpS",  formula: "HP × SPD",                        desc: "HP × Speed composite — fast-and-bulky proxy." },
   { key: "ehp",  label: "Ehp",  formula: "HP × (1 + DEF/1000) / max(0.3, 1 − dmgRed/100)", desc: "Effective HP — combines the in-game DEF mitigation 1000/(DEF+1000) with the build's own dmgRed (defender-side reduction)." },
   { key: "ehps", label: "EhpS", formula: "EHP × SPD",                       desc: "EHP × Speed — tanky-and-fast." },
-  { key: "dmg",  label: "Dmg",  formula: "DmgStat × E[DR] × penMult(2000)", desc: "Expected damage per hit vs DEF=2000 — scales off the hero's damage stat (ATK by default; DEF/HP for off-ATK heroes), weighting crit (1 + pCrit×(CHD/100−1)), attacker's dmgUp, and PEN. dmgRed doesn't reduce a build's own offensive output (defender stat)." },
-  { key: "dmgs", label: "DmgS", formula: "Dmg × SPD",                       desc: "DPS — Dmg × speed." },
-  { key: "mcd",  label: "Mcd",  formula: "ATK × (CHD/100 + dmgMod) × penMult(2000)", desc: "Max crit damage vs DEF=2000 — assumes 100% CHC (raid-buff scenario).", hideInTable: true },
+  { key: "dmg",  label: "Dmg",  formula: "DmgStat × E[DR] × penMult(2000) × skillFactor", desc: "Expected damage of the hero's STRONGEST skill hit (S1/S2/S3 at max level, burst states included; multi-hit = sum of hits) vs DEF=2000 — scales off the hero's damage stat (ATK by default; DEF/HP for off-ATK heroes), weighting crit (1 + pCrit×(CHD/100−1)), attacker's dmgUp, and PEN, then × the skill's total factor. No buffs / chains; DoT kits are under-estimated. dmgRed doesn't reduce a build's own offensive output (defender stat)." },
+  { key: "dmgs", label: "DmgS", formula: "Dmg × SPD",                       desc: "DPS — Dmg (best skill) × speed. Not a rotation: cooldowns are ignored." },
+  { key: "mcd",  label: "Mcd",  formula: "DmgStat × (CHD/100 + dmgMod) × penMult(2000) × skillFactor", desc: "Max crit damage of the best skill vs DEF=2000 — assumes 100% CHC (raid-buff scenario).", hideInTable: true },
   { key: "mcds", label: "McdS", formula: "Mcd × SPD",                       desc: "Max DPS — Mcd × speed.",            hideInTable: true },
-  { key: "dmgh", label: "DmgH", formula: "HP × E[DR] × penMult(2000)",      desc: "Expected damage for HP-scaling kits vs DEF=2000 — fixed HP reference column (the Dmg column already scales off the hero's actual stat).", hideInTable: true },
+  { key: "dmgh", label: "DmgH", formula: "HP × E[DR] × penMult(2000)",      desc: "Expected damage for HP-scaling kits vs DEF=2000 — fixed HP reference column at a 100% skill factor (the Dmg column already scales off the hero's actual stat and best skill).", hideInTable: true },
 ];
+
+/** Ratings scaled by the hero's best-skill factor — their tooltips name the
+ *  winning skill (or the ×1.00 fallback) via `ratingTitle`. */
+const SKILL_SCALED_RATINGS = new Set(["dmg", "dmgs", "mcd", "mcds"]);
+
+/** Tooltip for a rating column / filter row: formula (optional) + semantics,
+ *  plus — for the skill-scaled ratings — which S1/S2/S3 won for the picked
+ *  hero and its factor, or an explicit warning when the data is missing. */
+function ratingTitle(r: { key: string; formula: string; desc: string }, dmgSkill: DmgSkillInfo | null, withFormula = true): string {
+  const base = withFormula ? `${r.formula} — ${r.desc}` : r.desc;
+  if (!SKILL_SCALED_RATINGS.has(r.key)) return base;
+  if (!dmgSkill) return `${base} Skill factor: the picked hero's best skill (S1/S2/S3 at max level).`;
+  if (dmgSkill.missing) return `${base} ⚠ No skill data for this hero — skill factor assumed ×1.00 (a 100% skill).`;
+  return `${base} Best skill: ${dmgSkill.label} ×${dmgSkill.factor.toFixed(2)}${dmgSkill.approx ? " (hit chain unresolved in the data — approximate)" : ""}.`;
+}
 
 /** Ratings actually rendered in the results table — filters out the
  *  `hideInTable` ones so the row stays scannable. */
@@ -1133,7 +1153,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const dmgStat = meta.dmgStat ?? "atk";
     const amp = (k: "atk" | "def" | "hp") => 1 + (composed.scaling[k]?.buffPct ?? 0) / 100;
     const dmgAmp = { atk: amp("atk"), def: amp("def"), hp: amp("hp") };
-    return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false };
+    return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false, dmgSkill: dmgSkillInfo(meta.bestSkill) };
   }, [inventory, game, selected, userGeasLevels, userCodexLevel]);
 
   /** Hero's currently-equipped piece per engine slot — the "before" side of the
@@ -1249,6 +1269,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         filterActive={displayFilter != null}
         onFilter={applyClientFilter}
         onClearFilter={() => setDisplayFilter(null)}
+        dmgSkill={composition?.dmgSkill ?? null}
       />
       {cartesianEstimate > CARTESIAN_WARN && (
         <div className="flex shrink-0 items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-[11px] leading-snug text-amber-200">
@@ -1284,6 +1305,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               armorSets={armorSetCatalog}
               game={game}
               heatmap={heatmap}
+              dmgSkill={composition?.dmgSkill ?? null}
             />
           </div>
           {/* Gear band takes the remaining height and scrolls if the window is
@@ -1686,10 +1708,12 @@ function BuilderToolbar({
   armorSets, weaponEffects, accessoryEffects, mainStatCatalogs,
   filters, dispatch,
   solving, canSolve, solveMode, setSolveMode, onSolve, onCancelSolve,
-  canFilter, filterActive, onFilter, onClearFilter,
+  canFilter, filterActive, onFilter, onClearFilter, dmgSkill,
 }: {
   heroes: Inventory["characters"];
   game: GameData | null;
+  /** Picked hero's best-skill factor (Rating filters tooltips). */
+  dmgSkill: DmgSkillInfo | null;
   selectedUid: string | null;
   onSelect: (uid: string | null) => void;
   armorSets: ArmorSetEntry[];
@@ -1803,7 +1827,7 @@ function BuilderToolbar({
           <StatFiltersPanel filters={filters.statFilters} dispatch={dispatch} />
         </PopoverButton>
         <PopoverButton label="Ratings" count={ratingCount} openKey={openKey} myKey="rating" onToggle={toggle} onClose={close}>
-          <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} />
+          <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} dmgSkill={dmgSkill} />
         </PopoverButton>
         <PopoverButton label="Priority" count={priorityCount} accent="violet" openKey={openKey} myKey="priority" onToggle={toggle} onClose={close}>
           <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
@@ -2795,7 +2819,7 @@ function FilterInput({
 /* ─────────────────────────────────────────────────────────────────────────
  * Rating filters panel — same min/max model on calculated build ratings
  * ───────────────────────────────────────────────────────────────────────── */
-function RatingFiltersPanel({ filters, dispatch }: { filters: Record<string, MinMax>; dispatch: Dispatch<SolverAction> }) {
+function RatingFiltersPanel({ filters, dispatch, dmgSkill }: { filters: Record<string, MinMax>; dispatch: Dispatch<SolverAction>; dmgSkill: DmgSkillInfo | null }) {
   return (
     <Panel
       title="Rating filters"
@@ -2808,7 +2832,7 @@ function RatingFiltersPanel({ filters, dispatch }: { filters: Record<string, Min
             key={r.key}
             ratingKey={r.key}
             label={r.label}
-            title={`${r.formula} — ${r.desc}`}
+            title={ratingTitle(r, dmgSkill)}
             filters={filters}
             dispatch={dispatch}
           />
@@ -3498,9 +3522,12 @@ function ColumnsMenu({
 
 function ResultsTable({
   builds, selectedIdx, onSelect, solving, error, emptyReason, statFilters, rows, onRowsChange,
-  pieceByUid, armorSets, game, heatmap,
+  pieceByUid, armorSets, game, heatmap, dmgSkill,
 }: {
   builds: SolveBuild[];
+  /** Picked hero's best-skill factor — names the winning skill in the
+   *  Dmg/DmgS headers (badge + tooltip), flags the ×1.00 fallback. */
+  dmgSkill: DmgSkillInfo | null;
   selectedIdx: number | null;
   onSelect: (i: number | null) => void;
   solving: boolean;
@@ -3721,8 +3748,15 @@ function ResultsTable({
                 </SortHeader>
               ))}
               {ratingCols.map((r) => (
-                <SortHeader key={r.key} colKey={r.key} title={r.desc} sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
+                <SortHeader key={r.key} colKey={r.key} title={ratingTitle(r, dmgSkill, false)} sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
                   {r.label.toLowerCase()}
+                  {SKILL_SCALED_RATINGS.has(r.key) && dmgSkill && (
+                    // Which skill the column is scaled by (S1/S2/S3, "B1..3" =
+                    // burst state) — amber "×1" when the hero has no skill data.
+                    <span className={cx("ml-0.5 text-[8px] normal-case tracking-normal", dmgSkill.missing ? "text-amber-300" : "text-white/40")}>
+                      {dmgSkill.missing ? "×1" : dmgSkill.label}
+                    </span>
+                  )}
                 </SortHeader>
               ))}
               {showScore && (

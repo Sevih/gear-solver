@@ -340,6 +340,19 @@ export interface CharacterDef {
    *  always` — Rhona / K.Tamamo / G.Nella): they can never crit, so CHD is dead
    *  and the dmg model must NOT assume the crit cap. */
   noCrit?: boolean;
+  /** The hero's STRONGEST skill hit (S1/S2/S3 at max level, burst states
+   *  included when they replace the base skill): `factor` is the total skill
+   *  factor in ‰ of the damage stat (1670 = ×1.67 — SkillLevelTemplet
+   *  DamageFactor × the per-clip hit total of the strongest state, per
+   *  outerpedia's damage engine). Multi-hit skills are the SUM of their hits.
+   *  The solver's offensive ratings (`dmg`/`dmgs`/`mcd`/`mcds`) multiply
+   *  their 100%-factor base by it — a per-hero constant, so single-hero
+   *  ranking never moves; it makes the numbers comparable across heroes.
+   *  `unresolvedHits`: the winner's hit chain is unknown in the data, the
+   *  factor is the skill's full value (approximation). Omitted when the
+   *  generator has no offensive skill data for the hero → the app falls back
+   *  to ×1.00 and says so. DoTs are not modeled. */
+  bestSkill?: { slot: "S1" | "S2" | "S3"; burst?: 1 | 2 | 3; factor: number; unresolvedHits?: true };
   /** Null only if calc-stats couldn't find a row (defensive fallback). */
   ingredients: CharacterIngredients | null;
 }

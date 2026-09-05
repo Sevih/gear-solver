@@ -11,9 +11,12 @@
  * (`CFormula.<CalcDamage>g__CalcDamage|17_0`) reduced to a build-trait
  * scoring context:
  *
- *   E[damage per hit] ∝ Stat × E[DR]/1000 × penMult
+ *   E[damage per hit] ∝ Stat × E[DR]/1000 × penMult × skillFactor
  *   E[DR]   = 1000 + pCrit × (CHD×10 − 1000) + DMGBoost − DMGReduce  (clamped ≥ 300)
  *   penMult = (TARGET_DEF + 1000) / (TARGET_DEF × (1 − PEN/100) + 1000)
+ *   skillFactor = the hero's best-skill total factor (‰/1000, `bestSkill` in
+ *                 characters.json; 1 = a 100 % skill). Constant per hero: it
+ *                 scales `dmg`/`dmgs`/`mcd`/`mcds` without moving ranking.
  *
  * The previous formula `ATK × CHC × CHD` had no physical meaning — it
  * implicitly assumed non-crits did zero damage, ranking a CHD=300 / CHC=0
@@ -30,8 +33,8 @@ export interface CheapRatings {
   ehp: number;
   /** EHP × SPD — tanky-and-fast composite. */
   ehps: number;
-  /** Expected damage per ATK-scaling hit vs a `TARGET_DEF` enemy.
-   *  Includes crit weighting (pCrit × CHD term), `dmgUp − dmgRed`, and the
+  /** Expected damage of the hero's STRONGEST skill hit (S1/S2/S3 at max
+   *  level — `skillFactor`) vs a `TARGET_DEF` enemy. Includes crit weighting (pCrit × CHD term), `dmgUp − dmgRed`, and the
    *  penetration multiplier against TARGET_DEF=2000. */
   dmg: number;
   /** DPS — Dmg × SPD. */
@@ -43,7 +46,7 @@ export interface CheapRatings {
   mcds: number;
   /** Expected damage per HP-scaling hit (Aer's S3, Caren's heal-as-damage,
    *  etc.) vs a `TARGET_DEF` enemy. Same crit/PEN math as `dmg`, just HP
-   *  instead of ATK. */
+   *  instead of ATK — and NO skill factor (fixed 100 %-factor reference). */
   dmgh: number;
 }
 
@@ -78,7 +81,14 @@ const DR_FLOOR = 0.3;
  *  crit) score with `pCrit = 0` so the crit term drops out entirely, and `mcd`
  *  (the "assume 100% CHC" column) collapses to the non-crit hit — they have no
  *  crit ceiling to reach. Without this the offensive ratings reward CHC/CHD a
- *  no-crit hero can never cash in, over-ranking crit gear for them. */
+ *  no-crit hero can never cash in, over-ranking crit gear for them.
+ *
+ *  `skillFactor` is the hero's best-skill total factor as a multiplier
+ *  (`bestSkill.factor / 1000` — see `lib/dmgSkill.ts`, which also owns the
+ *  ×1.00 fallback when the data is missing). It multiplies the damage base
+ *  AFTER `dmgStat`/`dmgSec`/`noCrit` are applied, on `dmg`/`dmgs`/`mcd`/`mcds`
+ *  only — `dmgh` stays the 100 %-factor HP reference. A per-hero constant:
+ *  the relative order of builds is identical for any positive value. */
 export function computeCheapRatings(
   s: FinalStats,
   dmgStat: "atk" | "def" | "hp" = "atk",
@@ -87,6 +97,7 @@ export function computeCheapRatings(
   // scaling axis and is mapped to the renamed `critRate` FinalStats field below.
   dmgSec?: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd" | "eff" | "crc"; ratio: number }>,
   noCrit = false,
+  skillFactor = 1,
 ): CheapRatings {
   const hps = s.hp * s.spd;
   // EHP — combines DEF mitigation with the defender's DMGReduceRate
@@ -128,9 +139,12 @@ export function computeCheapRatings(
       dmgBase += (stat === "def" ? s.def : stat === "hp" ? s.hp : stat === "spd" ? s.spd : stat === "eff" ? s.eff : stat === "crc" ? s.critRate : s.atk) * ratio;
     }
   }
-  const dmg = dmgBase * drFactor * penMult;
+  // Best-skill factor LAST: a per-hero constant on top of the build-trait
+  // product (base × crit/dmgUp rate × PEN) — the number becomes "the hero's
+  // strongest hit", the ranking stays exactly the 100 %-factor one.
+  const dmg = dmgBase * drFactor * penMult * skillFactor;
   const dmgs = dmg * s.spd;
-  const mcd = dmgBase * mcdFactor * penMult;
+  const mcd = dmgBase * mcdFactor * penMult * skillFactor;
   const mcds = mcd * s.spd;
   const dmgh = s.hp * drFactor * penMult;
   return { hps, ehp, ehps, dmg, dmgs, mcd, mcds, dmgh };
