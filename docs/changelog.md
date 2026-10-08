@@ -8,6 +8,17 @@
 
 ## Items de backlog clôturés (index)
 
+### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
+- ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a
+  déplacées de `equipment/` vers `ui/stat/` sur le bucket R2 (`images.ts` → `statIcon`) ; le solver les
+  demandait toujours sous `/img/ui/effect/`, que `img-cache.ts` réécrit en `equipment/` → 404. Partout
+  l'échec était muet (`StatIcon` masque l'image sur `onError`) ; seul l'en-tête du tableau talisman de
+  Home (un `<img>` maison, sans garde) affichait des images cassées — d'où le signalement.
+  `StatIcon` ([EquipmentIcon.tsx](../apps/renderer/src/design/EquipmentIcon.tsx)) pointe maintenant sur
+  `/img/ui/stat/`, et l'en-tête talisman passe par `StatIcon` : le chemin n'existe plus qu'à un endroit.
+  L'alias `ui/effect/*` → `equipment/*` reste, il sert toujours les icônes de set et d'effet unique.
+  Non repris : `CM_Stat_Icon_VAMPIRIC` existe dans `ui/stat/` alors que `lifesteal` est déclaré sans icône.
+
 ### 🖼️ Icônes d'élément et de classe — nouveau set du jeu (2026-09-05)
 - ✅ 🟡 **Le jeu a changé ses icônes d'élément et de classe** avec la sortie Steam (27/08) : nouveau set
   `IG_Turn_Element_*` / `IG_Turn_Class_*` (outerpedia les extrait, les sert dans `images.ts` et les a

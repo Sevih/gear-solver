@@ -12,7 +12,10 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Stat icons are back.** The stat icons (ATK, HP, Crit Chance…) had stopped loading after
+  they moved on the image server — most visibly as broken images in Home → Gear breakdown →
+  Talisman, and as missing icons next to stats everywhere else. They show again across the
+  app: Home, Inventory, gear details, Builder, Builds and the worklist.
 
 ## [1.8.0] — 2026-09-05
 

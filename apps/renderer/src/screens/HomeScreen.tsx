@@ -21,6 +21,7 @@ import type { CaptureStatus } from "../capture.js";
 import type { EmulatorStatus } from "../emulator.js";
 import { describeSteam, type CaptureSource, type SteamStatus } from "../steam.js";
 import { cx } from "../design/cx.js";
+import { StatIcon } from "../design/EquipmentIcon.js";
 import { Spinner } from "../design/Shell.js";
 import { SLOTS, SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { gearPieceQualityTier, QUALITY_COLOR, type QualityTier } from "../lib/quality.js";
@@ -92,7 +93,7 @@ interface HomeStats {
   /** Talisman (ooparts) cross-tab: rows = talisman types, cols = main stats,
    *  cells = owned count of that type with that main stat. */
   ooparts: {
-    cols: { key: string; label: string; icon: string | null }[];
+    cols: { key: string; label: string }[];
     rows: { key: string; name: string; icon: string | null; effect: string; counts: number[]; total: number }[];
     colTotals: number[];
     total: number;
@@ -314,7 +315,7 @@ function computeStats(inv: Inventory, game: GameData | null): HomeStats {
     }
   }
   for (const name of talCount.keys()) if (!talCatalog.has(name)) talCatalog.set(name, { icon: null, effect: "" });
-  const oopartsCols = TALISMAN_STATS.map((key) => ({ key, label: STAT[key]?.label ?? key, icon: STAT[key]?.icon ?? null }));
+  const oopartsCols = TALISMAN_STATS.map((key) => ({ key, label: STAT[key]?.label ?? key }));
   const oopartsRows = [...talCatalog.entries()].map(([name, info]) => {
     const row = talCount.get(name);
     const counts = TALISMAN_STATS.map((s) => row?.get(s) ?? 0);
@@ -1153,9 +1154,7 @@ function OopartsTable({ ooparts }: { ooparts: HomeStats["ooparts"] }) {
         <span />
         {cols.map((c) => (
           <span key={c.key} title={c.label} className="grid place-items-center pb-1">
-            {c.icon
-              ? <img src={`/img/ui/effect/${c.icon}.webp`} alt={c.label} className="h-4 w-4" />
-              : <span className="text-[8px] font-bold uppercase tracking-wide text-zinc-400">{c.label}</span>}
+            <StatIcon stat={c.key} size={16} />
           </span>
         ))}
         <span className="grid place-items-center pb-1 text-[8px] font-bold uppercase tracking-wide text-zinc-500">Σ</span>

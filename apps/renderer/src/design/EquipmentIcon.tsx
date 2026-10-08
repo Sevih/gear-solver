@@ -25,7 +25,7 @@ export function StatIcon({
   }
   return (
     <img
-      src={`/img/ui/effect/${meta.icon}.webp`}
+      src={`/img/ui/stat/${meta.icon}.webp`}
       alt={meta.label}
       title={tip}
       className={cx("shrink-0 object-contain", className)}
