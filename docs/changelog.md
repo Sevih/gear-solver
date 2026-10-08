@@ -244,6 +244,10 @@
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
 
+## [1.8.1] — 2026-10-08
+
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
 ## [1.8.0] — 2026-09-05
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
