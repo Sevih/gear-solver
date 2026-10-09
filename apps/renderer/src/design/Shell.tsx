@@ -270,7 +270,7 @@ interface GsHeaderProps {
    *  first launch via App-level state. */
   onSetup: () => void;
   version: string;
-  /** Live Outerplane resource version pulled from outerpedia-v2's
+  /** Live Outerplane resource version pulled from outerpedia's
    *  `game-version.json`. Null while loading / on fetch failure (we just
    *  omit it from the subtitle rather than show a placeholder). */
   gameVersion: string | null;

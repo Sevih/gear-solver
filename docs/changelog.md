@@ -42,6 +42,9 @@
   prend maintenant l'ensemble des héros déjà vus (persisté sous `gs.priority.seen`) et ne classe que les
   nouveaux venus du roster : un rang vidé reste vide, et la règle « deux unranked ne se volent pas » de
   `isLowerPriority` redevient atteignable. Testé dans [heroPriority.test.ts](../apps/renderer/test/heroPriority.test.ts).
+- ✅ 🔴 **Version du jeu lue sur le repo archivé** — [game-version.ts](../apps/renderer/src/game-version.ts)
+  pointait sur `Sevih/outerpediaV2`, qui répond toujours mais reste figé (`1.10.602` contre `1.11.404` le
+  2026-10-09). L'URL lit maintenant `Sevih/outerpedia` (même chemin `data/generated/game-version.json`).
 
 ### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
 - ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a

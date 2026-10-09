@@ -6,7 +6,7 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **3 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
+> **2 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
 > L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
 
 ---
@@ -14,8 +14,6 @@
 ## Reste à faire
 
 ### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **URL morte pour la version du jeu** — `game-version.ts` pointe sur `Sevih/outerpediaV2` (repo mort). Pointer
-      sur `Sevih/outerpedia` (ou supprimer la feature si l'artefact n'y existe plus).
 - [ ] 🔴 **Mémoire de filtres par héros : héros initial jamais restauré** — `BuilderScreen` effet hero-switch : le garde
       `heroChangeReset` saute la première passe → avec « Optimize → » les filtres session du héros ne sont pas rechargés,
       puis `INITIAL_FILTERS` est snapshoté à leur place au premier switch (StrictMode : même perte). Lazy-init du reducer
