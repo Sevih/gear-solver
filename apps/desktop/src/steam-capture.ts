@@ -222,6 +222,16 @@ export function readHeartbeat(captureOut: string): SteamPluginHeartbeat | null {
   }
 }
 
+/** The plugin is loaded in a running game: OUTERPLANE runs AND the heartbeat
+ *  in `captureOut` belongs to that process. The cheap subset of
+ *  `steamStatus().live` (no registry lookup, no DLL hashing) for request-path
+ *  checks such as the user_item write-back guard. */
+export function steamPluginLive(captureOut: string): boolean {
+  const heartbeat = readHeartbeat(captureOut);
+  if (!heartbeat) return false;
+  return gamePids().includes(heartbeat.pid);
+}
+
 /** Full status snapshot. `bundledDll` = the plugin DLL this app ships (used
  *  for the up-to-date check); `captureOut` = where the plugin must write. */
 export function steamStatus(captureOut: string, bundledDll: string): SteamStatus {

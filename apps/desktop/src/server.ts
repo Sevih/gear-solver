@@ -51,7 +51,7 @@ import {
 } from "./emulator-detect.js";
 import { dlog, dwarn } from "./log.js";
 import { ensureMitmdump, mitmdumpPath } from "./mitm-provision.js";
-import { installSteamPlugin, launchGame, steamStatus, uninstallSteamPlugin } from "./steam-capture.js";
+import { installSteamPlugin, launchGame, steamPluginLive, steamStatus, uninstallSteamPlugin } from "./steam-capture.js";
 import { proxyReco } from "./reco-proxy.js";
 import { syncGameData } from "./data-sync.js";
 import { serveImg } from "./img-cache.js";
@@ -595,13 +595,20 @@ function route(req: IncomingMessage, res: ServerResponse): void {
   // The renderer applies the core equipItem/unequipItem helpers against the
   // loaded game data and POSTs the FULL rewritten user_item.json here; the
   // server just validates + writes it (it has no game data to resolve slots).
-  // Refused while armed so the next /user/item capture can't clobber the edit
-  // (mirrors /api/capture/wipe).
+  // Refused while a capture source is live so its next /user/item snapshot
+  // can't clobber the edit: the armed mitm pipeline (mirrors
+  // /api/capture/wipe) or the Steam plugin loaded in a running game (it
+  // rewrites user_item.json at the next lobby).
   if (url === "/api/captured/user-item" && req.method === "POST") {
     res.setHeader("Content-Type", "application/json");
     if (isArmed()) {
       res.statusCode = 409;
       res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
+      return;
+    }
+    if (steamPluginLive(CAPTURE_OUT)) {
+      res.statusCode = 409;
+      res.end(JSON.stringify({ error: "Steam capture plugin live — close the game first" }));
       return;
     }
     const chunks: Buffer[] = [];
