@@ -89,24 +89,20 @@ function assertBundle(value: unknown): asserts value is BackupBundle {
   if (!b.filterPresets || typeof b.filterPresets !== "object") throw new Error("Missing filterPresets.");
 }
 
+/** Window event fired after a backup import rewrote the blobs. The Builder
+ *  stays mounted (hidden) across tabs with both maps in memory; without a
+ *  reload its next persist would overwrite the imported entries. */
+export const BACKUP_IMPORTED_EVENT = "gs:backup-imported";
+
 /**
- * Apply a parsed backup bundle to localStorage.
- *  - "merge": keep current entries, add any whose id isn't already present.
- *  - "replace": overwrite both blobs wholesale.
- * Writes the raw blobs directly (presets stay in their serialized array form,
- * so loadFilterPresets() deserializes them correctly on the next Builder mount).
- * Returns how many entries were added (merge) or written (replace).
+ * Merge a parsed backup bundle into localStorage: keep current entries, add
+ * any whose id isn't already present. Writes the raw blobs directly (presets
+ * stay in their serialized array form, so loadFilterPresets() deserializes
+ * them correctly). The caller fires `BACKUP_IMPORTED_EVENT` so mounted
+ * screens reload. Returns how many entries were added.
  */
-export function applyBackup(value: unknown, mode: "merge" | "replace"): ImportResult {
+export function applyBackup(value: unknown): ImportResult {
   assertBundle(value);
-  const count = (m: ListMap) => Object.values(m).reduce((n, l) => n + (Array.isArray(l) ? l.length : 0), 0);
-
-  if (mode === "replace") {
-    localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(value.savedBuilds));
-    localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(value.filterPresets));
-    return { builds: count(value.savedBuilds), presets: count(value.filterPresets) };
-  }
-
   const builds = mergeListMap(readRaw(SAVED_BUILDS_KEY), value.savedBuilds);
   const presets = mergeListMap(readRaw(FILTER_PRESETS_KEY), value.filterPresets);
   localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(builds.merged));

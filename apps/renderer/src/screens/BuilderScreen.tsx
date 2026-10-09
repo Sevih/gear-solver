@@ -53,6 +53,7 @@ import {
   addFilterPreset, loadFilterPresets, persistFilterPresets, removeFilterPreset,
   type FilterPreset, type FilterPresetsMap,
 } from "../lib/storage/filterPresets.js";
+import { BACKUP_IMPORTED_EVENT } from "../lib/storage/transfer.js";
 
 interface BuilderScreenProps {
   inventory: Inventory | null;
@@ -716,6 +717,16 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // on every render, which would re-write the blob on hero switch etc.).
   const [savedBuildsMap, setSavedBuildsMap] = useState<SavedBuildsMap>(() => loadSavedBuilds());
   const [filterPresetsMap, setFilterPresetsMap] = useState<FilterPresetsMap>(() => loadFilterPresets());
+  // Settings → Backup import rewrites both blobs while this screen stays
+  // mounted (hidden tab) — reload, else the next persist drops the import.
+  useEffect(() => {
+    const reload = () => {
+      setSavedBuildsMap(loadSavedBuilds());
+      setFilterPresetsMap(loadFilterPresets());
+    };
+    window.addEventListener(BACKUP_IMPORTED_EVENT, reload);
+    return () => window.removeEventListener(BACKUP_IMPORTED_EVENT, reload);
+  }, []);
 
   // In-app name prompt (replaces window.prompt which blocked the renderer
   // thread and didn't match the rest of the UI's styling). `pending` carries

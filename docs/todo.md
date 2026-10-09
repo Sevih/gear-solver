@@ -6,7 +6,7 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **6 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
+> **5 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
 > L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
 
 ---
@@ -14,10 +14,6 @@
 ## Reste à faire
 
 ### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **Import de backup perdu** — l'import (Settings → Backup) n'écrit que localStorage ; le Builder reste monté
-      (`display:none`) avec sa map `savedBuilds`/`filterPresets` en `useState` → le prochain `persistSavedBuilds`
-      écrase le blob avec la map mémoire. Le message « Reopen the Builder tab » est faux. Remonter les maps dans App
-      (ou notifier le Builder via un event / clé de version) ; supprimer le mode `"replace"` mort de `transfer.ts`.
 - [ ] 🔴 **Drill Home → Inventory sur les sets ne filtre rien** — `HomeScreen.tsx` (`sets` / `allSets`) envoie
       `id: sname` (nom du set) alors que l'Inventory filtre sur `p.armorSetId` numérique. Le catalogue a le bon id
       sous `info.id`, écrasé au mapping. Envoyer `info.id`.
@@ -107,8 +103,8 @@
 - [ ] ⚪ **`SOLVER_FILES` en 4 exemplaires** (`data/sync.mjs`, `data-sync.ts`, `data.ts`, outerpedia). En mode checkout
       `data-sync.ts` saute silencieusement un artefact manquant là où `sync.mjs` sort en erreur. Une seule liste
       exportée (core) + même règle d'échec.
-- [ ] ⚪ **Code mort** — `SourcePicker` n'offre jamais le retour à « auto » (`onChange(null)`) · `transfer.ts` mode
-      `"replace"` · `addWorklistEntry`/`removeWorklistEntry`/`toggleWorklistChange` (worklist.ts) réimplémentés inline ·
+- [ ] ⚪ **Code mort** — `SourcePicker` n'offre jamais le retour à « auto » (`onChange(null)`) ·
+      `addWorklistEntry`/`removeWorklistEntry`/`toggleWorklistChange` (worklist.ts) réimplémentés inline ·
       `DebugFlag "capture"` · `GearCard` reçoit 9 props « reserved for pimp » jamais rendues · docstrings orphelines
       (`saveCurrentPreset`, composant gems disparu) · `APP_VERSION` fallback « 0.4 » + « set in next.config ».
 - [ ] ⚪ **Reset (Builds)** remet aussi le tri `byRank` à CP alors que la condition d'affichage ne le regarde pas ·

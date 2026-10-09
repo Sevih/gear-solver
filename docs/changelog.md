@@ -28,6 +28,11 @@
   ([savedBuilds.ts](../apps/renderer/src/lib/storage/savedBuilds.ts)) ajoute `{ talisman: [], ee: [] }`
   aux builds qui n'ont pas le champ, et `BottomGearBand` lit `build?.gemAllocation?.…`. Testé dans
   [storageMigrations.test.ts](../apps/renderer/test/storageMigrations.test.ts).
+- ✅ 🔴 **Import de backup perdu** — le Builder reste monté (onglet masqué) avec ses maps en mémoire : le
+  prochain `persistSavedBuilds` écrasait l'import. `SettingsModal` émet maintenant `BACKUP_IMPORTED_EVENT`
+  ([transfer.ts](../apps/renderer/src/lib/storage/transfer.ts)) après `applyBackup`, et `BuilderScreen`
+  recharge `savedBuilds` / `filterPresets` depuis localStorage. Le message « Reopen the Builder tab » est
+  retiré, et le mode `"replace"` mort de `applyBackup` supprimé (avec son test).
 
 ### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
 - ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a
