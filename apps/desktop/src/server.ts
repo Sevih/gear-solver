@@ -478,8 +478,13 @@ function route(req: IncomingMessage, res: ServerResponse): void {
   }
   // --- Steam source: BepInEx plugin in the Steam client (steam-capture.ts) ---
   if (url === "/api/steam/status" && req.method === "GET") {
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(steamStatus(CAPTURE_OUT, STEAM_PLUGIN_DLL)));
+    steamStatus(CAPTURE_OUT, STEAM_PLUGIN_DLL).then((st) => {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(st));
+    }).catch((err: Error) => {
+      res.statusCode = 500;
+      res.end(`steam status failed: ${err.message}`);
+    });
     return;
   }
   if (url === "/api/steam/install" && req.method === "POST") {
@@ -491,15 +496,16 @@ function route(req: IncomingMessage, res: ServerResponse): void {
   if (url === "/api/steam/uninstall" && req.method === "POST") {
     readJsonBody(req, res, 10_000, (body) => {
       const removeBepinex = Boolean((body as { removeBepinex?: unknown })?.removeBepinex);
-      try {
-        const lines: string[] = [];
-        const status = uninstallSteamPlugin({ captureOut: CAPTURE_OUT, bundledDll: STEAM_PLUGIN_DLL, log: (l) => lines.push(l), removeBepinex });
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ status, lines }));
-      } catch (err) {
-        res.statusCode = 409;
-        res.end(JSON.stringify({ error: (err as Error).message }));
-      }
+      const lines: string[] = [];
+      uninstallSteamPlugin({ captureOut: CAPTURE_OUT, bundledDll: STEAM_PLUGIN_DLL, log: (l) => lines.push(l), removeBepinex })
+        .then((status) => {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ status, lines }));
+        })
+        .catch((err: Error) => {
+          res.statusCode = 409;
+          res.end(JSON.stringify({ error: err.message }));
+        });
     });
     return;
   }
@@ -615,11 +621,8 @@ function route(req: IncomingMessage, res: ServerResponse): void {
       res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
       return;
     }
-    if (steamPluginLive(CAPTURE_OUT)) {
-      res.statusCode = 409;
-      res.end(JSON.stringify({ error: "Steam capture plugin live — close the game first" }));
-      return;
-    }
+    // The plugin probe is async (tasklist): start it now, decide once the body is in.
+    const live = steamPluginLive(CAPTURE_OUT).catch(() => false);
     const chunks: Buffer[] = [];
     let size = 0;
     let aborted = false;
@@ -636,8 +639,13 @@ function route(req: IncomingMessage, res: ServerResponse): void {
       }
       chunks.push(c);
     });
-    req.on("end", () => {
+    req.on("end", () => void live.then((isLive) => {
       if (aborted) return;
+      if (isLive) {
+        res.statusCode = 409;
+        res.end(JSON.stringify({ error: "Steam capture plugin live — close the game first" }));
+        return;
+      }
       try {
         const body = Buffer.concat(chunks).toString("utf-8");
         const parsed = JSON.parse(body) as { ItemList?: unknown };
@@ -650,7 +658,7 @@ function route(req: IncomingMessage, res: ServerResponse): void {
         res.statusCode = 400;
         res.end(JSON.stringify({ error: (err as Error).message }));
       }
-    });
+    }));
     return;
   }
 

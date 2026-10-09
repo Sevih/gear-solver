@@ -14,7 +14,7 @@ vi.mock("electron-updater", () => electronUpdaterMock());
 const steam = vi.hoisted(() => ({ live: false }));
 vi.mock("../src/steam-capture.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/steam-capture.js")>()),
-  steamPluginLive: () => steam.live,
+  steamPluginLive: async () => steam.live,
 }));
 
 const ORIGINAL = '{"ItemList":["before"]}';
