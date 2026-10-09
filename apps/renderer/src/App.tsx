@@ -5,6 +5,7 @@ import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.j
 import { getEmulators, type EmulatorStatus } from "./emulator.js";
 import { getSteamStatus, launchSteamGame, CAPTURE_SOURCE_KEY, type CaptureSource, type SteamStatus } from "./steam.js";
 import { getGameVersion } from "./game-version.js";
+import { describeDataSync, requestDataSync, type DataSyncResult } from "./lib/dataSync.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
 import { LogView } from "./design/LogView.js";
 import { SettingsModal } from "./design/SettingsModal.js";
@@ -168,19 +169,16 @@ export function App() {
     } else setStatus(r.game ? "Game data loaded - no capture found." : source === "steam" ? "No data. Install the capture plugin, then play to the lobby." : "No data. Arm capture to begin.");
   }
 
-  // Manual "Sync game data" — pulls fresh tables from the outerpedia repo and
-  // rebuilds the derived data, then re-imports so the renderer picks it up.
-  // Surfaced from the Home tab's System health / Quick actions.
-  async function syncGameData() {
+  // Manual "Sync game data" — pulls fresh tables from the outerpedia repo,
+  // then re-imports so the renderer picks them up (no window reload: a solve
+  // may be running in the kept-mounted Builder). The single path behind both
+  // the Home quick action and Settings → Data.
+  async function syncGameData(): Promise<DataSyncResult> {
     setStatus("Syncing game data…");
-    try {
-      const r = await fetch("/api/data/sync", { method: "POST" });
-      const j = (await r.json().catch(() => null)) as { status?: string; message?: string } | null;
-      await refreshInventory("Game data synced");
-      setStatus(j?.message ? `Game data: ${j.message}` : "Game data synced.");
-    } catch {
-      setStatus("Game data sync failed.");
-    }
+    const r = await requestDataSync();
+    if (r.status === "synced") await refreshInventory("Game data synced");
+    setStatus(describeDataSync(r));
+    return r;
   }
 
   // Auto-prune the worklist whenever the inventory changes (recapture, reload,
@@ -377,6 +375,7 @@ export function App() {
         steamBusy={running !== "none"}
         onResetOnboarding={() => setOnboardingDone(false)}
         onAfterWipe={() => void refreshInventory("Wiped captured data")}
+        onSyncData={syncGameData}
         debugStatLocks={debugStatLocks}
         onToggleDebugStatLocks={() => setDebugStatLocks((v) => !v)}
         debugSolver={debugSolver}

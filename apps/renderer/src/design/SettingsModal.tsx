@@ -21,6 +21,7 @@ import { Spinner } from "./Shell.js";
 import { applyBackup, buildBackup } from "../lib/storage/transfer.js";
 import { resolveWorkerCount } from "../lib/solver/orchestrator.js";
 import { loadDataVersion, type DataVersion } from "../data.js";
+import { describeDataSync, type DataSyncResult } from "../lib/dataSync.js";
 import { uninstallSteamPlugin, type CaptureSource, type SteamStatus } from "../steam.js";
 
 export type CheckId = "emulator-installed" | "emulator-running" | "adb-connection" | "root-toggle";
@@ -120,6 +121,8 @@ interface Props {
   onResetOnboarding: () => void;
   /** Refresh the inventory after a destructive action (wipe captured). */
   onAfterWipe?: () => void;
+  /** "Sync game data" — App's single sync path (syncs + re-imports, no reload). */
+  onSyncData: () => Promise<DataSyncResult>;
   /** Current state of the developer-only stat-lock toggle (Builds tab). */
   debugStatLocks: boolean;
   /** Flip the stat-lock debug toggle on/off. */
@@ -161,7 +164,7 @@ const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> =
 ];
 
 export function SettingsModal({
-  open, onClose, onReady, onResetOnboarding, onAfterWipe,
+  open, onClose, onReady, onResetOnboarding, onAfterWipe, onSyncData,
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver, solver,
   captureSource, onCaptureSourceChange, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy,
 }: Props) {
@@ -273,7 +276,7 @@ export function SettingsModal({
                 </div>
               )}
               {tab === "solver" && <SolverPane solver={solver} showAdvanced={showAdvanced} onToggleAdvanced={() => setShowAdvanced((v) => !v)} />}
-              {tab === "data"   && <DataPane syncing={syncing} setSyncing={setSyncing} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} />}
+              {tab === "data"   && <DataPane syncing={syncing} setSyncing={setSyncing} onSyncData={onSyncData} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} />}
               {tab === "backup" && <BackupPane importInputRef={importInputRef} />}
               {tab === "debug"  && <DebugPane debugStatLocks={debugStatLocks} onToggleDebugStatLocks={onToggleDebugStatLocks} debugSolver={debugSolver} onToggleDebugSolver={onToggleDebugSolver} />}
             </div>
@@ -864,10 +867,11 @@ function SolverPane({
 }
 
 function DataPane({
-  syncing, setSyncing, onResetOnboarding, onAfterWipe,
+  syncing, setSyncing, onSyncData, onResetOnboarding, onAfterWipe,
 }: {
   syncing: boolean;
   setSyncing: (b: boolean) => void;
+  onSyncData: () => Promise<DataSyncResult>;
   onResetOnboarding: () => void;
   onAfterWipe?: () => void;
 }) {
@@ -897,7 +901,7 @@ function DataPane({
         description="Refresh the raw tables from the local outerpedia checkout and rebuild the derived data (run after a game patch). Auto-runs at launch when the source is newer."
         actionLabel={syncing ? "Syncing…" : "Sync"}
         disabled={syncing}
-        onClick={() => void runDataSync(setSyncing)}
+        onClick={() => void runDataSync(setSyncing, onSyncData)}
       />
       <DataAction
         label="Reset onboarding prompt"
@@ -1175,24 +1179,13 @@ async function importBackupFile(file: File | null, done: () => void): Promise<vo
   }
 }
 
-/** POST /api/data/sync — copy raw tables from outerpedia + rebuild derived.
- *  Reloads the window on a real sync so the renderer picks up the fresh data.
- *  "unavailable" (packaged build / no checkout) is surfaced, not an error. */
-async function runDataSync(setSyncing: (b: boolean) => void): Promise<void> {
+/** Settings → Data → "Sync": run App's sync path (it re-imports on a real
+ *  sync — no window reload, so a running solve survives) and report the
+ *  outcome. */
+async function runDataSync(setSyncing: (b: boolean) => void, onSyncData: () => Promise<DataSyncResult>): Promise<void> {
   setSyncing(true);
   try {
-    const r = await fetch("/api/data/sync", { method: "POST" });
-    const data = (await r.json()) as { status: string; message: string };
-    if (data.status === "synced") {
-      window.alert(`Game data synced — ${data.message}. Reloading to apply.`);
-      window.location.reload();
-      return;
-    }
-    if (data.status === "fresh") window.alert("Game data is already up to date.");
-    else if (data.status === "unavailable") window.alert(`Sync unavailable: ${data.message}`);
-    else window.alert(`Sync failed: ${data.message}`);
-  } catch (err) {
-    window.alert(`Sync failed: ${err instanceof Error ? err.message : String(err)}`);
+    window.alert(describeDataSync(await onSyncData()));
   } finally {
     setSyncing(false);
   }
