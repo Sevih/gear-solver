@@ -45,3 +45,14 @@ outerpedia datagen (solver generator)
   characters, and the exp / trust / codex curves.
 
 Field semantics: [../docs/data-schema.md](../docs/data-schema.md).
+
+## Wiki oracle
+
+`npm run oracle:wiki -- --out <outerpedia>/src/lib/data/fixtures/gear-solver-oracle.json`
+writes, for every character of `characters.json`, the no-gear sheet computed by
+`composeCharStats` at the levels the wiki shows (1, the evolution rungs, 100, 105,
+110, 120): `white` (base + evolution) and `full` (every permanent layer at max),
+with this repo's commit and the data `version.json` as provenance. outerpedia
+cannot import this code; its `gear-solver-oracle.test.ts` compares the wiki's
+"Base Stats" sheet to that snapshot. Re-run it after a formula change here or a
+data sync that touches characters.
