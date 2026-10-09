@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Inventory } from "@gear-solver/core";
-import { planWorklist } from "../src/lib/worklist/plan.js";
+import { changeState, planWorklist } from "../src/lib/worklist/plan.js";
 import { worklistClaims, type WorklistChange, type WorklistEntry } from "../src/lib/storage/worklist.js";
 
 // --- Minimal fixtures. The planner only reads `gear[].uid` / `gear[].equippedBy`
@@ -135,5 +135,44 @@ describe("worklistClaims — solver reservations", () => {
   it("returns an empty map with no inventory", () => {
     expect(worklistClaims([entry("a", "h1", [change("weapon", "P")])], null)).toEqual({ P: "h1" });
     expect(worklistClaims([], inv([]))).toEqual({});
+  });
+});
+
+describe("changeState — the card's conflict matches the plan's contention", () => {
+  const ctxFor = (list: WorklistEntry[], inventory: Inventory) => ({
+    equippedOnHero: null,
+    invUids: new Set(inventory.gear.map((g) => g.uid)),
+    contended: planWorklist(list, inventory).contended,
+  });
+
+  it("one hero queuing the same piece in two builds is not a conflict", () => {
+    const list = [
+      entry("a", "h1", [change("weapon", "P")]),
+      entry("b", "h1", [change("weapon", "P")]),
+    ];
+    const i = inv([{ uid: "P" }]);
+    const plan = planWorklist(list, i);
+    // Header: "No cross-build dependencies — order doesn't matter."
+    expect(plan.applicable).toBe(true);
+    for (const e of list) expect(changeState(e.changes[0]!, ctxFor(list, i)).conflict).toBe(false);
+  });
+
+  it("two heroes wanting one copy is a conflict on both cards", () => {
+    const list = [
+      entry("a", "h1", [change("weapon", "P")]),
+      entry("b", "h2", [change("weapon", "P")]),
+    ];
+    const i = inv([{ uid: "P" }]);
+    for (const e of list) expect(changeState(e.changes[0]!, ctxFor(list, i)).conflict).toBe(true);
+  });
+
+  it("an applied change never reads as a conflict", () => {
+    const list = [
+      entry("a", "h1", [change("weapon", "P")]),
+      entry("b", "h2", [change("weapon", "P")]),
+    ];
+    const i = inv([{ uid: "P", owner: "h1" }]);
+    const st = changeState(list[0]!.changes[0]!, { ...ctxFor(list, i), equippedOnHero: new Set(["P"]) });
+    expect(st).toEqual({ applied: true, stale: false, conflict: false });
   });
 });
