@@ -25,7 +25,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, extname, join, normalize } from "node:path";
+import { dirname, extname, join } from "node:path";
 import {
   BUNDLED_ADB,
   BUNDLED_IMG,
@@ -54,6 +54,7 @@ import { installSteamPlugin, launchGame, steamStatus, uninstallSteamPlugin } fro
 import { proxyReco } from "./reco-proxy.js";
 import { syncGameData } from "./data-sync.js";
 import { serveImg } from "./img-cache.js";
+import { resolveInside } from "./safe-path.js";
 import { getStatus as getUpdateStatus, triggerCheck as triggerUpdateCheck, installUpdate } from "./updater.js";
 
 const MIME: Record<string, string> = {
@@ -145,8 +146,8 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, file: string, ca
 function tryMount(req: IncomingMessage, res: ServerResponse, url: string, prefix: string, dir: string, cacheMode: "etag" | "long"): boolean {
   if (!url.startsWith(prefix)) return false;
   const rel = decodeURIComponent(url.slice(prefix.length));
-  const file = normalize(join(dir, rel));
-  if (!file.startsWith(dir)) { res.statusCode = 403; res.end("forbidden"); return true; }
+  const file = resolveInside(dir, rel);
+  if (!file) { res.statusCode = 403; res.end("forbidden"); return true; }
   serveStatic(req, res, file, cacheMode);
   return true;
 }
@@ -635,8 +636,8 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
   // a red console error on every load.
   if (url.startsWith("/captured/") && url.endsWith(".json")) {
     const rel = decodeURIComponent(url.slice("/captured/".length).split("?")[0]!);
-    const file = normalize(join(CAPTURE_OUT, rel));
-    if (file.startsWith(CAPTURE_OUT) && !existsSync(file)) {
+    const file = resolveInside(CAPTURE_OUT, rel);
+    if (file && !existsSync(file)) {
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
       res.end("null");
@@ -649,8 +650,8 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
   // SPA fallback: any unknown path serves index.html so client-side state
   // (currently tab name in usePersistedState) survives a hard reload.
   const stripped = url === "/" ? "/index.html" : url;
-  const file = normalize(join(RENDERER_DIST, stripped));
-  if (file.startsWith(RENDERER_DIST) && existsSync(file) && statSync(file).isFile()) {
+  const file = resolveInside(RENDERER_DIST, stripped);
+  if (file && existsSync(file) && statSync(file).isFile()) {
     serveStatic(req, res, file, "etag");
     return;
   }

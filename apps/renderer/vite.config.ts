@@ -14,6 +14,7 @@ import { installSteamPlugin, launchGame, steamStatus, uninstallSteamPlugin } fro
 import { proxyReco } from "../desktop/src/reco-proxy.js";
 import { syncGameData } from "../desktop/src/data-sync.js";
 import { serveImg } from "../desktop/src/img-cache.js";
+import { resolveInside } from "../desktop/src/safe-path.js";
 import { getCurrentRef, resolveLatestSha, setCurrentRef, readShaState } from "../desktop/src/repo-source.js";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
@@ -39,8 +40,8 @@ const SCRATCH_DIR = join(root, ".cache", "scratch");
 // icons, effect badges and character portraits render without copying
 // gigabytes into gear-solver. `OUTERPEDIA_PATH` env wins. `normalize` keeps
 // the separator consistent with what path.join produces downstream — otherwise
-// the file.startsWith(dir) traversal check fails on Windows when one side
-// has forward slashes and the other backslashes.
+// the traversal check fails on Windows when one side has forward slashes
+// and the other backslashes.
 function findOuterpediaImages(): string | null {
   const env = process.env.OUTERPEDIA_PATH;
   const candidates = [
@@ -362,8 +363,8 @@ function localData(): Plugin {
         for (const [prefix, dir] of Object.entries(mounts)) {
           if (!url.startsWith(prefix)) continue;
           const rel = decodeURIComponent(url.slice(prefix.length));
-          const file = normalize(join(dir, rel));
-          if (!file.startsWith(dir)) {
+          const file = resolveInside(dir, rel);
+          if (!file) {
             res.statusCode = 404;
             return res.end("not found");
           }
