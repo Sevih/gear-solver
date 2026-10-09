@@ -4,7 +4,7 @@ import type { CharacterDef, CodexCurve, StatBlock } from "../src/gamedata.js";
 import charactersJson from "../../../data/derived/characters.json";
 import codexJson from "../../../data/derived/codex-curve.json";
 
-/** Deux captures prises en jeu le 10/10/2026 sur des passifs permanents de
+/** Deux captures prises en jeu le 09/10/2026 sur des passifs permanents de
  *  S2 : niveau 100, sans équipement, compte où transcendance (+30 %), codex
  *  et quirks sont au maximum — soit les défauts de `composeCharStats` avec
  *  `level: 100` et le niveau de S2 de la capture.

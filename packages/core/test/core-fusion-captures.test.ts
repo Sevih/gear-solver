@@ -4,7 +4,7 @@ import type { CharacterDef, CodexCurve } from "../src/gamedata.js";
 import charactersJson from "../../../data/derived/characters.json";
 import codexJson from "../../../data/derived/codex-curve.json";
 
-/** Captures prises en jeu le 10/10/2026 sur des Core Fusion : niveau 100,
+/** Captures prises en jeu le 09/10/2026 sur des Core Fusion : niveau 100,
  *  sans équipement, compte où transcendance, codex, quirks et fusion sont au
  *  maximum — soit les défauts de `composeCharStats` (transStar, codex, geas
  *  et niveaux de skill au max) avec `level: 100`. Elles établissent que la
