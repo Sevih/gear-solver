@@ -45,6 +45,11 @@
 - ✅ 🔴 **Version du jeu lue sur le repo archivé** — [game-version.ts](../apps/renderer/src/game-version.ts)
   pointait sur `Sevih/outerpediaV2`, qui répond toujours mais reste figé (`1.10.602` contre `1.11.404` le
   2026-10-09). L'URL lit maintenant `Sevih/outerpedia` (même chemin `data/generated/game-version.json`).
+- ✅ 🔴 **Mémoire de filtres par héros : héros initial jamais restauré** — `BuilderScreen` : le reducer de filtres
+  démarre maintenant sur les filtres mémorisés du héros initial (lazy-init depuis `heroFiltersRef`, cas
+  « Optimize → » qui monte le Builder directement sur un héros), et l'effet hero-switch est gardé par
+  `prevHeroRef.current === selectedUid` au lieu du drapeau `heroChangeReset` : ni le montage ni le rejeu
+  StrictMode ne snapshotent plus `INITIAL_FILTERS` par-dessus les filtres du héros.
 
 ### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
 - ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a

@@ -6,7 +6,7 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **2 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
+> **1 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
 > L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
 
 ---
@@ -14,10 +14,6 @@
 ## Reste à faire
 
 ### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **Mémoire de filtres par héros : héros initial jamais restauré** — `BuilderScreen` effet hero-switch : le garde
-      `heroChangeReset` saute la première passe → avec « Optimize → » les filtres session du héros ne sont pas rechargés,
-      puis `INITIAL_FILTERS` est snapshoté à leur place au premier switch (StrictMode : même perte). Lazy-init du reducer
-      avec `heroFiltersRef.current[initialHeroUid] ?? INITIAL_FILTERS` + garde par `prevHeroRef !== selectedUid`.
 - [ ] 🔴 **Race « Get preset » vs changement de héros** — `BuilderScreen` `getPreset` : après `await fetchReco`, rien ne
       vérifie que le héros sélectionné est le même → la reco de A est mergée dans les filtres de B. Capturer
       `selectedUid` avant l'await et bail si différent.

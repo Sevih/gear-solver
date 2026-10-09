@@ -654,14 +654,19 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialHeroUid]);
-  const [filters, dispatch] = useReducer(solverFiltersReducer, INITIAL_FILTERS);
   // Per-hero filter memory (session-scoped). `filtersRef` mirrors the live
   // filters so the hero-change effect can snapshot the OUTGOING hero without
   // depending on `filters` (which would re-fire it on every edit). `prevHeroRef`
   // tracks whose filters are currently loaded; `heroFiltersRef` is the map.
+  // The reducer starts from the initial hero's remembered filters (Optimize →
+  // mounts the Builder straight on a hero), not the defaults.
+  const heroFiltersRef = useRef<HeroFiltersMap>(loadHeroFilters());
+  const [filters, dispatch] = useReducer(solverFiltersReducer, initialHeroUid ?? null, (uid) => {
+    const saved = uid ? heroFiltersRef.current[uid] : undefined;
+    return saved ? cloneFilters(saved) : INITIAL_FILTERS;
+  });
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
-  const heroFiltersRef = useRef<HeroFiltersMap>(loadHeroFilters());
   const prevHeroRef = useRef(selectedUid);
   // Primary SOLVE mode (split button), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
@@ -1065,11 +1070,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // hero's set, restore the incoming hero's (or defaults if first time), so
   // returning to a hero brings back "what did I set here again?". Cancel any
   // in-flight solve first so its async `onResult` can't repopulate the table for
-  // the wrong hero. Skips the initial mount (just records the starting hero, so
-  // a pre-populated filter set keyed off `initialHeroUid` isn't clobbered).
-  const heroChangeReset = useRef(true);
+  // the wrong hero. Guarded on an actual change of hero (not a first-run flag),
+  // so the mount — and StrictMode's effect replay — never snapshot the
+  // reducer's initial state over the hero's remembered filters.
   useEffect(() => {
-    if (heroChangeReset.current) { heroChangeReset.current = false; prevHeroRef.current = selectedUid; return; }
+    if (prevHeroRef.current === selectedUid) return;
     orchestratorRef.current?.cancel();
     const prev = prevHeroRef.current;
     if (prev) {
