@@ -62,7 +62,8 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode; resetKey?: un
   }
 }
 
-// Resolved-at-build-time site version (set in next.config / vite env).
+// Resolved-at-build-time app version (`VITE_APP_VERSION`, injected by
+// apps/renderer/vite.config.ts from apps/desktop/package.json).
 const APP_VERSION =
   (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_APP_VERSION?: string } }).env?.VITE_APP_VERSION) ||
   "0.4";

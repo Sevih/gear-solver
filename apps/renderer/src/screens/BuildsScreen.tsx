@@ -241,8 +241,9 @@ interface RosterFilters {
   byRank?: boolean;
 }
 
-// Persist the roster filters across reloads — the two Set<>-typed fields need
-// the jsonWithSets codec to survive a JSON round-trip via localStorage.
+// Keep the roster filters for the session — the two Set<>-typed fields need
+// the jsonWithSets codec to survive a JSON round-trip via sessionStorage
+// (`useSessionState`: kept across tab hops, reset at each launch).
 const ROSTER_FILTER_CODEC = jsonWithSets<RosterFilters>(["elements", "classes"]);
 
 function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next: RosterFilters) => void; debug: boolean; trailing?: ReactNode }) {
@@ -938,8 +939,8 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
     () => ({ query: "", elements: new Set(), classes: new Set(), locks: "all" }),
     ROSTER_FILTER_CODEC,
   );
-  // Defaultify `locks` for users with a pre-migration entry in localStorage
-  // (no `locks` field on the stored object). Memoized so the identity stays
+  // Defaultify `locks` for a stored entry that predates the field (no `locks`
+  // on the stored object). Memoized so the identity stays
   // stable across renders and we don't re-trigger the roster useMemo.
   const filters = useMemo<RosterFilters>(
     () => ({ ...filtersRaw, locks: filtersRaw.locks ?? "all" }),

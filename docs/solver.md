@@ -112,9 +112,9 @@ ABSOLU**, pas un pourcentage par slot — un % ne borne pas le **produit** (30 %
 sept pools de ~40-50 = encore ~`7e8` ; mesuré : **703 M / 142 s** en mode Score
 avec priorité). `allocateComboBudget` répartit (water-filling) un nombre de pièces
 à garder **par slot** pour que `∏ keep ≤ budget` (slots petits gardés entiers, le
-surplus va aux gros slots armor). Budget défaut `COMBO_BUDGET = 8 M` (≈ 1-2 s de
+surplus va aux gros slots armor). Budget de référence `COMBO_BUDGET = 8 M` à Top% 30 (≈ 1-2 s de
 solve — Score est plus coûteux par combo que CP), **scalé par le slider Top%**
-(`budget = 8M × topPct/30` ; `topPct = 100` rebascule en exhaustif). Talisman
+(`budget = 8M × topPct/30`, ~16 M au défaut 60 ; `topPct = 100` rebascule en exhaustif). Talisman
 inclus, l'**EE jamais** (pas de pool EE — pièce équipée unique, toujours
 exempte) ; slots `keepCurrent` exemptés.
 
@@ -425,11 +425,12 @@ Inventaire typique : 150 pieces par slot × 7 slots = `150^7 ≈ 10^15` permutat
 Le slider Top% pilote un **budget de combos absolu** (phase 3) : `budget = 8M × topPct/30`,
 water-fillé par slot (`allocateComboBudget`) pour que `∏ keep ≤ budget` :
 - 100% → exhaustif (short-circuit, aucun prune)
-- 30% (défaut) → 8 M de combos (~1-2 s)
+- 60% (défaut) → ~16 M de combos
+- 30% → 8 M de combos (~1-2 s ; l'ancien défaut, référence de la normalisation)
 - 10% → ~2,7 M
 - 5% → ~1,3 M (très rapide, mais peut zapper le build optimal)
 
-Le hint du panneau le dit explicitement : *"Heuristic — too low a Top % drops optimal builds"*. C'est un trade-off pure recall vs vitesse. **Attention** : un Top% en *pourcentage par slot* ne bornerait pas le **produit** — sur un vrai compte, 30 %/slot laisse encore ~`10^10` combos (mesuré : 1,25 G post-prune-30 %, toujours >100 s). C'est pourquoi le budget borne `∏` directement, **quel que soit le mode** → solve en ~1-2 s quel que soit le compte.
+Le hint du panneau le dit explicitement : *"Top % scales an absolute combo budget (100 = exhaustive) […] Heuristic — too low a Top % drops optimal builds"*. C'est un trade-off pure recall vs vitesse. **Attention** : un Top% en *pourcentage par slot* ne bornerait pas le **produit** — sur un vrai compte, 30 %/slot laisse encore ~`10^10` combos (mesuré : 1,25 G post-prune-30 %, toujours >100 s). C'est pourquoi le budget borne `∏` directement, **quel que soit le mode** → solve en ~1-2 s quel que soit le compte.
 
 Avec `priority` vide, le budget mord quand même : en **SOLVE Score** le ranking retombe sur la magnitude brute des rolls (`magnitudeScoreOf`, phase 3c) — résultats arbitraires faute d'objectif, mais le solve ne pend pas. En **SOLVE CP**, l'auto-prune CP-pondéré (phase 3b) rend « max CP » jouable sans rien tuner.
 
@@ -544,7 +545,7 @@ lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloqu
   6 pièces invariantes ne sont plus re-sommées par talisman (accumulateur de buckets
   incrémental bit-identique, §7.4b), et la table de résultats est virtualisée
   (`@tanstack/react-virtual`). Le **nombre de combos** est attaqué côté pool :
-  défaut Top% 30 + auto-prune CP-pondéré (phase 3b) + dominance prune (§3) +
+  défaut Top% 60 + auto-prune CP-pondéré (phase 3b) + dominance prune (§3) +
   set-prune (§armor). Reste optionnel : borne CP par upper-bound (branch-and-bound
   exact) — gain incertain vu `topK = 1000`/worker, à valider par un profilage sur
   vrai compte (footer ⏱ pour mesurer).
@@ -583,7 +584,7 @@ apps/renderer/src/
 
 Bonus :
 - `data/stat-locks.json` : snapshots stat-régression pour valider la compose
-  formula (cf. [project-gear-solver-stat-locks](../../../.claude/projects/c--Users-Sevih-Documents-Projet-perso-outerpedia-v2/memory/project_gear_solver_stat_locks.md) memory).
+  formula (cf. [reference.md § 3.2](reference.md#32-locks-de-régression-datastat-locksjson)).
 
 ---
 

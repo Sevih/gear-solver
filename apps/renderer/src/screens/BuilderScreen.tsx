@@ -1,5 +1,6 @@
 /**
- * Builder — Fribbels-style dense optimizer UX. UX-only (no logic wired).
+ * Builder — Fribbels-style dense optimizer: filters reducer, every panel, and
+ * the wiring to the solver orchestrator (worker pool), results and equip.
  *
  *   ┌─────┬─────┬───────┬──────┬─────┬─────┬──────┬─────┐
  *   │Hero │Stats│Options│StFilt│RatFt│SsPri│AccMst│Sets │     ← top band
@@ -11,8 +12,6 @@
  *   │ [Weapon][Helmet][Armor][Acc][Gloves][Boots]        │     ← bottom
  *   └────────────────────────────────────────────────────┘
  *
- * Every input is visual placeholder — state lives only where needed to
- * demonstrate behavior (hero combobox open/close, picker selection).
  */
 import { Fragment, memo, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -170,13 +169,14 @@ const SOLVER_STATS: ReadonlyArray<{ key: string; iconKey: string; label: string;
 /** Calculated ratings — visible only in the Rating filters panel and as
  *  result-table columns. Formulas mirror the Fribbels E7 model; final
  *  Outerplane tuning may differ (e.g. EHP defense scaling uses the in-game
- *  HD formula). Score and Upg are derived in the solver, not user-bound.
+ *  HD formula). Score and Upg are derived in the solver (not from the
+ *  composed stats), and can be bounded here like the others.
  *
  *  `hideInTable` flags a rating that's still useful as a filter axis but
  *  rarely needed in the per-row table (avoids cluttering 20+ columns).
  *  Filters panel always shows everything. */
 const SOLVER_RATINGS: ReadonlyArray<{ key: string; label: string; formula: string; desc: string; hideInTable?: boolean }> = [
-  { key: "cp",   label: "Cp",   formula: "in-game CalcBattlePower",         desc: "Combat Power as shown on the unit page (no skill enhances)." },
+  { key: "cp",   label: "Cp",   formula: "in-game CalcBattlePower",         desc: "Combat Power as shown on the unit page (skill levels included)." },
   { key: "hps",  label: "HpS",  formula: "HP × SPD",                        desc: "HP × Speed composite — fast-and-bulky proxy." },
   { key: "ehp",  label: "Ehp",  formula: "HP × (1 + DEF/1000) / max(0.3, 1 − dmgRed/100)", desc: "Effective HP — combines the in-game DEF mitigation 1000/(DEF+1000) with the build's own dmgRed (defender-side reduction)." },
   { key: "ehps", label: "EhpS", formula: "EHP × SPD",                       desc: "EHP × Speed — tanky-and-fast." },
@@ -394,9 +394,10 @@ export interface SolverFilters {
 }
 
 /** Cartesian size (∏ per-slot pools) above which the Builder warns the solve
- *  will be slow and nudges the user to prune. Tuned so the default Top%-30 +
- *  CP-proxy case clears it, while an exhaustive (Top% 100) solve on a real
- *  account trips it. */
+ *  will be slow and nudges the user to prune. Sits above the combo budget of
+ *  any pruned solve (`COMBO_BUDGET × topPct/30`: ~16M at the default Top% 60,
+ *  ~26M at 99), so those clear it, while an exhaustive (Top% 100) solve on a
+ *  real account trips it. */
 const CARTESIAN_WARN = 50_000_000;
 
 /** Compact big-number label for the guard-rail (2.4e9 → "2.4B"). */
@@ -435,7 +436,8 @@ const INITIAL_FILTERS: SolverFilters = {
   //   reforgeMode "classic" — score gear at the +10 endgame norm (most players
   //     stop there; +15 is resource-gated), not the captured +0/+9 state.
   //   equippedScope "lower" — may only pull gear off STRICTLY lower-priority
-  //     heroes (auto-ranked by CP on capture), never strip an equal/higher one.
+  //     heroes (ranks set in the Builds tab; an unranked hero gets a default
+  //     rank by CP there, below the manual ones), never strip an equal/higher one.
   //     With no ranks it degrades to own+free (isLowerPriority ∞>∞ is false).
   options: { onlyMaxed: false, reforgeMode: "classic", equippedScope: "lower", keepCurrent: false, allowBrokenSets: true },
   excludedHeroes: new Set(),
@@ -947,9 +949,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         const nextBuilds = addSavedBuild(savedBuildsMap, buildEntry);
         setSavedBuildsMap(nextBuilds);
         persistSavedBuilds(nextBuilds);
-        // Filter preset snapshot (same name) — see `saveCurrentPreset`'s former
-        // note on the shallow `excludedHeroes` re-materialization being safe
-        // against the immutable reducer.
+        // Filter preset snapshot (same name). `excludedHeroes` is copied into a
+        // fresh Set; a shallow copy is enough because the reducer never mutates
+        // its Sets in place (it always builds a new one).
         const presetEntry: FilterPreset = {
           id: crypto.randomUUID(),
           name: finalName,
@@ -1596,8 +1598,8 @@ function armorSetCatalogFromInventory(inventory: Inventory | null, game: GameDat
 
 /** Build the per-slot effect palette — only effects the player actually
  *  owns a piece for, gated by the picked hero's class restriction. The
- *  chip's identity is the effect icon (the gear renderer overlays the
- *  same icon on equipped pieces). */
+ *  chip's identity is the effect (`setId` = UniqueOptionID); it shows the
+ *  effect icon, the one the gear renderer overlays on equipped pieces. */
 function effectCatalogFromInventory(
   inventory: Inventory | null,
   game: GameData | null,
@@ -1859,10 +1861,11 @@ function BuilderToolbar({
   );
 }
 
-/** Split SOLVE button — one primary action that runs the remembered mode
+/** Split SOLVE button — one primary action that runs the current mode
  *  (Score / Combat Power), plus a ▾ that opens a small menu to switch mode
- *  (picking a mode both remembers it and runs it). The mode persists across
- *  sessions (`gs.builder.solveMode`). While solving it becomes a Cancel button. */
+ *  (picking a mode both keeps it and runs it). The mode is NOT persisted: it
+ *  lives in the screen's `solveMode` state and starts on Solve (Score) at each
+ *  visit. While solving it becomes a Cancel button. */
 const SOLVE_MODES: { value: SolveMode; label: string; desc: string }[] = [
   { value: "score", label: "Solve", desc: "Maximize a priority-weighted Score" },
   { value: "cp", label: "Solve CP", desc: "Maximize in-game Combat Power" },
@@ -2837,8 +2840,8 @@ function RatingFiltersPanel({ filters, dispatch, dmgSkill }: { filters: Record<s
             dispatch={dispatch}
           />
         ))}
-        <RatingFilterRow ratingKey="score" label="Score" title="Aggregate score from priorities + rating filters." filters={filters} dispatch={dispatch} />
-        <RatingFilterRow ratingKey="upg" label="Upg" title="Number of slots improved over the current build." filters={filters} dispatch={dispatch} />
+        <RatingFilterRow ratingKey="score" label="Score" title="Priority-weighted score: Σ stat / norm × priority (CHC and PEN capped at 100%)." filters={filters} dispatch={dispatch} />
+        <RatingFilterRow ratingKey="upg" label="Upg" title="Number of slots whose piece differs from the current build." filters={filters} dispatch={dispatch} />
       </div>
     </Panel>
   );
@@ -2873,15 +2876,16 @@ function SubstatPriorityPanel({
   topPct: number;
   dispatch: Dispatch<SolverAction>;
 }) {
-  // The Top-% prune is gated on having at least one non-zero priority (the
-  // engine skips it otherwise — scoring every piece 0 would prune arbitrarily).
-  // Surface that so a user lowering Top % with no priorities set isn't puzzled
-  // when nothing changes.
+  // The Top-% prune runs whenever Top % < 100, priority or not: with no
+  // priority the engine ranks each slot by a CP proxy (SOLVE CP) or by raw roll
+  // magnitude (SOLVE, Score) — the latter has no objective, so its results are
+  // arbitrary. Surface that so a user lowering Top % with no priorities set
+  // knows what the slider is pruning by.
   const hasPriority = Object.values(priority).some((v) => v !== 0);
   return (
     <Panel
       title="Substat priority"
-      hint="Score gear by Σ(max-rolls × priority); only keep the Top % per slot. Heuristic — too low a Top % drops optimal builds. Top % needs at least one priority set to take effect."
+      hint="Score gear by Σ(max-rolls × priority). Top % scales an absolute combo budget (100 = exhaustive) and each slot keeps its best-ranked pieces. Heuristic — too low a Top % drops optimal builds."
       action={
         <button
           type="button"
@@ -2919,8 +2923,8 @@ function SubstatPriorityPanel({
       </div>
       {topPct < 100 && !hasPriority && (
         <div className="mt-1 text-[10px] leading-snug text-amber-300/80">
-          SOLVE CP ranks each slot by a CP proxy, so Top % applies. For SOLVE (Score),
-          set a substat priority above or Top % has no effect.
+          SOLVE CP ranks each slot by a CP proxy. SOLVE (Score) without a priority
+          keeps the fullest-rolled pieces, which is arbitrary: set a priority above.
         </div>
       )}
     </Panel>
