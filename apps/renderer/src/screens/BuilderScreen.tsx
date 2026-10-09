@@ -42,7 +42,7 @@ import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco,
 import { fetchReco } from "../lib/reco/fetchReco.js";
 import { equipPieces } from "../equip.js";
 import type { WorklistChange, WorklistEntry } from "../lib/storage/worklist.js";
-import { loadHeroFilters, persistHeroFilters, cloneFilters, type HeroFiltersMap } from "../lib/storage/heroFilters.js";
+import { loadHeroFilters, persistHeroFilters, cloneFilters, filtersForHero, snapshotOnHeroSwitch, type HeroFiltersMap } from "../lib/storage/heroFilters.js";
 import { usePersistedState } from "../hooks/usePersistedState.js";
 import { QUALITY_TIERS, QUALITY_LABEL, type QualityTier } from "../lib/quality.js";
 import {
@@ -653,14 +653,16 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialHeroUid]);
-  const [filters, dispatch] = useReducer(solverFiltersReducer, INITIAL_FILTERS);
   // Per-hero filter memory (session-scoped). `filtersRef` mirrors the live
   // filters so the hero-change effect can snapshot the OUTGOING hero without
   // depending on `filters` (which would re-fire it on every edit). `prevHeroRef`
   // tracks whose filters are currently loaded; `heroFiltersRef` is the map.
+  // The reducer starts on the initial hero's remembered set (lazy init).
+  const heroFiltersRef = useRef<HeroFiltersMap>(loadHeroFilters());
+  const [filters, dispatch] = useReducer(solverFiltersReducer, initialHeroUid ?? null,
+    (uid: string | null) => filtersForHero(heroFiltersRef.current, uid, INITIAL_FILTERS));
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
-  const heroFiltersRef = useRef<HeroFiltersMap>(loadHeroFilters());
   const prevHeroRef = useRef(selectedUid);
   // Primary SOLVE mode (split button), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
@@ -1054,16 +1056,16 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // hero's set, restore the incoming hero's (or defaults if first time), so
   // returning to a hero brings back "what did I set here again?". Cancel any
   // in-flight solve first so its async `onResult` can't repopulate the table for
-  // the wrong hero. Skips the initial mount (just records the starting hero, so
-  // a pre-populated filter set keyed off `initialHeroUid` isn't clobbered).
-  const heroChangeReset = useRef(true);
+  // the wrong hero. No-op while the hero is unchanged — the initial mount and
+  // StrictMode's re-run (the reducer already holds the initial hero's set).
   useEffect(() => {
-    if (heroChangeReset.current) { heroChangeReset.current = false; prevHeroRef.current = selectedUid; return; }
-    orchestratorRef.current?.cancel();
     const prev = prevHeroRef.current;
+    const snapshot = snapshotOnHeroSwitch(heroFiltersRef.current, prev, selectedUid, filtersRef.current);
+    if (!snapshot) return;
+    orchestratorRef.current?.cancel();
     if (prev) {
-      heroFiltersRef.current = { ...heroFiltersRef.current, [prev]: cloneFilters(filtersRef.current) };
-      persistHeroFilters(heroFiltersRef.current);
+      heroFiltersRef.current = snapshot;
+      persistHeroFilters(snapshot);
     }
     const saved = selectedUid ? heroFiltersRef.current[selectedUid] : undefined;
     dispatch(saved ? { type: "loadPreset", filters: cloneFilters(saved) } : { type: "resetAll" });
