@@ -24,7 +24,8 @@
  */
 import { createReadStream, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { dirname, extname, join, normalize } from "node:path";
+import { dirname, extname, join } from "node:path";
+import { resolveInside } from "./safe-path.js";
 
 /** Public R2 image base (the outerpedia site's asset bucket). */
 const OUTERPEDIA_IMAGE_BASE = process.env.OUTERPEDIA_IMAGE_BASE ?? "https://img.outerpedia.com/images";
@@ -86,8 +87,7 @@ function streamFile(res: ServerResponse, file: string): void {
 /** Resolve a path under `base`, rejecting traversal. Returns null if it would
  *  escape `base`. */
 function safeJoin(base: string, rel: string): string | null {
-  const file = normalize(join(base, rel));
-  return file.startsWith(base) ? file : null;
+  return resolveInside(base, rel);
 }
 
 /** Write bytes atomically (tmp + rename) so a concurrent reader never sees a
