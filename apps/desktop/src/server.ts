@@ -35,6 +35,7 @@ import {
   DERIVED,
   IMG_CACHE_DIR,
   MANUAL_DEVICE,
+  REPO_ROOT,
   REPO_SHA_STATE,
   IS_DEV,
   STAT_LOCKS,
@@ -379,7 +380,7 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   // Manual "Sync game data" — pull the solver artifacts from the outerpedia repo.
   if (url === "/api/data/sync" && req.method === "POST") {
     dlog("server", "manual data sync requested");
-    syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
+    syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true, repoRoot: IS_DEV ? REPO_ROOT : null })
       .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
       .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
     return;

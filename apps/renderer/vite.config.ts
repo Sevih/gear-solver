@@ -13,6 +13,7 @@ import {
 import { installSteamPlugin, launchGame, steamStatus, uninstallSteamPlugin } from "../desktop/src/steam-capture.js";
 import { proxyReco } from "../desktop/src/reco-proxy.js";
 import { syncGameData } from "../desktop/src/data-sync.js";
+import { findOuterpediaCheckout } from "../desktop/src/outerpedia-checkout.js";
 import { serveImg } from "../desktop/src/img-cache.js";
 import { getCurrentRef, resolveLatestSha, setCurrentRef, readShaState } from "../desktop/src/repo-source.js";
 
@@ -37,20 +38,14 @@ const SCRATCH_DIR = join(root, ".cache", "scratch");
 // Outerpedia checkout's staged image tree (`.assets-staging/images` — the same
 // files the site's R2 bucket serves) mounted at /img/ so equipment art, class
 // icons, effect badges and character portraits render without copying
-// gigabytes into gear-solver. `OUTERPEDIA_PATH` env wins. `normalize` keeps
-// the separator consistent with what path.join produces downstream — otherwise
-// the file.startsWith(dir) traversal check fails on Windows when one side
-// has forward slashes and the other backslashes.
+// gigabytes into gear-solver. Checkout lookup (outerpedia-checkout.ts):
+// `OUTERPEDIA_PATH` env → `.env.local` → sibling `../outerpedia`. The path is
+// built with path.join + normalize so the file.startsWith(dir) traversal check
+// downstream compares like separators on Windows.
 function findOuterpediaImages(): string | null {
-  const env = process.env.OUTERPEDIA_PATH;
-  const candidates = [
-    env ? `${env.replace(/\\/g, "/")}/.assets-staging/images` : null,
-    // Both dev machines' checkout locations — first one that exists wins.
-    "C:/Users/Sevih/Documents/Projet perso/outerpedia/.assets-staging/images",
-    "C:/Users/Sevih/Documents/dev/outerpedia-v3/.assets-staging/images",
-  ].filter((p): p is string => Boolean(p));
-  for (const p of candidates) if (existsSync(p)) return normalize(p);
-  return null;
+  const staging = join(".assets-staging", "images");
+  const checkout = findOuterpediaCheckout(root, staging);
+  return checkout ? normalize(join(checkout, staging)) : null;
 }
 const OUTERPEDIA_IMAGES = findOuterpediaImages();
 // Bundled UI sprites (the `ui/inven/*` set absent from R2) — same public/img
@@ -192,7 +187,7 @@ function localData(): Plugin {
         }
         // Manual "Sync game data" — copy/download the solver artifacts.
         if (url === "/api/data/sync" && req.method === "POST") {
-          syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
+          syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true, repoRoot: root })
             .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
             .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
           return;
