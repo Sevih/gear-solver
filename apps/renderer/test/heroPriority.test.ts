@@ -100,6 +100,14 @@ describe("fillUnrankedByOrder", () => {
   it("compacts gaps in the existing ranks", () => {
     expect(fillUnrankedByOrder({ a: 1, b: 5 }, byCp)).toEqual({ a: 1, b: 2, c: 3, d: 4 });
   });
+  it("leaves a seen hero unranked (a cleared rank sticks)", () => {
+    // c was cleared by the user: everyone already seen → nothing to fill.
+    expect(fillUnrankedByOrder({ a: 1, b: 2, d: 3 }, byCp, new Set(byCp))).toBeNull();
+  });
+  it("only ranks heroes new to the roster", () => {
+    // c cleared (seen), d freshly captured (unseen) → only d is appended.
+    expect(fillUnrankedByOrder({ a: 1, b: 2 }, byCp, new Set(["a", "b", "c"]))).toEqual({ a: 1, b: 2, d: 3 });
+  });
   it("ignores stale ranked uids no longer in the roster", () => {
     // 'z' isn't in the roster → dropped; a,b,c,d filled by CP.
     expect(fillUnrankedByOrder({ z: 1 }, byCp)).toEqual({ a: 1, b: 2, c: 3, d: 4 });

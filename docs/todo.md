@@ -6,7 +6,7 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **4 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
+> **3 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
 > L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
 
 ---
@@ -14,10 +14,6 @@
 ## Reste à faire
 
 ### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **Rang héros impossible à vider** — `BuildsScreen.tsx` : l'effet `fillUnrankedByOrder` dépend de
-      `heroPriority`, donc vider un rang le re-attribue aussitôt en dernière position ; la règle « deux unranked ne se
-      volent pas » de `isLowerPriority` est morte. Ne remplir les unranked qu'au changement de roster (nouvelle capture),
-      pas à chaque édition.
 - [ ] 🔴 **URL morte pour la version du jeu** — `game-version.ts` pointe sur `Sevih/outerpediaV2` (repo mort). Pointer
       sur `Sevih/outerpedia` (ou supprimer la feature si l'artefact n'y existe plus).
 - [ ] 🔴 **Mémoire de filtres par héros : héros initial jamais restauré** — `BuilderScreen` effet hero-switch : le garde

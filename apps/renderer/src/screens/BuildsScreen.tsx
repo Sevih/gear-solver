@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
-import { fillUnrankedByOrder, moveRankBefore, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
+import { fillUnrankedByOrder, loadSeenHeroes, moveRankBefore, persistSeenHeroes, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
 import { composeCharStats, expToLevel } from "@gear-solver/core";
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
@@ -1103,13 +1103,15 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
   const equippedCount = useMemo(() => roster.reduce((n, e) => n + (e.count > 0 ? 1 : 0), 0), [roster]);
 
   // Normalize priority against the roster: keep manual ranks (compacted) and
-  // give any UNRANKED hero a default by CP (appended below the ranked ones).
-  // No-op when everyone's already ranked — so it only fires on first use or
-  // after a new capture, and never fights a fully-managed list.
+  // give any hero NEW to the roster a default by CP (appended below the ranked
+  // ones). Heroes already seen are left alone, so clearing a rank sticks — it
+  // only fires on first use or after a capture brings new heroes.
   useEffect(() => {
     if (composedRoster.length === 0) return;
     const byCp = [...composedRoster].sort((a, b) => (b.bp ?? -Infinity) - (a.bp ?? -Infinity)).map((e) => e.char.uid);
-    const next = fillUnrankedByOrder(heroPriority, byCp);
+    const seen = loadSeenHeroes();
+    const next = fillUnrankedByOrder(heroPriority, byCp, seen);
+    if (byCp.some((u) => !seen.has(u))) persistSeenHeroes(new Set([...seen, ...byCp]));
     if (next) onHeroPriorityChange(next);
   }, [composedRoster, heroPriority, onHeroPriorityChange]);
 

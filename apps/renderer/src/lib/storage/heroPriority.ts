@@ -88,13 +88,37 @@ export function reorderRank(map: HeroPriority, uid: string, pos: number | null):
   return fromOrder(order);
 }
 
+/** Heroes the default-rank fill has already handled. A hero in here that is
+ *  unranked was unranked ON PURPOSE (the user cleared it) — the fill must not
+ *  re-rank it, or clearing a rank is impossible and two unranked heroes never
+ *  exist. Only a hero new to the roster (fresh capture) gets a default rank. */
+export const HERO_PRIORITY_SEEN_KEY = "gs.priority.seen";
+
+export function loadSeenHeroes(): Set<string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HERO_PRIORITY_SEEN_KEY) ?? "[]") as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.filter((u): u is string => typeof u === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function persistSeenHeroes(seen: Set<string>): void {
+  try {
+    localStorage.setItem(HERO_PRIORITY_SEEN_KEY, JSON.stringify([...seen]));
+  } catch {
+    // Quota / locked-down context — skip; next roster pass retries.
+  }
+}
+
 /** Normalize against the roster (given in CP-desc order): keep the already-ranked
  *  heroes (in their current rank order, compacted — no gaps) and append every
- *  unranked roster hero after them in CP order, renumbering contiguous 1..N.
- *  Preserves manual ranks while giving newcomers a sensible default below them.
- *  Returns `null` when nothing is unranked (all set → caller skips the write). */
-export function fillUnrankedByOrder(map: HeroPriority, rosterByCp: string[]): HeroPriority | null {
-  const unranked = rosterByCp.filter((u) => map[u] == null);
+ *  unranked roster hero NOT in `seen` after them in CP order, renumbering
+ *  contiguous 1..N. Preserves manual ranks (and manual un-ranks) while giving
+ *  newcomers a sensible default below them. Returns `null` when no unseen hero
+ *  is unranked (caller skips the write). */
+export function fillUnrankedByOrder(map: HeroPriority, rosterByCp: string[], seen: ReadonlySet<string> = new Set()): HeroPriority | null {
+  const unranked = rosterByCp.filter((u) => map[u] == null && !seen.has(u));
   if (unranked.length === 0) return null;
   const ranked = rosterByCp.filter((u) => map[u] != null).sort((a, b) => (map[a] ?? 0) - (map[b] ?? 0));
   return fromOrder([...ranked, ...unranked]);

@@ -37,6 +37,11 @@
   ([HomeScreen.tsx](../apps/renderer/src/screens/HomeScreen.tsx)) renvoyait le nom du set comme `id` alors
   que l'Inventory filtre sur `armorSetId`. `sets` et `allSets` portent maintenant l'id numérique du catalogue,
   y compris dans le repli sans données de jeu (id relevé sur les pièces possédées).
+- ✅ 🔴 **Rang héros impossible à vider** — l'effet de `BuildsScreen` re-remplissait tout héros sans rang à
+  chaque édition. `fillUnrankedByOrder` ([heroPriority.ts](../apps/renderer/src/lib/storage/heroPriority.ts))
+  prend maintenant l'ensemble des héros déjà vus (persisté sous `gs.priority.seen`) et ne classe que les
+  nouveaux venus du roster : un rang vidé reste vide, et la règle « deux unranked ne se volent pas » de
+  `isLowerPriority` redevient atteignable. Testé dans [heroPriority.test.ts](../apps/renderer/test/heroPriority.test.ts).
 
 ### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
 - ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a
