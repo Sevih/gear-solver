@@ -285,11 +285,12 @@ async function captureScriptArgs(): Promise<string[]> {
   ];
 }
 
-/** DNS-rebinding / CSRF guard for the mutating endpoints. A page served from
- *  another origin but pointed at 127.0.0.1 still carries its own hostname in
- *  the `Host` (and `Origin`) header, so requiring a loopback host blocks it
- *  from POSTing to `/api/capture/*` or `/api/stat-locks`. Same-origin
- *  requests from our own renderer always pass. */
+/** DNS-rebinding / CSRF guard for the mutating endpoints and the account
+ *  reads. A page served from another origin but pointed at 127.0.0.1 still
+ *  carries its own hostname in the `Host` (and `Origin`) header, so requiring
+ *  a loopback host blocks it from POSTing to `/api/capture/*` or reading
+ *  `/captured/user_item.json`. Same-origin requests from our own renderer
+ *  always pass. */
 function isLocalRequest(req: IncomingMessage): boolean {
   const host = (req.headers.host ?? "").split(":")[0];
   if (host !== "127.0.0.1" && host !== "localhost") return false;
@@ -345,9 +346,12 @@ function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: numbe
 export function handle(req: IncomingMessage, res: ServerResponse): void {
   const url = (req.url ?? "/").split("?")[0]!;
 
-  // Reject cross-origin mutations up front (every state-changing endpoint is
-  // a POST). GET asset/data routes stay open — they expose nothing sensitive.
-  if (req.method === "POST" && !isLocalRequest(req)) {
+  // Reject non-local Hosts up front on every mutation (all state-changing
+  // endpoints are POSTs) AND on every read of account data: `/captured/*` is
+  // the player's snapshot and `/api/*` GETs expose capture/Steam/device state —
+  // a DNS-rebinding page could otherwise read them. Static renderer files,
+  // `/gamedata/*` and `/img/*` are public and stay open.
+  if ((req.method === "POST" || url.startsWith("/captured/") || url.startsWith("/api/")) && !isLocalRequest(req)) {
     res.statusCode = 403;
     res.end("forbidden: non-local origin");
     return;
