@@ -21,7 +21,7 @@ import { disarmIfArmed, startServer } from "./server.js";
 import { setupAutoUpdate } from "./updater.js";
 import { dlog, dwarn } from "./log.js";
 import { syncGameData } from "./data-sync.js";
-import { BUNDLED_DERIVED, CACHE_ROOT, DERIVED, IMG_CACHE_DIR, REPO_SHA_STATE } from "./paths.js";
+import { BUNDLED_DERIVED, CACHE_ROOT, DERIVED, IMG_CACHE_DIR, REPO_ROOT, REPO_SHA_STATE } from "./paths.js";
 import { getCurrentRef, readShaState, setCurrentRef } from "./repo-source.js";
 import { prefetchImages } from "./img-cache.js";
 
@@ -123,7 +123,7 @@ if (!app.requestSingleInstanceLock()) {
     setCurrentRef(readShaState(REPO_SHA_STATE)?.sha ?? "main");
     // Refresh game data: checkout copy (dev) or SHA-gated CDN download (prod).
     // Awaited before the window so the renderer loads fresh derived; never fatal.
-    const r = await syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: false })
+    const r = await syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: false, repoRoot: IS_DEV ? REPO_ROOT : null })
       .catch((err: unknown) => { dwarn("server", "data sync failed:", err instanceof Error ? err.message : String(err)); return null; });
     if (r) dlog("server", `data sync: ${r.status} — ${r.message}`);
     // Re-pin to the SHA we just synced so Settings → Data shows the snapshot.
