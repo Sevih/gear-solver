@@ -146,3 +146,36 @@ export function parseFiles(
 ): Inventory {
   return parseInventory(userItem, userChar, game ?? undefined);
 }
+
+/** A user-picked file — the slice of `File` the manual import reads. */
+export interface PickedFile {
+  name: string;
+  text(): Promise<string>;
+}
+
+export interface ManualFiles {
+  userItem: RawUserItem | null;
+  userChar: RawUserCharacter | undefined;
+  /** First unreadable / non-JSON file, as a user-facing message. Null = all read. */
+  error: string | null;
+}
+
+/** Manual fallback: sort the picked captures into user_item (`ItemList`) and
+ *  user_character (`CharList`). Never throws — a broken file comes back as
+ *  `error` so the caller can say so instead of leaking a rejected promise. */
+export async function readManualFiles(files: Iterable<PickedFile>): Promise<ManualFiles> {
+  let userItem: RawUserItem | null = null;
+  let userChar: RawUserCharacter | undefined;
+  for (const f of files) {
+    let j: unknown;
+    try {
+      j = JSON.parse(await f.text());
+    } catch (err) {
+      return { userItem: null, userChar: undefined, error: `${f.name}: ${err instanceof Error ? err.message : String(err)}` };
+    }
+    if (!j || typeof j !== "object") continue;
+    if ("ItemList" in j) userItem = j as RawUserItem;
+    else if ("CharList" in j) userChar = j as RawUserCharacter;
+  }
+  return { userItem, userChar, error: null };
+}
