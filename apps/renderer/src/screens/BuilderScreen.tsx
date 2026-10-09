@@ -4505,9 +4505,9 @@ function BottomGearBand({
         // gems in SOLVE CP) are reachable, not silently mismatched against
         // the piece's currently-socketed gems.
         const recommendedGems = slot === "talisman"
-          ? build?.gemAllocation.talisman
+          ? build?.gemAllocation?.talisman
           : slot === "exclusive"
-            ? build?.gemAllocation.ee
+            ? build?.gemAllocation?.ee
             : undefined;
         // Resolve where the piece currently lives: on this hero (current),
         // on someone else (would be stolen), or unequipped (free).
