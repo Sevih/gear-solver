@@ -14,6 +14,9 @@
  *   3. persistent disk cache (steady state after first fetch)
  *   4. R2 fetch + cache to disk
  *   5. `.png`/`.jpg` miss → retry as `.webp` (webp-preferred source)
+ *   6. a bucket 404 is remembered for MISS_TTL_MS (negative cache) and
+ *      answered with a short `Cache-Control`, so an image absent from R2 is
+ *      not refetched on every render
  *
  * Namespace alias: the renderer requests unique-option / set icons under
  * `ui/effect/<TI_Icon_*>` (the V2 layout); the R2 bucket stores them under
@@ -47,6 +50,32 @@ function mime(file: string): string {
 const SAFE_PATH = /^[\w./%-]*$/;
 
 let tmpCounter = 0;
+
+/** How long a bucket 404 is remembered before the image is asked for again —
+ *  also the `max-age` of the 404 itself, so the renderer doesn't re-request it
+ *  on every render either. Network failures (502) are never remembered. */
+const MISS_TTL_MS = 10 * 60 * 1000;
+/** canonical rel → epoch ms until which it is a known miss. */
+const misses = new Map<string, number>();
+
+/** Forget every remembered miss (tests). */
+export function resetImgMissCache(): void {
+  misses.clear();
+}
+
+function knownMiss(rel: string): boolean {
+  const until = misses.get(rel);
+  if (until == null) return false;
+  if (until > Date.now()) return true;
+  misses.delete(rel);
+  return false;
+}
+
+function sendMiss(res: ServerResponse): void {
+  res.statusCode = 404;
+  res.setHeader("Cache-Control", `public, max-age=${MISS_TTL_MS / 1000}`);
+  res.end("image unavailable");
+}
 
 export interface ImgCacheOptions {
   /** Persistent cache root. Images are written under `<cacheDir>/images/...`. */
@@ -180,7 +209,8 @@ export async function serveImg(_req: IncomingMessage, res: ServerResponse, urlPa
   const cached = safeJoin(cacheImagesDir, rel);
   if (cached && existsSync(cached) && statSync(cached).isFile()) { streamFile(res, cached); return true; }
 
-  // 4. R2 fetch (+ cache)
+  // 4. R2 fetch (+ cache) — unless the bucket 404'd this path recently
+  if (knownMiss(rel)) { sendMiss(res); return true; }
   const got = await fetchR2(rel);
   if (got.status === 200 && got.buf) {
     serveAndCache(res, cacheImagesDir, rel, got.buf, mime(rel));
@@ -189,9 +219,12 @@ export async function serveImg(_req: IncomingMessage, res: ServerResponse, urlPa
 
   // 5. webp fallback for png/jpg misses (the bucket prefers webp)
   const ext = extname(rel).toLowerCase();
+  // A miss is only remembered when every source said 404 (not a timeout).
+  let definitiveMiss = got.status === 404;
   if (got.status === 404 && (ext === ".png" || ext === ".jpg" || ext === ".jpeg")) {
     const webpRel = rel.slice(0, -ext.length) + ".webp";
     const webp = await fetchR2(webpRel);
+    definitiveMiss = webp.status === 404;
     if (webp.status === 200 && webp.buf) {
       // Serve the webp bytes under the originally-requested URL; cache them
       // under the webp name (so a later direct .webp request also hits).
@@ -200,6 +233,11 @@ export async function serveImg(_req: IncomingMessage, res: ServerResponse, urlPa
     }
   }
 
+  if (definitiveMiss) {
+    misses.set(rel, Date.now() + MISS_TTL_MS);
+    sendMiss(res);
+    return true;
+  }
   res.statusCode = got.status === 0 ? 502 : 404;
   res.end("image unavailable");
   return true;
