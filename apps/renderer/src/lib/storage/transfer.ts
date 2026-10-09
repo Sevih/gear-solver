@@ -89,27 +89,31 @@ function assertBundle(value: unknown): asserts value is BackupBundle {
   if (!b.filterPresets || typeof b.filterPresets !== "object") throw new Error("Missing filterPresets.");
 }
 
+/** Screens that hold the maps in memory (the Builder stays mounted, hidden,
+ *  with them in `useState`) and re-persist them on their next edit. They must
+ *  reload after an import, or that next write puts back the pre-import blob. */
+const importListeners = new Set<() => void>();
+
+/** Run `listener` after each import has written localStorage. Returns the
+ *  unsubscribe function (a ready-made `useEffect` cleanup). */
+export function onBackupImported(listener: () => void): () => void {
+  importListeners.add(listener);
+  return () => { importListeners.delete(listener); };
+}
+
 /**
- * Apply a parsed backup bundle to localStorage.
- *  - "merge": keep current entries, add any whose id isn't already present.
- *  - "replace": overwrite both blobs wholesale.
- * Writes the raw blobs directly (presets stay in their serialized array form,
- * so loadFilterPresets() deserializes them correctly on the next Builder mount).
- * Returns how many entries were added (merge) or written (replace).
+ * Merge a parsed backup bundle into localStorage: keep current entries, add
+ * any whose id isn't already present. Writes the raw blobs directly (presets
+ * stay in their serialized array form, so loadFilterPresets() deserializes
+ * them correctly), then notifies the `onBackupImported` listeners.
+ * Returns how many entries were added.
  */
-export function applyBackup(value: unknown, mode: "merge" | "replace"): ImportResult {
+export function applyBackup(value: unknown): ImportResult {
   assertBundle(value);
-  const count = (m: ListMap) => Object.values(m).reduce((n, l) => n + (Array.isArray(l) ? l.length : 0), 0);
-
-  if (mode === "replace") {
-    localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(value.savedBuilds));
-    localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(value.filterPresets));
-    return { builds: count(value.savedBuilds), presets: count(value.filterPresets) };
-  }
-
   const builds = mergeListMap(readRaw(SAVED_BUILDS_KEY), value.savedBuilds);
   const presets = mergeListMap(readRaw(FILTER_PRESETS_KEY), value.filterPresets);
   localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(builds.merged));
   localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets.merged));
+  for (const listener of importListeners) listener();
   return { builds: builds.added, presets: presets.added };
 }
