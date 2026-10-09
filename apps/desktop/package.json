@@ -10,7 +10,8 @@
     "build": "tsc -p .",
     "start": "electron .",
     "dev": "tsc -p . && electron .",
-    "typecheck": "tsc -p . --noEmit",
+    "typecheck": "tsc -p . --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
     "fetch-binaries": "node scripts/fetch-binaries.mjs",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
@@ -23,7 +24,8 @@
     "@types/node": "^20.16.0",
     "electron": "^42.4.1",
     "electron-builder": "^25.1.8",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.8"
   },
   "build": {
     "appId": "com.outerpedia.gear-solver",

@@ -8,24 +8,16 @@
  *  - `/api/steam/{status,install,uninstall,launch}` → Steam source (BepInEx plugin)
  *  - `/api/stat-locks` GET/POST → stat regression locks
  *
- * Mirrors the Vite-middleware behavior (apps/renderer/vite.config.ts) so the
- * renderer code is identical across `npm run desktop:dev` (Vite) and a
- * packaged build (this server). ETag-based revalidation on data files keeps
- * the renderer fast after the first hit; images use a 1-day max-age.
+ * Everything but the renderer's own files is the shared API handler
+ * (api-handler.ts) — the Vite dev middleware (apps/renderer/vite.config.ts)
+ * mounts the same handler, so `npm run desktop:dev` and a packaged build
+ * behave identically. ETag-based revalidation on data files keeps the
+ * renderer fast after the first hit; images use a 1-day max-age.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { spawn, spawnSync } from "node:child_process";
-import {
-  createReadStream,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, extname, join, normalize } from "node:path";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, statSync } from "node:fs";
+import { join, normalize } from "node:path";
 import {
   BUNDLED_ADB,
   BUNDLED_IMG,
@@ -43,40 +35,11 @@ import {
   STEAM_PLUGIN_DLL,
   findOuterpediaImagesDev,
 } from "./paths.js";
-import {
-  detectEmulators, pickEmulator, pickPort, preflight,
-  resolveCaptureTarget, targetScriptArgs, loadManualDevice, saveManualDevice,
-  type ManualDevice,
-} from "./emulator-detect.js";
+import { resolveCaptureTarget, targetScriptArgs, loadManualDevice } from "./emulator-detect.js";
+import { createApiHandler, serveStatic } from "./api-handler.js";
 import { dlog, dwarn } from "./log.js";
 import { ensureMitmdump, mitmdumpPath } from "./mitm-provision.js";
-import { installSteamPlugin, launchGame, steamStatus, uninstallSteamPlugin } from "./steam-capture.js";
-import { proxyReco } from "./reco-proxy.js";
-import { syncGameData } from "./data-sync.js";
-import { serveImg } from "./img-cache.js";
 import { getStatus as getUpdateStatus, triggerCheck as triggerUpdateCheck, installUpdate } from "./updater.js";
-
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".mjs": "application/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json",
-  ".webp": "image/webp",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".svg": "image/svg+xml",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ico": "image/x-icon",
-  ".map": "application/json",
-  ".txt": "text/plain; charset=utf-8",
-};
-
-function mime(file: string): string {
-  return MIME[extname(file).toLowerCase()] ?? "application/octet-stream";
-}
 
 /**
  * Content-Security-Policy for the renderer document. The prod build ships only
@@ -105,160 +68,6 @@ const CSP = [
   "form-action 'none'",
 ].join("; ");
 
-/** Stream a static file with an ETag built from size+mtime; honor If-None-Match
- *  for cheap 304s. */
-function serveStatic(req: IncomingMessage, res: ServerResponse, file: string, cacheMode: "etag" | "long"): void {
-  if (!existsSync(file)) { res.statusCode = 404; res.end("not found"); return; }
-  const contentType = mime(file);
-  res.setHeader("Content-Type", contentType);
-  // Lock down the renderer document (the only thing CSP governs); set it here
-  // so both the root and the SPA-fallback index.html serves are covered.
-  if (contentType.startsWith("text/html")) res.setHeader("Content-Security-Policy", CSP);
-  if (cacheMode === "long") {
-    res.setHeader("Cache-Control", "public, max-age=86400");
-  } else {
-    const st = statSync(file);
-    const etag = `W/"${st.size}-${Math.floor(st.mtimeMs)}"`;
-    if (req.headers["if-none-match"] === etag) {
-      res.statusCode = 304;
-      res.end();
-      return;
-    }
-    res.setHeader("ETag", etag);
-    res.setHeader("Cache-Control", "no-cache");
-  }
-  // Guard the stream: an EBUSY / file-vanished mid-read (common on Windows
-  // when another process touches the file) would otherwise emit an
-  // unhandled 'error' on the stream and crash the whole server process.
-  const stream = createReadStream(file);
-  stream.on("error", (err) => {
-    // Surface the swallowed read failure (EBUSY / vanished file) — without
-    // this the client just gets a bare 500 and the cause is invisible.
-    dwarn("server", `stream error on ${file}:`, (err as Error).message);
-    if (!res.headersSent) res.statusCode = 500;
-    res.end();
-  });
-  stream.pipe(res);
-}
-
-/** Serve `/<prefix>/...` from a base dir, with path-traversal guard. */
-function tryMount(req: IncomingMessage, res: ServerResponse, url: string, prefix: string, dir: string, cacheMode: "etag" | "long"): boolean {
-  if (!url.startsWith(prefix)) return false;
-  const rel = decodeURIComponent(url.slice(prefix.length));
-  const file = normalize(join(dir, rel));
-  if (!file.startsWith(dir)) { res.statusCode = 403; res.end("forbidden"); return true; }
-  serveStatic(req, res, file, cacheMode);
-  return true;
-}
-
-/** Flip a response into unbuffered plain-text streaming mode (the capture
- *  console protocol). Idempotent — the mitmdump provisioning step may have
- *  already streamed progress lines through the same response before streamPs
- *  takes over. */
-function beginStream(res: ServerResponse): void {
-  if (res.headersSent) return;
-  res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders?.();
-}
-
-/** Spawn a PowerShell script and stream its stdout/stderr verbatim. The
- *  client (apps/renderer/src/capture.ts) consumes lines and looks for the
- *  `__EXIT__:<code>` sentinel that we emit when the child exits. We listen
- *  on 'exit' rather than 'close' because capture.ps1 grandchildren mitmdump
- *  via Start-Process — inherited pipe handles would otherwise keep 'close'
- *  pending until mitmdump itself dies, deadlocking the UI. */
-function streamPs(res: ServerResponse, script: string, extraArgs: string[] = []): void {
-  if (!existsSync(script)) {
-    res.statusCode = 404;
-    res.end(`script not found: ${script}\n__EXIT__:127\n`);
-    return;
-  }
-  beginStream(res);
-
-  const child = spawn(
-    "powershell.exe",
-    ["-ExecutionPolicy", "Bypass", "-NoLogo", "-NonInteractive", "-File", script, ...extraArgs],
-    { cwd: CAPTURE_DIR, windowsHide: true },
-  );
-  dlog("capture", `spawn ${script} pid=${child.pid ?? "?"}`, extraArgs);
-  child.stdout.setEncoding("utf-8");
-  child.stderr.setEncoding("utf-8");
-  child.stdout.on("data", (c: string) => res.write(c));
-  child.stderr.on("data", (c: string) => res.write(c));
-  child.on("error", (err) => {
-    dwarn("capture", `spawn error on ${script}:`, err.message);
-    res.write(`\n[spawn error] ${err.message}\n__EXIT__:1\n`); res.end();
-  });
-
-  let ended = false;
-  child.on("exit", (code) => {
-    if (ended) return;
-    ended = true;
-    dlog("capture", `${script} exited code=${code ?? 1}`);
-    res.write(`\n__EXIT__:${code ?? 1}\n`);
-    res.end();
-  });
-
-  // On an abrupt client disconnect while the script is still running, kill the
-  // whole process TREE — `child.kill()` only signals powershell.exe, leaving
-  // the mitmdump it launched via Start-Process orphaned. `taskkill /T` walks
-  // the PID tree. (In the normal armed flow the child has already exited by
-  // the time 'close' fires, so this is a no-op and mitmdump survives as
-  // intended.) Falls back to child.kill() if taskkill is unavailable.
-  res.on("close", () => {
-    if (child.killed || child.exitCode != null) return;
-    if (child.pid == null) { child.kill(); return; }
-    dlog("capture", `client disconnect mid-run — killing process tree pid=${child.pid}`);
-    try {
-      spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
-    } catch (err) {
-      dwarn("capture", "taskkill /T failed, falling back to child.kill():", (err as Error).message);
-      child.kill();
-    }
-  });
-}
-
-/** True iff the capture pipeline is genuinely armed: the `.mitm.pid` file
- *  exists AND the recorded mitmdump process is still alive. If mitmdump
- *  crashed outside a clean disarm the pid file lingers — left unchecked,
- *  `armed` would stick at true forever (and `/wipe` would refuse with 409).
- *  A dead pid is treated as not-armed and the stale file is cleaned up.
- *  (`.mitm.pid` holds the bare process id, written by capture.ps1 via
- *  `$proc.Id | Out-File`.) */
-function isArmed(): boolean {
-  const pidFile = join(CAPTURE_OUT, ".mitm.pid");
-  if (!existsSync(pidFile)) return false;
-  let pid = NaN;
-  try { pid = Number.parseInt(readFileSync(pidFile, "utf-8").trim(), 10); } catch { return true; }
-  if (!Number.isFinite(pid) || pid <= 0) return true; // unparseable — assume armed (conservative)
-  try {
-    process.kill(pid, 0); // signal 0 = liveness probe, never actually signals
-    return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "EPERM") return true; // alive, just not ours
-    // ESRCH → process gone. Drop the stale pid file so we don't wedge here.
-    dlog("capture", `stale .mitm.pid (pid ${pid} gone) — cleaning up`);
-    try { rmSync(pidFile, { force: true }); } catch { /* best-effort */ }
-    return false;
-  }
-}
-
-/** GET /api/capture/status — mirrored from the Vite middleware. Used by the
- *  renderer to render the armed/captured chip in the header. */
-function captureStatus(res: ServerResponse): void {
-  const itemPath = join(CAPTURE_OUT, "user_item.json");
-  const sentinel = join(CAPTURE_OUT, ".captured");
-  const userItem = existsSync(itemPath) ? statSync(itemPath) : null;
-  res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify({
-    armed: isArmed(),
-    captured: existsSync(sentinel),
-    userItemMtime: userItem ? userItem.mtimeMs : null,
-  }));
-}
-
 /** Resolve the args we hand capture.ps1 / disarm.ps1 so the bundled
  *  binaries are picked up in prod. In dev we pass nothing — the scripts
  *  fall back to their built-in defaults pointing at the LDPlayer-installed
@@ -285,376 +94,46 @@ async function captureScriptArgs(): Promise<string[]> {
   ];
 }
 
-/** DNS-rebinding / CSRF guard for the mutating endpoints. A page served from
- *  another origin but pointed at 127.0.0.1 still carries its own hostname in
- *  the `Host` (and `Origin`) header, so requiring a loopback host blocks it
- *  from POSTing to `/api/capture/*` or `/api/stat-locks`. Same-origin
- *  requests from our own renderer always pass. */
-function isLocalRequest(req: IncomingMessage): boolean {
-  const host = (req.headers.host ?? "").split(":")[0];
-  if (host !== "127.0.0.1" && host !== "localhost") return false;
-  const origin = req.headers.origin;
-  if (origin) {
-    try {
-      const h = new URL(origin).hostname;
-      if (h !== "127.0.0.1" && h !== "localhost") return false;
-    } catch { return false; }
-  }
-  return true;
-}
+/** The shared API (api-handler.ts) wired to the packaged paths, the bundled
+ *  binaries, mitmdump provisioning and electron-updater. */
+const api = createApiHandler({
+  captureDir: CAPTURE_DIR,
+  captureOut: CAPTURE_OUT,
+  derivedDir: DERIVED,
+  repoShaState: REPO_SHA_STATE,
+  statLocks: STAT_LOCKS,
+  manualDevice: MANUAL_DEVICE,
+  steamPluginDll: STEAM_PLUGIN_DLL,
+  scratchDir: SCRATCH_DIR,
+  bundledAdb: BUNDLED_ADB,
+  img: {
+    cacheDir: IMG_CACHE_DIR,
+    bundledDir: BUNDLED_IMG,
+    localCheckoutDir: IS_DEV ? findOuterpediaImagesDev() : null,
+  },
+  captureScriptArgs,
+  prepareCapture: (log) => ensureMitmdump(log),
+  update: { status: getUpdateStatus, check: triggerUpdateCheck, install: installUpdate },
+});
 
-/** Run an async task while streaming its progress lines through the capture
- *  console protocol (same `__EXIT__:<code>` sentinel as streamPs, so the
- *  renderer's streamCapture() consumes both). */
-function streamTask(res: ServerResponse, task: (log: (line: string) => void) => Promise<void>): void {
-  beginStream(res);
-  const log = (line: string) => res.write(line + "\n");
-  task(log).then(
-    () => { res.write("\n__EXIT__:0\n"); res.end(); },
-    (err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      dwarn("capture", "task failed:", msg);
-      res.write(`x  ${msg}\n__EXIT__:1\n`); res.end();
-    },
-  );
-}
-
-/** Buffer a request body (capped) and hand the caller the parsed JSON. On
- *  overflow / parse error it answers 413/400 itself and never calls `ok`. */
-function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: number, ok: (body: unknown) => void): void {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  let aborted = false;
-  req.on("data", (c: Buffer) => {
-    if (aborted) return;
-    size += c.length;
-    if (size > maxBytes) { aborted = true; res.statusCode = 413; res.end("payload too large"); req.destroy(); return; }
-    chunks.push(c);
-  });
-  req.on("end", () => {
-    if (aborted) return;
-    try {
-      ok(JSON.parse(Buffer.concat(chunks).toString("utf-8")));
-    } catch (err) {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: (err as Error).message }));
-    }
-  });
-}
-
-function handle(req: IncomingMessage, res: ServerResponse): void {
+export function handle(req: IncomingMessage, res: ServerResponse): void {
+  if (api(req, res)) return;
   const url = (req.url ?? "/").split("?")[0]!;
-
-  // Reject cross-origin mutations up front (every state-changing endpoint is
-  // a POST). GET asset/data routes stay open — they expose nothing sensitive.
-  if (req.method === "POST" && !isLocalRequest(req)) {
-    res.statusCode = 403;
-    res.end("forbidden: non-local origin");
-    return;
-  }
-
-  // --- capture pipeline endpoints ---
-  // captureScriptArgs is async (emulator detection probes TCP ports), so we
-  // resolve before spawning. On detection failure (very unlikely — the probe
-  // doesn't throw) we surface a synthetic error stream that the renderer
-  // already knows how to display.
-  if (url === "/api/capture/run" && req.method === "POST") {
-    // First run on a machine: pull mitmdump from downloads.mitmproxy.org into
-    // userData (checksum-verified) before arming — progress lines share the
-    // capture console. See mitm-provision.ts for why it isn't bundled.
-    ensureMitmdump((line) => { beginStream(res); res.write(`${line}\n`); })
-      .then(() => captureScriptArgs())
-      .then((args) => streamPs(res, join(CAPTURE_DIR, "capture.ps1"), args))
-      .catch((err: Error) => { beginStream(res); res.write(`\n[setup error] ${err.message}\n__EXIT__:1\n`); res.end(); });
-    return;
-  }
-  if (url === "/api/capture/disarm" && req.method === "POST") {
-    captureScriptArgs().then((args) => streamPs(res, join(CAPTURE_DIR, "disarm.ps1"), args))
-      .catch((err: Error) => { res.write(`\n[detect error] ${err.message}\n__EXIT__:1\n`); res.end(); });
-    return;
-  }
-  if (url === "/api/capture/status" && req.method === "GET") {
-    return captureStatus(res);
-  }
-  // Manual "Sync game data" — pull the solver artifacts from the outerpedia repo.
-  if (url === "/api/data/sync" && req.method === "POST") {
-    dlog("server", "manual data sync requested");
-    syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
-      .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
-      .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
-    return;
-  }
-  // --- auto-update — drives the Home tab's inline update card. status is
-  // polled; check/install are user actions (Check again / Retry / Install). ---
-  if (url === "/api/update/status" && req.method === "GET") {
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(getUpdateStatus()));
-    return;
-  }
-  if (url === "/api/update/check" && req.method === "POST") {
-    triggerUpdateCheck();
-    res.statusCode = 204;
-    res.end();
-    return;
-  }
-  if (url === "/api/update/install" && req.method === "POST") {
-    // 409 when nothing is downloaded yet (button shouldn't be reachable then,
-    // but guard against a stale client racing the state).
-    res.statusCode = installUpdate() ? 204 : 409;
-    res.end();
-    return;
-  }
-  // Build-reco proxy → outerpedia API (Get Preset). GET only, numeric id.
-  if (url.startsWith("/api/reco/") && req.method === "GET") {
-    const id = url.slice("/api/reco/".length);
-    dlog("server", `proxying reco ${id}`);
-    void proxyReco(id, res);
-    return;
-  }
-  // Settings → Data → "Wipe captured data". Deletes the user_*.json /
-  // item_customInfo.json snapshots so the renderer reverts to its empty
-  // state. We refuse while the pipeline is still armed — otherwise the
-  // next /user/* fetch would silently re-write what we just nuked.
-  if (url === "/api/capture/wipe" && req.method === "POST") {
-    res.setHeader("Content-Type", "application/json");
-    if (isArmed()) {
-      dlog("capture", "wipe refused — pipeline still armed (409)");
-      res.statusCode = 409;
-      res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
-      return;
-    }
-    let removed = 0;
-    try {
-      for (const f of readdirSync(CAPTURE_OUT)) {
-        if (f.endsWith(".json") || f === ".captured" || f === "seen-paths.log" || f.endsWith(".flows")) {
-          rmSync(join(CAPTURE_OUT, f), { force: true });
-          removed++;
-        }
-      }
-    } catch (err) {
-      dwarn("capture", "wipe failed:", (err as Error).message);
-      res.statusCode = 500;
-      res.end(JSON.stringify({ error: (err as Error).message }));
-      return;
-    }
-    dlog("capture", `wiped ${removed} captured file(s)`);
-    res.end(JSON.stringify({ removed }));
-    return;
-  }
-  // --- Steam source: BepInEx plugin in the Steam client (steam-capture.ts) ---
-  if (url === "/api/steam/status" && req.method === "GET") {
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(steamStatus(CAPTURE_OUT, STEAM_PLUGIN_DLL)));
-    return;
-  }
-  if (url === "/api/steam/install" && req.method === "POST") {
-    streamTask(res, async (log) => {
-      await installSteamPlugin({ captureOut: CAPTURE_OUT, bundledDll: STEAM_PLUGIN_DLL, scratchDir: SCRATCH_DIR, log });
-    });
-    return;
-  }
-  if (url === "/api/steam/uninstall" && req.method === "POST") {
-    readJsonBody(req, res, 10_000, (body) => {
-      const removeBepinex = Boolean((body as { removeBepinex?: unknown })?.removeBepinex);
-      try {
-        const lines: string[] = [];
-        const status = uninstallSteamPlugin({ captureOut: CAPTURE_OUT, bundledDll: STEAM_PLUGIN_DLL, log: (l) => lines.push(l), removeBepinex });
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ status, lines }));
-      } catch (err) {
-        res.statusCode = 409;
-        res.end(JSON.stringify({ error: (err as Error).message }));
-      }
-    });
-    return;
-  }
-  if (url === "/api/steam/launch" && req.method === "POST") {
-    launchGame();
-    res.statusCode = 204;
-    res.end();
-    return;
-  }
-
-  // --- emulator detection — surfaced in the header so the user knows which
-  // instance / port we'll target before they click Arm capture. ---
-  if (url === "/api/emulators" && req.method === "GET") {
-    detectEmulators().then((list) => {
-      const chosen = pickEmulator(list);
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ detected: list, chosen, chosenPort: chosen ? pickPort(chosen) : null }));
-    }).catch((err: Error) => {
-      res.statusCode = 500;
-      res.end(`detect failed: ${err.message}`);
-    });
-    return;
-  }
-  // --- onboarding preflight — sequence of checks (emulator installed,
-  // running, ADB connecting, root toggle ON) driven by the wizard UI. ---
-  if (url === "/api/preflight" && req.method === "GET") {
-    preflight(loadManualDevice(MANUAL_DEVICE), BUNDLED_ADB).then((result) => {
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(result));
-    }).catch((err: Error) => {
-      res.statusCode = 500;
-      res.end(`preflight failed: ${err.message}`);
-    });
-    return;
-  }
-  // --- manual capture-device override (Settings → Setup → Manual device).
-  // GET returns the persisted {adbPath, device} or null; POST persists it
-  // ({clear:true} wipes it). Lets any rooted emulator we lack a brand profile
-  // for be driven by hand. ---
-  if (url === "/api/capture/manual-device" && req.method === "GET") {
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(loadManualDevice(MANUAL_DEVICE)));
-    return;
-  }
-  if (url === "/api/capture/manual-device" && req.method === "POST") {
-    readJsonBody(req, res, 100_000, (body) => {
-      const b = body as { adbPath?: unknown; device?: unknown; clear?: unknown };
-      if (b.clear === true) { saveManualDevice(MANUAL_DEVICE, null); res.statusCode = 204; res.end(); return; }
-      const adbPath = typeof b.adbPath === "string" ? b.adbPath.trim() : "";
-      const device = typeof b.device === "string" ? b.device.trim() : "";
-      if (!adbPath || !device) { res.statusCode = 400; res.end(JSON.stringify({ error: "adbPath and device are required" })); return; }
-      const md: ManualDevice = { adbPath, device };
-      saveManualDevice(MANUAL_DEVICE, md);
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(md));
-    });
-    return;
-  }
-
-  // --- stat-locks read/write ---
-  if (url === "/api/stat-locks" && req.method === "GET") {
-    res.setHeader("Content-Type", "application/json");
-    res.end(existsSync(STAT_LOCKS) ? readFileSync(STAT_LOCKS, "utf-8") : "{}");
-    return;
-  }
-  if (url === "/api/stat-locks" && req.method === "POST") {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let aborted = false;
-    const MAX_BODY = 1_000_000; // ~1 MB — stat-locks snapshots are a few KB
-    req.on("data", (c: Buffer) => {
-      if (aborted) return;
-      size += c.length;
-      if (size > MAX_BODY) {
-        aborted = true;
-        res.statusCode = 413;
-        res.end("payload too large");
-        req.destroy();
-        return;
-      }
-      chunks.push(c);
-    });
-    req.on("end", () => {
-      if (aborted) return;
-      try {
-        const body = Buffer.concat(chunks).toString("utf-8");
-        JSON.parse(body); // validate
-        mkdirSync(dirname(STAT_LOCKS), { recursive: true });
-        writeFileSync(STAT_LOCKS, body, "utf-8");
-        res.statusCode = 204;
-        res.end();
-      } catch (err) {
-        res.statusCode = 400;
-        res.end(`invalid body: ${(err as Error).message}`);
-      }
-    });
-    return;
-  }
-
-  // --- captured user_item write-back (equip / unequip edits) ---
-  // The renderer applies the core equipItem/unequipItem helpers against the
-  // loaded game data and POSTs the FULL rewritten user_item.json here; the
-  // server just validates + writes it (it has no game data to resolve slots).
-  // Refused while armed so the next /user/item capture can't clobber the edit
-  // (mirrors /api/capture/wipe).
-  if (url === "/api/captured/user-item" && req.method === "POST") {
-    res.setHeader("Content-Type", "application/json");
-    if (isArmed()) {
-      res.statusCode = 409;
-      res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
-      return;
-    }
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let aborted = false;
-    const MAX_BODY = 32_000_000; // ~32 MB — a large account's user_item.json
-    req.on("data", (c: Buffer) => {
-      if (aborted) return;
-      size += c.length;
-      if (size > MAX_BODY) {
-        aborted = true;
-        res.statusCode = 413;
-        res.end(JSON.stringify({ error: "payload too large" }));
-        req.destroy();
-        return;
-      }
-      chunks.push(c);
-    });
-    req.on("end", () => {
-      if (aborted) return;
-      try {
-        const body = Buffer.concat(chunks).toString("utf-8");
-        const parsed = JSON.parse(body) as { ItemList?: unknown };
-        if (!Array.isArray(parsed.ItemList)) throw new Error("missing ItemList[]");
-        writeFileSync(join(CAPTURE_OUT, "user_item.json"), body, "utf-8");
-        dlog("capture", `user_item.json rewritten (${parsed.ItemList.length} items)`);
-        res.statusCode = 204;
-        res.end();
-      } catch (err) {
-        res.statusCode = 400;
-        res.end(JSON.stringify({ error: (err as Error).message }));
-      }
-    });
-    return;
-  }
-
-  // --- /img/* — bundled sprites → disk cache → R2 bucket, shared with the
-  // Vite dev middleware. See img-cache.ts for the full cascade + the
-  // ui/effect→equipment namespace alias. ---
-  if (url.startsWith("/img/")) {
-    void serveImg(req, res, url.slice("/img/".length), {
-      cacheDir: IMG_CACHE_DIR,
-      bundledDir: BUNDLED_IMG,
-      localCheckoutDir: IS_DEV ? findOuterpediaImagesDev() : null,
-    }).catch((err: unknown) => {
-      dwarn("server", "serveImg failed:", err instanceof Error ? err.message : String(err));
-      if (!res.headersSent) { res.statusCode = 500; res.end("image error"); }
-    });
-    return;
-  }
-
-  // --- bundled data mounts ---
-  if (tryMount(req, res, url, "/gamedata/", DERIVED, "etag")) return;
-  // A missing captured JSON is a normal state (the user may never have hit an
-  // optional endpoint like `/archive/info`); the renderer reads null as
-  // "absent". Serve 200 null instead of letting tryMount 404 — otherwise it's
-  // a red console error on every load.
-  if (url.startsWith("/captured/") && url.endsWith(".json")) {
-    const rel = decodeURIComponent(url.slice("/captured/".length).split("?")[0]!);
-    const file = normalize(join(CAPTURE_OUT, rel));
-    if (file.startsWith(CAPTURE_OUT) && !existsSync(file)) {
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "application/json");
-      res.end("null");
-      return;
-    }
-  }
-  if (tryMount(req, res, url, "/captured/", CAPTURE_OUT, "etag")) return;
 
   // --- renderer (built Vite dist) ---
   // SPA fallback: any unknown path serves index.html so client-side state
   // (currently tab name in usePersistedState) survives a hard reload.
+  // Lock down the renderer document (the only thing CSP governs) on both the
+  // direct and the fallback index.html serves.
+  const headersFor = (file: string): Record<string, string> => (file.endsWith(".html") ? { "Content-Security-Policy": CSP } : {});
   const stripped = url === "/" ? "/index.html" : url;
   const file = normalize(join(RENDERER_DIST, stripped));
   if (file.startsWith(RENDERER_DIST) && existsSync(file) && statSync(file).isFile()) {
-    serveStatic(req, res, file, "etag");
+    serveStatic(req, res, file, "etag", headersFor(file));
     return;
   }
-  serveStatic(req, res, join(RENDERER_DIST, "index.html"), "etag");
+  const index = join(RENDERER_DIST, "index.html");
+  serveStatic(req, res, index, "etag", headersFor(index));
 }
 
 /** Tear the capture pipeline down synchronously, if it's still armed. Used
