@@ -657,7 +657,7 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   serveStatic(req, res, join(RENDERER_DIST, "index.html"), "etag");
 }
 
-/** Tear the capture pipeline down synchronously, if it's still armed. Used
+/** Tear the capture pipeline down, if it's still armed. Used
  *  from main.ts on `before-quit` so the user doesn't have to remember to
  *  click Disarm before closing the window — otherwise `mitmdump.exe` and
  *  the device-side iptables redirect survive the Electron exit, and the
@@ -665,8 +665,9 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
  *  use), among other annoyances.
  *
  *  Returns true if a disarm was actually attempted (pipeline was armed).
- *  Uses `spawnSync` so the quit handler can await completion without
- *  needing to plumb a Promise through Electron's `before-quit` lifecycle. */
+ *  Runs `disarm.ps1` through an ASYNC `spawn` and resolves when it exits (or
+ *  after a 15 s timeout that kills it), so the quit handler awaits it without
+ *  blocking the event loop. */
 export async function disarmIfArmed(): Promise<boolean> {
   const pidFile = join(CAPTURE_OUT, ".mitm.pid");
   if (!existsSync(pidFile)) return false;

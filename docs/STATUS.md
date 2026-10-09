@@ -168,7 +168,7 @@ npm run data:sync        # rafraîchit data/derived depuis le checkout outerpedi
 - **Invalidation de cache au patch** : le stamp `version.json` (`{ hash, builtAt }`) est **livré**
   (affiché Settings → Data) ; reste à **comparer le hash** au lancement pour élaguer les caches
   localStorage (SavedBuild aux `pieceUids` disparus).
-- **Robustesse/sécu desktop** : cleanup process orphelins, gardes Host/Origin (cf. todo).
+- **Robustesse/sécu desktop** : cleanup process orphelins, garde Host étendue aux GET `/captured/*` et `/api/*` (cf. todo, section « sécurité / robustesse desktop »).
 
 ## Carte du repo
 
