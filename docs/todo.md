@@ -6,7 +6,7 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **7 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
+> **6 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
 > L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
 
 ---
@@ -14,9 +14,6 @@
 ## Reste à faire
 
 ### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **Build sauvegardé sans `gemAllocation` → crash de rendu** — `BuilderScreen` `BottomGearBand` fait
-      `build?.gemAllocation.talisman` ; aucune migration n'ajoute le champ dans `savedBuilds.ts`. Optional chaining +
-      défaut `{ talisman: [], ee: [] }` dans `migrateSavedBuild`.
 - [ ] 🔴 **Import de backup perdu** — l'import (Settings → Backup) n'écrit que localStorage ; le Builder reste monté
       (`display:none`) avec sa map `savedBuilds`/`filterPresets` en `useState` → le prochain `persistSavedBuilds`
       écrase le blob avec la map mémoire. Le message « Reopen the Builder tab » est faux. Remonter les maps dans App

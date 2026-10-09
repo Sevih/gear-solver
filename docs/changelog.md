@@ -24,6 +24,10 @@
   `reforgeMode` (même règle que `migrateReforge` : true → `classic`, sinon `disable`) et défaute `topPct` à 60.
   Un vieux preset ne donne plus `REFORGE_PLANS[undefined]` dans `engine.ts`.
   Testé dans [storageMigrations.test.ts](../apps/renderer/test/storageMigrations.test.ts).
+- ✅ 🔴 **Build sauvegardé sans `gemAllocation` → crash de rendu** — `migrateSavedBuild`
+  ([savedBuilds.ts](../apps/renderer/src/lib/storage/savedBuilds.ts)) ajoute `{ talisman: [], ee: [] }`
+  aux builds qui n'ont pas le champ, et `BottomGearBand` lit `build?.gemAllocation?.…`. Testé dans
+  [storageMigrations.test.ts](../apps/renderer/test/storageMigrations.test.ts).
 
 ### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
 - ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a

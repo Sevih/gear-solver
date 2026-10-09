@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { FILTER_PRESETS_KEY, loadFilterPresets } from "../src/lib/storage/filterPresets.js";
+import { SAVED_BUILDS_KEY, loadSavedBuilds } from "../src/lib/storage/savedBuilds.js";
 
 // Map-backed localStorage shim (vitest runs in the `node` environment).
 const store = new Map<string, string>();
@@ -46,5 +47,22 @@ describe("filter presets — legacy migration", () => {
     const f = loadFilterPresets().h1![0]!.filters;
     expect(f.options.reforgeMode).toBe("ascended");
     expect(f.topPct).toBe(25);
+  });
+});
+
+describe("saved builds — legacy migration", () => {
+  const saved = (build: Record<string, unknown>) => ({
+    h1: [{ id: "b1", name: "old", heroUid: "h1", mode: "score", createdAt: 0, build }],
+  });
+
+  it("backfills a missing gemAllocation", () => {
+    store.set(SAVED_BUILDS_KEY, JSON.stringify(saved({ slots: [], finalStats: { atk: 1 } })));
+    expect(loadSavedBuilds().h1![0]!.build.gemAllocation).toEqual({ talisman: [], ee: [] });
+  });
+
+  it("keeps an existing gemAllocation", () => {
+    const gemAllocation = { talisman: [1, 2, 0, 0, 0], ee: [3] };
+    store.set(SAVED_BUILDS_KEY, JSON.stringify(saved({ slots: [], finalStats: {}, gemAllocation })));
+    expect(loadSavedBuilds().h1![0]!.build.gemAllocation).toEqual(gemAllocation);
   });
 });
