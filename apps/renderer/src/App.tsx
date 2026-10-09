@@ -1,6 +1,6 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
-import type { GameData, Inventory, RawUserItem, RawUserCharacter, UserGeasLevels } from "@gear-solver/core";
-import { autoImport, parseFiles } from "./data.js";
+import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
+import { autoImport, parseFiles, readManualFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
 import { getEmulators, type EmulatorStatus } from "./emulator.js";
 import { getSteamStatus, launchSteamGame, CAPTURE_SOURCE_KEY, type CaptureSource, type SteamStatus } from "./steam.js";
@@ -234,18 +234,24 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
 
-  async function onFiles(files: FileList | null) {
+  async function onFiles(input: HTMLInputElement) {
+    const files = input.files;
     if (!files) return;
-    let userItem: RawUserItem | null = null;
-    let userChar: RawUserCharacter | undefined;
-    for (const f of Array.from(files)) {
-      const j = JSON.parse(await f.text());
-      if (j.ItemList) userItem = j as RawUserItem;
-      else if (j.CharList) userChar = j as RawUserCharacter;
-    }
-    if (userItem) {
+    try {
+      const { userItem, userChar, error } = await readManualFiles(Array.from(files));
+      if (error) { setStatus(`Manual import failed — ${error}`); return; }
+      if (!userItem) { setStatus("Manual import: no user_item JSON (ItemList) among the picked files."); return; }
       setInv(parseFiles(game, userItem, userChar));
+      // The picked files carry no gift/archive snapshot: drop the geas/codex
+      // levels of whatever capture was loaded before (another account, maybe).
+      setUserGeas(null);
+      setUserCodex(null);
       setStatus("Manual import OK");
+    } catch (err) {
+      setStatus(`Manual import failed — ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      // Re-picking the same file must fire onChange again.
+      input.value = "";
     }
   }
 
@@ -470,7 +476,7 @@ export function App() {
             type="file"
             accept="application/json"
             multiple
-            onChange={(e) => onFiles(e.target.files)}
+            onChange={(e) => void onFiles(e.currentTarget)}
             className="text-[11px] text-zinc-400"
           />
         </div>
