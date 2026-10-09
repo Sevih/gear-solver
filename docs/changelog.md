@@ -8,6 +8,13 @@
 
 ## Items de backlog clôturés (index)
 
+### 🐞 Audit projet (2026-09-07) — bugs confirmés 🔴 (2026-10-09)
+- ✅ 🔴 **Set Mitigation ignoré par le composeur** — `SET_BONUS_KEY_RATE` / `SET_BONUS_KEY_ADD`
+  ([composeBuild.ts](../apps/renderer/src/lib/composeBuild.ts)) n'avaient pas `ST_E_CRI_DMG_REDUCE` : le
+  2pc/4pc « Crit DMG Reduc » était jeté en silence (CDMG RED% et CP sous-comptés). Clé ajoutée aux deux maps ;
+  [composeBuild.test.ts](../apps/renderer/test/composeBuild.test.ts) vérifie que chaque `st` de `sets.json`
+  (hors stats de combat lifesteal / counter / enterAp) est mappé.
+
 ### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
 - ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a
   déplacées de `equipment/` vers `ui/stat/` sur le bucket R2 (`images.ts` → `statIcon`) ; le solver les

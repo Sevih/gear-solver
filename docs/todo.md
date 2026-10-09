@@ -6,7 +6,7 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **10 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
+> **9 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
 > L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
 
 ---
@@ -14,11 +14,6 @@
 ## Reste à faire
 
 ### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **Set Mitigation ignoré par le composeur** — `SET_BONUS_KEY_ADD` (`apps/renderer/src/lib/composeBuild.ts`)
-      n'a pas d'entrée `ST_E_CRI_DMG_REDUCE` : le bonus 2pc/4pc « Crit DMG Reduc +25/+20 % » (set id 9) est jeté
-      silencieusement → `FinalStats.critDmgReduce` et le CP sous-comptent pour tout build Mitigation. Vérifié par test
-      (attendu 25, obtenu 0). Ajouter la clé `critDmgReduce` dans les deux maps + un test data-driven qui vérifie que
-      chaque `st` de `sets.json` (hors ST_NONE / lifesteal / counter / enterAp) est mappé.
 - [ ] 🔴 **Serveur desktop : `decodeURIComponent` non protégé** — `server.ts` (`tryMount` + branche `/captured/`) lève
       `URIError` sur `/gamedata/%E0%A4%A` ; pas de try/catch dans `handle`, pas de `uncaughtException` dans `main.ts`
       → dialog d'erreur Electron + requête pendue. Faire comme `img-cache.ts` (try/catch → 400) et envelopper `handle`.
