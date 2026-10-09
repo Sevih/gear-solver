@@ -14,6 +14,11 @@
   2pc/4pc « Crit DMG Reduc » était jeté en silence (CDMG RED% et CP sous-comptés). Clé ajoutée aux deux maps ;
   [composeBuild.test.ts](../apps/renderer/test/composeBuild.test.ts) vérifie que chaque `st` de `sets.json`
   (hors stats de combat lifesteal / counter / enterAp) est mappé.
+- ✅ 🔴 **Serveur desktop : `decodeURIComponent` non protégé** — un chemin mal encodé (`/gamedata/%E0%A4%A`)
+  levait `URIError` dans `tryMount` et la branche `/captured/` de
+  [server.ts](../apps/desktop/src/server.ts). Les deux passent par `decodePathOr400` (même contrat que
+  `img-cache.ts` → 400), et `createServer` enveloppe `handle` dans un try/catch (log + 500) : plus de dialog
+  d'erreur Electron ni de requête pendue sur une exception synchrone.
 
 ### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
 - ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a

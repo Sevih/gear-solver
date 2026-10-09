@@ -6,7 +6,7 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **9 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
+> **8 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
 > L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
 
 ---
@@ -14,9 +14,6 @@
 ## Reste à faire
 
 ### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **Serveur desktop : `decodeURIComponent` non protégé** — `server.ts` (`tryMount` + branche `/captured/`) lève
-      `URIError` sur `/gamedata/%E0%A4%A` ; pas de try/catch dans `handle`, pas de `uncaughtException` dans `main.ts`
-      → dialog d'erreur Electron + requête pendue. Faire comme `img-cache.ts` (try/catch → 400) et envelopper `handle`.
 - [ ] 🔴 **Presets legacy cassent le solve** — `filterPresets.ts` `fromSerialized` migre `includeEquippedOnOthers`
       mais pas `useReforged` → `reforgeMode`, ni `topPct`. Un vieux preset donne `reforgeMode = undefined` →
       `REFORGE_PLANS[undefined].ceiling` TypeError dans `engine.ts`. Défauts : `reforgeMode ?? (useReforged ?

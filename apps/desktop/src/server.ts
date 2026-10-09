@@ -141,10 +141,18 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, file: string, ca
   stream.pipe(res);
 }
 
+/** `decodeURIComponent` that answers 400 instead of throwing `URIError` on a
+ *  malformed escape (`/gamedata/%E0%A4%A`). Returns null once the response is
+ *  ended — same contract as `img-cache.ts`. */
+function decodePathOr400(res: ServerResponse, raw: string): string | null {
+  try { return decodeURIComponent(raw); } catch { res.statusCode = 400; res.end("bad path"); return null; }
+}
+
 /** Serve `/<prefix>/...` from a base dir, with path-traversal guard. */
 function tryMount(req: IncomingMessage, res: ServerResponse, url: string, prefix: string, dir: string, cacheMode: "etag" | "long"): boolean {
   if (!url.startsWith(prefix)) return false;
-  const rel = decodeURIComponent(url.slice(prefix.length));
+  const rel = decodePathOr400(res, url.slice(prefix.length));
+  if (rel === null) return true;
   const file = normalize(join(dir, rel));
   if (!file.startsWith(dir)) { res.statusCode = 403; res.end("forbidden"); return true; }
   serveStatic(req, res, file, cacheMode);
@@ -634,7 +642,8 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   // "absent". Serve 200 null instead of letting tryMount 404 — otherwise it's
   // a red console error on every load.
   if (url.startsWith("/captured/") && url.endsWith(".json")) {
-    const rel = decodeURIComponent(url.slice("/captured/".length).split("?")[0]!);
+    const rel = decodePathOr400(res, url.slice("/captured/".length).split("?")[0]!);
+    if (rel === null) return;
     const file = normalize(join(CAPTURE_OUT, rel));
     if (file.startsWith(CAPTURE_OUT) && !existsSync(file)) {
       res.statusCode = 200;
@@ -705,7 +714,17 @@ const PREFERRED_PORT = 17891;
 export function startServer(): Promise<{ port: number; server: Server }> {
   return new Promise((resolve, reject) => {
     mkdirSync(CAPTURE_OUT, { recursive: true });
-    const server = createServer(handle);
+    // Safety net: a synchronous throw in a route must neither surface as an
+    // Electron error dialog nor leave the request hanging.
+    const server = createServer((req, res) => {
+      try {
+        handle(req, res);
+      } catch (err) {
+        dwarn("server", `handler threw on ${req.method} ${req.url}:`, err instanceof Error ? err.message : String(err));
+        if (!res.headersSent) res.statusCode = 500;
+        res.end();
+      }
+    });
     const tryListen = (port: number, isFallback: boolean) => {
       server.removeAllListeners("error");
       const onError = (err: NodeJS.ErrnoException) => {
