@@ -492,3 +492,195 @@ describe("composeCharStats — level progression (every committed hero)", () => 
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Against the game client — CFormula.CalcFinalStat (client 1.4.18, decompiled)
+// ---------------------------------------------------------------------------
+//
+// The client computes every stat in 64-bit integers: the flat sum
+// (base + evo + awakening + Monad Gate enchant) times (1000 + spawn-advantage
+// + transcend + item-option + awakening + Monad-enchant rates), divided by
+// 1000; plus item-option flat and buff flat; times (1000 + buff rate) / 1000;
+// plus base × archive rate / 1000; cast to int, then max(0, ·). C# integer
+// division truncates toward zero. The reference below re-derives that with
+// BigInt so the JS double arithmetic of `calcFinalStat` is checked against
+// exact integer arithmetic.
+
+/** Exact-integer model of the client formula, including the two terms
+ *  gear-solver does not carry (spawn-advantage rate, Monad Gate enchant
+ *  flat + rate). */
+function clientCalcFinalStat(a: CalcArgs & { spawnRate?: number; monadValue?: number; monadRate?: number }): number {
+  const B = BigInt;
+  const flat = B(a.base) + B(a.evo) + B(a.awak) + B(a.monadValue ?? 0);
+  const rate = 1000n + B(a.spawnRate ?? 0) + B(a.transRate) + B(a.gearRate) + B(a.awakRate) + B(a.monadRate ?? 0);
+  const inner = flat * rate / 1000n + B(a.gearFlat) + B(a.buffValue);
+  const total = inner * (1000n + B(a.buffRate)) / 1000n + B(a.base) * B(a.archiveRate) / 1000n;
+  return Math.max(0, Number(total));
+}
+
+/** Deterministic PRNG (mulberry32) — reproducible "random" inputs. */
+function rng(seed: number): (lo: number, hi: number) => number {
+  let s = seed >>> 0;
+  return (lo, hi) => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    const r = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    return lo + Math.floor(r * (hi - lo + 1));
+  };
+}
+
+describe("calcFinalStat — term by term against CFormula.CalcFinalStat", () => {
+  it("matches exact integer arithmetic on 20 000 inputs, negatives included", () => {
+    const r = rng(0x5eed);
+    const bad: string[] = [];
+    for (let i = 0; i < 20_000; i++) {
+      const a: CalcArgs = {
+        base: r(0, 12_000), evo: r(0, 2_000), awak: r(0, 1_500),
+        awakRate: r(-200, 600), transRate: r(0, 600), gearFlat: r(-3_000, 20_000), gearRate: r(-500, 3_000),
+        archiveRate: r(0, 200), buffRate: r(-900, 2_000), buffValue: r(-500, 500),
+      };
+      const got = calc(a);
+      const want = clientCalcFinalStat(a);
+      if (got !== want) bad.push(`${JSON.stringify(a)}: ${got} ≠ ${want}`);
+    }
+    expect(bad.slice(0, 5)).toEqual([]);
+  });
+
+  it("orders the stages like the client: inner rate bundle, + item flat + buff flat, × buff rate, + archive", () => {
+    // The item-option flat and the buff flat sit OUTSIDE the inner rate bundle
+    // but INSIDE the buff-rate amplifier.
+    const a: CalcArgs = { ...NONE, base: 1000, transRate: 500, gearFlat: 100, buffValue: 20, buffRate: 100, archiveRate: 50 };
+    // inner = 1000 × 1.5 = 1500 ; (1500 + 100 + 20) × 1.1 = 1782 ; + 1000 × 0.05 = 50
+    expect(calc(a)).toBe(1832);
+    expect(clientCalcFinalStat(a)).toBe(1832);
+  });
+
+  it("truncates both divisions toward zero, as C# long division does", () => {
+    // inner flat × rate negative: -7 × 1.5 = -10.5 → -10 (floor: -11)
+    const a: CalcArgs = { ...NONE, base: 0, evo: -7, transRate: 500, archiveRate: 0, gearFlat: 30 };
+    expect(calc(a)).toBe(-10 + 30);
+    expect(clientCalcFinalStat(a)).toBe(20);
+  });
+
+  it("the white sheet value is the client formula with only base / evo / awakening (no gear, no buff)", () => {
+    // CStatValue derives the yellow "(+X)" delta as final − CalcFinalStat(base,
+    // spawn, evo, awakening, awakening rate, 0…). For a hero sheet (no spawn
+    // advantage) that baseline equals `intrinsicStats` as long as no
+    // awakening (IOT_STAT geas) RATE exists — see the data guard below.
+    for (const [id, ing] of allIngredients) {
+      const { intrinsicStats, scaling } = composeCharStats(ing, codexCurve, { level: 120, levelMaxStep: 3, levelMaxModifier: LB_MOD[3] });
+      for (const k of ["atk", "def", "hp"] as const) {
+        const s = scaling[k];
+        expect(intrinsicStats[k], `${id} ${k}`).toBe(
+          clientCalcFinalStat({ ...NONE, base: s.baseValue, evo: s.evoValue, awak: s.awakValue, awakRate: s.awakPct * 10 }),
+        );
+      }
+    }
+  });
+});
+
+describe("baseAtLevel — against CStatValue / CFormula.CalcStat", () => {
+  it("matches the client's integer interpolation (two separate integer divisions above lv100)", () => {
+    // The client floors the LB leg as (rng × mod × (L-100) / 1000) / 99 in two
+    // integer divisions; floor(floor(x / 1000) / 99) = floor(x / 99000) for
+    // x ≥ 0, so the single division of `baseAtLevel` is equivalent.
+    const bad: string[] = [];
+    for (const [id, ing] of allIngredients) {
+      for (const [stat, b] of Object.entries(ing.base) as [string, StatBracket][]) {
+        for (const L of LEVELS) {
+          const mod = LB_MOD[lbStepFor(L)]!;
+          const r = BigInt(b.max - b.min);
+          const base = r * BigInt(L - 1) / 99n + BigInt(b.min);
+          const extra = L > 100 ? r * BigInt(mod) * BigInt(L - 100) / 1000n / 99n : 0n;
+          if (baseAtLevel(b, L, mod) !== Number(base + extra)) bad.push(`${id} ${stat} lv${L}`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Terms the client has and gear-solver does not
+// ---------------------------------------------------------------------------
+//
+// Each guard below holds on today's committed data. When one fails, the data
+// gained a case the composer cannot represent: fix compose-stats (or the
+// outerpedia generator), not the test.
+
+describe("client terms gear-solver does not model — data guards", () => {
+  const buffBlocks = (ing: CharacterIngredients): [string, StatBlock][] => [
+    ["classPassive", ing.classPassive],
+    ...Object.entries(ing.skill8ByLevel).map(([l, b]) => [`skill8@${l}`, b] as [string, StatBlock]),
+    ...(["s1ByLevel", "s2ByLevel", "s3ByLevel"] as const).flatMap((s) =>
+      Object.entries(ing[s] ?? {}).map(([l, b]) => [`${s}@${l}`, b] as [string, StatBlock])),
+    ...(ing.corePassive ? [["corePassive", ing.corePassive] as [string, StatBlock]] : []),
+  ];
+
+  it("no awakening (IOT_STAT geas) rate: the client compounds it into the white value, intrinsicStats does not", () => {
+    const hits: string[] = [];
+    for (const [id, ing] of allIngredients) {
+      for (const [nodeId, node] of Object.entries(ing.geasByNode)) {
+        if (node.source !== "stat") continue;
+        for (const [lv, b] of Object.entries(node.levels)) {
+          for (const s of ["atkPct", "defPct", "hpPct", "effRate", "resRate"] as const) if (b[s]) hits.push(`${id} geas ${nodeId}@${lv} ${s}`);
+        }
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it("no flat ATK/DEF/HP from a buff source: the client adds it as buff value, the composer drops it (class / skill / core) or compounds it as awakening (geas IOT_BUFF)", () => {
+    const hits: string[] = [];
+    for (const [id, ing] of allIngredients) {
+      for (const [name, b] of buffBlocks(ing)) for (const s of ["atk", "def", "hp"] as const) if (b[s]) hits.push(`${id} ${name} ${s}`);
+      for (const [nodeId, node] of Object.entries(ing.geasByNode)) {
+        if (node.source !== "buff") continue;
+        for (const [lv, b] of Object.entries(node.levels)) for (const s of ["atk", "def", "hp"] as const) if (b[s]) hits.push(`${id} geas ${nodeId}@${lv} ${s}`);
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it("only the two known SPD-rate core passives are pre-baked as flat SPD", () => {
+    // outerpedia's generator turns an OAT_RATE SPD buff into a flat
+    // floor((base max + all evo) × rate / 1000). The client applies the rate
+    // to the whole combined value (current-level base + unlocked evo + gear +
+    // buff flats), so the two only agree at full evolution without gear.
+    const spdCore = allIngredients
+      .filter(([, ing]) => (ing.corePassive?.spd ?? 0) !== 0)
+      .map(([id]) => id);
+    expect(spdCore).toEqual(["2700003", "2700005"]); // Core Fusion Snow, Core Fusion Lisha
+  });
+});
+
+describe("known divergence — pre-baked SPD rate (Core Fusion Snow, +4.3% SPD)", () => {
+  const snow = characters["2700003"]!.ingredients!;
+  const SPD_RATE = 43; // core_passive_2star_ablity_speed, OAT_RATE per-mille
+  const clientSpd = (level: number, step: number, gearFlat = 0) => {
+    const base = baseAtLevel(snow.base.spd, level, LB_MOD[step]!);
+    const evo = sumEvoUpTo(snow.evoByLevel, 9, 6 + step, level).spd;
+    return clientCalcFinalStat({ ...NONE, base, evo, gearFlat, buffRate: SPD_RATE });
+  };
+  const composedSpd = (level: number, step: number) =>
+    composeCharStats(snow, codexCurve, { level, levelMaxStep: step, levelMaxModifier: LB_MOD[step] }).noGearStats.spd;
+
+  it("agrees with the client at lv100 (LB0) and lv120 (LB3), without gear", () => {
+    expect(composedSpd(100, 0)).toBe(clientSpd(100, 0)); // 160
+    expect(composedSpd(120, 3)).toBe(clientSpd(120, 3)); // 168
+  });
+
+  it("still overstates SPD by 1 at lv1 (138 × 1.043 = 143.9 → 143, composer 138 + 6 = 144)", () => {
+    expect(clientSpd(1, 0)).toBe(143);
+    expect(composedSpd(1, 0)).toBe(144);
+  });
+
+  it("does not amplify gear SPD: +40 SPD of gear is +41 in the client", () => {
+    // Renderer side (composeBuild.computeFinalStats) adds gear SPD flat on top
+    // of the no-gear SPD, so the composed sheet stays at 160 + 40 = 200.
+    expect(clientSpd(100, 0, 40)).toBe(202);
+    expect(composedSpd(100, 0) + 40).toBe(200);
+  });
+});
