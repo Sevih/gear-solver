@@ -11,6 +11,7 @@
  *   `/api/capture/*`, `/gamedata/*`, `/captured/*`, `/img/*` (disk cache +
  *   GitHub CDN), plus serving the built `apps/renderer/dist`. The window is
  *   then loaded against that local server's ephemeral 127.0.0.1 port.
+ *   Game data syncs in the background once the window is up (startup.ts).
  */
 import { app, BrowserWindow, dialog } from "electron";
 import type { Server } from "node:http";
@@ -24,6 +25,7 @@ import { syncGameData } from "./data-sync.js";
 import { BUNDLED_DERIVED, CACHE_ROOT, DERIVED, IMG_CACHE_DIR, REPO_SHA_STATE } from "./paths.js";
 import { getCurrentRef, readShaState, setCurrentRef } from "./repo-source.js";
 import { prefetchImages } from "./img-cache.js";
+import { runStartup } from "./startup.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -122,17 +124,24 @@ if (!app.requestSingleInstanceLock()) {
     // Seed the data-SHA display from the last sync before serving anything.
     setCurrentRef(readShaState(REPO_SHA_STATE)?.sha ?? "main");
     // Refresh game data: checkout copy (dev) or SHA-gated CDN download (prod).
-    // Awaited before the window so the renderer loads fresh derived; never fatal.
-    const r = await syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: false })
-      .catch((err: unknown) => { dwarn("server", "data sync failed:", err instanceof Error ? err.message : String(err)); return null; });
-    if (r) dlog("server", `data sync: ${r.status} — ${r.message}`);
-    // Re-pin to the SHA we just synced so Settings → Data shows the snapshot.
-    setCurrentRef(readShaState(REPO_SHA_STATE)?.sha ?? getCurrentRef());
-    await createWindow();
-    setupAutoUpdate(IS_DEV);
-    // Background: warm the small UI/equipment image subset once per repo update
-    // (prod only — dev serves from the checkout). Non-blocking, best-effort.
-    if (!IS_DEV) void warmImageCache();
+    // Prod opens the window first and syncs in the background — the renderer
+    // polls /api/data/startup-sync and re-imports on new data (startup.ts).
+    // Never fatal.
+    await runStartup({
+      isDev: IS_DEV,
+      sync: () => syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: false })
+        .catch((err: unknown) => { dwarn("server", "data sync failed:", err instanceof Error ? err.message : String(err)); throw err; }),
+      afterSync: (r) => {
+        if (r) dlog("server", `data sync: ${r.status} — ${r.message}`);
+        // Re-pin to the SHA we just synced so Settings → Data shows the snapshot.
+        setCurrentRef(readShaState(REPO_SHA_STATE)?.sha ?? getCurrentRef());
+        // Background: warm the small UI/equipment image subset once per repo
+        // update (prod only — dev serves from the checkout). Best-effort.
+        if (!IS_DEV) void warmImageCache();
+      },
+      createWindow,
+      afterWindow: () => setupAutoUpdate(IS_DEV),
+    });
   }).catch((err: unknown) => {
     // Without this, a failed startServer() bind or loadURL() rejects
     // unhandled and the user is left staring at a blank window with no clue.

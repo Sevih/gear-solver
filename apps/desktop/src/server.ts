@@ -7,6 +7,7 @@
  *  - `/api/capture/{run,disarm,status}` → wraps the PowerShell pipeline (emulator source)
  *  - `/api/steam/{status,install,uninstall,launch}` → Steam source (BepInEx plugin)
  *  - `/api/stat-locks` GET/POST → stat regression locks
+ *  - `/api/data/sync` POST, `/api/data/startup-sync` GET → game-data sync
  *
  * Mirrors the Vite-middleware behavior (apps/renderer/vite.config.ts) so the
  * renderer code is identical across `npm run desktop:dev` (Vite) and a
@@ -53,6 +54,7 @@ import { ensureMitmdump, mitmdumpPath } from "./mitm-provision.js";
 import { installSteamPlugin, launchGame, steamStatus, uninstallSteamPlugin } from "./steam-capture.js";
 import { proxyReco } from "./reco-proxy.js";
 import { syncGameData } from "./data-sync.js";
+import { getStartupSyncState } from "./startup.js";
 import { serveImg } from "./img-cache.js";
 import { getStatus as getUpdateStatus, triggerCheck as triggerUpdateCheck, installUpdate } from "./updater.js";
 
@@ -342,7 +344,7 @@ function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: numbe
   });
 }
 
-function handle(req: IncomingMessage, res: ServerResponse): void {
+export function handle(req: IncomingMessage, res: ServerResponse): void {
   const url = (req.url ?? "/").split("?")[0]!;
 
   // Reject cross-origin mutations up front (every state-changing endpoint is
@@ -382,6 +384,13 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
     syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
       .then((r) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(r)); })
       .catch((err: Error) => { res.statusCode = 500; res.end(JSON.stringify({ status: "error", message: err.message })); });
+    return;
+  }
+  // Launch-time background sync (startup.ts) — the renderer polls this until
+  // "done" and re-imports when the result is "synced".
+  if (url === "/api/data/startup-sync" && req.method === "GET") {
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(getStartupSyncState()));
     return;
   }
   // --- auto-update — drives the Home tab's inline update card. status is
