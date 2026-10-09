@@ -5,6 +5,7 @@ import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.j
 import { getEmulators, type EmulatorStatus } from "./emulator.js";
 import { getSteamStatus, launchSteamGame, CAPTURE_SOURCE_KEY, type CaptureSource, type SteamStatus } from "./steam.js";
 import { getGameVersion } from "./game-version.js";
+import { createSnapshotFollower, type SnapshotFollower } from "./lib/snapshotFollower.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
 import { LogView } from "./design/LogView.js";
 import { SettingsModal } from "./design/SettingsModal.js";
@@ -96,9 +97,6 @@ export function App() {
   const source: CaptureSource = sourcePref ?? (steam?.installed ? "steam" : "emulator");
   const [gameVersion, setGameVersion] = useState<string | null>(null);
   const [running, setRunning] = useState<"none" | "capture" | "disarm" | "steam-install">("none");
-  // mtime of user_item.json at the last import — the Steam source polls it and
-  // re-imports when the plugin rewrote the snapshot (the user reached the lobby).
-  const lastItemMtime = useRef<number | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   // Onboarding wizard — persisted "seen" flag so the modal only auto-opens
@@ -195,10 +193,22 @@ export function App() {
     });
   }, [inv]);
 
-  useEffect(() => { void refreshInventory("Auto-import"); }, []);
-  useEffect(() => {
-    void getCaptureStatus().then((cs) => { setCapStatus(cs); lastItemMtime.current = cs?.userItemMtime ?? null; });
-  }, []);
+  // Startup import + Steam snapshot following share one state machine (the
+  // last-seen user_item.json mtime, an init-before-ticks order, no overlapping
+  // ticks) so launch imports exactly once — see lib/snapshotFollower.ts.
+  const refreshRef = useRef(refreshInventory);
+  refreshRef.current = refreshInventory;
+  const followerRef = useRef<SnapshotFollower | null>(null);
+  followerRef.current ??= createSnapshotFollower({
+    getCaptureStatus,
+    getSteamStatus,
+    refresh: (label) => refreshRef.current(label),
+    onCaptureStatus: setCapStatus,
+    onSteamStatus: setSteam,
+  });
+  const follower = followerRef.current;
+
+  useEffect(() => { void follower.init(); }, [follower]);
   useEffect(() => { void getEmulators().then(setEmulator); }, []);
   useEffect(() => { void getSteamStatus().then(setSteam); }, []);
   useEffect(() => { void getGameVersion().then(setGameVersion); }, []);
@@ -211,28 +221,12 @@ export function App() {
   useEffect(() => {
     if (source !== "steam") return;
     let alive = true;
-    const tick = async () => {
-      const st = await getSteamStatus();
-      if (!alive) return;
-      setSteam(st);
-      if (!st?.live && !st?.gameRunning) return;
-      const cs = await getCaptureStatus();
-      if (!alive) return;
-      setCapStatus(cs);
-      const m = cs?.userItemMtime ?? null;
-      if (m != null && lastItemMtime.current != null && m !== lastItemMtime.current) {
-        lastItemMtime.current = m;
-        await refreshInventory("Steam capture");
-      } else if (m != null && lastItemMtime.current == null) {
-        lastItemMtime.current = m;
-        await refreshInventory("Steam capture");
-      }
-    };
-    void tick();
-    const id = setInterval(() => { void tick(); }, 5000);
+    const isAlive = () => alive;
+    // The first tick is a no-op until the startup import seeded the mtime.
+    void follower.tick(isAlive);
+    const id = setInterval(() => { void follower.tick(isAlive); }, 5000);
     return () => { alive = false; clearInterval(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source]);
+  }, [source, follower]);
 
   async function onFiles(files: FileList | null) {
     if (!files) return;
