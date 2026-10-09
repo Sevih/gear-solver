@@ -667,20 +667,26 @@ describe("known divergence — pre-baked SPD rate (Core Fusion Snow, +4.3% SPD)"
   const composedSpd = (level: number, step: number) =>
     composeCharStats(snow, codexCurve, { level, levelMaxStep: step, levelMaxModifier: LB_MOD[step] }).noGearStats.spd;
 
+  // Expected values are derived from the committed base SPD, not written as
+  // literals: the fused base moved from the fusion sheet (138) to the original
+  // hero's (133) in gear-solver#31, and both bases show the same gaps.
+  const pinned = snow.base.spd.min === snow.base.spd.max ? snow.base.spd.max : NaN;
+  const preBaked = snow.corePassive!.spd;
+
   it("agrees with the client at lv100 (LB0) and lv120 (LB3), without gear", () => {
-    expect(composedSpd(100, 0)).toBe(clientSpd(100, 0)); // 160
-    expect(composedSpd(120, 3)).toBe(clientSpd(120, 3)); // 168
+    expect(composedSpd(100, 0)).toBe(clientSpd(100, 0));
+    expect(composedSpd(120, 3)).toBe(clientSpd(120, 3));
   });
 
-  it("still overstates SPD by 1 at lv1 (138 × 1.043 = 143.9 → 143, composer 138 + 6 = 144)", () => {
-    expect(clientSpd(1, 0)).toBe(143);
-    expect(composedSpd(1, 0)).toBe(144);
+  it("still overstates SPD by 1 at lv1: base × 1.043 truncated vs base + pre-baked flat", () => {
+    expect(clientSpd(1, 0)).toBe(Math.trunc(pinned * (1000 + SPD_RATE) / 1000));
+    expect(composedSpd(1, 0)).toBe(pinned + preBaked);
+    expect(composedSpd(1, 0) - clientSpd(1, 0)).toBe(1);
   });
 
-  it("does not amplify gear SPD: +40 SPD of gear is +41 in the client", () => {
+  it("does not amplify gear SPD: +40 SPD of gear is 2 short of the client", () => {
     // Renderer side (composeBuild.computeFinalStats) adds gear SPD flat on top
-    // of the no-gear SPD, so the composed sheet stays at 160 + 40 = 200.
-    expect(clientSpd(100, 0, 40)).toBe(202);
-    expect(composedSpd(100, 0) + 40).toBe(200);
+    // of the no-gear SPD, so the 4.3% never reaches the gear part.
+    expect(composedSpd(100, 0) + 40 - clientSpd(100, 0, 40)).toBe(-2);
   });
 });
