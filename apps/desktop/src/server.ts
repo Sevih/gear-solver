@@ -342,7 +342,7 @@ function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: numbe
   });
 }
 
-function handle(req: IncomingMessage, res: ServerResponse): void {
+export function handle(req: IncomingMessage, res: ServerResponse): void {
   const url = (req.url ?? "/").split("?")[0]!;
 
   // Reject cross-origin mutations up front (every state-changing endpoint is
@@ -443,8 +443,13 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   }
   // --- Steam source: BepInEx plugin in the Steam client (steam-capture.ts) ---
   if (url === "/api/steam/status" && req.method === "GET") {
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify(steamStatus(CAPTURE_OUT, STEAM_PLUGIN_DLL)));
+    steamStatus(CAPTURE_OUT, STEAM_PLUGIN_DLL).then((st) => {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(st));
+    }).catch((err: Error) => {
+      res.statusCode = 500;
+      res.end(`steam status failed: ${err.message}`);
+    });
     return;
   }
   if (url === "/api/steam/install" && req.method === "POST") {
@@ -456,15 +461,16 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   if (url === "/api/steam/uninstall" && req.method === "POST") {
     readJsonBody(req, res, 10_000, (body) => {
       const removeBepinex = Boolean((body as { removeBepinex?: unknown })?.removeBepinex);
-      try {
-        const lines: string[] = [];
-        const status = uninstallSteamPlugin({ captureOut: CAPTURE_OUT, bundledDll: STEAM_PLUGIN_DLL, log: (l) => lines.push(l), removeBepinex });
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ status, lines }));
-      } catch (err) {
-        res.statusCode = 409;
-        res.end(JSON.stringify({ error: (err as Error).message }));
-      }
+      const lines: string[] = [];
+      uninstallSteamPlugin({ captureOut: CAPTURE_OUT, bundledDll: STEAM_PLUGIN_DLL, log: (l) => lines.push(l), removeBepinex })
+        .then((status) => {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ status, lines }));
+        })
+        .catch((err: Error) => {
+          res.statusCode = 409;
+          res.end(JSON.stringify({ error: err.message }));
+        });
     });
     return;
   }

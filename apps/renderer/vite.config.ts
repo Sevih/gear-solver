@@ -228,8 +228,10 @@ function localData(): Plugin {
         }
         // Steam capture source — mirrors the Electron prod server (steam-capture.ts).
         if (url === "/api/steam/status" && req.method === "GET") {
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify(steamStatus(CAPTURED, STEAM_PLUGIN_DLL)));
+          steamStatus(CAPTURED, STEAM_PLUGIN_DLL).then((st) => {
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(st));
+          }).catch((err: Error) => { res.statusCode = 500; res.end(`steam status failed: ${err.message}`); });
           return;
         }
         if (url === "/api/steam/install" && req.method === "POST") {
@@ -243,15 +245,18 @@ function localData(): Plugin {
           req.on("data", (c: Buffer) => chunks.push(c));
           req.on("end", () => {
             res.setHeader("Content-Type", "application/json");
+            const fail = (err: unknown) => {
+              res.statusCode = 409;
+              res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+            };
             try {
               const raw = Buffer.concat(chunks).toString("utf-8");
               const removeBepinex = raw ? Boolean((JSON.parse(raw) as { removeBepinex?: unknown }).removeBepinex) : false;
               const lines: string[] = [];
-              const status = uninstallSteamPlugin({ captureOut: CAPTURED, bundledDll: STEAM_PLUGIN_DLL, log: (l) => lines.push(l), removeBepinex });
-              res.end(JSON.stringify({ status, lines }));
+              uninstallSteamPlugin({ captureOut: CAPTURED, bundledDll: STEAM_PLUGIN_DLL, log: (l) => lines.push(l), removeBepinex })
+                .then((status) => res.end(JSON.stringify({ status, lines })), fail);
             } catch (err) {
-              res.statusCode = 409;
-              res.end(JSON.stringify({ error: (err as Error).message }));
+              fail(err);
             }
           });
           return;
