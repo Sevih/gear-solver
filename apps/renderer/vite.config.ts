@@ -190,6 +190,12 @@ function localData(): Plugin {
           res.statusCode = 204;
           return res.end();
         }
+        // Launch-time sync state — dev syncs before the window opens
+        // (startup.ts), so it is always settled by the time Vite is asked.
+        if (url === "/api/data/startup-sync" && req.method === "GET") {
+          res.setHeader("Content-Type", "application/json");
+          return res.end(JSON.stringify({ phase: "done", result: null }));
+        }
         // Manual "Sync game data" — copy/download the solver artifacts.
         if (url === "/api/data/sync" && req.method === "POST") {
           syncGameData({ derivedDir: DERIVED, shaStateFile: REPO_SHA_STATE, force: true })
