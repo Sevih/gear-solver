@@ -20,6 +20,14 @@ export async function streamCapture(
   const reader = r.body.pipeThrough(new TextDecoderStream("utf-8")).getReader();
   let buf = "";
   let exitCode = -1;
+  // Every complete line AND the final unterminated remainder go through the
+  // same check — a server that ends on `__EXIT__:0` without a newline must
+  // still report exit 0, not leak the sentinel as a log line (exit -1).
+  const take = (line: string) => {
+    const m = line.match(/^__EXIT__:(-?\d+)\s*$/);
+    if (m) exitCode = Number(m[1]);
+    else onLine(line);
+  };
   try {
     while (true) {
       const { value, done } = await reader.read();
@@ -27,18 +35,15 @@ export async function streamCapture(
       buf += value;
       let nl = buf.indexOf("\n");
       while (nl !== -1) {
-        const line = buf.slice(0, nl);
+        take(buf.slice(0, nl));
         buf = buf.slice(nl + 1);
         nl = buf.indexOf("\n");
-        const m = line.match(/^__EXIT__:(-?\d+)\s*$/);
-        if (m) { exitCode = Number(m[1]); continue; }
-        onLine(line);
       }
     }
   } finally {
     try { reader.releaseLock(); } catch {}
   }
-  if (buf.length > 0) onLine(buf);
+  if (buf.length > 0) take(buf);
   return { exitCode };
 }
 
