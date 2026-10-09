@@ -78,7 +78,8 @@ export interface ComposeOptions {
   /** Per-character user-leveled skill levels (S1 = First, S2 = Second,
    *  S3 = Ultimate). Used to pick the correct `s{1,2,3}ByLevel` row for
    *  chars whose skills have permanent self-stat passives (Ame S2 CHC,
-   *  Bell Cranel S2 ATK, Claire S2 ATK at time of writing). Missing or
+   *  Bell Cranel S2 ATK, Claire S2 ATK at time of writing). A level with
+   *  no row at or below it contributes nothing (Claire S2 lv1). Missing or
    *  `null` falls back to the highest available level emitted in the
    *  ingredient — matches "max-everything" previews. */
   userSkillLevels?: { first: number; second: number; ultimate: number } | null;
@@ -151,19 +152,23 @@ function maxTranscendStar(transcendByStar: CharacterIngredients["transcendByStar
   return max;
 }
 
-/** Pick the per-skill StatBlock row matching the user's captured level. Falls
- *  back to the highest emitted level when the user has no slider for the
- *  skill (S4-S22 auto-leveled passives, Skill_23 Core Fusion). Hoisted to
- *  module scope so it doesn't allocate a fresh closure on every
- *  `composeCharStats` call (× 121 chars × 3 skill slots per roster pass). */
-function pickSkillBlock(table: Record<string, StatBlock>, lv: number | undefined): StatBlock {
-  if (lv != null && lv > 0 && table[String(lv)]) return table[String(lv)]!;
-  let max = 0;
+/** Pick the per-skill StatBlock row matching the user's captured level.
+ *  The contract only emits the levels that carry a buff (Claire S2: 2..5,
+ *  nothing at lv1), so a known level is floored onto the highest emitted
+ *  row ≤ lv, and a known level below every row is ZERO — the skill line
+ *  doesn't carry the buff yet (in-game Claire S2 lv1: ATK 1002, not 1096).
+ *  Only an unknown level (no user level, or 0) falls back to the highest
+ *  emitted row, the "max-everything" preview. Hoisted to module scope so it
+ *  doesn't allocate a fresh closure on every `composeCharStats` call
+ *  (× 121 chars × 3 skill slots per roster pass). */
+export function pickSkillBlock(table: Record<string, StatBlock>, lv: number | undefined): StatBlock {
+  const known = lv != null && lv > 0;
+  let best = 0;
   for (const k of Object.keys(table)) {
     const n = Number(k);
-    if (n > max) max = n;
+    if (n > best && (!known || n <= lv)) best = n;
   }
-  return max > 0 ? (table[String(max)] ?? ZERO) : ZERO;
+  return best > 0 ? (table[String(best)] ?? ZERO) : ZERO;
 }
 
 /** Character level at which each EvolutionLevel row unlocks in-game.
@@ -336,9 +341,10 @@ export function composeCharStats(
   const geas = geasResolved.all;
   const geasStat = geasResolved.fromStat;
   // Skill passives (S1/S2/S3 + core fusion). `pickSkillBlock` (hoisted
-  // above) picks the row matching the captured user skill level; falls back
-  // to the highest emitted level when no user level is provided. The Core
-  // Fusion passive is a single block (no slider).
+  // above) picks the row matching the captured user skill level — ZERO at a
+  // level that doesn't carry the buff — and falls back to the highest
+  // emitted level only when no user level is provided. The Core Fusion
+  // passive is a single block (no slider).
   const usl = options.userSkillLevels;
   const s1 = pickSkillBlock(ingredients.s1ByLevel ?? {}, usl?.first);
   const s2 = pickSkillBlock(ingredients.s2ByLevel ?? {}, usl?.second);
