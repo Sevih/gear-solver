@@ -883,7 +883,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     return { uids, moving, steal };
   }, [selectedBuild, selectedUid, pieceByUid]);
 
-  // Returns false on a network error or a 409 (capture pipeline armed) so the
+  // Returns false on a network error or a 409 (capture pipeline armed or Steam plugin live) so the
   // button can flag it; on success App re-imports the rewritten snapshot.
   async function equipSelectedBuild(): Promise<boolean> {
     if (!game || !selectedUid || equipPlan.uids.length === 0) return false;
@@ -4416,7 +4416,7 @@ function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
         )}
         {failed && (
           <p className="mt-2 rounded-md border border-rose-400/40 bg-rose-500/10 px-2 py-1.5 text-[10.5px] leading-snug text-rose-300">
-            Couldn't write the snapshot. Disarm the capture pipeline first, then retry.
+            Couldn't write the snapshot. Disarm the capture pipeline (or close the game when the Steam plugin is live), then retry.
           </p>
         )}
         <div className="mt-3.5 flex justify-end gap-2">

@@ -83,7 +83,7 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
     const ok = await equipAssignments(game, plan.assignments);
     setApplyingAll(false);
     if (ok) onAfterApply();
-    else setApplyAllError("Apply failed — disarm the capture pipeline and retry.");
+    else setApplyAllError("Apply failed — disarm the capture pipeline (or close the game when the Steam plugin is live) and retry.");
   };
 
   if (worklist.length === 0) {
@@ -231,7 +231,7 @@ function WorklistCard({
     const ok = await equipPieces(game, uids, entry.heroUid);
     setApplying(false);
     if (ok) onAfterApply();
-    else setApplyError("Apply failed — disarm the capture pipeline and retry.");
+    else setApplyError("Apply failed — disarm the capture pipeline (or close the game when the Steam plugin is live) and retry.");
   };
 
   return (

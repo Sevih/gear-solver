@@ -10,7 +10,7 @@ import {
   detectEmulators, pickEmulator, pickPort, preflight,
   resolveCaptureTarget, targetScriptArgs, loadManualDevice, saveManualDevice,
 } from "../desktop/src/emulator-detect.js";
-import { installSteamPlugin, launchGame, steamStatus, uninstallSteamPlugin } from "../desktop/src/steam-capture.js";
+import { installSteamPlugin, launchGame, steamPluginLive, steamStatus, uninstallSteamPlugin } from "../desktop/src/steam-capture.js";
 import { proxyReco } from "../desktop/src/reco-proxy.js";
 import { syncGameData } from "../desktop/src/data-sync.js";
 import { serveImg } from "../desktop/src/img-cache.js";
@@ -334,12 +334,17 @@ function localData(): Plugin {
         // Captured user_item write-back (equip / unequip edits) — mirrors the
         // Electron prod server. The renderer applies the core equip helpers and
         // POSTs the full rewritten snapshot; we validate + write it. Refused
-        // while armed so a capture can't clobber the edit (mirrors wipe).
+        // while armed or while the Steam plugin is live, so a capture can't
+        // clobber the edit (mirrors wipe).
         if (url === "/api/captured/user-item" && req.method === "POST") {
           res.setHeader("Content-Type", "application/json");
           if (existsSync(join(CAPTURED, ".mitm.pid"))) {
             res.statusCode = 409;
             return res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
+          }
+          if (steamPluginLive(CAPTURED)) {
+            res.statusCode = 409;
+            return res.end(JSON.stringify({ error: "Steam capture plugin live — close the game first" }));
           }
           const chunks: Buffer[] = [];
           req.on("data", (c: Buffer) => chunks.push(c));
