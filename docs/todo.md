@@ -6,7 +6,7 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **8 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
+> **7 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
 > L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
 
 ---
@@ -14,10 +14,6 @@
 ## Reste à faire
 
 ### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **Presets legacy cassent le solve** — `filterPresets.ts` `fromSerialized` migre `includeEquippedOnOthers`
-      mais pas `useReforged` → `reforgeMode`, ni `topPct`. Un vieux preset donne `reforgeMode = undefined` →
-      `REFORGE_PLANS[undefined].ceiling` TypeError dans `engine.ts`. Défauts : `reforgeMode ?? (useReforged ?
-      "classic" : "disable")`, `topPct ?? 60`.
 - [ ] 🔴 **Build sauvegardé sans `gemAllocation` → crash de rendu** — `BuilderScreen` `BottomGearBand` fait
       `build?.gemAllocation.talisman` ; aucune migration n'ajoute le champ dans `savedBuilds.ts`. Optional chaining +
       défaut `{ talisman: [], ee: [] }` dans `migrateSavedBuild`.

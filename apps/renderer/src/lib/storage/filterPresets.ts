@@ -77,12 +77,19 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
       accessoryEffectPicks: sanitizeEffects(f.accessoryEffectPicks),
       // Field added after some presets were saved — default to no quality gate.
       minQuality: f.minQuality ?? null,
+      // Pre-dates the Top% slider — same default as INITIAL_FILTERS.
+      topPct: f.topPct ?? 60,
       // `allowBrokenSets` was added later — a legacy preset's options lack it.
       // Default to true (legacy behavior) so the toggle/badge render correctly.
       // `equippedScope` replaced the `includeEquippedOnOthers` boolean — migrate
-      // an old preset (true/absent → "all", false → "none").
+      // an old preset (true/absent → "all", false → "none"). `reforgeMode`
+      // replaced the `useReforged` boolean — same mapping as `migrateReforge`
+      // (true → "classic", false/absent → "disable"); an undefined mode would
+      // crash the solve on `REFORGE_PLANS[mode]`.
       options: {
         ...f.options,
+        reforgeMode: f.options?.reforgeMode
+          ?? ((f.options as { useReforged?: boolean })?.useReforged ? "classic" : "disable"),
         allowBrokenSets: f.options?.allowBrokenSets ?? true,
         equippedScope: f.options?.equippedScope
           ?? ((f.options as { includeEquippedOnOthers?: boolean })?.includeEquippedOnOthers === false ? "none" : "all"),
