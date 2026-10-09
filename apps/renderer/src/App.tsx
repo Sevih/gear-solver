@@ -14,6 +14,7 @@ import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority
 import { loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
+import { createOnboardingGate } from "./lib/onboarding.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
 // bundle drops to just the shell + the first screen the user opens.
@@ -106,6 +107,9 @@ export function App() {
   // `wizardOpen` is the immediate UI state; `onboardingDone` survives reloads.
   const [onboardingDone, setOnboardingDone] = usePersistedState<boolean>("gs.onboarding.done", false);
   const [wizardOpen, setWizardOpen] = useState(!onboardingDone);
+  // A reset holds until relaunch — a ready probe on reopening Settings must
+  // not undo it (see lib/onboarding.ts).
+  const onboardingGate = useRef(createOnboardingGate()).current;
   // Off by default — the stat-lock / drift / copy-dump tooling on the Builds
   // tab is a regression-debug aid for stat-formula work, not a normal user
   // feature. Toggling on in Settings reveals the lock buttons + drift badges.
@@ -362,7 +366,7 @@ export function App() {
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onReady={() => {
-          setOnboardingDone(true);
+          if (onboardingGate.acceptsReady()) setOnboardingDone(true);
           // Re-poll the source status so the header badge flips green
           // immediately after the wizard confirms everything is set.
           void getEmulators().then(setEmulator);
@@ -375,7 +379,7 @@ export function App() {
         onSteamInstall={() => void runSteamInstall()}
         onSteamLaunch={() => void runSteamLaunch()}
         steamBusy={running !== "none"}
-        onResetOnboarding={() => setOnboardingDone(false)}
+        onResetOnboarding={() => { onboardingGate.reset(); setOnboardingDone(false); }}
         onAfterWipe={() => void refreshInventory("Wiped captured data")}
         debugStatLocks={debugStatLocks}
         onToggleDebugStatLocks={() => setDebugStatLocks((v) => !v)}
