@@ -6,7 +6,7 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **5 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
+> **4 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
 > L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
 
 ---
@@ -14,9 +14,6 @@
 ## Reste à faire
 
 ### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **Drill Home → Inventory sur les sets ne filtre rien** — `HomeScreen.tsx` (`sets` / `allSets`) envoie
-      `id: sname` (nom du set) alors que l'Inventory filtre sur `p.armorSetId` numérique. Le catalogue a le bon id
-      sous `info.id`, écrasé au mapping. Envoyer `info.id`.
 - [ ] 🔴 **Rang héros impossible à vider** — `BuildsScreen.tsx` : l'effet `fillUnrankedByOrder` dépend de
       `heroPriority`, donc vider un rang le re-attribue aussitôt en dernière position ; la règle « deux unranked ne se
       volent pas » de `isLowerPriority` est morte. Ne remplir les unranked qu'au changement de roster (nouvelle capture),

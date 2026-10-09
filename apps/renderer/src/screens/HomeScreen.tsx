@@ -176,6 +176,8 @@ function computeStats(inv: Inventory, game: GameData | null): HomeStats {
   // def — capture the first one seen per set group so the breakdown can show
   // the real in-game set icon instead of a colored swatch.
   const setIcon = new Map<string, string | null>();
+  // Numeric armorSetId per set name — the Inventory drill filters on it.
+  const setIdOf = new Map<string, string>();
   // Weapon / accessory by class, grouped by unique-option effect. We seed the
   // FULL game catalog first (every effect that exists per class/slot, count 0)
   // then overlay owned counts in the gear loop below — so unowned effects still
@@ -245,6 +247,7 @@ function computeStats(inv: Inventory, game: GameData | null): HomeStats {
       const sname = game?.sets?.[p.armorSetId]?.name ?? `Set ${p.armorSetId}`;
       setCount.set(sname, (setCount.get(sname) ?? 0) + 1);
       if (!setIcon.has(sname)) setIcon.set(sname, game?.equipment[String(p.itemId)]?.armorSetIcon ?? null);
+      if (!setIdOf.has(sname)) setIdOf.set(sname, p.armorSetId);
     }
     if (p.ascended) ascended++;
     if (p.enhanceLevel >= 15) maxed++;
@@ -254,8 +257,8 @@ function computeStats(inv: Inventory, game: GameData | null): HomeStats {
 
   // Canonical armor-set catalog — every set that exists in the game (resolved
   // from the equipment table, not just owned pieces), keyed by set NAME so the
-  // grid is complete and de-duped by name. `id` is kept only to order the grid
-  // stably. Falls back to icons seen on owned pieces when game data is absent.
+  // grid is complete and de-duped by name. `id` is the numeric armorSetId —
+  // it orders the grid stably and is what the Inventory drill filters on. Falls back to icons seen on owned pieces when game data is absent.
   const setCatalog = new Map<string, { id: string; icon: string | null }>();
   if (game?.equipment) {
     for (const k in game.equipment) {
@@ -266,14 +269,14 @@ function computeStats(inv: Inventory, game: GameData | null): HomeStats {
     }
   }
   for (const [sname] of setCount) {
-    if (!setCatalog.has(sname)) setCatalog.set(sname, { id: sname, icon: setIcon.get(sname) ?? null });
+    if (!setCatalog.has(sname)) setCatalog.set(sname, { id: setIdOf.get(sname)!, icon: setIcon.get(sname) ?? null });
   }
 
   // Overview "Top armor sets" — owned only, by piece count, top 5 with bars.
   const ownedSorted = [...setCount.entries()].sort((a, b) => b[1] - a[1]);
   const maxSet = Math.max(1, ...ownedSorted.map(([, n]) => n));
   const sets = ownedSorted.slice(0, 5).map(([sname, count], i) => ({
-    id: sname,
+    id: setCatalog.get(sname)!.id,
     name: sname,
     icon: setCatalog.get(sname)?.icon ?? null,
     color: SET_COLORS[i % SET_COLORS.length]!,
@@ -285,7 +288,7 @@ function computeStats(inv: Inventory, game: GameData | null): HomeStats {
   const allSets = [...setCatalog.entries()]
     .sort((a, b) => (setCount.get(b[0]) ?? 0) - (setCount.get(a[0]) ?? 0) || Number(a[1].id) - Number(b[1].id))
     .map(([sname, info], i) => ({
-      id: sname,
+      id: info.id,
       name: sname,
       icon: info.icon,
       color: SET_COLORS[i % SET_COLORS.length]!,

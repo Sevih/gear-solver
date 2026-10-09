@@ -33,6 +33,10 @@
   ([transfer.ts](../apps/renderer/src/lib/storage/transfer.ts)) après `applyBackup`, et `BuilderScreen`
   recharge `savedBuilds` / `filterPresets` depuis localStorage. Le message « Reopen the Builder tab » est
   retiré, et le mode `"replace"` mort de `applyBackup` supprimé (avec son test).
+- ✅ 🔴 **Drill Home → Inventory sur les sets ne filtre rien** — `computeStats`
+  ([HomeScreen.tsx](../apps/renderer/src/screens/HomeScreen.tsx)) renvoyait le nom du set comme `id` alors
+  que l'Inventory filtre sur `armorSetId`. `sets` et `allSets` portent maintenant l'id numérique du catalogue,
+  y compris dans le repli sans données de jeu (id relevé sur les pièces possédées).
 
 ### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
 - ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a
