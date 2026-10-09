@@ -105,3 +105,20 @@ describe("fillUnrankedByOrder", () => {
     expect(fillUnrankedByOrder({ z: 1 }, byCp)).toEqual({ a: 1, b: 2, c: 3, d: 4 });
   });
 });
+
+describe("fillUnrankedByOrder — a cleared rank stays cleared", () => {
+  const byCp = ["a", "b", "c"];
+
+  it("does not re-fill a hero already offered a rank", () => {
+    const first = fillUnrankedByOrder({}, byCp, new Set())!; // first use: a, b, c ranked
+    const seen = new Set(byCp);
+    const cleared = reorderRank(first, "b", null); // user clears b
+    expect(cleared).toEqual({ a: 1, c: 2 });
+    expect(fillUnrankedByOrder(cleared, byCp, seen)).toBeNull();
+  });
+
+  it("still ranks a newcomer from a new capture, below the ranked ones", () => {
+    const seen = new Set(byCp);
+    expect(fillUnrankedByOrder({ a: 1, c: 2 }, ["d", ...byCp], seen)).toEqual({ a: 1, c: 2, d: 3 });
+  });
+});
