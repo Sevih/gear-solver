@@ -342,7 +342,7 @@ function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: numbe
   });
 }
 
-function handle(req: IncomingMessage, res: ServerResponse): void {
+export function handle(req: IncomingMessage, res: ServerResponse): void {
   const url = (req.url ?? "/").split("?")[0]!;
 
   // Reject cross-origin mutations up front (every state-changing endpoint is
