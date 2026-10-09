@@ -926,7 +926,7 @@ function BackupPane({ importInputRef }: { importInputRef: { current: HTMLInputEl
       />
       <DataAction
         label="Import builds & presets"
-        description="Merge a previously exported JSON file into your current builds & presets (entries already present are kept). Reopen the Builder tab to see them."
+        description="Merge a previously exported JSON file into your current builds & presets (entries already present are kept)."
         actionLabel="Import"
         onClick={() => importInputRef.current?.click()}
       />
@@ -1162,11 +1162,11 @@ async function importBackupFile(file: File | null, done: () => void): Promise<vo
   if (!file) return;
   try {
     const parsed = JSON.parse(await file.text()) as unknown;
-    const { builds, presets } = applyBackup(parsed, "merge");
+    const { builds, presets } = applyBackup(parsed);
     if (builds === 0 && presets === 0) {
       window.alert("Nothing new to import — every build and preset in this file is already present.");
     } else {
-      window.alert(`Imported ${builds} build${builds === 1 ? "" : "s"} and ${presets} preset${presets === 1 ? "" : "s"}.\n\nReopen the Builder tab to see them.`);
+      window.alert(`Imported ${builds} build${builds === 1 ? "" : "s"} and ${presets} preset${presets === 1 ? "" : "s"}.`);
     }
   } catch (err) {
     window.alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
