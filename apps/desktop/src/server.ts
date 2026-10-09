@@ -353,7 +353,7 @@ function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: numbe
 /** Request entry point. A synchronous throw in a route must not escape to
  *  Node's `uncaughtException` (Electron shows a crash dialog and the request
  *  hangs forever): answer 500 instead. */
-function handle(req: IncomingMessage, res: ServerResponse): void {
+export function handle(req: IncomingMessage, res: ServerResponse): void {
   try {
     route(req, res);
   } catch (err) {
