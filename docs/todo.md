@@ -6,17 +6,15 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **1 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
+> **0 🔴 ouvert** — les 10 🔴 de l'audit projet du 2026-09-07 sont livrés (cf. changelog) ; ses 🟠/🟡 restent
+> en tête de « Reste à faire ».
 > L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
 
 ---
 
 ## Reste à faire
 
-### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **Race « Get preset » vs changement de héros** — `BuilderScreen` `getPreset` : après `await fetchReco`, rien ne
-      vérifie que le héros sélectionné est le même → la reco de A est mergée dans les filtres de B. Capturer
-      `selectedUid` avant l'await et bail si différent.
+### 🟠 Audit projet (2026-09-07) — bugs confirmés
 - [ ] 🟠 **Double import Steam au démarrage** — `App.tsx` : l'effet initial et le `tick()` Steam appellent
       `getCaptureStatus()` en parallèle ; si le tick gagne avec `lastItemMtime` null → second `refreshInventory`. Pas de
       garde in-flight si un tick dépasse 5 s. Un seul chemin d'init + flag `busy`.

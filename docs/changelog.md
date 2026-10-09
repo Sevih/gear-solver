@@ -50,6 +50,9 @@
   « Optimize → » qui monte le Builder directement sur un héros), et l'effet hero-switch est gardé par
   `prevHeroRef.current === selectedUid` au lieu du drapeau `heroChangeReset` : ni le montage ni le rejeu
   StrictMode ne snapshotent plus `INITIAL_FILTERS` par-dessus les filtres du héros.
+- ✅ 🔴 **Race « Get preset » vs changement de héros** — `getPreset` (`BuilderScreen`) capture le héros avant
+  `await fetchReco` et abandonne si `selectedUidRef` (synchronisé au rendu) a changé entre-temps : la reco de A
+  n'est plus mergée dans les filtres de B.
 
 ### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
 - ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a

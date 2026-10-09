@@ -1111,13 +1111,21 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     );
   };
 
+  // Live selected hero for async callbacks (render-synced, so it's already the
+  // new hero by the time any post-switch microtask runs).
+  const selectedUidRef = useRef(selectedUid);
+  selectedUidRef.current = selectedUid;
   const getPreset = async () => {
     if (!selected) return;
+    const forUid = selected.uid;
     setRecoBusy(true);
     setRecoStatus(null);
     setRecoPicker(null);
     const r = await fetchReco(selected.charId);
     setRecoBusy(false);
+    // Hero switched while the reco was in flight — it belongs to the previous
+    // hero; merging it would land in the new hero's filters.
+    if (selectedUidRef.current !== forUid) return;
     if (r.status === "none") { setRecoStatus({ tone: "warn", text: "No build reco for this hero yet." }); return; }
     if (r.status === "error") { setRecoStatus({ tone: "error", text: `Reco fetch failed: ${r.message}` }); return; }
     const names = Object.keys(r.reco.builds);
