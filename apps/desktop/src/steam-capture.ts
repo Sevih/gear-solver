@@ -9,7 +9,8 @@
  *     official GitHub release, skipped if the game already has one) and our
  *     `GearSolverCapture.dll` into the game folder, then writes the plugin's
  *     config so it points at THIS app's capture folder (CAPTURE_OUT).
- *  3. `steamStatus()` is what the renderer polls: game installed, BepInEx
+ *  3. `steamStatus()` is what the renderer polls (every 5 s — async, with the
+ *     Steam root and DLL hashes cached): game installed, BepInEx
  *     present, plugin present + up to date + pointed at the right folder, game
  *     running, and the plugin's heartbeat file (written by the plugin itself)
  *     to tell "live" from "installed but not loaded".
@@ -17,7 +18,7 @@
  * Pure Node (fs + child_process) — no Electron deps so the Vite dev middleware
  * can import it too for parity between dev and packaged builds.
  */
-import { spawn, spawnSync } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize, resolve } from "node:path";
@@ -42,23 +43,51 @@ const PLUGIN_DIR_NAME = "GearSolverCapture";
 // Steam / game discovery
 // ---------------------------------------------------------------------------
 
+/** Run a helper exe asynchronously and resolve with its stdout ("" on any
+ *  failure — missing exe, timeout, non-zero exit). Never blocks the main
+ *  process, which also serves the renderer's HTTP. */
+function run(file: string, args: string[], timeout: number): Promise<string> {
+  return new Promise((resolveRun) => {
+    execFile(file, args, { windowsHide: true, encoding: "utf-8", timeout }, (_err, stdout) => resolveRun(stdout || ""));
+  });
+}
+
 /** Steam's install root: HKCU `SteamPath` (set by the Steam client itself),
  *  then the usual default. Null when Steam isn't installed. */
-export function findSteamRoot(): string | null {
+export async function findSteamRoot(): Promise<string | null> {
   try {
-    const r = spawnSync("reg.exe", ["query", "HKCU\\Software\\Valve\\Steam", "/v", "SteamPath"], { windowsHide: true, encoding: "utf-8", timeout: 3000 });
-    const m = /SteamPath\s+REG_SZ\s+(.+)$/im.exec(r.stdout || "");
+    const stdout = await run("reg.exe", ["query", "HKCU\\Software\\Valve\\Steam", "/v", "SteamPath"], 3000);
+    const m = /SteamPath\s+REG_SZ\s+(.+)$/im.exec(stdout);
     if (m?.[1]) {
       // The registry value is lower-cased; realpath restores the on-disk
       // casing so the path reads well in the UI.
       const p = realpathSync.native(normalize(m[1].trim()));
       if (existsSync(join(p, "steamapps"))) return p;
     }
-  } catch { /* reg.exe missing / blocked — fall through */ }
+  } catch { /* unreadable path — fall through */ }
   for (const p of ["C:\\Program Files (x86)\\Steam", "C:\\Program Files\\Steam"]) {
     if (existsSync(join(p, "steamapps"))) return p;
   }
   return null;
+}
+
+/** Steam root cache: the registry lookup is a process spawn, and the root
+ *  doesn't move while the app runs. A miss is retried after STEAM_ROOT_MISS_TTL_MS
+ *  (Steam may get installed meanwhile). */
+const STEAM_ROOT_MISS_TTL_MS = 60_000;
+let steamRootCache: { root: string | null; at: number } | null = null;
+async function cachedSteamRoot(): Promise<string | null> {
+  const c = steamRootCache;
+  if (c && (c.root != null ? existsSync(join(c.root, "steamapps")) : Date.now() - c.at < STEAM_ROOT_MISS_TTL_MS)) return c.root;
+  const root = await findSteamRoot();
+  steamRootCache = { root, at: Date.now() };
+  return root;
+}
+
+/** Forget the cached Steam root and DLL hashes (tests). */
+export function resetSteamCaches(): void {
+  steamRootCache = null;
+  hashCache.clear();
 }
 
 /** Every Steam library folder (the root itself + `libraryfolders.vdf` entries). */
@@ -82,9 +111,11 @@ export interface SteamGame {
 }
 
 /** Locate the OUTERPLANE Steam install. Requires the app manifest AND the
- *  Unity Managed dir (a half-uninstalled game leaves an empty folder behind). */
-export function findOuterplane(): SteamGame | null {
-  const root = findSteamRoot();
+ *  Unity Managed dir (a half-uninstalled game leaves an empty folder behind).
+ *  The Steam root is cached; the manifest itself is re-read each call (small
+ *  file, and its build id changes on every game update). */
+export async function findOuterplane(): Promise<SteamGame | null> {
+  const root = await cachedSteamRoot();
   if (!root) return null;
   for (const lib of steamLibraries(root)) {
     const manifest = join(lib, "steamapps", `appmanifest_${OUTERPLANE_APPID}.acf`);
@@ -161,19 +192,29 @@ function sha256File(p: string): string | null {
   try { return createHash("sha256").update(readFileSync(p)).digest("hex"); } catch { return null; }
 }
 
+/** path → hash, valid while the file's size + mtime are unchanged. The
+ *  bundled DLL never changes during a run, the installed one only on
+ *  install/update — so the 5 s status poll stops re-hashing both. */
+const hashCache = new Map<string, { size: number; mtimeMs: number; hash: string | null }>();
+function cachedSha256(p: string): string | null {
+  let st;
+  try { st = statSync(p); } catch { hashCache.delete(p); return null; }
+  const c = hashCache.get(p);
+  if (c && c.size === st.size && c.mtimeMs === st.mtimeMs) return c.hash;
+  const hash = sha256File(p);
+  hashCache.set(p, { size: st.size, mtimeMs: st.mtimeMs, hash });
+  return hash;
+}
+
 /** `tasklist` pids for OUTERPLANE.exe (empty when not running). */
-export function gamePids(): number[] {
-  try {
-    const r = spawnSync("tasklist.exe", ["/FI", `IMAGENAME eq ${GAME_EXE}`, "/FO", "CSV", "/NH"], { windowsHide: true, encoding: "utf-8", timeout: 4000 });
-    const pids: number[] = [];
-    for (const line of (r.stdout || "").split(/\r?\n/)) {
-      const m = /^"[^"]+","(\d+)"/.exec(line.trim());
-      if (m) pids.push(Number(m[1]));
-    }
-    return pids;
-  } catch {
-    return [];
+export async function gamePids(): Promise<number[]> {
+  const stdout = await run("tasklist.exe", ["/FI", `IMAGENAME eq ${GAME_EXE}`, "/FO", "CSV", "/NH"], 4000);
+  const pids: number[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = /^"[^"]+","(\d+)"/.exec(line.trim());
+    if (m) pids.push(Number(m[1]));
   }
+  return pids;
 }
 
 function pluginPaths(gameDir: string) {
@@ -224,9 +265,8 @@ export function readHeartbeat(captureOut: string): SteamPluginHeartbeat | null {
 
 /** Full status snapshot. `bundledDll` = the plugin DLL this app ships (used
  *  for the up-to-date check); `captureOut` = where the plugin must write. */
-export function steamStatus(captureOut: string, bundledDll: string): SteamStatus {
-  const game = findOuterplane();
-  const pids = gamePids();
+export async function steamStatus(captureOut: string, bundledDll: string): Promise<SteamStatus> {
+  const [game, pids] = await Promise.all([findOuterplane(), gamePids()]);
   const heartbeat = readHeartbeat(captureOut);
   const live = pids.length > 0 && heartbeat != null && pids.includes(heartbeat.pid);
   const bundleAvailable = existsSync(bundledDll);
@@ -241,7 +281,7 @@ export function steamStatus(captureOut: string, bundledDll: string): SteamStatus
   const p = pluginPaths(game.gameDir);
   const bepPresent = existsSync(p.core) && existsSync(p.winhttp);
   const present = existsSync(p.dll);
-  const upToDate = present && bundleAvailable && sha256File(p.dll) === sha256File(bundledDll);
+  const upToDate = present && bundleAvailable && cachedSha256(p.dll) === cachedSha256(bundledDll);
   const outDir = readConfiguredOutDir(p.cfg);
   const outDirOk = sameDir(outDir, captureOut);
   return {
@@ -297,13 +337,13 @@ export interface InstallOpts {
  *  process, and our DLL is locked once its heartbeat says it's loaded. */
 export async function installSteamPlugin(opts: InstallOpts): Promise<SteamStatus> {
   const { captureOut, bundledDll, scratchDir, log } = opts;
-  const game = findOuterplane();
+  const game = await findOuterplane();
   if (!game) throw new Error("OUTERPLANE (Steam) not found — install it from Steam first, then retry.");
   log(`>  Game: ${game.gameDir}`);
   if (!existsSync(bundledDll)) {
     throw new Error(`plugin DLL missing: ${bundledDll} — in dev run \`npm run capture-steam:build\` (needs the .NET SDK).`);
   }
-  const pids = gamePids();
+  const pids = await gamePids();
   const running = pids.length > 0;
   const hb = readHeartbeat(captureOut);
   const pluginLoaded = running && hb != null && pids.includes(hb.pid);
@@ -361,10 +401,10 @@ export async function installSteamPlugin(opts: InstallOpts): Promise<SteamStatus
 /** Remove the plugin DLL + its config. BepInEx itself is left in place (other
  *  plugins may rely on it); pass `removeBepinex` to strip it too — only the
  *  files the official zip ships, nothing the user added. */
-export function uninstallSteamPlugin(opts: { captureOut: string; bundledDll: string; log: (line: string) => void; removeBepinex?: boolean }): SteamStatus {
-  const game = findOuterplane();
+export async function uninstallSteamPlugin(opts: { captureOut: string; bundledDll: string; log: (line: string) => void; removeBepinex?: boolean }): Promise<SteamStatus> {
+  const game = await findOuterplane();
   if (!game) throw new Error("OUTERPLANE (Steam) not found.");
-  if (gamePids().length > 0) throw new Error("OUTERPLANE is running — close the game first.");
+  if ((await gamePids()).length > 0) throw new Error("OUTERPLANE is running — close the game first.");
   const p = pluginPaths(game.gameDir);
   rmSync(dirname(p.dll), { recursive: true, force: true });
   rmSync(p.cfg, { force: true });
