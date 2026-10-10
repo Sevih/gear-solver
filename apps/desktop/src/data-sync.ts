@@ -13,7 +13,8 @@
  *
  *  - REPO mode (packaged build, any machine): no checkout. Resolve the latest
  *    commit SHA of `Sevih/outerpedia`, and if it changed since last sync,
- *    download the 19 artifacts from the GitHub CDN into the writable cache.
+ *    download its version.json; only when the data hash differs too are the
+ *    other 18 artifacts downloaded from the GitHub CDN into the writable cache.
  *    This is what lets the app track game patches WITHOUT shipping a new
  *    installer. Degrades cleanly offline (uses whatever derived is already
  *    cached).
@@ -59,6 +60,16 @@ function findSolverCheckout(): string | null {
 function readVersionHash(dir: string): string | null {
   try {
     const v = JSON.parse(readFileSync(join(dir, "version.json"), "utf-8")) as { hash?: string };
+    return typeof v.hash === "string" ? v.hash : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Content hash from a version.json body — null when malformed. */
+function hashOf(buf: Buffer): string | null {
+  try {
+    const v = JSON.parse(buf.toString("utf-8")) as { hash?: string };
     return typeof v.hash === "string" ? v.hash : null;
   } catch {
     return null;
@@ -145,13 +156,30 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
     return { status: "fresh", message: `data up to date (${latest.slice(0, 7)})` };
   }
 
+  // Most outerpedia commits touch the site, not the solver data. Fetch
+  // version.json first and compare its content hash with the cached one: the
+  // same hash means the 18 other tables are byte-identical — record the new
+  // SHA and stop there. (The manual Sync — force — still re-downloads all.)
+  const bufs = new Map<string, Buffer>();
+  const version = await fetchRepoFile(latest, `${SOLVER_DIR}/version.json`);
+  if (version.status !== 200 || !version.buf) {
+    return derivedReady
+      ? { status: "error", message: `download failed: version.json (${version.status}) — keeping cached data` }
+      : { status: "unavailable", message: `download failed: version.json (${version.status}) and no cached data` };
+  }
+  const remoteHash = hashOf(version.buf);
+  if (!force && derivedReady && remoteHash != null && remoteHash === readVersionHash(derivedDir)) {
+    writeShaState(shaStateFile, latest);
+    return { status: "fresh", message: `data up to date (${latest.slice(0, 7)}, data ${remoteHash})` };
+  }
+  bufs.set("version.json", version.buf);
+
   // Download ALL artifacts into memory first, then write — a mid-flight
   // network failure must never leave `derivedDir` half old / half new
   // (characters.json from one patch + equipment.json from another would be
   // an incoherent snapshot).
-  const bufs = new Map<string, Buffer>();
   let failed: string | null = null;
-  await pool(SOLVER_FILES, 8, async (f) => {
+  await pool(SOLVER_FILES.filter((f) => f !== "version.json"), 8, async (f) => {
     if (failed) return;
     const got = await fetchRepoFile(latest, `${SOLVER_DIR}/${f}`);
     if (got.status !== 200 || !got.buf) { failed = `${f} (${got.status})`; return; }
@@ -162,7 +190,10 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
       ? { status: "error", message: `download failed: ${failed} — keeping cached data` }
       : { status: "unavailable", message: `download failed: ${failed} and no cached data` };
   }
-  for (const [f, buf] of bufs) writeAtomic(join(derivedDir, f), compact(buf));
+  // version.json goes LAST: its hash is what the next launch compares, so it
+  // must never claim data a half-finished write didn't deliver.
+  for (const [f, buf] of bufs) if (f !== "version.json") writeAtomic(join(derivedDir, f), compact(buf));
+  writeAtomic(join(derivedDir, "version.json"), compact(version.buf));
   // Only record the SHA after a complete write — a failed sync retries next launch.
   writeShaState(shaStateFile, latest);
   return { status: "synced", message: `synced ${bufs.size} tables @ ${latest.slice(0, 7)}`, copied: bufs.size };
