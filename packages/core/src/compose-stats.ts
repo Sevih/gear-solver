@@ -33,7 +33,7 @@ import type {
  *
  *  Stats where min == max (SPD/CHC/CHD/EFF for most chars) collapse to a
  *  constant — rng=0 zeros both terms. */
-function baseAtLevel(bracket: StatBracket, level: number, modifier: number): number {
+export function baseAtLevel(bracket: StatBracket, level: number, modifier: number): number {
   if (bracket.max === bracket.min) return bracket.min;
   const rng = bracket.max - bracket.min;
   // baseTerm extrapolates naturally past lv 100 (rng × (L-1)/99 keeps growing);
@@ -195,7 +195,7 @@ function evoUnlockLevel(evoLevel: number): number {
  *  (LB1 → 7, LB2 → 8, LB3 → 9), so `evoCap = 6 + LB`.
  *  Verified against in-game Sterope (LB 0 → 2..6) and Luna (LB 3 → 2..9),
  *  plus Flamberge (6★ lv5 → none). */
-function sumEvoUpTo(
+export function sumEvoUpTo(
   evoByLevel: CharacterIngredients["evoByLevel"],
   targetStar: number,
   evoCap: number,
@@ -229,7 +229,7 @@ function sumEvoUpTo(
  *  on G.Beth / Notia (core fusion +50% EFF baseline 120 → 255 exact match).
  *  `Math.trunc` mirrors the ARM64 signed-magic-divide-by-1000 — `Math.floor`
  *  would diverge on negative intermediates (rare but real on debuff sources). */
-function calcFinalStat(
+export function calcFinalStat(
   baseValue: number,
   evoValue: number,
   awakValue: number,
