@@ -77,6 +77,8 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
       accessoryEffectPicks: sanitizeEffects(f.accessoryEffectPicks),
       // Field added after some presets were saved — default to no quality gate.
       minQuality: f.minQuality ?? null,
+      // `topPct` (budget prune) was added later — absent → the UI default.
+      topPct: f.topPct ?? 60,
       // `allowBrokenSets` was added later — a legacy preset's options lack it.
       // Default to true (legacy behavior) so the toggle/badge render correctly.
       // `equippedScope` replaced the `includeEquippedOnOthers` boolean — migrate
@@ -86,6 +88,10 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
         allowBrokenSets: f.options?.allowBrokenSets ?? true,
         equippedScope: f.options?.equippedScope
           ?? ((f.options as { includeEquippedOnOthers?: boolean })?.includeEquippedOnOthers === false ? "none" : "all"),
+        // `reforgeMode` replaced the `useReforged` boolean (true → "classic").
+        // Left undefined, the Builder's gear band indexes REFORGE_PLANS[undefined].
+        reforgeMode: f.options?.reforgeMode
+          ?? ((f.options as { useReforged?: boolean })?.useReforged ? "classic" : "disable"),
       },
     },
   };
