@@ -5,6 +5,7 @@ import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.j
 import { getEmulators, type EmulatorStatus } from "./emulator.js";
 import { getSteamStatus, launchSteamGame, CAPTURE_SOURCE_KEY, type CaptureSource, type SteamStatus } from "./steam.js";
 import { getGameVersion } from "./game-version.js";
+import { waitForStartupSync } from "./lib/startupSync.js";
 import { describeDataSync, requestDataSync, type DataSyncResult } from "./lib/dataSync.js";
 import { createSnapshotFollower, type SnapshotFollower } from "./lib/snapshotFollower.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
@@ -212,6 +213,18 @@ export function App() {
   const follower = followerRef.current;
 
   useEffect(() => { void follower.init(); }, [follower]);
+  // The packaged app opens before its launch-time data sync finishes: once it
+  // settles, re-import if it brought new tables, and say so if it couldn't.
+  useEffect(() => {
+    let alive = true;
+    void waitForStartupSync().then((r) => {
+      if (!alive || !r) return;
+      if (r.status === "synced") void refreshRef.current("Game data updated");
+      else if (r.status === "unavailable" || r.status === "error") setStatus(`Game data: ${r.message}`);
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => { void getEmulators().then(setEmulator); }, []);
   useEffect(() => { void getSteamStatus().then(setSteam); }, []);
   useEffect(() => { void getGameVersion().then(setGameVersion); }, []);
