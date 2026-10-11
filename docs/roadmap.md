@@ -12,7 +12,8 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 - **M0 — Capture.** One-button pipeline (`tools/capture`) decrypts the game server and
   writes account JSON. No pinning; XOR key recovered.
 - **M1 — Data foundation.** Game tables copied to `data/game`, distilled to `data/derived`
-  (`data/build.mjs`). Mappings ItemID→equipment, OptionID→stat (validated vs in-game),
+  (`data/build.mjs`, remplacé depuis par `datagen/generators/solver.ts` d'outerpedia
+  + `data/sync.mjs`). Mappings ItemID→equipment, OptionID→stat (validated vs in-game),
   CharID→character. Engine parses a real inventory with resolved stats.
 - **M2 — Auto-import.** Web app loads game data + latest capture automatically (Vite
   middleware serves `data/derived` and `tools/capture/out`).
@@ -50,7 +51,7 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   (`lib/storage/transfer.ts` + section Backup dans Settings + 8 tests).
 - **View-state session-scoped** — ✅ **livré** : tris/filtres Inventory + filtres roster Builds en
   `sessionStorage` (`useSessionState`), réinitialisés au lancement (`gs.builds.notes` reste durable).
-- **Versioning du snapshot `data/`** — stamp + expo ✅ **livrés** (`build.mjs` → `version.json`
+- **Versioning du snapshot `data/`** — stamp + expo ✅ **livrés** (`solver.ts` d'outerpedia → `version.json`
   `{ hash, builtAt }`, hash de contenu stable ; affiché Settings → Data). **Reste** : l'invalidation
   des caches localStorage au changement de hash (élaguer les SavedBuild aux `pieceUids` disparus).
 - **Édition d'équipement** — méthodes core (`equipItem`/`unequipItem`) + writer

@@ -74,10 +74,10 @@ function emptyFilters(): FilterState {
 }
 
 // Persistence codec for the inventory filter shape — wraps the Set<>-typed
-// fields so they survive a JSON round-trip via localStorage. The deserializer
-// overlays stored values on top of `emptyFilters()` so older sessions missing
-// newer non-Set fields (e.g. `subMode`) get the current defaults instead of
-// undefined.
+// fields so they survive a JSON round-trip via sessionStorage
+// (`useSessionState`). The deserializer overlays stored values on top of
+// `emptyFilters()` so older sessions missing newer non-Set fields (e.g.
+// `subMode`) get the current defaults instead of undefined.
 const _setCodec = jsonWithSets<FilterState>(["slots", "rarities", "stars", "quality", "mains", "subs", "armorSets", "classes"]);
 const FILTER_CODEC = {
   serialize: _setCodec.serialize,

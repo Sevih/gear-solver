@@ -5,7 +5,7 @@
  *
  * Mirror of the in-game CFormula::CalcFinalStat from libil2cpp.so 1.4.9
  * (RVA 0x2C59E48). Validated 0-diff on a fleet of LB0/1/2/3 chars; see
- * `memory/game_stat_compose_formula.md` for the derivation.
+ * `docs/reference.md` § 2.1 (CalcFinalStat) for the derivation.
  *
  * NOTE: keep this file pure — no React, no IO. The screens own the React
  * state + memoization; this lib is the deterministic engine.
@@ -106,16 +106,6 @@ export interface GemOverride {
   pct: Record<string, number>;
 }
 
-/** Aggregate gear pieces (mains, subs, set bonuses) into flat/pct/buffPct
- *  buckets keyed by engine stat key. Three-way split mirrors the in-game
- *  CalcFinalStat input separation.
- *
- *  Talisman/EE handling: the in-game SubOptionList for these slots IS the
- *  gem slot list (5 OAT_RATE/OAT_ADD entries via OptionIDs 15001-15054).
- *  The parser puts those into `piece.subs` via the standard path, so without
- *  any override the current gems contribute to the buckets automatically.
- *  When `gemOverride` is supplied, Talisman/EE subs are SKIPPED and the
- *  pre-aggregated deltas are added in their place. */
 /** Result of `computeSetBonuses` — the active 2pc/4pc bonus stat options. */
 export type SetBonusList = ReadonlyArray<{ st: string; ap: string; v: number }>;
 
@@ -164,6 +154,16 @@ function addSetBonuses(setBonuses: SetBonusList, b: GearBuckets): void {
   }
 }
 
+/** Aggregate gear pieces (mains, subs, set bonuses) into flat/pct/buffPct
+ *  buckets keyed by engine stat key. Three-way split mirrors the in-game
+ *  CalcFinalStat input separation.
+ *
+ *  Talisman/EE handling: the in-game SubOptionList for these slots IS the
+ *  gem slot list (5 OAT_RATE/OAT_ADD entries via OptionIDs 15001-15054).
+ *  The parser puts those into `piece.subs` via the standard path, so without
+ *  any override the current gems contribute to the buckets automatically.
+ *  When `gemOverride` is supplied, Talisman/EE subs are SKIPPED and the
+ *  pre-aggregated deltas are added in their place. */
 export function aggregateGearBuckets(
   pieces: GearPiece[],
   game: GameData | null,

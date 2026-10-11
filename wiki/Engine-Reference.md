@@ -61,8 +61,8 @@ particular):
 | `CharacterArchiveStatTemplet.json` (via `computeCharacterIngredients`) | `codex-curve.json` | codex level idx 0..11 → {atkPct, defPct, hpPct} |
 | `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data |
 
-Regenerate after a game patch: `npm run data:build` (or `data/sync.ps1`
-if you also need to re-copy from Outerpedia).
+Refresh after a game patch: `npm run data:sync` (`data/sync.mjs`, once
+outerpedia's `datagen:build` + `promote` have run).
 
 The generator also writes `version.json` `{ hash, builtAt }`: `hash` is a `sha256`
 over the content of **every** derived file (name + body, fixed emit order), so it stays
@@ -604,8 +604,9 @@ the 19 derived artifacts. Refreshed **at launch** by `data-sync.ts`
   **without publishing a new build**. Degrades gracefully offline (uses the
   already-cached `data/derived`).
 
-`build.mjs` reads its dirs via env (`OUTERPEDIA_GAME_DIR` / `OUTERPEDIA_SYNC_DIR`
-/ `OUTERPEDIA_DERIVED_DIR`) — defaults = `data/game` + `data/derived` + checkout.
+`data/sync.mjs` (the dev-time copy) finds the outerpedia checkout via the
+`OUTERPEDIA_PATH` env var, else a list of known local paths, and exits non-zero
+if the checkout or any of the 19 artifacts is missing.
 
 `sub-ticks.json` (derived): per-tick values of the ATK/DEF/HP flat+% subs per
 star (5★/6★), recomposed by outerpedia's solver generator from `ItemOptionTemplet`

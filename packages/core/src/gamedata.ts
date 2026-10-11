@@ -67,7 +67,7 @@ export type EquipmentTable = Record<string, EquipmentDef>;
 
 /** Main-stat enhancement scaling tables (mirrors outerpedia-v2 item-stats-detail). */
 export interface EnhanceData {
-  enhanceFactor: number;        // +0.04 per enhance level (stored as 0.4, applied as factor*lv where lv = 0..10/10)
+  enhanceFactor: number;        // +40% per enhance level (stored as 0.4, applied as 1 + factor × lv, lv = 0..10 → ×5 at +10)
   tierFactor: number;           // +0.05 per breakthrough tier
   maxEnhanceLevel: number;      // 10
   singularity: { activation: number; steps: number[] };  // ascended (lv 11..15) extras

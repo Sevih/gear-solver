@@ -112,9 +112,9 @@ budget**, not a per-slot percentage — a % does not bound the **product** (30% 
 seven ~40-50-piece pools is still ~`7e8`; measured: **703M / 142s** in Score mode
 with a priority set). `allocateComboBudget` distributes (water-filling) a keep
 count **per slot** so that `∏ keep ≤ budget` (small slots kept whole, the surplus
-flows to the big armor slots). Default budget `COMBO_BUDGET = 8M` (≈ 1-2 s of
+flows to the big armor slots). Reference budget `COMBO_BUDGET = 8M` at Top% 30 (≈ 1-2 s of
 solve — Score is more expensive per combo than CP), **scaled by the Top% slider**
-(`budget = 8M × topPct/30`; `topPct = 100` short-circuits back to exhaustive).
+(`budget = 8M × topPct/30`, ~16M at the default 60; `topPct = 100` short-circuits back to exhaustive).
 Talisman included, the **EE never** (no EE pool — single equipped piece, always
 exempt); `keepCurrent` slots exempt.
 
@@ -396,11 +396,12 @@ A typical inventory: 150 pieces per slot × 7 slots = `150^7 ≈ 10^15` permutat
 The Top% slider drives an **absolute combo budget** (phase 3): `budget = 8M × topPct/30`,
 water-filled per slot (`allocateComboBudget`) so that `∏ keep ≤ budget`:
 - 100% → exhaustive (short-circuit, no prune)
-- 30% (default) → 8M combos (~1-2 s)
+- 60% (default) → ~16M combos
+- 30% → 8M combos (~1-2 s; the former default, the normalization reference)
 - 10% → ~2.7M
 - 5% → ~1.3M (very fast, but may skip the optimal build)
 
-The panel hint says so explicitly: *"Heuristic — too low a Top % drops optimal builds"*. It's a pure recall vs speed trade-off. **Caution**: a *per-slot percentage* Top% would not bound the **product** — on a real account, 30%/slot still leaves ~`10^10` combos (measured: 1.25G post-30%-prune, still >100 s). That's why the budget bounds `∏` directly, **whatever the mode** → a ~1-2 s solve on any account.
+The panel hint says so explicitly: *"Top % scales an absolute combo budget (100 = exhaustive) […] Heuristic — too low a Top % drops optimal builds"*. It's a pure recall vs speed trade-off. **Caution**: a *per-slot percentage* Top% would not bound the **product** — on a real account, 30%/slot still leaves ~`10^10` combos (measured: 1.25G post-30%-prune, still >100 s). That's why the budget bounds `∏` directly, **whatever the mode** → a ~1-2 s solve on any account.
 
 With empty `priority`, the budget still bites: in **SOLVE Score** the ranking
 falls back to raw roll magnitude (`magnitudeScoreOf`, phase 3c) — results are

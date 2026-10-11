@@ -855,10 +855,11 @@ export function magnitudeScoreOf(p: GearPiece): number {
   return s;
 }
 
-/** Default combo budget for the per-slot auto-prune: the cartesian the solver is
- *  allowed to walk at the default Top% (30). At ~5-13M combos/s across a modern
- *  worker pool (Score is heavier per combo than CP) this finishes in ~1-2s; the
- *  Top% slider scales it linearly. Applies to every objective (priority / CP /
+/** Reference combo budget for the per-slot auto-prune: the cartesian the solver
+ *  is allowed to walk at Top% 30 (the former default). At ~5-13M combos/s across
+ *  a modern worker pool (Score is heavier per combo than CP) this finishes in
+ *  ~1-2s; the Top% slider scales it linearly (`budget = COMBO_BUDGET × topPct/30`,
+ *  so the UI default of 60 walks ~16M). Applies to every objective (priority / CP /
  *  magnitude) — a per-slot percentage can't bound the product. */
 const COMBO_BUDGET = 8_000_000;
 

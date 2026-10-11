@@ -1,13 +1,16 @@
 /**
  * Runtime no-gear stat composer — assembles the per-character ingredients
- * (data/calc-stats.mjs output) with the captured user progression and a few
- * UI toggles. Returns the same {NoGearStats, scaling} shape the BuildsScreen
- * already consumes, so adding gear on top stays identical to before.
+ * (`ingredients` of `data/derived/characters.json`, emitted by outerpedia's
+ * `datagen/generators/solver-ingredients.ts` and synced by `data/sync.mjs`)
+ * with the captured user progression and a few UI toggles. Returns the same
+ * {NoGearStats, scaling} shape the BuildsScreen already consumes, so adding
+ * gear on top stays identical to before.
  *
- * Formula mirrors outerpedia-v2's /api/admin/characters/[id]/stats route. The
- * key insight is that transcend% and the sum of class-passive + Skill_8 +
- * gift %-bonuses compound MULTIPLICATIVELY, while codex stacks additively on
- * top of the compound result (only on the baseMax leg, not on flats).
+ * This file is the reference for the formula: the old-site admin stats route
+ * it was first ported from no longer exists. The key insight is that
+ * transcend% and the sum of class-passive + Skill_8 + gift %-bonuses compound
+ * MULTIPLICATIVELY, while codex stacks additively on top of the compound
+ * result (only on the baseMax leg, not on flats).
  */
 import type {
   CharacterIngredients,
@@ -25,9 +28,10 @@ import type {
  *  CharacterMaxLevelTemplet.LevelUpStatModifierAfter100 (200 / 400 / 700 for
  *  LB Step 1 / 2 / 3 on a 3★ char).
  *
- *  Both terms are floored INDEPENDENTLY: the lv-1..100 leg uses the same
- *  formula extracted from outerpedia-v2/datamine/ParserV3/extract_character_stats.py;
- *  the lv > 100 amplification leg is `floor(rng × (L-100) × mod / 99000)` —
+ *  Both terms are floored INDEPENDENTLY: the lv-1..100 leg is the in-game
+ *  per-level interpolation (first taken from the old site's python datamine
+ *  parser, since removed; outerpedia's `src/lib/data/char-progression.ts`
+ *  applies the same `floor(rng × (L-1) / 99)`); the lv > 100 amplification leg is `floor(rng × (L-100) × mod / 99000)` —
  *  reverse-engineered against M.S.Ame lv 105 mod=200 (ATK 1307 / HP 3913 /
  *  DEF 965 white all match in-game exactly).
  *

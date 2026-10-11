@@ -9,7 +9,7 @@
  *    here are the DISPLAYED (percent) values, multiplied to raw inside.
  *  - EFF/RES use the displayed integer directly.
  *
- * See `memory/game_combat_power_formula.md` for the full derivation.
+ * See `docs/reference.md` § 2.2 (CalcBattlePower) for the full derivation.
  *
  * Moved out of BuildsScreen so the solver worker can import it without
  * pulling React (BuildsScreen.tsx transitively pulls the design system).
