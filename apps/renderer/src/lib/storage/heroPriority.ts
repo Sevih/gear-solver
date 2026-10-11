@@ -16,6 +16,9 @@
  * the solver. Owned by `App` so an edit in Builds is live for the Builder.
  */
 export const HERO_PRIORITY_KEY = "gs.priority.rank";
+/** Every hero uid that has already been offered a default rank. A hero in this
+ *  list with no rank was unranked ON PURPOSE and is never re-filled. */
+export const HERO_PRIORITY_SEEN_KEY = "gs.priority.seen";
 
 /** charUid → unique integer rank. Absent = unranked (lowest priority). */
 export type HeroPriority = Record<string, number>;
@@ -41,6 +44,23 @@ export function persistHeroPriority(map: HeroPriority): void {
     localStorage.setItem(HERO_PRIORITY_KEY, JSON.stringify(map));
   } catch {
     // Quota / locked-down context — skip; next save retries.
+  }
+}
+
+export function loadSeenHeroes(): Set<string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HERO_PRIORITY_SEEN_KEY) ?? "[]") as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.filter((u): u is string => typeof u === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function persistSeenHeroes(uids: Iterable<string>): void {
+  try {
+    localStorage.setItem(HERO_PRIORITY_SEEN_KEY, JSON.stringify([...new Set(uids)]));
+  } catch {
+    // Quota / locked-down context — skip; next roster pass retries.
   }
 }
 
@@ -90,11 +110,13 @@ export function reorderRank(map: HeroPriority, uid: string, pos: number | null):
 
 /** Normalize against the roster (given in CP-desc order): keep the already-ranked
  *  heroes (in their current rank order, compacted — no gaps) and append every
- *  unranked roster hero after them in CP order, renumbering contiguous 1..N.
+ *  unranked NEWCOMER after them in CP order, renumbering contiguous 1..N.
  *  Preserves manual ranks while giving newcomers a sensible default below them.
- *  Returns `null` when nothing is unranked (all set → caller skips the write). */
-export function fillUnrankedByOrder(map: HeroPriority, rosterByCp: string[]): HeroPriority | null {
-  const unranked = rosterByCp.filter((u) => map[u] == null);
+ *  A hero in `seen` was already offered a rank: if it has none, the user cleared
+ *  it, and it stays unranked. Returns `null` when no newcomer is unranked
+ *  (caller skips the write). */
+export function fillUnrankedByOrder(map: HeroPriority, rosterByCp: string[], seen: ReadonlySet<string> = new Set()): HeroPriority | null {
+  const unranked = rosterByCp.filter((u) => map[u] == null && !seen.has(u));
   if (unranked.length === 0) return null;
   const ranked = rosterByCp.filter((u) => map[u] != null).sort((a, b) => (map[a] ?? 0) - (map[b] ?? 0));
   return fromOrder([...ranked, ...unranked]);
