@@ -59,3 +59,25 @@ export function persistHeroFilters(map: HeroFiltersMap): void {
 export function cloneFilters(f: SolverFilters): SolverFilters {
   return { ...f, excludedHeroes: new Set(f.excludedHeroes) };
 }
+
+/** Starting filters for the Builder: the remembered set of the hero it opens on
+ *  (Optimize →, or a reload mid-session), else `defaults`. Lazy-init of the
+ *  filters reducer — the hero-switch effect never runs for the initial hero. */
+export function filtersForHero(map: HeroFiltersMap, uid: string | null, defaults: SolverFilters): SolverFilters {
+  const saved = uid ? map[uid] : undefined;
+  return saved ? cloneFilters(saved) : defaults;
+}
+
+/** Hero switch: the map with the OUTGOING hero's live filters snapshotted, or
+ *  null when the hero did not actually change (initial mount, StrictMode's
+ *  effect re-run) — snapshotting then would store the defaults over that
+ *  hero's remembered set. */
+export function snapshotOnHeroSwitch(
+  map: HeroFiltersMap,
+  prevUid: string | null,
+  nextUid: string | null,
+  live: SolverFilters,
+): HeroFiltersMap | null {
+  if (prevUid === nextUid) return null;
+  return prevUid ? { ...map, [prevUid]: cloneFilters(live) } : map;
+}
