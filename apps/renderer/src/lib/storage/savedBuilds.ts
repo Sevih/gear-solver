@@ -62,13 +62,14 @@ export function loadSavedBuilds(): SavedBuildsMap {
   }
 }
 
-/** Rewrite a single saved build's legacy stat keys → canonical (see loader). */
+/** Rewrite a single saved build's legacy stat keys → canonical (see loader),
+ *  and backfill `build.gemAllocation` — builds saved before the solver
+ *  returned it lack the field, and the Builder's gear band reads it. */
 function migrateSavedBuild(b: SavedBuild): SavedBuild {
   const fs = b.build?.finalStats as unknown as Record<string, number> | undefined;
-  const next: SavedBuild = {
-    ...b,
-    build: fs ? { ...b.build, finalStats: renameLegacyStatKeys(fs) as unknown as FinalStats } : b.build,
-  };
+  let build = fs ? { ...b.build, finalStats: renameLegacyStatKeys(fs) as unknown as FinalStats } : b.build;
+  if (build && !build.gemAllocation) build = { ...build, gemAllocation: { talisman: [], ee: [] } };
+  const next: SavedBuild = { ...b, build };
   if (b.reforge?.priority) {
     next.reforge = { ...b.reforge, priority: renameLegacyStatKeys(b.reforge.priority) };
   }
