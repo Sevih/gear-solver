@@ -122,6 +122,12 @@ npm run desktop:build
 npm --workspace @gear-solver/desktop run dist
 ```
 
+Dev mode reads game data (`npm run data:sync`, the in-app sync) and images from a local
+[outerpedia](https://github.com/Sevih/outerpedia) checkout when one is found: `OUTERPEDIA_PATH`
+from the environment, else from a gitignored `.env.local` at the repo root
+(`OUTERPEDIA_PATH=/path/to/outerpedia`), else an `outerpedia` folder next to this repo. The
+packaged app only honors the environment variable and otherwise downloads from GitHub.
+
 Renderer-only dev (without the Electron shell — useful for UI iteration; note that the
 root `npm run dev` is an alias for `desktop:dev`, so target the workspace explicitly):
 

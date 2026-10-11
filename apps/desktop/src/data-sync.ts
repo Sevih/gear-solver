@@ -22,6 +22,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { findOuterpediaCheckout } from "./outerpedia-checkout.js";
 import { fetchRepoFile, readShaState, resolveLatestSha, writeShaState } from "./repo-source.js";
 
 /** Repo-relative dir holding the solver artifacts. */
@@ -38,21 +39,15 @@ export const SOLVER_FILES = [
 ];
 
 /** Locate a local outerpedia checkout carrying the solver artifacts, if any.
- *  `OUTERPEDIA_PATH` env wins. Absent on a user's machine → REPO mode. */
-function findSolverCheckout(): string | null {
+ *  `OUTERPEDIA_PATH` env wins; with a `repoRoot` (dev) `.env.local` and a
+ *  sibling `../outerpedia` checkout are tried too (outerpedia-checkout.ts).
+ *  Absent on a user's machine → REPO mode. */
+function findSolverCheckout(repoRoot: string | null): string | null {
   // Test hook: force REPO mode even on a machine that has a checkout, so the
   // packaged-build sync path can be exercised in dev (OUTERPEDIA_NO_CHECKOUT=1).
   if (process.env.OUTERPEDIA_NO_CHECKOUT) return null;
-  const candidates = [
-    process.env.OUTERPEDIA_PATH,
-    // Both dev machines' checkout locations — first one that exists wins.
-    "C:\\Users\\Sevih\\Documents\\Projet perso\\outerpedia",
-    "C:\\Users\\Sevih\\Documents\\dev\\outerpedia-v3",
-  ].filter((p): p is string => Boolean(p));
-  for (const p of candidates) {
-    if (existsSync(join(p, SOLVER_DIR, "version.json"))) return join(p, SOLVER_DIR);
-  }
-  return null;
+  const root = findOuterpediaCheckout(repoRoot, join(SOLVER_DIR, "version.json"));
+  return root ? join(root, SOLVER_DIR) : null;
 }
 
 /** Content hash from a derived tree's version.json — null when absent/corrupt. */
@@ -103,6 +98,9 @@ export interface SyncOptions {
   shaStateFile: string;
   /** Skip the staleness/SHA gate (manual "Sync" button). */
   force: boolean;
+  /** gear-solver repo root — dev only, enables the `.env.local` and sibling
+   *  checkout lookups. Null/absent (packaged build): `OUTERPEDIA_PATH` only. */
+  repoRoot?: string | null;
 }
 
 /**
@@ -111,11 +109,11 @@ export interface SyncOptions {
  * returns a status.
  */
 export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
-  const { derivedDir, shaStateFile, force } = opts;
+  const { derivedDir, shaStateFile, force, repoRoot = null } = opts;
   mkdirSync(derivedDir, { recursive: true });
 
   // ── CHECKOUT mode ─────────────────────────────────────────────────────────
-  const checkout = findSolverCheckout();
+  const checkout = findSolverCheckout(repoRoot);
   if (checkout) {
     const srcHash = readVersionHash(checkout);
     if (!force && srcHash != null && srcHash === readVersionHash(derivedDir)) {

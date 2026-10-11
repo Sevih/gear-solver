@@ -7,13 +7,15 @@
  * Run after a game patch (once outerpedia's `datagen:build` + `promote` ran):
  *   node data/sync.mjs      (or: npm run data:sync)
  *
- * `OUTERPEDIA_PATH` env overrides the checkout location. Exits non-zero when
+ * Checkout lookup (scripts/outerpedia-checkout.mjs): `OUTERPEDIA_PATH` env →
+ * `OUTERPEDIA_PATH` in `.env.local` → sibling `../outerpedia`. Exits non-zero when
  * the checkout or an expected artifact is missing so a release can't silently
  * ship stale data.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { REPO_ROOT, findOuterpediaCheckout } from "../scripts/outerpedia-checkout.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DERIVED = join(here, "derived");
@@ -28,16 +30,11 @@ const SOLVER_FILES = [
   "trust-buffs.json", "trust-character.json", "version.json",
 ];
 
-const candidates = [
-  process.env.OUTERPEDIA_PATH,
-  // Both dev machines' checkout locations — first one that exists wins.
-  "C:\\Users\\Sevih\\Documents\\Projet perso\\outerpedia",
-  "C:\\Users\\Sevih\\Documents\\dev\\outerpedia-v3",
-].filter(Boolean);
-const checkout = candidates.map((p) => join(p, "data", "generated", "solver"))
-  .find((p) => existsSync(join(p, "version.json")));
+const SOLVER_DIR = join("data", "generated", "solver");
+const root = findOuterpediaCheckout(REPO_ROOT, join(SOLVER_DIR, "version.json"));
+const checkout = root ? join(root, SOLVER_DIR) : null;
 if (!checkout) {
-  console.error("no outerpedia checkout with data/generated/solver found (set OUTERPEDIA_PATH?)");
+  console.error("no outerpedia checkout with data/generated/solver found (set OUTERPEDIA_PATH in the environment or .env.local)");
   process.exit(1);
 }
 

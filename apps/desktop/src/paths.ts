@@ -14,9 +14,9 @@
  *    `app.getPath("userData")` so the install dir stays read-only.
  */
 import { app } from "electron";
-import { existsSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findOuterpediaCheckout } from "./outerpedia-checkout.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -112,17 +112,12 @@ export const BUNDLED_IMG = IS_DEV
 
 /** Outerpedia checkout's staged image tree (`.assets-staging/images`, the
  *  same files the site's R2 bucket serves) — only used in dev as a zero-network
- *  fast path for `/img/*`. Prod goes disk-cache → R2. */
+ *  fast path for `/img/*`. Prod goes disk-cache → R2. Checkout lookup:
+ *  `OUTERPEDIA_PATH` env → `.env.local` → sibling `../outerpedia`. */
+const IMAGES_STAGING = join(".assets-staging", "images");
 export function findOuterpediaImagesDev(): string | null {
-  const env = process.env.OUTERPEDIA_PATH;
-  const candidates = [
-    env ? `${env.replace(/\\/g, "/")}/.assets-staging/images` : null,
-    // Both dev machines' checkout locations — first one that exists wins.
-    "C:/Users/Sevih/Documents/Projet perso/outerpedia/.assets-staging/images",
-    "C:/Users/Sevih/Documents/dev/outerpedia-v3/.assets-staging/images",
-  ].filter((p): p is string => Boolean(p));
-  for (const p of candidates) if (existsSync(p)) return normalize(p);
-  return null;
+  const root = findOuterpediaCheckout(REPO_ROOT, IMAGES_STAGING);
+  return root ? join(root, IMAGES_STAGING) : null;
 }
 
 /** Stat-locks JSON — committable baseline that the renderer reads/writes via

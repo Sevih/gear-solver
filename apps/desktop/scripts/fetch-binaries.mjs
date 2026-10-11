@@ -34,6 +34,7 @@ import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, r
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findOuterpediaCheckout } from "../../../scripts/outerpedia-checkout.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BIN = join(here, "..", "resources", "bin");
@@ -225,17 +226,20 @@ async function provisionProdCert() {
 }
 
 /** Wrap a PNG as a single-image Windows ICO container. electron-builder
- *  needs build/icon.ico to be >= 256x256 square; the favicon.ico in
- *  outerpedia-v2 is 189x256 (the site's tall-logo favicon) so we
- *  regenerate from the square 512x512 PNG asset. Inline because
+ *  needs build/icon.ico to be >= 256x256 square; the site's favicon.ico
+ *  is 189x256 (the tall-logo favicon) so we regenerate from the square
+ *  512x512 PNG asset of the outerpedia checkout (OUTERPEDIA_PATH env →
+ *  .env.local → sibling ../outerpedia, see scripts/outerpedia-checkout.mjs). Inline because
  *  ImageMagick isn't on the dev's PATH and the format is trivial: 6-byte
  *  header + 16-byte directory entry + the raw PNG payload. */
 function provisionWindowsIcon() {
-  const srcPng = join(here, "..", "..", "..", "..", "outerpedia-v2", "public", "icons", "icon-512x512.png");
+  const iconRel = join("public", "icons", "icon-512x512.png");
+  const checkout = findOuterpediaCheckout(REPO, iconRel);
+  const srcPng = checkout ? join(checkout, iconRel) : null;
   const buildDir = join(here, "..", "build");
   const outIco = join(buildDir, "icon.ico");
-  if (!existsSync(srcPng)) {
-    console.warn(`[warn] icon source not found at ${srcPng} - skipping .ico generation`);
+  if (!srcPng) {
+    console.warn(`[warn] no outerpedia checkout with ${iconRel} (set OUTERPEDIA_PATH?) - skipping .ico generation`);
     return;
   }
   mkdirSync(buildDir, { recursive: true });
