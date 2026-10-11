@@ -165,6 +165,30 @@ export function planWorklist(list: WorklistEntry[], inventory: Inventory | null)
   };
 }
 
+/** Live state of one queued change, as the Worklist card shows it. */
+export interface ChangeState {
+  /** Target piece already on the entry's hero. */
+  applied: boolean;
+  /** Target piece gone from the inventory (post data-sync / dismantle). */
+  stale: boolean;
+  /** Target wanted by another HERO too — the plan's contention, nothing
+   *  looser: the same hero queuing one piece in two builds is not a conflict
+   *  (the header says "order doesn't matter" then, and it must agree). */
+  conflict: boolean;
+}
+
+/** Per-change state for the card. `conflict` is read from `plan.contended`
+ *  so the card and the transaction header share one definition. */
+export function changeState(
+  change: WorklistChange,
+  ctx: { equippedOnHero: Set<string> | null; invUids: Set<string>; contended: Map<string, string[]> },
+): ChangeState {
+  const applied = ctx.equippedOnHero?.has(change.toUid) ?? false;
+  const stale = !ctx.invUids.has(change.toUid);
+  const conflict = !applied && !stale && ctx.contended.has(change.toUid);
+  return { applied, stale, conflict };
+}
+
 function mapSet<K, V>(m: Map<K, Set<V>>, k: K): Set<V> {
   let s = m.get(k);
   if (!s) { s = new Set<V>(); m.set(k, s); }

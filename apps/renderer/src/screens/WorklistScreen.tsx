@@ -7,7 +7,7 @@
  *
  * All decision state is derived LIVE from the current inventory, so the list
  * self-heals as pieces move: a change whose target piece is already on the hero
- * reads as applied (green), a target claimed by two entries flags a conflict,
+ * reads as applied (green), a target wanted by two heroes flags a conflict,
  * and a target that vanished from the inventory (post data-sync) reads as stale.
  */
 import { useMemo, useState } from "react";
@@ -21,7 +21,7 @@ import {
   equippedByHero,
   type WorklistEntry,
 } from "../lib/storage/worklist.js";
-import { planWorklist } from "../lib/worklist/plan.js";
+import { changeState, planWorklist } from "../lib/worklist/plan.js";
 
 interface WorklistScreenProps {
   inventory: Inventory | null;
@@ -62,13 +62,6 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
   // flat assignment list for the atomic "Apply all". Single source of truth for
   // the cross-entry concerns the per-card view can't see.
   const plan = useMemo(() => planWorklist(worklist, inventory), [worklist, inventory]);
-  // How many entries claim each target piece — > 1 ⇒ contention (a piece is a
-  // single physical copy; two heroes can't both wear it).
-  const claimCount = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const e of worklist) for (const c of e.changes) m.set(c.toUid, (m.get(c.toUid) ?? 0) + 1);
-    return m;
-  }, [worklist]);
   // uid → display name, for the contention banner (drawn from the queued diffs).
   const nameOf = useMemo(() => {
     const m = new Map<string, string>();
@@ -154,7 +147,7 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
           game={game}
           equippedOnHero={equipped.get(entry.heroUid) ?? null}
           invUids={invUids}
-          claimCount={claimCount}
+          contended={plan.contended}
           pieceByUid={pieceByUid}
           charByUid={charByUid}
           step={plan.position.get(entry.id) ?? null}
@@ -169,13 +162,14 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
 }
 
 function WorklistCard({
-  entry, game, equippedOnHero, invUids, claimCount, pieceByUid, charByUid, step, cyclic, worklist, onChange, onAfterApply,
+  entry, game, equippedOnHero, invUids, contended, pieceByUid, charByUid, step, cyclic, worklist, onChange, onAfterApply,
 }: {
   entry: WorklistEntry;
   game: GameData | null;
   equippedOnHero: Set<string> | null;
   invUids: Set<string>;
-  claimCount: Map<string, number>;
+  /** Pieces wanted by two distinct heroes — the plan's contention map. */
+  contended: Map<string, string[]>;
   /** Live inventory lookups — target piece (image + stats) and its current owner. */
   pieceByUid: Map<string, GearPiece>;
   charByUid: Map<string, Character>;
@@ -192,12 +186,10 @@ function WorklistCard({
   const [applyError, setApplyError] = useState<string | null>(null);
 
   // Per-change live state — applied (target already on hero), stale (target
-  // gone from the inventory), or conflicting (claimed by another entry too) —
-  // plus the live piece (image + stats) and its current owner.
+  // gone from the inventory), or conflicting (wanted by another hero too, the
+  // plan's contention) — plus the live piece (image + stats) and its current owner.
   const rows = entry.changes.map((c) => {
-    const applied = equippedOnHero?.has(c.toUid) ?? false;
-    const stale = !invUids.has(c.toUid);
-    const conflict = (claimCount.get(c.toUid) ?? 0) > 1;
+    const { applied, stale, conflict } = changeState(c, { equippedOnHero, invUids, contended });
     // Engine slot → player-facing design slot (ooparts → Talisman, shoes →
     // Boots) for the label + icon; the game never shows "ooparts".
     const ds = toDesignSlot(c.slot) ?? c.slot;
