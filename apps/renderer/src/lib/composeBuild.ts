@@ -203,12 +203,14 @@ const SET_BONUS_KEY_RATE: Record<string, string> = {
   ST_SPEED: "spd", ST_CRITICAL_RATE: "critRate", ST_CRITICAL_DMG_RATE: "critDmg",
   ST_DMG_BOOST: "dmgUp", ST_DMG_REDUCE_RATE: "dmgReduce",
   ST_BUFF_CHANCE: "eff", ST_BUFF_RESIST: "effRes", ST_PIERCE_POWER_RATE: "pen",
+  ST_E_CRI_DMG_REDUCE: "critDmgReduce",
 };
 const SET_BONUS_KEY_ADD: Record<string, string> = {
   ST_ATK: "atk", ST_DEF: "def", ST_HP: "hp",
   ST_SPEED: "spd", ST_CRITICAL_RATE: "critRate", ST_CRITICAL_DMG_RATE: "critDmg",
   ST_DMG_BOOST: "dmgUp", ST_DMG_REDUCE_RATE: "dmgReduce",
   ST_BUFF_CHANCE: "eff", ST_BUFF_RESIST: "effRes", ST_PIERCE_POWER_RATE: "pen",
+  ST_E_CRI_DMG_REDUCE: "critDmgReduce",
 };
 export function setBonusStatKey(st: string, isRate: boolean): string | null {
   return (isRate ? SET_BONUS_KEY_RATE : SET_BONUS_KEY_ADD)[st] ?? null;
