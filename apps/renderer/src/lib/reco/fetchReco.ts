@@ -28,3 +28,17 @@ export async function fetchReco(charId: number): Promise<RecoFetch> {
     return { status: "error", message: err instanceof Error ? err.message : String(err) };
   }
 }
+
+/** `fetchReco` for the hero selected when the request starts. Resolves to null
+ *  when the selection moved on while the request was in flight (`currentUid()`
+ *  no longer returns `uid`), so a late answer is never applied to another
+ *  hero. `fetcher` is injectable for tests. */
+export async function fetchRecoForHero(
+  uid: string,
+  charId: number,
+  currentUid: () => string | null,
+  fetcher: (charId: number) => Promise<RecoFetch> = fetchReco,
+): Promise<RecoFetch | null> {
+  const r = await fetcher(charId);
+  return currentUid() === uid ? r : null;
+}

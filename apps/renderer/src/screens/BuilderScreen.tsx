@@ -39,7 +39,7 @@ import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, Solve
 import type { HeroPriority } from "../lib/storage/heroPriority.js";
 import { ARMOR_SLOTS, planSlots } from "../lib/solver/setPlans.js";
 import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
-import { fetchReco } from "../lib/reco/fetchReco.js";
+import { fetchRecoForHero } from "../lib/reco/fetchReco.js";
 import { equipPieces } from "../equip.js";
 import type { WorklistChange, WorklistEntry } from "../lib/storage/worklist.js";
 import { loadHeroFilters, persistHeroFilters, cloneFilters, type HeroFiltersMap } from "../lib/storage/heroFilters.js";
@@ -662,6 +662,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   filtersRef.current = filters;
   const heroFiltersRef = useRef<HeroFiltersMap>(loadHeroFilters());
   const prevHeroRef = useRef(selectedUid);
+  // Live selection for async callbacks — their closure keeps the hero they
+  // started on (see `getPreset`).
+  const selectedUidRef = useRef(selectedUid);
+  selectedUidRef.current = selectedUid;
   // Primary SOLVE mode (split button), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
   // RANKING differs: Score ranks by priority — or raw roll magnitude without
@@ -1100,8 +1104,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setRecoBusy(true);
     setRecoStatus(null);
     setRecoPicker(null);
-    const r = await fetchReco(selected.charId);
+    const r = await fetchRecoForHero(selected.uid, selected.charId, () => selectedUidRef.current);
     setRecoBusy(false);
+    // Hero switched mid-fetch: this reco belongs to the previous hero — never
+    // merge it into the new one's filters (the switch already cleared reco UI).
+    if (r === null) return;
     if (r.status === "none") { setRecoStatus({ tone: "warn", text: "No build reco for this hero yet." }); return; }
     if (r.status === "error") { setRecoStatus({ tone: "error", text: `Reco fetch failed: ${r.message}` }); return; }
     const names = Object.keys(r.reco.builds);
