@@ -141,10 +141,17 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, file: string, ca
   stream.pipe(res);
 }
 
+/** `decodeURIComponent` that returns null instead of throwing `URIError` on a
+ *  malformed escape (`%E0%A4%A`) — same 400 contract as img-cache.ts. */
+function safeDecode(s: string): string | null {
+  try { return decodeURIComponent(s); } catch { return null; }
+}
+
 /** Serve `/<prefix>/...` from a base dir, with path-traversal guard. */
 function tryMount(req: IncomingMessage, res: ServerResponse, url: string, prefix: string, dir: string, cacheMode: "etag" | "long"): boolean {
   if (!url.startsWith(prefix)) return false;
-  const rel = decodeURIComponent(url.slice(prefix.length));
+  const rel = safeDecode(url.slice(prefix.length));
+  if (rel === null) { res.statusCode = 400; res.end("bad path"); return true; }
   const file = normalize(join(dir, rel));
   if (!file.startsWith(dir)) { res.statusCode = 403; res.end("forbidden"); return true; }
   serveStatic(req, res, file, cacheMode);
@@ -342,7 +349,20 @@ function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: numbe
   });
 }
 
+/** Request entry point. A synchronous throw in a route must not escape to
+ *  Node's `uncaughtException` (Electron shows a crash dialog and the request
+ *  hangs forever): answer 500 instead. */
 function handle(req: IncomingMessage, res: ServerResponse): void {
+  try {
+    route(req, res);
+  } catch (err) {
+    dwarn("server", "request failed:", err instanceof Error ? err.message : String(err));
+    if (!res.headersSent) res.statusCode = 500;
+    res.end();
+  }
+}
+
+function route(req: IncomingMessage, res: ServerResponse): void {
   const url = (req.url ?? "/").split("?")[0]!;
 
   // Reject cross-origin mutations up front (every state-changing endpoint is
@@ -634,7 +654,8 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
   // "absent". Serve 200 null instead of letting tryMount 404 — otherwise it's
   // a red console error on every load.
   if (url.startsWith("/captured/") && url.endsWith(".json")) {
-    const rel = decodeURIComponent(url.slice("/captured/".length).split("?")[0]!);
+    const rel = safeDecode(url.slice("/captured/".length).split("?")[0]!);
+    if (rel === null) { res.statusCode = 400; res.end("bad path"); return; }
     const file = normalize(join(CAPTURE_OUT, rel));
     if (file.startsWith(CAPTURE_OUT) && !existsSync(file)) {
       res.statusCode = 200;
