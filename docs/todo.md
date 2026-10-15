@@ -6,143 +6,153 @@
 > 🟢 feature / amélioration (non-bloquant) · ⚪ nit.
 >
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
-> **10 🔴 ouverts** — audit projet complet du 2026-09-07 (4 sections en tête de « Reste à faire »).
-> L'audit Builder 2026-07-03 est entièrement livré (cf. changelog).
+> **Décision** = à trancher avant de coder.
+>
+> Dernier passage : 2026-10-15. Les bugs confirmés de l'audit du 2026-09-07 sont livrés (T3, T4, T10, T14,
+> #23-#29 ; cf. git log). En tête : les constats de la revue du 2026-10-09 (identifiants C/M de la revue),
+> tous revérifiés sur `main` au 2026-10-15.
 
 ---
 
 ## Reste à faire
 
-### 🔴 Audit projet (2026-09-07) — bugs confirmés
-- [ ] 🔴 **Set Mitigation ignoré par le composeur** — `SET_BONUS_KEY_ADD` (`apps/renderer/src/lib/composeBuild.ts`)
-      n'a pas d'entrée `ST_E_CRI_DMG_REDUCE` : le bonus 2pc/4pc « Crit DMG Reduc +25/+20 % » (set id 9) est jeté
-      silencieusement → `FinalStats.critDmgReduce` et le CP sous-comptent pour tout build Mitigation. Vérifié par test
-      (attendu 25, obtenu 0). Ajouter la clé `critDmgReduce` dans les deux maps + un test data-driven qui vérifie que
-      chaque `st` de `sets.json` (hors ST_NONE / lifesteal / counter / enterAp) est mappé.
-- [ ] 🔴 **Serveur desktop : `decodeURIComponent` non protégé** — `server.ts` (`tryMount` + branche `/captured/`) lève
-      `URIError` sur `/gamedata/%E0%A4%A` ; pas de try/catch dans `handle`, pas de `uncaughtException` dans `main.ts`
-      → dialog d'erreur Electron + requête pendue. Faire comme `img-cache.ts` (try/catch → 400) et envelopper `handle`.
-- [ ] 🔴 **Presets legacy cassent le solve** — `filterPresets.ts` `fromSerialized` migre `includeEquippedOnOthers`
-      mais pas `useReforged` → `reforgeMode`, ni `topPct`. Un vieux preset donne `reforgeMode = undefined` →
-      `REFORGE_PLANS[undefined].ceiling` TypeError dans `engine.ts`. Défauts : `reforgeMode ?? (useReforged ?
-      "classic" : "disable")`, `topPct ?? 60`.
-- [ ] 🔴 **Build sauvegardé sans `gemAllocation` → crash de rendu** — `BuilderScreen` `BottomGearBand` fait
-      `build?.gemAllocation.talisman` ; aucune migration n'ajoute le champ dans `savedBuilds.ts`. Optional chaining +
-      défaut `{ talisman: [], ee: [] }` dans `migrateSavedBuild`.
-- [ ] 🔴 **Import de backup perdu** — l'import (Settings → Backup) n'écrit que localStorage ; le Builder reste monté
-      (`display:none`) avec sa map `savedBuilds`/`filterPresets` en `useState` → le prochain `persistSavedBuilds`
-      écrase le blob avec la map mémoire. Le message « Reopen the Builder tab » est faux. Remonter les maps dans App
-      (ou notifier le Builder via un event / clé de version) ; supprimer le mode `"replace"` mort de `transfer.ts`.
-- [ ] 🔴 **Drill Home → Inventory sur les sets ne filtre rien** — `HomeScreen.tsx` (`sets` / `allSets`) envoie
-      `id: sname` (nom du set) alors que l'Inventory filtre sur `p.armorSetId` numérique. Le catalogue a le bon id
-      sous `info.id`, écrasé au mapping. Envoyer `info.id`.
-- [ ] 🔴 **Rang héros impossible à vider** — `BuildsScreen.tsx` : l'effet `fillUnrankedByOrder` dépend de
-      `heroPriority`, donc vider un rang le re-attribue aussitôt en dernière position ; la règle « deux unranked ne se
-      volent pas » de `isLowerPriority` est morte. Ne remplir les unranked qu'au changement de roster (nouvelle capture),
-      pas à chaque édition.
-- [ ] 🔴 **URL morte pour la version du jeu** — `game-version.ts` pointe sur `Sevih/outerpediaV2` (repo mort). Pointer
-      sur `Sevih/outerpedia` (ou supprimer la feature si l'artefact n'y existe plus).
-- [ ] 🔴 **Mémoire de filtres par héros : héros initial jamais restauré** — `BuilderScreen` effet hero-switch : le garde
-      `heroChangeReset` saute la première passe → avec « Optimize → » les filtres session du héros ne sont pas rechargés,
-      puis `INITIAL_FILTERS` est snapshoté à leur place au premier switch (StrictMode : même perte). Lazy-init du reducer
-      avec `heroFiltersRef.current[initialHeroUid] ?? INITIAL_FILTERS` + garde par `prevHeroRef !== selectedUid`.
-- [ ] 🔴 **Race « Get preset » vs changement de héros** — `BuilderScreen` `getPreset` : après `await fetchReco`, rien ne
-      vérifie que le héros sélectionné est le même → la reco de A est mergée dans les filtres de B. Capturer
-      `selectedUid` avant l'await et bail si différent.
-- [ ] 🟠 **Double import Steam au démarrage** — `App.tsx` : l'effet initial et le `tick()` Steam appellent
-      `getCaptureStatus()` en parallèle ; si le tick gagne avec `lastItemMtime` null → second `refreshInventory`. Pas de
-      garde in-flight si un tick dépasse 5 s. Un seul chemin d'init + flag `busy`.
-- [ ] 🟠 **`onFiles` sans try/catch** — `App.tsx` : `JSON.parse(await f.text())` → rejection non gérée sur un fichier
-      invalide ; ne remet pas `userGeas`/`userCodex`, ne vide pas l'`<input>`.
-- [ ] 🟠 **Reset onboarding annulé par simple réouverture de Settings** — `onReady()` rappelé à chaque probe réussie
-      de l'onglet Setup, avant même un relaunch.
-- [ ] 🟠 **Worklist : deux définitions du « conflit »** — la carte (`WorklistScreen`) compte les claims par uid (même
-      héros, changes appliqués inclus) ; `plan.ts` exige ≥ 2 héros distincts sur des changes live. Un héros avec deux
-      builds visant la même pièce voit « conflict » alors que l'entête dit « order doesn't matter ». Une seule source
-      (`plan.ts`).
-- [ ] 🟠 **`syncGameData` (App) ne teste pas `r.ok`** — HTTP 500 sans JSON → « Game data synced. » ; et
-      `SettingsModal` réimplémente le même bouton avec `window.location.reload()` (tue un solve en cours). Un seul
-      chemin.
-- [ ] 🟠 **`capture.ts` : reliquat sans `\n` final** — émis via `onLine` sans test du sentinel `__EXIT__` → « Capture
-      failed (exit -1) » si le serveur ne termine pas par un retour ligne.
+### 🔴 Revue 2026-10 — calcul de la fiche
+- [ ] 🔴 **M1 — Niveau de set faux en mélange BT4/BT3** — `computeSetBonuses` (`composeBuild.ts`) passe au palier 2
+      seulement si **toutes** les pièces du set sont BT4 ; le jeu prend le minimum des 2 (2P) ou 4 (4P) meilleures
+      (`[4,4,3]` : 35 % en jeu, 30 % ici). Même règle recopiée dans `BuildEffectsPanel` (BuilderScreen) et
+      `docs/reference.md`. Une seule fonction de niveau de set dans `core`, et le niveau dans la clé de dominance
+      de `pruneDominatedForCp` (une BT3 peut aujourd'hui éliminer une BT4 meilleure du même set). Voir aussi O5
+      (§ Contrat).
+- [ ] 🔴 **M4 — Héros fusionnés calculés sur l'origine dans le Builder et le moteur** — Builds utilise
+      `effectiveCharId` depuis T16, pas le Builder ni `precomputeContext` : pas de passif de cœur, mauvais
+      `charLevelMax`, mauvaise stat de dégâts (Snow 1370 ATK au lieu de 1503). Un seul helper « héros effectif »
+      dans `core`, appelé par Builds, Builder, moteur et Worklist ; corriger le commentaire du Builder qui dit
+      l'inverse.
+- [ ] 🟡 **Main stat en float32** — `parse.ts` `mainMult`/`roundMain` calcule en double + epsilon, le jeu en float32
+      (`CItemMainOption`) : 21 cas d'écart d'arrondi. Porter la chaîne d'outerpedia.
+- [ ] 🟡 **M5 — Niveaux de compétence des fusionnés** — le jeu les reconstruit depuis `CharacterFusionLevel`, l'outil
+      prend `First..Ultimate` de la capture (jusqu'à +1 200 CP d'écart). **Bloqué** : il faut une capture d'un
+      fusionné dont les compétences d'origine dépassent celles de la fusion.
+- [ ] 🟡 **Mineurs de fiche (revue)** — set Vitesse appliqué sur une base qui inclut les buffs OAT_ADD (~+3 SPD en 4P
+      sur Claire, Faenan, Delta…) · `critRate` non borné à [0, 100] dans `FinalStats` (affichage, filtres, scaling
+      secondaire crc de Regina) · CP en double au lieu de float32 (±1 sur ~0,5 % des fiches) · ATK/DEF/HP plats
+      issus de `fromBuff` perdus, OAT_ADD sur EFF/RES traité en taux (latent) · `combatOnly` des mains d'EE décidé
+      par le nom et non par le Type (latent) · `composeCharStats` ignore l'ATK plat de classe/skill8/cœur (vaut 0
+      aujourd'hui) · `awakValue` : ATK prend `geas.atk` toutes sources, EFF/RES `geasStat` — unifier.
 
-### 🟠 Audit projet (2026-09-07) — sécurité / robustesse desktop
-- [ ] 🟠 **`GET /captured/*` exposé sans garde Host** — `server.ts` ne filtre que les POST par `isLocalRequest` ; le
-      commentaire dit que les GET « n'exposent rien de sensible », mais `/captured/user_item.json` est le compte du
-      joueur (lisible par DNS rebinding). Appliquer la garde Host aux mounts `/captured/*` (et `/api/*` GET).
-- [ ] 🟠 **Vite middleware ≠ server.ts (dérive)** — le mirror dev (`vite.config.ts`) teste `armed` par simple présence
-      de `.mitm.pid` (pas de vérif de vivacité, wedge possible) et n'a pas le kill en arbre `taskkill /T`. ~430 lignes
-      dupliquées : extraire un `createApiHandler(paths)` partagé dans `apps/desktop/src` (déjà Electron-free pour la
-      plupart des modules) et le monter des deux côtés.
-- [ ] 🟠 **Write-back d'équipement non protégé contre la source Steam** — `/api/captured/user-item` refuse si
-      `isArmed()` (mitm) mais pas si le plugin Steam est live, alors que le prochain lobby écrase l'édition pareil.
-      Refuser (ou avertir) quand `steamStatus().live`.
-- [ ] 🟠 **`steamStatus()` toutes les 5 s en `spawnSync`** — `reg.exe` + `tasklist.exe` (timeouts 3-4 s) + SHA-256
-      de deux DLL, dans le thread principal Electron qui sert aussi le HTTP. Passer en async (`execFile`), cacher
-      `findOuterplane()` et le hash du DLL bundlé (invariant par process).
-- [ ] 🟡 **Fenêtre ouverte seulement après la sync réseau** — `main.ts` await `syncGameData` avant `createWindow` :
-      offline avec DNS lent = jusqu'à ~30 s sans fenêtre. Ouvrir la fenêtre, puis sync + notification (le renderer
-      sait déjà afficher le statut).
-- [ ] 🟡 **Pas de cache négatif sur `/img/*`** — une image absente du bucket R2 est refetchée à chaque rendu, sans
-      `Cache-Control` sur le 404. Mémoriser les misses (TTL) + `Cache-Control` court sur la 404.
-- [ ] ⚪ **Garde de traversal `file.startsWith(dir)` sans séparateur** (server.ts `tryMount`, img-cache.ts `safeJoin`)
-      : `dir2/` passe si `dir` en est un préfixe. Comparer avec `dir + sep` (ou `path.relative` sans `..`).
-- [ ] ⚪ **Sync REPO gatée sur le SHA du repo** — tout commit site-only d'outerpedia redéclenche le download des 19
-      fichiers. Télécharger `version.json` d'abord et comparer le `hash` avant le reste.
-- [ ] ⚪ **Chemins perso codés en dur** (`C:\Users\Sevih\...`) dans `paths.ts`, `data-sync.ts`, `data/sync.mjs`,
-      `vite.config.ts` — passer par `OUTERPEDIA_PATH` + un `.env.local` gitignoré (déjà listé dans `.gitignore`).
+### 🔴 Revue 2026-10 — moteur et Builder
+- [ ] 🔴 **M6 — « Maxed only » en +15R9 renvoie toujours 0 build** — `meetsMaxedFloor` exige +15 du talisman, qui
+      plafonne à +10 (courbes ooparts à 11 entrées, pas de singularité). Plancher `min(ceiling, 10)` pour les ooparts.
+- [ ] 🔴 **M9 — Projection de reforge sans priorité : les ticks partent sur les PV plats** — `simulateReforges`
+      départage à la valeur brute par tick quand la priorité est nulle (5 ticks : HP 180 → 1080). Répartir selon
+      le poids CP de la stat.
+- [ ] 🔴 **M7 — Priorité partielle : des emplacements de gemme restent vides** — `solver/gems.ts` s'arrête dès que
+      le score est ≤ 0 (talisman `[15050, 15050, 0, 0, 0]`, le +20 % ATK des gemmes possédées disparaît de la fiche
+      et de la CP). **Décision** : compléter par CP ou par la stat la plus utile, une fois la priorité servie ?
+- [ ] 🔴 **M11 — ΔCP du Builder trompeur** — compare le build projeté (+10R6) à la CP réelle actuelle : un build
+      identique à l'équipement affiche un ΔCP positif. **Décision** : base du ΔCP (équipé projeté pareil, ou
+      projeté vs réel affiché comme tel) ?
+- [ ] 🔴 **M12 — Worklist « Apply all » : deux builds d'un même héros sur un même emplacement** — `plan.ts` annonce
+      « 0 contention » et la plus ancienne gagne, alors que `worklistClaims` dit « la plus récente gagne » et que la
+      docstring « indépendant de l'ordre » de `equip.ts` est fausse (#18 ne couvre pas ce cas). **Décision** :
+      quelle règle pour ce doublon (la plus récente, la plus ancienne, ou un conflit affiché) ?
+- [ ] 🟠 **M8 — Allocation de gemmes en SOLVE CP non optimale** — le glouton prend des gemmes de réduction de dégâts
+      (34 643 CP contre un optimum à 35 044 sur Ame ; chiffres non relancés). `allocateGems` et `aggregateGemDelta`
+      font le même travail : n'en garder qu'un.
+- [ ] 🟠 **M10 — La projection ignore l'étoile et la rareté** — une pièce 5★ est projetée à +15R9 avec un passif de
+      singularité, ce que le jeu refuse (`GetMaxSmeltingCount`, `IsSingularityActivate`). Lié : `UiPiece.reforge.max
+      = star` faux pour les pièces ascendées. **Décision** : vue « tout en 6★ » assumée, ou plafond réel par pièce ?
+- [ ] 🟡 **Mineurs moteur / Builder (revue)** — score arrondi utilisé comme clé de tri (ex aequo arbitraires) ·
+      variantes de talisman fusionnées après le top-K par worker (candidats perdus) · erreur d'un worker → résultats
+      partiels affichés sans avertissement · `allowBrokenSets=false` + Top% peut donner 0 build sans explication ·
+      SOLVE CP avec priorité ne fixe pas l'équipement actuel · clés `mainStat` des recos non validées
+      (`translateReco`, latent) · en-tête « N slots change » périmé après Equip · `plan.ts` marque cycliques les
+      entrées qui ne font que dépendre d'un cycle · `buildAdvice` propose « +5 pour un 5e emplacement de gemme » aux
+      talismans 4★/5★ qui n'en ont pas.
 
-### 🟡 Audit projet (2026-09-07) — incohérences docs ↔ code
-- [ ] 🟡 **Top % par défaut : 60 dans le code**, encore 30 dans `docs/solver.md` (§ résumé perf), `todo.md` (item Perf
-      solver), `CARTESIAN_WARN` et le commentaire de `COMBO_BUDGET` (`engine.ts`). Le hint UI présente Top % comme
-      « percentile par slot » et l'avertissement ambre « Top % has no effect without priority » contredit le moteur
-      (prune par magnitude en Score sans priorité). Aligner UI + docs sur « budget absolu de combos ».
-- [ ] 🟡 **Docs publiques cassées** — `wiki/Engine-Reference.md` documente `npm run data:build` (n'existe plus) et
-      décrit `build.mjs` ; `docs/solver.md` lie un fichier mémoire hors repo ; `roadmap.md` et l'item Persistence de ce
-      todo citent `data/build.mjs` ; `compose-stats.ts` parle de « data/calc-stats.mjs output » ; `cp.ts` /
-      `composeBuild.ts` renvoient vers `memory/game_*.md` inexistants. STATUS.md liste « gardes Host/Origin » en
-      renvoyant vers ce todo, qui n'en parlait plus (cf. section sécu ci-dessus).
-- [ ] 🟡 **Commentaires faux / périmés** — `gamedata.ts` : « +0.04 per enhance level (stored as 0.4) » alors que le
-      code applique +40 %/niveau (×5 à +10, validé par tests) · `server.ts` `disarmIfArmed` « uses spawnSync » (async
-      spawn) · en-tête de `BuilderScreen.tsx` « UX-only, no logic wired » · `gs.builder.solveMode` (clé inexistante,
-      fallback sur « Solve CP » au lieu de « Solve ») · « auto-ranked by CP on capture » (le rang est manuel) · CP
-      décrit « no skill enhances » alors que `skillSum` compte · chips effets « identité = icône » (clé = `setId`) ·
-      libellés Score (« + rating filters ») et Upg (« improved » vs « differ ») · commentaires storage
-      « localStorage » (Inventory/Builds) alors que c'est sessionStorage.
+### 🔴 Contrat solver (avec outerpedia)
+> Ordre pour tout changement de forme : outerpedia ajoute sans retirer et pose `schema` ; une version de gear-solver
+> qui lit le nouveau champ est publiée ; ensuite seulement on retire l'ancien.
+- [ ] 🔴 **L1 d'abord — versionner le contrat** — `schema` (entier) et `resVersion` dans `solver/version.json` ;
+      `data-sync.ts` refuse un schéma plus récent que le sien et garde son cache. Aujourd'hui un push d'outerpedia
+      qui change la forme casse toutes les installations à la fois (le chargeur caste le JSON sans le valider).
+- [ ] 🔴 **C1 — Sets à effet de combat comptés comme stats de fiche** — Pulvérisation (17), Faiblesse (20, signe et
+      cible retournés par `abs()`), Augmentation (21), Immunité 4P niveau 2 (18) : `resolveSetEffectEntry`
+      (outerpedia) convertit leurs IOT_BUFF en stat, `computeSetBonuses` ne filtre pas → CP gonflée (+1 477 à
+      +7 301 sur 59 142), « Max CP » sur-sélectionne ces sets. Ne produire en stat que les IOT_STAT ; côté
+      gear-solver, ne rien compter sans `st`. **Décision** : exposer les IOT_BUFF dans un champ `combatEffects`
+      affiché, ou seulement les retirer de la CP ?
+- [ ] 🔴 **M2 — Uniques d'arme et d'accessoire qui touchent la fiche, ignorés** — Phantasm Necrosis (SPD −30 % caché,
+      CP trop haute de ~8 000 à 220 SPD), Ambition de Briaréos (RES +20 à 40 %, niveau = 1 + BreakLimitCount).
+      Générer les BT_STAT_PREMIUM/PASSIVE ciblant ME, cachés compris. **Décision** : livrer sur la preuve par le
+      code, ou attendre une capture ?
+- [ ] 🔴 **M3 — Unique IOT_STAT de l'EE de Fatal (2000078) absente** — CHD +30 % à +10 perdu : le contrat ne sort
+      que les uniques IOT_BUFF. Seul cas parmi les EE.
+- [ ] 🟡 **Vitesse en % du noyau** (`spdPct`) émise en taux et cuite au niveau courant par les deux compositeurs
+      (aujourd'hui pré-cuite, erreur commune au wiki et au solver).
+- [ ] 🟡 **Passif de cœur par niveau de fusion** — `corePassive` est un seul bloc pris au niveau max : faux pour une
+      fusion 1 à 4 (Notia).
+- [ ] 🟡 **Filtre des passifs de skill trop strict** côté contrat (`extractSkillPassiveByLevel` : ME seul, condition
+      NONE, `TurnDuration −1`) ; sans rejet constaté aujourd'hui.
+- [ ] 🟡 **O5 — Paliers de set par pièce et `IgnoreLowSet`** — le contrat n'émet ni les paliers séparés ni
+      `ignoreLowSet` (2 pièces palier 2 + 2 palier 1 : 55 % en jeu, 50 % ici). **Décision** : maintenant (avec M1)
+      ou plus tard ?
+- [ ] 🟡 **L6 — Une table `ST_*` → clés unique**, émise dans le contrat (`solver/stat-keys.json`) et lue par
+      `GAME_STAT` et par le wiki. Y faire entrer les mains d'EE `ST_AVOID` (précision vs élément), présentes dans
+      `buffs.json` mais inconnues de `GAME_STAT` → le main disparaît du panneau au lieu d'être affiché combat-only.
+- [ ] 🟡 **Mode CHECKOUT : fichier absent sauté par un `continue` muet** (`data-sync.ts`) alors que `data/sync.mjs`
+      sort en erreur ; `SOLVER_FILES` recopié dans `data/sync.mjs` et `data-sync.ts`. Une seule liste exportée
+      (core) et la même règle d'échec.
+- [ ] 🟡 **Test de forme croisé** — `CharacterIngredients` et `StatBlock` définis deux fois (outerpedia
+      `solver-ingredients.ts`, `core/gamedata.ts`), identiques aujourd'hui, rien ne le garantit.
+- [ ] ⚪ **Règles du jeu recopiées à la main** au lieu de venir du contrat : `REFORGE_PER_SUB_CAP`
+      (`OptionMaxValue`, que `parse.ts` n'applique pas non plus : sans effet tant que max = 6 × valeur), budgets
+      6/9 (`AddSmeltingCount`), emplacements de gemme (`GemSlot`), `EVO_UNLOCK_LEVEL`. `ee-passives` ne garde que
+      TargetType ME et le niveau de buff le plus haut (0 écart, fragile). `trust-buffs.json` synchronisé et chargé
+      mais jamais lu (à raison : buffs de combat) → cesser de le charger.
+- [ ] ⚪ **L10 — outerpedia consommateur de `packages/core`** : abandon recommandé (deux compositeurs tenus par un
+      oracle client commun). **Décision**.
+
+### 🟡 Revue 2026-10 — divers
+- [ ] 🟡 **`Talisman` de `/api/reco` ignoré** — outerpedia émet `Talisman?: RecoGearStat[]`, le type recopié dans
+      `translateReco.ts` ne l'a pas. **Décision** : exprès ou oubli ?
+- [ ] 🟡 **Plugin Steam en repli** : `GiftList` entre en collision avec `PVPStart` → écrit les geas de l'adversaire ·
+      écritures du plugin dans un ordre non FIFO · ré-import déclenché par le seul mtime de `user_item`.
+- [ ] 🟡 **data-sync** — `derivedReady` ne teste que `characters.json` · échecs de `writeAtomic` avalés · octets
+      non JSON écrits tels quels · pas de verrou contre deux syncs simultanées.
+- [ ] ⚪ **Desktop** — écritures du serveur non atomiques · `img-cache` ne revalide jamais une image en cache ·
+      une route `/api/*` inconnue répond 200 avec `index.html` · `release.mjs` ne restaure que `package.json` en
+      cas d'échec · champ `InvenType` déclaré dans `raw.ts` mais absent des captures.
+- [ ] ⚪ **Commentaires morts vers outerpedia-v2** — `EquipmentIcon.tsx`, `GameText.tsx`, `Shell.tsx`,
+      `InventoryScreen.tsx`, `BuilderScreen.tsx`, `core/gamedata.ts`, `core/parse.ts`.
+
+### 🟡 Audit projet (2026-09-07) — reste
 - [ ] 🟡 **`emptyReason` accuse l'EE** — `poolSizes.exclusive.hit = ee ? 1 : 0` : un héros sans EE affiche
       « Exclusive: 0 pieces after filters » alors que le solve tourne sans EE. Exclure `exclusive` de `dead`. Même
       écran : après un « Filter » client qui vide la table, message « Pick a hero and click SOLVE » au lieu de « filtré ».
-- [ ] 🟡 **EE mains `ST_AVOID`** (accuracy vs élément) — présents dans `buffs.json` avec leur nom, mais `GAME_STAT`
-      (`stats.ts`) ne les connaît pas → le main disparaît du panneau au lieu d'être affiché combat-only.
-- [ ] 🟡 **Stat-locks : migration `renameLegacyStatKeys` non appliquée** au fichier lu via `/api/stat-locks` — un
-      fichier ancien (`crc`, `chd`, …) ne matchera jamais.
 - [ ] 🟡 **`mergePreset` peut rendre les filtres contradictoires** — remplace `setPlans` par ceux de la reco mais
       laisse `excludedSets` : set requis + exclu → 0 build sans explication. Retirer des `excludedSets` les sets des
       nouveaux plans (ou avertir).
-- [ ] ⚪ **`SOLVER_FILES` en 4 exemplaires** (`data/sync.mjs`, `data-sync.ts`, `data.ts`, outerpedia). En mode checkout
-      `data-sync.ts` saute silencieusement un artefact manquant là où `sync.mjs` sort en erreur. Une seule liste
-      exportée (core) + même règle d'échec.
-- [ ] ⚪ **Code mort** — `SourcePicker` n'offre jamais le retour à « auto » (`onChange(null)`) · `transfer.ts` mode
-      `"replace"` · `addWorklistEntry`/`removeWorklistEntry`/`toggleWorklistChange` (worklist.ts) réimplémentés inline ·
-      `DebugFlag "capture"` · `GearCard` reçoit 9 props « reserved for pimp » jamais rendues · docstrings orphelines
-      (`saveCurrentPreset`, composant gems disparu) · `APP_VERSION` fallback « 0.4 » + « set in next.config ».
+- [ ] ⚪ **Stat-locks (debug) : `renameLegacyStatKeys` non appliqué** au fichier lu via `/api/stat-locks` — un
+      fichier ancien (`crc`, `chd`, …) ne matchera jamais.
+- [ ] ⚪ **Code mort** — `SourcePicker` n'offre jamais le retour à « auto » (`onChange(null)`) ·
+      `addWorklistEntry`/`removeWorklistEntry`/`toggleWorklistChange` (worklist.ts) réimplémentés inline ·
+      `DebugFlag "capture"` · `GearCard` reçoit des props « reserved for pimp » jamais rendues · `equipPiece`/
+      `unequipPiece` (renderer `equip.ts`) · `toIconPiece` · `statColor` · `loadHeroPriority`/`persistHeroPriority` ·
+      option `allowZeroPriority` · `has4pc`.
 - [ ] ⚪ **Reset (Builds)** remet aussi le tri `byRank` à CP alors que la condition d'affichage ne le regarde pas ·
       clamp worker count à `hardwareConcurrency` côté Settings vs `WORKER_COUNT_CEILING` côté orchestrateur.
-
-### 🟡 Audit projet (2026-09-07) — pratiques / perf
-- [ ] 🟠 **Aucune CI de vérification** — le seul workflow publie le wiki ; ni typecheck ni tests sur push/PR, et
-      `scripts/release.mjs` ne lance pas `npm test` avant `publish`. Ajouter un workflow `typecheck + test` et
-      l'étape dans la release.
+- [ ] 🟠 **`scripts/release.mjs` ne lance ni typecheck ni tests avant `publish`** (la CI les passe sur PR et `main`).
 - [ ] 🟠 **Aucun ESLint configuré** — les `eslint-disable-next-line react-hooks/exhaustive-deps` sont inertes, les deps
       de hooks ne sont vérifiées par rien. Ajouter `eslint.config.js` (typescript-eslint + react-hooks) et corriger ce
       qui sort.
 - [ ] 🟡 **`packages/core` déclare `vite` en dependency** (jamais importé, le package est « pure TS ») — supprimer.
 - [ ] 🟡 **Dépendance inversée `lib → screens`** — `filterPresets.ts` et `heroFilters.ts` importent `SolverFilters`
-      depuis `screens/BuilderScreen`. Déplacer le type + le reducer dans `lib/solver/builderFilters.ts` (permet aussi de
-      tester la migration des presets sans tirer l'écran).
-- [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer) · `computeQuality`
-      copié 3× (GearDetail, ResultGearDetail, quality.ts) · « slot changé » défini 3× dans le Builder (`equipPlan`,
-      `addToWorklist`, `pieceBySlot`) → une `diffBuildVsLoadout` partagée, même invariant que `upg` moteur.
+      depuis `screens/BuilderScreen`. Déplacer le type + le reducer dans `lib/solver/builderFilters.ts`.
+- [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer) · calcul de
+      qualité en 3 exemplaires (`computeQuality` de GearDetail et ResultGearDetail, `quality.ts`) · « slot changé »
+      défini 3× dans le Builder (`equipPlan`, `addToWorklist`, `pieceBySlot`) → une `diffBuildVsLoadout` partagée,
+      même invariant que `upg` moteur.
 - [ ] 🟡 **Effets de bord dans des updaters `setState`** (persist localStorage dans App/Builds — exécutés 2× en
       StrictMode) · `setState` après `await` sans garde d'unmount (BuildsScreen stat-locks, WorklistScreen,
       SettingsModal) · timers non nettoyés (`setWorklistAdded`, `CopyDebugButton`) · `filtersRef.current = filters`
@@ -155,8 +165,8 @@
       reconstruit 4× par changement d'inventaire (reconcile, claims, badge, WorklistScreen) → une map mémoïsée.
 - [ ] 🟡 **Perf Inventory** — `matchesFilters` reconstruit la chaîne `hay` et rappelle `computeQuality` par pièce à
       chaque frappe (2×1000 recalculs) → précalculer dans `toUiPiece` (cf. item « Optims mineures Inventory »).
-- [ ] 🟡 **Composants monolithiques** — BuilderScreen 4600 lignes (~40 composants + reducer), InventoryScreen 1350,
-      SettingsModal 1220 (5 panes + helpers réseau), HomeScreen `computeStats` 200 lignes. Découpage proposé :
+- [ ] 🟡 **Composants monolithiques** — BuilderScreen ~4600 lignes (~40 composants + reducer), InventoryScreen 1350,
+      SettingsModal 1210 (5 panes + helpers réseau), HomeScreen `computeStats` 200 lignes. Découpage proposé :
       `builderFilters.ts`, `catalogs.ts`, `ResultsTable`, `BottomGearBand`, `BuilderToolbar` + panels, `RightSidebar`,
       `FilterFooter`, hook `useSolverSession` ; une pane par fichier côté Settings.
 - [ ] ⚪ **`window.alert` / `confirm` bloquants** dans SettingsModal alors que l'app a une barre de status.
@@ -164,85 +174,55 @@
 - [ ] ⚪ **`useMemo(…, [])` comme « lire une fois »** (HomeScreen) → initialiseur `useState`.
 
 ### 🟢 Ratings offensifs — après la colonne « meilleur skill » (2026-09-05)
-- [ ] 🟢 **DPS de rotation pondéré par les cooldowns** — `dmgs` = hit du meilleur skill × SPD,
-      pas une rotation. La donnée damage d'outerpedia porte déjà `levels[].cool` / `startCool`
-      par skill : un `bestSkill`-like « facteur moyen par tour » (S1 filler + S2/S3 quand
-      dispo) est calculable côté générateur. À faire dans le pipeline (nouveau champ), jamais
-      en parsant localement.
-- [ ] ⚪ **DoT dans le meilleur hit** — assumé non modélisé (Gnosis Beth sous-estimée) ; ne
-      traiter que si le moteur damage expose un facteur DoT par skill comparable au hit direct.
+- [ ] 🟢 **DPS de rotation pondéré par les cooldowns** — `dmgs` = hit du meilleur skill × SPD, pas une rotation. La
+      donnée damage d'outerpedia porte déjà `levels[].cool` / `startCool` par skill : un facteur « moyen par tour »
+      (S1 filler + S2/S3 quand dispo) est calculable côté générateur. À faire dans le pipeline (nouveau champ),
+      jamais en parsant localement.
+- [ ] ⚪ **DoT dans le meilleur hit** — assumé non modélisé (Gnosis Beth sous-estimée) ; ne traiter que si le moteur
+      damage expose un facteur DoT par skill comparable au hit direct.
 
 ### 🟢 Tests manquants — audit Builder (2026-07-03)
-- [ ] 🟢 **Crit-cap slow path de bout en bout** — rien ne teste le trigger `wantCritCap`
-      + recompose dans `solveChunk` (le chemin par-combo `allocateGemsReachingCap` +
-      `gemDeltaEquals` + le memo `capAllocCache`).
-- [ ] 🟢 **Flux orchestrateur** — cancel / supersede / `solveId` anti-stale /
-      `workersDone === activeChunks` / crash worker (`onerror` → cancel) / flux
-      `estimate` (id anti-stale, null-on-error) : aucun test, et c'est là que vivaient
-      les bugs corrigés par l'audit (cf. changelog).
+- [ ] 🟢 **Crit-cap slow path de bout en bout** — rien ne teste le trigger `wantCritCap` + recompose dans `solveChunk`
+      (le chemin par-combo `allocateGemsReachingCap` + `gemDeltaEquals` + le memo `capAllocCache`).
+- [ ] 🟢 **Flux orchestrateur** — cancel / supersede / `solveId` anti-stale / `workersDone === activeChunks` / crash
+      worker (`onerror` → cancel) / flux `estimate` (id anti-stale, null-on-error) : aucun test.
 
 ### 🟠 Perf solver
-- [~] **Solver CP trop lent** — diagnostic sur vrai compte : Top% 100 défaut + aucune priorité = **cartésien
-      complet** (2,4 G combos, >100 s, `S ≈ P`) ; et un prune **en %** ne suffit pas (30 %/slot = encore 1,25 G).
-      **Perf RÉSOLUE** (mesuré sur D.Luna, vrai compte : >100 s → **< 4 s**) : (1) **auto-prune CP-pondéré + budget
-      combos** sur les 6 slots gear **+ talisman** — chaque slot classé par le CP qu'une pièce donne dans le build
-      courant, `allocateComboBudget` borne `∏ ≤ 8 M` (scalé par Top%) ; (2) **gemmes notées par apport CP**
-      (`cpStatWeights`, plus de dmg-red gobées) ; (3) **pin du build courant** (jamais pire que l'équipé) ;
-      (4) **défaut Top% → 30** (slider 100 = exhaustif) ; (5) **garde-fou** bandeau si `∏ poolSizes > 50 M`.
-      **Reste** : (a) confirmer la **justesse du top-CP** en jeu (≥ build équipé) ; (b) *optionnel* : qualité —
-      la notation standalone peut sous-classer un membre de set couplé (garde set-aware) ; (c) *optionnel* : B&B CP exact.
-- [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) ·
-      **SharedArrayBuffer** pour le flag
-      `cancelled` (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
+- [~] **Solver CP** — perf résolue (> 100 s → < 4 s sur un vrai compte : auto-prune CP-pondéré + budget de combos,
+      gemmes notées par apport CP, pin du build courant ; cf. changelog). **Reste** : (a) confirmer en jeu la justesse
+      du top-CP (≥ build équipé) ; (b) *optionnel* : la notation standalone peut sous-classer un membre de set couplé
+      (garde set-aware) ; (c) *optionnel* : B&B CP exact.
+- [ ] *(optionnel, si profilage)* Profiler un vrai solve (DevTools) · **SharedArrayBuffer** pour le flag `cancelled`
+      (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
 ### 🟡/⚪ UX-cohérence & nits
-- [~] 🟡 **`Advices` (tab Builds)** — lot prioritaire + (1)/(2) livrés (`lib/buildAdvice.ts` : caps gaspillés,
-      gems vides, upgrade agrégé ; **(1)** bruit Missing supprimé sur persos WIP — `Missing` ne sort que ≤ 2
-      slots manquants ; **(2)** ligne agrégée « N pieces below max enhance » (cap +10, +15 si ascended) ;
-      cf. changelog). **Reste — (3) lot secondaire** (main off-scaling vs `meta.dmgStat`, basse qualité,
-      « 4pc dispo en inventaire ») : nécessite de **passer l'inventaire complet** à `computeAdvice` (thread
-      `inventory.gear` + `meta.dmgStat` dans `AdviceInput`) — plus gros changement, différé.
-- [~] ⚪ **Optims mineures Inventory (si profilage)** — double virtualisation + fusion des 7 `useMemo`
-      d'availability livrées (cf. changelog). **Reste** : `computeQuality` est encore recalculé dans
-      `matchesFilters` (chip quality actif) et le panneau de détail — un précalcul partagé (`toUiPiece` /
-      map par UID) traverserait la frontière adapter↔quality, différé tant que le profilage ne le réclame pas.
+- [~] 🟡 **`Advices` (tab Builds)** — **reste le lot secondaire** (main off-scaling vs `meta.dmgStat`, basse qualité,
+      « 4pc dispo en inventaire ») : il faut passer l'inventaire complet à `computeAdvice` (`inventory.gear` +
+      `meta.dmgStat` dans `AdviceInput`).
+- [~] ⚪ **Optims mineures Inventory (si profilage)** — **reste** : `computeQuality` encore recalculé dans
+      `matchesFilters` (chip quality actif) et le panneau de détail ; un précalcul partagé (`toUiPiece` / map par UID)
+      traverserait la frontière adapter↔quality, différé tant que le profilage ne le réclame pas.
 
 ### Persistence
-- [~] **Snapshot `data/` versioning** — stamp + expo livrés (`build.mjs` → `version.json` `{ hash, builtAt }`,
-      affiché Settings → Data ; cf. changelog). **Reste (différé — touche les caches Builder)** : comparer le
-      `hash` au démarrage vs un `gs.data.hash` stocké et, au changement, **invalider/élaguer** les caches
-      localStorage (SavedBuild référençant des `pieceUids` disparus, presets). À faire dans la couche storage /
-      au boot, hors UI Builder.
-- [~] **Equip / Unequip** — méthodes core + endpoint writer + client + **déclencheur Builder « Equip
-      build »** livrés (popup de confirmation → `equipPieces` réécrit le snapshot en 1 passe → `refreshInventory` ;
-      cf. changelog). **Reste (optionnel)** : un déclencheur côté **Builds** (unequip / assignation par slot).
-      → consommé par la **worklist** (§ Workflow) pour le « fait ».
+- [~] **Snapshot `data/` versioning** — stamp `version.json` livré. **Reste** : comparer le `hash` au démarrage à un
+      `gs.data.hash` stocké et, au changement, invalider/élaguer les caches localStorage (SavedBuild référençant des
+      `pieceUids` disparus, presets). Dans la couche storage / au boot, hors UI Builder.
+- [~] **Equip / Unequip** — Builder « Equip build » et Worklist livrés. **Reste (optionnel)** : un déclencheur côté
+      **Builds** (unequip / assignation par slot).
 
 ### Externe — packaging desktop (vérif sur un vrai build, le plumbing existe)
-- [~] **Support Mobile et emulateur** — **émulateurs : LIVRÉ** (détection générique via `adb devices` +
-      override « Manual device » → tout émulateur rooté marche, plus seulement LDPlayer/MuMu/Nox ; cf.
-      changelog — à **valider sur un vrai ému** non-profilé). **Reste : mobile/physique** — bloqué par le
-      root (téléphone rooté = ADB USB + cert via module Magisk à câbler ; non-rooté = hors de portée, c'est
-      une limite physique pas un manque de code). Le wizard signale déjà « physique pas supporté ».
-- [~] 🟢 **Capture no-root** — livré par la **source Steam** (plugin BepInEx `tools/capture-steam/`, cf.
-      changelog 2026-09-05) : plus de root, d'émulateur ni de proxy pour les joueurs PC. Le root reste
-      requis pour la voie émulateur (redirect iptables + CA système, cf.
-      [tools/capture/README.md](../tools/capture/README.md)) — plus de raison d'y investir.
-      Validé en jeu le 2026-09-05 (hook principal `Log2InternalWeb` actif, 9 endpoints capturés,
-      auto-import OK — cf. changelog). **Reste** : (a) vérifier qu'un compte mobile se lie au client
-      Steam (FAQ MAJOR9) avant de le vendre aux joueurs ; (b) tester le chemin « BepInEx absent »
-      (download + pose dans le dossier du jeu) sur une install vierge — sur la machine de dev BepInEx
-      était déjà là ; (c) mobile physique : toujours bloqué par le root (limite physique, cf. item
-      au-dessus).
-- [ ] Bake prod du `data/` (`extraResources` → `process.resourcesPath`) · `electron build`/installeur
-      lance serveur local + renderer · auto-update contre release signée + feed réels · bouton capture
-      natif en packagé (sans `npm run dev`).
-- [ ] **Vérif sync repo en prod packagé** — 1er lancement online : seed `data/derived` bundlé →
-      sync SHA → download des 19 artefacts solver depuis `Sevih/outerpedia` (sans rebuild) ; images
-      peuplent le cache à la demande depuis R2 + préfetch des icônes d'équipement référencées par la
-      donnée. Vérifier `/img/*` ne tape R2 que sur miss (127.0.0.1 ensuite) · 2e lancement SHA
-      inchangé = instantané · simuler un patch (`OUTERPEDIA_REF` autre branche) · offline cold-cache
-      = pas de crash. (Mode REPO déjà smoke-testé hors packaging le 2026-08-12 : download @ 387a58c OK.)
+- [~] **Support mobile et émulateur** — émulateurs livrés (détection `adb devices` + « Manual device » ; à valider sur
+      un vrai ému non profilé). **Reste : mobile physique** — bloqué par le root (rooté = ADB USB + module Magisk à
+      câbler ; non rooté = hors de portée). Le wizard signale déjà « physique pas supporté ».
+- [~] 🟢 **Capture no-root** — livrée par la source Steam (plugin BepInEx, validé en jeu le 2026-09-05). **Reste** :
+      (a) vérifier qu'un compte mobile se lie au client Steam (FAQ MAJOR9) avant de le vendre aux joueurs ; (b) tester
+      le chemin « BepInEx absent » (download + pose dans le dossier du jeu) sur une install vierge.
+- [ ] Bake prod du `data/` (`extraResources` → `process.resourcesPath`) · installeur qui lance serveur local + renderer
+      · mise à jour automatique sur un vrai feed de release · bouton capture natif en packagé (sans `npm run dev`).
+- [ ] **Vérif sync repo en prod packagé** — 1er lancement online : seed `data/derived` bundlé → comparaison du hash de
+      `version.json` → download des artefacts solver depuis `Sevih/outerpedia` ; images en cache à la demande depuis
+      R2. Vérifier `/img/*` ne tape R2 que sur miss · 2e lancement inchangé = instantané · simuler un patch
+      (`OUTERPEDIA_REF` autre branche) · offline cold-cache = pas de crash.
 
 ---
 
