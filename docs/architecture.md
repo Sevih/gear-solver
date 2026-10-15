@@ -49,7 +49,9 @@ Four layers, connected by plain JSON:
   auto-update in production (`updater.ts` / `setupAutoUpdate`). The installer bundles `adb`
   but **not** the mitmproxy binaries (AV heuristics flag them as a PUA): `mitm-provision.ts`
   downloads the official checksum-pinned `mitmdump.exe` into `<userData>/bin/mitmproxy/` on the
-  first capture instead.
+  first capture instead. The installer ships no capture CA either: that same mitmdump generates
+  one per install in `<userData>/capture-ca/` before the first capture (`capture-ca.ts`), and
+  `capture.ps1` pushes it to the emulator whenever the copy there differs (SHA-256).
 
 ## Why this split
 

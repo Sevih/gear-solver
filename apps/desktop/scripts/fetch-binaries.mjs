@@ -2,14 +2,8 @@
 /**
  * One-shot provisioner for the build-time binaries of the packaged Electron
  * app. Run before `npm run pack` / `npm run dist`, and any time you want a
- * fresher mitmproxy or platform-tools release.
+ * fresher platform-tools release.
  *
- *   mitmproxy   (mitmdump.exe only) — BUILD-TIME ONLY: it generates the
- *               dedicated prod CA below but is NOT bundled in the installer.
- *               AV heuristics flag the mitmproxy binaries (PUA), so the
- *               packaged app downloads its own checksum-verified copy on
- *               first capture instead — see src/mitm-provision.ts and keep
- *               MITMPROXY_VERSION / MITMPROXY_SHA256 in sync with it.
  *   platform-tools (adb.exe + AdbWinApi / AdbWinUsbApi DLLs)
  *               from Google's always-latest pointer URL; we keep only the
  *               three files we actually need.
@@ -20,16 +14,19 @@
  *               as `<resources>/capture-steam` (BepInEx itself is downloaded
  *               at install time by steam-capture.ts, not bundled).
  *
- * Output: apps/desktop/resources/bin/{mitmproxy,adb}/ (gitignored). The
- * electron-builder extraResources mapping copies only the adb tree to
- * `<resources>/bin/adb` in the packaged build.
+ * Output: apps/desktop/resources/bin/adb/ (gitignored), copied to
+ * `<resources>/bin/adb` by the electron-builder extraResources mapping.
+ *
+ * Nothing mitmproxy-related happens here: the packaged app downloads its own
+ * checksum-verified mitmdump on first capture (src/mitm-provision.ts) and
+ * generates the user's capture CA with it (src/capture-ca.ts). No CA is
+ * produced at build time or shipped in the installer.
  *
  * Windows-only (we shell out to PowerShell's Expand-Archive). The Electron
  * tool ships Windows-only anyway — the capture pipeline depends on LDPlayer
  * / MuMu / NoxPlayer, all Windows.
  */
-import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -41,10 +38,6 @@ const BIN = join(here, "..", "resources", "bin");
 const RESOURCES = join(here, "..", "resources");
 const REPO = join(here, "..", "..", "..");
 
-// Keep both pins in sync with src/mitm-provision.ts (runtime download).
-const MITMPROXY_VERSION = "12.1.2";
-const MITMPROXY_SHA256 = "81c268b4d4965899f59043201bd0707075c5b820310be382b2fd41c554f370a2";
-const MITMPROXY_URL = `https://downloads.mitmproxy.org/${MITMPROXY_VERSION}/mitmproxy-${MITMPROXY_VERSION}-windows-x86_64.zip`;
 const PLATFORM_TOOLS_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip";
 
 async function download(url, out) {
@@ -70,27 +63,6 @@ function expand(zip, dest) {
     `Expand-Archive -Force -Path "${zip}" -DestinationPath "${dest}"`,
   ], { stdio: "inherit" });
   if (r.status !== 0) throw new Error("Expand-Archive failed");
-}
-
-async function provisionMitmproxy() {
-  const dest = join(BIN, "mitmproxy");
-  if (existsSync(join(dest, "mitmdump.exe"))) {
-    console.log("[ok] mitmproxy already present, skipping (delete the folder to refresh)");
-    return;
-  }
-  const tmp = join(tmpdir(), `mitmproxy-${Date.now()}.zip`);
-  await download(MITMPROXY_URL, tmp);
-  const got = createHash("sha256").update(readFileSync(tmp)).digest("hex");
-  if (got !== MITMPROXY_SHA256) {
-    rmSync(tmp, { force: true });
-    throw new Error(`mitmproxy zip checksum mismatch (got ${got}, expected ${MITMPROXY_SHA256}) — update both pins if the release moved`);
-  }
-  expand(tmp, dest);
-  rmSync(tmp, { force: true });
-  // Only mitmdump.exe is used (prod CA generation); the siblings are the AV
-  // bait we no longer want anywhere near the packaging pipeline.
-  for (const f of ["mitmproxy.exe", "mitmweb.exe"]) rmSync(join(dest, f), { force: true });
-  console.log(`[ok] mitmproxy ${MITMPROXY_VERSION} (mitmdump.exe only, checksum OK) -> ${dest}`);
 }
 
 async function provisionPlatformTools() {
@@ -138,93 +110,6 @@ function provisionSteamPlugin() {
   console.log(`[ok] capture-steam plugin -> ${dest}`);
 }
 
-/** Locate an OpenSSL executable. Git for Windows ships one under usr/bin; the
- *  OpenSSL-Win64 installer puts it under Program Files. PATH wins if set. */
-function findOpenssl() {
-  const candidates = [
-    "openssl",
-    "C:\\Program Files\\Git\\usr\\bin\\openssl.exe",
-    "C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe",
-    "C:\\Program Files\\OpenSSL-Win64\\bin\\openssl.exe",
-  ];
-  for (const c of candidates) {
-    const r = spawnSync(c, ["version"], { stdio: "ignore" });
-    if (r.status === 0) return c;
-  }
-  return null;
-}
-
-/** Generate a fresh mitmproxy CA dedicated to the packaged prod build so we
- *  never ship the dev's personal ~/.mitmproxy/ private key. Steps:
- *    1. Spawn the bundled mitmdump with `--set confdir=resources/prod-cert`.
- *       mitmdump generates the CA lazily during startup (before binding to
- *       the proxy port), so we just wait for the pem to appear and kill it.
- *    2. Compute Android `subject_hash_old` via OpenSSL (Git Bash ships one).
- *       Mitmproxy's CA subject is fixed (`O=mitmproxy CN=mitmproxy`) so the
- *       hash should always be `c8750f0d` — we still verify in case mitmproxy
- *       ever changes its CA template.
- *    3. Copy mitmproxy-ca-cert.pem to `<hash>.0` (the filename Android's
- *       system CA store expects).
- *  The resulting tree is bundled via electron-builder extraResources and
- *  consumed by capture.ps1 in prod via `-MitmConfDir` + `-CertDir`. */
-async function provisionProdCert() {
-  const certDir = join(here, "..", "resources", "prod-cert");
-  const caPath = join(certDir, "mitmproxy-ca.pem");
-  const certPemPath = join(certDir, "mitmproxy-ca-cert.pem");
-  const expectedHash = "c8750f0d";
-  if (existsSync(join(certDir, `${expectedHash}.0`))) {
-    console.log("[ok] prod cert already present, skipping (delete prod-cert/ to refresh)");
-    return;
-  }
-  const mitmdump = join(BIN, "mitmproxy", "mitmdump.exe");
-  if (!existsSync(mitmdump)) throw new Error("mitmdump missing — provisionMitmproxy must run first");
-  mkdirSync(certDir, { recursive: true });
-
-  console.log(`[cert] generating dedicated prod CA in ${certDir}`);
-  const proc = spawn(mitmdump, [
-    "--set", `confdir=${certDir}`,
-    "--listen-host", "127.0.0.1",
-    "--listen-port", "0",
-  ], { stdio: "ignore" });
-  try {
-    for (let i = 0; i < 100; i++) {
-      if (existsSync(caPath)) break;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    if (!existsSync(caPath)) throw new Error("mitmdump did not write CA within 10s");
-  } finally {
-    proc.kill();
-  }
-  console.log(`[cert] CA pem ready at ${caPath}`);
-
-  let hash = expectedHash;
-  const openssl = findOpenssl();
-  if (openssl) {
-    const r = spawnSync(openssl, [
-      "x509", "-inform", "PEM", "-subject_hash_old", "-noout", "-in", certPemPath,
-    ], { encoding: "utf-8" });
-    if (r.status === 0 && r.stdout.trim()) {
-      const out = r.stdout.trim();
-      if (out !== hash) {
-        console.warn(`[warn] mitmproxy CA subject hash changed: ${out} (expected ${expectedHash}) — using observed value`);
-        hash = out;
-      }
-    } else {
-      console.warn(`[warn] openssl subject_hash_old failed (status=${r.status}); assuming ${hash}`);
-    }
-  } else {
-    console.warn(`[warn] OpenSSL not found in PATH or Git/OpenSSL-Win64 install dirs; assuming ${hash}`);
-  }
-
-  const hashFile = join(certDir, `${hash}.0`);
-  const cp = spawnSync("powershell.exe", [
-    "-NoProfile", "-NonInteractive", "-Command",
-    `Copy-Item -Force "${certPemPath}" "${hashFile}"`,
-  ], { stdio: "inherit" });
-  if (cp.status !== 0) throw new Error("Copy-Item of CA cert to hashed name failed");
-  console.log(`[ok] android cert ready: ${hashFile}`);
-}
-
 /** Wrap a PNG as a single-image Windows ICO container. electron-builder
  *  needs build/icon.ico to be >= 256x256 square; the site's favicon.ico
  *  is 189x256 (the tall-logo favicon) so we regenerate from the square
@@ -268,9 +153,7 @@ function provisionWindowsIcon() {
 }
 
 mkdirSync(BIN, { recursive: true });
-await provisionMitmproxy();
 await provisionPlatformTools();
-await provisionProdCert();
 provisionSteamPlugin();
 provisionWindowsIcon();
-console.log(`[done] all binaries + prod cert + icon provisioned under ${BIN}/..`);
+console.log(`[done] all binaries + icon provisioned under ${BIN}/..`);

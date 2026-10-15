@@ -8,6 +8,46 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔐 Capture émulateur — CA générée sur le poste de l'utilisateur (2026-10-15)
+- ✅ 🟠 **La CA de capture est générée sur le poste de l'utilisateur au premier lancement ;
+  l'installeur n'en livre plus.** Avant, `fetch-binaries.mjs` produisait une CA mitmproxy au build
+  (`resources/prod-cert/`, réutilisée d'un build à l'autre) que l'installeur embarquait : toutes les
+  installations partageaient la même. Désormais chaque installation a la sienne.
+- ✅ **Génération** — `capture-ca.ts` : avant le premier armement (`prepareCapture`, après le
+  téléchargement de mitmdump), le mitmdump de `userData` est lancé avec `--set confdir=<dossier>` ;
+  il écrit `mitmproxy-ca.pem` + `mitmproxy-ca-cert.pem`, on l'arrête et on copie le cert sous
+  `c8750f0d.0` (sujet fixe → nom constant, pas d'openssl chez l'utilisateur). Génération dans
+  `<dossier>.new` renommé une fois complet (une génération interrompue ne laisse rien de
+  réutilisable) ; une CA existante est toujours réutilisée (seul le `.0` est recopié s'il manque).
+  Dossier : `<userData>/capture-ca` (`CAPTURE_CA_DIR` dans `paths.ts`, droits par défaut du profil),
+  hors de `bin/mitmproxy/` que la montée de version de mitmdump purge. Le dev ne change pas
+  (`~/.mitmproxy` + `tools/capture/cert`).
+- ✅ **Build** — `provisionProdCert` retiré de `fetch-binaries.mjs`, avec le téléchargement de
+  mitmproxy au build qui ne servait qu'à elle ; `resources/prod-cert` retiré des `extraResources`.
+  Garde `scripts/before-pack.mjs` (hook `beforePack` d'electron-builder) : refuse un config qui
+  embarquerait `resources/prod-cert` (ou tout `resources/`), et signale un dossier `prod-cert`
+  resté d'un ancien build — ignoré, jamais copié, supprimable.
+- ✅ **Émulateur** — `capture.ps1` compare le **contenu** du cert du magasin système (SHA-256 via
+  `sha256sum`, repli `toybox sha256sum`) à celui du fichier local, et non plus le seul nom (toutes
+  les CA mitmproxy s'appellent `c8750f0d.0`) : absent ou différent → push + `bind_cert.sh`, puis
+  revérification par empreinte. `bind_cert.sh` démonte d'abord un bind mount déjà posé, sinon la
+  copie repartirait de l'ancien overlay (dont le dossier source est supprimé juste avant) au lieu du
+  vrai magasin système.
+- ✅ **Écoute locale** — mitmdump écoute sur `127.0.0.1` (et non plus `0.0.0.0`) : le trafic arrive
+  par `adb reverse`.
+- ✅ **Tests** — `capture-ca.test.ts` (faux mitmdump qui écrit les deux fichiers dans `confdir` :
+  génération + copie en `c8750f0d.0`, réutilisation sans relancer mitmdump, `.0` restauré, appels
+  concurrents, échec propre), `paths.test.ts` (`CAPTURE_CA_DIR` sous userData, hors installation),
+  `packaging.test.ts` (aucun `extraResources` ne mappe `prod-cert`, garde câblé et testé).
+- ⏳ **À valider sous Windows (LDPlayer)**, le PowerShell ne tourne pas sous Linux :
+  1. émulateur qui porte l'**ancienne** CA (installée par une version précédente), app à jour :
+     Arm capture → « Capture certificate ready » au premier lancement, puis « Replacing the MITM cert
+     in the system store » (l'empreinte diffère), « MITM cert installed », et la capture aboutit
+     (`user_item.json` écrit) ;
+  2. Disarm puis second Arm → « MITM cert already in system store », rien n'est repoussé ni régénéré ;
+  3. contrôle : `<userData>/capture-ca/` contient `mitmproxy-ca.pem`, `mitmproxy-ca-cert.pem`,
+     `c8750f0d.0`, et le dossier `resources/` de l'installation n'a plus de `prod-cert`.
+
 ### 🖼️ Icônes de stat — déplacées sous `ui/stat/` sur R2 (2026-10-08)
 - ✅ 🟡 **Les icônes de stat (`CM_Stat_Icon_*`) ne chargeaient plus nulle part.** Outerpedia les a
   déplacées de `equipment/` vers `ui/stat/` sur le bucket R2 (`images.ts` → `statIcon`) ; le solver les

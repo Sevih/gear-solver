@@ -1,6 +1,13 @@
 #!/system/bin/sh
 SYS=/system/etc/security/cacerts
 TMP=/data/local/tmp/cacerts
+# Re-run on a device that already has our bind mount (CA being replaced):
+# drop it first, so the copy below starts from the real system store and not
+# from the previous overlay (whose backing dir is about to be deleted).
+for i in 1 2 3 4 5; do
+  grep -q " $SYS " /proc/mounts || break
+  umount "$SYS" || break
+done
 rm -rf "$TMP"
 mkdir -p "$TMP"
 cp "$SYS"/* "$TMP"/ 2>/dev/null

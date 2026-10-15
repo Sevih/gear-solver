@@ -112,7 +112,7 @@ Manual equivalent:
    mitmdump -s addon.py \
      --mode "reverse:https://glb-game.outerplane.vagames.co.kr:38001@9001" \
      --mode "reverse:https://glb-login.outerplane.vagames.co.kr:38002@9002" \
-     --listen-host 0.0.0.0
+     --listen-host 127.0.0.1
    ```
 2. Tunnel + redirect on the device (`scripts/redir.sh` as root):
    ```

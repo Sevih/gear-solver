@@ -68,7 +68,7 @@ export interface ApiConfig {
   img: ImgCacheOptions;
   /** Arguments for capture.ps1 / disarm.ps1 (detected emulator, bundled binaries). */
   captureScriptArgs: () => Promise<string[]>;
-  /** Runs before capture.ps1 — prod provisions mitmdump, streaming progress. */
+  /** Runs before capture.ps1 — prod provisions mitmdump and the capture CA, streaming progress. */
   prepareCapture?: (log: (line: string) => void) => Promise<void>;
   /** `/api/update/*` — electron-updater in prod, a static "up to date" in dev. */
   update: {
@@ -354,8 +354,9 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
     // resolve before spawning. On failure we surface a synthetic error stream
     // that the renderer already knows how to display.
     if (url === "/api/capture/run" && req.method === "POST") {
-      // Prod, first run on a machine: pull mitmdump (checksum-verified) before
-      // arming — progress lines share the capture console (mitm-provision.ts).
+      // Prod, first run on a machine: pull mitmdump (checksum-verified) and
+      // generate the capture CA before arming — progress lines share the
+      // capture console (mitm-provision.ts, capture-ca.ts).
       const prepare = cfg.prepareCapture ?? (async () => {});
       prepare((line) => { beginStream(res); res.write(`${line}\n`); })
         .then(() => cfg.captureScriptArgs())

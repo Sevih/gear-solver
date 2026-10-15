@@ -39,6 +39,7 @@
     "npmRebuild": false,
     "nodeGypRebuild": false,
     "buildDependenciesFromSource": false,
+    "beforePack": "./scripts/before-pack.mjs",
     "extraMetadata": {
       "dependencies": {
         "electron-updater": "^6.3.9"
@@ -76,13 +77,6 @@
       {
         "from": "resources/bin/adb",
         "to": "bin/adb",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "resources/prod-cert",
-        "to": "prod-cert",
         "filter": [
           "**/*"
         ]
