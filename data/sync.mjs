@@ -10,12 +10,14 @@
  * Checkout lookup (scripts/outerpedia-checkout.mjs): `OUTERPEDIA_PATH` env →
  * `OUTERPEDIA_PATH` in `.env.local` → sibling `../outerpedia`. Exits non-zero when
  * the checkout or an expected artifact is missing so a release can't silently
- * ship stale data.
+ * ship stale data, and when the checkout's `version.json` carries a contract
+ * schema this build can't read (scripts/solver-schema.mjs).
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { REPO_ROOT, findOuterpediaCheckout } from "../scripts/outerpedia-checkout.mjs";
+import { schemaRefusal } from "../scripts/solver-schema.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DERIVED = join(here, "derived");
@@ -35,6 +37,14 @@ const root = findOuterpediaCheckout(REPO_ROOT, join(SOLVER_DIR, "version.json"))
 const checkout = root ? join(root, SOLVER_DIR) : null;
 if (!checkout) {
   console.error("no outerpedia checkout with data/generated/solver found (set OUTERPEDIA_PATH in the environment or .env.local)");
+  process.exit(1);
+}
+
+// A contract this build can't read must never reach `data/derived/` (it ships
+// in the installer): refuse before writing anything.
+const refusal = schemaRefusal(readFileSync(join(checkout, "version.json"), "utf-8"));
+if (refusal) {
+  console.error(`${refusal}; data/derived left untouched`);
   process.exit(1);
 }
 

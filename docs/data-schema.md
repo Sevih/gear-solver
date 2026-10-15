@@ -141,12 +141,26 @@ node levels par account).
 1. Côté outerpedia : `datagen:build` + `promote` régénèrent `data/generated/solver/*.json`
    (le generator `solver` y porte l'ancienne distillation locale `build.mjs`/`calc-stats.mjs`).
 2. `npm run data:sync` copie ces artefacts dans `data/derived/*.json` (y compris
-   `version.json` `{ hash, builtAt }` — le `hash` ne change que si la donnée a
-   réellement bougé). Affiché dans Settings → Data.
+   `version.json` `{ schema, resVersion, hash, builtAt }` — le `hash` ne change que si la
+   donnée a réellement bougé ; `resVersion` est la version des tables du jeu). Affiché dans
+   Settings → Data.
 3. Re-capture le compte si la version a changé (`tools/capture/capture.ps1`).
 4. Tests verts (`npm test --workspaces`).
 5. Re-validate les stat-locks via le toggle debug de l'app, refresh des
    snapshots dans `data/stat-locks.json` si nécessaire.
+
+**Schéma du contrat.** `schema` (entier ≥ 1 ; absent = 1, le contrat d'avant son ajout)
+dit quelle forme ont les tables. L'app lit jusqu'à `SUPPORTED_SOLVER_SCHEMA`
+(`apps/desktop/src/data-sync.ts`, jumeau `scripts/solver-schema.mjs` pour `data/sync.mjs`).
+Un schéma plus récent, ou illisible (texte, décimal, 0, JSON cassé), est refusé avant tout
+téléchargement ou copie : rien n'est écrit, le SHA n'est pas enregistré (l'app mise à jour
+reprendra ces données au lancement suivant), le cache reste en place, statut `error` (ou
+`unavailable` sans cache) avec « update gear-solver » dans le message ; `data:sync` sort en
+erreur sans toucher `data/derived/`. outerpedia ne monte `schema` que pour un changement
+qu'une ancienne version lirait mal, dans cet ordre : (a) le nouveau champ arrive à côté de
+l'ancien, `schema` inchangé ; (b) une release de gear-solver lit le nouveau champ et monte
+`SUPPORTED_SOLVER_SCHEMA` à `schema + 1` (constante et jumeau ensemble) ; (c) outerpedia
+retire l'ancien champ et monte `schema`.
 
 Le `hash` de `version.json` est le crochet d'une future invalidation auto des caches localStorage ;
 l'élagage des SavedBuild aux `pieceUids` disparus reste à brancher (cf.

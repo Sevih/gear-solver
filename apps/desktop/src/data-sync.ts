@@ -51,6 +51,42 @@ function findSolverCheckout(repoRoot: string | null): string | null {
   return root ? join(root, SOLVER_DIR) : null;
 }
 
+/**
+ * Highest `version.json` `schema` this build reads. outerpedia's solver
+ * generator (header of `datagen/generators/solver.ts`) only bumps `schema` for
+ * a change an older reader would misread (field removed, renamed, meaning
+ * changed), in this order: (a) outerpedia adds the new field next to the old
+ * one, `schema` unchanged; (b) a gear-solver release reads the new field and
+ * raises this constant to `schema + 1`; (c) outerpedia drops the old field and
+ * bumps `schema`. A newer schema is refused and the cache kept (see
+ * `schemaRefusal`). Twin: `scripts/solver-schema.mjs` (data/sync.mjs).
+ */
+export const SUPPORTED_SOLVER_SCHEMA = 1;
+
+/** Contract schema of a solver `version.json` body: no `schema` field → 1 (the
+ *  contract before outerpedia added it — still what an un-updated cache
+ *  carries); an integer ≥ 1 → itself; anything else, or unparsable JSON → null. */
+export function solverSchemaOf(body: string): number | null {
+  let v: unknown;
+  try { v = JSON.parse(body); } catch { return null; }
+  if (v == null || typeof v !== "object" || Array.isArray(v)) return null;
+  const schema = (v as { schema?: unknown }).schema;
+  if (schema === undefined) return 1;
+  return typeof schema === "number" && Number.isInteger(schema) && schema >= 1 ? schema : null;
+}
+
+/** Why a `version.json` body can't be used by a build reading up to
+ *  `supported`, or null when it can. Worded to read inside the UI's
+ *  "Game data sync failed — <reason>; keeping the cached data." */
+export function schemaRefusal(body: string, supported: number = SUPPORTED_SOLVER_SCHEMA): string | null {
+  const schema = solverSchemaOf(body);
+  if (schema == null) return "outerpedia's game data has an unreadable format";
+  if (schema > supported) {
+    return `outerpedia's game data uses format ${schema}, this version of gear-solver reads up to format ${supported} — update gear-solver`;
+  }
+  return null;
+}
+
 /** Content hash from a derived tree's version.json — null when absent/corrupt. */
 function readVersionHash(dir: string): string | null {
   try {
@@ -112,6 +148,17 @@ export interface SyncOptions {
   /** gear-solver repo root — dev only, enables the `.env.local` and sibling
    *  checkout lookups. Null/absent (packaged build): `OUTERPEDIA_PATH` only. */
   repoRoot?: string | null;
+  /** Highest contract schema accepted — tests only; defaults to
+   *  `SUPPORTED_SOLVER_SCHEMA`. */
+  supportedSchema?: number;
+}
+
+/** Refused data: nothing written, SHA not recorded — status by whether a
+ *  cache is there to fall back on. */
+function refused(reason: string, derivedReady: boolean): SyncResult {
+  return derivedReady
+    ? { status: "error", message: `${reason}; keeping the cached data` }
+    : { status: "unavailable", message: `${reason}; no cached game data` };
 }
 
 /**
@@ -120,12 +167,17 @@ export interface SyncOptions {
  * returns a status.
  */
 export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
-  const { derivedDir, shaStateFile, force, repoRoot = null } = opts;
+  const { derivedDir, shaStateFile, force, repoRoot = null, supportedSchema = SUPPORTED_SOLVER_SCHEMA } = opts;
   mkdirSync(derivedDir, { recursive: true });
+  const derivedReady = existsSync(join(derivedDir, "characters.json"));
 
   // ── CHECKOUT mode ─────────────────────────────────────────────────────────
   const checkout = findSolverCheckout(repoRoot);
   if (checkout) {
+    let body = "";
+    try { body = readFileSync(join(checkout, "version.json"), "utf-8"); } catch { /* refused below */ }
+    const refusal = schemaRefusal(body, supportedSchema);
+    if (refusal) return refused(refusal, derivedReady);
     const srcHash = readVersionHash(checkout);
     if (!force && srcHash != null && srcHash === readVersionHash(derivedDir)) {
       return { status: "fresh", message: `data already up to date (checkout ${srcHash})` };
@@ -140,7 +192,6 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
   }
 
   // ── REPO mode ─────────────────────────────────────────────────────────────
-  const derivedReady = existsSync(join(derivedDir, "characters.json"));
   const latest = await resolveLatestSha();
   const cached = readShaState(shaStateFile)?.sha ?? null;
 
@@ -165,6 +216,12 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
       ? { status: "error", message: `download failed: version.json (${version.status}) — keeping cached data` }
       : { status: "unavailable", message: `download failed: version.json (${version.status}) and no cached data` };
   }
+  // A contract this build can't read is refused before anything else — no
+  // table downloaded or written, and the SHA NOT recorded: recording it would
+  // make the gate above answer "fresh" on every later launch, so an updated
+  // app would never pick these tables up.
+  const refusal = schemaRefusal(version.buf.toString("utf-8"), supportedSchema);
+  if (refusal) return refused(refusal, derivedReady);
   const remoteHash = hashOf(version.buf);
   if (!force && derivedReady && remoteHash != null && remoteHash === readVersionHash(derivedDir)) {
     writeShaState(shaStateFile, latest);

@@ -8,6 +8,48 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧾 Données de jeu — lecture du `schema` du contrat, refus d'un schéma plus récent (2026-10-15)
+- ✅ 🟠 **G1 — l'app lit le `schema` de `version.json` et refuse un contrat qu'elle ne sait pas lire.**
+  outerpedia ajoute `schema` (entier, 1 aujourd'hui) et `resVersion` à `version.json` ; jusqu'ici rien
+  ne disait quelle forme avaient les tables, et un changement de forme côté outerpedia serait arrivé
+  d'un coup chez toutes les installations. `data-sync.ts` exporte `SUPPORTED_SOLVER_SCHEMA = 1` (le
+  commentaire renvoie à la règle d'outerpedia : on la monte dans la release qui lit le nouveau champ,
+  étape (b)), `solverSchemaOf` (pure : `schema` absent → 1, contrat d'avant et cache existant ;
+  entier ≥ 1 → lui ; texte, décimal, 0, négatif, JSON illisible → null) et `schemaRefusal`.
+- ✅ **Mode REPO** — le schéma se vérifie juste après le téléchargement de `version.json`, avant la
+  comparaison de hash et toute autre table, en `force` aussi (bouton « Sync game data »). Refus : rien
+  écrit, cache intact, statut `error` (`unavailable` sans cache), message « outerpedia's game data uses
+  format 2, this version of gear-solver reads up to format 1 — update gear-solver; keeping the cached
+  data » ; il se lit dans « Game data sync failed — … . » et « Game data: … », renderer inchangé. Le SHA
+  n'est PAS enregistré : la gate (`latest === cached && derivedReady` → `fresh`) répondrait sinon
+  « à jour » à chaque lancement et une app mise à jour ne reprendrait jamais ces données — vérifié par
+  un test. **Mode CHECKOUT** — même vérification sur le `version.json` du checkout avant toute copie.
+- ✅ **`data/sync.mjs`** — même refus avant toute écriture dans `data/derived/` (sortie 1). Choix :
+  jumeau `scripts/solver-schema.mjs` (constante + deux fonctions), sur le modèle
+  `outerpedia-checkout.ts` / `.mjs` ; un test vérifie que les deux s'accordent sur 14 corps. Une source
+  unique aurait demandé d'importer du `.mjs` depuis le `tsc` du desktop (`allowJs`, `rootDir`), plus
+  intrusif. `docs/data-schema.md` (cycle après patch) décrit `{ schema, resVersion, hash, builtAt }`,
+  le refus et quand monter la constante.
+- ✅ **Tests** — `data-sync.test.ts` (`stubRemote` sert des champs en plus) : sans `schema`, les
+  trois tests existants passent sans retouche ; `schema: 1` synchronise ; `schema: 2` → `error`,
+  aucune table demandée après `version.json`, `version.json` + `characters.json` + SHA intacts, idem
+  en `force` ; sans cache → `unavailable` ; `"1"`, `1.5`, `0`, `-1`, `null` refusés ; après un refus,
+  une app qui lit 2 (option `supportedSchema`, réservée aux tests) synchronise au lancement suivant.
+  CHECKOUT (faux checkout via `OUTERPEDIA_PATH`) : `schema: 2` ne copie rien, `schema: 1` copie.
+  `sync.mjs` en processus enfant contre un faux checkout `schema: 2` : sortie ≠ 0, message, et
+  `data/derived/version.json` inchangé (le faux checkout ne porte que `version.json`, donc même une
+  vérification cassée s'arrêterait à la première table manquante sans écrire dans le dépôt).
+  `npm run typecheck` : sortie 0 (dernière ligne `> tsc --noEmit`, sans erreur) ; `npm test` : dernière
+  ligne `Tests  368 passed (368)` (core 80, desktop 77, renderer 368).
+- ⏳ `npm run data:sync` non lancé : le checkout voisin `../outerpedia` ne porte pas encore A56 (son
+  `version.json` n'a pas de `schema`). Après le commit d'A56 : `npm run data:sync`, vérifier que seul
+  `data/derived/version.json` change (`hash` `e0d0b39edac2` identique) et le commiter.
+- ⏳ Afficher `resVersion` (lot à part, `apps/renderer/src/game-version.ts`) : le `hash` ne bouge pas
+  quand seul `resVersion` change, donc le `version.json` du cache (même `hash` → arrêt avant écriture)
+  peut garder un `resVersion` ancien.
+- ⏳ Repéré hors périmètre : l'en-tête de `apps/renderer/test/outerpediaCheckout.test.ts` dit que le
+  desktop n'a pas de lanceur de tests, ce qui n'est plus vrai (`apps/desktop/vitest.config.ts`).
+
 ### ⚙️ Moteur — « Maxed only » en +15R9 et ticks de reforge sans priorité (2026-10-15)
 - ✅ 🔴 **M6 — « Maxed only » en +15R9 ne renvoyait jamais aucun build.** `meetsMaxedFloor` exigeait
   +15 du talisman, qui plafonne à +10 (pas de singularité, courbes ooparts de 11 entrées) : le pool
