@@ -110,7 +110,12 @@
 
 ### 🟡 Revue 2026-10 — divers
 - [ ] 🟡 **`Talisman` de `/api/reco` ignoré** — outerpedia émet `Talisman?: RecoGearStat[]`, le type recopié dans
-      `translateReco.ts` ne l'a pas. **Décision** : exprès ou oubli ?
+      `translateReco.ts` ne l'a pas. Décidé le 15/10 : lu en contrainte « préféré » (lot G4).
+- [ ] 🟡 **Plancher de « Maxed only » pour une pièce sous 6★** — une 5★ n'atteint jamais le budget du mode.
+      Décidé le 15/10 : il voudra dire « au plafond de la pièce » ; petit lot après G2.
+- [ ] ⚪ **`trust-buffs.json` chargé, jamais appliqué** (`apps/renderer/src/data.ts:79`) — s'il sert un jour, il
+      faudra la chaîne d'affinité par perso (une seule stat par héros, pas les trois) : outerpedia la corrige côté
+      site (lot C24) sans toucher au contrat.
 - [ ] 🟡 **Plugin Steam en repli** : `GiftList` entre en collision avec `PVPStart` → écrit les geas de l'adversaire ·
       écritures du plugin dans un ordre non FIFO · ré-import déclenché par le seul mtime de `user_item`.
 - [ ] 🟡 **data-sync** — `derivedReady` ne teste que `characters.json` · échecs de `writeAtomic` avalés · octets
