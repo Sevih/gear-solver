@@ -12,7 +12,7 @@ import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import SolverWorker from "../../workers/solver.worker.ts?worker";
 import { debug, debugEnabled } from "../log.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
-import { collapseTalismanVariants, precomputeContext } from "./engine.js";
+import { collapseTalismanVariants, precomputeContext, type ReforgeTickWeights } from "./engine.js";
 import type {
   EquippedScope,
   EstimateRequestMsg,
@@ -112,8 +112,10 @@ export interface OrchestratorCallbacks {
   /** `durationMs` = FULL wall-clock from solve() entry to this flush (whole
    *  milliseconds, incl. precompute), so the footer ⏱ reflects what the user
    *  actually waited — not just the worker search. `debug` is the per-solve
-   *  diagnostic snapshot, present only when `gs.debug.solver` is on. */
-  onResult(builds: SolveBuild[], durationMs: number, debug?: SolveDebugInfo): void;
+   *  diagnostic snapshot, present only when `gs.debug.solver` is on.
+   *  `reforgeTickWeights` = the no-priority reforge weights the precompute
+   *  projected with (null when unused) — the gear band re-projects with them. */
+  onResult(builds: SolveBuild[], durationMs: number, debug: SolveDebugInfo | undefined, reforgeTickWeights: ReforgeTickWeights | null): void;
   onError(message: string): void;
 }
 
@@ -176,6 +178,7 @@ export class SolverOrchestrator {
   /** Pool sizes — captured from the first worker's first progress event
    *  (every worker computes the same per-slot pre-filter result). */
   private poolSizes: PoolSizes | undefined;
+  private reforgeTickWeights: ReforgeTickWeights | null = null;
   /** Monotonically incremented per `solve()`. Echoed by workers on every
    *  output; messages tagged with a stale solveId are dropped. Without this,
    *  a stale `result` from a superseded run would slip into the new `buf`
@@ -279,6 +282,7 @@ export class SolverOrchestrator {
     this.buf = [];
     this.workersDone = 0;
     this.poolSizes = undefined;
+    this.reforgeTickWeights = null;
     this.stats = this.workers.map(() => ({ permutations: 0, searched: 0 }));
     const topK = args.topK ?? 1000;
     // Build the precompute ONCE on the main thread — broadcast to every
@@ -328,6 +332,7 @@ export class SolverOrchestrator {
     // first worker progress event (saves the perceptible "blank footer"
     // window at solve start).
     this.poolSizes = precomputed.poolSizes;
+    this.reforgeTickWeights = precomputed.reforgeTickWeights;
     this.emitProgress();
     // Cap the worker count to the partitioned pool size. `solveChunk` splits
     // the largest pool (pickPartitionSlot), so a pool of N items can keep at
@@ -553,7 +558,7 @@ export class SolverOrchestrator {
       this.debugInfo.perWorker = this.stats.map((s, i) => ({ w: i, perm: s.permutations, searched: s.searched }));
       debug("solver", "done", this.debugInfo);
     }
-    this.cb.onResult(out, totalMs, this.debugInfo ?? undefined);
+    this.cb.onResult(out, totalMs, this.debugInfo ?? undefined, this.reforgeTickWeights);
     this.active = false;
   }
 }

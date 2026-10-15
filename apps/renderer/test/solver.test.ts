@@ -785,16 +785,56 @@ describe("simulateReforges", () => {
     expect(sim.subs[0]!.value).toBe(18); // unchanged
   });
 
-  it("with empty priority, picks the highest raw per-tick sub", () => {
+  it("with empty priority and no weights, picks the largest tick relative to its roll norm", () => {
     const p = piece(3, 0, [
-      { stat: "atkPct", value: 6, percent: true, ticks: 2 },   // perTick = 3
-      { stat: "critRate", value: 2, percent: true, ticks: 2 }, // perTick = 1
+      { stat: "atkPct", value: 6, percent: true, ticks: 2 },   // perTick 3 / norm 40 = 0.075
+      { stat: "critRate", value: 2, percent: true, ticks: 2 }, // perTick 1 / norm 20 = 0.05
     ]);
     const sim = simulateReforges(p, {});
     const atk = sim.subs.find((s) => s.stat === "atkPct")!;
     // 3 reforges, ATK has 4 ticks of headroom → all 3 go to ATK.
     expect(atk.ticks).toBe(5);
     expect(atk.value).toBeCloseTo(15); // 6 + 3 × 3
+  });
+
+  it("with empty priority, flat HP no longer takes every tick (revue M9)", () => {
+    // The replayed case: 180 HP a tick against ~4 % for the others. Comparing
+    // raw per-tick values sent all 5 ticks to HP (180 → 1080).
+    const p = piece(6, 0, [
+      { stat: "critRate", value: 4, percent: true, ticks: 1 },
+      { stat: "critDmg", value: 4.4, percent: true, ticks: 1 },
+      { stat: "hp", value: 180, percent: false, ticks: 1 },
+      { stat: "atkPct", value: 4, percent: true, ticks: 1 },
+    ]);
+    const sim = simulateReforges(p, {}, 6);
+    const by = (k: string) => sim.subs.find((s) => s.stat === k)!;
+    // Per-roll norms: CRC 4/20 = 0.2 beats HP 180/1500 = 0.12 → CRC fills to LV6.
+    expect(by("critRate").ticks).toBe(6);
+    expect(by("hp").ticks).toBe(2);
+    expect(by("hp").value).toBe(360);
+  });
+
+  it("with empty priority, follows the CP tick weights when given", () => {
+    const p = piece(6, 0, [
+      { stat: "hp", value: 180, percent: false, ticks: 1 },
+      { stat: "atkPct", value: 4, percent: true, ticks: 1 },
+      { stat: "critDmg", value: 4.4, percent: true, ticks: 1 },
+    ]);
+    // ATK% worth the most CP per tick, then CHD; HP ~nothing.
+    const sim = simulateReforges(p, {}, 7, { "atkPct%": 50, "critDmg%": 20, hp: 0.01 });
+    const by = (k: string) => sim.subs.find((s) => s.stat === k)!;
+    expect(by("atkPct").ticks).toBe(6); // 5 ticks to the cap
+    expect(by("critDmg").ticks).toBe(3); // the 2 left
+    expect(by("hp").ticks).toBe(1);
+  });
+
+  it("an explicit priority ignores the tick weights", () => {
+    const p = piece(6, 0, [
+      { stat: "hp", value: 180, percent: false, ticks: 1 },
+      { stat: "atkPct", value: 4, percent: true, ticks: 1 },
+    ]);
+    const sim = simulateReforges(p, { hp: 1 }, 6, { "atkPct%": 50, hp: 0 });
+    expect(sim.subs.find((s) => s.stat === "hp")!.ticks).toBe(6);
   });
 
   it("does not mutate the original piece", () => {
@@ -933,6 +973,8 @@ describe("projectPieceForReforge — reforge budget per mode", () => {
 });
 
 describe("maxedFloorOf / meetsMaxedFloor — the 'Maxed only' investment floor", () => {
+  // The talisman's own enhance ceiling (`enhance.maxEnhanceLevel` in the contract).
+  const TALISMAN_MAX = 10;
   // A piece at a given (enhance, reforgeCount) state.
   const at = (enhanceLevel: number, reforgeCount: number): GearPiece =>
     ({ ...gearPiece("weapon"), enhanceLevel, reforgeCount });
@@ -940,35 +982,43 @@ describe("maxedFloorOf / meetsMaxedFloor — the 'Maxed only' investment floor",
   it("toggle off or reforge 'disable' → no gate (pieces in their current state)", () => {
     expect(maxedFloorOf(false, "ascended")).toBeNull();
     expect(maxedFloorOf(true, "disable")).toBeNull();
-    expect(meetsMaxedFloor(at(0, 0), "weapon", null)).toBe(true); // +0 piece admitted
+    expect(meetsMaxedFloor(at(0, 0), "weapon", null, TALISMAN_MAX)).toBe(true); // +0 piece admitted
   });
 
   it("+10R6: admits +10r6 and better, rejects below on either axis", () => {
     const floor = maxedFloorOf(true, "classic")!;
-    expect(meetsMaxedFloor(at(10, 6), "weapon", floor)).toBe(true);  // exactly the floor
-    expect(meetsMaxedFloor(at(15, 9), "weapon", floor)).toBe(true);  // "or better"
-    expect(meetsMaxedFloor(at(9, 6), "weapon", floor)).toBe(false);  // enhance short
-    expect(meetsMaxedFloor(at(10, 5), "weapon", floor)).toBe(false); // reforges short
+    expect(meetsMaxedFloor(at(10, 6), "weapon", floor, TALISMAN_MAX)).toBe(true);  // exactly the floor
+    expect(meetsMaxedFloor(at(15, 9), "weapon", floor, TALISMAN_MAX)).toBe(true);  // "or better"
+    expect(meetsMaxedFloor(at(9, 6), "weapon", floor, TALISMAN_MAX)).toBe(false);  // enhance short
+    expect(meetsMaxedFloor(at(10, 5), "weapon", floor, TALISMAN_MAX)).toBe(false); // reforges short
   });
 
   it("+10R9: needs 9 reforges done — a +10r6 non-ascended piece is out", () => {
     const floor = maxedFloorOf(true, "ascended10")!;
-    expect(meetsMaxedFloor(at(10, 9), "weapon", floor)).toBe(true);  // ascended-for-reforges
-    expect(meetsMaxedFloor(at(15, 9), "weapon", floor)).toBe(true);
-    expect(meetsMaxedFloor(at(10, 6), "weapon", floor)).toBe(false);
+    expect(meetsMaxedFloor(at(10, 9), "weapon", floor, TALISMAN_MAX)).toBe(true);  // ascended-for-reforges
+    expect(meetsMaxedFloor(at(15, 9), "weapon", floor, TALISMAN_MAX)).toBe(true);
+    expect(meetsMaxedFloor(at(10, 6), "weapon", floor, TALISMAN_MAX)).toBe(false);
   });
 
   it("+15R9: only +15 with 9 reforges", () => {
     const floor = maxedFloorOf(true, "ascended")!;
-    expect(meetsMaxedFloor(at(15, 9), "weapon", floor)).toBe(true);
-    expect(meetsMaxedFloor(at(10, 9), "weapon", floor)).toBe(false); // +10 ascended, not +15
-    expect(meetsMaxedFloor(at(15, 6), "weapon", floor)).toBe(false);
+    expect(meetsMaxedFloor(at(15, 9), "weapon", floor, TALISMAN_MAX)).toBe(true);
+    expect(meetsMaxedFloor(at(10, 9), "weapon", floor, TALISMAN_MAX)).toBe(false); // +10 ascended, not +15
+    expect(meetsMaxedFloor(at(15, 6), "weapon", floor, TALISMAN_MAX)).toBe(false);
   });
 
-  it("talisman is gated on enhance only (gems replace reforge)", () => {
+  it("talisman is gated on enhance only (gems replace reforge), at most on its +10 ceiling", () => {
+    // +15R9: a talisman has no Singularity and stops at +10 — a +15 floor
+    // emptied its pool, so every +15R9 "Maxed only" solve returned 0 builds.
     const floor = maxedFloorOf(true, "ascended")!;
-    expect(meetsMaxedFloor(at(15, 0), "ooparts", floor)).toBe(true);
-    expect(meetsMaxedFloor(at(10, 0), "ooparts", floor)).toBe(false);
+    expect(meetsMaxedFloor(at(10, 0), "ooparts", floor, TALISMAN_MAX)).toBe(true);
+    expect(meetsMaxedFloor(at(9, 0), "ooparts", floor, TALISMAN_MAX)).toBe(false);
+    // The armor still needs the real +15.
+    expect(meetsMaxedFloor(at(10, 9), "helmet", floor, TALISMAN_MAX)).toBe(false);
+    // +10R6: the talisman floor is +10, below its ceiling.
+    const classic = maxedFloorOf(true, "classic")!;
+    expect(meetsMaxedFloor(at(10, 0), "ooparts", classic, TALISMAN_MAX)).toBe(true);
+    expect(meetsMaxedFloor(at(9, 0), "ooparts", classic, TALISMAN_MAX)).toBe(false);
   });
 });
 

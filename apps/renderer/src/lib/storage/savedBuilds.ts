@@ -28,8 +28,9 @@ export interface SavedBuild {
    *  for backward compat: builds saved before this field fall back to
    *  showing the pieces' current rolls (their pre-existing behavior).
    *  `useReforged` is the legacy boolean shape (pre-reforge-modes) — read
-   *  tolerantly and migrated to `reforgeMode` on restore. */
-  reforge?: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number> };
+   *  tolerantly and migrated to `reforgeMode` on restore. `tickWeights` = the
+   *  no-priority reforge weights the solve projected with (absent before). */
+  reforge?: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number>; tickWeights?: Record<string, number> | null };
   /** Wall-clock ms — sort key for newest-first display. */
   createdAt: number;
 }

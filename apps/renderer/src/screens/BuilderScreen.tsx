@@ -31,7 +31,7 @@ import { flatVsPctTick } from "../lib/subValue.js";
 import { dmgTickGains, type DmgTickCandidate } from "../lib/dmgValue.js";
 import { dmgSkillInfo, type DmgSkillInfo } from "../lib/dmgSkill.js";
 import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
-import { projectPieceForReforge, type ReforgeMode } from "../lib/solver/engine.js";
+import { projectPieceForReforge, type ReforgeMode, type ReforgeTickWeights } from "../lib/solver/engine.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../lib/solver/orchestrator.js";
 import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
@@ -328,16 +328,19 @@ interface SolverOptions {
 interface ReforgeContext {
   reforgeMode: ReforgeMode;
   priority: Record<string, number>;
+  /** No-priority tick weights the engine projected with (`reforgeTickWeights`);
+   *  absent on builds saved before them → per-roll-norm fallback. */
+  tickWeights?: ReforgeTickWeights | null;
 }
 
 /** Migrate a persisted reforge context (saved builds) to the current shape.
  *  Pre-reforge-modes builds stored a `useReforged` boolean → map true to
  *  "classic" (the only projection that existed then), false/absent to
  *  "disable". */
-function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number> } | undefined): ReforgeContext {
+function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number>; tickWeights?: ReforgeTickWeights | null } | undefined): ReforgeContext {
   if (!r) return { reforgeMode: "disable", priority: {} };
   const reforgeMode = r.reforgeMode ?? (r.useReforged ? "classic" : "disable");
-  return { reforgeMode, priority: r.priority };
+  return { reforgeMode, priority: r.priority, tickWeights: r.tickWeights ?? null };
 }
 
 /** UI metadata for the reforge-mode segmented control — order = cycle order,
@@ -788,7 +791,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     if (!orchestratorRef.current) {
       orchestratorRef.current = new SolverOrchestrator({
         onProgress: (p) => setSolveProgress({ permutations: p.permutations, searched: p.searched, poolSizes: p.poolSizes ?? null }),
-        onResult:   (builds, durationMs, debugInfo) => { setSolveResults(builds); setResultsReforge(solveReforgeRef.current); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); setLastDebugInfo(debugInfo ?? null); },
+        onResult:   (builds, durationMs, debugInfo, tickWeights) => { setSolveResults(builds); setResultsReforge({ ...solveReforgeRef.current, tickWeights }); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); setLastDebugInfo(debugInfo ?? null); },
         onError:    (msg) => { setSolveError(msg); setSolving(false); },
       });
     }
@@ -4493,7 +4496,7 @@ function BottomGearBand({
     for (const uid of build.pieceUids) {
       const original = pieceByUid.get(uid);
       if (!original?.slot) continue;
-      const piece = game ? projectPieceForReforge(original, game, reforge.reforgeMode, reforge.priority) : original;
+      const piece = game ? projectPieceForReforge(original, game, reforge.reforgeMode, reforge.priority, reforge.tickWeights ?? undefined) : original;
       const reforged = piece !== original;
       // Per-sub reforge procs the projection added (delta of total ticks vs the
       // captured piece) — `simulateReforges` clones subs 1:1 in order, so index

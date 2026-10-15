@@ -89,7 +89,7 @@ filters the inventory pieces:
 - `g.slot === slot`
 - excluded per `equippedScope` (`none`/`lower`/`all`) if equipped on **another** hero — `lower` gated via `isLowerPriority(heroPriority, …)` (cf. § Options, Equipped items). The "owner" is the **worklist claim if any, else `equippedBy`**: a piece reserved by another hero's queued build (`worklistClaims`, uid → claiming hero, unapplied changes only) is treated as equipped on that hero — the scope + rank rules apply to reservations exactly like to real equipment
 - excluded if `g.equippedBy ∈ excludedHeroes` (likewise via the effective owner)
-- excluded if below the **"Maxed only" investment floor** (`meetsMaxedFloor`): the toggle = **zero extrapolation** — the reforge mode becomes a floor (only pieces **already** at that state or better, scored on their real rolls, projection skipped). Off → no gate; +10R6 → enhance ≥ 10 & reforges ≥ 6; +10R9 → ≥ 10 & ≥ 9; +15R9 → ≥ 15 & ≥ 9. Talisman: enhance floor only (gems replace reforge)
+- excluded if below the **"Maxed only" investment floor** (`meetsMaxedFloor`): the toggle = **zero extrapolation** — the reforge mode becomes a floor (only pieces **already** at that state or better, scored on their real rolls, projection skipped). Off → no gate; +10R6 → enhance ≥ 10 & reforges ≥ 6; +10R9 → ≥ 10 & ≥ 9; +15R9 → ≥ 15 & ≥ 9. Talisman: enhance floor only (gems replace reforge), capped at its +10 ceiling (`enhance.maxEnhanceLevel`: no Singularity — a +15 floor emptied the pool)
 - excluded if `classLimit` ≠ the hero's class
 - excluded if **main pick** is active for this slot and `g.main[0].stat ∉ picks`
 - excluded if **effect chip** (weapon/accessory) marked `excluded`; or marked `required` and the piece's `setId` (the `UniqueOptionID` effect identity) does not match — the comparison is **deliberately** on `setId`, not `effectIcon` (distinct effects can share an icon, e.g. the Recklessness family)
@@ -247,6 +247,9 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
     unconditional Singularity passive** (`addProjectedSingularity`: DMG+ 50% on weapon/accessory, DMG-
     25% on armor — the table's best value). **Passive and the +11→+15 main-stat steps are +15-only.** An
     already-ascended piece keeps its **real roll**. Never *downgrades* a piece already above the ceiling.
+  Ticks: by the priority; **without a priority, by CP weight** (`reforgeTickWeights`, evaluated on the
+  hero's equipped build) — returned with the context (`onResult`) and saved with the build, so the gear
+  cards re-project the same ticks.
 
   The main re-scale goes through the ratio of the multipliers (`RolledStat` does not keep
   the base value) — validated against in-game (test `projectMainToCeiling`: 240 → 1380).
@@ -256,7 +259,7 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   (`maxedFloorOf`/`meetsMaxedFloor`): Off → none (any piece as-is) · +10R6 → enhance ≥ 10 &
   ≥ 6 reforges · +10R9 → ≥ 10 & ≥ 9 · +15R9 → +15 & ≥ 9. "Or better" keeps its better rolls
   (a +15R9 piece in a +10R6 solve is not scaled down to the +10 ceiling). Talisman: enhance
-  only; the hero's own EE is never filtered. (Replaces the old mode-blind flat
+  only, +10 at most (its ceiling); the hero's own EE is never filtered. (Replaces the old mode-blind flat
   `enhanceLevel < 15` cut.)
 - **Equipped items** (`equippedScope`, **3 states**, **default ≤ Lower**) — which pieces
   equipped on **other** heroes the solver may pull. Default `lower`: only heroes of

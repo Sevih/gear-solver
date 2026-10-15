@@ -503,8 +503,12 @@ Reforge budget per piece:
   exclusive to 6★ Singularity; the other ranks have no ascension.
 
 For each piece with `remaining = maxReforges - reforgeCount > 0`, distributes
-the remaining reforges greedy by `priority × per-tick value`. Cap at **LV6 ticks
-per sub** (observed in real data). Tie-break on per-tick raw.
+the remaining reforges greedy by `weight × per-tick value`. The weight is the stat's
+priority; without a priority, the sub's CP weight per unit (`reforgeTickWeights`: ΔCP of a
+`ROLL_NORMS`-sized roll added to the hero's equipped build, divided by that norm), else
+`1 / ROLL_NORMS`. Raw values are never compared across stats (180 flat HP against 4 % used
+to win every tick). Cap at **LV6 ticks per sub** (observed in real data). Tie-break on the
+normalized tick (`per-tick / ROLL_NORMS`).
 
 Mutations contained on a clone — the original inventory is never modified.
 

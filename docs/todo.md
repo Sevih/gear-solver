@@ -41,11 +41,6 @@
       aujourd'hui) · `awakValue` : ATK prend `geas.atk` toutes sources, EFF/RES `geasStat` — unifier.
 
 ### 🔴 Revue 2026-10 — moteur et Builder
-- [ ] 🔴 **M6 — « Maxed only » en +15R9 renvoie toujours 0 build** — `meetsMaxedFloor` exige +15 du talisman, qui
-      plafonne à +10 (courbes ooparts à 11 entrées, pas de singularité). Plancher `min(ceiling, 10)` pour les ooparts.
-- [ ] 🔴 **M9 — Projection de reforge sans priorité : les ticks partent sur les PV plats** — `simulateReforges`
-      départage à la valeur brute par tick quand la priorité est nulle (5 ticks : HP 180 → 1080). Répartir selon
-      le poids CP de la stat.
 - [ ] 🔴 **M7 — Priorité partielle : des emplacements de gemme restent vides** — `solver/gems.ts` s'arrête dès que
       le score est ≤ 0 (talisman `[15050, 15050, 0, 0, 0]`, le +20 % ATK des gemmes possédées disparaît de la fiche
       et de la CP). **Décision** : compléter par CP ou par la stat la plus utile, une fois la priorité servie ?

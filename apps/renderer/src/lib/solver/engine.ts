@@ -19,6 +19,7 @@ import {
   aggregatePrefixBuckets,
   computeFinalStats,
   computeFinalStatsFromPrefix,
+  computeFinalStatsPlusRoll,
   computeSetBonuses,
   type FinalStats,
   type FinalStatsBaseline,
@@ -81,15 +82,22 @@ export function maxedFloorOf(onlyMaxed: boolean, mode: ReforgeMode): { ceiling: 
 }
 
 /** Does the piece meet the "Maxed only" investment floor? Talisman is gated on
- *  enhance only (gems replace reforge there); EE never reaches the pool filter
- *  but is exempted for symmetry. Null floor = nothing gated. */
+ *  enhance only (gems replace reforge there), and at most on its own ceiling:
+ *  it has no Singularity, so it stops at `talismanMaxEnhance` (+10, the
+ *  contract's `enhance.maxEnhanceLevel`) — a +15 floor would empty its pool and
+ *  every +15R9 "Maxed only" solve would return 0 builds. EE never reaches the
+ *  pool filter but is exempted for symmetry. Null floor = nothing gated. */
 export function meetsMaxedFloor(
   g: GearPiece,
   slot: string,
   floor: { ceiling: ReforgeCeiling; budget: number } | null,
+  talismanMaxEnhance: number,
 ): boolean {
   if (!floor) return true;
-  if (g.enhanceLevel < floor.ceiling.enhanceLevel) return false;
+  const enhanceFloor = slot === "ooparts"
+    ? Math.min(floor.ceiling.enhanceLevel, talismanMaxEnhance)
+    : floor.ceiling.enhanceLevel;
+  if (g.enhanceLevel < enhanceFloor) return false;
   if (slot !== "ooparts" && slot !== "exclusive" && g.reforgeCount < floor.budget) return false;
   return true;
 }
@@ -104,10 +112,12 @@ export function projectPieceForReforge(
   game: GameData,
   mode: ReforgeMode,
   priority: Record<string, number>,
+  /** No-priority tick weights (`reforgeTickWeights`) — see `simulateReforges`. */
+  tickWeights?: ReforgeTickWeights,
 ): GearPiece {
   if (mode === "disable" || piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
   const plan = REFORGE_PLANS[mode];
-  const projected = simulateReforges(projectMainToCeiling(piece, game, plan.ceiling), priority, plan.budget);
+  const projected = simulateReforges(projectMainToCeiling(piece, game, plan.ceiling), priority, plan.budget, tickWeights);
   // The unconditional Singularity passive (DMG+ on weapon/accessory, DMG- on the
   // four armor pieces) unlocks ONLY at +15 — not at ascension. So only the +15
   // plan carries `ceiling.ascended`; +10R9 (ascended for reforges) and +10R6
@@ -223,6 +233,10 @@ export interface PrecomputedSolveContext {
    *  excluded set for tertiary checks. */
   excludedWeaponEffects: Set<string>;
   excludedAccessoryEffects: Set<string>;
+  /** Per-tick CP weights the reforge projection used (no priority, projection
+   *  on) — null otherwise. The Builder's gear band passes them back to
+   *  `projectPieceForReforge` so its cards show the ticks the engine scored. */
+  reforgeTickWeights: ReforgeTickWeights | null;
   /** CP of the hero's CURRENTLY-equipped build (socketed gems, no override) —
    *  computed only when `gs.debug.solver` is on, else null. Surfaced so the
    *  footer's "Copy Debug Info" can show top-CP-vs-current at a glance (a top
@@ -332,8 +346,8 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   //   - +10R6 → enhance ≥ 10 AND ≥ 6 reforges done;
   //   - +10R9 → enhance ≥ 10 AND ≥ 9 reforges done (implies ascended);
   //   - +15R9 → enhance ≥ 15 (implies ascended) AND ≥ 9 reforges done.
-  // Talisman is gated on enhance only (gems replace reforge there); the hero's
-  // own EE never goes through `allow`. Replaces the old flat `enhance < 15`
+  // Talisman is gated on enhance only (gems replace reforge there), capped at
+  // its own +10 ceiling; the hero's own EE never goes through `allow`. Replaces the old flat `enhance < 15`
   // cut, which was mode-blind (it excluded +10 endgame gear from +10 solves).
   const reforgeMode = filters.options.reforgeMode ?? "disable";
   const maxedFloor = maxedFloorOf(filters.options.onlyMaxed, reforgeMode);
@@ -355,7 +369,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       if (equippedScope === "lower" && !isLowerPriority(heroPriority, owner, heroUid)) return false;
       if (excludedSet.has(owner)) return false;
     }
-    if (!meetsMaxedFloor(g, slot, maxedFloor)) return false;
+    if (!meetsMaxedFloor(g, slot, maxedFloor, game.enhance.maxEnhanceLevel)) return false;
     // Quality gate — only on slots that have a quality tier (null → keep).
     if (minQualityRank >= 0) {
       const tier = gearPieceQualityTier(g);
@@ -432,6 +446,22 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     }
   }
 
+  // Star metadata + skills for CP — hoisted above the reforge projection and
+  // the prune: both can build a CP evaluator (also returned).
+  const transRow = meta.ingredients.transcendByStar?.[String(hero.stars)] ?? null;
+  const starMeta = {
+    showUIStar: transRow?.showUIStar ?? 0,
+    starPlus: transRow?.starPlus ?? 0,
+    fused: hero.fusionCharId !== 0,
+  };
+  const skills = {
+    first: req.userSkills.first,
+    second: req.userSkills.second,
+    ultimate: req.userSkills.ultimate,
+    chainPassive: req.userSkills.chainPassive,
+  };
+  const hasPriority = Object.values(filters.priority).some((v) => v !== 0);
+
   // Reforge simulation — if the user toggled "Use reforged stats", clone
   // each piece with its remaining reforge attempts greedily allocated to
   // the highest-priority substats. Happens BEFORE the combo-budget prune so it
@@ -451,26 +481,26 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // extrapolation — pieces are scored on their real, captured rolls. Projecting
   // here would also DOWN-scale a +15 piece's mains to a +10 ceiling in the
   // +10R6/+10R9 modes ("or better" must keep its better rolls).
+  //
+  // Without a priority the ticks go by CP weight (`reforgeTickWeights`, the CP
+  // one tick of each sub adds to the hero's current build) — the raw per-tick
+  // value sent every tick to flat HP (180 a tick against 4 % for the rest).
+  // The weights are returned with the context so the Builder's gear band
+  // re-projects the same ticks.
+  let reforgeWeights: ReforgeTickWeights | null = null;
   if (reforgeMode !== "disable" && !filters.options.onlyMaxed) {
+    if (!hasPriority) {
+      const equippedNow = inv.gear.filter((g) => g.equippedBy === heroUid);
+      reforgeWeights = reforgeTickWeights(
+        composed.noGearStats, composed.scaling, equippedNow, game,
+        makeCpEvaluator({ showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused }),
+        equippedNow.find((g) => g.slot === "ooparts") ?? null,
+      );
+    }
     for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const) {
-      pools[slot] = pools[slot].map((p) => projectPieceForReforge(p, game, reforgeMode, filters.priority));
+      pools[slot] = pools[slot].map((p) => projectPieceForReforge(p, game, reforgeMode, filters.priority, reforgeWeights ?? undefined));
     }
   }
-
-  // Star metadata + skills for CP — hoisted above the prune so the
-  // CP-weighted auto-prune below can build a CP evaluator (also returned).
-  const transRow = meta.ingredients.transcendByStar?.[String(hero.stars)] ?? null;
-  const starMeta = {
-    showUIStar: transRow?.showUIStar ?? 0,
-    starPlus: transRow?.starPlus ?? 0,
-    fused: hero.fusionCharId !== 0,
-  };
-  const skills = {
-    first: req.userSkills.first,
-    second: req.userSkills.second,
-    ultimate: req.userSkills.ultimate,
-    chainPassive: req.userSkills.chainPassive,
-  };
 
   // Combo-budget per-slot prune (bounds ∏ poolSizes — see below). Needs a
   // ranking signal per slot:
@@ -484,7 +514,6 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // guard, a low-scoring set member could be dropped and `checkSetsFeasible`
   // would silently return 0 results (the user sees "no builds" without a clue
   // why). Protected pieces survive on top of the budget slice.
-  const hasPriority = Object.values(filters.priority).some((v) => v !== 0);
   let debugKeeps: number[] | null = null;
   let debugRequiredSets: string[] | null = null;
   if (filters.topPct < 100) {
@@ -714,6 +743,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     allowBrokenSets,
     excludedWeaponEffects,
     excludedAccessoryEffects,
+    reforgeTickWeights: reforgeWeights,
     debugCurCp,
     debugKeeps,
     debugRequiredSets,
@@ -755,14 +785,52 @@ export function maxReforgesOf(piece: GearPiece): number {
   return star === 6 && piece.ascended ? star + 3 : star;
 }
 
+/** Key of a sub in `ReforgeTickWeights`: stat + flat/percent, since the same
+ *  stat can roll either way (`spd`, `eff`, `effRes`) and lands in a different
+ *  CalcFinalStat bucket. */
+export function reforgeTickKey(stat: string, percent: boolean): string {
+  return percent ? `${stat}%` : stat;
+}
+
+/** CP added per unit of a sub's value (keyed by `reforgeTickKey`), when there
+ *  is no priority to steer the reforge projection. */
+export type ReforgeTickWeights = Record<string, number>;
+
+/** Per-unit CP weight of every rollable sub: ΔCP of adding one ROLL_NORM-sized
+ *  roll of it to the hero's CURRENT build (the `cpStatWeights` approach,
+ *  routed like a real sub so % rolls go through the hero's base), divided by
+ *  that norm, clamped ≥ 0. A stat already at its CP cap (CRC 100 %) weighs ~0. */
+export function reforgeTickWeights(
+  baseline: FinalStatsBaseline,
+  scaling: ScalingMap,
+  equipped: GearPiece[],
+  game: GameData,
+  cpEval: (s: FinalStats, oo: GearPiece | null) => number,
+  ooparts: GearPiece | null,
+): ReforgeTickWeights {
+  const cp0 = cpEval(computeFinalStats(baseline, scaling, equipped, game), ooparts);
+  const out: ReforgeTickWeights = {};
+  for (const [stat, norm] of Object.entries(ROLL_NORMS)) {
+    for (const percent of [false, true]) {
+      const stats = computeFinalStatsPlusRoll(baseline, scaling, equipped, game, { stat, value: norm, percent });
+      out[reforgeTickKey(stat, percent)] = Math.max(0, cpEval(stats, ooparts) - cp0) / norm;
+    }
+  }
+  return out;
+}
+
 /** Predict the maximum-rolled state of a piece by distributing its
  *  remaining reforge attempts (`star − reforgeCount`) across substats:
- *  greedy by `priority × per-tick value`, respecting the per-sub LV6 cap
+ *  greedy by `weight × per-tick value`, respecting the per-sub LV6 cap
  *  and the total budget. Returns a CLONE — caller's original piece is
  *  untouched.
  *
- *  When priority is uniformly zero, the greedy tie-break falls to raw
- *  per-tick value (maximizes total stat output regardless of axis).
+ *  The weight is the user priority of the sub's stat. When the priority is
+ *  uniformly zero it is `tickWeights` (CP per unit, `reforgeTickWeights`), or
+ *  without them the sub's per-roll norm (`1 / ROLL_NORMS`): a tick is then
+ *  worth its share of a max roll. Ties go to the larger normalized tick. The
+ *  raw per-tick value is never compared across stats — 180 flat HP against
+ *  4 % would always win.
  *
  *  REJECTS Talisman / EE pieces — their `subs` array is the gem-slot list
  *  (the parser stores resolved gems there, not rolled substats), and gems
@@ -773,7 +841,12 @@ export function maxReforgesOf(piece: GearPiece): number {
  *  This is intentionally a HEURISTIC — the real game lets you re-roll
  *  individual ticks (orange) but we assume monotonic additions only. Good
  *  enough for "what's the best this piece can become?" previews. */
-export function simulateReforges(piece: GearPiece, priority: Record<string, number>, maxReforgesOverride?: number): GearPiece {
+export function simulateReforges(
+  piece: GearPiece,
+  priority: Record<string, number>,
+  maxReforgesOverride?: number,
+  tickWeights?: ReforgeTickWeights,
+): GearPiece {
   if (piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
   // `maxReforgesOverride` lets the reforge-mode preview impose a fixed endgame
   // budget regardless of the piece's actual star (classic = 6, ascended = 9) —
@@ -781,26 +854,31 @@ export function simulateReforges(piece: GearPiece, priority: Record<string, numb
   const maxReforges = maxReforgesOverride ?? maxReforgesOf(piece);
   const remaining = Math.max(0, maxReforges - piece.reforgeCount);
   if (remaining === 0 || piece.subs.length === 0) return piece;
+  const hasPriority = Object.values(priority).some((v) => v !== 0);
   const subs: RolledStat[] = piece.subs.map((s) => ({ ...s }));
   // Pre-compute per-sub scoring data; mutated in the loop as ticks accumulate.
   const meta = subs.map((s) => {
-    const pk = STAT_TO_PRIORITY[s.stat] ?? s.stat;
-    const w = priority[pk] ?? 0;
     const perTick = (s.ticks && s.ticks > 0) ? s.value / s.ticks : s.value;
-    return { weighted: w * perTick, perTick };
+    const norm = ROLL_NORMS[s.stat] ?? 100;
+    const w = hasPriority
+      ? priority[STAT_TO_PRIORITY[s.stat] ?? s.stat] ?? 0
+      : tickWeights
+        ? tickWeights[reforgeTickKey(s.stat, s.percent)] ?? 0
+        : 1 / norm;
+    return { weighted: w * perTick, normTick: perTick / norm, perTick };
   });
   for (let i = 0; i < remaining; i++) {
     let bestIdx = -1;
     let bestW = -Infinity;
-    let bestP = -Infinity;
+    let bestN = -Infinity;
     for (let j = 0; j < subs.length; j++) {
       const s = subs[j]!;
       if ((s.ticks ?? 0) >= REFORGE_PER_SUB_CAP) continue;
       const m = meta[j]!;
-      // Primary: weighted score. Secondary: raw per-tick (drives fallback
-      // when no priority is set — distributes to maximize total stat output).
-      if (m.weighted > bestW || (m.weighted === bestW && m.perTick > bestP)) {
-        bestIdx = j; bestW = m.weighted; bestP = m.perTick;
+      // Primary: weighted value. Secondary: normalized tick (subs the weight
+      // can't separate, e.g. all at 0 CP once the useful ones are capped).
+      if (m.weighted > bestW || (m.weighted === bestW && m.normTick > bestN)) {
+        bestIdx = j; bestW = m.weighted; bestN = m.normTick;
       }
     }
     if (bestIdx === -1) break; // every sub capped

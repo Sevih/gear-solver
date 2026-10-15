@@ -102,7 +102,7 @@ results, the bottom band shows the selected build's pieces.
 - **Maxed only** — no extrapolation: only pieces **already at the reforge mode's investment
   state (or better)**, scored on their real rolls (no projection). Off: any piece as-is ·
   +10R6: +10 with ≥ 6 reforges done · +10R9: +10 with ≥ 9 reforges · +15R9: +15 with ≥ 9
-  reforges. Use it to answer "what's my best build with zero further investment?".
+  reforges (the talisman, which stops at +10, only needs +10). Use it to answer "what's my best build with zero further investment?".
 - **Equipped items** — a three-way control for which gear worn by *other* heroes the solver
   may pull in: **None** (only the hero's own gear + free gear), **≤ Lower** (default — also
   gear on heroes ranked strictly lower in the Builds priority ranking; with no ranks set this

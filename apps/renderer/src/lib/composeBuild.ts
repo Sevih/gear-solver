@@ -237,6 +237,22 @@ export function computeFinalStats(
   return finalStatsFromBuckets(baseline, scaling, aggregateGearBuckets(pieces, game, gemOverride, precomputedSetBonuses));
 }
 
+/** `computeFinalStats` of `pieces` plus ONE extra roll, routed like a substat
+ *  (percent → the % bucket, else flat). The reforge projection probes the CP
+ *  of one more tick of each sub with it (`reforgeTickWeights`). */
+export function computeFinalStatsPlusRoll(
+  baseline: FinalStatsBaseline,
+  scaling: ScalingMap,
+  pieces: GearPiece[],
+  game: GameData | null,
+  roll: { stat: string; value: number; percent: boolean },
+): FinalStats {
+  const b = aggregateGearBuckets(pieces, game);
+  const target = roll.percent ? b.pct : b.flat;
+  target[roll.stat] = (target[roll.stat] ?? 0) + roll.value;
+  return finalStatsFromBuckets(baseline, scaling, b);
+}
+
 /** Solver hot-path variant of `computeFinalStats`. Instead of re-summing all
  *  6 (+EE) invariant pieces on every talisman, it starts from a `prefix`
  *  (weapon..accessory, aggregated once per accessory iteration via

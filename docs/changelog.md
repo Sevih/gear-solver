@@ -8,6 +8,24 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚙️ Moteur — « Maxed only » en +15R9 et ticks de reforge sans priorité (2026-10-15)
+- ✅ 🔴 **M6 — « Maxed only » en +15R9 ne renvoyait jamais aucun build.** `meetsMaxedFloor` exigeait
+  +15 du talisman, qui plafonne à +10 (pas de singularité, courbes ooparts de 11 entrées) : le pool
+  talisman se vidait. Le plancher talisman est maintenant `min(plafond du mode, enhance.maxEnhanceLevel)`
+  — +10, lu dans le contrat ; les autres pièces gardent leur +15.
+- ✅ 🔴 **M9 — Sans priorité, la projection de reforge envoyait tous les ticks sur les PV plats.**
+  `simulateReforges` départageait à la valeur brute d'un tick (180 PV contre 4 %) : 5 ticks faisaient
+  passer HP de 180 à 1080. Sans priorité, chaque sub est maintenant pesé par la CP qu'un tick ajoute
+  au build équipé du héros (`reforgeTickWeights`, routé comme un vrai sub : un % passe par la base du
+  héros) ; sans ces poids, par sa part d'un roll max (`1 / ROLL_NORMS`). Les égalités se départagent
+  au tick normalisé. Les poids reviennent avec le résultat (`onResult`) et sont sauvés avec le build :
+  les gear cards du Builder reprojettent les mêmes ticks que le moteur.
+- ✅ **Tests** — `reforgeProjection.test.ts` sur le contrat réel (héros 2000001) : build +15R9
+  « Maxed only » trouvé avec un talisman +10, talisman +9 écarté ; ticks par poids CP en SOLVE et
+  SOLVE CP, PV hors de tête, reprojection identique côté gear band, priorité explicite inchangée.
+  `solver.test.ts` : plancher talisman borné, cas rejoué de la revue (PV 180 → 360 au lieu de
+  1080), poids CP suivis, priorité prioritaire sur les poids.
+
 ### 🔐 Capture émulateur — CA générée sur le poste de l'utilisateur (2026-10-15)
 - ✅ 🟠 **La CA de capture est générée sur le poste de l'utilisateur au premier lancement ;
   l'installeur n'en livre plus.** Avant, `fetch-binaries.mjs` produisait une CA mitmproxy au build

@@ -89,7 +89,7 @@ filtre les pièces de l'inventaire :
 - exclu selon `equippedScope` (`none`/`lower`/`all`) si équipé sur un **autre** héros — `lower` gate via `isLowerPriority(heroPriority, …)` (cf. § Options, Equipped items). Le « propriétaire » est le **claim worklist s'il existe, sinon `equippedBy`** : une pièce réservée par le build en attente d'un autre héros (`worklistClaims`, uid → héros réclamant, changes non appliqués seulement) est traitée comme équipée sur lui — le scope + rank s'appliquent aux réservations comme au gear réel
 - exclu si `g.uid ∈ excludedPieceUids` (exclusion **globale** account-wide, clic-droit Inventory — vérifié en premier)
 - exclu si `g.equippedBy ∈ excludedHeroes` (idem via le propriétaire effectif)
-- exclu si sous le **plancher « Maxed only »** (`meetsMaxedFloor`) : le toggle = **zéro extrapolation** — le mode reforge devient un plancher d'investissement (pièces **déjà** à cet état ou mieux, notées sur leurs vrais rolls, projection sautée). Off → aucun gate ; +10R6 → enhance ≥ 10 & reforges ≥ 6 ; +10R9 → ≥ 10 & ≥ 9 ; +15R9 → ≥ 15 & ≥ 9. Talisman : plancher enhance seul (pas de reforge sur gemmes)
+- exclu si sous le **plancher « Maxed only »** (`meetsMaxedFloor`) : le toggle = **zéro extrapolation** — le mode reforge devient un plancher d'investissement (pièces **déjà** à cet état ou mieux, notées sur leurs vrais rolls, projection sautée). Off → aucun gate ; +10R6 → enhance ≥ 10 & reforges ≥ 6 ; +10R9 → ≥ 10 & ≥ 9 ; +15R9 → ≥ 15 & ≥ 9. Talisman : plancher enhance seul (pas de reforge sur gemmes), borné à son plafond +10 (`enhance.maxEnhanceLevel` : pas de singularité, un plancher +15 vidait le pool)
 - exclu si `classLimit` ≠ classe du héros
 - exclu si **main pick** actif pour ce slot et `g.main[0].stat ∉ picks`
 - exclu si **effect chip** (weapon/accessory) marqué `excluded` ; ou marqué `required` et le `setId` de la pièce (identité d'effet `UniqueOptionID`) ne match pas — la comparaison est **délibérément** sur `setId`, pas sur `effectIcon` (des effets distincts partagent une icône, ex. la famille Recklessness)
@@ -255,6 +255,9 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
     de singularité inconditionnel** (`addProjectedSingularity` : DMG+ 50 % arme/accessoire, DMG- 25 %
     armures — meilleure valeur de la table). **Passif et steps de main +11→+15 = +15 uniquement.** Une pièce
     déjà ascended garde son **vrai roll**. Ne *downgrade* jamais une pièce déjà au-dessus du plafond.
+  Ticks : par la priorité ; **sans priorité, par poids CP** (`reforgeTickWeights`, évalué sur le build
+  équipé du héros) — renvoyés avec le contexte (`onResult`) et sauvés avec le build, pour que les gear
+  cards reprojettent les mêmes ticks.
 
   Le re-scale du main passe par le ratio des multiplicateurs (`RolledStat` ne garde pas
   la valeur de base) — validé contre l'in-game (test `projectMainToCeiling` : 240 → 1380).
@@ -264,7 +267,7 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   (`maxedFloorOf`/`meetsMaxedFloor`) : Off → aucun (pièces telles quelles, peu importe le niveau) ·
   +10R6 → enhance ≥ 10 & ≥ 6 reforges · +10R9 → ≥ 10 & ≥ 9 · +15R9 → +15 & ≥ 9. « Ou mieux » garde
   ses meilleurs rolls (une +15R9 dans un solve +10R6 n'est pas redescendue au plafond +10). Talisman :
-  enhance seul ; l'EE du héros n'est jamais filtré. (Remplace l'ancien cut plat `enhanceLevel < 15`,
+  enhance seul, +10 au plus (son plafond) ; l'EE du héros n'est jamais filtré. (Remplace l'ancien cut plat `enhanceLevel < 15`,
   aveugle au mode.)
 - **Equipped items** (`equippedScope`, **défaut ≤ Lower**) — quelles pièces équipées sur
   d'**autres** héros le solver peut piocher. Défaut `lower` : seulement les héros **strictement
