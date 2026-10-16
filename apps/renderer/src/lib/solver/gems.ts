@@ -73,8 +73,15 @@ export interface ScoredGem {
   /** Per-tick resolved value (e.g. 4.0 for a +4% ATK gem). */
   value: number;
   percent: boolean;
-  /** Priority × value — sort key. Zero or negative → never picked. */
+  /** Priority × value — sort key. Negative → never picked; zero → picked only
+   *  as a filler (see `fill`). */
   score: number;
+  /** Filler key, set only on a gem of score EXACTLY 0 that may fill the slots
+   *  the priority leaves empty: the relative `dmg` gain it brings the hero
+   *  (`ScoreGemOptions.fillGain`, 0 without it). Fillers are sorted by it, then
+   *  by raw magnitude (`value / ROLL_NORMS`). Absent → never a filler (a stat
+   *  under a `max` bound, a scored gem built by hand, SOLVE without priority). */
+  fill?: number;
 }
 
 export interface ScoreGemOptions {
@@ -85,6 +92,14 @@ export interface ScoreGemOptions {
    *  currently-socketed gems just because the user didn't tick a priority
    *  chip. */
   allowZeroPriority?: boolean;
+  /** Relative `dmg` gain of one gem (stat, value, percent) on the hero's
+   *  equipped build — the `fill` key of the zero-score gems. Omitted → every
+   *  filler gains 0 and they rank by raw magnitude alone. */
+  fillGain?: (stat: string, value: number, percent: boolean) => number;
+  /** Priority keys never placed as filler — the stats carrying a `max` bound
+   *  in `filters.statFilters` (a filler there would push the build out of its
+   *  band). */
+  noFill?: ReadonlySet<string>;
 }
 
 /** Resolve every gem in the pool to its (stat, value) tuple and score by
@@ -98,7 +113,13 @@ export interface ScoreGemOptions {
  *  gems (preserves "no intent" semantics for SOLVE mode). With the flag
  *  on, the score becomes `value / norm` so the allocator still picks the
  *  strongest gems by raw magnitude (SOLVE CP needs this — "max CP"
- *  without a priority hint should still re-allocate gems). */
+ *  without a priority hint should still re-allocate gems).
+ *
+ *  With a priority, the zero-score gems (stats the priority leaves out) carry
+ *  a `fill` key and sort after the priority ones, by `dmg` gain then raw
+ *  magnitude: once the priority is served, the free slots take the gems that
+ *  help the hero most — a socketed gem never takes anything off the sheet, an
+ *  empty slot does. The order among positive scores is unchanged. */
 export function scoreGemPool(
   pool: Map<number, number>,
   priority: Record<string, number>,
@@ -121,11 +142,37 @@ export function scoreGemPool(
     const score = useRawFallback
       ? r.value / norm
       : (priority[pk] ?? 0) * r.value / norm;
+    const fill = hasPriority && score === 0 && !options.noFill?.has(pk)
+      ? Math.max(0, options.fillGain?.(r.stat, r.value, r.percent) ?? 0)
+      : undefined;
     for (let i = 0; i < count; i++) {
-      out.push({ id, stat: r.stat, value: r.value, percent: r.percent, score });
+      out.push({ id, stat: r.stat, value: r.value, percent: r.percent, score, ...(fill != null ? { fill } : {}) });
     }
   }
-  out.sort((a, b) => b.score - a.score);
+  // Ties on a zero score break by `fill` (fillers first, larger gain first),
+  // then raw magnitude; positive ties keep the pool order (stable sort).
+  out.sort((a, b) => b.score - a.score || (a.score === 0 ? fillOrder(a, b) : 0));
+  return out;
+}
+
+function fillOrder(a: ScoredGem, b: ScoredGem): number {
+  if (a.fill == null || b.fill == null) return (a.fill == null ? 1 : 0) - (b.fill == null ? 1 : 0);
+  return b.fill - a.fill || b.value / (ROLL_NORMS[b.stat] ?? 100) - a.value / (ROLL_NORMS[a.stat] ?? 100);
+}
+
+/** The gems the allocators walk, in order: the priority ones (score > 0, up
+ *  to the first score ≤ 0 — the pool is sorted), then the fillers (score
+ *  exactly 0 with a `fill` key, already in fill order). A negative score is
+ *  never walked. Shared by the four allocators so the displayed split and the
+ *  composed delta can't diverge. */
+function pickOrder(scored: ScoredGem[]): ScoredGem[] {
+  let n = 0;
+  while (n < scored.length && scored[n]!.score > 0) n++;
+  const out = scored.slice(0, n);
+  for (let i = n; i < scored.length; i++) {
+    const g = scored[i]!;
+    if (g.score === 0 && g.fill != null) out.push(g);
+  }
   return out;
 }
 
@@ -138,11 +185,11 @@ export function gemSlotsOf(piece: GearPiece | null): number {
   return piece.enhanceLevel >= 5 ? 5 : 4;
 }
 
-/** Allocate the K best gems to (Talisman, EE) — first K in the scored
- *  pool, with the split decided by per-piece available slot counts.
- *  Greedy by score: piece with more available slots takes the first
- *  ones; both fill in pool-order. Returns the OptionID arrays the UI uses
- *  to display "which gems to socket where". */
+/** Allocate the K best gems to (Talisman, EE) — first K in `pickOrder`
+ *  (priority gems, then fillers), with the split decided by per-piece
+ *  available slot counts. Talisman takes the first ones, then EE, both in
+ *  pool-order. Returns the OptionID arrays the UI uses to display "which gems
+ *  to socket where". */
 export function allocateGems(
   scored: ScoredGem[],
   talismanSlots: number,
@@ -150,9 +197,7 @@ export function allocateGems(
 ): { talisman: number[]; ee: number[] } {
   const talisman: number[] = [];
   const ee: number[] = [];
-  for (let i = 0; i < scored.length; i++) {
-    const g = scored[i];
-    if (!g || g.score <= 0) break;
+  for (const g of pickOrder(scored)) {
     if (talisman.length < talismanSlots) {
       talisman.push(g.id);
     } else if (ee.length < eeSlots) {
@@ -211,10 +256,9 @@ export function allocateGemsCapped(
   const total = talismanSlots + eeSlots;
   let crc = preGemCrc;
   let picked = 0;
-  for (let i = 0; i < scored.length && picked < total; i++) {
-    const g = scored[i];
-    if (!g || g.score <= 0) break;
-    // Already at the cap → this crit gem is wasted; keep scanning for a useful
+  for (const g of pickOrder(scored)) {
+    if (picked >= total) break;
+    // Already at the cap (a filler crit gem included) → this crit gem is wasted; keep scanning for a useful
     // non-crit one rather than spending the slot.
     if (g.stat === CRC_GEM_STAT && crc >= CRC_GEM_CAP) continue;
     if (talisman.length < talismanSlots) talisman.push(g.id);
@@ -237,7 +281,7 @@ export function allocateGemsCapped(
  * which would be wasted). Mirrors the player's real intent for a crit DPS:
  * "guarantee the crit cap, then pour the rest into damage/EHP".
  *
- * Stage 1 walks crit gems in score-desc order (equal crit priority ⇒ highest
+ * Stage 1 walks crit gems of positive score in score-desc order (equal crit priority ⇒ highest
  * value first), so the cap is reached with the FEWEST gems, leaving the most
  * slots for stage 2. It stops as soon as `preGemCrc + accumulated ≥ cap`
  * (overshoot ≤ one 3% gem) or crit gems / slots run out. When `preGemCrc` is
@@ -258,7 +302,8 @@ export function allocateGemsReachingCap(
   const flat: Record<string, number> = {};
   const pct: Record<string, number> = {};
   const total = talismanSlots + eeSlots;
-  const used = new Array(scored.length).fill(false);
+  const order = pickOrder(scored);
+  const used = new Array(order.length).fill(false);
   let picked = 0;
   const place = (g: ScoredGem): void => {
     if (talisman.length < talismanSlots) talisman.push(g.id);
@@ -269,8 +314,8 @@ export function allocateGemsReachingCap(
   // Stage 1 — spend crit gems until the CHC cap is reached.
   let crc = preGemCrc;
   if (crc < CRC_GEM_CAP) {
-    for (let i = 0; i < scored.length && picked < total; i++) {
-      const g = scored[i];
+    for (let i = 0; i < order.length && picked < total; i++) {
+      const g = order[i];
       if (!g || used[i] || g.stat !== CRC_GEM_STAT || g.score <= 0) continue;
       place(g);
       used[i] = true;
@@ -279,12 +324,15 @@ export function allocateGemsReachingCap(
       if (crc >= CRC_GEM_CAP) break;
     }
   }
-  // Stage 2 — fill the rest by priority order, skipping crit (capped/wasted).
-  for (let i = 0; i < scored.length && picked < total; i++) {
-    const g = scored[i];
-    if (!g || used[i] || g.score <= 0 || g.stat === CRC_GEM_STAT) continue;
+  // Stage 2 — fill the rest in `pickOrder` (priority, then fillers), skipping
+  // crit once at the cap (wasted). A positive crit gem left after stage 1 only
+  // exists at the cap; a filler crit gem below it is taken and counted.
+  for (let i = 0; i < order.length && picked < total; i++) {
+    const g = order[i];
+    if (!g || used[i] || (g.stat === CRC_GEM_STAT && crc >= CRC_GEM_CAP)) continue;
     place(g);
     used[i] = true;
+    if (g.stat === CRC_GEM_STAT) crc += g.value;
     picked++;
   }
   while (talisman.length < talismanSlots) talisman.push(0);
@@ -317,9 +365,10 @@ function bucketEquals(a: Record<string, number>, b: Record<string, number>): boo
  *  Called once per `(talismanSlots, eeSlots)` variant in `prepareContext`
  *  — typically 1-2 variants per solve.
  *
- *  Returns `null` when the pool produces no gems worth picking (all scores
- *  ≤ 0) — caller should drop the gemOverride entirely and fall back to the
- *  Talisman/EE pieces' own subs. */
+ *  Same walk as `allocateGems` (`pickOrder`), so the composed delta matches
+ *  the displayed split. Returns `null` when the pool produces no gems worth
+ *  picking (no positive score, no filler) — caller should drop the gemOverride
+ *  entirely and fall back to the Talisman/EE pieces' own subs. */
 export function aggregateGemDelta(
   scored: ScoredGem[],
   talismanSlots: number,
@@ -330,9 +379,8 @@ export function aggregateGemDelta(
   const flat: Record<string, number> = {};
   const pct: Record<string, number> = {};
   let picked = 0;
-  for (let i = 0; i < scored.length && picked < total; i++) {
-    const g = scored[i];
-    if (!g || g.score <= 0) break;
+  for (const g of pickOrder(scored)) {
+    if (picked >= total) break;
     const bucket = g.percent ? pct : flat;
     bucket[g.stat] = (bucket[g.stat] ?? 0) + g.value;
     picked++;

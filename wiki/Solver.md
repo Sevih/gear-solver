@@ -247,6 +247,11 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
     unconditional Singularity passive** (`addProjectedSingularity`: DMG+ 50% on weapon/accessory, DMG-
     25% on armor — the table's best value). **Passive and the +11→+15 main-stat steps are +15-only.** An
     already-ascended piece keeps its **real roll**. Never *downgrades* a piece already above the ceiling.
+  **Each piece stops at its own ceiling** (`pieceReforgePlan`, the min of the mode and the piece): only a
+  **6★ `unique`** piece ascends (`CItem.IsSingularityActivate`); a piece **under 6★, or a 6★ that isn't
+  `unique`**, stops at **+10**, at **its own reforge count** (`maxReforgesOf`: its star under 6★, 6 for a
+  6★ — 9 only for a 6★ `unique` in a mode that ascends), **with no passive**, whatever the mode. A 5★ in
+  +15R9 thus stays +10 R5. The mode labels are the ceiling of a 6★ `unique` piece.
   Ticks: by the priority; **without a priority, by CP weight** (`reforgeTickWeights`, evaluated on the
   hero's equipped build) — returned with the context (`onResult`) and saved with the build, so the gear
   cards re-project the same ticks.
@@ -375,13 +380,15 @@ Em-dash when no build is selected.
 
 **Scoring**: for each gem, `score = priority × (value / ROLL_NORMS)`. Normalized to allow cross-stat comparison. Sorted desc. **In SOLVE CP without a user priority**, the "priority" passed is not empty but the **CP weights** (`cpStatWeights`: ΔCP of a ROLL_NORM-sized bump of each stat, evaluated at the current build). Otherwise (raw `value/norm` ranking), the allocator preferred dmg-reduce/flat gems (big magnitude, ~0 CP) over atk/crit/pen gems → a CP solve could return **less** CP than the equipped build. A stat already at its CP cap (e.g. CRC ~100%) gets a ~0 weight.
 
-**Allocation (default, fast path)**: greedy, K = `talismanSlots + eeSlots` (4 or 5 depending on `enhanceLevel`). We take the K first gems with `score > 0`. Pre-computed **once per talismanSlots variant** (4 or 5) in `prepareContext` — no re-computation in the hot loop.
+**Allocation (default, fast path)**: greedy, K = `talismanSlots + eeSlots` (4 or 5 depending on `enhanceLevel`). We take the K first gems with `score > 0`, then, if slots are left, the **filler gems**. Pre-computed **once per talismanSlots variant** (4 or 5) in `prepareContext` — no re-computation in the hot loop.
+
+**Filling by the hero's useful stat**: with a partial priority (e.g. `{ critDmg: 3 }`), the gems of a stat without priority score `0`; they're no longer dropped but fill the free slots — a socketed gem takes nothing off the sheet, an empty slot does. Only gems scoring **exactly 0** fill (a negatively-prioritized stat is never socketed, nor a stat carrying a `max` in `statFilters`: it would push the build out of its band). Order: the relative `dmg` gain the gem brings (`gemDmgGains`, the `computeCheapRatings` model with `dmgStat` / `dmgSec` / `noCrit` — the one behind the "DMG per 1 %" panel), **weighed once per solve on the equipped build**; at zero gain (stat outside the model, CHC at the cap, CHC/CHD for a `noCrit` hero), by raw magnitude `value / ROLL_NORMS`. Carried by `ScoredGem.fill`, set by `scoreGemPool` and read by all four allocators (`pickOrder`: the priority gems in their order, then the fillers) — the displayed split and the composed delta can't diverge. Unchanged: SOLVE Score with no priority at all (`null` fallback below) and the build score (`computeScore` only reads the priority); in SOLVE CP without a priority, the gems with a zero CP weight fill by the same rule.
 
 **Cap-reaching CHC (slow path, per combo)**: when the user prioritizes `crc` **and** the pool has crit gems (`wantCritCap`), the allocation is **staged** (`allocateGemsReachingCap`):
 1. **Stage 1** — spend crit gems to **reach** the 100% CHC cap (as a priority, even if atk scores higher), overshoot ≤ one 3% gem.
-2. **Stage 2** — fill the rest **by priority** (skipping any crit gem, now wasted).
+2. **Stage 2** — fill the rest **by priority, then by filler** (skipping any crit gem once the cap is reached, now wasted — a filler crit gem follows the same skip).
 
-The combo's pre-gem CHC is recovered from `fs.crc − defaultCrcGem` (crit rate is purely additive). We only **recompose** if the cap-aware delta differs from the default greedy (`gemDeltaEquals`) — often identical when crit gems already rank high. The case without a crc priority (e.g. SOLVE CP fallback) keeps the old anti-overshoot (`allocateGemsCapped`, triggered only if `fs.crc > 102`).
+The combo's pre-gem CHC is recovered from `fs.crc − defaultCrcGem` (crit rate is purely additive). We only **recompose** if the cap-aware delta differs from the default greedy (`gemDeltaEquals`) — often identical when crit gems already rank high. The case without a crc priority (e.g. SOLVE CP fallback, or filler crit gems) keeps the old anti-overshoot (`allocateGemsCapped`, triggered only if `fs.crc > 102`).
 
 **Pre-aggregation**: the gem contribution is converted into `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`. The compose just adds these deltas to the buckets after the piece aggregation. Avoids `resolveStat` × 10 gems × N combos.
 

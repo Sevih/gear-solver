@@ -443,7 +443,14 @@ Talisman/EE of a hero the user just excluded or outranks.
 Sorted desc.
 
 **Greedy allocation**: top-K for `K = talismanSlots + eeSlots` (4 or 5 depending
-on `enhanceLevel ≥ 5`). Stops at `score ≤ 0`.
+on `enhanceLevel ≥ 5`). First the gems with `score > 0` in their order, then the
+**fillers**: gems scoring **exactly 0** (a stat outside the priority; never a
+negative priority, never a stat under a `statFilters` `max`), sorted by the
+relative `dmg` gain they bring the equipped build (`gemDmgGains`,
+`computeCheapRatings` with `dmgStat`/`dmgSec`/`noCrit`, weighed once per solve),
+then by `value / ROLL_NORMS`. Key carried by `ScoredGem.fill`, same walk
+(`pickOrder`) in all four allocators; a filler crit gem follows the same skip at
+the CHC cap. No filling without any priority (fallback below).
 
 **Pre-aggregation**: `aggregateGemDelta(scored, ts, ee)` returns a `{flat, pct}`
 directly consumable by `aggregateGearBuckets`. Avoids N×10 `resolveStat` calls
@@ -511,6 +518,14 @@ to win every tick). Cap at **LV6 ticks per sub** (observed in real data). Tie-br
 normalized tick (`per-tick / ROLL_NORMS`).
 
 Mutations contained on a clone — the original inventory is never modified.
+
+**Reforge-mode projection (`projectPieceForReforge`)** — each piece is projected to
+the ceiling of the **piece in the mode** (`pieceReforgePlan`, the min of both): only
+a **6★ `unique`** piece ascends (`CItem.IsSingularityActivate`) and reaches the
+mode's ceiling (+10 R6 classic, +10 R9 ascended10, +15 R9 ascended, the Singularity
+passive in ascended only); a piece **under 6★, or a 6★ that isn't `unique`**, stops
+at **+10**, at **its own reforge count** (`maxReforgesOf`: its star under 6★, 6 for
+a 6★), **with no passive**, whatever the mode.
 
 **Talisman slot (ooparts) and EE (exclusive) explicitly excluded**: their
 `subs` is actually the list of socketed gems (the parser stores

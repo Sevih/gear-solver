@@ -98,7 +98,9 @@ results, the bottom band shows the selected build's pieces.
 - **Reforge** — four modes: **Off** / **+10R6** (preview pieces at +10, not ascended — 6
   reforge ticks) / **+10R9** (preview at +10 ascended — 9 ticks, same main stat as +10R6, no
   Singularity passive) / **+15R9** (preview at +15 fully ascended — 9 ticks plus the
-  Singularity passive). Lets you compare builds as if the gear were maxed.
+  Singularity passive). Lets you compare builds as if the gear were maxed — each piece up to
+  its own ceiling: a piece under 6★, or a 6★ that isn't Unique, stops at +10 with its own
+  number of reforges and no Singularity passive, whatever the mode.
 - **Maxed only** — no extrapolation: only pieces **already at the reforge mode's investment
   state (or better)**, scored on their real rolls (no projection). Off: any piece as-is ·
   +10R6: +10 with ≥ 6 reforges done · +10R9: +10 with ≥ 9 reforges · +15R9: +15 with ≥ 9

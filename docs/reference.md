@@ -440,7 +440,15 @@ d'un héros que l'utilisateur venait juste d'exclure.
 Trié desc.
 
 **Allocation greedy** : top-K pour `K = talismanSlots + eeSlots` (4 ou 5 selon
-`enhanceLevel ≥ 5`). Stoppe à `score ≤ 0`.
+`enhanceLevel ≥ 5`). D'abord les gemmes de `score > 0` dans leur ordre, puis
+les **remplissages** : les gemmes de score **exactement 0** (stat hors priorité ;
+jamais une priorité négative, jamais une stat sous un `max` de `statFilters`),
+triées par le gain relatif de `dmg` qu'elles apportent au build équipé
+(`gemDmgGains`, `computeCheapRatings` avec `dmgStat`/`dmgSec`/`noCrit`, pesé une
+fois par solve), puis par `value / ROLL_NORMS`. Clé portée par `ScoredGem.fill`,
+même parcours (`pickOrder`) dans les quatre allocateurs ; une gemme crit de
+remplissage suit le même saut au cap CHC. Pas de remplissage sans aucune
+priorité (fallback ci-dessous).
 
 **Pré-agrégation** : `aggregateGemDelta(scored, ts, ee)` retourne un
 `{flat, pct}` directement consommable par `aggregateGearBuckets`. Évite N×10
@@ -510,8 +518,13 @@ modifié.
 
 **Projection de mode reforge (`projectPieceForReforge`)** — le preview Builder
 projette chaque pièce vers un plafond endgame : rescale du main
-(`projectMainToCeiling`) + ticks de reforge (`simulateReforges`, budget fixe 6
-classic / 9 ascended). En mode **ascended uniquement**, on ajoute aussi le
+(`projectMainToCeiling`) + ticks de reforge (`simulateReforges`). Le plafond est
+celui de la **pièce dans le mode** (`pieceReforgePlan`, min des deux) : seule une
+**6★ `unique`** ascende (`CItem.IsSingularityActivate`) et va au plafond du mode
+(+10 R6 classic, +10 R9 ascended10, +15 R9 ascended) ; une pièce **sous 6★, ou
+une 6★ non `unique`**, s'arrête à **+10**, à **son nombre de reforges**
+(`maxReforgesOf` : l'étoile sous 6★, 6 pour une 6★), **sans passif**, quel que
+soit le mode. En mode **ascended uniquement** (et sur une pièce qui ascende), on ajoute aussi le
 **passif de singularité inconditionnel** (`addProjectedSingularity`) — DMG+
 sur arme/accessoire (`ST_DMG_BOOST`), DMG- sur les 4 armures
 (`ST_DMG_REDUCE_RATE`) — à la **meilleure valeur** de `singularity-options.json`

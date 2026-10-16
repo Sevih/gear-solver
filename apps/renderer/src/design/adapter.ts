@@ -7,6 +7,7 @@ import { resolveOption } from "@gear-solver/core";
 import type { GameData, GearPiece, RolledStat } from "@gear-solver/core";
 import type { IconPiece } from "./EquipmentIcon.js";
 import { type SlotId, toDesignRarity, toDesignSlot, STAT } from "./tokens.js";
+import { maxReforgesOf } from "../lib/solver/engine.js";
 
 /** Talisman / EE 5th gem slot unlocks once the piece's enhance level
  *  reaches this threshold (matches the in-game gating). */
@@ -288,8 +289,8 @@ export function toUiPiece(g: GearPiece, game?: GameData | null): UiPiece {
     passive,
     multiTierPassive,
     gemSlots,
-    // Reforge max == star tier (e.g. 6× for 6★ items).
-    reforge: { n: g.reforgeCount, max: g.star ?? 0 },
+    // Reforge max = the game's budget: star tier, 9 for a 6★ ascended.
+    reforge: { n: g.reforgeCount, max: maxReforgesOf(g) },
     status: g.equippedBy ? "equipped" : "free",
     locked: g.locked,
     equippedBy: g.equippedBy,

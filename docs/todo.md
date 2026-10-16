@@ -34,9 +34,6 @@
       aujourd'hui) · `awakValue` : ATK prend `geas.atk` toutes sources, EFF/RES `geasStat` — unifier.
 
 ### 🔴 Revue 2026-10 — moteur et Builder
-- [ ] 🔴 **M7 — Priorité partielle : des emplacements de gemme restent vides** — `solver/gems.ts` s'arrête dès que
-      le score est ≤ 0 (talisman `[15050, 15050, 0, 0, 0]`, le +20 % ATK des gemmes possédées disparaît de la fiche
-      et de la CP). **Décision** : compléter par CP ou par la stat la plus utile, une fois la priorité servie ?
 - [ ] 🔴 **M11 — ΔCP du Builder trompeur** — compare le build projeté (+10R6) à la CP réelle actuelle : un build
       identique à l'équipement affiche un ΔCP positif. **Décision** : base du ΔCP (équipé projeté pareil, ou
       projeté vs réel affiché comme tel) ?
@@ -47,9 +44,6 @@
 - [ ] 🟠 **M8 — Allocation de gemmes en SOLVE CP non optimale** — le glouton prend des gemmes de réduction de dégâts
       (34 643 CP contre un optimum à 35 044 sur Ame ; chiffres non relancés). `allocateGems` et `aggregateGemDelta`
       font le même travail : n'en garder qu'un.
-- [ ] 🟠 **M10 — La projection ignore l'étoile et la rareté** — une pièce 5★ est projetée à +15R9 avec un passif de
-      singularité, ce que le jeu refuse (`GetMaxSmeltingCount`, `IsSingularityActivate`). Lié : `UiPiece.reforge.max
-      = star` faux pour les pièces ascendées. **Décision** : vue « tout en 6★ » assumée, ou plafond réel par pièce ?
 - [ ] 🟡 **Mineurs moteur / Builder (revue)** — score arrondi utilisé comme clé de tri (ex aequo arbitraires) ·
       variantes de talisman fusionnées après le top-K par worker (candidats perdus) · erreur d'un worker → résultats
       partiels affichés sans avertissement · `allowBrokenSets=false` + Top% peut donner 0 build sans explication ·

@@ -22,7 +22,8 @@ import {
   computeSetBonuses, type FinalStatsBaseline, type GemOverride, type ScalingMap,
 } from "../src/lib/composeBuild.js";
 import type { StatScaling } from "@gear-solver/core";
-import { collapseTalismanVariants, maxedFloorOf, meetsMaxedFloor, projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
+import { collapseTalismanVariants, maxedFloorOf, meetsMaxedFloor, pieceReforgePlan, projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
+import { toUiPiece } from "../src/design/adapter.js";
 import type { SolveBuild } from "../src/lib/solver/types.js";
 import { calcBattlePower, makeCpEvaluator } from "../src/lib/solver/cp.js";
 import { aggregateGemDelta, allocateGems, buildGemPool, gemSlotsOf, scoreGemPool } from "../src/lib/solver/gems.js";
@@ -972,6 +973,71 @@ describe("projectPieceForReforge — reforge budget per mode", () => {
   it("ascended (+15R9) distributes 9 ticks", () => expect(totalReforge("ascended")).toBe(9));
 });
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * EACH PIECE AT ITS OWN CEILING — only a 6★ `unique` piece ascends
+ * (`CItem.IsSingularityActivate`); anything else stops at +10, at its own
+ * reforge budget (star under 6★, 6 for a 6★), with no Singularity passive.
+ * ───────────────────────────────────────────────────────────────────────── */
+describe("projectPieceForReforge — each piece at its own ceiling", () => {
+  // Real enhance factors (non-zero) so the +10 → +15 main-stat step shows.
+  const REAL_ENH_GAME = {
+    enhance: { enhanceFactor: 0.1, tierFactor: 0.05, maxEnhanceLevel: 10, singularity: { activation: 0.1, steps: [0.02, 0.02, 0.02, 0.02, 0.02] }, expCurves: {} },
+  } as unknown as GameData;
+  const fourSubs = (): RolledStat[] => [
+    { stat: "atkPct", value: 1, percent: true, ticks: 1 },
+    { stat: "critRate", value: 1, percent: true, ticks: 1 },
+    { stat: "critDmg", value: 1, percent: true, ticks: 1 },
+    { stat: "effRes", value: 1, percent: true, ticks: 1 },
+  ];
+  const at = (o: Partial<GearPiece>): GearPiece =>
+    ({ ...gearPiece("weapon", { subs: fourSubs(), main: [{ stat: "atk", value: 600, percent: false, source: "option" }] }), reforgeCount: 0, ...o });
+  const reforged = (p: GearPiece): number => p.subs.reduce((n, s) => n + (s.reforgeTicks ?? 0), 0);
+
+  it("a 5★ in +10R6 gets its 5 reforges", () => {
+    const out = projectPieceForReforge(at({ star: 5 }), REAL_ENH_GAME, "classic", {});
+    expect(out.reforgeCount).toBe(5);
+    expect(reforged(out)).toBe(5);
+  });
+
+  it("a 5★ in +15R9 stays +10 with 5 reforges and no passive", () => {
+    const out = projectPieceForReforge(at({ star: 5 }), REAL_ENH_GAME, "ascended", {});
+    expect(out.enhanceLevel).toBe(10);
+    expect(out.ascended).toBe(false);
+    expect(out.reforgeCount).toBe(5);
+    expect(reforged(out)).toBe(5);
+    expect(out.main.some((m) => m.source === "singularity")).toBe(false);
+    expect(out.main[0]!.value).toBe(600); // already +10: main untouched
+  });
+
+  it("a 6★ `rare` in +15R9 stays +10 with 6 reforges and no passive", () => {
+    const out = projectPieceForReforge(at({ rarity: "rare" }), REAL_ENH_GAME, "ascended", {});
+    expect(out.enhanceLevel).toBe(10);
+    expect(out.ascended).toBe(false);
+    expect(out.reforgeCount).toBe(6);
+    expect(out.main.some((m) => m.source === "singularity")).toBe(false);
+  });
+
+  it("a 6★ `rare` in +10R9 gets 6 reforges, not 9", () => {
+    expect(projectPieceForReforge(at({ rarity: "rare" }), REAL_ENH_GAME, "ascended10", {}).reforgeCount).toBe(6);
+  });
+
+  it("a 6★ `unique` in +15R9 still goes to +15, 9 reforges, with the passive", () => {
+    const out = projectPieceForReforge(at({}), REAL_ENH_GAME, "ascended", {});
+    expect(out.enhanceLevel).toBe(15);
+    expect(out.ascended).toBe(true);
+    expect(out.reforgeCount).toBe(9);
+    expect(out.main.some((m) => m.source === "singularity")).toBe(true);
+    expect(out.main[0]!.value).toBeGreaterThan(600);
+  });
+
+  it("pieceReforgePlan reads the game's budget: star under 6★, 6, or 9 for a 6★ `unique` that ascends", () => {
+    expect(pieceReforgePlan(at({ star: 4 }), "ascended10").budget).toBe(4);
+    expect(pieceReforgePlan(at({}), "classic").budget).toBe(6);
+    expect(pieceReforgePlan(at({}), "ascended10").budget).toBe(9);
+    expect(pieceReforgePlan(at({ star: 5 }), "ascended").ceiling).toEqual({ enhanceLevel: 10, ascended: false, singularityLevel: 0 });
+  });
+});
+
 describe("maxedFloorOf / meetsMaxedFloor — the 'Maxed only' investment floor", () => {
   // The talisman's own enhance ceiling (`enhance.maxEnhanceLevel` in the contract).
   const TALISMAN_MAX = 10;
@@ -1281,9 +1347,9 @@ describe("simulateReforges — 6★ ascended budget", () => {
     expect(crc.ticks).toBe(2);
   });
 
-  it("budget override forces a fixed endgame budget regardless of real star", () => {
-    // A 3★ piece (real budget 3) previewed in ascended mode gets the fixed
-    // 9-tick budget — "project every piece as a maxed 6★ ascended".
+  it("budget override forces the given budget regardless of real star", () => {
+    // The override wins over the piece's own budget (the reforge projection
+    // passes `pieceReforgePlan`'s, which never exceeds the piece's own).
     const p = piece(3, 0, [
       { stat: "atkPct", value: 4, percent: true, ticks: 1 },   // → cap at 6 (5 ticks)
       { stat: "critRate", value: 1, percent: true, ticks: 1 }, // → absorbs the other 4
@@ -1293,6 +1359,14 @@ describe("simulateReforges — 6★ ascended budget", () => {
     const crc = sim.subs.find((s) => s.stat === "critRate")!;
     expect(atk.ticks).toBe(6);
     expect(crc.ticks).toBe(5); // 9 total − 4 into atk
+  });
+});
+
+describe("toUiPiece — reforge max", () => {
+  it("reads the game's budget: 9 for a 6★ ascended, the star otherwise", () => {
+    expect(toUiPiece({ ...piece(6, 7, []), ascended: true }).reforge).toEqual({ n: 7, max: 9 });
+    expect(toUiPiece(piece(6, 6, [])).reforge.max).toBe(6);
+    expect(toUiPiece(piece(5, 2, [])).reforge.max).toBe(5);
   });
 });
 

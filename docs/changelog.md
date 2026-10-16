@@ -8,6 +8,83 @@
 
 ## Items de backlog clôturés (index)
 
+### 💎 Moteur — gemmes complétées par la stat utile du héros, chaque pièce projetée à son propre plafond (2026-10-16)
+- ✅ 🔴 **M7 — une priorité partielle ne laisse plus d'emplacement de gemme vide.** Les quatre allocateurs de
+  `apps/renderer/src/lib/solver/gems.ts` s'arrêtaient au premier score ≤ 0 : avec `{ critDmg: 3 }` sur un pool
+  15046 ×5 (ATK +4 %) + 15050 ×2 (CHD +4), le talisman recevait `[15050, 15050, 0, 0, 0]` et l'EE rien, le +20 %
+  ATK des gemmes possédées sortait de la fiche et de la CP. Décision de Sevih (15/10) appliquée telle quelle :
+  une fois la priorité servie (gemmes de score > 0 dans leur ordre, plafond CHC inchangé), les emplacements
+  libres prennent les gemmes de score **exactement 0**, par gain relatif de `dmg` décroissant puis par magnitude
+  brute (`value / ROLL_NORMS`, le repli `allowZeroPriority`). Forme conseillée retenue : `ScoredGem.fill`
+  (optionnel ; absent = jamais posé en remplissage), posé par `scoreGemPool` à partir de deux nouvelles
+  options — `fillGain` (gain `dmg` d'une gemme) et `noFill` (clés de priorité portant un `max` dans
+  `filters.statFilters`, jamais posées en remplissage) — et trié après les scores positifs sans toucher à leur
+  ordre (tri stable, départage seulement à score 0). Un seul parcours, `pickOrder` (les priorités jusqu'au
+  premier score ≤ 0, puis les remplissages ; un score négatif n'est jamais visité), lu par `allocateGems`,
+  `aggregateGemDelta`, `allocateGemsCapped` et `allocateGemsReachingCap` : la répartition affichée et le delta
+  composé ne peuvent pas diverger. Plafond CHC : `allocateGemsCapped` saute aussi une gemme crit de
+  remplissage au cap, et l'étage 2 d'`allocateGemsReachingCap` ne saute plus toute gemme crit mais celles
+  posées au cap (équivalent pour les gemmes crit priorisées — il n'en reste qu'au cap après l'étage 1 —, et
+  une gemme crit de remplissage suit le même saut) ; le chemin sans priorité crit du hot loop (`fs.critRate >
+  102`) se déclenche aussi sur des gemmes crit de remplissage. Le gain `dmg` vient de `gemDmgGains`
+  (`engine.ts`, à côté de `cpStatWeights`) : `computeCheapRatings(…).dmg` avec `meta.dmgStat`, `meta.dmgSec`
+  et `meta.noCrit` (le modèle de `dmgTickGains`, panneau « DMG per 1 % »), gemme routée comme un sub
+  (`computeFinalStatsPlusRoll`), pesé **une fois par solve** sur le build équipé du héros comme
+  `reforgeTickWeights` (CHC au cap → 0, héros `noCrit` → CHC/CHD à 0, stat hors modèle → 0 puis magnitude).
+  `precomputeContext` le passe à `scoreGemPool` ; `dmgStat`/`noCrit` y sont lus une fois et réutilisés pour le
+  contexte rendu. Inchangé : SOLVE sans aucune priorité (aucun `fill` → `null` → gemmes serties), le score du
+  build (`computeScore`), SOLVE CP sans priorité (poids CP — ses gemmes à poids 0 remplissent maintenant par la
+  même règle). M8 non touché (`allocateGems` et `aggregateGemDelta` restent deux fonctions).
+- ✅ 🟠 **M10 — chaque pièce projetée à son plafond réel.** `REFORGE_PLANS` projetait toute pièce en 6★ maxée
+  (budget fixe 6 ou 9, main à +15 ascendée et passif de singularité en +15R9) : une arme 5★ `unique` +10 R5
+  sortait en +15R9 avec 9 reforges, ATK 600 → 690 et DMG +50 %, ce que le jeu refuse
+  (`CItem.IsSingularityActivate` : 6★ `unique` seulement ; `CUIItemSmelting` : budget = étoile sous 6★, 6 ou
+  6 + 3 pour une 6★ ascendée). Nouvelle `pieceReforgePlan(piece, mode)` exportée : peut ascender ⇔ 6★ ET
+  `unique` (`canAscend`) ; sinon plafond `REFORGE_PLANS.classic.ceiling` (+10, sans ascension ni passif) quel
+  que soit le mode ; budget = `min(budget du mode, maxReforgesOf(piece, ascends && mode ≠ classic))`.
+  `maxReforgesOf` prend un second paramètre `ascended` (défaut : l'état de la pièce) au lieu d'une deuxième
+  copie de la règle 6/9. `projectPieceForReforge` lit ce plan — donc le moteur ET la bande de pièces du
+  Builder, qui l'appelle déjà : la carte suit le score ; `projectMainToCeiling` reçoit le plafond par pièce et
+  ne déclasse toujours pas une pièce au-dessus. `REFORGE_PLANS` reste le plafond du MODE ;
+  `maxedFloorOf`/`meetsMaxedFloor` inchangés. Lié : `UiPiece.reforge.max` (`design/adapter.ts`) lit
+  `maxReforgesOf` (9 pour une 6★ ascendée, au lieu de l'étoile). Textes : infobulles des trois modes
+  (`REFORGE_MODES`, `BuilderScreen.tsx`), commentaires d'`engine.ts` (« every piece is previewed as a maxed
+  6★ », `simulateReforges`, `SINGULARITY_CEILING`), `docs/solver.md` (§ Options, § Gems),
+  `docs/reference.md` (§ 2.7 gemmes, § 2.9 projection) et leurs miroirs `wiki/Solver.md`,
+  `wiki/Engine-Reference.md` (paragraphe de projection ajouté, il n'y était pas), `wiki/Using-the-App.md`
+  (§ Options).
+- ✅ **Tests.** Nouveau `apps/renderer/test/gemFill.test.ts` sur le contrat réel `data/derived` (11 tests) :
+  le cas de la revue (appel direct et via `prepareContext`, héros 2000001) → talisman
+  `[15050, 15050, 15046, 15046, 15046]`, EE `[15046, 15046, 0, 0, 0]` ; HP à priorité −1 jamais posé ; ATK
+  sous `max` jamais posé en remplissage ; Drakhan (`dmgStat: "hp"`) remplit HP % avant ATK % (la magnitude
+  brute dirait l'inverse) ; Rhona (`noCrit`) prend les ATK % lv5 avant les CHD lv6 ; `aggregateGemDelta`
+  = les gemmes d'`allocateGems` (4 et 5 emplacements) ; SOLVE sans priorité → delta `null`, aucun `fill` ;
+  SOLVE CP sans priorité → les 7 gemmes posées ; `allocateGemsCapped` / `allocateGemsReachingCap` : une
+  seule gemme crit de remplissage sous le cap, aucune au cap ; sans `fill`, arrêt aux priorités. Dans
+  `solver.test.ts` (6 + 1 tests) : 5★ en +10R6 → 5 reforges ; 5★ en +15R9 → +10, 5 reforges, pas
+  d'ascension ni de passif, main inchangé ; 6★ `rare` en +15R9 → +10, 6 reforges, sans passif ; 6★ `rare`
+  en +10R9 → 6 ; 6★ `unique` en +15R9 → +15, 9, passif (et les tests existants de `simulateReforges`, du
+  budget par mode et du passif projeté passent sans changement) ; `pieceReforgePlan` (4★ → 4, 6★ 6/9,
+  plafond +10 d'une 5★) ; `toUiPiece` : 6★ ascendée → max 9, 6★ → 6, 5★ → 5. Commentaire du test
+  « budget override » recalé (la surcharge reste, le « tout en 6★ » non). Tests existants d'allocation
+  inchangés : un `ScoredGem` écrit à la main sans `fill` n'est jamais un remplissage.
+- ✅ **Rejeu de la revue** (copie de `moteur/` hors du dépôt, chemins vers la racine du dépôt) : `t4.ts`
+  avant — `delta {"flat":{},"pct":{"critDmg":8}} alloc {"talisman":[15050,15050,0,0,0],"ee":[0,0,0,0,0]}` ;
+  après — `delta {"flat":{},"pct":{"critDmg":8,"atkPct":20}} alloc
+  {"talisman":[15050,15050,15046,15046,15046],"ee":[15046,15046,0,0,0]}`. `t6.ts` avant — `classic
+  reforgeCount 6 … enh 10`, `ascended reforgeCount 9 ascended true enh 15 main [["atk",690,"option"],
+  ["dmgUp",50,"singularity"]]` ; après — `classic reforgeCount 5 ascended false enh 10 main
+  [["atk",600,"option"]]` et `ascended reforgeCount 5 ascended false enh 10 main [["atk",600,"option"]]`,
+  sans `singularity`. `npm run typecheck` : dernière ligne `> tsc --noEmit` (renderer, sans erreur) ;
+  `npm test` : `Tests  388 passed (388)` (renderer, 34 fichiers).
+- ⏳ **Sevih — « Maxed only » doit-il vouloir dire « au plafond de la pièce » ?** Le plancher exige toujours le
+  budget du mode : une 5★ +10 R5 reste exclue d'un solve « Maxed only » +10R6, alors que la projection la
+  tient maintenant pour maxée. Décidé le 15/10 pour le lot suivant, pas touché ici.
+- ⏳ **Vu, hors périmètre.** Une pièce sans étoile (`star: null`, objet absent du contrat) a maintenant un
+  budget de 0 et n'est plus projetée en reforges (elle recevait 6 ou 9) ; les règles 6/9 et le plafond par sub
+  restent recopiés à la main (item ⚪ « Règles du jeu recopiées ») ; les comptes de tests du README et de
+  `docs/reference.md` (§ tests) étaient déjà périmés, non recalés.
+
 ### 🧮 Fiche — héros fusionnés calculés sur leur vrai personnage partout, main stat en float32 comme le jeu (2026-10-16)
 - ✅ 🔴 **M4 — un héros en Core Fusion est composé sur sa variante `27xxxxx` dans le Builder, le moteur et
   la Worklist, plus seulement dans Builds.** Seul Builds lisait `characters[fusionCharId]` (helpers locaux

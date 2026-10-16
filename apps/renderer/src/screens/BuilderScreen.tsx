@@ -347,9 +347,9 @@ function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; p
  *  label = chip text, hint = tooltip. */
 const REFORGE_MODES: ReadonlyArray<{ value: ReforgeMode; label: string; hint: string }> = [
   { value: "disable",    label: "Off",    hint: "Reforge preview off — score gear exactly as captured." },
-  { value: "classic",    label: "+10R6",  hint: "+10, not ascended (6 reforge ticks). Main stats re-scaled, substats max-rolled by priority." },
-  { value: "ascended10", label: "+10R9",  hint: "+10, ascended for the reforges only (9 ticks). Same main stat as +10R6 — ascending just adds 3 reforges and unlocks +15. No Singularity passive (that's +15 only). The cost-conscious endgame: skips the steep +10→+15 enhancement." },
-  { value: "ascended",   label: "+15R9",  hint: "+15 full Singularity (9 reforge ticks). Adds the +11→+15 main-stat steps AND the unconditional Singularity passive (DMG± on weapon/acc vs armor) on top of +10R9." },
+  { value: "classic",    label: "+10R6",  hint: "+10, not ascended (6 reforge ticks). Main stats re-scaled, substats max-rolled by priority. Each piece stops at its own ceiling: a piece under 6★ gets only its own number of reforges." },
+  { value: "ascended10", label: "+10R9",  hint: "+10, ascended for the reforges only (9 ticks). Same main stat as +10R6 — ascending just adds 3 reforges and unlocks +15. No Singularity passive (that's +15 only). The cost-conscious endgame: skips the steep +10→+15 enhancement. Each piece stops at its own ceiling: a piece under 6★, or a 6★ that isn't Unique, stays at +10 with its own number of reforges." },
+  { value: "ascended",   label: "+15R9",  hint: "+15 full Singularity (9 reforge ticks). Adds the +11→+15 main-stat steps AND the unconditional Singularity passive (DMG± on weapon/acc vs armor) on top of +10R9. Each piece stops at its own ceiling: a piece under 6★, or a 6★ that isn't Unique, stays at +10 with its own number of reforges and no passive." },
 ];
 
 /** UI metadata for the Options "Equipped items" scope (see `EquippedScope`). */

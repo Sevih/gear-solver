@@ -46,7 +46,8 @@ function engineToDesign(slot: string): string {
 
 /** Reforge-mode preview: how aggressively to project each pool piece toward
  *  an endgame ceiling before scoring. `disable` keeps pieces as captured; the
- *  others project main stats + substat reforge ticks to a 6★ endgame:
+ *  others project main stats + substat reforge ticks toward a 6★ endgame, each
+ *  piece stopping at its own ceiling (`pieceReforgePlan`):
  *   - `classic`    → +10, NOT ascended, 6 reforge ticks            (label "+10R6")
  *   - `ascended10` → +10, ascended for the reforges only, 9 ticks  (label "+10R9")
  *   - `ascended`   → +15 full Singularity, 9 ticks + passive       (label "+15R9")
@@ -55,16 +56,19 @@ function engineToDesign(slot: string): string {
  *  main-stat steps unlock ONLY at +15. So `ascended10` is `classic`'s exact
  *  ceiling (+10 main stat) with 3 extra reforges and NO passive — the
  *  cost-conscious endgame that skips the steep +10→+15 enhancement (chips at
- *  90/80/70/60/40%). Only `ascended` (+15) adds the steps + passive on top. */
+ *  90/80/70/60/40%). Only `ascended` (+15) adds the steps + passive on top.
+ *  A piece that can't ascend (under 6★, or a 6★ that isn't `unique`) stops at
+ *  +10 with its own reforge count and no passive, whatever the mode. */
 export type ReforgeMode = "disable" | "classic" | "ascended10" | "ascended";
 
-/** Per-mode projection plan — the enhance ceiling fed to `projectMainToCeiling`
- *  (main-stat re-scale) and the fixed reforge budget fed to `simulateReforges`
- *  (substat ticks). Budgets are fixed (not derived from the piece's real star)
- *  so every piece is previewed as a maxed 6★. `ceiling.ascended` is a MAIN-STAT
- *  formula flag (use the Singularity main-stat path) AND gates the passive — so
- *  `ascended10` keeps `ascended: false` (its +10 main stat is unchanged by
- *  ascending; only the reforge budget grows). */
+/** Per-mode projection plan — the MODE's ceiling: the enhance ceiling fed to
+ *  `projectMainToCeiling` (main-stat re-scale) and the reforge budget fed to
+ *  `simulateReforges` (substat ticks), as a 6★ `unique` piece reaches them. A
+ *  piece is projected to the min of this and its own ceiling
+ *  (`pieceReforgePlan`). `ceiling.ascended` is a MAIN-STAT formula flag (use the
+ *  Singularity main-stat path) AND gates the passive — so `ascended10` keeps
+ *  `ascended: false` (its +10 main stat is unchanged by ascending; only the
+ *  reforge budget grows). */
 const REFORGE_PLANS: Record<Exclude<ReforgeMode, "disable">, { ceiling: ReforgeCeiling; budget: number }> = {
   classic:    { ceiling: { enhanceLevel: 10, ascended: false, singularityLevel: 0 }, budget: 6 },
   ascended10: { ceiling: { enhanceLevel: 10, ascended: false, singularityLevel: 0 }, budget: 9 },
@@ -102,11 +106,35 @@ export function meetsMaxedFloor(
   return true;
 }
 
-/** Project a single pool piece to its reforge-mode ceiling: main-stat re-scale
- *  (`projectMainToCeiling`) + substat reforge ticks (`simulateReforges`) at the
- *  mode's fixed endgame budget. `disable` and Talisman/EE return the piece
- *  untouched. Shared by `precomputeContext` (pool scoring) and the Builder's
- *  bottom gear band (display), so the previewed card matches the scored stats. */
+/** Can the piece ascend (Singularity)? Only a 6★ `unique` one — the game's
+ *  `CItem.IsSingularityActivate` gate. Ascension is what unlocks +11→+15, the
+ *  +3 reforges and the Singularity passive. */
+function canAscend(piece: GearPiece): boolean {
+  return piece.star === 6 && piece.rarity === "unique";
+}
+
+/** The ceiling a piece is projected to in a reforge mode: the min of the mode
+ *  (`REFORGE_PLANS`) and what the piece can reach. A piece that can't ascend
+ *  stops at +10 (the `classic` ceiling: no ascension, no passive) whatever the
+ *  mode; its reforge budget is the game's (`maxReforgesOf`: its star under 6★,
+ *  6 for a 6★, 9 for a 6★ `unique` in a mode that ascends — +10R9, +15R9),
+ *  capped by the mode's. `projectMainToCeiling` still never downgrades a piece
+ *  already above the ceiling. */
+export function pieceReforgePlan(piece: GearPiece, mode: Exclude<ReforgeMode, "disable">): { ceiling: ReforgeCeiling; budget: number } {
+  const plan = REFORGE_PLANS[mode];
+  const ascends = canAscend(piece);
+  return {
+    ceiling: ascends ? plan.ceiling : REFORGE_PLANS.classic.ceiling,
+    budget: Math.min(plan.budget, maxReforgesOf(piece, ascends && mode !== "classic")),
+  };
+}
+
+/** Project a single pool piece to its reforge-mode ceiling (`pieceReforgePlan`):
+ *  main-stat re-scale (`projectMainToCeiling`) + substat reforge ticks
+ *  (`simulateReforges`) up to the piece's budget in that mode. `disable` and
+ *  Talisman/EE return the piece untouched. Shared by `precomputeContext` (pool
+ *  scoring) and the Builder's bottom gear band (display), so the previewed card
+ *  matches the scored stats. */
 export function projectPieceForReforge(
   piece: GearPiece,
   game: GameData,
@@ -116,18 +144,18 @@ export function projectPieceForReforge(
   tickWeights?: ReforgeTickWeights,
 ): GearPiece {
   if (mode === "disable" || piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
-  const plan = REFORGE_PLANS[mode];
+  const plan = pieceReforgePlan(piece, mode);
   const projected = simulateReforges(projectMainToCeiling(piece, game, plan.ceiling), priority, plan.budget, tickWeights);
   // The unconditional Singularity passive (DMG+ on weapon/accessory, DMG- on the
   // four armor pieces) unlocks ONLY at +15 — not at ascension. So only the +15
   // plan carries `ceiling.ascended`; +10R9 (ascended for reforges) and +10R6
-  // both go without it.
+  // both go without it, and so does a piece that can't ascend.
   return plan.ceiling.ascended ? addProjectedSingularity(projected) : projected;
 }
 
 /** Best-grade unconditional Singularity passive granted at full ascension —
- *  the optimistic ceiling the ascended preview projects (mirrors the rest of
- *  the projection's "maxed 6★" framing). Weapon/accessory roll an unconditional
+ *  the optimistic ceiling the ascended preview projects on a piece that can
+ *  ascend (6★ `unique`). Weapon/accessory roll an unconditional
  *  DMG+ (`ST_DMG_BOOST`), the four armor pieces an unconditional DMG-
  *  (`ST_DMG_REDUCE_RATE`); these are the top values in `singularity-options.json`
  *  (DMG+ v=500 → 50%, DMG- v=250 → 25%, both stored ×10 → percent). A
@@ -696,6 +724,10 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // gems off strictly-lower-priority heroes; "none" excludes all others) and
   // excluded heroes. Otherwise the solver could recommend gems that require
   // unequipping a Talisman/EE on a hero the user just opted out of / outranks.
+  //
+  // Once the priority is served, the slots it leaves free take the zero-score
+  // gems by the `dmg` gain they bring the hero (`gemDmgGains`, weighed once on
+  // the equipped build), never a stat under a `max` bound — see `scoreGemPool`.
   const gemPool = buildGemPool(inv, {
     heroUid,
     equippedScope,
@@ -712,7 +744,16 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
           inv.gear.find((g) => g.equippedBy === heroUid && g.slot === "ooparts") ?? null,
         )
       : filters.priority;
-  const scoredGems = scoreGemPool(gemPool, gemPriority, game, { allowZeroPriority: false });
+  const dmgStat = meta.dmgStat ?? "atk";
+  const noCrit = meta.noCrit ?? false;
+  const scoredGems = scoreGemPool(gemPool, gemPriority, game, {
+    allowZeroPriority: false,
+    fillGain: gemDmgGains(
+      composed.noGearStats, composed.scaling, inv.gear.filter((g) => g.equippedBy === heroUid), game,
+      dmgStat, meta.dmgSec, noCrit,
+    ),
+    noFill: new Set(Object.entries(filters.statFilters).filter(([, b]) => b?.max != null).map(([k]) => k)),
+  });
   const eeSlotCount = gemSlotsOf(ee);
   // Pre-aggregate gem contribution per talismanSlots variant — at most
   // two variants (4 and 5) cover every talisman in the inventory.
@@ -736,9 +777,9 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     gemAllocByTalismanSlots,
     skills,
     starMeta,
-    dmgStat: meta.dmgStat ?? "atk",
+    dmgStat,
     dmgSec: meta.dmgSec,
-    noCrit: meta.noCrit ?? false,
+    noCrit,
     skillFactor: dmgSkillFactor(meta.bestSkill),
     setPlans,
     excludedSets,
@@ -780,11 +821,13 @@ const REFORGE_PER_SUB_CAP = 6;
 /** In-game reforge budget for a piece: N reforges for a 1★→6★ piece (= its
  *  star), with a 6★ ascended (Singularity) piece getting an extra +3 → 9 total.
  *  The +3 is exclusive to 6★ Singularity items; lower-star ascension doesn't
- *  exist (ascension is a 6★-only mechanic). Exported so non-solver surfaces
- *  (e.g. the Builds advice) read the same budget instead of re-deriving it. */
-export function maxReforgesOf(piece: GearPiece): number {
+ *  exist (ascension is a 6★-only mechanic). `ascended` defaults to the piece's
+ *  own state; the reforge projection passes the state it projects to
+ *  (`pieceReforgePlan`). Exported so non-solver surfaces (the Builds advice,
+ *  the gear cards) read the same budget instead of re-deriving it. */
+export function maxReforgesOf(piece: GearPiece, ascended = piece.ascended): number {
   const star = piece.star ?? 0;
-  return star === 6 && piece.ascended ? star + 3 : star;
+  return star === 6 && ascended ? star + 3 : star;
 }
 
 /** Key of a sub in `ReforgeTickWeights`: stat + flat/percent, since the same
@@ -850,9 +893,9 @@ export function simulateReforges(
   tickWeights?: ReforgeTickWeights,
 ): GearPiece {
   if (piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
-  // `maxReforgesOverride` lets the reforge-mode preview impose a fixed endgame
-  // budget regardless of the piece's actual star (classic = 6, ascended = 9) —
-  // "project every piece as if it were max-star 6★".
+  // `maxReforgesOverride` lets the reforge-mode preview impose the budget of the
+  // state it projects to (`pieceReforgePlan`: the mode's, capped by the piece's
+  // own — a 6★ that ascends goes to 9 though it isn't ascended yet).
   const maxReforges = maxReforgesOverride ?? maxReforgesOf(piece);
   const remaining = Math.max(0, maxReforges - piece.reforgeCount);
   if (remaining === 0 || piece.subs.length === 0) return piece;
@@ -1058,6 +1101,31 @@ export function cpStatWeights(
     critDmgReduce: d({ critDmgReduce: cur.critDmgReduce + ROLL_NORMS.critDmgReduce! }),
     eff: d({ eff: cur.eff + ROLL_NORMS.eff! }),
     effRes: d({ effRes: cur.effRes + ROLL_NORMS.effRes! }),
+  };
+}
+
+/** Relative `dmg` gain of one extra gem on the hero's CURRENT build — the
+ *  filler key of `scoreGemPool` (`ScoreGemOptions.fillGain`). The damage model
+ *  is `computeCheapRatings(…).dmg` (`dmgStat`, `dmgSec`, `noCrit`), the one the
+ *  Builder's "DMG per 1 %" panel reads (`dmgTickGains`); the gem is routed like
+ *  a sub (`computeFinalStatsPlusRoll`), as `reforgeTickWeights` does for CP. A
+ *  stat outside the model gains 0, so does CHC at the cap, and CHC/CHD for a
+ *  `noCrit` hero. */
+export function gemDmgGains(
+  baseline: FinalStatsBaseline,
+  scaling: ScalingMap,
+  equipped: GearPiece[],
+  game: GameData,
+  dmgStat: "atk" | "def" | "hp",
+  dmgSec: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd" | "eff" | "crc"; ratio: number }> | undefined,
+  noCrit: boolean,
+): (stat: string, value: number, percent: boolean) => number {
+  let dmg0: number | null = null;
+  return (stat, value, percent) => {
+    dmg0 ??= computeCheapRatings(computeFinalStats(baseline, scaling, equipped, game), dmgStat, dmgSec, noCrit).dmg;
+    if (dmg0 <= 0) return 0;
+    const stats = computeFinalStatsPlusRoll(baseline, scaling, equipped, game, { stat, value, percent });
+    return (computeCheapRatings(stats, dmgStat, dmgSec, noCrit).dmg - dmg0) / dmg0;
   };
 }
 
