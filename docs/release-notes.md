@@ -12,7 +12,31 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Set bonuses follow the game's rule.** A set mixing Breakthrough 4 and lower pieces now
+  gets the bonus the game gives: the 2-piece reads the level of your 2 best pieces, the
+  4-piece the level of your 4 best (Attack 4/4/3: 35 %, not 30 %). Speed, Penetration and
+  Bursting no longer stack their 2-piece on top of a lower-level 4-piece. The solver also
+  stops discarding a better Breakthrough 4 piece in favour of a lower one of the same set.
+- **Combat-effect sets no longer inflate CP.** Pulverization, Weakness, Augmentation and the
+  Immunity 4-piece act in battle only; they no longer add stats to the sheet or the CP.
+  The Mitigation set's Crit DMG Reduction is counted.
+- **Fused heroes and stat rounding.** Core Fusion heroes are composed on their real character
+  everywhere, and main stats round the way the game does.
+- **Reforge projection.** Each piece is projected to its own ceiling, gems are filled with a
+  stat your hero actually uses, and "+15R9 Maxed only" keeps a +10 talisman.
+- **Builder and Worklist.** ΔCP says what it compares against; the Worklist keeps a hero's
+  most recent build; the recommended talisman is shown as preferred; a Get preset that lands
+  after you switched hero is ignored; a hero's filters and a cleared rank are remembered.
+- **Emulator capture.** The capture certificate is now generated on your PC the first time you
+  arm a capture and replaced in the emulator automatically — the installer no longer ships
+  one. Settings → Data → Wipe captured data clears the whole capture folder; raw traffic is
+  only kept with the new Settings → Debug option.
+- **Steam capture.** Your account imports once at launch with no overlapping checks, and gear
+  edits are refused while the plugin is live.
+- **Startup and data.** The window opens before the data update, which only downloads when the
+  data changed. If the data comes in a newer format than this version reads, the app keeps
+  your current data and asks you to update. Backup import keeps your builds and presets, and a
+  bad manual import file no longer breaks the import.
 
 ## [1.8.1] — 2026-10-08
 
