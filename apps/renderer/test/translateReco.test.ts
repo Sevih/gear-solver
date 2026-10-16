@@ -51,6 +51,32 @@ describe("translateRecoBuild — effects", () => {
   });
 });
 
+describe("translateRecoBuild — talisman (preferred)", () => {
+  it("reads the advised talismans as preferred effect keys, OR at slot level", () => {
+    const { patch, warnings } = translateRecoBuild({
+      Talisman: [
+        { name: "Tactician's Charm", itemId: 10207, effectIcon: "TI_Icon_UO_Talisman_07", mainStat: [] },
+        { name: "Executioner's Charm", itemId: 10201, effectIcon: "TI_Icon_UO_Talisman_01", mainStat: [] },
+      ],
+    }, resolve);
+    expect(patch.talismanEffectPicks).toEqual({ eff10207: "preferred", eff10201: "preferred" });
+    expect(patch.mainPicks.talisman).toBeUndefined(); // the advice carries no main stat
+    expect(warnings).toEqual([]);
+  });
+
+  it("warns and skips a talisman whose effect can't be resolved", () => {
+    const { patch, warnings } = translateRecoBuild({
+      Talisman: [{ name: "Mystery Charm", itemId: null, effectIcon: null, mainStat: [] }],
+    }, resolve);
+    expect(patch.talismanEffectPicks).toEqual({});
+    expect(warnings.some((w) => /Talisman.*Mystery Charm.*resolve/.test(w))).toBe(true);
+  });
+
+  it("no advice → no talisman pick", () => {
+    expect(translateRecoBuild({}, resolve).patch.talismanEffectPicks).toEqual({});
+  });
+});
+
 describe("translateRecoBuild — sets", () => {
   it("maps each combo 1:1 to an OR plan", () => {
     const build: StructuredRecoBuild = {

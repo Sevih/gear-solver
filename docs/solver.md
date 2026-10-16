@@ -332,8 +332,14 @@ off → req-2pc → req-4pc → excluded → off
 en sautant les transitions impossibles. Sets totalement inutilisables (aucun
 bonus 2pc/4pc atteignable) ne s'affichent pas. Tooltip 3-sections : nom + (N owned) / desc 2pc / desc 4pc / state.
 
-### Weapons & accessories
-Deux groupes de chips effect-icon (Weapons / Accessories), filtrés par class du héros (gated par `classLimit`). Click cycle `off → required → excluded → off`. Tooltip : nom + (N owned) / desc T4 / state.
+### Weapons, accessories & talismans
+Trois groupes de chips effect-icon (Weapons / Accessories / Talismans), filtrés par class du héros (gated par `classLimit`), clés sur le `setId` de la pièce. Click cycle `off → required → excluded → off`. Tooltip : nom + (N owned) / desc T4 / state.
+Un talisman conseillé par **Get preset** (`Talisman` de `/api/reco`, `translateReco.ts`) arrive en état
+**`preferred`** (contour pointillé, badge `~`) : si au moins une pièce du pool talisman — après tous les filtres
+d'`allow()` — porte l'un des `setId` préférés, le pool est restreint à celles-là ; sinon il reste ouvert, comme sans
+conseil (jamais 0 build à cause d'un talisman préféré, contrairement à `required`). En « keep current », le talisman
+porté reste verrouillé. Un clic le fait passer en `required`. Le statut de Get preset signale quand aucun des
+talismans conseillés n'est possédé.
 
 ### RightSidebar — Library
 Trois sections **câblées** (localStorage, par héros) :
@@ -350,7 +356,9 @@ Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
 - **+ Worklist** — pousse le **diff par slot** (slots changés only) sur l'onglet **Worklist**
   (`screens/WorklistScreen.tsx`, storage `lib/storage/worklist.ts`) : une file inter-héros où
   chaque changement est une ligne cochable + un **Apply locally** (même `equipPieces`). États
-  *applied / stale / conflict* **dérivés live** de l'inventaire (rien n'est figé) ; **auto-prune à
+  *applied / stale / conflict / superseded* **dérivés live** de l'inventaire (rien n'est figé ;
+  *superseded* = une entrée plus récente du même héros vise le même slot : seule la plus récente
+  entre dans Apply all, `planWorklist`) ; **auto-prune à
   chaque recapture** (`reconcileWorklist` retire les changements faits + entrées vidées). Désactivé
   quand aucun slot ne change (`equipPlan.moving === 0`).
 
@@ -393,7 +401,10 @@ enhance level, icône slot, main stat, subs (avec ticks). En plus :
   `upg`) porte un **liseré cyan** + une ligne `← <pièce remplacée>` (ou `+ new slot` si le slot
   était vide). La pièce courante par slot vient de `currentLoadout` (Map slot→pièce équipée). Le
   header de la band résume le tout : **`N slots change`** + **`ΔCP ±X`** (`build.cp − currentCp`,
-  `currentCp` = `calcBattlePower` du loadout équipé, calculé dans `composition`).
+  `currentCp` = `calcBattlePower` du loadout équipé, calculé dans `composition`). Le build est
+  compté dans le mode de reforge des résultats, l'équipement tel qu'il est : hors `Off`, le libellé
+  dit la base (`ΔCP +X vs equipped (build at +10R6)`, infobulle d'une phrase — `deltaCpLabel`,
+  `lib/deltaCp.ts`), puisqu'un build identique à l'équipement y affiche un ΔCP positif.
 
 Em-dash quand aucun build n'est sélectionné.
 

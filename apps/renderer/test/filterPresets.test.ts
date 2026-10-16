@@ -47,3 +47,23 @@ describe("filter presets — legacy migration", () => {
     expect(loadOne(legacyPreset({}, { topPct: 20 })).topPct).toBe(20);
   });
 });
+
+describe("filter presets — talisman effect picks", () => {
+  it("a preset saved before the field loads with no talisman pick", () => {
+    expect(loadOne(legacyPreset({})).talismanEffectPicks).toEqual({});
+  });
+
+  it("preferred / required / excluded come back as saved (list-shaped 6★ setIds included)", () => {
+    const picks = { "3029, 3129": "preferred", "3023, 3123": "required", "3007": "excluded" };
+    expect(loadOne(legacyPreset({}, { talismanEffectPicks: picks })).talismanEffectPicks).toEqual(picks);
+  });
+
+  it("an unknown state or a non-setId key is dropped", () => {
+    const picks = { "3029, 3129": "maybe", TI_Icon_UO_Talisman_07: "required" };
+    expect(loadOne(legacyPreset({}, { talismanEffectPicks: picks })).talismanEffectPicks).toEqual({});
+  });
+
+  it("preferred stays a talisman state — a weapon pick saved as preferred is dropped", () => {
+    expect(loadOne(legacyPreset({}, { weaponEffectPicks: { "1001": "preferred" } })).weaponEffectPicks).toEqual({});
+  });
+});

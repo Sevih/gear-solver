@@ -61,6 +61,16 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
     }
     return out;
   };
+  // Talisman picks came later (setId-keyed from the start, and a 6★ talisman's
+  // setId is a list like "3029, 3129"), with the reco's `preferred` state. A
+  // preset saved before the field has none → {}.
+  const sanitizeTalismanEffects = (m: Record<string, unknown> | undefined): Record<string, "required" | "excluded" | "preferred"> => {
+    const out: Record<string, "required" | "excluded" | "preferred"> = {};
+    for (const [k, v] of Object.entries(m ?? {})) {
+      if (/^\d+(, \d+)*$/.test(k) && (v === "required" || v === "excluded" || v === "preferred")) out[k] = v;
+    }
+    return out;
+  };
   return {
     ...s,
     filters: {
@@ -75,6 +85,7 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
       statFilters: renameLegacyStatKeys(f.statFilters),
       weaponEffectPicks: sanitizeEffects(f.weaponEffectPicks),
       accessoryEffectPicks: sanitizeEffects(f.accessoryEffectPicks),
+      talismanEffectPicks: sanitizeTalismanEffects(f.talismanEffectPicks),
       // Field added after some presets were saved — default to no quality gate.
       minQuality: f.minQuality ?? null,
       // `topPct` (budget prune) was added later — absent → the UI default.

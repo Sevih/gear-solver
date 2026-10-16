@@ -19,8 +19,9 @@
 import { STAT_TO_PRIORITY } from "../solver/ratings.js";
 import type { SetPlan } from "../solver/types.js";
 
-/** One recommended weapon / amulet. `mainStat` is an OR-list of acceptable
- *  engine main-stat keys for that piece (e.g. `["pen","critDmg"]`). */
+/** One recommended weapon / amulet / talisman. `mainStat` is an OR-list of
+ *  acceptable engine main-stat keys for that piece (e.g. `["pen","critDmg"]`);
+ *  always empty on a talisman. */
 export interface RecoGearStat {
   name: string;
   itemId: number | null;
@@ -41,6 +42,9 @@ export interface RecoSetStat {
 export interface StructuredRecoBuild {
   Weapon?: RecoGearStat[];
   Amulet?: RecoGearStat[];
+  /** OR-list of advised talismans (`itemId` = the family's top tier). Read
+   *  as "preferred", not "required" — see `talismanEffectPicks`. */
+  Talisman?: RecoGearStat[];
   Set?: RecoSetStat[][];
   SubstatPrio?: string[][];
 }
@@ -58,6 +62,8 @@ export interface RecoFilterPatch {
   mainPicks: Record<string, Record<string, boolean>>;
   weaponEffectPicks: Record<string, "required">;
   accessoryEffectPicks: Record<string, "required">;
+  /** Advised talismans: narrow the pool to them only if the hero can use one. */
+  talismanEffectPicks: Record<string, "preferred">;
   setPlans: SetPlan[];
   priority: Record<string, number>;
 }
@@ -92,18 +98,19 @@ function mainPicksForSlot(refs: RecoGearStat[] | undefined): Record<string, bool
  *  game data. Null when the item id is missing or has no unique-option effect. */
 export type ResolveEffectKey = (itemId: number | null) => string | null;
 
-/** Required effect keys for a slot (OR-list), resolved from each piece's
- *  itemId → setId. Unresolvable pieces are skipped + warned. */
-function effectPicks(
+/** Effect keys for a slot (OR-list) in the given state, resolved from each
+ *  piece's itemId → setId. Unresolvable pieces are skipped + warned. */
+function effectPicks<S extends "required" | "preferred">(
   refs: RecoGearStat[] | undefined,
   slot: string,
   warnings: string[],
   resolveEffectKey: ResolveEffectKey,
-): Record<string, "required"> {
-  const out: Record<string, "required"> = {};
+  state: S,
+): Record<string, S> {
+  const out: Record<string, S> = {};
   for (const ref of refs ?? []) {
     const key = resolveEffectKey(ref.itemId);
-    if (key) out[key] = "required";
+    if (key) out[key] = state;
     else warnings.push(`${slot}: "${ref.name}" — couldn't resolve its effect — skipped its effect filter.`);
   }
   return out;
@@ -125,8 +132,9 @@ export function translateRecoBuild(build: StructuredRecoBuild, resolveEffectKey:
   if (Object.keys(weaponMains).length > 0) mainPicks.weapon = weaponMains;
   if (Object.keys(accessoryMains).length > 0) mainPicks.accessory = accessoryMains;
 
-  const weaponEffectPicks = effectPicks(build.Weapon, "Weapon", warnings, resolveEffectKey);
-  const accessoryEffectPicks = effectPicks(build.Amulet, "Amulet", warnings, resolveEffectKey);
+  const weaponEffectPicks = effectPicks(build.Weapon, "Weapon", warnings, resolveEffectKey, "required");
+  const accessoryEffectPicks = effectPicks(build.Amulet, "Amulet", warnings, resolveEffectKey, "required");
+  const talismanEffectPicks = effectPicks(build.Talisman, "Talisman", warnings, resolveEffectKey, "preferred");
 
   const setPlans: SetPlan[] = [];
   for (const combo of build.Set ?? []) {
@@ -155,5 +163,5 @@ export function translateRecoBuild(build: StructuredRecoBuild, resolveEffectKey:
     }
   });
 
-  return { patch: { mainPicks, weaponEffectPicks, accessoryEffectPicks, setPlans, priority }, warnings };
+  return { patch: { mainPicks, weaponEffectPicks, accessoryEffectPicks, talismanEffectPicks, setPlans, priority }, warnings };
 }

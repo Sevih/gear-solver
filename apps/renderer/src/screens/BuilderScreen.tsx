@@ -44,6 +44,7 @@ import type { WorklistChange, WorklistEntry } from "../lib/storage/worklist.js";
 import { loadHeroFilters, persistHeroFilters, cloneFilters, filtersForHero, snapshotOnHeroSwitch, type HeroFiltersMap } from "../lib/storage/heroFilters.js";
 import { usePersistedState } from "../hooks/usePersistedState.js";
 import { QUALITY_TIERS, QUALITY_LABEL, type QualityTier } from "../lib/quality.js";
+import { deltaCpLabel } from "../lib/deltaCp.js";
 import {
   addSavedBuild, loadSavedBuilds, persistSavedBuilds, removeSavedBuild,
   type SavedBuild, type SavedBuildsMap,
@@ -392,6 +393,9 @@ export interface SolverFilters {
   excludedSets: string[];
   weaponEffectPicks: Record<string, ChipState>;
   accessoryEffectPicks: Record<string, ChipState>;
+  /** Talisman effect picks — same cycle, plus `preferred`, set only by a
+   *  recommendation (narrows the pool when the hero can use one, else open). */
+  talismanEffectPicks: Record<string, ChipState>;
   /** Minimum gear quality tier admitted into the solve pool. Null = no gate.
    *  Talisman / EE have no quality and are always kept. */
   minQuality: QualityTier | null;
@@ -431,6 +435,7 @@ function buildSolveFilters(filters: SolverFilters): SolveFilters {
     excludedSets: filters.excludedSets,
     weaponEffectPicks: filters.weaponEffectPicks as SolveFilters["weaponEffectPicks"],
     accessoryEffectPicks: filters.accessoryEffectPicks as SolveFilters["accessoryEffectPicks"],
+    talismanEffectPicks: filters.talismanEffectPicks as SolveFilters["talismanEffectPicks"],
     minQuality: filters.minQuality,
   };
 }
@@ -462,6 +467,7 @@ const INITIAL_FILTERS: SolverFilters = {
   excludedSets: [],
   weaponEffectPicks: {},
   accessoryEffectPicks: {},
+  talismanEffectPicks: {},
   minQuality: null,
 };
 
@@ -485,7 +491,7 @@ type SolverAction =
   | { type: "removePlan"; planIdx: number }
   /** Toggle a set in/out of the hard-excluded list. */
   | { type: "toggleExcludedSet"; setId: string }
-  | { type: "cycleEffectPick"; group: "weapon" | "accessory"; key: string }
+  | { type: "cycleEffectPick"; group: "weapon" | "accessory" | "talisman"; key: string }
   | { type: "clearPriority" }
   | { type: "resetAll" }
   /** Replace the entire filter state — used to apply a saved preset.
@@ -493,7 +499,8 @@ type SolverAction =
    *  the rerender as a single update. */
   | { type: "loadPreset"; filters: SolverFilters }
   /** Overlay an imported reco onto the current state — replaces the gear-shape
-   *  fields (effects / sets / priority) and the weapon+accessory mains, but
+   *  fields (weapon / accessory / talisman effects, sets, priority) and the
+   *  weapon+accessory mains, but
    *  keeps options, excluded heroes, stat/rating bands, topPct and any other
    *  slot's main picks. */
   | { type: "mergePreset"; patch: RecoFilterPatch }
@@ -579,7 +586,8 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
       };
     }
     case "cycleEffectPick": {
-      const mapKey = action.group === "weapon" ? "weaponEffectPicks" : "accessoryEffectPicks";
+      const mapKey = action.group === "weapon" ? "weaponEffectPicks"
+        : action.group === "accessory" ? "accessoryEffectPicks" : "talismanEffectPicks";
       const cur = state[mapKey][action.key] ?? "off";
       const nxt = nextChipState(cur);
       const map = { ...state[mapKey] };
@@ -603,6 +611,7 @@ function solverFiltersReducer(state: SolverFilters, action: SolverAction): Solve
         // The reco fully specifies these — replace wholesale.
         weaponEffectPicks: { ...p.weaponEffectPicks },
         accessoryEffectPicks: { ...p.accessoryEffectPicks },
+        talismanEffectPicks: { ...p.talismanEffectPicks },
         setPlans: p.setPlans.length > 0 ? p.setPlans : [[]],
         priority: { ...p.priority },
       };
@@ -1106,10 +1115,16 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const { patch, warnings } = translateRecoBuild(build, resolveEffectKey);
     dispatch({ type: "mergePreset", patch });
     setRecoPicker(null);
+    // A preferred talisman the account doesn't own leaves the pool open — say so.
+    const preferredTalismans = Object.keys(patch.talismanEffectPicks);
+    const talismanNote = preferredTalismans.length > 0 && game && inventory
+      && !inventory.gear.some((g) => g.slot === "ooparts" && preferredTalismans.includes(game.equipment[String(g.itemId)]?.setId ?? ""))
+      ? " None of the recommended talismans is owned — any talisman will be used."
+      : "";
     setRecoStatus(
       warnings.length > 0
-        ? { tone: "warn", text: `Applied "${name}" — ${warnings.length} note${warnings.length === 1 ? "" : "s"}: ${warnings[0]}` }
-        : { tone: "ok", text: `Applied "${name}".` },
+        ? { tone: "warn", text: `Applied "${name}" — ${warnings.length} note${warnings.length === 1 ? "" : "s"}: ${warnings[0]}${talismanNote}` }
+        : { tone: "ok", text: `Applied "${name}".${talismanNote}` },
     );
   };
 
@@ -1193,9 +1208,18 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
 
   /** Battle-Power swing of the selected build vs the hero's current loadout —
    *  the headline number for "is this swap worth it?". Null until both a build
-   *  is selected and the current-loadout CP composed. */
+   *  is selected and the current-loadout CP composed. The build side is in the
+   *  results' reforge mode, the loadout side as captured — the label says so
+   *  (`deltaCpLabel`). */
   const deltaCp = selectedBuild?.cp != null && composition?.currentCp != null
     ? selectedBuild.cp - composition.currentCp
+    : null;
+  const deltaCpText = deltaCp != null
+    ? deltaCpLabel(
+        deltaCp,
+        resultsReforge.reforgeMode,
+        REFORGE_MODES.find((m) => m.value === resultsReforge.reforgeMode)?.label ?? resultsReforge.reforgeMode,
+      )
     : null;
 
   // Queue the selected build's per-slot diff (changed slots only) onto the
@@ -1254,6 +1278,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const armorSetCatalog = useMemo(() => armorSetCatalogFromInventory(inventory, game), [inventory, game]);
   const weaponEffectCatalog = useMemo(() => effectCatalogFromInventory(inventory, game, "weapon", heroClass), [inventory, game, heroClass]);
   const accessoryEffectCatalog = useMemo(() => effectCatalogFromInventory(inventory, game, "accessory", heroClass), [inventory, game, heroClass]);
+  const talismanEffectCatalog = useMemo(() => effectCatalogFromInventory(inventory, game, "talisman", heroClass), [inventory, game, heroClass]);
   /** Per-slot main-stat catalogs keyed by SlotId — only the variable-main
    *  slots from `MAIN_STAT_SLOTS` appear, each populated by scanning the
    *  inventory for owned pieces. Stats from `STAT_DISPLAY_ORDER` come
@@ -1279,6 +1304,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         armorSets={armorSetCatalog}
         weaponEffects={weaponEffectCatalog}
         accessoryEffects={accessoryEffectCatalog}
+        talismanEffects={talismanEffectCatalog}
         mainStatCatalogs={mainStatCatalogs}
         filters={filters}
         dispatch={dispatch}
@@ -1342,9 +1368,12 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
                 {selectedBuild && (
                   <span className="flex items-center gap-2 text-[10px] tabular-nums text-white/45">
                     <span>{selectedBuild.upg} slot{selectedBuild.upg === 1 ? "" : "s"} change</span>
-                    {deltaCp != null && (
-                      <span className={cx("font-semibold", deltaCp > 0 ? "text-emerald-300" : deltaCp < 0 ? "text-rose-300" : "text-white/50")}>
-                        ΔCP {deltaCp > 0 ? "+" : ""}{Math.round(deltaCp).toLocaleString()}
+                    {deltaCp != null && deltaCpText && (
+                      <span
+                        className={cx("font-semibold", deltaCp > 0 ? "text-emerald-300" : deltaCp < 0 ? "text-rose-300" : "text-white/50")}
+                        title={deltaCpText.title ?? undefined}
+                      >
+                        {deltaCpText.text}
                       </span>
                     )}
                   </span>
@@ -1624,7 +1653,7 @@ function armorSetCatalogFromInventory(inventory: Inventory | null, game: GameDat
 function effectCatalogFromInventory(
   inventory: Inventory | null,
   game: GameData | null,
-  slot: "weapon" | "accessory",
+  slot: "weapon" | "accessory" | "talisman",
   heroClass: string | null,
 ): EffectEntry[] {
   if (!game || !inventory) return [];
@@ -1728,7 +1757,7 @@ function mainStatCatalogFromInventory(
  * ───────────────────────────────────────────────────────────────────────── */
 function BuilderToolbar({
   heroes, game, selectedUid, onSelect,
-  armorSets, weaponEffects, accessoryEffects, mainStatCatalogs,
+  armorSets, weaponEffects, accessoryEffects, talismanEffects, mainStatCatalogs,
   filters, dispatch,
   solving, canSolve, solveMode, setSolveMode, onSolve, onCancelSolve,
   canFilter, filterActive, onFilter, onClearFilter, dmgSkill,
@@ -1742,6 +1771,7 @@ function BuilderToolbar({
   armorSets: ArmorSetEntry[];
   weaponEffects: EffectEntry[];
   accessoryEffects: EffectEntry[];
+  talismanEffects: EffectEntry[];
   mainStatCatalogs: Record<string, MainStatEntry[]>;
   filters: SolverFilters;
   dispatch: Dispatch<SolverAction>;
@@ -1772,7 +1802,8 @@ function BuilderToolbar({
   const mainCount = Object.values(filters.mainPicks)
     .reduce((n, m) => n + Object.values(m).filter(Boolean).length, 0);
   const setCount = filters.setPlans.filter((p) => p.length > 0).length + filters.excludedSets.length;
-  const effectCount = Object.keys(filters.weaponEffectPicks).length + Object.keys(filters.accessoryEffectPicks).length;
+  const effectCount = Object.keys(filters.weaponEffectPicks).length + Object.keys(filters.accessoryEffectPicks).length
+    + Object.keys(filters.talismanEffectPicks).length;
   // Options badge counts only the constraints that deviate from the defaults
   // (equipped scope off its "lower" baseline either way, keep-current on,
   // broken-sets disallowed, min-quality set, plus each excluded hero).
@@ -1865,8 +1896,10 @@ function BuilderToolbar({
           <WeaponsAccessoriesPanel
             weapons={weaponEffects}
             accessories={accessoryEffects}
+            talismans={talismanEffects}
             weaponPicks={filters.weaponEffectPicks}
             accPicks={filters.accessoryEffectPicks}
+            talismanPicks={filters.talismanEffectPicks}
             dispatch={dispatch}
           />
         </PopoverButton>
@@ -3226,23 +3259,26 @@ function PlanTab({
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Weapons & Accessories panel — effect-icon-based pick lists. Each chip is
- * the in-game effect icon (e.g. ATK%, CHC) that identifies the piece. The
- * solver keeps only pieces whose effect is among the picked icons.
+ * Weapons, accessories & talismans panel — effect-icon-based pick lists. Each
+ * chip is the in-game effect icon (e.g. ATK%, CHC) that identifies the piece.
+ * The solver keeps only pieces whose effect is among the picked icons; a
+ * talisman a recommendation advised is "preferred" (kept only if owned).
  * ───────────────────────────────────────────────────────────────────────── */
 function WeaponsAccessoriesPanel({
-  weapons, accessories, weaponPicks, accPicks, dispatch,
+  weapons, accessories, talismans, weaponPicks, accPicks, talismanPicks, dispatch,
 }: {
   weapons: EffectEntry[];
   accessories: EffectEntry[];
+  talismans: EffectEntry[];
   weaponPicks: Record<string, ChipState>;
   accPicks: Record<string, ChipState>;
+  talismanPicks: Record<string, ChipState>;
   dispatch: Dispatch<SolverAction>;
 }) {
   return (
     <Panel
-      title="Weapons & accessories"
-      hint="Click an effect to cycle off → required → excluded. Empty = solver may use every effect."
+      title="Weapons, accessories & talismans"
+      hint="Click an effect to cycle off → required → excluded. A talisman advised by Get preset starts preferred: used if you own it, otherwise any talisman. Empty = solver may use every effect."
       width="w-60"
     >
       <div className="space-y-2">
@@ -3257,6 +3293,12 @@ function WeaponsAccessoriesPanel({
           effects={accessories}
           picks={accPicks}
           onCycle={(key) => dispatch({ type: "cycleEffectPick", group: "accessory", key })}
+        />
+        <EffectGroup
+          title="Talismans"
+          effects={talismans}
+          picks={talismanPicks}
+          onCycle={(key) => dispatch({ type: "cycleEffectPick", group: "talisman", key })}
         />
       </div>
     </Panel>
@@ -3296,16 +3338,18 @@ function EffectGroup({
  * Icon chip atoms — shared by Sets and Weapons & accessories. Click cycles
  * the chip through its valid states; the surrounding panel owns the state
  * map. Two state machines:
- *  - effect chips:   off → required → excluded → off
+ *  - effect chips:   off → required → excluded → off (a talisman's
+ *                    `preferred`, set by a reco, goes to required)
  *  - set chips (require mode): off → req-2pc → req-4pc → off in the active plan
  *  - set chips (exclude mode): off → excluded → off (global ban list)
  *                    (each step the inventory/set can't form is skipped —
  *                    cf. `nextPlanCount` + the Sets panel hint)
  * ───────────────────────────────────────────────────────────────────────── */
-type ChipState = "off" | "required" | "excluded";
+type ChipState = "off" | "required" | "excluded" | "preferred";
 type SetChipState = "off" | "req-4pc" | "req-2pc" | "excluded";
 
 function nextChipState(s: ChipState | undefined): ChipState {
+  if (s === "preferred") return "required";
   if (s === "required") return "excluded";
   if (s === "excluded") return "off";
   return "required";
@@ -3394,10 +3438,12 @@ function SetTooltipBody({ set, stateLabel }: { set: ArmorSetEntry; stateLabel: s
   );
 }
 
-/** Weapon / accessory effect chip — simpler off/required/excluded. */
+/** Weapon / accessory / talisman effect chip — off/required/excluded, plus a
+ *  talisman's `preferred` (the required tone with a dashed border). */
 function EffectIconChip({ effect, state, onClick }: { effect: EffectEntry; state: ChipState; onClick: () => void }) {
   const stateLabel =
     state === "off" ? "click to require"
+    : state === "preferred" ? "preferred by the recommendation (click to require)"
     : state === "required" ? "required (click to exclude)"
     : "excluded (click to clear)";
   return (
@@ -3405,7 +3451,11 @@ function EffectIconChip({ effect, state, onClick }: { effect: EffectEntry; state
       <button
         type="button"
         onClick={onClick}
-        className={cx("relative grid h-7 w-7 place-items-center rounded-md border transition-colors", chipClasses(state === "required", state === "excluded"))}
+        className={cx(
+          "relative grid h-7 w-7 place-items-center rounded-md border transition-colors",
+          chipClasses(state === "required" || state === "preferred", state === "excluded"),
+          state === "preferred" && "border-dashed",
+        )}
       >
         {effect.icon ? (
           <img src={`/img/ui/effect/${effect.icon}.webp`} alt={effect.name} className="pointer-events-none h-5 w-5 object-contain" />
@@ -3451,7 +3501,7 @@ function SetBadge({ state }: { state: SetChipState }) {
 
 function EffectBadge({ state }: { state: ChipState }) {
   if (state === "off") return null;
-  const label = state === "required" ? "✓" : "✕";
+  const label = state === "required" ? "✓" : state === "preferred" ? "~" : "✕";
   const tone = state === "excluded" ? "text-rose-300" : "text-cyan-200";
   return (
     <span className={cx("absolute -bottom-0.5 -right-0.5 grid h-3.5 w-3.5 place-items-center rounded-full bg-zinc-900 font-mono text-[9px] font-bold", tone)}>

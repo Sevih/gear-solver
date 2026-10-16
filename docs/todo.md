@@ -34,13 +34,6 @@
       aujourd'hui) · `awakValue` : ATK prend `geas.atk` toutes sources, EFF/RES `geasStat` — unifier.
 
 ### 🔴 Revue 2026-10 — moteur et Builder
-- [ ] 🔴 **M11 — ΔCP du Builder trompeur** — compare le build projeté (+10R6) à la CP réelle actuelle : un build
-      identique à l'équipement affiche un ΔCP positif. **Décision** : base du ΔCP (équipé projeté pareil, ou
-      projeté vs réel affiché comme tel) ?
-- [ ] 🔴 **M12 — Worklist « Apply all » : deux builds d'un même héros sur un même emplacement** — `plan.ts` annonce
-      « 0 contention » et la plus ancienne gagne, alors que `worklistClaims` dit « la plus récente gagne » et que la
-      docstring « indépendant de l'ordre » de `equip.ts` est fausse (#18 ne couvre pas ce cas). **Décision** :
-      quelle règle pour ce doublon (la plus récente, la plus ancienne, ou un conflit affiché) ?
 - [ ] 🟠 **M8 — Allocation de gemmes en SOLVE CP non optimale** — le glouton prend des gemmes de réduction de dégâts
       (34 643 CP contre un optimum à 35 044 sur Ame ; chiffres non relancés). `allocateGems` et `aggregateGemDelta`
       font le même travail : n'en garder qu'un.
@@ -96,8 +89,6 @@
       oracle client commun). **Décision**.
 
 ### 🟡 Revue 2026-10 — divers
-- [ ] 🟡 **`Talisman` de `/api/reco` ignoré** — outerpedia émet `Talisman?: RecoGearStat[]`, le type recopié dans
-      `translateReco.ts` ne l'a pas. Décidé le 15/10 : lu en contrainte « préféré » (lot G4).
 - [ ] 🟡 **Plancher de « Maxed only » pour une pièce sous 6★** — une 5★ n'atteint jamais le budget du mode.
       Décidé le 15/10 : il voudra dire « au plafond de la pièce » ; petit lot après G2.
 - [ ] ⚪ **`trust-buffs.json` chargé, jamais appliqué** (`apps/renderer/src/data.ts:79`) — s'il sert un jour, il

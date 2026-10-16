@@ -144,7 +144,8 @@ In the right sidebar (**Library**):
 - **Filter presets** — reload (or remove) a saved set of filters per hero, independently of
   the build it was saved with.
 - **Restore** — push a saved build back into the table + gear band.
-- **Get Preset** — import a recommended build from Outerpedia as a starting filter set.
+- **Get Preset** — import a recommended build from Outerpedia as a starting filter set. Its
+  advised talismans are only *preferred*: used if you own one, otherwise any talisman is.
 
 ---
 
@@ -162,7 +163,8 @@ target piece's image, stats, and where it currently lives (which hero wears it, 
   frees a piece before the build that reuses it.
 - The list stays truthful on its own: lines flip to **applied** when the piece lands on the
   hero, **contested** when two queued builds want the same single copy (resolve one before
-  Apply all), and **gone** when the piece vanished from your inventory.
+  Apply all), **superseded** when a newer queued build of the same hero targets the same slot
+  (only the newest one goes into Apply all), and **gone** when the piece vanished from your inventory.
 
 ---
 

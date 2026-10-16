@@ -325,8 +325,14 @@ off → req-2pc → req-4pc → excluded → off
 skipping impossible transitions. Totally unusable sets (no
 reachable 2pc/4pc bonus) are not shown. 3-section tooltip: name + (N owned) / 2pc desc / 4pc desc / state.
 
-### Weapons & accessories
-Two groups of effect-icon chips (Weapons / Accessories), filtered by the hero's class (gated by `classLimit`). Click cycles `off → required → excluded → off`. Tooltip: name + (N owned) / T4 desc / state.
+### Weapons, accessories & talismans
+Three groups of effect-icon chips (Weapons / Accessories / Talismans), filtered by the hero's class (gated by `classLimit`), keyed on the piece's `setId`. Click cycles `off → required → excluded → off`. Tooltip: name + (N owned) / T4 desc / state.
+A talisman advised by **Get preset** (`Talisman` from `/api/reco`, `translateReco.ts`) arrives as
+**`preferred`** (dashed outline, `~` badge): if at least one piece of the talisman pool — after every `allow()`
+filter — carries one of the preferred `setId`s, the pool is narrowed to those; otherwise it stays open, as without
+advice (never 0 builds because of a preferred talisman, unlike `required`). Under "keep current" the worn talisman
+stays locked. A click turns it into `required`. The Get preset status says when none of the advised talismans is
+owned.
 
 ### RightSidebar — Library
 Three **wired** sections (localStorage, per hero):
@@ -369,6 +375,13 @@ enhance level, slot icon, main stat, subs (with ticks). In addition:
   badge per sub showing the reforge ticks the projection added (delta vs the captured piece).
 - **Equip state**: per-card badge — 🟠 portrait + name if the piece is equipped on **another hero**
   (applying steals it), 🟢 `equipped` if already on the current hero, `free` otherwise.
+- **Per-slot diff**: a card whose piece **differs from the equipped loadout** (same definition as
+  `upg`) gets a **cyan edge** + a `← <replaced piece>` line (or `+ new slot` if the slot was empty).
+  The band header sums it up: **`N slots change`** + **`ΔCP ±X`** (`build.cp − currentCp`,
+  `currentCp` = `calcBattlePower` of the equipped loadout). The build is counted in the results'
+  reforge mode, the equipped gear as it is: outside `Off` the label names the base
+  (`ΔCP +X vs equipped (build at +10R6)`, one-sentence tooltip — `deltaCpLabel`, `lib/deltaCp.ts`),
+  since a build identical to the loadout shows a positive ΔCP there.
 
 Em-dash when no build is selected.
 

@@ -69,9 +69,12 @@ export async function equipPieces(game: GameData, itemUids: string[], charUid: s
  *  rewrite (fetch once, fold `equipItem` over each, write once). Unlike
  *  `equipPieces` (all onto one hero), each move can target a different hero —
  *  the Worklist's "Apply all" across queued builds. `equipItem`'s steal
- *  semantics make the FINAL state order-independent for a consistent batch (no
- *  single copy claimed by two heroes), so the caller is free to pass a
- *  dependency-ordered list for tidiness without depending on it for correctness.
+ *  semantics make the FINAL state order-independent for a consistent batch —
+ *  no single copy claimed by two heroes AND no hero given two pieces for one
+ *  slot (otherwise the last move wins; `planWorklist` drops the older of two
+ *  same-hero, same-slot changes so its batch is consistent) — so the caller is
+ *  free to pass a dependency-ordered list for tidiness without depending on it
+ *  for correctness.
  *  Returns true once persisted; the caller should re-import the inventory. */
 export async function equipAssignments(
   game: GameData,

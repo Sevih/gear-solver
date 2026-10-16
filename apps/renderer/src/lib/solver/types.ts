@@ -35,6 +35,10 @@ export type SetPlan = SetCond[];
 
 /** Effect chip state — same encoding as the Builder's reducer. */
 export type EffectConstraint = "required" | "excluded";
+/** Talisman effect state. `preferred` (set by a recommendation only) narrows
+ *  the talisman pool to the preferred effects when the hero can use at least
+ *  one of them, and leaves it open otherwise — never 0 builds because of it. */
+export type TalismanEffectConstraint = EffectConstraint | "preferred";
 
 /** Snapshot of every Builder filter the worker needs. The orchestrator
  *  serializes the SolverFilters reducer state into this shape (Sets become
@@ -86,6 +90,9 @@ export interface SolveFilters {
   excludedSets: string[];
   weaponEffectPicks: Record<string, EffectConstraint>;
   accessoryEffectPicks: Record<string, EffectConstraint>;
+  /** Talisman effect picks, keyed on `setId` like the weapon/accessory ones.
+   *  Absent → no talisman constraint (payloads from before the field). */
+  talismanEffectPicks?: Record<string, TalismanEffectConstraint>;
   /** Minimum gear quality tier to admit into the pool (rollable-sub slots
    *  only; Talisman / EE have no quality and are always kept). Null = no
    *  quality gate. One of "poor" | "decent" | "good" | "excellent" |

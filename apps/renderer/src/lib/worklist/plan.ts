@@ -3,7 +3,11 @@
  * ORDERED, validated transaction so the user (or one atomic snapshot rewrite)
  * can apply them all without stepping on themselves.
  *
- * Three things the flat list can't tell you on its own:
+ * Four things the flat list can't tell you on its own:
+ *  - **Superseded** — two entries of the SAME hero target the same slot (the
+ *    hero was re-optimized and queued again). Only the newest entry's change
+ *    (`createdAt`, then list position — the list is newest-first) is applied;
+ *    the older one is exposed as superseded, never silently folded in.
  *  - **Contention** — a piece is a single physical copy, so if two entries
  *    (distinct heroes) both target the same uid, only one can win. Ordering
  *    can't fix this; the user must drop/retarget one. Surfaced, never silently
@@ -17,10 +21,11 @@
  *    semantics), so we flag these "do together" rather than block.
  *
  * Pure + inventory-driven (same live-truth philosophy as the screen): re-run it
- * whenever the snapshot changes. `equipItem`'s steal semantics make the atomic
- * fold order-independent for the FINAL state, so `assignments` is correct in any
- * order — `order` exists for the human and for a tidy, dependency-respecting
- * fold, not for correctness.
+ * whenever the snapshot changes. With superseded changes dropped, no hero gets
+ * two pieces for one slot and (absent contention) no piece goes to two heroes,
+ * so `equipItem`'s steal semantics make the atomic fold order-independent for
+ * the FINAL state: `assignments` is correct in any order — `order` exists for
+ * the human and for a tidy, dependency-respecting fold, not for correctness.
  */
 import type { Inventory } from "@gear-solver/core";
 import type { WorklistChange, WorklistEntry } from "../storage/worklist.js";
@@ -48,10 +53,15 @@ export interface WorklistPlan {
   contended: Map<string, string[]>;
   /** Entry ids caught in a dependency cycle — apply atomically, no human order. */
   cyclic: Set<string>;
+  /** Entry id → slots whose actionable change is superseded by a newer entry
+   *  of the same hero on that slot. Left out of `assignments`, contention and
+   *  ordering. */
+  superseded: Map<string, Set<string>>;
   /** Flat moves to apply, ordered to match `order`. Excludes applied/stale
-   *  changes (target already on the hero, or gone from the inventory). */
+   *  changes (target already on the hero, or gone from the inventory) and
+   *  superseded ones. */
   assignments: WorklistAssignment[];
-  /** Distinct heroes with at least one actionable change. */
+  /** Distinct heroes with at least one actionable, non-superseded change. */
   heroes: number;
   /** Safe to Apply-all — no contention (cycles are still applicable atomically). */
   applicable: boolean;
@@ -59,7 +69,7 @@ export interface WorklistPlan {
 
 const EMPTY: WorklistPlan = {
   order: [], position: new Map(), hasDeps: false, contended: new Map(),
-  cyclic: new Set(), assignments: [], heroes: 0, applicable: false,
+  cyclic: new Set(), superseded: new Map(), assignments: [], heroes: 0, applicable: false,
 };
 
 /** Build the transaction plan from the worklist + the current snapshot. */
@@ -74,16 +84,36 @@ export function planWorklist(list: WorklistEntry[], inventory: Inventory | null)
     if (g.equippedBy) ownerOf.set(g.uid, g.equippedBy);
   }
 
+  // Newest entry per (hero, slot) — the one whose change owns that slot. Read
+  // over every queued change, applied or stale included: the newest intent
+  // wins even when it needs no move (an older build must not undo it).
+  const recency = list
+    .map((e, i) => ({ e, i }))
+    .sort((x, y) => (y.e.createdAt ?? 0) - (x.e.createdAt ?? 0) || x.i - y.i);
+  const slotOwner = new Map<string, string>(); // `${heroUid}\0${slot}` → entryId
+  for (const { e } of recency) {
+    for (const c of e.changes) {
+      const k = `${e.heroUid}\0${c.slot}`;
+      if (!slotOwner.has(k)) slotOwner.set(k, e.id);
+    }
+  }
+
   // Actionable changes per entry: target piece exists AND isn't already on the
   // hero. (A change whose target is gone — stale — or already worn is a no-op.)
+  // An actionable change on a slot a newer entry of the same hero owns is
+  // superseded instead.
   const liveByEntry = new Map<string, WorklistChange[]>();
+  const superseded = new Map<string, Set<string>>();
   for (const e of list) {
-    const live = e.changes.filter(
-      (c) => invUids.has(c.toUid) && ownerOf.get(c.toUid) !== e.heroUid,
-    );
+    const live: WorklistChange[] = [];
+    for (const c of e.changes) {
+      if (!invUids.has(c.toUid) || ownerOf.get(c.toUid) === e.heroUid) continue;
+      if (slotOwner.get(`${e.heroUid}\0${c.slot}`) !== e.id) mapSet(superseded, e.id).add(c.slot);
+      else live.push(c);
+    }
     if (live.length > 0) liveByEntry.set(e.id, live);
   }
-  if (liveByEntry.size === 0) return EMPTY;
+  if (liveByEntry.size === 0) return { ...EMPTY, superseded };
 
   const entries = list.filter((e) => liveByEntry.has(e.id));
   const byId = new Map(entries.map((e) => [e.id, e]));
@@ -160,7 +190,7 @@ export function planWorklist(list: WorklistEntry[], inventory: Inventory | null)
   }
 
   return {
-    order, position, hasDeps, contended, cyclic, assignments, heroes,
+    order, position, hasDeps, contended, cyclic, superseded, assignments, heroes,
     applicable: contended.size === 0,
   };
 }
@@ -175,18 +205,28 @@ export interface ChangeState {
    *  looser: the same hero queuing one piece in two builds is not a conflict
    *  (the header says "order doesn't matter" then, and it must agree). */
   conflict: boolean;
+  /** A newer queued build of the same hero targets this slot — the plan's
+   *  `superseded`; left out of Apply all. */
+  superseded: boolean;
 }
 
-/** Per-change state for the card. `conflict` is read from `plan.contended`
- *  so the card and the transaction header share one definition. */
+/** Per-change state for the card. `conflict` and `superseded` are read from
+ *  the plan (`contended`, `superseded.get(entryId)`) so the card and the
+ *  transaction header share one definition. */
 export function changeState(
   change: WorklistChange,
-  ctx: { equippedOnHero: Set<string> | null; invUids: Set<string>; contended: Map<string, string[]> },
+  ctx: {
+    equippedOnHero: Set<string> | null;
+    invUids: Set<string>;
+    contended: Map<string, string[]>;
+    supersededSlots?: ReadonlySet<string> | null;
+  },
 ): ChangeState {
   const applied = ctx.equippedOnHero?.has(change.toUid) ?? false;
   const stale = !ctx.invUids.has(change.toUid);
-  const conflict = !applied && !stale && ctx.contended.has(change.toUid);
-  return { applied, stale, conflict };
+  const superseded = !applied && !stale && (ctx.supersededSlots?.has(change.slot) ?? false);
+  const conflict = !applied && !stale && !superseded && ctx.contended.has(change.toUid);
+  return { applied, stale, conflict, superseded };
 }
 
 function mapSet<K, V>(m: Map<K, Set<V>>, k: K): Set<V> {

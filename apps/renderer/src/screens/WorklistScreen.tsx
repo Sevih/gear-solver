@@ -8,7 +8,8 @@
  * All decision state is derived LIVE from the current inventory, so the list
  * self-heals as pieces move: a change whose target piece is already on the hero
  * reads as applied (green), a target wanted by two heroes flags a conflict,
- * and a target that vanished from the inventory (post data-sync) reads as stale.
+ * a slot a newer build of the same hero also targets reads as superseded, and
+ * a target that vanished from the inventory (post data-sync) reads as stale.
  */
 import { useMemo, useState } from "react";
 import type { Character, GameData, GearPiece, Inventory } from "@gear-solver/core";
@@ -148,6 +149,7 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
           equippedOnHero={equipped.get(entry.heroUid) ?? null}
           invUids={invUids}
           contended={plan.contended}
+          supersededSlots={plan.superseded.get(entry.id) ?? null}
           pieceByUid={pieceByUid}
           charByUid={charByUid}
           step={plan.position.get(entry.id) ?? null}
@@ -162,7 +164,7 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
 }
 
 function WorklistCard({
-  entry, game, equippedOnHero, invUids, contended, pieceByUid, charByUid, step, cyclic, worklist, onChange, onAfterApply,
+  entry, game, equippedOnHero, invUids, contended, supersededSlots, pieceByUid, charByUid, step, cyclic, worklist, onChange, onAfterApply,
 }: {
   entry: WorklistEntry;
   game: GameData | null;
@@ -170,6 +172,9 @@ function WorklistCard({
   invUids: Set<string>;
   /** Pieces wanted by two distinct heroes — the plan's contention map. */
   contended: Map<string, string[]>;
+  /** Slots of this entry a newer build of the same hero overrides — the plan's
+   *  `superseded`; left out of Apply all. */
+  supersededSlots: Set<string> | null;
   /** Live inventory lookups — target piece (image + stats) and its current owner. */
   pieceByUid: Map<string, GearPiece>;
   charByUid: Map<string, Character>;
@@ -189,14 +194,14 @@ function WorklistCard({
   // gone from the inventory), or conflicting (wanted by another hero too, the
   // plan's contention) — plus the live piece (image + stats) and its current owner.
   const rows = entry.changes.map((c) => {
-    const { applied, stale, conflict } = changeState(c, { equippedOnHero, invUids, contended });
+    const { applied, stale, conflict, superseded } = changeState(c, { equippedOnHero, invUids, contended, supersededSlots });
     // Engine slot → player-facing design slot (ooparts → Talisman, shoes →
     // Boots) for the label + icon; the game never shows "ooparts".
     const ds = toDesignSlot(c.slot) ?? c.slot;
     const piece = pieceByUid.get(c.toUid) ?? null;
     const ui = piece && game ? toUiPiece(piece, game) : null;
     const owner = piece?.equippedBy ? (charByUid.get(piece.equippedBy) ?? null) : null;
-    return { c, applied, stale, conflict, ds, ui, hasPiece: !!piece, owner };
+    return { c, applied, stale, conflict, superseded, ds, ui, hasPiece: !!piece, owner };
   });
   const remaining = rows.filter((r) => !r.applied && !r.stale).length;
   const allApplied = rows.every((r) => r.applied || r.stale);
@@ -272,7 +277,7 @@ function WorklistCard({
       {/* Change lines — one per changed slot. Each shows the TARGET item's image,
        *  stats, and current owner, since the name alone can't identify a copy. */}
       <div className="flex flex-col divide-y divide-white/5">
-        {rows.map(({ c, applied, stale, conflict, ds, ui, hasPiece, owner }) => (
+        {rows.map(({ c, applied, stale, conflict, superseded, ds, ui, hasPiece, owner }) => (
           <label
             key={c.slot}
             className={cx(
@@ -308,6 +313,9 @@ function WorklistCard({
                   <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-white/40">gone</span>
                 ) : null}
               </div>
+              {superseded && (
+                <div className="mt-0.5 text-[10.5px] text-white/45">Superseded by a newer build — skipped by Apply all.</div>
+              )}
               {/* Stats — main(s) then substats (the deterministic identifier). */}
               {ui && (ui.main.length > 0 || ui.subs.length > 0) && (
                 <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 font-mono text-[10.5px] tabular-nums">

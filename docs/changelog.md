@@ -8,6 +8,80 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧭 Builder et Worklist — ΔCP dit « projeté contre réel », le build le plus récent gagne, talisman conseillé lu en « préféré » (2026-10-16)
+- ✅ 🔴 **M11 — le ΔCP du Builder dit sa base.** `deltaCp` (`build.cp − composition.currentCp`, `BuilderScreen.tsx`)
+  compare le build compté dans le mode de reforge des résultats (`resultsReforge.reforgeMode`) à l'équipement tel
+  qu'il est : en +10R6 un build identique au loadout affichait un ΔCP positif sans le dire. Décision de Sevih (15/10)
+  appliquée : le calcul ne change pas, le libellé dit la base. Fonction pure `deltaCpLabel` (nouveau
+  `apps/renderer/src/lib/deltaCp.ts`) : en `disable` (« Maxed only » y force déjà les résultats) → `ΔCP +X` inchangé,
+  sans infobulle ; sinon `ΔCP +X vs equipped (build at +10R6)`, le libellé du mode tiré de `REFORGE_MODES`, et
+  l'infobulle « The build is projected to +10R6; your equipped gear is counted as it is now. ». Seul endroit où ce
+  ΔCP est affiché (recherche de `deltaCp`/`ΔCP` dans `apps/renderer/src`) ; `docs/solver.md` (diff par slot) précisé,
+  et le même paragraphe, absent du miroir, ajouté à `wiki/Solver.md`. Test `test/deltaCp.test.ts` (2) : `disable` →
+  `ΔCP +1,234` / `ΔCP -56` / `ΔCP 0` nus, `classic` → la mention `+10R6` et l'infobulle, `ascended` → `+15R9`.
+- ✅ 🔴 **M12 — deux builds d'un même héros sur un même emplacement : le plus récent gagne.** `planWorklist`
+  (`apps/renderer/src/lib/worklist/plan.ts`) ne comptait la contention qu'entre héros distincts : deux entrées du
+  même héros visant l'arme avec W1 puis W2 passaient « applicable, 0 contention » et, la liste étant stockée la plus
+  récente d'abord, le repli `equipAssignments` finissait sur la plus ANCIENNE. Décision de Sevih (15/10) appliquée :
+  le propriétaire de chaque couple (héros, `WorklistChange.slot`) est l'entrée la plus récente (`createdAt`, à
+  défaut l'ordre de la liste), lue sur toutes ses changes — appliquées et périmées comprises, pour qu'un build plus
+  ancien ne défasse jamais une intention plus récente déjà en place. Une change actionnable d'une entrée plus
+  ancienne sur ce couple sort de `assignments`, de la contention et de l'ordre, et va dans le nouveau champ
+  `superseded: Map<entryId, Set<slot>>` du plan ; une entrée dont toutes les changes sont écartées ne compte plus
+  dans `heroes`. `changeState` gagne `superseded` (lu de `supersededSlots`, jamais en même temps que `conflict`) et
+  la carte de `WorklistScreen.tsx` affiche sous la ligne « Superseded by a newer build — skipped by Apply all. »,
+  sans nouvelle action (« Apply locally » de la carte reste l'action explicite de l'entrée). En-tête de `plan.ts`
+  et docstring d'`equipAssignments` (`equip.ts`) corrigés : l'ordre ne compte pas pour un lot cohérent, sans pièce
+  pour deux héros ET sans deux pièces pour un même emplacement d'un héros. `worklistClaims` inchangé. Docs :
+  `docs/solver.md` (état *superseded*), `wiki/Using-the-App.md`, ligne de `worklistPlan.test.ts` dans
+  `docs/reference.md` / `wiki/Engine-Reference.md` (compte remis à 20). Tests (`test/worklistPlan.test.ts`, +6) :
+  le cas de la revue (même héros, « new » W2 et « old » W1 sur l'arme, liste plus récente d'abord) → une seule
+  assignation W2, « old » écartée sur `weapon`, `applicable` vrai, `heroes` 1 ; même cas liste inversée →
+  `createdAt` décide ; une entrée ancienne à deux emplacements dont un seul repris → l'autre reste assigné ; deux
+  héros sur une même pièce → contention inchangée ; `equipAssignments` (fetch stubé) sur ces assignations →
+  W2 au héros, W0 et W1 libres ; la carte lit `superseded` sans `conflict`. Test de la revue rejoué sur une copie
+  temporaire (`apps/renderer/test/tmp-wl.test.ts`, supprimée, non commitée) : avant `applicable true hasDeps false
+  contended 0 assignments ["W2","W1"]`, après `applicable true hasDeps false contended 0 assignments ["W2"]`.
+- ✅ 🟡 **`Talisman` de `/api/reco` lu en « préféré ».** outerpedia émet `Talisman?: RecoGearStat[]` dans chaque
+  build ; le type `StructuredRecoBuild` (`translateReco.ts`) ne l'avait pas, le conseil était perdu. Décision de
+  Sevih (15/10) appliquée : (a) `translateRecoBuild` le lit comme Weapon/Amulet (`effectPicks` prend maintenant
+  l'état à poser) dans `RecoFilterPatch.talismanEffectPicks: Record<string, "preferred">`, référence non résolue →
+  avertissement ; (b) `SolveFilters` gagne `talismanEffectPicks?` (`TalismanEffectConstraint` = `required` |
+  `excluded` | `preferred`, absent = aucune contrainte) et `SolverFilters` du Builder `talismanEffectPicks`
+  (`ChipState` gagne `preferred`) ; dans `precomputeContext` (`engine.ts`), `required`/`excluded` filtrent dans
+  `allow()` comme pour les armes (clé `setId` de `equipment.json`, partagée par les variantes, ex. « 3029, 3129 »
+  pour le Tactician's Charm 6★), et `preferred` s'applique juste après la construction des pools : si au moins une
+  pièce du pool talisman (donc après tous les filtres d'`allow()`) porte l'un des `setId` préférés, le pool est
+  restreint à celles-là, sinon il reste entier — jamais 0 build à cause d'un talisman préféré ; en « keep current »
+  le talisman porté reste verrouillé (`lockedSlots`). (c) Reducer : `mergePreset` remplace `talismanEffectPicks` en
+  bloc, `cycleEffectPick` gagne le groupe `talisman`, `preferred` repart sur `required` au clic ; `INITIAL_FILTERS`
+  (donc `resetAll`) et `buildSolveFilters` le portent, le badge du bouton Effects le compte. (d) Le panneau
+  `WeaponsAccessoriesPanel` devient « Weapons, accessories & talismans » (indice ajusté) avec un groupe Talismans
+  tiré de l'inventaire par `effectCatalogFromInventory` (slot `talisman`) ; `EffectIconChip` rend `preferred` dans
+  les styles de `required` avec un contour pointillé, `EffectBadge` un `~`, infobulle « preferred by the
+  recommendation (click to require) ». (e) Après Get preset, `applyRecoBuild` ajoute « None of the recommended
+  talismans is owned — any talisman will be used. » quand aucun talisman de l'inventaire n'a l'un des `setId`
+  conseillés. (f) `filterPresets.ts` : `sanitizeTalismanEffects` accepte `preferred` et les `setId` en liste des 6★
+  (« 3029, 3129 », que le filtre des armes, numérique seul, aurait jetés), un preset ancien sans le champ → `{}`.
+  `heroFilters.ts` (session, écrit par le code courant) et `transfer.ts` (blobs bruts relus par
+  `loadFilterPresets`) n'ont rien à changer. Docs : `docs/solver.md` / `wiki/Solver.md` (panneau), `wiki/Using-the-App.md`
+  (Get Preset), ligne de `translateReco.test.ts` dans les tables de tests. Tests : `translateReco` (+3 : résolu →
+  `preferred`, non résolu → avertissement, sans conseil → `{}`) ; nouveau `test/talismanPreferred.test.ts` (6, vrai
+  contrat, `precomputeContext` sur un petit inventaire) : préféré possédé → pool réduit à lui et sa variante,
+  non possédé → pool entier, possédé mais écarté par la classe ou par la portée « equipped » `none` → pool restant
+  entier, `required` non possédé → pool vide, `required`/`excluded` possédés, keep current → le porté reste seul,
+  champ absent → pool entier ; `filterPresets` (+4 : preset ancien → `{}`, `preferred`/`required`/`excluded`
+  rendus tels quels, état ou clé inconnus jetés, `preferred` refusé sur une arme).
+- ✅ Vérification : `npm run typecheck` → dernière ligne `> tsc --noEmit` (sortie 0) ; `npm test` → dernière
+  ligne `Tests  409 passed (409)` (renderer ; core 93, desktop 82).
+- ⏳ Sevih : regarder dans l'app le libellé du ΔCP en +10R6 et en Off, une carte Worklist écartée, et le groupe
+  Talismans après un Get preset (contour pointillé, message quand le talisman n'est pas possédé).
+- ⏳ Laissé : le conseil vise le `setId` du palier max de la famille (« 3029, 3129 ») — un Tactician's Charm 5★
+  (`3018`) n'est pas reconnu comme préféré (même règle que les armes, hors périmètre). Après un Apply all,
+  `reconcileWorklist` supprime l'entrée récente appliquée et l'ancienne redevient actionnable sur ce slot (règle de
+  `reconcileWorklist`, non touchée). Le total « 300 tests » de `docs/reference.md` §3.3 était déjà périmé, non
+  recompté.
+
 ### 💎 Moteur — gemmes complétées par la stat utile du héros, chaque pièce projetée à son propre plafond (2026-10-16)
 - ✅ 🔴 **M7 — une priorité partielle ne laisse plus d'emplacement de gemme vide.** Les quatre allocateurs de
   `apps/renderer/src/lib/solver/gems.ts` s'arrêtaient au premier score ≤ 0 : avec `{ critDmg: 3 }` sur un pool

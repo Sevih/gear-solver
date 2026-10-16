@@ -350,6 +350,12 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const excludedAccessoryEffects = new Set(
     Object.entries(filters.accessoryEffectPicks).filter(([, v]) => v === "excluded").map(([k]) => k),
   );
+  // Talisman: required/excluded filter in `allow` like the weapon ones;
+  // preferred narrows the built pool below, only when it leaves something.
+  const talismanEffectPicks = Object.entries(filters.talismanEffectPicks ?? {});
+  const requiredTalismanEffects = new Set(talismanEffectPicks.filter(([, v]) => v === "required").map(([k]) => k));
+  const excludedTalismanEffects = new Set(talismanEffectPicks.filter(([, v]) => v === "excluded").map(([k]) => k));
+  const preferredTalismanEffects = new Set(talismanEffectPicks.filter(([, v]) => v === "preferred").map(([k]) => k));
 
   // Quality gate — drop pieces whose rolled-substat quality is below the
   // chosen tier. `minQualityRank < 0` (unset / unknown) disables the check.
@@ -415,15 +421,15 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
         .map((m) => m.stat);
       if (!stats.some((s) => mainPicks[s])) return false;
     }
-    // Effect picks — weapon / accessory only. Keyed on `setId` (the unique
+    // Effect picks — weapon / accessory / talisman. Keyed on `setId` (the unique
     // UniqueOptionID effect identity), NOT `effectIcon` — distinct effects can
     // share an icon (the Recklessness family), which would make an icon filter
     // match the wrong variants.
-    if (slot === "weapon" || slot === "accessory") {
+    if (slot === "weapon" || slot === "accessory" || slot === "ooparts") {
       const def = game.equipment[String(g.itemId)];
       const effKey = def?.setId ?? null;
-      const excludedEffects = slot === "weapon" ? excludedWeaponEffects : excludedAccessoryEffects;
-      const requiredEffects = slot === "weapon" ? requiredWeaponEffects : requiredAccessoryEffects;
+      const excludedEffects = slot === "weapon" ? excludedWeaponEffects : slot === "accessory" ? excludedAccessoryEffects : excludedTalismanEffects;
+      const requiredEffects = slot === "weapon" ? requiredWeaponEffects : slot === "accessory" ? requiredAccessoryEffects : requiredTalismanEffects;
       if (effKey && excludedEffects.has(effKey)) return false;
       if (requiredEffects.size > 0 && (!effKey || !requiredEffects.has(effKey))) return false;
     }
@@ -456,6 +462,17 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     accessory: grabRespectingKeep("accessory"),
     ooparts: grabRespectingKeep("ooparts"),
   };
+
+  // Preferred talismans (a recommendation's advice): narrow the talisman pool
+  // to them when at least one survived every `allow` filter; otherwise keep it
+  // open, as without advice. A keep-current lock is left alone.
+  if (preferredTalismanEffects.size > 0 && !lockedSlots.has("ooparts")) {
+    const preferred = pools.ooparts.filter((g) => {
+      const effKey = game.equipment[String(g.itemId)]?.setId ?? null;
+      return effKey != null && preferredTalismanEffects.has(effKey);
+    });
+    if (preferred.length > 0) pools.ooparts = preferred;
+  }
 
   // Set-based pool prune. When the set requirements fully constrain the armor
   // (e.g. `2pc A + 2pc B` or `4pc A` → no free armor slot), every out-of-set
