@@ -6,3 +6,4 @@ export * from "./stats.js";
 export * from "./parse.js";
 export * from "./compose-stats.js";
 export * from "./equip.js";
+export * from "./set-level.js";

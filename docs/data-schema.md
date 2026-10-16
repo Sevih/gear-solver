@@ -162,6 +162,15 @@ l'ancien, `schema` inchangé ; (b) une release de gear-solver lit le nouveau cha
 `SUPPORTED_SOLVER_SCHEMA` à `schema + 1` (constante et jumeau ensemble) ; (c) outerpedia
 retire l'ancien champ et monte `schema`.
 
+**Paliers de set (`sets.json`).** Chaque entrée `levels[]` porte, à côté de `p2` / `p4` /
+`p2_desc` / `p4_desc`, deux champs ajoutés par outerpedia (C20, `schema` resté à 1) :
+`breakLimitCounts` (`number[]`, les breakthroughs qui donnent ce niveau à une pièce ;
+aujourd'hui `[0,1,2,3]` au niveau 1, `[4]` au niveau 2, `[]` sur les groupes d'options
+uniques) et `ignoreLowSet` (`boolean`, vrai quand cette ligne, retenue pour le 4pc, retire
+le 2pc). Typés optionnels dans `SetLevel` (`core/gamedata.ts`) : un cache d'avant ne les a
+pas, `wornSetRows` (`core/set-level.ts`) retombe alors sur l'ancienne règle (cf.
+[reference.md §2.6](reference.md#26-set-bonuses-composebuildtscomputesetbonuses)).
+
 Le `hash` de `version.json` est le crochet d'une future invalidation auto des caches localStorage ;
 l'élagage des SavedBuild aux `pieceUids` disparus reste à brancher (cf.
 [todo.md](todo.md) "Snapshot data versioning").

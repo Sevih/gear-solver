@@ -14,7 +14,7 @@
  * into postMessage events.
  */
 import type { GameData, GearPiece, ReforgeCeiling, RolledStat } from "@gear-solver/core";
-import { composeCharStats, effectiveCharacter, expToLevel, projectMainToCeiling } from "@gear-solver/core";
+import { composeCharStats, effectiveCharacter, expToLevel, pieceSetLevel, projectMainToCeiling } from "@gear-solver/core";
 import {
   aggregatePrefixBuckets,
   computeFinalStats,
@@ -676,7 +676,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const noRatingBound = !Object.values(filters.ratingFilters).some((b) => b && (b.min != null || b.max != null));
   if (req.mode === "cp" && noStatMax && noRatingBound) {
     const effKeyOf = (g: GearPiece): string => game.equipment[String(g.itemId)]?.setId ?? "—";
-    const setKeyOf = (g: GearPiece): string => g.armorSetId ?? "—";
+    const setKeyOf = (g: GearPiece): string => armorSetKeyOf(g, game.sets);
     for (const slot of ["weapon", "accessory"] as const) {
       if (!lockedSlots.has(slot)) pools[slot] = pruneDominatedForCp(pools[slot], effKeyOf);
     }
@@ -1212,10 +1212,18 @@ function bucketDominatesStrict(x: GearBuckets, y: GearBuckets): boolean {
   return strict;
 }
 
+/** Dominance group of an armor piece for `pruneDominatedForCp`: its set AND its
+ *  level in that set (`pieceSetLevel`). A BT3 and a BT4 of the same set read
+ *  different set rows, so the BT3 must never eliminate the BT4 on raw stats. */
+export function armorSetKeyOf(g: GearPiece, sets: GameData["sets"] | null | undefined): string {
+  if (!g.armorSetId) return "—";
+  return `${g.armorSetId}|${pieceSetLevel(sets?.[g.armorSetId], g.breakthrough)}`;
+}
+
 /** Drop pieces strictly dominated (per `bucketDominatesStrict`) by another in
  *  the SAME group of the slot. `groupKeyOf` partitions so incomparable pieces
- *  are never pitted: armor by `armorSetId` (set bonus + feasibility differ
- *  across sets), weapon/accessory by effect id (CP ignores effects, but a
+ *  are never pitted: armor by `armorSetId` + set level (`armorSetKeyOf`: set
+ *  bonus + feasibility differ across sets and levels), weapon/accessory by effect id (CP ignores effects, but a
  *  distinct effect is a distinct build the user may want, so we never elide the
  *  last piece of an effect). Pieces carry whatever stats the active reforge mode
  *  left them with (captured in "disable", ceiling-projected otherwise) — the

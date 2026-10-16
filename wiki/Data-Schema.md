@@ -101,6 +101,15 @@ node levels per account).
 5. Re-validate the stat-locks via the app's debug toggle, refresh the
    snapshots in `data/stat-locks.json` if necessary.
 
+**Set levels (`sets.json`).** Each `levels[]` entry carries, next to `p2` / `p4` /
+`p2_desc` / `p4_desc`, two fields added by outerpedia (`schema` still 1):
+`breakLimitCounts` (`number[]`, the breakthroughs that give a piece this level; today
+`[0,1,2,3]` at level 1, `[4]` at level 2, `[]` on unique-option groups) and
+`ignoreLowSet` (`boolean`, true when this row, read for the 4pc, drops the 2pc). Typed
+optional in `SetLevel` (`core/gamedata.ts`): an older cache lacks them and `wornSetRows`
+(`core/set-level.ts`) then falls back to the former rule (cf.
+[Engine Reference §2.6](Engine-Reference#26-set-bonuses-composebuildtscomputesetbonuses)).
+
 The `version.json` `hash` is the hook for a future automatic localStorage cache invalidation;
 pruning SavedBuilds with vanished `pieceUids` is still to be wired (cf.
 `todo.md` "Snapshot data versioning").

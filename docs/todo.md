@@ -17,12 +17,6 @@
 ## Reste à faire
 
 ### 🔴 Revue 2026-10 — calcul de la fiche
-- [ ] 🔴 **M1 — Niveau de set faux en mélange BT4/BT3** — `computeSetBonuses` (`composeBuild.ts`) passe au palier 2
-      seulement si **toutes** les pièces du set sont BT4 ; le jeu prend le minimum des 2 (2P) ou 4 (4P) meilleures
-      (`[4,4,3]` : 35 % en jeu, 30 % ici). Même règle recopiée dans `BuildEffectsPanel` (BuilderScreen) et
-      `docs/reference.md`. Une seule fonction de niveau de set dans `core`, et le niveau dans la clé de dominance
-      de `pruneDominatedForCp` (une BT3 peut aujourd'hui éliminer une BT4 meilleure du même set). Voir aussi O5
-      (§ Contrat).
 - [ ] 🟡 **M5 — Niveaux de compétence des fusionnés** — le jeu les reconstruit depuis `CharacterFusionLevel`, l'outil
       prend `First..Ultimate` de la capture (jusqu'à +1 200 CP d'écart). **Bloqué** : il faut une capture d'un
       fusionné dont les compétences d'origine dépassent celles de la fusion.
@@ -51,7 +45,7 @@
 - [ ] 🔴 **L1 d'abord — versionner le contrat** — `schema` (entier) et `resVersion` dans `solver/version.json` ;
       `data-sync.ts` refuse un schéma plus récent que le sien et garde son cache. Aujourd'hui un push d'outerpedia
       qui change la forme casse toutes les installations à la fois (le chargeur caste le JSON sans le valider).
-- [ ] 🔴 **C1 — Sets à effet de combat comptés comme stats de fiche** — Pulvérisation (17), Faiblesse (20, signe et
+- [~] 🔴 **C1 — Sets à effet de combat comptés comme stats de fiche** — côté gear-solver fait (G3) ; Pulvérisation (17), Faiblesse (20, signe et
       cible retournés par `abs()`), Augmentation (21), Immunité 4P niveau 2 (18) : `resolveSetEffectEntry`
       (outerpedia) convertit leurs IOT_BUFF en stat, `computeSetBonuses` ne filtre pas → CP gonflée (+1 477 à
       +7 301 sur 59 142), « Max CP » sur-sélectionne ces sets. Ne produire en stat que les IOT_STAT ; côté
@@ -69,9 +63,6 @@
       fusion 1 à 4 (Notia).
 - [ ] 🟡 **Filtre des passifs de skill trop strict** côté contrat (`extractSkillPassiveByLevel` : ME seul, condition
       NONE, `TurnDuration −1`) ; sans rejet constaté aujourd'hui.
-- [ ] 🟡 **O5 — Paliers de set par pièce et `IgnoreLowSet`** — le contrat n'émet ni les paliers séparés ni
-      `ignoreLowSet` (2 pièces palier 2 + 2 palier 1 : 55 % en jeu, 50 % ici). **Décision** : maintenant (avec M1)
-      ou plus tard ?
 - [ ] 🟡 **L6 — Une table `ST_*` → clés unique**, émise dans le contrat (`solver/stat-keys.json`) et lue par
       `GAME_STAT` et par le wiki. Y faire entrer les mains d'EE `ST_AVOID` (précision vs élément), présentes dans
       `buffs.json` mais inconnues de `GAME_STAT` → le main disparaît du panneau au lieu d'être affiché combat-only.

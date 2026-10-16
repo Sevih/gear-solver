@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece } from "@gear-solver/core";
-import { aggregateGearBuckets, setBonusStatKey } from "../src/lib/composeBuild.js";
+import { aggregateGearBuckets, computeSetBonuses, setBonusStatKey } from "../src/lib/composeBuild.js";
 import setsJson from "../../../data/derived/sets.json";
 
 // The real set catalog — the guard below must follow what the game ships,
@@ -47,4 +47,43 @@ describe("set bonuses — Mitigation (set 9)", () => {
     const b = aggregateGearBuckets(pieces, { sets: SETS } as GameData);
     expect(b.pct.critDmgReduce).toBe(45);
   });
+});
+
+describe("set bonuses — per-piece level and ignoreLowSet (core wornSetRows)", () => {
+  const piece = (setId: string, breakthrough: number, i: number): GearPiece =>
+    ({ slot: ["helmet", "armor", "gloves", "boots"][i], armorSetId: setId, breakthrough, main: [], subs: [] }) as unknown as GearPiece;
+  const worn = (setId: string, bts: number[]) => computeSetBonuses(bts.map((bt, i) => piece(setId, bt, i)), SETS);
+
+  it("Attack [4,4,3] → the level-2 2pc (35 %)", () => {
+    expect(worn("1", [4, 4, 3])).toEqual([{ st: "ST_ATK", ap: "OAT_RATE", v: 350 }]);
+  });
+
+  it("Attack [4,4,3,3] → 2pc level 2 + 4pc level 1 (35 + 20)", () => {
+    expect(worn("1", [4, 4, 3, 3]).map((o) => o.v)).toEqual([350, 200]);
+  });
+
+  it("Speed [4,4,3,3] → the level-1 4pc alone (25 %, not 38 %)", () => {
+    expect(worn("13", [4, 4, 3, 3])).toEqual([{ st: "ST_SPEED", ap: "OAT_RATE", v: 250 }]);
+  });
+
+  it("a combat-effect field next to p2/p4 never reaches the stat list", () => {
+    const def = SETS["1"]!;
+    const withEffects = { ...SETS, "1": { ...def, levels: def.levels.map((l) => ({ ...l, combatEffects: [{ st: "ST_ATK", ap: "OAT_RATE", v: 999 }] })) } };
+    const pieces = [4, 4, 3, 3].map((bt, i) => piece("1", bt, i));
+    expect(computeSetBonuses(pieces, withEffects as unknown as GameData["sets"])).toEqual(computeSetBonuses(pieces, SETS));
+  });
+});
+
+describe("set bonuses — combat-effect sets bring no stat (contract after outerpedia's C1 fix)", () => {
+  // Pulverization (17), Weakness (20), Augmentation (21): stat-less at every
+  // level; Immunity (18): its level-2 4pc too. Nothing counts without a `st`.
+  const piece = (setId: string, breakthrough: number, i: number): GearPiece =>
+    ({ slot: ["helmet", "armor", "gloves", "boots"][i], armorSetId: setId, breakthrough, main: [], subs: [] }) as unknown as GearPiece;
+  for (const setId of ["17", "20", "21", "18"]) {
+    for (const bts of [[3, 3, 3, 3], [4, 4, 4, 4], [4, 4, 3, 3]]) {
+      it(`set ${setId} at BT [${bts.join(",")}] adds nothing`, () => {
+        expect(computeSetBonuses(bts.map((bt, i) => piece(setId, bt, i)), SETS)).toEqual([]);
+      });
+    }
+  }
 });

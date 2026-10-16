@@ -8,6 +8,62 @@
 
 ## Items de backlog clôturés (index)
 
+### 🛡️ Sets — niveau lu du contrat (paliers par pièce, `ignoreLowSet`), clé de dominance au niveau, sets de combat hors CP (2026-10-16)
+- ✅ 🔴 **M1 + O5 — une seule fonction de niveau de set, lue du contrat.** outerpedia émet désormais la règle et ses
+  données (`levels[].breakLimitCounts`, `levels[].ignoreLowSet` dans `sets.json`, ajouts seuls, `schema` 1 ;
+  `SUPPORTED_SOLVER_SCHEMA` inchangé). Nouveau `packages/core/src/set-level.ts` (exporté par `index.ts`) :
+  `pieceSetLevel(def, bt)` = la ligne dont `breakLimitCounts` contient le breakthrough ; `wornSetRows(def, bts)`
+  rend la ligne du 2P (minimum des 2 meilleures pièces), celle du 4P (minimum des 4 meilleures) et `drop2`, le 2P
+  effacé par l'`ignoreLowSet` de la ligne du 4P — stat par stat comme `CStatValue.SetSetItemValue` (même `st`), et
+  pour un 2P d'effet de combat seulement si le 4P de cette ligne en est un aussi (`CreateBuffSetItem` ; Fortification
+  niveau 2 porte le drapeau avec un 4P vide : rien n'est effacé). Repli commenté quand les champs manquent (cache
+  d'avant C20) ou qu'aucune ligne ne liste le breakthrough : l'ancienne règle exacte (niveau 2 seulement si toutes
+  les pièces sont BT4, même ligne pour 2P et 4P, sans `ignoreLowSet`), jamais la règle par pièce sans
+  `ignoreLowSet` (Vitesse `[4,4,3,3]` vaudrait 38 %). `SetLevel` (`core/gamedata.ts`) gagne les deux champs,
+  optionnels. `computeSetBonuses` (`composeBuild.ts`) groupe les breakthroughs par set et lit 2P et 4P dans leurs
+  lignes ; même signature, même ordre de sortie, appel hors de la boucle talisman inchangé (le test « set-bonus
+  hoist » de `solver.test.ts` passe, sur le repli puisque sa fixture n'a pas les champs). `BuildEffectsPanel`
+  (`BuilderScreen.tsx`) lit `wornSetRows` : texte du 2P depuis la ligne du 2P, du 4P depuis celle du 4P, 2P effacé
+  non affiché ; seul écart visuel, le voulu : un set en mélange BT4/BT3 montre le texte de la ligne du jeu (ex.
+  Attaque `[4,4,3]` : « Attack +35% » au lieu de « Attack +30% »).
+- ✅ 🔴 **Dominance au niveau de set.** `setKeyOf` de `pruneDominatedForCp` (`engine.ts`) passe par le nouveau
+  `armorSetKeyOf(g, sets)` = `armorSetId|pieceSetLevel` : une BT3 ne peut plus éliminer une BT4 du même set (sur le
+  repli, la clé vaut BT4 → 2 sinon 1, ce qui sépare aussi les pièces que l'ancienne règle distinguait). Docstring de
+  `pruneDominatedForCp` suivie.
+- ✅ 🔴 **C1, côté gear-solver.** La lecture reste « rien sans `st` » (`p2`/`p4` nul ou `ST_NONE` → rien). Le
+  `sets.json` synchronisé porte le correctif C1 d'outerpedia : Pulvérisation (17), Faiblesse (20), Augmentation (21)
+  sans stat à tous les niveaux, Immunité (18) sans stat au 4P niveau 2. Aucun champ d'effets de combat dans
+  `sets.json` (clés de `levels[]` : `level`, `p2`, `p4`, `p2_desc`, `p4_desc`, `breakLimitCounts`, `ignoreLowSet`) ;
+  un test vérifie qu'un tel champ posé à côté de `p2`/`p4` n'atteint jamais la liste de stats.
+- ✅ **Docs.** `docs/reference.md` § 2.6 et `wiki/Engine-Reference.md` décrivent la règle par pièce, `ignoreLowSet` et
+  le repli, et la ligne `sets.json` de leur table des sources nomme les deux champs ; `docs/data-schema.md` et
+  `wiki/Data-Schema.md` décrivent les deux champs ; commentaire de `BuildEffectsPanel` réécrit.
+- ✅ **Tests.** Nouveau `packages/core/test/set-level.test.ts` (12) sur le contrat réel de `data/derived` : Attaque
+  `[4,4,3]` → 35 %, `[4,4,3,3]` → 35 + 20, `[4,4,4,3]` → 35 + 20, `[4,4,4,4]` → 35 + 25, `[3,3]` → 30 ; Vitesse
+  `[4,4,3,3]` → 25 % (`drop2`), `[4,4]` → 13 %, `[4,4,4,4]` → 13 + 12 ; Pénétration `[4,4,3,3]` → 4P niveau 1 seul ;
+  repli (mêmes lignes sans les champs) → 30, 30 + 20, 30 + 20, 35 + 25, 30, Vitesse 25 / 13, Pénétration 20, les
+  résultats d'avant ce lot ; breakthrough non listé → repli ; lignes construites pour le « stat par stat » et
+  Fortification niveau 2. `apps/renderer/test/setBonusKeys.test.ts` (+16) : `computeSetBonuses` sur le contrat réel
+  (Attaque `[4,4,3]`, `[4,4,3,3]`, Vitesse `[4,4,3,3]`), champ d'effets de combat ignoré, et la garde C1 (sets 17, 20,
+  21, 18 aux BT `[3,3,3,3]`, `[4,4,4,4]`, `[4,4,3,3]` → aucune stat). `apps/renderer/test/dominance.test.ts` (+2) :
+  `armorSetKeyOf` (`1|1`, `1|2`, `—`) ; X BT3 domine Y BT4 en stats brutes, la clé par set seul garde X, la nouvelle
+  garde les deux, et `solveChunk` en CP sur trois BT4 d'Attaque met Y en tête, CP de Y > CP de X.
+- ✅ **Rejeu des scripts de la revue** (copie hors du dépôt, avant = `git archive HEAD`, après = l'arborescence du
+  lot). `t2` : avant, build X (BT3) 19 959 CP, build Y (BT4) 20 091, prune `[X]` ; après, X 20 033 (son 2P passe au
+  niveau 2 : `[4,4,4,3]`), Y 20 091 ; le script garde sa clé d'origine (`armorSetId`, toujours `[X]`), la même ligne
+  avec `armorSetKeyOf` donne `[X, Y]`. `sets.ts` (§ A) : avant, `4/4/3` solveur 300 contre 350 en jeu, `4/4/3/3` et
+  `4/4/4/3` 300 + 200 contre 350 + 200 ; après, les quatre cas égaux au jeu. Le § B (set Vitesse sur une base avec
+  OAT_ADD, Claire 136 contre 133…) est inchangé, hors périmètre.
+- ✅ **Données.** `npm run data:sync` (outerpedia à `ba3e08e0`, dernier commit du contrat `987e141e`) : « synced 19
+  tables », version `b5b2bb33b258` ; `git diff --stat data/derived` vide, le contrat C20 était déjà synchronisé
+  (`1596168`, puis `f7c9f2d`).
+- ✅ **Vérifié.** `npm run typecheck` : les trois `tsc` sans erreur (dernière ligne `> tsc --noEmit`, renderer).
+  `npm test` : core « Tests 105 passed (105) », desktop « Tests 82 passed (82) », renderer « Tests 427 passed
+  (427) ».
+- ⏳ **Laissé.** `GearDetail.tsx` (l. 86, fiche d'une pièce seule) garde `bt >= 4 ? 2 : 1` pour choisir sa ligne :
+  vue d'une pièce, hors du lot, pourrait lire `pieceSetLevel`. Le set Vitesse sur une base avec OAT_ADD (mineurs de
+  fiche) reste ouvert. Sevih : la release qui porte ce lot peut sortir (pas de montée de `schema`).
+
 ### 🧭 Builder et Worklist — ΔCP dit « projeté contre réel », le build le plus récent gagne, talisman conseillé lu en « préféré » (2026-10-16)
 - ✅ 🔴 **M11 — le ΔCP du Builder dit sa base.** `deltaCp` (`build.cp − composition.currentCp`, `BuilderScreen.tsx`)
   compare le build compté dans le mode de reforge des résultats (`resultsReforge.reforgeMode`) à l'équipement tel

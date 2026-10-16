@@ -92,6 +92,14 @@ export interface SetLevel {
    *  Break by 35%"). Null when no curated string exists. */
   p2_desc: string | null;
   p4_desc: string | null;
+  /** Breakthroughs that put a piece at this level (`ItemSpecialOptionTemplet
+   *  .BreakLimitCount`; today level 1 = [0,1,2,3], level 2 = [4]). Optional:
+   *  a cache synced before outerpedia added it has none (see `set-level.ts`). */
+  breakLimitCounts?: number[];
+  /** When this row is the 4-pc one, the 2-pc bonus is dropped (`IgnoreLowSet`;
+   *  today Penetration, Speed and Bursting at level 1, Fortification at
+   *  level 2). Optional, same as `breakLimitCounts`. */
+  ignoreLowSet?: boolean;
 }
 export interface SetDef {
   name: string | null;

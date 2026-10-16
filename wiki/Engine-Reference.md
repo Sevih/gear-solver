@@ -47,7 +47,7 @@ particular):
 | `ItemTemplet.json`                   | `equipment.json`          | ItemID → slot/grade/star/setId/armorSetId/name/image/effectIcon/class |
 | `ItemOptionTemplet.json`             | `options.json`            | OptionID → StatOption (`{st, ap, v}`) OR IOT_BUFF reference |
 | `BuffTemplet.json`                   | `buffs.json`              | BuffID → array of StatOption (per enhanceLevel)        |
-| `ItemSpecialOptionTemplet.json` + curated (outerpedia) | `sets.json` | setId → levels[] → {p2, p4, p2_desc, p4_desc, name}  |
+| `ItemSpecialOptionTemplet.json` + curated (outerpedia) | `sets.json` | setId → levels[] → {p2, p4, p2_desc, p4_desc, breakLimitCounts, ignoreLowSet}, name |
 | `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `equipment-passives.json` | ItemID → {name, textByTier[1..4]}            |
 | `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `multi-tier-passives.json`| ItemID → list of tier passives               |
 | `ItemOptionTemplet.json` (IDs 15001..15054) | `gems.json`        | OptionID → {type, level, st, ap, v}                    |
@@ -406,13 +406,28 @@ collapse (`atkPct → atk`, `defPct → def`, `hpPct → hp`); everything else i
 
 ### 2.6 Set bonuses (`composeBuild.ts::computeSetBonuses`)
 
-For each armorSetId present ≥ 2× among the pieces:
-- Counts total pieces + those with `breakthrough >= 4`.
-- If all pieces of the set are BT4 → tier 4 row (`level === 2`),
-  otherwise tier 1.
-- The 2pc applies as soon as count ≥ 2; the 4pc as soon as count ≥ 4.
-- Skip if `p2.st === "ST_NONE"` (narrative effect only, e.g. Counterattack
-  which stores its effect in `desc` rather than in a stat).
+For each armorSetId present ≥ 2× among the pieces, the rows read come from
+`wornSetRows` (`packages/core/src/set-level.ts`, the single set-level function, also
+read by the Builder's Effects panel and by the dominance key). The rule is the
+contract's (outerpedia is its source, header of its `datagen/generators/solver.ts`;
+client `CStatValue.SetSetItemValue`, `CItem.SetOptionLevel`):
+- A piece's level (`pieceSetLevel`) = the `levels[]` row whose `breakLimitCounts`
+  holds its breakthrough (today level 1 = BT0-3, level 2 = BT4).
+- The 2pc (count ≥ 2) reads the row of the **minimum level of the 2 best** pieces, the
+  4pc (count ≥ 4) the row of the **minimum of the 4 best**: `[4,4,3]` → 2pc level 2;
+  `[4,4,3,3]` → 2pc level 2 + 4pc level 1.
+- `ignoreLowSet`: when the 4pc row carries it, the 2pc is dropped if it carries the same
+  stat (the client compares stat by stat), or, for a combat effect without a stat, if
+  that row's 4pc is one too. Today Penetration, Speed and Bursting at level 1 (empty
+  2pc, the 4pc holds the whole bonus), Fortification at level 2 (empty 4pc, nothing
+  dropped). Speed `[4,4,3,3]` → 25 %, not 13 + 25.
+- Skip if `p2`/`p4` is null or `ST_NONE` (combat effect, e.g. Counterattack which
+  stores its effect in `desc` rather than in a stat): nothing counts without a `st`.
+- **Fallback** (cache synced before the contract carried `breakLimitCounts` /
+  `ignoreLowSet`, or a breakthrough no row lists): the former rule exactly, level 2
+  only when every piece of the set is BT4, for both the 2pc and the 4pc, no
+  `ignoreLowSet`. Never the per-piece rule without `ignoreLowSet`: Speed `[4,4,3,3]`
+  would be 38 %.
 
 Values routed to `flat` or `pct` via `setBonusStatKey(st, isRate)`.
 

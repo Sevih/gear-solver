@@ -16,7 +16,7 @@
 import { Fragment, memo, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
-import { composeCharStats, effectiveCharacter, expToLevel } from "@gear-solver/core";
+import { composeCharStats, effectiveCharacter, expToLevel, wornSetRows } from "@gear-solver/core";
 import { CharacterPortrait, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
 import { Pill } from "../design/Chips.js";
 import { cx } from "../design/cx.js";
@@ -2171,27 +2171,27 @@ function BuildEffectsPanel({ build, pieceByUid, game }: {
     const weapon = passiveOf("weapon");
     const accessory = passiveOf("accessory");
 
-    // Active armor sets: count pieces per armorSetId (active at ≥2). The 6★ tier
-    // (level 2) wording applies only when EVERY piece in the set is bt≥4 —
-    // mirrors composeBuild's computeSetBonuses.
-    const counts = new Map<string, { count: number; bt4: number; sample: GearPiece }>();
+    // Active armor sets: group pieces per armorSetId (active at ≥2). The rows
+    // come from core's `wornSetRows`, like composeBuild's computeSetBonuses:
+    // the 2-pc text from the row of the 2-pc level, the 4-pc text from the row
+    // of the 4-pc level, and a 2-pc cancelled by `ignoreLowSet` is not shown.
+    const groups = new Map<string, { bts: number[]; sample: GearPiece }>();
     for (const p of pieces) {
       if (!p.armorSetId) continue;
-      const e = counts.get(p.armorSetId);
-      if (e) { e.count++; if (p.breakthrough >= 4) e.bt4++; }
-      else counts.set(p.armorSetId, { count: 1, bt4: p.breakthrough >= 4 ? 1 : 0, sample: p });
+      const e = groups.get(p.armorSetId);
+      if (e) e.bts.push(p.breakthrough);
+      else groups.set(p.armorSetId, { bts: [p.breakthrough], sample: p });
     }
     const sets: Array<{ id: string; name: string; icon: string | null; pc: number; descs: Array<{ tag: string; desc: string }> }> = [];
-    for (const [setId, { count, bt4, sample }] of counts) {
+    for (const [setId, { bts, sample }] of groups) {
+      const count = bts.length;
       if (count < 2) continue;
       const def = game.sets?.[setId];
       if (!def) continue;
-      const targetLevel = bt4 === count ? 2 : 1;
-      const level = def.levels.find((l) => l.level === targetLevel) ?? [...def.levels].sort((a, b) => b.level - a.level)[0];
-      if (!level) continue;
+      const { row2, row4, drop2 } = wornSetRows(def, bts);
       const descs: Array<{ tag: string; desc: string }> = [];
-      if (count >= 2 && level.p2_desc) descs.push({ tag: "2-pc", desc: level.p2_desc });
-      if (count >= 4 && level.p4_desc) descs.push({ tag: "4-pc", desc: level.p4_desc });
+      if (!drop2 && row2?.p2_desc) descs.push({ tag: "2-pc", desc: row2.p2_desc });
+      if (row4?.p4_desc) descs.push({ tag: "4-pc", desc: row4.p4_desc });
       if (descs.length === 0) continue;
       sets.push({ id: setId, name: def.name ?? "Set", icon: toUiPiece(sample, game).setIcon, pc: count >= 4 ? 4 : 2, descs });
     }

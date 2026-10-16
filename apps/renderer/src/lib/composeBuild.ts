@@ -10,7 +10,7 @@
  * NOTE: keep this file pure — no React, no IO. The screens own the React
  * state + memoization; this lib is the deterministic engine.
  */
-import type { GameData, GearPiece, StatScaling } from "@gear-solver/core";
+import { wornSetRows, type GameData, type GearPiece, type StatScaling } from "@gear-solver/core";
 
 export interface FinalStats {
   atk: number; hp: number; def: number; spd: number;
@@ -53,37 +53,33 @@ export function composeMultStat(sc: StatScaling, gearFlat: number, gearPct: numb
 }
 
 /** Aggregate active 2pc / 4pc armor-set bonuses into one list of stat options.
- *  See `BuildsScreen` history for the full derivation — Combat-only sets
+ *  The rows come from `wornSetRows` (core `set-level.ts`: per-piece level,
+ *  min of the 2 / 4 best pieces, `ignoreLowSet`). Combat-only sets
  *  (Counterattack, Lifesteal, Bursting, …) carry their effects as buffs and
- *  are stored as `ST_NONE` rows that get skipped here. */
+ *  are stored as `ST_NONE` / null rows that get skipped here. */
 export function computeSetBonuses(
   pieces: GearPiece[],
   sets: GameData["sets"] | null,
 ): Array<{ st: string; ap: string; v: number }> {
   if (!sets) return [];
-  type Bucket = { count: number; bt4Count: number };
-  const counts = new Map<string, Bucket>();
+  const bts = new Map<string, number[]>();
   for (const p of pieces) {
     // `p?.` tolerates a sparse `pieces` array — the solver hoists this call
     // out of its talisman loop, where the talisman slot may not be filled yet.
     if (!p?.armorSetId) continue;
-    let b = counts.get(p.armorSetId);
-    if (!b) { b = { count: 0, bt4Count: 0 }; counts.set(p.armorSetId, b); }
-    b.count++;
-    if (p.breakthrough >= 4) b.bt4Count++;
+    const arr = bts.get(p.armorSetId);
+    if (arr) arr.push(p.breakthrough); else bts.set(p.armorSetId, [p.breakthrough]);
   }
   const out: Array<{ st: string; ap: string; v: number }> = [];
-  for (const [setId, b] of counts) {
-    if (b.count < 2) continue;
+  for (const [setId, list] of bts) {
+    if (list.length < 2) continue;
     const def = sets[setId];
     if (!def) continue;
-    const targetLevel = b.bt4Count >= b.count ? 2 : 1;
-    let lvRow = null;
-    for (const l of def.levels) { if (l.level === targetLevel) { lvRow = l; break; } }
-    if (!lvRow) continue;
-    const { p2, p4 } = lvRow;
+    const { row2, row4, drop2 } = wornSetRows(def, list);
+    const p2 = drop2 ? null : row2?.p2;
+    const p4 = row4?.p4;
     if (p2 && p2.st !== "ST_NONE" && p2.v != null) out.push({ st: p2.st, ap: p2.ap, v: p2.v });
-    if (b.count >= 4 && p4 && p4.st !== "ST_NONE" && p4.v != null) out.push({ st: p4.st, ap: p4.ap, v: p4.v });
+    if (p4 && p4.st !== "ST_NONE" && p4.v != null) out.push({ st: p4.st, ap: p4.ap, v: p4.v });
   }
   return out;
 }

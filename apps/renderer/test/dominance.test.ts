@@ -13,7 +13,8 @@
  */
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, Inventory, RolledStat, StatScaling } from "@gear-solver/core";
-import { finalizeBuilds, pruneDominatedForCp, solveChunk, type SolveContext } from "../src/lib/solver/engine.js";
+import { armorSetKeyOf, finalizeBuilds, pruneDominatedForCp, solveChunk, type SolveContext } from "../src/lib/solver/engine.js";
+import setsJson from "../../../data/derived/sets.json";
 import type { FinalStatsBaseline, ScalingMap } from "../src/lib/composeBuild.js";
 import type { SetPlan, SolveFilters, SolveMode, SolveRequest } from "../src/lib/solver/types.js";
 
@@ -195,5 +196,44 @@ describe("dominance prune — end-to-end CP equivalence", () => {
     for (const b of full) {
       if (b.pieceUids.includes("acLo")) expect(bestPruned).toBeGreaterThanOrEqual(b.cp!);
     }
+  });
+});
+
+describe("dominance prune — set level in the armor key", () => {
+  // X (BT3) has a bit more flat ATK than Y (BT4) of the same Attack set: X
+  // dominates Y on raw stats, but with three BT4 Attack pieces Y lifts the
+  // 4pc to level 2 (25 % instead of 20 % ATK) and wins on CP. Keyed on the
+  // set alone, X used to eliminate Y and lose the optimum.
+  const SETS = setsJson as unknown as GameData["sets"];
+  const atkPiece = (slot: string, uid: string, breakthrough: number, atk: number): GearPiece =>
+    ({ ...piece(slot, uid, { armorSetId: "1", subs: [flatSub("atk", atk)] }), breakthrough } as GearPiece);
+  const X = atkPiece("boots", "X", 3, 40);
+  const Y = atkPiece("boots", "Y", 4, 30);
+
+  it("keys an armor piece on its set and its level in it", () => {
+    expect(armorSetKeyOf(X, SETS)).toBe("1|1");
+    expect(armorSetKeyOf(Y, SETS)).toBe("1|2");
+    expect(armorSetKeyOf(piece("boots", "n"), SETS)).toBe("—");
+  });
+
+  it("a BT3 no longer eliminates a better BT4 of the same set", async () => {
+    expect(pruneDominatedForCp([X, Y], (p) => p.armorSetId ?? "—").map((p) => p.uid)).toEqual(["X"]);
+    const kept = pruneDominatedForCp([X, Y], (p) => armorSetKeyOf(p, SETS));
+    expect(kept.map((p) => p.uid).sort()).toEqual(["X", "Y"]);
+
+    const ctx = makeCtx({
+      weapon: [piece("weapon", "w1")],
+      helmet: [atkPiece("helmet", "h", 4, 0)],
+      armor: [atkPiece("armor", "a", 4, 0)],
+      gloves: [atkPiece("gloves", "g", 4, 0)],
+      boots: kept,
+      accessory: [piece("accessory", "ac")],
+      ooparts: [piece("ooparts", "t1")],
+    }, "cp");
+    ctx.req = { ...ctx.req, game: { ...GAME, sets: SETS } as GameData };
+    const builds = finalizeBuilds(ctx, (await solveChunk(ctx, 0, 1, 1000)).builds, "cp");
+    expect(builds[0]!.pieceUids).toContain("Y");
+    const cpOf = (uid: string) => builds.find((b) => b.pieceUids.includes(uid))!.cp!;
+    expect(cpOf("Y")).toBeGreaterThan(cpOf("X"));
   });
 });
