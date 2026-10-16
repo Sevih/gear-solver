@@ -55,6 +55,8 @@ describe("computeAdvice — rules 2/3 (set composition)", () => {
   const game = {
     sets: {
       "7": { name: "Sharp", levels: [{ level: 2, p4: { st: "ST_ATK", v: 10 } }] },
+      // Combat-effect 4pc: no sheet stat, only its description.
+      "8": { name: "Pulverization", levels: [{ level: 2, p4: null, p4_desc: "Deals extra damage" }] },
     },
   } as unknown as GameData;
 
@@ -68,6 +70,13 @@ describe("computeAdvice — rules 2/3 (set composition)", () => {
       mkPiece({ uid: `s${i}`, slot: s as GearPiece["slot"], armorSetId: "7" }));
     const out = computeAdvice(fullEntry(three), game);
     expect(out).toContainEqual({ tone: "tip", text: "Sharp: 3/4 — one more piece completes 4pc" });
+  });
+
+  it("tips 3/4 for a combat-effect 4pc too (no sheet stat, p4_desc only)", () => {
+    const three = ["helmet", "armor", "gloves"].map((s, i) =>
+      mkPiece({ uid: `p${i}`, slot: s as GearPiece["slot"], armorSetId: "8" }));
+    const out = computeAdvice(fullEntry(three), game);
+    expect(out).toContainEqual({ tone: "tip", text: "Pulverization: 3/4 — one more piece completes 4pc" });
   });
 });
 

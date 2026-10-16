@@ -116,7 +116,10 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
       const def = game.sets[setId];
       const name = def?.name ?? `Set ${setId}`;
       const t4 = def?.levels.find((l) => l.level === 2);
-      const has4pc = !!(t4?.p4 && t4.p4.st !== "ST_NONE" && t4.p4.v != null);
+      // A 4pc that is a combat effect (Pulverization…) has no sheet stat —
+      // `p4` is null since the contract stopped counting those in the CP —
+      // but its `p4_desc` still says the 4pc exists.
+      const has4pc = !!((t4?.p4 && t4.p4.st !== "ST_NONE" && t4.p4.v != null) || t4?.p4_desc);
       if (n === 1) {
         out.push({ tone: "warn", text: `${name}: 1 piece — no set bonus active` });
       } else if (n === 3 && has4pc) {
