@@ -4,6 +4,11 @@
  * outerpedia's datagen — the distillation pipeline that used to live here as
  * build.mjs/calc-stats.mjs).
  *
+ * Also refreshes `apps/desktop/src/game-client.json`, the committed copy of
+ * outerpedia's `data/curated/game-client.json` (Steam appid / exe / roots and
+ * the pinned BepInEx release, read by steam-capture.ts). Not a solver table:
+ * it ships inside the app build and is never downloaded at runtime.
+ *
  * Run after a game patch (once outerpedia's `datagen:build` + `promote` ran):
  *   node data/sync.mjs      (or: npm run data:sync)
  *
@@ -13,7 +18,7 @@
  * ship stale data, and when the checkout's `version.json` carries a contract
  * schema this build can't read (scripts/solver-schema.mjs).
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { REPO_ROOT, findOuterpediaCheckout } from "../scripts/outerpedia-checkout.mjs";
@@ -65,3 +70,14 @@ for (const f of SOLVER_FILES) {
 const version = JSON.parse(readFileSync(join(DERIVED, "version.json"), "utf-8"));
 console.log(`synced ${copied} tables from ${checkout}`);
 console.log(`derived version: ${version.hash} (built ${version.builtAt})`);
+
+// Shared Steam client reference, copied verbatim (outerpedia's tests guard its
+// shape; ours compare the copy against it).
+const GAME_CLIENT = join("data", "curated", "game-client.json");
+const gameClientSrc = join(root, GAME_CLIENT);
+if (!existsSync(gameClientSrc)) {
+  console.error(`missing reference: ${gameClientSrc}`);
+  process.exit(1);
+}
+copyFileSync(gameClientSrc, join(REPO_ROOT, "apps", "desktop", "src", "game-client.json"));
+console.log(`synced game-client.json from ${gameClientSrc}`);

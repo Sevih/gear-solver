@@ -16,6 +16,9 @@ Four layers, connected by plain JSON:
   Steam game folder (`/api/steam/install`). It hooks the game's own HTTP layer and writes
   the same `user_item.json` / `user_character.json` / … into the capture folder while you
   play — no emulator, root or proxy. See [tools/capture-steam/README.md](../tools/capture-steam/README.md).
+  What the app knows of the Steam client (appid, exe, Steam roots, the pinned BepInEx release and its
+  SHA-256) comes from outerpedia's `data/curated/game-client.json`, copied as
+  `apps/desktop/src/game-client.json`, bundled into each build and refreshed by `npm run data:sync`.
 - **tools/capture** — the emulator source: external, runs only when you want to (re)import.
   Produces `out/user_item.json`, `user_character.json`, etc. Not coupled to the app.
 - **packages/core** — pure TypeScript, no DOM, no Node APIs. The brain: wire types,

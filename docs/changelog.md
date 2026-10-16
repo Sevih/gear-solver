@@ -8,6 +8,41 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎮 Capture Steam — appid, racines Steam et BepInEx lus dans la référence d'outerpedia (2026-10-16)
+- ✅ **Une seule source pour le client Steam.** Ce qu'il faut savoir du client Steam vit désormais dans outerpedia,
+  `data/curated/game-client.json` (blocs `steam`, `client`, `bepinex`) ; gear-solver en garde une copie committée,
+  `apps/desktop/src/game-client.json`, identique octet pour octet. Elle n'est ni dans `data/derived/` ni dans
+  `SOLVER_FILES` : ce n'est pas une table du contrat solver, `tsc` l'émet dans `dist/` avec le reste du process
+  principal et aucune installation ne la télécharge — la version de BepInEx et son sha256 restent figés dans chaque
+  release.
+- ✅ **`data/sync.mjs`** (`npm run data:sync`) la recopie depuis le checkout déjà trouvé par
+  `findOuterpediaCheckout`, après les tables, avec la même règle : référence absente → message
+  `missing reference: …` et sortie 1. En-tête du script complété.
+- ✅ **`steam-capture.ts`** importe la copie (`import gameClient from "./game-client.json" with { type: "json" }`) :
+  `OUTERPLANE_APPID` (`String(steam.appId)`), `GAME_EXE`, `BEPINEX_VERSION`, `BEPINEX_SHA256`, `BEPINEX_URL` et les
+  racines Windows de repli de `findSteamRoot` (`steam.roots.windows`, passées par `normalize`) en sont lus ; mêmes
+  noms d'export, mêmes valeurs. La clé de registre reste écrite en dur (hors de la liste du lot). Les deux chemins
+  d'import vérifiés : `tsc -p . --outDir <scratch>` émet `game-client.json` et le module compilé, importé par Node,
+  rend `4247320 OUTERPLANE.exe 5.4.23.5` ; `loadConfigFromFile` de Vite sur `apps/renderer/vite.config.ts` charge la
+  config et liste `../desktop/src/game-client.json` dans ses dépendances (middleware du dev).
+- ✅ **`GearSolverCapture.csproj`** : la liste des chemins de jeu reste (chemins de compilation sur les postes de
+  Sevih, `-p:GameDir` gagne), un commentaire renvoie à `steam.roots` de la référence comme liste de vérité. Les
+  relevés « build 24947556 » de `tools/capture-steam/README.md` ne bougent pas.
+- ✅ **Docs.** `docs/architecture.md`, partie `tools/capture-steam` : une phrase sur la référence, sa copie et son
+  rafraîchissement par `data:sync`.
+- ✅ **Tests.** Nouveau `apps/desktop/test/game-client.test.ts` (2) : la copie est égale en profondeur (JSON parsé)
+  au fichier du checkout d'outerpedia quand il est trouvé, sautée sinon avec « (skipped: no outerpedia checkout
+  found) » dans son nom (la CI n'a pas de checkout) ; les exports de `steam-capture.ts` égalent la copie.
+  `steam-status.test.ts` vert sans retouche.
+- ✅ **Données.** `npm run data:sync` (outerpedia à `79868b8b`) : « synced 19 tables », version `77bba3140a60`,
+  puis « synced game-client.json » ; `data/derived/` inchangé, seule la copie apparaît.
+- ✅ **Vérifié.** `npm run typecheck` : les trois `tsc` sans erreur (dernière ligne `> tsc --noEmit`, renderer).
+  `npm test` : core « Tests 105 passed (105) », desktop « Tests 84 passed (84) », renderer « Tests 427 passed
+  (427) ».
+- ⏳ **Laissé.** Afficher le client de référence (`client.version`, `client.buildId`) à côté de `build <id>` dans
+  Settings, et avertir quand le client installé diffère : lots à part. La release qui embarque la copie reste à
+  Sevih.
+
 ### 🛡️ Sets — niveau lu du contrat (paliers par pièce, `ignoreLowSet`), clé de dominance au niveau, sets de combat hors CP (2026-10-16)
 - ✅ 🔴 **M1 + O5 — une seule fonction de niveau de set, lue du contrat.** outerpedia émet désormais la règle et ses
   données (`levels[].breakLimitCounts`, `levels[].ignoreLowSet` dans `sets.json`, ajouts seuls, `schema` 1 ;

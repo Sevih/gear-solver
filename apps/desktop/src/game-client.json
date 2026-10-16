@@ -1,0 +1,37 @@
+{
+  "_doc": "Référence COMMUNE de ce qu'il faut savoir du client Steam d'OUTERPLANE (décision de Sevih du 15/10/2026 : outerpedia est la source). Lecteurs : `datagen/extract/steam.ts` ici (bloc `steam`), gear-solver (bloc `steam` et `bepinex`) et outerplane-tweaks (blocs `client` et `bepinex`). Adresse publique : https://raw.githubusercontent.com/Sevih/outerpedia/main/data/curated/game-client.json — les deux dépôts voisins le COPIENT à leur build, aucun ne le télécharge à l'exécution : une valeur changée ici ne leur parvient qu'à leur prochain build. Forme gardée par `datagen/extract/game-client.test.ts`.",
+  "_docSteam": "Où trouver le jeu. `roots` = racines Steam CANDIDATES par système, dans l'ordre de préférence, utilisées quand le registre (`registry`, Windows seulement) ne répond pas ; `linux` est relatif au dossier personnel. C'est l'UNION de ce que connaissaient les trois dépôts (les deux formes Flatpak comprises) : la détection teste l'existence de chaque racine, une racine en trop ne coûte rien, une racine manquante rend le jeu introuvable.",
+  "steam": {
+    "appId": 4247320,
+    "installDir": "OUTERPLANE",
+    "dataDir": "OUTERPLANE_Data",
+    "exe": "OUTERPLANE.exe",
+    "registry": {
+      "key": "HKCU\\Software\\Valve\\Steam",
+      "value": "SteamPath"
+    },
+    "roots": {
+      "windows": ["C:/Program Files (x86)/Steam", "C:/Program Files/Steam"],
+      "linux": [
+        ".local/share/Steam",
+        ".steam/steam",
+        ".steam/root",
+        ".var/app/com.valvesoftware.Steam/.local/share/Steam",
+        ".var/app/com.valvesoftware.Steam/data/Steam"
+      ]
+    }
+  },
+  "_docClient": "Le client Steam que le wiki a lu : version applicative (`bundleVersion`), build Steam (`appmanifest`) et date du dump. Réécrit par `datagen/extract/dump-steam.ts` à chaque dump dont la version ou le build diffèrent (le bloc seul, à committer avec le patch) ; jamais quand la version est « inconnue » (UnityPy absent). Ne pas l'éditer à la main.",
+  "client": {
+    "version": "1.4.18",
+    "buildId": "25744766",
+    "dumpedAt": "2026-10-06"
+  },
+  "_docBepinex": "La version de BepInEx 5 (Mono, win_x64 même sous Proton) que outerplane-tweaks empaquette et que gear-solver installe. En changer est une DÉCISION, avec le sha256 relevé sur la release officielle (`asset` de https://github.com/BepInEx/BepInEx/releases) : les deux lecteurs refusent un zip dont l'empreinte diffère.",
+  "bepinex": {
+    "version": "5.4.23.5",
+    "asset": "BepInEx_win_x64_5.4.23.5.zip",
+    "url": "https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5/BepInEx_win_x64_5.4.23.5.zip",
+    "sha256": "82f9878551030f54657792c0740d9d51a09500eeae1fba21106b0c441e6732c4"
+  }
+}

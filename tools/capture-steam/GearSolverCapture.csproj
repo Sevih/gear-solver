@@ -36,6 +36,9 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <!-- Build-time game paths on the dev machines (-p:GameDir wins). The list of
+       truth for Steam roots is `steam.roots` in apps/desktop/src/game-client.json
+       (copy of outerpedia's data/curated/game-client.json). -->
   <PropertyGroup>
     <GameDir Condition="'$(GameDir)' == '' AND Exists('C:/Program Files (x86)/Steam/steamapps/common/OUTERPLANE/OUTERPLANE_Data')">C:/Program Files (x86)/Steam/steamapps/common/OUTERPLANE</GameDir>
     <GameDir Condition="'$(GameDir)' == '' AND Exists('$(HOME)/.local/share/Steam/steamapps/common/OUTERPLANE/OUTERPLANE_Data')">$(HOME)/.local/share/Steam/steamapps/common/OUTERPLANE</GameDir>

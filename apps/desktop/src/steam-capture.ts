@@ -23,15 +23,20 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize, resolve } from "node:path";
 import { downloadVerified, expandZip } from "./download.js";
+// Committed copy of outerpedia's `data/curated/game-client.json` (the shared
+// reference for the Steam client), refreshed by `npm run data:sync`. Bundled at
+// build time — never downloaded at runtime, so each release keeps the BepInEx
+// version and checksum it was tested with.
+import gameClient from "./game-client.json" with { type: "json" };
 
-export const OUTERPLANE_APPID = "4247320";
-export const GAME_EXE = "OUTERPLANE.exe";
+export const OUTERPLANE_APPID = String(gameClient.steam.appId);
+export const GAME_EXE = gameClient.steam.exe;
 
 /** BepInEx 5 (Mono) release we provision when the game has none. Pinned
  *  version + SHA-256 of the official `BepInEx_win_x64_<ver>.zip` asset. */
-export const BEPINEX_VERSION = "5.4.23.5";
-export const BEPINEX_SHA256 = "82f9878551030f54657792c0740d9d51a09500eeae1fba21106b0c441e6732c4";
-const BEPINEX_URL = `https://github.com/BepInEx/BepInEx/releases/download/v${BEPINEX_VERSION}/BepInEx_win_x64_${BEPINEX_VERSION}.zip`;
+export const BEPINEX_VERSION = gameClient.bepinex.version;
+export const BEPINEX_SHA256 = gameClient.bepinex.sha256;
+const BEPINEX_URL = gameClient.bepinex.url;
 
 /** Plugin identity — must match tools/capture-steam/src/Plugin.cs. BepInEx
  *  names the config file after the GUID. */
@@ -53,7 +58,8 @@ function run(file: string, args: string[], timeout: number): Promise<string> {
 }
 
 /** Steam's install root: HKCU `SteamPath` (set by the Steam client itself),
- *  then the usual default. Null when Steam isn't installed. */
+ *  then the reference's usual Windows roots (`steam.roots.windows`). Null when
+ *  Steam isn't installed. */
 export async function findSteamRoot(): Promise<string | null> {
   try {
     const stdout = await run("reg.exe", ["query", "HKCU\\Software\\Valve\\Steam", "/v", "SteamPath"], 3000);
@@ -65,7 +71,8 @@ export async function findSteamRoot(): Promise<string | null> {
       if (existsSync(join(p, "steamapps"))) return p;
     }
   } catch { /* unreadable path — fall through */ }
-  for (const p of ["C:\\Program Files (x86)\\Steam", "C:\\Program Files\\Steam"]) {
+  for (const r of gameClient.steam.roots.windows) {
+    const p = normalize(r);
     if (existsSync(join(p, "steamapps"))) return p;
   }
   return null;
