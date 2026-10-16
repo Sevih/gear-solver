@@ -8,6 +8,71 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧮 Fiche — héros fusionnés calculés sur leur vrai personnage partout, main stat en float32 comme le jeu (2026-10-16)
+- ✅ 🔴 **M4 — un héros en Core Fusion est composé sur sa variante `27xxxxx` dans le Builder, le moteur et
+  la Worklist, plus seulement dans Builds.** Seul Builds lisait `characters[fusionCharId]` (helpers locaux
+  `effectiveCharId`/`metaOf`, T16) ; `composition` et `heroClass` du Builder et `precomputeContext` lisaient
+  l'origine : Snow fusionnée à 1 370 ATK / 5 770 HP / 1 331 DEF / 149 SPD au lieu de 1 503 / 6 452 / 1 366 /
+  155, Lisha 1 922 ATK au lieu de 2 093, Notia 170 EFF au lieu de 255, Veronica fusionnée notée sur l'ATK au
+  lieu des PV. Nouvelle `effectiveCharacter(c, characters)` dans `packages/core/src/gamedata.ts` (exportée
+  par `index.ts`) : `{ charId, def }` de la fusion quand `fusionCharId` ≠ 0, de l'origine sinon ; fusion
+  absente du contrat (capture plus récente que les données synchronisées) → repli sur l'origine, commenté ;
+  pas encore de table → l'id fusionné sans fiche, comme l'ancien `effectiveCharId` pour le portrait. Builds
+  l'appelle à la place de ses deux helpers (supprimés, `ComposedEntry.meta` typé `CharacterDef | null`) ; le
+  Builder pour `composition` (commentaire « Same pipeline the Builds tab uses » rendu vrai et précisé) et
+  `heroClass` ; le moteur dans `precomputeContext`, donc la base sans équipement, `dmgStat`, `dmgSec`,
+  `noCrit`, `bestSkill` et la ligne de transcendance de la CP viennent de la fusion, comme sur la carte
+  Builds ; la Worklist stocke l'id effectif dans `charId` d'une nouvelle entrée (portrait, comme
+  `displayCharId` de Builds), `heroName` inchangé. Noms affichés (`displayNameOf`), carte et portrait du
+  héros dans le Builder, recherche et reco : inchangés. `charLevelMax` non touché : depuis C17
+  d'outerpedia, `data/derived/characters.json` donne au fusionné l'étoile de son origine (`star` 2 pour
+  2000003 et 2700003, 2 pour 2000005/2700005, 3 pour 2000037/2700037), la clé `${star}|${step}` est la même
+  dans les deux metas — vérifié par un test.
+- ✅ **Rejeu de la revue** (copies hors du dépôt, chemins vers la racine du dépôt, esbuild de l'annexe) :
+  `fusion.ts` avant — Snow « Builder/moteur (2000003) : ATK 1370 HP 5770 DEF 1331 SPD 149 EFF 170 | Builds
+  (2700003) : ATK 1503 HP 6452 DEF 1366 SPD 155 », Lisha 1922 | 2093, Notia EFF 170 | 255, Veronica
+  identique ; après (côté Builder/moteur composé sur l'id rendu par `effectiveCharacter`) : les quatre
+  lignes égales des deux côtés (Snow 1503/6452/1366/155, Lisha 2093, Notia EFF 255). `ui/fusion.test.ts`
+  compose par id sans passer par le code de l'app : mêmes sorties avant et après (2000003 ATK 1370 ≠
+  2700003 ATK 1503 ; 2700037 `dmgStat hp`, 2000037 `atk`), ce que le moteur lit maintenant (test ci-dessous).
+- ✅ 🟡 **Main stat en float32 comme le jeu.** `parse.ts` calculait `(1 + enhanceFactor × lv) × (1 +
+  tierFactor × tier)` en double puis `floor` avec epsilon ; le client (`CItem.InitializeOptionData`,
+  `CItemMainOption.get_OptionValue`) fait tout en float32 et tronque : 21 états sur 7 140 par type de pièce
+  lisaient 1 de trop (base 60 +0 palier 1 → 62 en jeu, 63 ici ; 90 +4 → 233 / 234 ; 100 +6 palier 1 → 356 /
+  357 ; 120 +0 palier 1 → 125 / 126). `scaleMain` (désormais exportée) reçoit l'`OptionValue` BRUTE
+  d'`options.json` (‰ pour un pourcentage, avant le ÷10 de `resolveOption`), refait la chaîne
+  d'outerpedia (`sumFactorsF32` + `itemMainOptionValue` de `src/lib/damage/item.ts`, recopiés et commentés,
+  sans import entre dépôts) avec les facteurs d'`enhance.json` (`enhanceFactor` × lv — le max une fois
+  ascendée —, `tierFactor` × palier, `singularity.activation` + paliers atteints), tronque, puis divise par
+  10 pour un pourcentage. Le parseur pose sur chaque main `source: "option"` non-buff un champ optionnel
+  `rawBase` (`RolledStat`, `types.ts`) = cette valeur +0 ; `projectMainToCeiling` en repart (même chiffre
+  que le jeu à l'état visé) et ne garde le rapport de multiplicateurs (`mainMult`/`roundMain`, gardés pour
+  ça et pour le « jamais de baisse ») qu'en repli sans `rawBase`. Talisman (`ooparts`) et mains IOT_BUFF
+  inchangés. `docs/solver.md` et `wiki/Solver.md` (re-scale du main en mode reforge) corrigés.
+- ✅ **Rejeu de l'audit** `mainstat.mts` (copie hors du dépôt, `solver` remplacée par la nouvelle
+  `scaleMain` importée depuis un bundle esbuild de `parse.ts` — `node --experimental-strip-types` ne
+  résout pas les imports `.js` du source —, `REPOS` = le dossier parent des dépôts) : avant
+  `jeu_vs_solver` 21 pour `ITS_EQUIP_WEAPON`, `ITS_EQUIP_ARMOR` et `ITS_EQUIP_ACCESSORY` ; après 0 pour les
+  trois (`wiki_vs_solver` 21 → 0, `jeu_vs_wiki` 0).
+- ✅ **Tests** — `core-fusion-captures.test.ts` : `effectiveCharacter` (Snow 2000003/2700003 → 2700003 et
+  sa fiche ; non fusionné → origine ; fusion retirée de la table → origine ; table absente → id fusionné,
+  fiche nulle ; même `star` origine/fusion pour Snow, Lisha, Veronica). `apps/renderer/test/coreFusion.test.ts`
+  (nouveau, contrat réel) : `precomputeContext` de Snow fusionnée = la composition de la carte Builds sur
+  2700003 et ≠ celle de l'origine ; Snow non fusionnée sur l'origine ; Veronica fusionnée (2700037) →
+  `dmgStat` `hp`, l'origine `atk`. `main-stat-f32.test.ts` (nouveau) : les quatre exemples (en plat et en
+  pourcentage) ; exhaustif sur les 84 `OptionValue` d'`IOT_STAT` d'`options.json` × +0..+10 et +10 ascendé
+  singularité 0..5 × palier 0..4 contre la copie de la formule d'outerpedia → 0 écart ; talisman non
+  scalé ; projection d'une pièce +0 palier 1 (62) vers +10 = la valeur parsée d'une vraie +10 (315), et
+  repli au rapport sans `rawBase` (310). Aucun test existant de valeur de main (parse, reforgeProjection,
+  solver) n'a bougé : leurs fixtures ne tombent sur aucun des 21 états. Commentaires de test qui citaient
+  l'ancien helper / le rapport mis à jour. `npm run typecheck` : sortie 0 (dernière ligne `> tsc --noEmit`,
+  sans erreur) ; `npm test` : sortie 0, dernière ligne `Tests  371 passed (371)` (core 93, desktop 82,
+  renderer 371).
+- ⏳ Vérifier dans l'app sur un fusionné (Snow, Lisha) que la colonne Current du Builder et ΔCP lisent les
+  mêmes chiffres que la carte Builds. Restent M5 (niveaux de compétence des fusionnés, bloqué sur une
+  capture) et, hors périmètre, la carte et le portrait du héros dans le Builder (id d'origine) ainsi que le
+  tableau des tests de `docs/reference.md` § 3.3, déjà en retard avant ce lot (« 300 tests »).
+
 ### 🧹 Capture — `game.flows` en option de debug, Wipe du dossier entier, vérification de mise à jour au lancement (2026-10-16)
 - ✅ 🟠 **L'enregistrement complet du trafic de capture devient une option de debug, coupée par
   défaut.** `capture.ps1` passait `-w game.flows` à mitmdump à chaque capture : tout le trafic du jeu

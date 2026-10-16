@@ -16,7 +16,7 @@
 import { Fragment, memo, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
-import { composeCharStats, expToLevel } from "@gear-solver/core";
+import { composeCharStats, effectiveCharacter, expToLevel } from "@gear-solver/core";
 import { CharacterPortrait, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
 import { Pill } from "../design/Chips.js";
 import { cx } from "../design/cx.js";
@@ -1132,11 +1132,12 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   };
 
   /** Compose the picked hero's full stats (gear included) via the shared
-   *  composeBuild helpers. Same pipeline the Builds tab uses — so a hero's
+   *  composeBuild helpers, on the hero's effective character (the Core Fusion
+   *  variant when fused). Same pipeline the Builds tab uses — so a hero's
    *  Current column here matches their card there. */
   const composition = useMemo<SelectedComposition | null>(() => {
     if (!inventory || !game || !selected) return null;
-    const meta = game.characters[String(selected.charId)];
+    const meta = effectiveCharacter(selected, game.characters).def;
     if (!meta?.ingredients || !game.codexCurve) return null;
     const level = expToLevel(game.expCharacter, selected.exp);
     const lbKey = meta.star != null && selected.levelMaxStep > 0 ? `${meta.star}|${selected.levelMaxStep}` : null;
@@ -1226,7 +1227,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       id: crypto.randomUUID(),
       heroUid: selectedUid,
       heroName: displayNameOf(selected, meta ? { nickname: meta.nickname ?? null } : null),
-      charId: selected.charId,
+      // Portrait id — the fused variant's, like the Builds card.
+      charId: effectiveCharacter(selected, game?.characters).charId,
       mode: lastSolveMode,
       cp: selectedBuild.cp ?? null,
       upg: selectedBuild.upg,
@@ -1242,7 +1244,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
    *  in that case so the user can scan what's possible. */
   const heroClass = useMemo<string | null>(() => {
     if (!selected || !game) return null;
-    return game.characters[String(selected.charId)]?.cls ?? null;
+    return effectiveCharacter(selected, game.characters).def?.cls ?? null;
   }, [selected, game]);
 
   /** Catalogs are inventory-driven: only show options the user has at least

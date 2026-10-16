@@ -452,6 +452,34 @@ export interface GameData {
  *  units, e.g. 4 = 4%). Derived from outerpedia's `subStatPools`. */
 export type SubTickTable = Record<string, Record<string, { step: number; percent: boolean }>>;
 
+/** The character a captured hero actually IS in-game: the Core Fusion variant
+ *  (`27xxxxx`) when `fusionCharId` is set, the origin otherwise. The fused
+ *  variant has its own base/evolution stats, core passive, sometimes its own
+ *  `dmgStat` (fused Veronica scales off HP) and best skill — every stat /
+ *  solver lookup goes through here, so Builds, Builder, engine and Worklist
+ *  agree. Display names stay on the origin (`displayNameOf` adds the
+ *  "Core Fusion" prefix itself).
+ *
+ *  `charLevelMax` keys (`${star}|${step}`) are unaffected: the contract gives a
+ *  fused variant its origin's `star` (the client reads transcend + limit break
+ *  there), so both defs yield the same key. */
+export function effectiveCharacter(
+  c: { charId: number; fusionCharId: number },
+  characters: CharactersTable | null | undefined,
+): { charId: number; def: CharacterDef | null } {
+  if (c.fusionCharId !== 0) {
+    const fused = characters?.[String(c.fusionCharId)];
+    if (fused) return { charId: c.fusionCharId, def: fused };
+    // No table yet (data still loading): nothing to compose, keep the fused id
+    // for the portrait.
+    if (!characters) return { charId: c.fusionCharId, def: null };
+    // Fused variant missing from the contract (capture newer than the synced
+    // data): fall back to the origin so the hero still composes — without the
+    // fusion's base stats / core passive until the next data sync.
+  }
+  return { charId: c.charId, def: characters?.[String(c.charId)] ?? null };
+}
+
 /** Resolve a character's cumulative XP to a level using the ExpCharacterTemplet
  *  curve. Returns `lv1` for any sub-threshold XP and clamps to the max level. */
 export function expToLevel(curve: ExpCharacterCurve, exp: number): number {

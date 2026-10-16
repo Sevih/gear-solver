@@ -65,11 +65,11 @@ function levelFromExp(meta: EquipmentDef, enhance: EnhanceData, exp: number): nu
   return lv;
 }
 
-/** Main-stat multiplier for a given enhance/breakthrough/ascension state.
- *  Mirrors outerpedia-v2 `mainStat` / `mainStatAscended`. Talisman (slot=ooparts)
- *  has enhanceFactor=0 in-game ⇒ multiplier is a no-op (1). Factored out of
- *  `scaleMain` so the reforge-projection helper can re-scale an already-scaled
- *  main between two states via the ratio of multipliers. */
+/** Main-stat multiplier for a given enhance/breakthrough/ascension state, in
+ *  double. Talisman (slot=ooparts) has enhanceFactor=0 in-game ⇒ multiplier is
+ *  a no-op (1). Only orders two states (`projectMainToCeiling`'s "never
+ *  downgrade") and backs its ratio fallback — the actual values come from the
+ *  game's float32 chain in `scaleMain`. */
 function mainMult(slot: string, lv: number, tier: number, ascended: boolean, singLevel: number, e: EnhanceData): number {
   if (slot === "ooparts") return 1;
   let mult: number;
@@ -82,16 +82,53 @@ function mainMult(slot: string, lv: number, tier: number, ascended: boolean, sin
   return mult * (1 + e.tierFactor * tier);
 }
 
-/** Round a raw main-stat value the way the game displays it: percent stats
- *  keep 1 decimal (floor), flat stats are integers (floor). */
+/** Round a display-unit main-stat value: percent stats keep 1 decimal (floor),
+ *  flat stats are integers (floor). Only for the ratio fallback of
+ *  `projectMainToCeiling`. */
 function roundMain(raw: number, percent: boolean): number {
   return percent ? Math.floor(raw * 10 + 1e-9) / 10 : Math.floor(raw + 1e-9);
 }
 
-/** Apply enhance + breakthrough + (optional) singularity scaling to a rolled main stat. */
-function scaleMain(base: RolledStat, slot: string, lv: number, tier: number, ascended: boolean, singLevel: number, e: EnhanceData): number {
-  if (slot === "ooparts") return base.value;
-  return roundMain(base.value * mainMult(slot, lv, tier, ascended, singLevel, e), base.percent);
+const f32 = Math.fround;
+
+/** Sequential float32 sum (chained fadd in the client) — term order matters.
+ *  `CItem.GetEnchantFactor` sums the piece's ItemEnchantTemplet factors for
+ *  levels 1..lv, `GetBreakLimitFactor` / `GetSingularityFactor` likewise.
+ *  Copied from outerpedia `src/lib/damage/item.ts` (`sumFactorsF32`). */
+function sumFactorsF32(factors: readonly number[]): number {
+  let sum = 0;
+  for (const f of factors) sum = f32(sum + f32(f));
+  return sum;
+}
+
+/** `CItemMainOption.get_OptionValue`, in the client's exact instruction order:
+ *  `trunc_f32(f32(f32(1 + enchant) + singularity) × OptionValue) × f32(1 + breakLimit))`.
+ *  `optionValue` is the RAW table value (‰ for a percent stat); the result is
+ *  in the same unit. Copied from outerpedia `src/lib/damage/item.ts`
+ *  (`itemMainOptionValue`, 0 mismatch against the client). */
+function itemMainOptionValue(optionValue: number, enchantFactor: number, breakLimitFactor: number, singularityFactor: number): number {
+  let t = f32(f32(enchantFactor) + 1);
+  t = f32(t + f32(singularityFactor));
+  t = f32(t * f32(optionValue));
+  t = f32(t * f32(f32(breakLimitFactor) + 1));
+  return Math.trunc(t);
+}
+
+/** Enhance + breakthrough + (optional) singularity scaling of a regular main
+ *  stat, as the game computes it (`CItem.InitializeOptionData`, float32).
+ *  `optionValue` is the RAW `OptionValue` from `options.json` (before
+ *  `resolveOption`'s ÷10 for a percent stat); returns the display value.
+ *  Factors come from `enhance.json`: `enhanceFactor` once per enhance level
+ *  (the max level once ascended), `tierFactor` once per breakthrough tier,
+ *  `singularity.activation` + the steps reached — every client row equals
+ *  these constants today. Talisman (ooparts) mains don't scale. */
+export function scaleMain(optionValue: number, percent: boolean, slot: string, lv: number, tier: number, ascended: boolean, singLevel: number, e: EnhanceData): number {
+  const toDisplay = (raw: number) => (percent ? raw / 10 : raw);
+  if (slot === "ooparts") return toDisplay(optionValue);
+  const enchant = sumFactorsF32(Array(ascended ? e.maxEnhanceLevel : lv).fill(e.enhanceFactor));
+  const singularity = ascended ? sumFactorsF32([e.singularity.activation, ...e.singularity.steps.slice(0, singLevel)]) : 0;
+  const breakLimit = sumFactorsF32(Array(tier).fill(e.tierFactor));
+  return toDisplay(itemMainOptionValue(optionValue, enchant, breakLimit, singularity));
 }
 
 /** Target enhancement ceiling a piece is projected to by the reforge-mode
@@ -110,11 +147,11 @@ export interface ReforgeCeiling {
  *  its current enhance/ascension state to a target ceiling, for the Builder's
  *  reforge-mode preview ("show what this piece becomes at +15 ascended").
  *
- *  The parsed `main` values are already scaled to the piece's current state
- *  (parse-time `scaleMain`), and `RolledStat` doesn't retain the base value, so
- *  we recover it via the multiplier ratio: `projected = current / curMult ×
- *  tgtMult`. The floor in the original scaling makes the recovered base
- *  slightly lossy, but the error is sub-unit — fine for a planning preview.
+ *  Parsed mains carry their +0 table value (`rawBase`), so the target value is
+ *  `scaleMain` run again from it — the same number the game shows at that
+ *  state. A main without `rawBase` (piece not built by the parser) falls back
+ *  to the multiplier ratio `current / curMult × tgtMult`, slightly lossy (the
+ *  original truncation is not undone) but sub-unit.
  *
  *  Never DOWNGRADES: a piece already past the ceiling (e.g. an ascended +15
  *  piece previewed in `classic` mode) is returned untouched. Talisman / EE,
@@ -131,11 +168,14 @@ export function projectMainToCeiling(piece: GearPiece, game: GameData, target: R
   // Don't downgrade a piece that's already beyond the previewed ceiling.
   if (tgtMult <= curMult || curMult === 0) return piece;
   const ratio = tgtMult / curMult;
-  const main = piece.main.map((m) =>
-    m.source === "option" && !m.fromBuff
-      ? { ...m, value: roundMain(m.value * ratio, m.percent) }
-      : m,
-  );
+  const slot = piece.slot;
+  const main = piece.main.map((m) => {
+    if (m.source !== "option" || m.fromBuff) return m;
+    const value = m.rawBase != null
+      ? scaleMain(m.rawBase, m.percent, slot, target.enhanceLevel, tier, target.ascended, target.singularityLevel, e)
+      : roundMain(m.value * ratio, m.percent);
+    return { ...m, value };
+  });
   return {
     ...piece,
     main,
@@ -190,9 +230,10 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
     }
     const r = toRolled(oid, 1, game); // base (+0) value, before enhancement scaling
     if (!r) continue;
-    if (enhance && meta) {
-      const scaled = scaleMain(r, meta.slot, enhanceLevel, item.BreakLimitLevel, ascended, item.SingularityLevel, enhance);
-      main.push({ ...r, value: scaled, source: "option" });
+    const def = game?.options[String(oid)];
+    if (enhance && meta && def && "st" in def) {
+      const scaled = scaleMain(def.v, r.percent, meta.slot, enhanceLevel, item.BreakLimitLevel, ascended, item.SingularityLevel, enhance);
+      main.push({ ...r, value: scaled, source: "option", rawBase: def.v });
     } else {
       main.push({ ...r, source: "option" });
     }

@@ -23,13 +23,6 @@
       `docs/reference.md`. Une seule fonction de niveau de set dans `core`, et le niveau dans la clé de dominance
       de `pruneDominatedForCp` (une BT3 peut aujourd'hui éliminer une BT4 meilleure du même set). Voir aussi O5
       (§ Contrat).
-- [ ] 🔴 **M4 — Héros fusionnés calculés sur l'origine dans le Builder et le moteur** — Builds utilise
-      `effectiveCharId` depuis T16, pas le Builder ni `precomputeContext` : pas de passif de cœur, mauvais
-      `charLevelMax`, mauvaise stat de dégâts (Snow 1370 ATK au lieu de 1503). Un seul helper « héros effectif »
-      dans `core`, appelé par Builds, Builder, moteur et Worklist ; corriger le commentaire du Builder qui dit
-      l'inverse.
-- [ ] 🟡 **Main stat en float32** — `parse.ts` `mainMult`/`roundMain` calcule en double + epsilon, le jeu en float32
-      (`CItemMainOption`) : 21 cas d'écart d'arrondi. Porter la chaîne d'outerpedia.
 - [ ] 🟡 **M5 — Niveaux de compétence des fusionnés** — le jeu les reconstruit depuis `CharacterFusionLevel`, l'outil
       prend `First..Ultimate` de la capture (jusqu'à +1 200 CP d'écart). **Bloqué** : il faut une capture d'un
       fusionné dont les compétences d'origine dépassent celles de la fusion.

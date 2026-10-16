@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-import type { Character, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
+import type { Character, CharacterDef, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
 import { fillUnrankedByOrder, loadSeenHeroes, moveRankBefore, persistSeenHeroes, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
-import { composeCharStats, expToLevel } from "@gear-solver/core";
+import { composeCharStats, effectiveCharacter, expToLevel } from "@gear-solver/core";
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { computeAdvice, type AdviceItem } from "../lib/buildAdvice.js";
@@ -392,19 +392,6 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
   );
 }
 
-/** Effective in-game CharID — the fused variant when Core Fusion is active,
- *  otherwise the base. Used for portrait / base-stat / skill-id lookups. */
-function effectiveCharId(c: { charId: number; fusionCharId: number }): number {
-  return c.fusionCharId !== 0 ? c.fusionCharId : c.charId;
-}
-
-/** Resolve the right `CharacterDef` for a captured Character — fused
- *  variant's meta when active (its `FaceIconID` / BasicStar / ingredients
- *  differ from the base), base meta otherwise. */
-function metaOf(c: { charId: number; fusionCharId: number }, game: GameData | null) {
-  return game?.characters[String(effectiveCharId(c))] ?? null;
-}
-
 /** On-card display name. `Core Fusion ${baseName}` when fused — the in-game
  *  NickName for fusion variants is flavor text, not the variant identifier.
  *  Otherwise prefixes the meta nickname for Mystic Sage / Gnosis / etc. */
@@ -504,7 +491,7 @@ interface ComposedEntry {
   level: number;
   bp: number | null;
   /** Fused variant's meta when active, base meta otherwise. */
-  meta: NonNullable<ReturnType<typeof metaOf>> | null;
+  meta: CharacterDef | null;
   /** ID used for portrait/face icon (fused or base). */
   displayCharId: number;
   /** "Core Fusion X" / "Nickname X" / "X" — final string for the card title. */
@@ -996,8 +983,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
       if (key) presetByKey.set(key, p.name);
     }
     return inventory.characters.map((c): ComposedEntry => {
-      const meta = metaOf(c, game);
-      const displayCharId = effectiveCharId(c);
+      const { charId: displayCharId, def: meta } = effectiveCharacter(c, game?.characters);
       const displayName = displayNameOf(c, meta);
       const equipped = gearByChar.get(c.uid) ?? new Map();
       const raws = rawByChar.get(c.uid) ?? [];

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { composeCharStats } from "../src/compose-stats.js";
-import type { CharacterDef, CodexCurve } from "../src/gamedata.js";
+import { effectiveCharacter, type CharacterDef, type CodexCurve } from "../src/gamedata.js";
 import charactersJson from "../../../data/derived/characters.json";
 import codexJson from "../../../data/derived/codex-curve.json";
 
@@ -34,5 +34,39 @@ describe("Core Fusion — captures lv100 sans équipement", () => {
     const r = composeCharStats(ingredients!, codex, { level: 100 });
     expect(r.noGearStats[stat]).toBe(value);
     expect(r.intrinsicStats[stat]).toBe(white);
+  });
+});
+
+describe("effectiveCharacter — le perso que le héros est en jeu", () => {
+  const snow = { charId: 2000003, fusionCharId: 2700003 };
+
+  it("Snow fusionnée → 2700003 et sa fiche, pas celle de l'origine", () => {
+    const eff = effectiveCharacter(snow, characters);
+    expect(eff.charId).toBe(2700003);
+    expect(eff.def).toBe(characters["2700003"]);
+  });
+
+  it("non fusionné → l'origine", () => {
+    const eff = effectiveCharacter({ charId: 2000003, fusionCharId: 0 }, characters);
+    expect(eff.charId).toBe(2000003);
+    expect(eff.def).toBe(characters["2000003"]);
+  });
+
+  it("fusion absente du contrat → repli sur l'origine", () => {
+    const { "2700003": _fused, ...withoutFusion } = characters;
+    const eff = effectiveCharacter(snow, withoutFusion);
+    expect(eff.charId).toBe(2000003);
+    expect(eff.def).toBe(characters["2000003"]);
+  });
+
+  it("pas encore de table → l'id fusionné, sans fiche", () => {
+    expect(effectiveCharacter(snow, null)).toEqual({ charId: 2700003, def: null });
+  });
+
+  it("l'étoile d'un fusionné est celle de son origine : même clé de charLevelMax", () => {
+    for (const [origin, fused] of [["2000003", "2700003"], ["2000005", "2700005"], ["2000037", "2700037"]] as const) {
+      expect(characters[fused]?.star).toBe(characters[origin]?.star);
+    }
+    expect(characters["2700003"]?.star).toBe(2);
   });
 });

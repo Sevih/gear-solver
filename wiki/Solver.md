@@ -251,8 +251,9 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   hero's equipped build) — returned with the context (`onResult`) and saved with the build, so the gear
   cards re-project the same ticks.
 
-  The main re-scale goes through the ratio of the multipliers (`RolledStat` does not keep
-  the base value) — validated against in-game (test `projectMainToCeiling`: 240 → 1380).
+  The main re-scale starts again from the table's +0 value (`rawBase`, set by the parser) and
+  re-runs the game's float32 chain (`scaleMain`) — the same numbers as in-game (test
+  `projectMainToCeiling`: 240 → 1380); a piece without `rawBase` falls back to the multiplier ratio.
 - **Maxed only** (`onlyMaxed`) — **zero extrapolation**: the reforge mode becomes an
   **investment floor** and the projection is **skipped** (pieces scored on their real rolls,
   gear cards included — the display context is snapshotted to `disable`). Floors

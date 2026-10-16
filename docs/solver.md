@@ -259,8 +259,9 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   équipé du héros) — renvoyés avec le contexte (`onResult`) et sauvés avec le build, pour que les gear
   cards reprojettent les mêmes ticks.
 
-  Le re-scale du main passe par le ratio des multiplicateurs (`RolledStat` ne garde pas
-  la valeur de base) — validé contre l'in-game (test `projectMainToCeiling` : 240 → 1380).
+  Le re-scale du main repart de la valeur +0 de la table (`rawBase`, posée par le parseur) et
+  refait la chaîne float32 du jeu (`scaleMain`) — mêmes chiffres qu'en jeu (test `projectMainToCeiling` :
+  240 → 1380) ; une pièce sans `rawBase` retombe sur le ratio des multiplicateurs.
 - **Maxed only** (`onlyMaxed`) — **zéro extrapolation** : le mode reforge devient un **plancher
   d'investissement** et la projection est **sautée** (pièces notées sur leurs vrais rolls, y compris
   sur les gear cards — le contexte d'affichage est snapshoté en `disable`). Planchers

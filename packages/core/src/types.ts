@@ -52,6 +52,11 @@ export interface RolledStat {
    *    - "eePassive"  → EE level-gated permanent stat passive
    *  Substats don't carry this — they always come from the substat pool. */
   source?: "option" | "singularity" | "eePassive";
+  /** Regular mains only (`source: "option"`, non-buff), set by the parser: the
+   *  raw +0 `OptionValue` from `options.json` (‰ for a percent stat) the value
+   *  was scaled from. Lets `projectMainToCeiling` re-run the game's exact
+   *  scaling for another enhance state instead of a lossy ratio. */
+  rawBase?: number;
   /** True when the contribution is gated by an in-game combat condition
    *  (`BuffConditionType` ≠ `NONE`, e.g. `TARGET_HAS_BUFF` /
    *  `TARGET_ELEMENT`) or has a finite turn duration / `SKILL_START` trigger.

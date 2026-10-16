@@ -93,7 +93,7 @@ describe("composeCharStats — in-game captures reproducible from committed file
   it("Core Fusion Notia lv100: EFF 255 (core +50% EFF on top of the 120 baseline)", () => {
     const lock = lockFor("Core Fusion Notia");
     // The lock stores the base charId (2000056); the fused hero composes from
-    // its fusion variant 2700056, as BuildsScreen's `effectiveCharId` does.
+    // its fusion variant 2700056, as `effectiveCharacter` resolves it.
     expect(lock.charId).toBe(2000056);
     const { noGearStats, scaling } = composeCharStats(characters["2700056"]!.ingredients!, codexCurve, {
       level: lock.level, levelMaxStep: 0,

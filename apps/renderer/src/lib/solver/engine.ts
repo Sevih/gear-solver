@@ -14,7 +14,7 @@
  * into postMessage events.
  */
 import type { GameData, GearPiece, ReforgeCeiling, RolledStat } from "@gear-solver/core";
-import { composeCharStats, expToLevel, projectMainToCeiling } from "@gear-solver/core";
+import { composeCharStats, effectiveCharacter, expToLevel, projectMainToCeiling } from "@gear-solver/core";
 import {
   aggregatePrefixBuckets,
   computeFinalStats,
@@ -279,7 +279,9 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const { inventory: inv, game, filters, heroUid } = req;
   const hero = inv.characters.find((c) => c.uid === heroUid);
   if (!hero) throw new Error(`hero ${heroUid} not found in inventory`);
-  const meta = game.characters[String(hero.charId)];
+  // The fused variant when Core Fusion is active — its own base, core passive,
+  // dmgStat and best skill.
+  const meta = effectiveCharacter(hero, game.characters).def;
   if (!meta?.ingredients || !game.codexCurve) throw new Error("hero missing ingredients/codexCurve");
 
   const level = expToLevel(game.expCharacter, hero.exp);

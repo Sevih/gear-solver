@@ -193,8 +193,8 @@ describe("parseInventory", () => {
 describe("projectMainToCeiling", () => {
   // The +0 weapon (main ATK 240) and its +15-ascended twin (ATK 1380) are
   // pinned to the real in-game readout above — so projecting the +0 piece to
-  // the ascended ceiling must reproduce exactly 1380 (validates the
-  // recover-base-via-multiplier-ratio approach against ground truth).
+  // the ascended ceiling must reproduce exactly 1380 (re-scaled from the
+  // parsed `rawBase`, against ground truth).
   const ASCENDED = { enhanceLevel: 15, ascended: true, singularityLevel: 5 };
   const CLASSIC = { enhanceLevel: 10, ascended: false, singularityLevel: 0 };
 
