@@ -700,6 +700,10 @@
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
 
+## [1.9.0] — 2026-10-16
+
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
 ## [1.8.1] — 2026-10-08
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_

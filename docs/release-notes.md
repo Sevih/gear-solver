@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.9.0] — 2026-10-16
+
 - **Set bonuses follow the game's rule.** A set mixing Breakthrough 4 and lower pieces now
   gets the bonus the game gives: the 2-piece reads the level of your 2 best pieces, the
   4-piece the level of your 4 best (Attack 4/4/3: 35 %, not 30 %). Speed, Penetration and
