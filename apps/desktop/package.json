@@ -15,7 +15,7 @@
     "fetch-binaries": "node scripts/fetch-binaries.mjs",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "publish": "electron-builder --publish always"
+    "publish": "electron-builder --win --publish always"
   },
   "dependencies": {
     "electron-updater": "^6.3.9"
