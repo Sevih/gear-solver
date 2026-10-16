@@ -27,6 +27,12 @@ game, and writes decoded JSON to `out/` (`user_item.json`, `user_character.json`
 leaves the pipeline armed: the game stays fully playable and every later data fetch keeps
 decoding into `out/`. Everything below is the manual explanation of what the script does.
 
+Full traffic recording is **off by default**: `capture.ps1` only writes the decoded JSON. For
+debugging, `-RecordFlows` also passes `-w game.flows` to mitmdump, which saves every request and
+response (headers and bodies) to `out/game.flows` until the next Wipe; a run without it deletes a
+`game.flows` left by an earlier run. In the app this is **Settings → Debug → Record full capture
+traffic (game.flows)**.
+
 ## Summary of findings
 
 - The game **splits its traffic**:
@@ -137,6 +143,8 @@ Manual equivalent:
 - `scripts/bind_cert.sh` — install CA via bind mount (run as root).
 - `scripts/redir.sh` — iptables redirect of game ports to local
   reverse-proxy ports (run as root).
-- `out/` — decoded capture snapshot.
+- `out/` — decoded capture snapshot, plus `mitm.log` / `mitm.log.err` (mitmdump output),
+  `_unknown/`, `seen-paths.log` and, with `-RecordFlows` only, `game.flows`. The app's
+  **Settings → Data → Wipe captured data** empties the whole folder.
 
 See also: [Data Schema](Data-Schema) for the decoded JSON field reference.

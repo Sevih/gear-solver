@@ -106,8 +106,9 @@ In the app's local storage. Use **Settings → Backup → Export** to download t
 there.
 
 **I want a clean slate.**
-**Settings → Data → Wipe captured data** removes the imported snapshot (it's blocked while a
-capture is still armed — Disarm first).
+**Settings → Data → Wipe captured data** empties the whole capture folder: the imported
+snapshot, the capture logs, `game.flows` and the unknown endpoints under `_unknown/` (it's
+blocked while a capture is still armed — Disarm first).
 
 ---
 

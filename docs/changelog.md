@@ -8,6 +8,55 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧹 Capture — `game.flows` en option de debug, Wipe du dossier entier, vérification de mise à jour au lancement (2026-10-16)
+- ✅ 🟠 **L'enregistrement complet du trafic de capture devient une option de debug, coupée par
+  défaut.** `capture.ps1` passait `-w game.flows` à mitmdump à chaque capture : tout le trafic du jeu
+  (en-têtes et corps) restait sur le disque jusqu'au Wipe suivant. Nouveau paramètre
+  `[switch]$RecordFlows` : `-w` n'est passé que s'il est présent ; sans lui, un `game.flows` laissé
+  dans `-Out` par une version précédente est supprimé au lancement. Côté app : **Settings → Debug →
+  « Record full capture traffic (game.flows) — debugging only »** (clé `gs.debug.captureFlows`,
+  `false` par défaut, sur le modèle des deux bascules voisines). `runCapture` appelle alors
+  `POST /api/capture/run?recordFlows=1`, et `api-handler.ts` ajoute `-RecordFlows` aux arguments de
+  `capture.ps1`, en dev comme en prod, via la fonction pure `captureRunArgs(scriptArgs, query)`
+  (seule la valeur `1` l'active). `tools/capture/README.md` et `wiki/Capture-Pipeline.md` décrivent
+  l'option et le contenu du dossier de sortie.
+- ✅ 🟠 **Wipe vide tout le dossier de capture, journal et `_unknown/` compris.**
+  `POST /api/capture/wipe` ne supprimait que `*.json`, `.captured`, `seen-paths.log` et `*.flows` :
+  `mitm.log`, `mitm.log.err` et `_unknown/` (réponses décodées des chemins hors liste, écrites par
+  `addon.py` et par le plugin Steam) restaient. Chaque entrée de `captureOut` est maintenant
+  supprimée (`rmSync(…, { recursive: true, force: true })`), le dossier lui-même est gardé (la
+  capture et le plugin Steam écrivent dedans). Le 409 pendant que la capture est armée ne change pas ;
+  `removed` compte les entrées supprimées. Textes mis à jour : l'action et sa confirmation
+  (Settings → Data), `wiki/FAQ.md`.
+  **Plugin Steam** : son battement `.steam-plugin.json` était déjà supprimé par l'ancien Wipe (il finit
+  en `.json`). Sans fichier, `readHeartbeat` renvoie `null` et `steamStatus` répond « pas live »,
+  sans erreur ; le plugin réécrit son battement à sa prochaine réponse décodée (`WriteKnown`) ou au
+  prochain lancement du jeu, et le statut revient alors. Il recrée `_unknown/` à la première écriture ;
+  `seen-paths.log` ne reprend que les chemins pas encore vus depuis le lancement du jeu (liste en
+  mémoire du plugin). Côté émulateur, `addon.py` recrée `_unknown/` à son chargement, donc au
+  prochain armement.
+- ✅ **Un échec de la vérification de mise à jour au lancement est attrapé et affiché.**
+  `setupAutoUpdate` lançait `void autoUpdater.checkForUpdates()` en comptant sur l'événement
+  `error` ; electron-updater rejette aussi la promesse, et ce rejet n'était pas attrapé. Il l'est
+  maintenant comme dans `triggerCheck` : état `error`, message, `dwarn`. Commentaire corrigé ;
+  configuration de build inchangée.
+- ✅ **Tests** — `api-handler.test.ts` : `captureRunArgs` sans l'option (requête vide, `0`, `true`)
+  et avec (`-RecordFlows` ajouté, tableau d'origine intact) ; Wipe d'un `captureOut` qui contient
+  deux `.json`, `mitm.log`, `mitm.log.err`, `game.flows`, `seen-paths.log`, `.captured` et
+  `_unknown/a.json` → dossier présent et vide, `removed: 8` ; 409 quand la capture est armée, rien
+  supprimé ; le test du `.mitm.pid` périmé passe sans retouche. `updater.test.ts` (nouveau) : avec
+  le mock d'`electron-updater` dont `checkForUpdates` rejette (`electronUpdaterMock` prend
+  maintenant une fonction de remplacement), aucun rejet non attrapé et `getStatus().state === "error"`
+  — le test échoue sur le code d'avant. `npm run typecheck` : sortie 0 (dernière ligne
+  `> tsc --noEmit`, sans erreur) ; `npm test` : sortie 0, dernière ligne de résumé
+  `Tests  368 passed (368)` (core 80, desktop 82, renderer 368).
+- ⏳ **À valider sous Windows (LDPlayer)**, le PowerShell ne tourne pas sous Linux :
+  1. option coupée, avec un `game.flows` laissé dans `capture-out` par une version précédente :
+     Arm capture → la capture aboutit, aucun `game.flows` créé et l'ancien a disparu ;
+  2. Disarm, option cochée (Settings → Debug), Arm capture → `game.flows` présent dans `capture-out` ;
+  3. Disarm puis Settings → Data → Wipe captured data → le dossier `capture-out` existe et est vide
+     (`mitm.log`, `mitm.log.err`, `_unknown/` compris) ; Arm capture suivant : la capture aboutit.
+
 ### 🧾 Données de jeu — lecture du `schema` du contrat, refus d'un schéma plus récent (2026-10-15)
 - ✅ 🟠 **G1 — l'app lit le `schema` de `version.json` et refuse un contrat qu'elle ne sait pas lire.**
   outerpedia ajoute `schema` (entier, 1 aujourd'hui) et `resVersion` à `version.json` ; jusqu'ici rien

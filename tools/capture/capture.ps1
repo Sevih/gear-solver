@@ -11,6 +11,7 @@
   Usage:
     powershell -ExecutionPolicy Bypass -File .\capture.ps1
     powershell -ExecutionPolicy Bypass -File .\capture.ps1 -NoRelaunch   # just arm, don't restart the game
+    powershell -ExecutionPolicy Bypass -File .\capture.ps1 -RecordFlows  # debugging: also record game.flows
 #>
 param(
   [string]$Device   = "127.0.0.1:5555",
@@ -34,7 +35,11 @@ param(
   # wait 6 min. Past the timeout the pipeline stays armed anyway (the capture
   # still completes when the lobby loads; the status poll picks the sentinel up).
   [int]$TimeoutSec  = 360,
-  [switch]$NoRelaunch
+  [switch]$NoRelaunch,
+  # Debugging only: also record the full capture traffic (headers and bodies)
+  # to $Out\game.flows. Off by default; without it a game.flows left by an
+  # earlier version is deleted at launch.
+  [switch]$RecordFlows
 )
 $ErrorActionPreference = "Stop"
 $Root   = $PSScriptRoot
@@ -124,6 +129,7 @@ Remove-Item (Join-Path $Out ".captured") -ErrorAction SilentlyContinue
 $env:OP_OUT = $Out
 $log = Join-Path $Out "mitm.log"
 $flows = Join-Path $Out "game.flows"
+if (-not $RecordFlows) { Remove-Item -LiteralPath $flows -Force -ErrorAction SilentlyContinue }
 # Start-Process w/ -ArgumentList does NOT auto-quote args containing spaces on
 # Windows PS 5.1 (see PowerShell/PowerShell#5576). Wrap any path arg whose
 # value can contain whitespace (here: $Root, $flows) - else `mitmdump -s ...\Projet perso\...\addon.py`
@@ -135,9 +141,9 @@ $mitmArgs = @(
   # Loopback only: the device reaches us through `adb reverse` (step 3).
   "--listen-host","127.0.0.1",
   "-s", (Quote (Join-Path $Root "addon.py")),
-  "-w", (Quote $flows),
   "--set","flow_detail=0"
 )
+if ($RecordFlows) { $mitmArgs += @("-w", (Quote $flows)) }
 # Override mitmproxy's confdir when one was passed (Electron prod): the
 # per-install CA must match the cert we push to the device a few lines above,
 # otherwise the TLS handshake fails. In dev mode this is empty and mitmdump

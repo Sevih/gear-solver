@@ -25,8 +25,10 @@ export function electronMock(userDataDir: string) {
  *  electron mock in tests that import server.ts:
  *
  *   vi.mock("electron-updater", () => electronUpdaterMock());
- */
-export function electronUpdaterMock() {
-  const autoUpdater = { on() { return autoUpdater; }, checkForUpdates: async () => null, quitAndInstall() {} };
+ *
+ *  `checkForUpdates` overrides the default (resolves null), e.g. with a
+ *  rejecting one to exercise a failed check. */
+export function electronUpdaterMock(checkForUpdates: () => Promise<unknown> = async () => null) {
+  const autoUpdater = { on() { return autoUpdater; }, checkForUpdates, quitAndInstall() {} };
   return { default: { autoUpdater }, autoUpdater };
 }

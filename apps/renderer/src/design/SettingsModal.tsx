@@ -131,6 +131,10 @@ interface Props {
   debugSolver: boolean;
   /** Flip the solver logging toggle on/off. */
   onToggleDebugSolver: () => void;
+  /** Current state of the emulator capture's full-traffic recording (`gs.debug.captureFlows`). */
+  debugCaptureFlows: boolean;
+  /** Flip the full-traffic recording on/off. */
+  onToggleDebugCaptureFlows: () => void;
   /** Solver tuning settings (Solver tab). */
   solver: SolverSettings;
   /** Active acquisition path (auto-resolved by App) + setter for the persisted
@@ -165,7 +169,8 @@ const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> =
 
 export function SettingsModal({
   open, onClose, onReady, onResetOnboarding, onAfterWipe, onSyncData,
-  debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver, solver,
+  debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
+  debugCaptureFlows, onToggleDebugCaptureFlows, solver,
   captureSource, onCaptureSourceChange, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy,
 }: Props) {
   const [result, setResult] = useState<PreflightResult | null>(null);
@@ -278,7 +283,7 @@ export function SettingsModal({
               {tab === "solver" && <SolverPane solver={solver} showAdvanced={showAdvanced} onToggleAdvanced={() => setShowAdvanced((v) => !v)} />}
               {tab === "data"   && <DataPane syncing={syncing} setSyncing={setSyncing} onSyncData={onSyncData} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} />}
               {tab === "backup" && <BackupPane importInputRef={importInputRef} />}
-              {tab === "debug"  && <DebugPane debugStatLocks={debugStatLocks} onToggleDebugStatLocks={onToggleDebugStatLocks} debugSolver={debugSolver} onToggleDebugSolver={onToggleDebugSolver} />}
+              {tab === "debug"  && <DebugPane debugStatLocks={debugStatLocks} onToggleDebugStatLocks={onToggleDebugStatLocks} debugSolver={debugSolver} onToggleDebugSolver={onToggleDebugSolver} debugCaptureFlows={debugCaptureFlows} onToggleDebugCaptureFlows={onToggleDebugCaptureFlows} />}
             </div>
 
             {/* CONTEXTUAL FOOTER */}
@@ -910,7 +915,7 @@ function DataPane({
       />
       <DataAction
         label="Wipe captured data"
-        description="Delete every imported snapshot. Cannot be undone · requires confirmation · blocked while capture is armed."
+        description="Empty the whole capture folder: imported snapshots, capture logs, game.flows and unknown endpoints (_unknown/). Cannot be undone · requires confirmation · blocked while capture is armed."
         tone="danger"
         onClick={() => void wipeCaptured(onAfterWipe)}
       />
@@ -947,11 +952,14 @@ function BackupPane({ importInputRef }: { importInputRef: { current: HTMLInputEl
 
 function DebugPane({
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
+  debugCaptureFlows, onToggleDebugCaptureFlows,
 }: {
   debugStatLocks: boolean;
   onToggleDebugStatLocks: () => void;
   debugSolver: boolean;
   onToggleDebugSolver: () => void;
+  debugCaptureFlows: boolean;
+  onToggleDebugCaptureFlows: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -967,6 +975,12 @@ function DebugPane({
         description="Log the solver's fan-out (pool sizes, chunk count, workers) and per-solve merge/duration to the devtools console. Useful when profiling a slow solve — off by default."
         checked={debugSolver}
         onToggle={onToggleDebugSolver}
+      />
+      <ToggleAction
+        label="Record full capture traffic (game.flows) — debugging only"
+        description="Emulator capture: also save every request and response (headers and bodies) to game.flows in the capture folder, until the next Wipe. Takes effect on the next capture — off by default, and a capture with it off deletes an old game.flows."
+        checked={debugCaptureFlows}
+        onToggle={onToggleDebugCaptureFlows}
       />
     </div>
   );
@@ -1191,11 +1205,12 @@ async function runDataSync(setSyncing: (b: boolean) => void, onSyncData: () => P
   }
 }
 
-/** POST /api/capture/wipe + refresh inventory. Confirms via native dialog
- *  first (destructive). 409 means the pipeline is armed — we surface it as
- *  an alert so the user knows to Disarm first. */
+/** POST /api/capture/wipe (empties the whole capture folder) + refresh
+ *  inventory. Confirms via native dialog first (destructive). 409 means the
+ *  pipeline is armed — we surface it as an alert so the user knows to Disarm
+ *  first. */
 async function wipeCaptured(onAfterWipe?: () => void): Promise<void> {
-  if (!window.confirm("Delete every imported gear / character snapshot? This cannot be undone (next capture will refill).")) return;
+  if (!window.confirm("Empty the whole capture folder (gear / character snapshots, capture logs, game.flows, _unknown/)? This cannot be undone (next capture will refill).")) return;
   try {
     const r = await fetch("/api/capture/wipe", { method: "POST" });
     if (r.status === 409) {

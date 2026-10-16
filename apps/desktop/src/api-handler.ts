@@ -317,6 +317,15 @@ function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: numbe
   });
 }
 
+/** Arguments handed to capture.ps1 for `POST /api/capture/run`: the detected
+ *  emulator / bundled binaries, plus `-RecordFlows` when the request carries
+ *  `?recordFlows=1` (Settings → Debug, off by default) — only then does the
+ *  script record the full capture traffic to `game.flows`. */
+export function captureRunArgs(scriptArgs: string[], query: string): string[] {
+  const recordFlows = new URLSearchParams(query).get("recordFlows") === "1";
+  return recordFlows ? [...scriptArgs, "-RecordFlows"] : scriptArgs;
+}
+
 /** Build the request handler. It returns false for a URL it doesn't own (the
  *  renderer's own files), so the caller can fall through. */
 export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: ServerResponse) => boolean {
@@ -357,10 +366,11 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       // Prod, first run on a machine: pull mitmdump (checksum-verified) and
       // generate the capture CA before arming — progress lines share the
       // capture console (mitm-provision.ts, capture-ca.ts).
+      const query = (req.url ?? "").slice(url.length + 1);
       const prepare = cfg.prepareCapture ?? (async () => {});
       prepare((line) => { beginStream(res); res.write(`${line}\n`); })
         .then(() => cfg.captureScriptArgs())
-        .then((args) => streamPs(res, captureDir, join(captureDir, "capture.ps1"), args))
+        .then((args) => streamPs(res, captureDir, join(captureDir, "capture.ps1"), captureRunArgs(args, query)))
         .catch((err: Error) => { beginStream(res); res.write(`\n[setup error] ${err.message}\n__EXIT__:1\n`); res.end(); });
       return true;
     }
@@ -416,10 +426,12 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       void proxyReco(id, res);
       return true;
     }
-    // Settings → Data → "Wipe captured data". Deletes the user_*.json /
-    // item_customInfo.json snapshots so the renderer reverts to its empty
-    // state. We refuse while the pipeline is still armed — otherwise the
-    // next /user/* fetch would silently re-write what we just nuked.
+    // Settings → Data → "Wipe captured data". Empties the whole capture folder
+    // (snapshots, sentinel, logs, game.flows, `_unknown/`, the Steam plugin
+    // heartbeat) so the renderer reverts to its empty state. The folder itself
+    // stays: capture.ps1 and the Steam plugin write into it. We refuse while
+    // the pipeline is still armed — otherwise the next /user/* fetch would
+    // silently re-write what we just removed.
     if (url === "/api/capture/wipe" && req.method === "POST") {
       res.setHeader("Content-Type", "application/json");
       if (isArmed(captureOut)) {
@@ -431,10 +443,8 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       let removed = 0;
       try {
         for (const f of readdirSync(captureOut)) {
-          if (f.endsWith(".json") || f === ".captured" || f === "seen-paths.log" || f.endsWith(".flows")) {
-            rmSync(join(captureOut, f), { force: true });
-            removed++;
-          }
+          rmSync(join(captureOut, f), { recursive: true, force: true });
+          removed++;
         }
       } catch (err) {
         dwarn("capture", "wipe failed:", (err as Error).message);
@@ -442,7 +452,7 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
         res.end(JSON.stringify({ error: (err as Error).message }));
         return true;
       }
-      dlog("capture", `wiped ${removed} captured file(s)`);
+      dlog("capture", `wiped ${removed} capture folder entr(ies)`);
       res.end(JSON.stringify({ removed }));
       return true;
     }

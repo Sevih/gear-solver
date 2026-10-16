@@ -11,7 +11,7 @@ export interface CaptureResult {
 
 /** Stream a capture script's output line by line; resolves with the exit code. */
 export async function streamCapture(
-  endpoint: "/api/capture/run" | "/api/capture/disarm" | "/api/steam/install",
+  endpoint: "/api/capture/run" | "/api/capture/run?recordFlows=1" | "/api/capture/disarm" | "/api/steam/install",
   onLine: (line: string) => void,
   signal?: AbortSignal,
 ): Promise<CaptureResult> {

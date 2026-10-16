@@ -119,6 +119,10 @@ export function App() {
   // fan-out / merge / duration logging on. Persisted so it survives reloads
   // while profiling a slow solve.
   const [debugSolver, setDebugSolver] = usePersistedState<boolean>("gs.debug.solver", false);
+  // Emulator capture: also record the full capture traffic to game.flows
+  // (capture.ps1 -RecordFlows). Debugging only — off by default, and the
+  // script deletes a leftover game.flows when it is off.
+  const [debugCaptureFlows, setDebugCaptureFlows] = usePersistedState<boolean>("gs.debug.captureFlows", false);
   // Solver tuning (edited in Settings → Solver, consumed by the Builder).
   // workerCount: null = auto (hardwareConcurrency − 1); a number pins the pool
   // size. Shares `gs.solver.workerCount` with the non-React `resolveWorkerCount`.
@@ -271,7 +275,8 @@ export function App() {
     setLog([]); setLogOpen(true);
     try {
       const { exitCode } = await streamCapture(
-        mode === "capture" ? "/api/capture/run" : "/api/capture/disarm",
+        mode === "disarm" ? "/api/capture/disarm"
+          : debugCaptureFlows ? "/api/capture/run?recordFlows=1" : "/api/capture/run",
         (line) => setLog((l) => [...l, line]),
       );
       if (mode === "capture") {
@@ -398,6 +403,8 @@ export function App() {
         onToggleDebugStatLocks={() => setDebugStatLocks((v) => !v)}
         debugSolver={debugSolver}
         onToggleDebugSolver={() => setDebugSolver((v) => !v)}
+        debugCaptureFlows={debugCaptureFlows}
+        onToggleDebugCaptureFlows={() => setDebugCaptureFlows((v) => !v)}
         solver={{
           workerCount, setWorkerCount,
           topN: solverTopN, setTopN: setSolverTopN,

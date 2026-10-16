@@ -72,8 +72,13 @@ export function setupAutoUpdate(isDev: boolean): void {
     dwarn("server", "auto-update error:", err.message);
   });
 
-  // Fire-and-forget — rejection is already handled by the 'error' event.
-  void autoUpdater.checkForUpdates();
+  // electron-updater emits 'error' AND rejects the promise on a failed check;
+  // the rejection is caught here so it never surfaces as an unhandled one.
+  autoUpdater.checkForUpdates().catch((err: unknown) => {
+    state.phase = "error";
+    state.error = err instanceof Error ? err.message : String(err);
+    dwarn("server", "auto-update check failed:", state.error);
+  });
 }
 
 /** The full status payload the Home tab consumes. Always includes the running
