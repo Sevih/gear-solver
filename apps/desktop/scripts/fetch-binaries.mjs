@@ -1,97 +1,27 @@
 #!/usr/bin/env node
 /**
  * One-shot provisioner for the build-time binaries of the packaged Electron
- * app. Run before `npm run pack` / `npm run dist`, and any time you want a
- * fresher platform-tools release.
+ * app. Run before `npm run pack` / `npm run dist`.
  *
- *   platform-tools (adb.exe + AdbWinApi / AdbWinUsbApi DLLs)
- *               from Google's always-latest pointer URL; we keep only the
- *               three files we actually need.
  *   capture-steam (GearSolverCapture.dll) — the BepInEx plugin for the Steam
  *               client, built from tools/capture-steam with the .NET SDK
  *               (needs the game installed: it compiles against its Unity
  *               assemblies). Copied to resources/capture-steam/ and bundled
  *               as `<resources>/capture-steam` (BepInEx itself is downloaded
  *               at install time by steam-capture.ts, not bundled).
+ *   build/icon.ico — the installer / window icon, see provisionWindowsIcon().
  *
- * Output: apps/desktop/resources/bin/adb/ (gitignored), copied to
- * `<resources>/bin/adb` by the electron-builder extraResources mapping.
- *
- * Nothing mitmproxy-related happens here: the packaged app downloads its own
- * checksum-verified mitmdump on first capture (src/mitm-provision.ts) and
- * generates the user's capture CA with it (src/capture-ca.ts). No CA is
- * produced at build time or shipped in the installer.
- *
- * Windows-only (we shell out to PowerShell's Expand-Archive). The Electron
- * tool ships Windows-only anyway — the capture pipeline depends on LDPlayer
- * / MuMu / NoxPlayer, all Windows.
+ * Needs the .NET SDK (`dotnet.exe`) and the game installed.
  */
 import { spawnSync } from "node:child_process";
-import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findOuterpediaCheckout } from "../../../scripts/outerpedia-checkout.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const BIN = join(here, "..", "resources", "bin");
 const RESOURCES = join(here, "..", "resources");
 const REPO = join(here, "..", "..", "..");
-
-const PLATFORM_TOOLS_URL = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip";
-
-async function download(url, out) {
-  console.log(`[fetch] ${url}`);
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`download failed: ${url} -> HTTP ${r.status}`);
-  const stream = createWriteStream(out);
-  const reader = r.body.getReader();
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    stream.write(value);
-  }
-  await new Promise((resolve) => stream.end(resolve));
-}
-
-function expand(zip, dest) {
-  console.log(`[unzip] ${zip} -> ${dest}`);
-  rmSync(dest, { recursive: true, force: true });
-  mkdirSync(dest, { recursive: true });
-  const r = spawnSync("powershell.exe", [
-    "-NoProfile", "-NonInteractive", "-Command",
-    `Expand-Archive -Force -Path "${zip}" -DestinationPath "${dest}"`,
-  ], { stdio: "inherit" });
-  if (r.status !== 0) throw new Error("Expand-Archive failed");
-}
-
-async function provisionPlatformTools() {
-  const dest = join(BIN, "adb");
-  if (existsSync(join(dest, "adb.exe"))) {
-    console.log("[ok] adb already present, skipping (delete the folder to refresh)");
-    return;
-  }
-  const zip = join(tmpdir(), `platform-tools-${Date.now()}.zip`);
-  const stage = join(tmpdir(), `platform-tools-stage-${Date.now()}`);
-  await download(PLATFORM_TOOLS_URL, zip);
-  expand(zip, stage);
-  mkdirSync(dest, { recursive: true });
-  // platform-tools.zip contains ~200MB of unused tooling (fastboot, sysroot,
-  // systrace, …). Keep only the 3 files our PowerShell scripts touch.
-  const PT = join(stage, "platform-tools");
-  for (const f of ["adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll"]) {
-    const from = join(PT, f);
-    const to = join(dest, f);
-    const r = spawnSync("powershell.exe", [
-      "-NoProfile", "-NonInteractive", "-Command",
-      `Copy-Item -Force "${from}" "${to}"`,
-    ], { stdio: "inherit" });
-    if (r.status !== 0) throw new Error(`copy ${f} failed`);
-  }
-  rmSync(stage, { recursive: true, force: true });
-  rmSync(zip, { force: true });
-  console.log(`[ok] platform-tools (adb + DLLs) -> ${dest}`);
-}
 
 /** Build the Steam capture plugin and stage its DLL for extraResources. Always
  *  rebuilds (2 s) so a plugin source change can't ship stale. */
@@ -152,8 +82,6 @@ function provisionWindowsIcon() {
   console.log(`[ok] windows icon ${width}x${height} -> ${outIco}`);
 }
 
-mkdirSync(BIN, { recursive: true });
-await provisionPlatformTools();
 provisionSteamPlugin();
 provisionWindowsIcon();
-console.log(`[done] all binaries + icon provisioned under ${BIN}/..`);
+console.log(`[done] plugin + icon provisioned under ${RESOURCES} and build/`);

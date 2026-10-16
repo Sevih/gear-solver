@@ -910,7 +910,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     return { uids, moving, steal };
   }, [selectedBuild, selectedUid, pieceByUid]);
 
-  // Returns false on a network error or a 409 (capture pipeline armed or Steam plugin live) so the
+  // Returns false on a network error or a 409 (Steam plugin live) so the
   // button can flag it; on success App re-imports the rewritten snapshot.
   async function equipSelectedBuild(): Promise<boolean> {
     if (!game || !selectedUid || equipPlan.uids.length === 0) return false;
@@ -4425,8 +4425,8 @@ function FilterBig({ label, value, title }: { label: string; value: number; titl
  *  (rewrites the captured snapshot via `equipPieces`). The trigger opens a
  *  confirmation popup (the act mutates the captured account + may take pieces
  *  off other heroes), which owns the busy/failed state. `onEquip` resolves false
- *  on a network error or a 409 (capture pipeline armed) → shown inline in the
- *  popup so the user can disarm and retry. Disabled when nothing moves. */
+ *  on a network error or a 409 (Steam plugin live) → shown inline in the
+ *  popup so the user can close the game and retry. Disabled when nothing moves. */
 function EquipBuildButton({ disabled, moving, steal, heroName, onEquip }: {
   disabled: boolean; moving: number; steal: number; heroName: string | null; onEquip: () => Promise<boolean>;
 }) {
@@ -4456,7 +4456,7 @@ function EquipBuildButton({ disabled, moving, steal, heroName, onEquip }: {
 
 /** Confirmation popup for "Equip build". Spells out how many pieces move and how
  *  many are taken off other heroes, then commits on confirm. Stays open on
- *  failure (e.g. capture pipeline armed) with an inline error + retry. */
+ *  failure (e.g. Steam plugin live) with an inline error + retry. */
 function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
   moving: number; steal: number; heroName: string | null; onEquip: () => Promise<boolean>; onClose: () => void;
 }) {
@@ -4491,7 +4491,7 @@ function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
         )}
         {failed && (
           <p className="mt-2 rounded-md border border-rose-400/40 bg-rose-500/10 px-2 py-1.5 text-[10.5px] leading-snug text-rose-300">
-            Couldn't write the snapshot. Disarm the capture pipeline (or close the game when the Steam plugin is live), then retry.
+            Couldn't write the snapshot. Close the game while the Steam plugin is live, then retry.
           </p>
         )}
         <div className="mt-3.5 flex justify-end gap-2">

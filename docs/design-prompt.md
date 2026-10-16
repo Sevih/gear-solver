@@ -74,7 +74,7 @@ d'outerpedia-v2 :
    lancer la recherche, comparer les top-N.
 
 À gauche du header : logo "gear-solver" + version. À droite : bouton
-**Capture** (avec status pill `● armé` / `○ inactif`), bouton **Désarmer**,
+**Install plugin / Launch game** (avec status pill `● live` / `○ inactif`),
 bouton **Recharger inventaire**.
 
 ## Écran 1 — Inventory (read-only browser)
@@ -253,7 +253,7 @@ bouton **Recharger inventaire**.
 | `WeightSlider` | builder left | Stat name + slider + value mono |
 | `BuildResultCard` | builder right | Score + 8 slots + totaux + diff + actions |
 | `FilterPanel` | inventory | Sidebar avec slot/rarity/star/stat/lv/brk |
-| `CaptureControls` | header right | Run / Disarm / Reload + status pill |
+| `CaptureControls` | header right | Install plugin / Launch game / Reload + status pill |
 
 ## Deliverables attendus
 

@@ -12,7 +12,16 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Emulator capture removed.** OUTERPLANE is on Steam, so the app now captures only through
+  the Steam plugin; importing your files by hand still works. Settings → Setup no longer asks
+  for a source, and an earlier "Emulator" choice simply reads as Steam.
+- **Cleanup.** On first launch the app deletes the capture certificate it had generated for the
+  emulator (private key included), the downloaded mitmproxy and its own emulator leftovers;
+  your snapshots stay.
+- **If you used an emulator:** the certificate the app had trusted there lived only until the
+  instance restarted — restart it once and it's gone. The pushed files (`/sdcard/c8750f0d.0`,
+  `/sdcard/bind_cert.sh`, `/sdcard/redir.sh`) can be deleted by hand, and you can turn the
+  emulator's Root setting back off.
 
 ## [1.9.0] — 2026-10-16
 

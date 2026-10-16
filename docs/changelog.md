@@ -8,6 +8,96 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗑️ Capture — retrait de la source émulateur, Steam et import manuel seulement (2026-10-16)
+- ✅ **Décision de Sevih du 16/10** : le jeu étant sur Steam, tout le pipeline émulateur part (retiré, pas
+  désactivé). Restent deux entrées de données : le plugin BepInEx du client Steam et l'import manuel de fichiers
+  (« Manual fallback »), sans changement de comportement pour l'un comme pour l'autre.
+- ✅ **Supprimés** : `tools/capture/` en entier (`capture.ps1`, `disarm.ps1`, `addon.py`, `cert/c8750f0d.0`,
+  `scripts/bind_cert.sh`, `scripts/redir.sh`, README), `apps/desktop/src/emulator-detect.ts`, `mitm-provision.ts`,
+  `capture-ca.ts`, `apps/desktop/test/capture-ca.test.ts`, `apps/renderer/src/emulator.ts`, `.gitattributes` (ses
+  deux règles visaient les `.sh` poussés par adb et l'addon Python : plus aucun fichier de ce type).
+- ✅ **Desktop.** `api-handler.ts` perd `/api/capture/run`, `/api/capture/disarm`, `/api/emulators`,
+  `/api/preflight`, `/api/capture/manual-device`, `streamPs`, `isArmed`, `captureRunArgs`, `readJsonBody` et les
+  champs `captureDir` / `manualDevice` / `bundledAdb` / `captureScriptArgs` / `prepareCapture` d'`ApiConfig` ;
+  `/api/capture/status` rend `{ captured, userItemMtime }` (le suiveur Steam s'en sert toujours) ; le Wipe ne
+  connaît plus de 409 « armed » et le write-back `POST /api/captured/user-item` n'est plus refusé que plugin Steam
+  actif (inchangé). `server.ts` perd `captureScriptArgs` et `disarmIfArmed` ; `main.ts` ferme simplement le serveur
+  au `before-quit`. `paths.ts` perd `CAPTURE_DIR`, `BUNDLED_ADB`, `CAPTURE_CA_DIR`, `MANUAL_DEVICE`. `download.ts`
+  (`downloadVerified` / `expandZip`) reste, il sert à BepInEx.
+- ✅ **`CAPTURE_OUT` reste** : le plugin Steam y écrit (`OutDir`) et l'import le relit. En dev il quittait
+  `tools/capture/out` (dossier supprimé) pour `.cache/capture-out` (`paths.ts` et `vite.config.ts`, déjà ignoré
+  par `.cache/`) ; packagé, `<userData>/capture-out` ne bouge pas.
+- ✅ **Nettoyage au lancement** (`apps/desktop/src/legacy-cleanup.ts`, appelé par `main.ts` à chaque démarrage,
+  sans effet une fois fait) : supprime `<userData>/capture-ca/` (la CA générée par S1, clé privée comprise).
+  `capture-out/` sert encore à Steam, il reste ; seuls les fichiers propres au pipeline y partent (`.mitm.pid`,
+  `mitm.log`, `mitm.log.err`, `game.flows` — ce dernier peut contenir tout le trafic, en-têtes compris). Au-delà de
+  la liste du lot, et pour la même raison : `<userData>/bin/mitmproxy/` (le `mitmdump.exe` téléchargé, que des
+  antivirus classent PUA) et `<userData>/manual-device.json`. Un fichier verrouillé est sauté et retenté au
+  lancement suivant ; chaque suppression est loggée.
+- ✅ **Renderer.** `CaptureSource` et `CAPTURE_SOURCE_KEY` disparaissent de `steam.ts` : plus de préférence de
+  source, `gs.capture.source` n'est plus lu, donc une valeur `"emulator"` déjà sauvée se lit comme Steam sans
+  message (idem `gs.debug.captureFlows`). Le suivi des snapshots tourne toujours (plus de garde
+  `source === "steam"`). Sans Steam installé, l'app montre ce qu'elle montrait déjà à un utilisateur Steam sans
+  jeu : « OUTERPLANE not found in Steam » sur Home, le Manual fallback en bas de fenêtre ; le texte de l'étape 1 du
+  wizard et l'infobulle du badge renvoient à cet import au lieu de « switch the source ». Settings : plus de
+  sélecteur de source (`SourcePicker`), plus de `SetupPane` à quatre étapes, `ManualDeviceSection`,
+  `CurrentStepCard`, `ReadyCard`, copies par marque ni option Debug `game.flows` ; Setup = le wizard Steam seul.
+  Header : plus d'`EmulatorBadge` ni Arm/Disarm, `CaptureControls` = les contrôles Steam. Home : CTA et carte
+  santé Steam seuls, pastille Live/Idle. Textes ajustés : description et confirmation du Wipe (plus de
+  `game.flows` ni de « blocked while armed »), état vide d'Inventory, messages 409 du Builder et du Worklist,
+  en-tête de `LogView` (les lignes `[spawn error]` / `[detect error]` n'existent plus).
+- ✅ **Packaging.** `apps/desktop/package.json` : les cinq entrées `tools/capture/*` et `bin/adb` sortent de
+  `build.extraResources` (pas d'entrée mitmproxy). **Écart au lot, assumé** : le script `fetch-binaries` et
+  `scripts/fetch-binaries.mjs` restent, car ils construisent aussi le DLL du plugin Steam (`resources/capture-steam`,
+  mappé par `extraResources`) et `build/icon.ico` — la règle « ce qui sert aussi à Steam reste » l'emporte ; seul
+  `provisionPlatformTools` (adb) en sort. `scripts/before-pack.mjs` et `packaging.test.ts` restent (la garde
+  « jamais de CA dans l'installeur » reste vraie). Aucune dépendance ne servait qu'à l'émulateur.
+- ✅ **`.gitignore`** perd `apps/desktop/resources/bin/`, `tools/capture/dumps/`, `*.flows`, `*.log.err` et les trois
+  lignes `tools/capture/cert/…`. Gardées, avec leur commentaire mis à jour, parce que des fichiers existent encore
+  sur les postes : `tools/capture/out/` (données de compte des anciens setups dev, présentes ici) et
+  `apps/desktop/resources/prod-cert/` (clé privée d'anciens builds, encore visée par la garde de `before-pack`).
+- ✅ **Plugin Steam.** `GearSolverCapture.csproj` : un commentaire (« no emulator » → « no root »), sans effet sur la
+  sortie. `src/Plugin.cs` **non touché** : ses deux commentaires qui citent `tools/capture/addon.py` changeraient
+  le DLL et feraient proposer « Update plugin » à chaque joueur.
+- ✅ **Docs.** `README.md`, `docs/architecture.md`, `docs/reference.md` (§ 1.1 réécrit pour le plugin, write-back),
+  `docs/STATUS.md`, `docs/roadmap.md`, `docs/data-schema.md`, `docs/design-prompt.md`,
+  `docs/design/home-dashboard-brief.md`, `docs/design/settings-redesign-brief.md`, `tools/capture-steam/README.md` ;
+  wiki : `Capture-Pipeline.md` réduit à la capture Steam (le wiki n'a pas d'autre page Steam : liens conservés),
+  `Using-the-App.md`, `Getting-Started.md`, `FAQ.md` (nouvelle entrée « I used the emulator capture of an older
+  version — what now? »), `Home.md`, `Architecture.md`, `Roadmap.md`, `Engine-Reference.md`, `Data-Schema.md`.
+  Commentaires de `packages/core` (`raw.ts`, `equip.ts`, `compose-stats.test.ts`) recalés. `docs/todo.md` : l'item
+  « Support mobile et émulateur » sort, le cast `as PreflightResult` de l'item « Casts JSON » aussi. Les deux
+  « ⏳ À valider sous Windows (LDPlayer) » des entrées S1 et S4 plus bas deviennent **sans objet** (entrées non
+  réécrites). Notes joueur `[Unreleased]` : retrait, nettoyage de la CA, et ce qui reste sur un émulateur équipé —
+  d'après `bind_cert.sh`, la CA n'était posée que par un `mount --bind` sur `/system/etc/security/cacerts`, non
+  persistant : elle disparaît au redémarrage de l'instance ; restent des fichiers inertes (`/sdcard/c8750f0d.0`,
+  `/sdcard/bind_cert.sh`, `/sdcard/redir.sh`, `/data/local/tmp/cacerts/` côté root), à supprimer à la main.
+- ✅ **Tests.** `api-handler.test.ts` : cas `.mitm.pid` / armed / `captureRunArgs` retirés, Wipe sur les fichiers
+  Steam, nouveau cas « les routes émulateur ne sont plus servies » (+ forme de `/api/capture/status`). Nouveau
+  `legacy-cleanup.test.ts` (2) : suppression ciblée (snapshots et `seen-paths.log` gardés), sans effet sans les
+  dossiers et au second passage. `paths.test.ts` sans `MANUAL_DEVICE` / `CAPTURE_CA_DIR` ;
+  `captureStream.test.ts` / `snapshotFollower.test.ts` suivent les types.
+- ✅ **Vérifié.** `npm run typecheck` sans erreur (dernière ligne `> tsc --noEmit`, renderer). `npm test` : core
+  « Tests 105 passed (105) », desktop « Tests 75 passed (75) » (84 avant : −5 `capture-ca`, −6 `api-handler`, −1
+  `paths`, +3 nouveaux), renderer « Tests 427 passed (427) ». `npm run desktop:build` passe. `git grep -il -E
+  "emulator|ldplayer|adb|mitm"` ne rend plus que l'historique (`docs/changelog.md`, versions passées de
+  `docs/release-notes.md`), ce qui nomme le retrait ou le nettoyage (`main.ts`, `legacy-cleanup.ts` et son test,
+  `api-handler.test.ts`, `docs/architecture.md`, `wiki/Architecture.md`, `wiki/FAQ.md`, `[Unreleased]`) et des
+  faux positifs (`readBody`, `padBottom`, `readBepinexVersion`, `commitMsg`, un hash de `package-lock.json`).
+  `git diff --stat` hors cette entrée : 67 fichiers, +516 / −3049, dont 13 fichiers supprimés (−1359).
+- ✅ **Poste local (hors git).** Supprimés ici : `apps/desktop/resources/bin/` (adb + mitmdump, désormais non ignoré :
+  le pré-contrôle « arbre propre » de `release.mjs` aurait bloqué) et les `emulator-detect.js`, `capture-ca.js`,
+  `mitm-provision.js` (+ `.map`) restés dans `apps/desktop/dist/` (`tsc` ne nettoie pas, et electron-builder emballe
+  `dist/**/*`).
+- ⏳ **Sevih.** Dans l'app : Settings sans choix de source, une capture Steam qui aboutit, l'import manuel, et
+  `capture-ca/` (avec `bin/mitmproxy/`) disparu de `%APPDATA%\Outerpedia Gear Solver`. Sur le fixe : supprimer
+  `apps/desktop/resources/bin/` et vider `apps/desktop/dist/` avant la prochaine release. Sur les deux postes :
+  déplacer `tools/capture/out/` vers `.cache/capture-out/` puis réinstaller le plugin en dev (son `OutDir` pointe
+  l'ancien dossier) ; la ligne `tools/capture/out/` du `.gitignore` pourra partir ensuite. Les deux commentaires
+  `addon.py` de `Plugin.cs` sont à recaler au prochain changement du plugin.
+- ⏳ **Repéré hors périmètre.** Le Wipe n'est pas refusé quand le plugin Steam est actif (le write-back, lui, l'est) ;
+  l'item todo « bouton capture natif en packagé » date d'avant la source Steam.
+
 ### 🎮 Capture Steam — appid, racines Steam et BepInEx lus dans la référence d'outerpedia (2026-10-16)
 - ✅ **Une seule source pour le client Steam.** Ce qu'il faut savoir du client Steam vit désormais dans outerpedia,
   `data/curated/game-client.json` (blocs `steam`, `client`, `bepinex`) ; gear-solver en garde une copie committée,

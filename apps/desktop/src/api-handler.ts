@@ -1,27 +1,22 @@
 /**
  * The renderer's backend API, shared by the Electron prod server (server.ts)
  * and the Vite dev middleware (apps/renderer/vite.config.ts). Both used to
- * carry their own ~430-line copy, and the copies drifted: the dev mirror
- * judged the capture pipeline "armed" by the mere presence of `.mitm.pid`
- * (a crashed mitmdump wedged it armed forever) and killed only powershell.exe
- * on a client disconnect, orphaning the mitmdump it had started.
+ * carry their own copy, and the copies drifted — one handler keeps dev and
+ * packaged builds identical.
  *
  * Routes served here:
  *  - `/gamedata/*`  → derived game data (ETag revalidation)
  *  - `/captured/*`  → captured account JSON (a missing `.json` is `200 null`)
  *  - `/img/*`       → bundled sprites / local checkout / disk cache / R2
- *  - `/api/capture/{run,disarm,status,wipe,manual-device}`, `/api/preflight`,
- *    `/api/emulators` → emulator source (PowerShell pipeline)
- *  - `/api/steam/{status,install,uninstall,launch}` → Steam source
+ *  - `/api/capture/{status,wipe}` → capture folder state / wipe
+ *  - `/api/steam/{status,install,uninstall,launch}` → Steam capture plugin
  *  - `/api/data/sync`, `/api/data/startup-sync`, `/api/reco/:id`, `/api/stat-locks`,
  *    `/api/captured/user-item`, `/api/update/*`
  *
- * What differs between dev and prod is injected (`ApiConfig`): the paths,
- * the capture-script arguments, the mitmdump provisioning step and the
- * auto-updater. Electron-free on purpose — nothing here imports `electron`
+ * What differs between dev and prod is injected (`ApiConfig`): the paths
+ * and the auto-updater. Electron-free on purpose — nothing here imports `electron`
  * or paths.ts — so Vite can load it.
  */
-import { spawn, spawnSync } from "node:child_process";
 import {
   createReadStream,
   existsSync,
@@ -34,11 +29,6 @@ import {
 } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, extname, join } from "node:path";
-import {
-  detectEmulators, pickEmulator, pickPort, preflight,
-  loadManualDevice, saveManualDevice,
-  type ManualDevice,
-} from "./emulator-detect.js";
 import { dlog, dwarn } from "./log.js";
 import { installSteamPlugin, launchGame, steamPluginLive, steamStatus, uninstallSteamPlugin } from "./steam-capture.js";
 import { proxyReco } from "./reco-proxy.js";
@@ -48,9 +38,7 @@ import { serveImg, type ImgCacheOptions } from "./img-cache.js";
 import { resolveInside } from "./safe-path.js";
 
 export interface ApiConfig {
-  /** tools/capture — PowerShell entrypoints (capture.ps1 / disarm.ps1). */
-  captureDir: string;
-  /** Captured account JSON + `.mitm.pid` + the Steam plugin heartbeat. */
+  /** Captured account JSON + the Steam plugin heartbeat. */
   captureOut: string;
   /** Derived game data served under /gamedata/ and refreshed by /api/data/sync. */
   derivedDir: string;
@@ -60,16 +48,9 @@ export interface ApiConfig {
    *  `.env.local` / a sibling dir (outerpedia-checkout.ts). Prod: null. */
   repoRoot: string | null;
   statLocks: string;
-  manualDevice: string;
   steamPluginDll: string;
   scratchDir: string;
-  /** adb handed to the onboarding preflight (prod: the bundled one; dev: none). */
-  bundledAdb: string | null;
   img: ImgCacheOptions;
-  /** Arguments for capture.ps1 / disarm.ps1 (detected emulator, bundled binaries). */
-  captureScriptArgs: () => Promise<string[]>;
-  /** Runs before capture.ps1 — prod provisions mitmdump and the capture CA, streaming progress. */
-  prepareCapture?: (log: (line: string) => void) => Promise<void>;
   /** `/api/update/*` — electron-updater in prod, a static "up to date" in dev. */
   update: {
     status: () => unknown;
@@ -156,97 +137,13 @@ function tryMount(req: IncomingMessage, res: ServerResponse, url: string, prefix
 }
 
 /** Flip a response into unbuffered plain-text streaming mode (the capture
- *  console protocol). Idempotent — the mitmdump provisioning step may have
- *  already streamed progress lines through the same response before streamPs
- *  takes over. */
+ *  console protocol). Idempotent. */
 function beginStream(res: ServerResponse): void {
   if (res.headersSent) return;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders?.();
-}
-
-/** Spawn a PowerShell script and stream its stdout/stderr verbatim. The
- *  client (apps/renderer/src/capture.ts) consumes lines and looks for the
- *  `__EXIT__:<code>` sentinel that we emit when the child exits. We listen
- *  on 'exit' rather than 'close' because capture.ps1 grandchildren mitmdump
- *  via Start-Process — inherited pipe handles would otherwise keep 'close'
- *  pending until mitmdump itself dies, deadlocking the UI. */
-function streamPs(res: ServerResponse, cwd: string, script: string, extraArgs: string[] = []): void {
-  if (!existsSync(script)) {
-    res.statusCode = 404;
-    res.end(`script not found: ${script}\n__EXIT__:127\n`);
-    return;
-  }
-  beginStream(res);
-
-  const child = spawn(
-    "powershell.exe",
-    ["-ExecutionPolicy", "Bypass", "-NoLogo", "-NonInteractive", "-File", script, ...extraArgs],
-    { cwd, windowsHide: true },
-  );
-  dlog("capture", `spawn ${script} pid=${child.pid ?? "?"}`, extraArgs);
-  child.stdout.setEncoding("utf-8");
-  child.stderr.setEncoding("utf-8");
-  child.stdout.on("data", (c: string) => res.write(c));
-  child.stderr.on("data", (c: string) => res.write(c));
-  child.on("error", (err) => {
-    dwarn("capture", `spawn error on ${script}:`, err.message);
-    res.write(`\n[spawn error] ${err.message}\n__EXIT__:1\n`); res.end();
-  });
-
-  let ended = false;
-  child.on("exit", (code) => {
-    if (ended) return;
-    ended = true;
-    dlog("capture", `${script} exited code=${code ?? 1}`);
-    res.write(`\n__EXIT__:${code ?? 1}\n`);
-    res.end();
-  });
-
-  // On an abrupt client disconnect while the script is still running, kill the
-  // whole process TREE — `child.kill()` only signals powershell.exe, leaving
-  // the mitmdump it launched via Start-Process orphaned. `taskkill /T` walks
-  // the PID tree. (In the normal armed flow the child has already exited by
-  // the time 'close' fires, so this is a no-op and mitmdump survives as
-  // intended.) Falls back to child.kill() if taskkill is unavailable.
-  res.on("close", () => {
-    if (child.killed || child.exitCode != null) return;
-    if (child.pid == null) { child.kill(); return; }
-    dlog("capture", `client disconnect mid-run — killing process tree pid=${child.pid}`);
-    try {
-      spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
-    } catch (err) {
-      dwarn("capture", "taskkill /T failed, falling back to child.kill():", (err as Error).message);
-      child.kill();
-    }
-  });
-}
-
-/** True iff the capture pipeline is genuinely armed: the `.mitm.pid` file
- *  exists AND the recorded mitmdump process is still alive. If mitmdump
- *  crashed outside a clean disarm the pid file lingers — left unchecked,
- *  `armed` would stick at true forever (and `/wipe` would refuse with 409).
- *  A dead pid is treated as not-armed and the stale file is cleaned up.
- *  (`.mitm.pid` holds the bare process id, written by capture.ps1 via
- *  `$proc.Id | Out-File`.) */
-export function isArmed(captureOut: string): boolean {
-  const pidFile = join(captureOut, ".mitm.pid");
-  if (!existsSync(pidFile)) return false;
-  let pid = NaN;
-  try { pid = Number.parseInt(readFileSync(pidFile, "utf-8").trim(), 10); } catch { return true; }
-  if (!Number.isFinite(pid) || pid <= 0) return true; // unparseable — assume armed (conservative)
-  try {
-    process.kill(pid, 0); // signal 0 = liveness probe, never actually signals
-    return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "EPERM") return true; // alive, just not ours
-    // ESRCH → process gone. Drop the stale pid file so we don't wedge here.
-    dlog("capture", `stale .mitm.pid (pid ${pid} gone) — cleaning up`);
-    try { rmSync(pidFile, { force: true }); } catch { /* best-effort */ }
-    return false;
-  }
 }
 
 /** DNS-rebinding / CSRF guard for the mutating endpoints and the account
@@ -269,8 +166,8 @@ export function isLocalRequest(req: IncomingMessage): boolean {
 }
 
 /** Run an async task while streaming its progress lines through the capture
- *  console protocol (same `__EXIT__:<code>` sentinel as streamPs, so the
- *  renderer's streamCapture() consumes both). */
+ *  console protocol: one line per log call, then a `__EXIT__:<code>` sentinel
+ *  the renderer's streamCapture() looks for. */
 function streamTask(res: ServerResponse, task: (log: (line: string) => void) => Promise<void>): void {
   beginStream(res);
   const log = (line: string) => res.write(line + "\n");
@@ -302,43 +199,19 @@ function readBody(req: IncomingMessage, res: ServerResponse, maxBytes: number, o
   });
 }
 
-/** `readBody` + JSON.parse; a parse error answers 400 and never calls `ok`. */
-function readJsonBody(req: IncomingMessage, res: ServerResponse, maxBytes: number, ok: (body: unknown) => void): void {
-  readBody(req, res, maxBytes, (raw) => {
-    let body: unknown;
-    try {
-      body = JSON.parse(raw);
-    } catch (err) {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: (err as Error).message }));
-      return;
-    }
-    ok(body);
-  });
-}
-
-/** Arguments handed to capture.ps1 for `POST /api/capture/run`: the detected
- *  emulator / bundled binaries, plus `-RecordFlows` when the request carries
- *  `?recordFlows=1` (Settings → Debug, off by default) — only then does the
- *  script record the full capture traffic to `game.flows`. */
-export function captureRunArgs(scriptArgs: string[], query: string): string[] {
-  const recordFlows = new URLSearchParams(query).get("recordFlows") === "1";
-  return recordFlows ? [...scriptArgs, "-RecordFlows"] : scriptArgs;
-}
-
 /** Build the request handler. It returns false for a URL it doesn't own (the
  *  renderer's own files), so the caller can fall through. */
 export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: ServerResponse) => boolean {
-  const { captureDir, captureOut } = cfg;
+  const { captureOut } = cfg;
 
-  /** GET /api/capture/status — the armed/captured chip in the header. */
+  /** GET /api/capture/status — whether a snapshot exists, and its mtime (the
+   *  Steam follower re-imports when it changes). */
   function captureStatus(res: ServerResponse): void {
     const itemPath = join(captureOut, "user_item.json");
     const sentinel = join(captureOut, ".captured");
     const userItem = existsSync(itemPath) ? statSync(itemPath) : null;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({
-      armed: isArmed(captureOut),
       captured: existsSync(sentinel),
       userItemMtime: userItem ? userItem.mtimeMs : null,
     }));
@@ -349,7 +222,7 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
 
     // Reject non-local Hosts up front on every mutation (all state-changing
     // endpoints are POSTs) AND on every read of account data: `/captured/*` is
-    // the player's snapshot and `/api/*` GETs expose capture/Steam/device state —
+    // the player's snapshot and `/api/*` GETs expose capture/Steam state —
     // a DNS-rebinding page could otherwise read them. Static renderer files,
     // `/gamedata/*` and `/img/*` are public and stay open.
     if ((req.method === "POST" || url.startsWith("/captured/") || url.startsWith("/api/")) && !isLocalRequest(req)) {
@@ -358,27 +231,6 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       return true;
     }
 
-    // --- capture pipeline endpoints ---
-    // captureScriptArgs is async (emulator detection probes TCP ports), so we
-    // resolve before spawning. On failure we surface a synthetic error stream
-    // that the renderer already knows how to display.
-    if (url === "/api/capture/run" && req.method === "POST") {
-      // Prod, first run on a machine: pull mitmdump (checksum-verified) and
-      // generate the capture CA before arming — progress lines share the
-      // capture console (mitm-provision.ts, capture-ca.ts).
-      const query = (req.url ?? "").slice(url.length + 1);
-      const prepare = cfg.prepareCapture ?? (async () => {});
-      prepare((line) => { beginStream(res); res.write(`${line}\n`); })
-        .then(() => cfg.captureScriptArgs())
-        .then((args) => streamPs(res, captureDir, join(captureDir, "capture.ps1"), captureRunArgs(args, query)))
-        .catch((err: Error) => { beginStream(res); res.write(`\n[setup error] ${err.message}\n__EXIT__:1\n`); res.end(); });
-      return true;
-    }
-    if (url === "/api/capture/disarm" && req.method === "POST") {
-      cfg.captureScriptArgs().then((args) => streamPs(res, captureDir, join(captureDir, "disarm.ps1"), args))
-        .catch((err: Error) => { beginStream(res); res.write(`\n[detect error] ${err.message}\n__EXIT__:1\n`); res.end(); });
-      return true;
-    }
     if (url === "/api/capture/status" && req.method === "GET") {
       captureStatus(res);
       return true;
@@ -427,19 +279,11 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       return true;
     }
     // Settings → Data → "Wipe captured data". Empties the whole capture folder
-    // (snapshots, sentinel, logs, game.flows, `_unknown/`, the Steam plugin
+    // (snapshots, sentinel, seen-paths.log, `_unknown/`, the Steam plugin
     // heartbeat) so the renderer reverts to its empty state. The folder itself
-    // stays: capture.ps1 and the Steam plugin write into it. We refuse while
-    // the pipeline is still armed — otherwise the next /user/* fetch would
-    // silently re-write what we just removed.
+    // stays: the Steam plugin writes into it.
     if (url === "/api/capture/wipe" && req.method === "POST") {
       res.setHeader("Content-Type", "application/json");
-      if (isArmed(captureOut)) {
-        dlog("capture", "wipe refused — pipeline still armed (409)");
-        res.statusCode = 409;
-        res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
-        return true;
-      }
       let removed = 0;
       try {
         for (const f of readdirSync(captureOut)) {
@@ -502,56 +346,6 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       return true;
     }
 
-    // --- emulator detection — surfaced in the header so the user knows which
-    // instance / port we'll target before they click Arm capture. ---
-    if (url === "/api/emulators" && req.method === "GET") {
-      detectEmulators().then((list) => {
-        const chosen = pickEmulator(list);
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ detected: list, chosen, chosenPort: chosen ? pickPort(chosen) : null }));
-      }).catch((err: Error) => {
-        res.statusCode = 500;
-        res.end(`detect failed: ${err.message}`);
-      });
-      return true;
-    }
-    // --- onboarding preflight — sequence of checks (emulator installed,
-    // running, ADB connecting, root toggle ON) driven by the wizard UI. ---
-    if (url === "/api/preflight" && req.method === "GET") {
-      preflight(loadManualDevice(cfg.manualDevice), cfg.bundledAdb).then((result) => {
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify(result));
-      }).catch((err: Error) => {
-        res.statusCode = 500;
-        res.end(`preflight failed: ${err.message}`);
-      });
-      return true;
-    }
-    // --- manual capture-device override (Settings → Setup → Manual device).
-    // GET returns the persisted {adbPath, device} or null; POST persists it
-    // ({clear:true} wipes it). Lets any rooted emulator we lack a brand profile
-    // for be driven by hand. ---
-    if (url === "/api/capture/manual-device" && req.method === "GET") {
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(loadManualDevice(cfg.manualDevice)));
-      return true;
-    }
-    if (url === "/api/capture/manual-device" && req.method === "POST") {
-      readJsonBody(req, res, 100_000, (body) => {
-        const b = (body ?? {}) as { adbPath?: unknown; device?: unknown; clear?: unknown };
-        if (b.clear === true) { saveManualDevice(cfg.manualDevice, null); res.statusCode = 204; res.end(); return; }
-        const adbPath = typeof b.adbPath === "string" ? b.adbPath.trim() : "";
-        const device = typeof b.device === "string" ? b.device.trim() : "";
-        if (!adbPath || !device) { res.statusCode = 400; res.end(JSON.stringify({ error: "adbPath and device are required" })); return; }
-        const md: ManualDevice = { adbPath, device };
-        saveManualDevice(cfg.manualDevice, md);
-        res.statusCode = 200;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify(md));
-      });
-      return true;
-    }
-
     // --- stat-locks read/write ---
     if (url === "/api/stat-locks" && req.method === "GET") {
       res.setHeader("Content-Type", "application/json");
@@ -579,17 +373,11 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
     // The renderer applies the core equipItem/unequipItem helpers against the
     // loaded game data and POSTs the FULL rewritten user_item.json here; the
     // server just validates + writes it (it has no game data to resolve slots).
-    // Refused while a capture source is live so its next /user/item snapshot
-    // can't clobber the edit: the armed mitm pipeline (mirrors
-    // /api/capture/wipe) or the Steam plugin loaded in a running game (it
-    // rewrites user_item.json at the next lobby).
+    // Refused while the Steam plugin is loaded in a running game, so its next
+    // /user/item snapshot (it rewrites user_item.json at the next lobby) can't
+    // clobber the edit.
     if (url === "/api/captured/user-item" && req.method === "POST") {
       res.setHeader("Content-Type", "application/json");
-      if (isArmed(captureOut)) {
-        res.statusCode = 409;
-        res.end(JSON.stringify({ error: "pipeline armed — disarm first" }));
-        return true;
-      }
       // The plugin probe is async (tasklist): start it now, decide once the body is in.
       const live = steamPluginLive(captureOut).catch(() => false);
       // ~32 MB — a large account's user_item.json

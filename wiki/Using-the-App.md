@@ -126,8 +126,8 @@ results, the bottom band shows the selected build's pieces.
   if a Reforge mode is on, the **projected** max-roll stats.
 - **Equip build** — above the gear band, applies the selected build's pieces to the hero. A
   confirmation popup spells out how many pieces move (and how many would be taken off other
-  heroes); on confirm it rewrites your captured snapshot and re-imports. Requires the capture
-  pipeline to be **disarmed** (it edits the local snapshot, never the game itself).
+  heroes); on confirm it rewrites your captured snapshot and re-imports. Refused while the game
+  runs with the capture plugin loaded (it edits the local snapshot, never the game itself).
 - **+ Worklist** — next to Equip build; queues the selected build's gear changes onto the
   **Worklist** tab instead of applying them right away.
 - Two helper panels per hero: **Sub tick value** (is a flat or % substat tick worth more for
@@ -172,8 +172,8 @@ target piece's image, stats, and where it currently lives (which hero wears it, 
 
 A tabbed modal:
 
-- **Setup** — pick the **capture source** (Steam plugin / Android emulator) and re-run its
-  checklist; Steam also has Install / Update / Remove plugin and Launch game here.
+- **Setup** — the capture plugin checklist (game found in Steam · plugin installed · plugin
+  loaded in the game), with Install / Update / Remove plugin and Launch game.
 - **Solver** — worker count (Auto = use your CPU; or pin a number), how many results to return,
   results heatmap on/off.
 - **Data** — **Sync game data** (refresh the game tables after a patch), reset the onboarding

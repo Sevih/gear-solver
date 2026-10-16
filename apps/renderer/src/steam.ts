@@ -2,15 +2,10 @@
  * Client for the Steam capture source (`/api/steam/*`, served by both the Vite
  * dev middleware and the Electron prod server — see apps/desktop/src/steam-capture.ts).
  *
- * The Steam source has no arm/disarm: a BepInEx plugin inside the game writes
+ * The capture is passive: a BepInEx plugin inside the game writes
  * every decoded response straight into the capture folder while you play. The
  * app only needs to (1) install that plugin once and (2) watch the folder.
  */
-
-/** Which acquisition path the app drives. Persisted under `gs.capture.source`;
- *  null = auto (Steam when the game is found in a Steam library, else emulator). */
-export type CaptureSource = "steam" | "emulator";
-export const CAPTURE_SOURCE_KEY = "gs.capture.source";
 
 export interface SteamPluginHeartbeat {
   version: string;

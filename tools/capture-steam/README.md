@@ -1,10 +1,10 @@
-# Outerplane — Steam capture source (BepInEx plugin)
+# Outerplane — Steam capture plugin (BepInEx)
 
-Second capture method of the gear solver, for the **Steam (PC) client** of OUTERPLANE
-(released 2026-08-27). Replaces the emulator + root + mitmproxy pipeline of
-[`tools/capture/`](../capture/README.md) with a **plugin that runs inside the game**: no
-emulator, no root, no proxy, no certificate. The game decrypts its own server responses;
-the plugin copies the decoded JSON to the app's capture folder as they arrive.
+The gear solver's capture source, for the **Steam (PC) client** of OUTERPLANE (released
+2026-08-27): a **plugin that runs inside the game** — no root, no proxy, no certificate. The
+game decrypts its own server responses; the plugin copies the decoded JSON to the app's
+capture folder as they arrive. Players without the Steam client can still import the same
+JSON files by hand in the app.
 
 **Status: working end-to-end** (validated in-game 2026-09-05, see "Validation" below).
 
@@ -26,7 +26,7 @@ Two Harmony **postfixes**, both read-only (`src/Plugin.cs`):
 
 | Hook | Role |
 |------|------|
-| `CWebManager.Log2InternalWeb(string message, string cmd, bool request)` | **Primary.** Called on every successful response with the decrypted JSON and the path (`/user/item`). Path → file name, same table as `addon.py`. `request == true` (outgoing) is skipped. |
+| `CWebManager.Log2InternalWeb(string message, string cmd, bool request)` | **Primary.** Called on every successful response with the decrypted JSON and the path (`/user/item`). Path → file name (the files the renderer reads). `request == true` (outgoing) is skipped. |
 | `CWebManager.DecryptMsg(string)` (static) | **Fallback.** The stub above is tiny and Mono's JIT may inline it into its caller, in which case the patch never fires. `DecryptMsg` is too big to inline; its postfix identifies the payload by its **top-level keys** (`ItemList`+`PresetList` → `user_item`, `CharList`+`SlotList` → `user_character`, …) and stays silent once the primary hook has fired. |
 
 Both targets are resolved **by name at runtime** (`AccessTools.TypeByName`, no reference to
@@ -35,7 +35,7 @@ the plugin. Every hook body is wrapped in try/catch: a plugin bug can never bubb
 game's network callback. Disk writes happen on the thread pool (a 5 MB inventory would
 otherwise hitch a frame), atomically (`.tmp` + replace) so the app never reads a half file.
 
-## Output (same layout as `tools/capture/out/`)
+## Output
 
 | File | Source | Notes |
 |------|--------|-------|
@@ -46,8 +46,8 @@ otherwise hitch a frame), atomically (`.tmp` + replace) so the app never reads a
 
 ## Install (what the app does on "Install plugin")
 
-`apps/desktop/src/steam-capture.ts`, driven by `POST /api/steam/install` (Settings → Setup →
-Steam, or the header button):
+`apps/desktop/src/steam-capture.ts`, driven by `POST /api/steam/install` (Settings → Setup,
+or the header button):
 
 1. Find the game: registry `HKCU\Software\Valve\Steam\SteamPath` → `steamapps/libraryfolders.vdf`
    → `appmanifest_4247320.acf` → `<lib>/steamapps/common/OUTERPLANE`.
@@ -58,7 +58,7 @@ Steam, or the header button):
    game runs as long as the plugin isn't loaded yet (it loads on the next launch); refused when
    the heartbeat says it's live (file locked).
 4. Write `BepInEx/config/outerpedia.gearsolver.capture.cfg` with `OutDir = <the app's capture
-   folder>` (`tools/capture/out` in dev, `<userData>/capture-out` packaged).
+   folder>` (`.cache/capture-out` in dev, `<userData>/capture-out` packaged).
 
 Manual equivalent: same three files. Config keys (`[Capture]`): `Enabled` (bool), `OutDir`
 (string, empty = `%APPDATA%\Outerpedia Gear Solver\capture-out`), `KeepUnknown` (bool).
@@ -100,9 +100,7 @@ Packaging: `apps/desktop/scripts/fetch-binaries.mjs` builds the plugin and stage
   classes unobfuscated (`[Skip]`); if that changes, this plugin needs a rebuild against the
   new assembly — the same exposure as any BepInEx plugin for this game.
 - **Read-only, still a mod.** Nothing is sent to the server and gameplay is untouched, but it
-  is a third-party DLL loaded into the client — same ToS category as the MITM capture.
+  is a third-party DLL loaded into the client.
 - **Account.** The Steam client uses the same account system (link via the in-game account
   menu); whether an existing mobile account can be played on Steam is MAJOR9's policy, see
   their Steam FAQ — not something the plugin changes.
-- The emulator pipeline (`tools/capture/`) stays as the fallback for players without the
-  Steam client; both write the same files, the app picks the source in Settings → Setup.

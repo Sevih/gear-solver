@@ -1,7 +1,7 @@
 /**
- * Shared "download → verify → unzip" primitives for runtime provisioning
- * (mitmdump for the emulator source, BepInEx for the Steam source). Pure
- * Node — no Electron import — so the Vite dev middleware can use them too.
+ * "Download → verify → unzip" primitives for runtime provisioning (BepInEx
+ * for the Steam capture plugin). Pure Node — no Electron import — so the Vite
+ * dev middleware can use them too.
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";

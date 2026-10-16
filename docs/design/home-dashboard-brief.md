@@ -13,8 +13,8 @@
 ## 1. What you're designing
 
 **gear-solver** is a desktop (Electron) gear optimizer for the mobile gacha RPG
-*Outerplane* (Fribbels-for-E7 energy). The user captures their account from an
-emulator, browses gear/heroes, and runs a build solver. Today the app opens on
+*Outerplane* (Fribbels-for-E7 energy). The user captures their account from the
+Steam client (a capture plugin), browses gear/heroes, and runs a build solver. Today the app opens on
 the **Inventory** tab; there is no landing page, and app updates are surfaced as
 **two native OS dialogs** ("Download?" then "Restart?") that interrupt launch.
 
@@ -86,15 +86,15 @@ restarts the app — make that consequence legible (small "app will restart" not
 ## 5. Dashboard content (what goes on Home)
 
 All data below is already available to the renderer (inventory, capture status,
-emulator/setup readiness, versions, saved builds/presets in localStorage). Group
+capture-plugin readiness, versions, saved builds/presets in localStorage). Group
 into cards. **Core** sections must be present; **optional** can be cut/merged.
 
 ### CORE
 - **Account snapshot** — big numbers: **N heroes owned**, **N gear pieces**,
-  **last capture** ("3h ago"), a **capture status** pill (● armed / ○ idle).
-- **System / setup health** — capture pipeline + emulator/ADB readiness. If NOT
+  **last capture** ("3h ago"), a **capture status** pill (● live / ○ idle).
+- **System / setup health** — Steam game found + capture plugin readiness. If NOT
   ready: an amber row "Setup incomplete — Open setup". If ready: quiet ✓ + a
-  "Sync game data" / "Arm capture" affordance.
+  "Sync game data" / "Launch game" affordance.
 - **Gear quality distribution** — counts (and a stacked/segmented bar) across the
   5 tiers **Poor · Decent · Good · Excellent · Perfect**. The headline "interesting
   stat" — make it the visual centerpiece of the dashboard.

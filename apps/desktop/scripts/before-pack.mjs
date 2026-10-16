@@ -1,7 +1,7 @@
 /**
  * electron-builder `beforePack` hook — the installer never carries a capture
- * CA. Each user's CA is generated on their machine before the first capture
- * (src/capture-ca.ts).
+ * CA (the private key of the capture source older versions had). The app no
+ * longer generates nor ships one.
  *
  *  - Refuses to pack when the packaging config maps anything that would pick
  *    up `resources/prod-cert/` (the folder older builds generated).

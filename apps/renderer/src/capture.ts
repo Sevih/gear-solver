@@ -1,17 +1,17 @@
 /**
- * Client for the streaming capture endpoints (Vite middleware in dev, the
- * Electron server in prod). POSTs to /api/capture/{run,disarm} (emulator
- * source) and /api/steam/install (Steam source) return a plain-text stream of
- * progress lines, terminated by a `__EXIT__:<code>` sentinel line.
+ * Client for the capture endpoints (Vite middleware in dev, the Electron
+ * server in prod). POST /api/steam/install (the Steam plugin install) returns
+ * a plain-text stream of progress lines, terminated by a `__EXIT__:<code>`
+ * sentinel line; GET /api/capture/status reports the capture folder.
  */
 
 export interface CaptureResult {
   exitCode: number;
 }
 
-/** Stream a capture script's output line by line; resolves with the exit code. */
+/** Stream a capture task's output line by line; resolves with the exit code. */
 export async function streamCapture(
-  endpoint: "/api/capture/run" | "/api/capture/run?recordFlows=1" | "/api/capture/disarm" | "/api/steam/install",
+  endpoint: "/api/steam/install",
   onLine: (line: string) => void,
   signal?: AbortSignal,
 ): Promise<CaptureResult> {
@@ -48,7 +48,6 @@ export async function streamCapture(
 }
 
 export interface CaptureStatus {
-  armed: boolean;
   captured: boolean;
   userItemMtime: number | null;
 }

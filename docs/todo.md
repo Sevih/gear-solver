@@ -139,7 +139,7 @@
       `builderFilters.ts`, `catalogs.ts`, `ResultsTable`, `BottomGearBand`, `BuilderToolbar` + panels, `RightSidebar`,
       `FilterFooter`, hook `useSolverSession` ; une pane par fichier côté Settings.
 - [ ] ⚪ **`window.alert` / `confirm` bloquants** dans SettingsModal alors que l'app a une barre de status.
-- [ ] ⚪ **Casts JSON non validés** (`as PreflightResult`, stat-locks `as Record<…>`, `j.ItemList` sur `any`).
+- [ ] ⚪ **Casts JSON non validés** (stat-locks `as Record<…>`, `j.ItemList` sur `any`).
 - [ ] ⚪ **`useMemo(…, [])` comme « lire une fois »** (HomeScreen) → initialiseur `useState`.
 
 ### 🟢 Ratings offensifs — après la colonne « meilleur skill » (2026-09-05)
@@ -180,9 +180,6 @@
       **Builds** (unequip / assignation par slot).
 
 ### Externe — packaging desktop (vérif sur un vrai build, le plumbing existe)
-- [~] **Support mobile et émulateur** — émulateurs livrés (détection `adb devices` + « Manual device » ; à valider sur
-      un vrai ému non profilé). **Reste : mobile physique** — bloqué par le root (rooté = ADB USB + module Magisk à
-      câbler ; non rooté = hors de portée). Le wizard signale déjà « physique pas supporté ».
 - [~] 🟢 **Capture no-root** — livrée par la source Steam (plugin BepInEx, validé en jeu le 2026-09-05). **Reste** :
       (a) vérifier qu'un compte mobile se lie au client Steam (FAQ MAJOR9) avant de le vendre aux joueurs ; (b) tester
       le chemin « BepInEx absent » (download + pose dans le dossier du jeu) sur une install vierge.

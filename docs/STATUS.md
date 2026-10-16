@@ -1,6 +1,6 @@
 # STATUS — où on en est / comment reprendre
 
-Dernière mise à jour : 2026-09-05. Ce fichier est le point d'entrée pour reprendre le
+Dernière mise à jour : 2026-10-16. Ce fichier est le point d'entrée pour reprendre le
 projet à froid. Les détails sont dans les autres docs (liens en bas).
 
 ## But du projet
@@ -10,20 +10,17 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
 
 ## Ce qui est FAIT et fonctionne
 
-1. **Capture des données du jeu** (`tools/capture/`) — pipeline « un bouton ».
+1. **Capture des données du jeu** (`tools/capture-steam/`) — plugin BepInEx dans le client Steam.
    - Le jeu parle à `glb-game.outerplane.vagames.co.kr:38001` (compte/inventaire) et
-     `glb-login…:38002` via le client Unity **BestHTTP/2** sur ports non-standard (ignore le
-     proxy système). **Pas de certificate pinning.**
-   - Méthode : cert mitmproxy dans le store système (bind mount), redirection iptables des
-     ports 38001/38002 vers des proxies mitmproxy **reverse**, puis déchiffrement.
-   - Réponses = `{"msg":"<hex>"}` → hex → **XOR clé répétée `ASLDKGFJASPODIFJSOWEI`** → JSON.
-   - `capture.ps1` fait tout et déchiffre en direct vers `tools/capture/out/*.json`.
-   - **Source Steam (2026-09-05)** : le client Steam (Unity **Mono**) est hooké par un plugin BepInEx
-     (`tools/capture-steam/`) — postfix sur `CWebManager.Log2InternalWeb` (JSON déjà déchiffré + path),
-     fallback `DecryptMsg` par forme — qui écrit **les mêmes fichiers** dans le dossier de capture.
-     Sans émulateur, root ni proxy : l'app installe le plugin (`steam-capture.ts`, `/api/steam/install`)
-     et auto-importe en polling. Sélecteur de source dans Settings → Setup. **Validé en jeu le
-     2026-09-05** (hook primaire actif, 9 endpoints, auto-import au lobby).
+     `glb-login…:38002` via le client Unity **BestHTTP/2** ; réponses = `{"msg":"<hex>"}` → hex →
+     **XOR clé répétée `ASLDKGFJASPODIFJSOWEI`** → JSON.
+   - Le client Steam (Unity **Mono**) est hooké par un plugin BepInEx — postfix sur
+     `CWebManager.Log2InternalWeb` (JSON déjà déchiffré + path), fallback `DecryptMsg` par forme —
+     qui écrit `user_item.json`, `user_character.json`, … dans le dossier de capture. Ni root ni
+     proxy : l'app installe le plugin (`steam-capture.ts`, `/api/steam/install`) et auto-importe en
+     polling. **Validé en jeu le 2026-09-05** (hook primaire actif, 9 endpoints, auto-import au lobby).
+   - Seule source de capture depuis le 2026-10-16 (l'ancienne voie Android par proxy est retirée —
+     cf. changelog) ; l'import manuel de fichiers reste.
 
 2. **Données statiques du jeu** (`data/`)
    - La distillation vit **côté outerpedia** (`datagen/generators/solver.ts`, port de l'ancien
@@ -44,7 +41,7 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
    - Tests verts : `npm test`.
 
 4. **Renderer** (`apps/renderer/`, Vite + React, embarqué dans Electron)
-   - **Auto-import** : au démarrage, charge `data/derived` + `tools/capture/out` (servis en
+   - **Auto-import** : au démarrage, charge `data/derived` + le dossier de capture (servis en
      direct par un middleware Vite) et affiche l'inventaire parsé. Fallback fichier manuel.
    - **Onglet Home** (par défaut) : dashboard — snapshot du compte (2×2), répartition qualité
      par tier (couleurs partagées avec l'Inventory), répartition étoiles, Library, et
@@ -92,10 +89,8 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      recapture** (`reconcileWorklist`) (`screens/WorklistScreen.tsx`, `lib/storage/worklist.ts`).
    - **Onglet Settings** : modal left-rail à onglets (Setup · Solver · Data · Backup · Debug). **Setup =
      wizard d'onboarding guidé** (auto-ouvert au 1er lancement) : stepper linéaire qui focalise le blocage
-     courant (emulator install/running · ADB · root), instructions **par marque** (LDPlayer/MuMu/Nox),
-     **détection générique** de tout émulateur listé par le serveur ADB partagé + **override « Manual
-     device »** (adb path + device) pour forcer n'importe quel émulateur rooté hors-profil ;
-     étape finale = vraies next-steps de capture. Section Solver (worker count Auto/Manual, result/per-worker
+     courant (jeu trouvé dans Steam · plugin installé · plugin chargé dans le jeu), boutons Install
+     plugin / Launch game, retrait du plugin ; étape finale = vraies next-steps de capture. Section Solver (worker count Auto/Manual, result/per-worker
      count, heatmap), backup JSON import/export, sync « game data » manuelle, **version des données dérivées**
      affichée (hash + date, lue depuis `data/derived/version.json`).
    - **Édition d'équipement (méthodes)** : `equipItem`/`unequipItem` (`packages/core/src/equip.ts`,
@@ -108,20 +103,15 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      inventaire envoyés aux workers **une fois** (init), compteur « ⚙ N workers » dans le footer.
 
 5. **Desktop Electron** (`apps/desktop/`) — `main.ts` + serveur local (`server.ts`) +
-   détection d'émulateur (`emulator-detect.ts`) + source Steam (`steam-capture.ts` : détection du jeu,
-   install BepInEx + plugin, statut/heartbeat), capture native via IPC. App fonctionnelle en dev ; le
+   capture Steam (`steam-capture.ts` : détection du jeu, install BepInEx + plugin, statut/heartbeat). App fonctionnelle en dev ; le
    **packaging** prod (electron-builder `extraResources`, `setupAutoUpdate`) est **câblé mais
    non vérifié end-to-end** sur un vrai build packagé (cf. todo M7+).
 
 ## Comment lancer
 
 ```powershell
-# 0. Source Steam (recommandée) : npm run capture-steam:build (une fois, .NET SDK), lancer l'app,
-#    Settings → Setup → Steam → Install plugin, puis jouer jusqu'au lobby — l'import est automatique.
-
-# 1. Voie émulateur — (re)capturer ton compte — LDPlayer lancé, ADB on, Root toggle on
-cd tools/capture ; powershell -ExecutionPolicy Bypass -File .\capture.ps1
-cd ../..
+# 1. Capture : npm run capture-steam:build (une fois, .NET SDK), lancer l'app,
+#    Settings → Setup → Install plugin, puis jouer jusqu'au lobby — l'import est automatique.
 
 # 2. Lancer l'app (auto-importe la dernière capture)
 npm install        # première fois
@@ -134,14 +124,12 @@ npm run data:sync        # rafraîchit data/derived depuis le checkout outerpedi
 
 ## À RETENIR (gotchas)
 
-- **Root LDPlayer** : doit rester activé pour la capture (cert système + iptables). Le jeu se
-  lance très bien avec. Le bind mount + iptables ne survivent pas à un reboot de l'instance →
-  `capture.ps1` les ré-applique automatiquement.
 - **Clé XOR** : `ASLDKGFJASPODIFJSOWEI` (même pour tous les endpoints, Android et Steam).
 - **Plugin Steam** : `tools/capture-steam/dist/` = sortie `dotnet build` (gitignoré, compile contre les
   DLL du jeu installé + BepInEx présent dans le jeu). Le DLL installé est verrouillé tant que le jeu
   l'a chargé → fermer le jeu pour le mettre à jour (l'install le refuse via le heartbeat).
-- **Données perso** (`tools/capture/out/`, `dumps/`) : **gitignore**, jamais commitées.
+- **Données perso** (dossier de capture : `.cache/capture-out/` en dev, `<userData>/capture-out/`
+  packagé) : **gitignore**, jamais commitées.
 - **`data/derived` est généré** : ne pas l'éditer à la main — la distillation vit dans
   outerpedia (`datagen/generators/solver.ts`), modifier là-bas puis `npm run data:sync`.
 - **Commentaires TS** : éviter `*/` littéral dans un bloc `/** */` (ça ferme le commentaire).
@@ -176,11 +164,10 @@ npm run data:sync        # rafraîchit data/derived depuis le checkout outerpedi
 apps/renderer/    UI React + Vite (renderer process Electron) ; le SOLVER vit ici
                   (src/lib/solver/: engine.ts, orchestrator.ts, gems.ts, cp.ts,
                   ratings.ts, setPlans.ts, worker ; composeBuild.ts une couche au-dessus)
-apps/desktop/     Electron : main.ts, server.ts (serveur local), emulator-detect.ts
+apps/desktop/     Electron : main.ts, server.ts (serveur local), steam-capture.ts
 packages/core/    moteur stats : raw.ts, types.ts, gamedata.ts, stats.ts, parse.ts,
                   compose-stats.ts, equip.ts (édition locale), index.ts
-tools/capture/    pipeline de capture émulateur (capture.ps1, disarm.ps1, addon.py, scripts/)
-tools/capture-steam/ plugin BepInEx = source Steam (csproj + src/Plugin.cs → dist/GearSolverCapture.dll)
+tools/capture-steam/ plugin BepInEx = la capture (csproj + src/Plugin.cs → dist/GearSolverCapture.dll)
 data/derived/     tables distillées (kebab-case) — consommées par le moteur ;
                   émises par outerpedia (datagen solver), resync via data/sync.mjs
 docs/             architecture.md, data-schema.md, reference.md, roadmap.md, solver.md,
@@ -197,4 +184,4 @@ docs/             architecture.md, data-schema.md, reference.md, roadmap.md, sol
 - [docs/solver.md](solver.md) — solver Builder : pipeline, panneaux UI, optimisations, limites
 - [docs/todo.md](todo.md) — backlog **actionnable** (tâches ouvertes uniquement)
 - [docs/changelog.md](changelog.md) — **journal des livraisons** (ce qui est livré, par session)
-- [tools/capture/README.md](../tools/capture/README.md) — pipeline de capture en détail
+- [tools/capture-steam/README.md](../tools/capture-steam/README.md) — plugin de capture en détail

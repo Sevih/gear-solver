@@ -16,7 +16,7 @@ gear icon in the header, and **auto-opens on first launch** as a setup wizard.
 It is a centered modal overlay (not a full page), dark theme, desktop-first.
 
 Its job today is three unrelated things crammed into one scroll: **(1) a
-first-run setup checklist** (is the emulator/ADB/root ready for capture), **(2)
+first-run setup checklist** (is the game found and the capture plugin in place), **(2)
 data & backup actions**, and **(3) developer debug toggles**. We're now **adding
 a fourth concern — solver tuning** — and the flat stacked layout no longer holds.
 We want a **left-nav (tabs/sidebar) modal**: pick a section on the left, see its
@@ -64,11 +64,10 @@ A single centered modal, header + one long scroll of stacked sections + footer:
 ┌─────────────────────────────────────────────┐
 │ Settings                                 [✕] │  header (title + subtitle)
 ├─────────────────────────────────────────────┤
-│ SETUP STATUS                Target: …:5555  │  ← section strip
-│  ✓ Android emulator installed               │
-│  ✓ Emulator instance running                │
-│  ! ADB Debug = Local Connection   (fix copy)│
-│  · Root toggle ON                           │
+│ SETUP STATUS                build 1234567   │  ← section strip
+│  ✓ OUTERPLANE installed via Steam           │
+│  ! Capture plugin installed       (fix copy)│
+│  · Game running with the plugin loaded      │
 │ DATA                                        │
 │  [Sync game data]      … description  [Sync] │  ← action rows
 │  [Reset onboarding]    …              [Reset]│
@@ -98,16 +97,16 @@ and naming open). The existing reusable primitives:
 - **Action row** (`DataAction`): label + helper text + a right-aligned button
   (default or `danger` rose). Button can show a busy caption ("Syncing…").
 - **Section header strip**: tiny uppercase label + optional right-aligned mono
-  sub-note (e.g. `Target: 127.0.0.1:5555`).
+  sub-note (e.g. `build 1234567`).
 - **Status dot**: ✓ emerald (pass) / ! amber (fail) / · dim (pending).
 
 ### A. Setup (today: "Setup status")
-- A live checklist of **4 sequential checks** (probed from a backend on open):
-  emulator installed · emulator running · ADB local-connection · root toggle ON.
+- A live checklist of **3 sequential checks** (probed from a backend on open):
+  game found in Steam · capture plugin installed · game running with the plugin loaded.
 - Each row: status dot + title + a mono detail line + (when failing) a paragraph
   of **fix instructions**. This is the most text-heavy section.
 - A **Re-check** action (primary) re-runs the probe; a Close action. On first
-  launch this section is the wizard and self-dismisses once all 4 pass.
+  launch this section is the wizard and self-dismisses once the plugin is in place.
 
 ### B. Solver (NEW — the reason for this redesign)
 Four controls that tune the build search. All persist to localStorage.
@@ -134,7 +133,7 @@ Four controls that tune the build search. All persist to localStorage.
   "Syncing…"). 
 - **Reset onboarding prompt** — make this modal auto-open next launch.
 - **Wipe captured data** *(danger)* — delete every imported snapshot; native
-  confirm; blocked while capture is armed.
+  confirm.
 
 ### D. Backup (today: "Backup")
 - **Export builds & presets** — download a JSON file.

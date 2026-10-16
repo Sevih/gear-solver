@@ -9,12 +9,10 @@ coverage/
 # synced asset/data cache (images + game data pulled from the outerpedia repo)
 .cache/
 
-# Electron desktop — packaged builds + downloaded bundled binaries (adb, …),
-# reproducible from scripts/fetch-binaries.mjs. prod-cert/ is a CA folder
-# older builds generated (private key inside, NEVER commit): no longer
-# produced nor packaged (scripts/before-pack.mjs), still ignored if left over.
+# Electron desktop — packaged builds. prod-cert/ is a CA folder older builds
+# generated (private key inside, NEVER commit): no longer produced nor packaged
+# (scripts/before-pack.mjs), still ignored if left over.
 apps/desktop/release/
-apps/desktop/resources/bin/
 apps/desktop/resources/prod-cert/
 
 # Steam capture plugin — dotnet build output (dist/ is already ignored globally)
@@ -22,17 +20,11 @@ tools/capture-steam/obj/
 tools/capture-steam/bin/
 apps/desktop/resources/capture-steam/
 
-# capture runtime artifacts & PERSONAL account data — never commit
+# PERSONAL account data — never commit. The dev capture folder is now
+# .cache/capture-out (ignored above); tools/capture/out/ is where older dev
+# setups kept it, still ignored if left over.
 tools/capture/out/
-tools/capture/dumps/
-*.flows
 *.log
-*.log.err
-
-# mitmproxy CA private material / duplicate PEM (the hashed .0 is kept for the one-button flow)
-tools/capture/cert/mitmproxy-ca-cert.pem
-tools/capture/cert/*.p12
-tools/capture/cert/*-ca.pem
 
 # OS / editor
 .DS_Store

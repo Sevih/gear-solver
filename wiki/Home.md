@@ -21,11 +21,9 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
 
 ## What it does
 
-- **Captures** your account data two ways: from the **Steam client** through a small BepInEx
-  plugin the app installs into the game (no emulator, no root — snapshots import while you
-  play), or via a mitmproxy pipeline against the mobile client running in a rooted LDPlayer
-  (one-button PowerShell). No certificate pinning; XOR key recovered.
-  → [Capture Pipeline](Capture-Pipeline)
+- **Captures** your account data from the **Steam client** through a small BepInEx plugin the
+  app installs into the game (no root, no proxy — snapshots import while you play), or from
+  JSON files you import by hand. → [Capture Pipeline](Capture-Pipeline)
 - **Parses** the captured JSON into a typed inventory (gear, characters, presets) with
   resolved stat values matching the in-game display. → [Data Schema](Data-Schema)
 - **Composes** each hero's full stat sheet — a mirror of the in-game `CFormula::CalcFinalStat`
@@ -60,15 +58,14 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
 | [Solver](Solver) | Solver pipeline, SOLVE vs SOLVE CP, UI panels, gems, optimizations, file map |
 | [Engine Reference](Engine-Reference) | Full pipeline + formulas (parse, compose, set bonuses, ratings, score, CP, gems, reforge), tests, reverse-engineering notes |
 | [Data Schema](Data-Schema) | Captured-server JSON schema (`/user/item`, `/user/character`, presets, endpoints) |
-| [Capture Pipeline](Capture-Pipeline) | Steam plugin source (pointer) + mitmproxy + LDPlayer acquisition: servers, XOR decrypt, output files, steps |
+| [Capture Pipeline](Capture-Pipeline) | Steam capture plugin: servers, XOR encoding, hooks, install, output files |
 | [Roadmap](Roadmap) | Milestones M0–M8, what's done, what's next, guardrails |
 
 ## One-diagram overview
 
 ```
-Steam client (game) ──BepInEx plugin──▶ tools/capture-steam ──┐
-LDPlayer (game) ──HTTPS──▶ tools/capture (mitmproxy + PS) ────┴─JSON──▶ packages/core ──▶ apps/renderer
-  account data              decrypts & writes out/*.json               parse + compose + types     React UI + Web Worker pool
+Steam client (game) ──BepInEx plugin──▶ tools/capture-steam ────JSON──▶ packages/core ──▶ apps/renderer
+  account data                        copies decoded JSON              parse + compose + types     React UI + Web Worker pool
 
                                                                                         │
                                                                         packaged via    ▼

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { cx } from "./cx.js";
-import { describeSteam, type CaptureSource, type SteamStatus } from "../steam.js";
+import { describeSteam, type SteamStatus } from "../steam.js";
 
 /** Vivid violet/cyan glow background — matches the design's PageBackground. */
 export function PageBackground({ children }: { children: ReactNode }) {
@@ -36,8 +36,6 @@ export function Spinner({ className = "h-3.5 w-3.5" }: { className?: string }) {
   );
 }
 
-export type CaptureState = "armed" | "idle" | "capturing";
-
 /** What the Steam-source controls need: the last status poll + the two
  *  actions the header can trigger (install the plugin / launch the game). */
 export interface SteamControls {
@@ -47,75 +45,16 @@ export interface SteamControls {
 }
 
 interface CaptureControlsProps {
-  state: CaptureState;
-  onCapture: () => void;
-  onDisarm: () => void;
   onReload: () => void;
   busy?: boolean;
-  /** Which acquisition path the controls drive. Emulator = Arm/Disarm around
-   *  the MITM pipeline; Steam = a passive plugin, so the button becomes
-   *  Install / Launch and the pill reports the plugin's liveness. */
-  source?: CaptureSource;
   steam?: SteamControls;
 }
 
-/** Header-right capture controls — status pill + primary action + Reload. */
-export function CaptureControls({ state, onCapture, onDisarm, onReload, busy = false, source = "emulator", steam }: CaptureControlsProps) {
-  if (source === "steam") return <SteamCaptureControls steam={steam} onReload={onReload} busy={busy} />;
-  const armed = state === "armed";
-  const capturing = state === "capturing";
-  const disable = busy || capturing;
-  return (
-    <div className="flex items-center gap-2">
-      <span className={cx(
-        "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium",
-        armed ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
-        : capturing ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-200"
-        : "border-white/8 bg-white/3 text-white",
-      )}>
-        {capturing
-          ? <Spinner className="h-3 w-3 text-cyan-300" />
-          : <span className={cx("h-1.5 w-1.5 rounded-full",
-              armed ? "bg-emerald-400 shadow-[0_0_6px_#34d399]" : "bg-zinc-500")} />
-        }
-        {capturing ? "Capturing…" : armed ? "Armed" : "Idle"}
-      </span>
-
-      <button
-        onClick={armed ? onDisarm : onCapture}
-        disabled={disable}
-        className={cx(
-          "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[11.5px] font-medium transition-colors",
-          disable && "cursor-not-allowed opacity-50",
-          armed
-            ? "border-white/8 bg-white/3 text-white hover:bg-white/6"
-            : "border-cyan-400/30 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
-        )}
-      >
-        {armed ? "Disarm" : "Arm capture"}
-      </button>
-
-      <button
-        onClick={onReload}
-        disabled={disable}
-        className={cx(
-          "inline-flex h-7 items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2.5 text-[11.5px] text-white transition-colors hover:bg-white/6 active:scale-95",
-          disable && "cursor-not-allowed opacity-50",
-        )}
-      >
-        {/* Spin the reload icon while capture/disarm is running so the user
-            gets unambiguous "something is happening" feedback even when the
-            button itself is disabled. */}
-        <ReloadIcon className={cx("h-3.5 w-3.5", capturing && "animate-spin")} /> Reload
-      </button>
-    </div>
-  );
-}
-
-/** Steam-source flavour of the header controls. No arm/disarm: the plugin
- *  captures whenever the game runs. The single primary button is whatever
- *  unblocks the user next — install the plugin, then launch the game. */
-function SteamCaptureControls({ steam, onReload, busy }: { steam?: SteamControls; onReload: () => void; busy: boolean }) {
+/** Header-right capture controls — status pill + primary action + Reload. The
+ *  plugin captures whenever the game runs, so the single primary
+ *  button is whatever unblocks the user next — install the plugin, then
+ *  launch the game. */
+export function CaptureControls({ steam, onReload, busy = false }: CaptureControlsProps) {
   const s = steam?.status ?? null;
   const d = describeSteam(s);
   const live = Boolean(s?.live);
@@ -185,16 +124,7 @@ export interface TabCounts {
   Worklist: number | null;
 }
 
-export interface EmulatorBadgeProps {
-  /** Display label like "LDPlayer", "MuMu Player" — null when nothing was
-   *  detected on disk (user has no supported emulator installed). */
-  label: string | null;
-  /** Port the backend will target. Null when the emulator is installed but
-   *  not currently running. */
-  port: number | null;
-}
-
-/** Header pill for the Steam source — what `/api/steam/status` saw. Green
+/** Header pill for the Steam capture plugin — what `/api/steam/status` saw. Green
  *  when the plugin is live in a running game, amber when something needs
  *  doing (install / launch), gray when the game isn't in any Steam library. */
 export function SteamBadge({ status }: { status: SteamStatus | null }) {
@@ -204,7 +134,7 @@ export function SteamBadge({ status }: { status: SteamStatus | null }) {
     <span
       title={
         !status ? "Probing the Steam library…"
-        : !status.installed ? "OUTERPLANE isn't installed through Steam on this PC — install it from Steam, or switch the source to Emulator in Setup"
+        : !status.installed ? "OUTERPLANE isn't installed through Steam on this PC — install it from Steam, or import your snapshot files manually"
         : status.gameDir ?? d.text
       }
       className={cx(
@@ -225,46 +155,11 @@ export function SteamBadge({ status }: { status: SteamStatus | null }) {
   );
 }
 
-/** Header pill that surfaces what the backend's `/api/emulators` saw. Green
- *  when an emulator is running and we have a port locked, amber when one is
- *  installed but stopped, gray when no supported emulator exists at all. */
-export function EmulatorBadge({ label, port }: EmulatorBadgeProps) {
-  const tone = label && port ? "ready" : label ? "stopped" : "missing";
-  const text = label
-    ? port ? `${label} · ${port}` : `${label} · not running`
-    : "No emulator detected";
-  return (
-    <span
-      title={
-        tone === "ready" ? "Backend will target this instance on Arm capture"
-        : tone === "stopped" ? "Launch your emulator, then click Reload"
-        : "Install LDPlayer, MuMu, or NoxPlayer — capture needs a rooted Android emulator"
-      }
-      className={cx(
-        "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium",
-        tone === "ready" && "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
-        tone === "stopped" && "border-amber-400/30 bg-amber-500/10 text-amber-200",
-        tone === "missing" && "border-white/8 bg-white/3 text-white/75",
-      )}
-    >
-      <span className={cx(
-        "h-1.5 w-1.5 rounded-full",
-        tone === "ready" && "bg-emerald-400 shadow-[0_0_6px_#34d399]",
-        tone === "stopped" && "bg-amber-400 shadow-[0_0_6px_#fbbf24]",
-        tone === "missing" && "bg-zinc-500",
-      )} />
-      {text}
-    </span>
-  );
-}
-
 interface GsHeaderProps {
   active: Tab;
   onTabChange: (tab: Tab) => void;
   capture: CaptureControlsProps;
-  emulator: EmulatorBadgeProps;
-  /** Steam-source status for the badge — only rendered when `capture.source`
-   *  is "steam"; the emulator badge shows otherwise. */
+  /** Steam plugin status for the badge. */
   steam?: SteamStatus | null;
   /** Opens the onboarding wizard manually. Wizard is otherwise auto-shown on
    *  first launch via App-level state. */
@@ -280,7 +175,7 @@ interface GsHeaderProps {
   counts: TabCounts;
 }
 
-export function GsHeader({ active, onTabChange, capture, emulator, steam = null, onSetup, version, gameVersion, counts }: GsHeaderProps) {
+export function GsHeader({ active, onTabChange, capture, steam = null, onSetup, version, gameVersion, counts }: GsHeaderProps) {
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/6 bg-black/45 px-4 py-2.5 backdrop-blur-md">
       <div className="flex items-center gap-4">
@@ -321,10 +216,10 @@ export function GsHeader({ active, onTabChange, capture, emulator, steam = null,
       </div>
 
       <div className="flex items-center gap-2">
-        {capture.source === "steam" ? <SteamBadge status={steam} /> : <EmulatorBadge {...emulator} />}
+        <SteamBadge status={steam} />
         <button
           onClick={onSetup}
-          title={capture.source === "steam" ? "Open the setup checklist (Steam, capture plugin)" : "Open the setup checklist (emulator, ADB, root)"}
+          title="Open the setup checklist (Steam, capture plugin)"
           className="grid h-7 w-7 place-items-center rounded-md border border-white/8 bg-white/3 text-white transition-colors hover:bg-white/6 active:scale-95"
           aria-label="Setup"
         >

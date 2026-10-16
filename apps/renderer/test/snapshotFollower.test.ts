@@ -11,7 +11,7 @@ function deferred<T>() {
 }
 
 const live = { live: true, gameRunning: true } as SteamStatus;
-const status = (mtime: number | null): CaptureStatus => ({ armed: false, captured: mtime != null, userItemMtime: mtime });
+const status = (mtime: number | null): CaptureStatus => ({ captured: mtime != null, userItemMtime: mtime });
 
 function harness(capture: () => Promise<CaptureStatus | null>, steam: () => Promise<SteamStatus | null> = async () => live) {
   const refresh = vi.fn(async (_label: string) => {});

@@ -1338,7 +1338,7 @@ function InventoryEmpty() {
       </div>
       <h2 className="font-display text-[18px] font-semibold text-white">No capture yet</h2>
       <p className="max-w-sm text-[12.5px] leading-relaxed text-white/85">
-        Run the capture pipeline to import your gear and heroes from the Outerplane client. The Arm capture button up top arms mitmproxy and waits for the game to send <span className="font-mono text-white">/user/item</span>.
+        Install the capture plugin (Setup, top right), then play OUTERPLANE on Steam: your gear and heroes import as soon as the lobby loads <span className="font-mono text-white">/user/item</span>. No Steam? Import your snapshot files by hand below.
       </p>
     </div>
   );

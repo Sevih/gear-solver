@@ -1,7 +1,7 @@
 /**
  * Auto-import: load distilled game data (/gamedata/*) and the latest captured
  * account (/captured/*), both served live by the Vite dev middleware from the
- * repo dirs (data/derived and tools/capture/out). Re-run capture + refresh to
+ * repo dirs (data/derived and .cache/capture-out). Re-run capture + refresh to
  * pick up a new snapshot.
  */
 import {

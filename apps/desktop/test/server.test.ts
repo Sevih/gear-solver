@@ -3,7 +3,7 @@ import type { Server } from "node:http";
 
 // server.ts pulls Electron in through paths.ts / updater.ts. Under plain Node
 // we stub the two modules: `isPackaged: false` puts paths.ts in dev mode, so
-// the mounts resolve to the repo trees (data/derived, tools/capture/out).
+// the mounts resolve to the repo trees (data/derived, .cache/capture-out).
 vi.mock("electron", () => ({ app: { isPackaged: false, getPath: () => "", getVersion: () => "0.0.0" } }));
 vi.mock("electron-updater", () => ({ default: { autoUpdater: { on: () => {} } } }));
 

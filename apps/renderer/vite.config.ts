@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join, normalize } from "node:path";
-import { resolveCaptureTarget, targetScriptArgs, loadManualDevice } from "../desktop/src/emulator-detect.js";
 import { createApiHandler } from "../desktop/src/api-handler.js";
 import { findOuterpediaCheckout } from "../desktop/src/outerpedia-checkout.js";
 import { getCurrentRef, resolveLatestSha, setCurrentRef, readShaState } from "../desktop/src/repo-source.js";
@@ -13,14 +12,12 @@ import { getCurrentRef, resolveLatestSha, setCurrentRef, readShaState } from "..
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const DERIVED = join(root, "data", "derived");
 const STAT_LOCKS = join(root, "data", "stat-locks.json");
-const CAPTURE_DIR = join(root, "tools", "capture");
-const CAPTURED = join(CAPTURE_DIR, "out");
+// Captured account JSON — same dev path paths.ts computes, so `npm run dev` and
+// a dev Electron run share the snapshots the Steam plugin writes.
+const CAPTURED = join(root, ".cache", "capture-out");
 // Persistent cache for assets/data synced from the outerpedia repo (gitignored).
 const CACHE_DIR = join(root, ".cache", "outerpedia");
 const REPO_SHA_STATE = join(CACHE_DIR, "repo-sha.json");
-// Manual capture-device override — same dev path paths.ts computes (REPO/.cache)
-// so the override is shared between `npm run dev` and a dev Electron run.
-const MANUAL_DEVICE = join(root, ".cache", "manual-device.json");
 // Steam capture source — the BepInEx plugin built by `npm run capture-steam:build`
 // (tools/capture-steam/dist) and a scratch dir for the one-time BepInEx download.
 const STEAM_PLUGIN_DLL = join(root, "tools", "capture-steam", "dist", "GearSolverCapture.dll");
@@ -44,36 +41,22 @@ const OUTERPEDIA_IMAGES = findOuterpediaImages();
 // it must know where to find them.
 const BUNDLED_IMG = join(root, "apps", "renderer", "public", "img");
 
-/** Resolve the args the dev-mode middleware hands capture.ps1 / disarm.ps1.
- *  Detects the running emulator and overrides the script's `-Adb` /
- *  `-Device` defaults so MuMu / Nox work without the user editing
- *  capture.ps1's hardcoded LDPlayer paths. */
-async function detectArgs(): Promise<string[]> {
-  // No bundled adb in dev — generic probe relies on a brand's adb being on disk.
-  const target = await resolveCaptureTarget(loadManualDevice(MANUAL_DEVICE), null);
-  return targetScriptArgs(target);
-}
-
 /** Mount the shared backend API (apps/desktop/src/api-handler.ts — the very
  *  handler the Electron prod server runs) on the dev server, wired to the repo
- *  dirs: derived game data, captured account JSON, the PowerShell capture
- *  pipeline, the Steam source, images, stat-locks. Only the auto-updater
+ *  dirs: derived game data, captured account JSON, the Steam source, images,
+ *  stat-locks. Only the auto-updater
  *  differs: there is no packaged app in dev, so it reports a static "up to
  *  date" payload and check/install are no-ops. */
 function localData(): Plugin {
   const api = createApiHandler({
-    captureDir: CAPTURE_DIR,
     captureOut: CAPTURED,
     derivedDir: DERIVED,
     repoShaState: REPO_SHA_STATE,
     repoRoot: root,
     statLocks: STAT_LOCKS,
-    manualDevice: MANUAL_DEVICE,
     steamPluginDll: STEAM_PLUGIN_DLL,
     scratchDir: SCRATCH_DIR,
-    bundledAdb: null,
     img: { cacheDir: CACHE_DIR, bundledDir: BUNDLED_IMG, localCheckoutDir: OUTERPEDIA_IMAGES },
-    captureScriptArgs: detectArgs,
     update: {
       status: () => {
         const ref = getCurrentRef();

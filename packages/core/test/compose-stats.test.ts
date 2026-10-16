@@ -55,7 +55,7 @@ const LEVELS = Array.from({ length: 120 }, (_, i) => i + 1);
 // The locks are FINAL stats read on the Builds tab: gear included, composed
 // with the account's captured progression (TransStar, LB step, geas, codex,
 // skill levels). Neither the inventory nor that progression is committed
-// (tools/capture/out/ is git-ignored), so a lock is only reproducible here
+// (the capture folder is git-ignored), so a lock is only reproducible here
 // when the hero carried no gear on the locked axis AND the composer's
 // "max everything" defaults equal the captured progression. Only these cases
 // are asserted below; the other locks stay app-side (drift badge).

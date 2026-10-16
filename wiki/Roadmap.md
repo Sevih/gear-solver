@@ -11,14 +11,15 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 
 ## Done ✅
 
-- **M0 — Capture.** One-button pipeline (`tools/capture`) decrypts the game server and
-  writes account JSON. No pinning; XOR key recovered.
+- **M0 — Capture.** A first one-button pipeline decrypted the game server and wrote account
+  JSON (no pinning; XOR key recovered). Since 2026-10-16 the only source is the Steam plugin
+  (`tools/capture-steam`), plus the manual file import.
 - **M1 — Data foundation.** Game tables copied to `data/game`, distilled to `data/derived`
   (`data/build.mjs`, since replaced by outerpedia's `datagen/generators/solver.ts`
   + `data/sync.mjs`). Mappings ItemID→equipment, OptionID→stat (validated vs in-game),
   CharID→character. Engine parses a real inventory with resolved stats.
 - **M2 — Auto-import.** Web app loads game data + latest capture automatically (Vite
-  middleware serves `data/derived` and `tools/capture/out`).
+  middleware serves `data/derived` and the capture folder).
 - **M3 — Inventory UX.** Table, filters, per-piece detail (main/subs/ticks/reforge/BT/singularity),
   substat score per piece.
 - **M4 — Stat model.** Main stat scaling (+0..+15, BT, singularity), set bonuses, character
@@ -31,7 +32,7 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   (`simulateReforges`, projected up to the bottom band), recommended gem allocation.
 - **M7 (partial) — Persistence.** Save/Remove build per hero + Filter presets per hero,
   in **localStorage** (`lib/storage/`). Optimize button → (Builds → Builder).
-- **Desktop Electron.** `apps/desktop` (main + local server + emulator detection) —
+- **Desktop Electron.** `apps/desktop` (main + local server + Steam capture) —
   functional in dev.
 - **Repo sync (game data).** On launch, the app downloads the solver artifacts from the
   public repo `Sevih/outerpedia` (`data-sync.ts` dual-mode checkout/repo SHA-gated; images via
@@ -112,7 +113,8 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 
 - **One game, one job.** No team-builder, damage sim, or PvP meta — just gear optimization.
 - **Engine stays pure.** No DOM/Node in `packages/core`; data comes in as plain objects.
-- **Capture stays external.** The app consumes JSON; it never embeds the MITM stack.
+- **Capture stays a separate piece.** The app consumes the JSON the plugin writes (or the user
+  imports by hand); the engine never knows where a snapshot came from.
 - **Derived data is generated.** Never hand-edit `data/derived`; change outerpedia's `datagen/generators/solver.ts` then `npm run data:sync`.
 - **Validate against reality.** New stat/formula work ships with a test pinned to a real
   captured item vs its in-game display.

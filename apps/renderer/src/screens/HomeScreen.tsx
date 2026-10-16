@@ -18,8 +18,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { GameData, Inventory } from "@gear-solver/core";
 import type { CaptureStatus } from "../capture.js";
-import type { EmulatorStatus } from "../emulator.js";
-import { describeSteam, type CaptureSource, type SteamStatus } from "../steam.js";
+import { describeSteam, type SteamStatus } from "../steam.js";
 import { cx } from "../design/cx.js";
 import { StatIcon } from "../design/EquipmentIcon.js";
 import { Spinner } from "../design/Shell.js";
@@ -625,50 +624,19 @@ function UpdateCard({ status, onCheck, onInstall }: {
 }
 
 // ── empty state ──────────────────────────────────────────────────────────
-/** Source-aware CTA: the emulator path arms the MITM pipeline; the Steam path
- *  needs the plugin installed once, then the game launched. */
-function EmptyDashboard({ source, steam, busy, onCapture, onSteamInstall, onSteamLaunch }: {
-  source: CaptureSource; steam: SteamStatus | null; busy: boolean;
-  onCapture: () => void; onSteamInstall: () => void; onSteamLaunch: () => void;
+/** Capture CTA: the plugin needs installing once, then the game launched. */
+function EmptyDashboard({ steam, busy, onSteamInstall, onSteamLaunch }: {
+  steam: SteamStatus | null; busy: boolean;
+  onSteamInstall: () => void; onSteamLaunch: () => void;
 }) {
-  if (source === "steam") {
-    const s = steam;
-    const cta: { label: string; onClick?: () => void } =
-      !s ? { label: "Checking Steam…" }
-      : !s.installed ? { label: "OUTERPLANE not found in Steam" }
-      : !s.ready ? { label: busy ? "Installing…" : s.plugin.present ? "Update the capture plugin" : "Install the capture plugin", onClick: busy ? undefined : onSteamInstall }
-      : !s.gameRunning ? { label: "Launch OUTERPLANE", onClick: onSteamLaunch }
-      : s.live ? { label: "Waiting for the lobby…" }
-      : { label: "Restart the game to load the plugin" };
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-white/8 px-10 py-16 text-center" style={{ background: "#161618" }}>
-        <div className="mb-5 grid h-16 w-16 place-items-center rounded-2xl border border-cyan-400/25 bg-cyan-400/8">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#67e8f9" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="5" width="18" height="14" rx="2.5" /><circle cx="12" cy="12" r="3.4" /><path d="M8 5l1.4-2h5.2L16 5" />
-          </svg>
-        </div>
-        <span className="mb-2 text-[20px] font-bold tracking-tight text-white">No account captured yet</span>
-        <p className="mb-6 max-w-105 text-[13px] leading-relaxed text-zinc-400">
-          Play OUTERPLANE on Steam with the capture plugin installed and this home fills in on its own — heroes, gear quality, breakdowns and your saved build library.
-        </p>
-        <button
-          onClick={cta.onClick}
-          disabled={!cta.onClick}
-          className={cx(
-            "rounded-[10px] px-6.5 py-3 text-[13px] font-bold tracking-tight",
-            cta.onClick
-              ? "bg-linear-to-b from-cyan-400 to-cyan-500 text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.45),0_8px_22px_-8px_rgba(34,211,238,0.7)] hover:brightness-105"
-              : "cursor-default border border-white/10 bg-white/4 text-zinc-400",
-          )}
-        >
-          {cta.label}
-        </button>
-        <div className="mt-6 flex items-center gap-2.5 font-mono text-[11px] text-zinc-400">
-          <span>install plugin</span><span className="text-zinc-400">→</span><span>launch game</span><span className="text-zinc-400">→</span><span>reach the lobby</span>
-        </div>
-      </div>
-    );
-  }
+  const s = steam;
+  const cta: { label: string; onClick?: () => void } =
+    !s ? { label: "Checking Steam…" }
+    : !s.installed ? { label: "OUTERPLANE not found in Steam" }
+    : !s.ready ? { label: busy ? "Installing…" : s.plugin.present ? "Update the capture plugin" : "Install the capture plugin", onClick: busy ? undefined : onSteamInstall }
+    : !s.gameRunning ? { label: "Launch OUTERPLANE", onClick: onSteamLaunch }
+    : s.live ? { label: "Waiting for the lobby…" }
+    : { label: "Restart the game to load the plugin" };
   return (
     <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-white/8 px-10 py-16 text-center" style={{ background: "#161618" }}>
       <div className="mb-5 grid h-16 w-16 place-items-center rounded-2xl border border-cyan-400/25 bg-cyan-400/8">
@@ -678,16 +646,22 @@ function EmptyDashboard({ source, steam, busy, onCapture, onSteamInstall, onStea
       </div>
       <span className="mb-2 text-[20px] font-bold tracking-tight text-white">No account captured yet</span>
       <p className="mb-6 max-w-105 text-[13px] leading-relaxed text-zinc-400">
-        Capture your roster from the emulator and this home fills in — heroes, gear quality, breakdowns and your saved build library, all at a glance.
+        Play OUTERPLANE on Steam with the capture plugin installed and this home fills in on its own — heroes, gear quality, breakdowns and your saved build library.
       </p>
       <button
-        onClick={onCapture}
-        className="rounded-[10px] bg-linear-to-b from-cyan-400 to-cyan-500 px-6.5 py-3 text-[13px] font-bold tracking-tight text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.45),0_8px_22px_-8px_rgba(34,211,238,0.7)] hover:brightness-105"
+        onClick={cta.onClick}
+        disabled={!cta.onClick}
+        className={cx(
+          "rounded-[10px] px-6.5 py-3 text-[13px] font-bold tracking-tight",
+          cta.onClick
+            ? "bg-linear-to-b from-cyan-400 to-cyan-500 text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.45),0_8px_22px_-8px_rgba(34,211,238,0.7)] hover:brightness-105"
+            : "cursor-default border border-white/10 bg-white/4 text-zinc-400",
+        )}
       >
-        Capture your account
+        {cta.label}
       </button>
       <div className="mt-6 flex items-center gap-2.5 font-mono text-[11px] text-zinc-400">
-        <span>launch emulator</span><span className="text-zinc-400">→</span><span>arm capture</span><span className="text-zinc-400">→</span><span>open Outerplane</span>
+        <span>install plugin</span><span className="text-zinc-400">→</span><span>launch game</span><span className="text-zinc-400">→</span><span>reach the lobby</span>
       </div>
     </div>
   );
@@ -698,13 +672,10 @@ export interface HomeScreenProps {
   inventory: Inventory | null;
   game: GameData | null;
   capStatus: CaptureStatus | null;
-  emulator: EmulatorStatus | null;
-  /** Active acquisition path + the Steam source's last status poll. */
-  source: CaptureSource;
+  /** The Steam capture plugin's last status poll. */
   steam: SteamStatus | null;
   appVersion: string;
   busy: boolean;
-  onCapture: () => void;
   onSteamInstall: () => void;
   onSteamLaunch: () => void;
   onReload: () => void;
@@ -716,8 +687,8 @@ export interface HomeScreenProps {
 }
 
 export function HomeScreen({
-  inventory, game, capStatus, emulator, source, steam, appVersion, busy,
-  onCapture, onSteamInstall, onSteamLaunch, onReload, onSyncData, onOpenBuilder, onDrill,
+  inventory, game, capStatus, steam, appVersion, busy,
+  onSteamInstall, onSteamLaunch, onReload, onSyncData, onOpenBuilder, onDrill,
 }: HomeScreenProps) {
   // Poll the update status. Faster while a download is in flight so the % bar
   // animates; idle states tick slowly. Seeded with a static "up to date" using
@@ -755,23 +726,16 @@ export function HomeScreen({
     return { builds, presets };
   }, []);
 
-  const isSteam = source === "steam";
-  // "Armed" (emulator pipeline up) / "Live" (Steam plugin loaded in a running game).
-  const armed = isSteam ? Boolean(steam?.live) : (capStatus?.armed ?? false);
+  // "Live" = the plugin is loaded in a running game.
+  const live = Boolean(steam?.live);
   const lastCap = relTime(capStatus?.userItemMtime ?? null);
-  const emuReady = Boolean(emulator?.chosen && emulator?.chosenPort);
-  const emuLine = emulator?.chosen
-    ? `${emulator.chosen.label}${emulator.chosenPort ? ` · 127.0.0.1:${emulator.chosenPort}` : " · not running"}`
-    : "No emulator detected";
   const steamD = describeSteam(steam);
-  const healthReady = isSteam ? Boolean(steam?.ready) : emuReady;
-  const healthTitle = isSteam
-    ? (steam?.live ? "Capture plugin live" : steam?.ready ? "Plugin ready · launch the game" : steam?.installed ? "Capture plugin needed" : "OUTERPLANE not found in Steam")
-    : (emuReady ? "Capture pipeline ready" : "Setup incomplete");
-  const healthLine = isSteam ? (steam?.gameDir ?? steamD.text) : emuLine;
-  // Steam primary action mirrors the header: install → launch → (live) reload.
+  const healthReady = Boolean(steam?.ready);
+  const healthTitle = steam?.live ? "Capture plugin live" : steam?.ready ? "Plugin ready · launch the game" : steam?.installed ? "Capture plugin needed" : "OUTERPLANE not found in Steam";
+  const healthLine = steam?.gameDir ?? steamD.text;
+  // Primary action mirrors the header: install → launch → (live) reload.
   const steamAction: { label: string; onClick: () => void } | null =
-    !isSteam || !steam || !steam.installed ? null
+    !steam || !steam.installed ? null
     : !steam.ready ? { label: busy ? "Installing…" : steam.plugin.present ? "Update plugin" : "Install plugin", onClick: onSteamInstall }
     : !steam.gameRunning ? { label: "Launch game", onClick: onSteamLaunch }
     : { label: "Reload", onClick: onReload };
@@ -783,7 +747,7 @@ export function HomeScreen({
           <div className="max-w-md">
             <UpdateCard status={update} onCheck={onCheck} onInstall={onInstall} />
           </div>
-          <EmptyDashboard source={source} steam={steam} busy={busy} onCapture={onCapture} onSteamInstall={onSteamInstall} onSteamLaunch={onSteamLaunch} />
+          <EmptyDashboard steam={steam} busy={busy} onSteamInstall={onSteamInstall} onSteamLaunch={onSteamLaunch} />
         </>
       ) : (
         <>
@@ -827,10 +791,10 @@ export function HomeScreen({
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Capture</span>
                   <span className={cx(
                     "inline-flex w-fit items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold",
-                    armed ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : "border-white/10 bg-white/4 text-zinc-400",
+                    live ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : "border-white/10 bg-white/4 text-zinc-400",
                   )}>
-                    <span className={cx("h-1.5 w-1.5 rounded-full", armed ? "bg-emerald-400 shadow-[0_0_7px_#34d399]" : "bg-zinc-500")} />
-                    {isSteam ? (armed ? "Live" : "Idle") : (armed ? "Armed" : "Idle")}
+                    <span className={cx("h-1.5 w-1.5 rounded-full", live ? "bg-emerald-400 shadow-[0_0_7px_#34d399]" : "bg-zinc-500")} />
+                    {live ? "Live" : "Idle"}
                   </span>
                 </div>
               </div>
@@ -863,9 +827,7 @@ export function HomeScreen({
               </div>
               <div className="mt-auto flex gap-2">
                 <ActBtn className="flex-1" onClick={onSyncData} disabled={busy}>Sync game data</ActBtn>
-                {isSteam
-                  ? (steamAction && <ActBtn tone="cyan" className="flex-1" onClick={steamAction.onClick} disabled={busy}>{steamAction.label}</ActBtn>)
-                  : <ActBtn tone="cyan" className="flex-1" onClick={onCapture} disabled={busy}>{busy ? "Capturing…" : armed ? "Re-capture" : "Arm capture"}</ActBtn>}
+                {steamAction && <ActBtn tone="cyan" className="flex-1" onClick={steamAction.onClick} disabled={busy}>{steamAction.label}</ActBtn>}
               </div>
             </Card>
 

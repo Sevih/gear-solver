@@ -1,11 +1,9 @@
 /**
- * Streaming log viewer for the capture / disarm pipelines.
+ * Streaming log viewer for the capture plugin install.
  *
- * Parses the line prefixes emitted by capture.ps1 / disarm.ps1 (see the
- * `Info` / `Ok` / `Die` / `Warn` PowerShell helpers in tools/capture/) and
- * colors them in the renderer — ANSI sequences don't survive the spawn
- * pipe from PowerShell to Node's child stdout, so we re-do the coloring
- * client-side based on the textual prefix conventions.
+ * Colors the line prefixes the backend emits (`v  ` ok, `x  ` error, `!  `
+ * warning, `>  ` info — see steam-capture.ts) client-side: the stream is
+ * plain text, so the tone comes from the textual prefix conventions.
  *
  * Also auto-scrolls to bottom on every new line so the user sees the
  * freshest event without manual scrolling.
@@ -14,7 +12,7 @@ import { useEffect, useRef } from "react";
 import { cx } from "./cx.js";
 
 /** Per-prefix tone table — order matters only for tied prefixes; today every
- *  prefix is unique. Keep in sync with the PowerShell helpers if a new tone
+ *  prefix is unique. Keep in sync with the backend's log lines if a new tone
  *  gets introduced. */
 const TONES: Array<{ prefix: string; className: string }> = [
   { prefix: "v  ", className: "text-emerald-300" },  // Ok
@@ -25,11 +23,9 @@ const TONES: Array<{ prefix: string; className: string }> = [
 
 function lineTone(line: string): string {
   for (const t of TONES) if (line.startsWith(t.prefix)) return t.className;
-  // streamCapture.ts surfaces transport failures as `[client] ...` lines;
-  // the embedded server prefixes its synthetic error lines with `[spawn
-  // error]` / `[detect error]`. Show all three in the error tone so the
-  // user can spot them in the wall of normal text.
-  if (line.startsWith("[client] ") || line.startsWith("[spawn error]") || line.startsWith("[detect error]")) {
+  // App.tsx surfaces transport failures as `[client] ...` lines. Show them in
+  // the error tone so the user can spot them in the wall of normal text.
+  if (line.startsWith("[client] ")) {
     return "text-rose-300";
   }
   // `__EXIT__:N` is the sentinel streamCapture strips, but if it ever leaks

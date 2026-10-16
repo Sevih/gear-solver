@@ -21,25 +21,17 @@ install, import your account, optimize a hero. No build step, no command line. T
 **[player wiki](https://github.com/Sevih/gear-solver/wiki)** (Getting Started · Using the App ·
 FAQ) walks through everything.
 
-> Needs Windows + OUTERPLANE either on **Steam** (the app installs a small capture plugin into
-> the game — no emulator, no root) or in a rooted **LDPlayer** — see the guide for the why and how.
+> Needs Windows + OUTERPLANE on **Steam** — the app installs a small capture plugin into the
+> game (no root, no proxy). See the guide for the why and how.
 
 ### ⚠️ Antivirus / SmartScreen warnings
 
 The installer is **not code-signed** (a certificate costs money the project doesn't spend), so
 Windows SmartScreen shows an "unknown publisher" prompt — click **More info → Run anyway**. A few
-antivirus engines may also flag it. This is expected for an unsigned Electron app, and specifically:
-
-- With the **emulator** source, the app **drives a rooted Android emulator and intercepts the
-  game's own HTTPS traffic** (via [mitmproxy](https://mitmproxy.org)) to read your account
-  inventory. That behavior looks like what monitoring tools do, so heuristic scanners are cautious
-  about it — it's exactly what the app is documented to do, nothing hidden. See
-  [tools/capture/README.md](tools/capture/README.md).
-- With the **Steam** source, it writes a [BepInEx](https://github.com/BepInEx/BepInEx) loader + a
-  small plugin into the game folder instead (read-only hook on the game's HTTP layer). See
-  [tools/capture-steam/README.md](tools/capture-steam/README.md).
-- mitmproxy is **downloaded from its official site on first capture** (checksum-verified), not
-  bundled, so the installer itself stays lean.
+antivirus engines may also flag it. This is expected for an unsigned Electron app, and specifically
+the app writes a [BepInEx](https://github.com/BepInEx/BepInEx) loader (downloaded from its official
+release, checksum-verified) + a small plugin into the game folder — a read-only hook on the game's
+HTTP layer. See [tools/capture-steam/README.md](tools/capture-steam/README.md).
 
 **Verify your download:** every [release](https://github.com/Sevih/gear-solver/releases) publishes
 the installer's SHA-256. Check it with `Get-FileHash .\Outerpedia-Gear-Solver-Setup-*.exe -Algorithm SHA256`.
@@ -57,9 +49,9 @@ Read on. The rest of this README plus [docs/](docs) cover the stack, build, and 
 
 ## What it does
 
-- **Captures** your account data via a mitmproxy pipeline against the mobile client
-  running in LDPlayer (one-button PowerShell). No certificate pinning; XOR key
-  recovered. See [tools/capture/README.md](tools/capture/README.md).
+- **Captures** your account data via a BepInEx plugin inside the Steam client: it copies
+  the game's own decrypted server responses as you play (or import the JSON files by
+  hand). See [tools/capture-steam/README.md](tools/capture-steam/README.md).
 - **Parses** the captured JSON into a typed inventory (gear, characters, presets)
   with resolved stat values matching in-game display.
 - **Composes** each hero's full stat sheet — mirror of in-game `CFormula::CalcFinalStat`
@@ -88,7 +80,7 @@ gear-solver/
 ├─ packages/
 │  └─ core/             Stack-agnostic engine: raw types, parser, stat resolution, no-gear composer
 ├─ tools/
-│  └─ capture/          Data acquisition pipeline (mitmproxy + LDPlayer, one-button PS)
+│  └─ capture-steam/    Data acquisition: BepInEx plugin for the Steam client
 ├─ data/
 │  ├─ derived/          Distilled tables consumed by the engine (committed; synced from outerpedia's solver artifacts by sync.mjs, stamped with version.json)
 │  └─ stat-locks.json   Per-hero regression snapshots validated against in-game
@@ -110,7 +102,7 @@ gear-solver/
 > building from source.
 
 ```bash
-# Prereqs: Node ≥ 20, LDPlayer rooted with the Outerplane mobile client installed.
+# Prereqs: Node ≥ 20; for the capture plugin, OUTERPLANE on Steam + the .NET SDK.
 
 npm install                   # all workspaces
 
@@ -135,14 +127,13 @@ root `npm run dev` is an alias for `desktop:dev`, so target the workspace explic
 npm run dev -w @gear-solver/renderer   # http://localhost:5173
 ```
 
-Capture (run once you have a fresh account state to import):
+Capture plugin (build once, then install it from the app: Settings → Setup → Install plugin):
 
-```powershell
-cd tools/capture
-powershell -ExecutionPolicy Bypass -File .\capture.ps1
+```bash
+npm run capture-steam:build   # dotnet build tools/capture-steam → dist/GearSolverCapture.dll
 ```
 
-The renderer auto-imports the latest capture on launch.
+Play to the lobby: the renderer imports the snapshot on its own, and the latest one on launch.
 
 ---
 
@@ -166,8 +157,8 @@ resolution, JSON backup round-trip, and the engine↔user stat key mapping.
 ## Architecture in one diagram
 
 ```
-LDPlayer (game) ──HTTPS──▶ tools/capture (mitmproxy + PS) ──JSON──▶ packages/core ──▶ apps/renderer
-  account data              decrypts & writes out/*.json     parse + compose + types     React UI + Web Worker pool
+Steam client (game) ──BepInEx──▶ tools/capture-steam ───────JSON──▶ packages/core ──▶ apps/renderer
+  account data                  copies decoded JSON          parse + compose + types     React UI + Web Worker pool
 
                                                                                           │
                                                                           packaged via    ▼

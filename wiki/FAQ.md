@@ -7,45 +7,40 @@ Common questions and fixes for players. For how the app works internally, see
 
 ## Importing my account
 
-**Steam or emulator — which source should I use?**
-**Steam** if you have the PC client: nothing to root, nothing to configure, and your account
-re-imports every time you reach the lobby. The emulator path exists for players without the
-Steam client. Switch anytime in **Settings → Setup** (top of the pane).
+**How does the app get my account?**
+Through a small capture plugin in the **Steam** client of OUTERPLANE: nothing to root, nothing to
+configure, and your account re-imports every time you reach the lobby. Without the Steam client,
+import your snapshot files by hand with the **Manual fallback** picker at the bottom of the
+window.
 
-**(Steam) "Install plugin" says the game must be closed.**
+**I used the emulator capture of an older version — what now?**
+That source is gone: install OUTERPLANE from Steam and the capture plugin (Settings → Setup).
+The app deleted its own capture certificate folder on the first launch of the new version. On
+the emulator, the certificate it had trusted only lasted until the instance restarted — restart
+it once and it's no longer trusted (a few leftover files under `/sdcard` can be deleted by hand;
+see the release notes).
+
+**"Install plugin" says the game must be closed.**
 Two cases lock files in the game folder: the first install of the BepInEx loader, and updating
 a plugin the running game has already loaded. Quit OUTERPLANE, click Install again, relaunch.
 A first install while the game runs *without* any plugin yet is fine — just restart the game
 afterwards so it loads.
 
-**(Steam) The header says "game up, plugin not loaded" / nothing imports.**
+**The header says "game up, plugin not loaded" / nothing imports.**
 The game was started before the plugin was installed (or BepInEx isn't loading). Restart the
 game. If it persists, look at `BepInEx/LogOutput.log` in the game folder — it should list
 *Gear Solver Capture* and "hooked CWebManager…"; an antivirus quarantining `winhttp.dll` in
 the game folder is the usual culprit.
 
-**(Steam) What does the plugin do to my game?**
+**What does the plugin do to my game?**
 It reads the responses the game already received and copies them to the app's folder. It
 changes nothing in the game, sends nothing to the server, and can be removed from
-**Settings → Setup → Remove plugin**. It is still a third-party mod loaded into the client —
-same category as the emulator interception.
-
-**(Emulator) Nothing shows up after I click Arm capture.**
-Play the game **through to the lobby** (main town screen) — that's when OUTERPLANE sends your
-account + inventory. Then click **Reload** in gear-solver. If it's still empty, check the next
-item.
-
-**(Emulator) The setup checklist won't go green / "ADB connection" or "Root toggle" fails.**
-- Make sure LDPlayer is **running** with OUTERPLANE open.
-- Turn **Root permission ON** in LDPlayer (Settings → Other settings → Root → ON) and **restart
-  the instance** — root must be on *before* you capture.
-- Re-open the **Setup** wizard (gear icon) and re-run the checks.
+**Settings → Setup → Remove plugin**. It is still a third-party mod loaded into the client.
 
 **My hero stats are slightly off vs the in-game character sheet.**
 Two stat sources (Codex and Geas) aren't sent on the lobby screen. Open the in-game **Hero
-Archive (Codex)** and **Gift / Geas** screens once: on Steam they import as they load; on the
-emulator do it with capture still **armed**, then click **Disarm** in gear-solver. Your stats
-will then match exactly.
+Archive (Codex)** and **Gift / Geas** screens once: they import as they load. Your stats will
+then match exactly.
 
 **Do you upload my account anywhere?**
 No. Capturing reads the game's network responses **locally on your PC**; saved builds and presets
@@ -107,8 +102,7 @@ there.
 
 **I want a clean slate.**
 **Settings → Data → Wipe captured data** empties the whole capture folder: the imported
-snapshot, the capture logs, `game.flows` and the unknown endpoints under `_unknown/` (it's
-blocked while a capture is still armed — Disarm first).
+snapshot, the seen-paths log and the unknown endpoints under `_unknown/`.
 
 ---
 

@@ -5,7 +5,7 @@
  * pure + tested); here we just run it against the loaded game data (needed to
  * resolve a piece's slot) and persist the result by POSTing the FULL rewritten
  * `user_item.json` back to the local server, which writes it to disk
- * (`tools/capture/out/user_item.json`). The caller re-imports the inventory
+ * (`<capture folder>/user_item.json`). The caller re-imports the inventory
  * afterwards (e.g. `refreshInventory` in App.tsx) to pick the edit up.
  *
  * Wired to the Builder via "Equip build" (applies a solved build's pieces to
@@ -27,7 +27,7 @@ async function fetchRawUserItem(): Promise<RawUserItem | null> {
 }
 
 /** Persist a rewritten snapshot. Returns false on a network error or a server
- *  refusal (e.g. 409 while the capture pipeline is armed). */
+ *  refusal (e.g. 409 while the Steam plugin is live in a running game). */
 async function writeUserItem(raw: RawUserItem): Promise<boolean> {
   try {
     const r = await fetch("/api/captured/user-item", {

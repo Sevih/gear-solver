@@ -5,12 +5,12 @@
  *
  * Layout assumptions:
  *  - Dev: the compiled main lives at `apps/desktop/dist/main.js`; all repo
- *    artefacts (data/derived, tools/capture, apps/renderer/dist, the outerpedia
- *    image checkout) live at known offsets relative to the repo root.
+ *    artefacts (data/derived, tools/capture-steam, apps/renderer/dist, the
+ *    outerpedia image checkout) live at known offsets relative to the repo root.
  *  - Prod: `electron-builder` copies the bundled trees under
  *    `process.resourcesPath` (see the `extraResources` mapping in this
  *    package's package.json). Anything that needs to be written at runtime
- *    (capture out/, mitm pid file, …) is stored under
+ *    (capture out/, stat locks, …) is stored under
  *    `app.getPath("userData")` so the install dir stays read-only.
  */
 import { app } from "electron";
@@ -54,43 +54,17 @@ export const DERIVED = IS_DEV ? join(REPO_ROOT, "data", "derived") : join(CACHE_
  *  in prod as the first-launch seed for the writable DERIVED cache. */
 export const BUNDLED_DERIVED = join(RES, "data", "derived");
 
-/** Capture pipeline scripts + cert + mitmproxy addon. PowerShell entrypoints
- *  are `capture.ps1` / `disarm.ps1`. */
-export const CAPTURE_DIR = IS_DEV ? join(REPO_ROOT, "tools", "capture") : join(RES, "tools", "capture");
-
-/** Captured account JSON — `user_item.json` etc. In dev this is the repo
- *  output dir so an existing capture stays visible; in prod we keep capture
- *  output under userData so it survives upgrades and the install dir stays
- *  read-only. */
+/** Captured account JSON — `user_item.json` etc., written by the Steam
+ *  capture plugin (and read back by the renderer). Dev keeps it in the
+ *  gitignored repo cache; prod under userData so it survives upgrades and the
+ *  install dir stays read-only. */
 export const CAPTURE_OUT = IS_DEV
-  ? join(CAPTURE_DIR, "out")
+  ? join(REPO_ROOT, ".cache", "capture-out")
   : join(app.getPath("userData"), "capture-out");
 
 /** Built renderer (apps/renderer/dist) — served by the embedded HTTP server in
  *  prod; ignored in dev where Vite serves the same files with HMR. */
 export const RENDERER_DIST = IS_DEV ? join(REPO_ROOT, "apps", "renderer", "dist") : join(RES, "renderer", "dist");
-
-/** Bundled adb.exe (+ AdbWinApi.dll / AdbWinUsbApi.dll alongside). The dev
- *  fallback points at the LDPlayer-installed copy — the bundled tree only
- *  exists after `scripts/fetch-binaries.mjs` was run, which is a prod-only
- *  concern. */
-export const BUNDLED_ADB = IS_DEV
-  ? "C:\\LDPlayer\\LDPlayer9\\adb.exe"
-  : join(RES, "bin", "adb", "adb.exe");
-
-// mitmdump.exe is NOT bundled (AV heuristics flag the mitmproxy binaries in
-// the installer) — it is downloaded on first capture into userData. See
-// `mitm-provision.ts` for the pinned version/hash and `mitmdumpPath()`.
-
-/** This install's mitmproxy CA for the emulator capture — `mitmproxy-ca.pem`
- *  (key + cert, read by mitmdump via `--set confdir=...`) and the Android-hash
- *  named `c8750f0d.0` (pushed to the device). Generated on the user's machine
- *  before the first capture (`capture-ca.ts`), reused afterwards; the
- *  installer ships none. Lives in userData next to `bin/` (not under
- *  `bin/mitmproxy/`, which a mitmdump version bump wipes), with the profile's
- *  default permissions. Prod only — dev passes no CA args and capture.ps1's
- *  defaults (~/.mitmproxy + tools/capture/cert) take over. */
-export const CAPTURE_CA_DIR = join(app.getPath("userData"), "capture-ca");
 
 /** Steam capture plugin (tools/capture-steam) — the BepInEx DLL the app copies
  *  into the game folder on "Install plugin". Dev reads the local `dotnet build`
@@ -126,11 +100,3 @@ export function findOuterpediaImagesDev(): string | null {
 export const STAT_LOCKS = IS_DEV
   ? join(REPO_ROOT, "data", "stat-locks.json")
   : join(app.getPath("userData"), "stat-locks.json");
-
-/** Manual capture-device override (adb path + device serial) set in
- *  Settings → Setup. User-specific, never committed — dev keeps it in the
- *  gitignored cache, prod under userData. Mirrors the path the Vite dev
- *  middleware computes so the override survives a dev↔packaged swap. */
-export const MANUAL_DEVICE = IS_DEV
-  ? join(REPO_ROOT, ".cache", "manual-device.json")
-  : join(app.getPath("userData"), "manual-device.json");

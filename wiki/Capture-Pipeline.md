@@ -1,55 +1,48 @@
 # Capture Pipeline
 
-*Mirror of `tools/capture/README.md` — see the repo for the authoritative source.*
+*Summary of `tools/capture-steam/README.md` — see the repo for the authoritative source.*
 
-Proven method to recover the full account inventory/character data from OUTERPLANE
-(`com.smilegate.outerplane.stove.google`) for the gear solver. **Status: working end-to-end.**
+How the gear solver reads your account inventory/character data from OUTERPLANE: a
+**BepInEx plugin inside the Steam (PC) client** — no root, no proxy, no certificate.
+**Status: working end-to-end** (validated in-game 2026-09-05). Players without the Steam
+client can import the same JSON files by hand in the app.
 
-> **Steam client (2026-09-05):** OUTERPLANE is on Steam, and the app has a second capture
-> source for it — a BepInEx plugin hooked into the PC client, **no emulator, root or proxy**.
-> That's the recommended path for PC players; the app picks it in Settings → Setup. See
-> [tools/capture-steam/README.md](https://github.com/Sevih/gear-solver/blob/main/tools/capture-steam/README.md). Everything below is the
-> **emulator** source, kept for players without the Steam client.
+## How it works
 
-## Quick start (one button)
-
-Prereqs once: LDPlayer 9 running with **ADB debugging = Local connection** and the
-**Root toggle ON** (the game launches fine with it on).
-
-```powershell
-cd tools/capture
-powershell -ExecutionPolicy Bypass -File .\capture.ps1     # arms + relaunches + live-decodes
-powershell -ExecutionPolicy Bypass -File .\disarm.ps1      # tears everything down
-```
-
-`capture.ps1` installs the CA cert if needed, starts the MITM pipeline, relaunches the
-game, and writes decoded JSON to `out/` (`user_item.json`, `user_character.json`, …). It
-leaves the pipeline armed: the game stays fully playable and every later data fetch keeps
-decoding into `out/`. Everything below is the manual explanation of what the script does.
-
-Full traffic recording is **off by default**: `capture.ps1` only writes the decoded JSON. For
-debugging, `-RecordFlows` also passes `-w game.flows` to mitmdump, which saves every request and
-response (headers and bodies) to `out/game.flows` until the next Wipe; a run without it deletes a
-`game.flows` left by an earlier run. In the app this is **Settings → Debug → Record full capture
-traffic (game.flows)**.
-
-## Summary of findings
-
-- The game **splits its traffic**:
-  - Asset/patch CDN over standard HTTPS (port 443) — *honors* the Android system proxy.
-    Hosts: `kr-patch.outerplane.vagames.co.kr`, `glb-patch.outerplane.vagames.co.kr`.
-  - **Game data** over HTTPS on **non-standard ports** via the Unity **BestHTTP/2** client,
-    which **ignores** the system proxy. This is where account/inventory data lives.
-- Game servers (from `…/files/Hosts` in the app's external storage):
+- The Steam build is Unity 2022.3 **Mono**, so the game's C# can be patched at runtime by
+  Harmony (bundled with BepInEx).
+- The game talks to its servers through the Unity **BestHTTP/2** client:
   | Host | Port | Role |
   |------|------|------|
   | `glb-login.outerplane.vagames.co.kr` | 38002 | login / version check |
   | `glb-game.outerplane.vagames.co.kr`  | 38001 | **account, inventory, characters** |
-  | `glb-chat.outerplane.vagames.co.kr`  | 38003 | chat (HTTPS + WSS) |
-- **No certificate pinning.** A CA cert trusted by the system store is enough to MITM.
 - Response bodies are JSON shaped `{"msg":"<hex>"}`. The hex decodes to bytes that are
   **repeating-key XOR** encrypted with the 21-byte ASCII key **`ASLDKGFJASPODIFJSOWEI`**.
-  Decoded result is plain UTF-8 JSON. Same key for every endpoint.
+  The game decrypts them itself (`CWebManager.DecryptMsg`), so the plugin never has to.
+- Two read-only Harmony **postfixes**: `CWebManager.Log2InternalWeb` (primary — the decrypted
+  JSON + its path, e.g. `/user/item`) and `CWebManager.DecryptMsg` (fallback, identifies the
+  payload by its top-level keys). Nothing is sent to the server, gameplay is untouched.
+
+## Install (what the app does on "Install plugin")
+
+1. Finds the game through the Steam library folders (no path to type).
+2. If the game has no BepInEx yet, downloads the pinned **BepInEx 5** release from its official
+   GitHub page (SHA-256 checked) into the game folder. The game must be closed.
+3. Copies `GearSolverCapture.dll` to `BepInEx/plugins/GearSolverCapture/` and points the plugin
+   config (`OutDir`) at the app's capture folder (`%APPDATA%\Outerpedia Gear Solver\capture-out`).
+
+Then launch the game from Steam and reach the lobby: the app re-imports on its own.
+
+## Output (the app's capture folder)
+
+| File | Source | Notes |
+|------|--------|-------|
+| `user_item.json`, `user_character.json`, `user_asset.json`, `user_info.json`, `user_lobby.json`, `user_etc.json`, `item_customInfo.json`, `user_archive.json`, `user_gift.json` | `/user/item`, `/user/character`, … `/archive/info`, `/gift/info` | Rewritten on every fetch (lobby load, screen open). |
+| `.captured` | after `/user/item` | Sentinel the app's status endpoint reports. |
+| `.steam-plugin.json` | plugin start + every capture | Heartbeat the app reads to show **Live**. |
+| `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | Discovery of new game endpoints. |
+
+The app's **Settings → Data → Wipe captured data** empties the whole folder.
 
 ## Key endpoints (POST, on `glb-game …:38001`)
 
@@ -81,70 +74,5 @@ SubOptionList[]      substats: { OptionID, Level (procs above the initial tick),
   distills it into `data/derived/options.json`, consumed at runtime via `resolveStat(optionId, ticks, game.options)`.
   Cross-checked against in-game display (e.g. a weapon read ATK 61.8% / Crit Chance 12% / Crit
   DMG 24% / DMG Increase 8% / Speed 9).
-
-## Environment
-
-- Emulator: **LDPlayer 9**, instance 0, **Android 9 (API 28)**, game targetSdk 35.
-- `adb` bundled at `C:\LDPlayer\LDPlayer9\adb.exe`, device `127.0.0.1:5555`.
-- `mitmproxy` 12.x at `C:\Program Files\mitmproxy\bin\mitmdump.exe`.
-- Host LAN IP example: `192.168.1.204`. Game UID example: `10060` (varies).
-
-## Reproduce (one-time setup)
-
-1. **Enable ADB** in LDPlayer settings → ADB debugging = *Local connection*.
-   `adb connect 127.0.0.1:5555`.
-2. **Install the mitmproxy CA into the system store.** `adb root` is blocked on LDPlayer
-   (production adbd) and `/system` is a read-only rootfs, so use a **bind mount** (needs the
-   LDPlayer Root toggle ON temporarily — game closed; can be turned off after, but the bind
-   mount is non-persistent and must be re-applied after any reboot):
-   - Compute Android cert name: `openssl x509 -inform PEM -subject_hash_old -in ~/.mitmproxy/mitmproxy-ca-cert.pem` → `<hash>.0`.
-   - Push to `/sdcard`, then run `scripts/bind_cert.sh` as root (copies system certs + ours into
-     `/data/local/tmp/cacerts`, then `mount --bind` over `/system/etc/security/cacerts`).
-3. The game launches fine with the cert installed (and even with LDPlayer root on — no root
-   detection blocked it in testing).
-
-## Reproduce (each capture)
-
-`capture.ps1` does it all (preferred):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\capture.ps1
-```
-
-Manual equivalent:
-
-1. Start mitmdump with the addon (decodes live, no `.flows` file needed):
-   ```
-   mitmdump -s addon.py \
-     --mode "reverse:https://glb-game.outerplane.vagames.co.kr:38001@9001" \
-     --mode "reverse:https://glb-login.outerplane.vagames.co.kr:38002@9002" \
-     --listen-host 127.0.0.1
-   ```
-2. Tunnel + redirect on the device (`scripts/redir.sh` as root):
-   ```
-   adb reverse tcp:9001 tcp:9001 ; adb reverse tcp:9002 tcp:9002
-   # device: iptables nat OUTPUT REDIRECT dport 38001→9001, 38002→9002 (route_localnet=1)
-   ```
-3. Force-stop + relaunch the game, tap "TOUCH TO START". `addon.py` writes
-   `out/user_item.json`, `out/user_character.json` etc. on the fly and drops
-   a `out/.captured` sentinel once `/user/item` is seen.
-
-## Files
-
-- `capture.ps1` / `disarm.ps1` — one-shot orchestration (arm + relaunch +
-  live-decode / tear down). Vite dev server's "Arm capture" button wraps
-  these via `/api/capture/run|disarm`.
-- `addon.py` — mitmproxy addon: live XOR-decode of every `{"msg":"<hex>"}`
-  body. Known endpoints land in `out/<name>.json`; unknown ones get
-  written to `out/_unknown/` plus logged to `out/seen-paths.log` so new
-  game endpoints are easy to discover after navigating the menus.
-- `cert/c8750f0d.0` — mitmproxy CA in Android `subject_hash_old` format,
-  pushed to the device by `capture.ps1`.
-- `scripts/bind_cert.sh` — install CA via bind mount (run as root).
-- `scripts/redir.sh` — iptables redirect of game ports to local
-  reverse-proxy ports (run as root).
-- `out/` — decoded capture snapshot, plus `mitm.log` / `mitm.log.err` (mitmdump output),
-  `_unknown/`, `seen-paths.log` and, with `-RecordFlows` only, `game.flows`. The app's
-  **Settings → Data → Wipe captured data** empties the whole folder.
 
 See also: [Data Schema](Data-Schema) for the decoded JSON field reference.

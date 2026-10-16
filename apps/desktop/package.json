@@ -59,29 +59,6 @@
         "to": "renderer/dist"
       },
       {
-        "from": "../../tools/capture/capture.ps1",
-        "to": "tools/capture/capture.ps1"
-      },
-      {
-        "from": "../../tools/capture/disarm.ps1",
-        "to": "tools/capture/disarm.ps1"
-      },
-      {
-        "from": "../../tools/capture/addon.py",
-        "to": "tools/capture/addon.py"
-      },
-      {
-        "from": "../../tools/capture/scripts",
-        "to": "tools/capture/scripts"
-      },
-      {
-        "from": "resources/bin/adb",
-        "to": "bin/adb",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
         "from": "resources/capture-steam",
         "to": "capture-steam",
         "filter": [

@@ -5,7 +5,7 @@
  * rewriting the captured JSON: a piece's owner is its `RawItem.CharUID`
  * (`"0"` = unequipped, mirroring the wire convention in parse.ts). These pure
  * helpers produce a NEW `RawUserItem` with the right `CharUID`s flipped; the
- * caller persists it (writes `tools/capture/out/user_item.json`) and re-imports.
+ * caller persists it (rewrites the captured `user_item.json`) and re-imports.
  *
  * Wiring the disk write-back + a Builder/Builds trigger is a separate task
  * (see docs/todo.md "Equip / Unequip — branchement"); this module is just the

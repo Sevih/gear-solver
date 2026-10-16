@@ -17,19 +17,20 @@ Dense unified doc for anyone who has to pick up the engine cold. Covers:
 
 ## 1. Processing
 
-### 1.1 Capture (`tools/capture/`)
+### 1.1 Capture (`tools/capture-steam/`)
 
-mitmproxy + PowerShell pipeline. Captures Outerplane server responses:
+BepInEx plugin loaded by the Steam client (Unity Mono). Copies Outerplane server responses
+once the game has decrypted them:
 - Endpoints: `glb-game.outerplane.vagames.co.kr:38001` (account/inventory) +
-  `glb-login…:38002`. Non-standard ports via Unity BestHTTP/2 → bypasses the
-  system proxy, so an iptables redirect is required.
-- Encoding: `{"msg":"<hex>"}` → hex → **repeated-key XOR
-  `ASLDKGFJASPODIFJSOWEI`** → UTF-8 JSON. No certificate pinning.
-- Output: `tools/capture/out/{user_item,user_character,…}.json`.
+  `glb-login…:38002`, via Unity BestHTTP/2.
+- Wire encoding: `{"msg":"<hex>"}` → hex → **repeated-key XOR
+  `ASLDKGFJASPODIFJSOWEI`** → UTF-8 JSON. The plugin has nothing to decrypt: postfix on
+  `CWebManager.Log2InternalWeb` (clear JSON + path), shape-based `DecryptMsg` fallback.
+- Output: `<capture folder>/{user_item,user_character,…}.json` (`.cache/capture-out` in dev,
+  `<userData>/capture-out` packaged). The manual import reads the same files.
 
-Files: [capture.ps1](../tools/capture/capture.ps1),
-[disarm.ps1](../tools/capture/disarm.ps1),
-[addon.py](../tools/capture/addon.py).
+Files: [Plugin.cs](https://github.com/Sevih/gear-solver/blob/main/tools/capture-steam/src/Plugin.cs),
+[steam-capture.ts](https://github.com/Sevih/gear-solver/blob/main/apps/desktop/src/steam-capture.ts) (app-side install + status).
 
 See also: [Capture Pipeline](Capture-Pipeline).
 
@@ -155,8 +156,8 @@ A piece's owner is `RawItem.CharUID` (`"0"` = free, same convention as the parse
 
 Persistence: the **renderer** runs the transform (it already holds core + the loaded game data
 for the slot lookup), then POSTs the full rewritten snapshot to `POST /api/captured/user-item`
-(a dumb writer: validates `{ ItemList[] }` + `writeFileSync`s `out/user_item.json`, refuses with
-409 while the capture pipeline is armed). Client: `apps/renderer/src/equip.ts`
+(a dumb writer: validates `{ ItemList[] }` + `writeFileSync`s the captured `user_item.json`, refuses
+with 409 while the Steam plugin is live in a running game). Client: `apps/renderer/src/equip.ts`
 (`equipPiece`/`unequipPiece`). A Builder/Builds trigger UI is the remaining step.
 
 ---

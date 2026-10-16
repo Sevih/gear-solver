@@ -4,7 +4,7 @@
  * These mirror the captured payloads 1:1; do not "clean them up" here, the
  * cleanup happens in parse.ts when mapping to the domain model in types.ts.
  *
- * Source: tools/capture (see docs/data-schema.md).
+ * Source: the Steam capture plugin, tools/capture-steam (see docs/data-schema.md).
  */
 
 /** One substat line on a gear piece. */

@@ -7,7 +7,7 @@
     It hooks the game's own HTTP layer (CWebManager) and writes every decoded
     server response the solver cares about (user/item, user/character, …) as
     plain JSON into the app's capture folder. No proxy, no certificate, no
-    emulator: the game decrypts the payload itself, we just copy the result.
+    root: the game decrypts the payload itself, we just copy the result.
 
     References are NOT NuGet packages: they are read from the installed game
     (UnityEngine, Newtonsoft — the game classes are reached by name at runtime) and from BepInEx/core, so

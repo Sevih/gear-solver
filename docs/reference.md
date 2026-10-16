@@ -15,19 +15,20 @@ Doc dense unifiée pour quiconque doit reprendre le moteur à froid. Couvre :
 
 ## 1. Traitements
 
-### 1.1 Capture (`tools/capture/`)
+### 1.1 Capture (`tools/capture-steam/`)
 
-Pipeline mitmproxy + PowerShell. Capture les réponses du serveur Outerplane :
+Plugin BepInEx chargé par le client Steam (Unity Mono). Copie les réponses du serveur Outerplane
+au moment où le jeu les a déchiffrées :
 - Endpoints : `glb-game.outerplane.vagames.co.kr:38001` (compte/inventaire) +
-  `glb-login…:38002`. Ports non-standard via Unity BestHTTP/2 → bypasse
-  proxy système, donc redirect iptables nécessaire.
-- Encodage : `{"msg":"<hex>"}` → hex → **XOR clé répétée
-  `ASLDKGFJASPODIFJSOWEI`** → UTF-8 JSON. Pas de certificate pinning.
-- Sortie : `tools/capture/out/{user_item,user_character,…}.json`.
+  `glb-login…:38002`, via Unity BestHTTP/2.
+- Encodage sur le fil : `{"msg":"<hex>"}` → hex → **XOR clé répétée
+  `ASLDKGFJASPODIFJSOWEI`** → UTF-8 JSON. Le plugin n'a rien à déchiffrer : postfix sur
+  `CWebManager.Log2InternalWeb` (JSON clair + path), fallback `DecryptMsg` par forme.
+- Sortie : `<dossier de capture>/{user_item,user_character,…}.json` (`.cache/capture-out` en dev,
+  `<userData>/capture-out` packagé). L'import manuel lit les mêmes fichiers.
 
-Fichiers : [capture.ps1](../tools/capture/capture.ps1),
-[disarm.ps1](../tools/capture/disarm.ps1),
-[addon.py](../tools/capture/addon.py).
+Fichiers : [Plugin.cs](../tools/capture-steam/src/Plugin.cs),
+[steam-capture.ts](../apps/desktop/src/steam-capture.ts) (install + statut côté app).
 
 ### 1.2 Tables dérivées (datagen outerpedia → `data/derived/`)
 
@@ -147,7 +148,7 @@ d'une pièce est `RawItem.CharUID` (`"0"` = libre, même convention qu'au parse)
 
 Persistance : le **renderer** applique le transform (il a core + la game data chargée), puis POST
 le snapshot complet à `POST /api/captured/user-item` (writer bête : valide `{ ItemList[] }` +
-`writeFileSync` `out/user_item.json`, refus 409 si pipeline armé). Client :
+`writeFileSync` du `user_item.json` capturé, refus 409 si le plugin Steam est actif dans le jeu). Client :
 [apps/renderer/src/equip.ts](../apps/renderer/src/equip.ts) (`equipPiece`/`unequipPiece`). Le
 déclencheur UI (Builder/Builds) reste à câbler.
 

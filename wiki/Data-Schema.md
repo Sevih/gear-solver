@@ -96,7 +96,7 @@ node levels per account).
 2. `npm run data:sync` copies those artifacts into `data/derived/*.json` (including
    `version.json` `{ hash, builtAt }` — the `hash` only changes if the
    data actually moved). Shown in Settings → Data.
-3. Re-capture the account if the version has changed (`tools/capture/capture.ps1`).
+3. Re-capture the account if the version has changed (play to the lobby with the plugin).
 4. Green tests (`npm test --workspaces`).
 5. Re-validate the stat-locks via the app's debug toggle, refresh the
    snapshots in `data/stat-locks.json` if necessary.

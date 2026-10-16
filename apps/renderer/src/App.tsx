@@ -2,8 +2,7 @@ import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, use
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { autoImport, parseFiles, readManualFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
-import { getEmulators, type EmulatorStatus } from "./emulator.js";
-import { getSteamStatus, launchSteamGame, CAPTURE_SOURCE_KEY, type CaptureSource, type SteamStatus } from "./steam.js";
+import { getSteamStatus, launchSteamGame, type SteamStatus } from "./steam.js";
 import { getGameVersion } from "./game-version.js";
 import { waitForStartupSync } from "./lib/startupSync.js";
 import { describeDataSync, requestDataSync, type DataSyncResult } from "./lib/dataSync.js";
@@ -90,17 +89,12 @@ export function App() {
   const [heroPriority, setHeroPriority] = usePersistedState<HeroPriority>(HERO_PRIORITY_KEY, {});
   const [status, setStatus] = useState("");
   const [capStatus, setCapStatus] = useState<CaptureStatus | null>(null);
-  const [emulator, setEmulator] = useState<EmulatorStatus | null>(null);
-  // Steam capture source — last `/api/steam/status` poll. Null until the first
-  // probe answers (the header shows "checking…" meanwhile).
+  // Steam capture plugin — last `/api/steam/status` poll. Null until the first
+  // probe answers (the header shows "checking…" meanwhile). The plugin is the
+  // only capture source; without the Steam game, the manual import remains.
   const [steam, setSteam] = useState<SteamStatus | null>(null);
-  // Which acquisition path the app drives. Persisted explicit choice, or auto:
-  // Steam whenever OUTERPLANE is found in a Steam library (no root, no
-  // emulator, no proxy), emulator otherwise. Editable in Settings → Setup.
-  const [sourcePref, setSourcePref] = usePersistedState<CaptureSource | null>(CAPTURE_SOURCE_KEY, null);
-  const source: CaptureSource = sourcePref ?? (steam?.installed ? "steam" : "emulator");
   const [gameVersion, setGameVersion] = useState<string | null>(null);
-  const [running, setRunning] = useState<"none" | "capture" | "disarm" | "steam-install">("none");
+  const [running, setRunning] = useState<"none" | "steam-install">("none");
   const [log, setLog] = useState<string[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   // Onboarding wizard — persisted "seen" flag so the modal only auto-opens
@@ -119,10 +113,6 @@ export function App() {
   // fan-out / merge / duration logging on. Persisted so it survives reloads
   // while profiling a slow solve.
   const [debugSolver, setDebugSolver] = usePersistedState<boolean>("gs.debug.solver", false);
-  // Emulator capture: also record the full capture traffic to game.flows
-  // (capture.ps1 -RecordFlows). Debugging only — off by default, and the
-  // script deletes a leftover game.flows when it is off.
-  const [debugCaptureFlows, setDebugCaptureFlows] = usePersistedState<boolean>("gs.debug.captureFlows", false);
   // Solver tuning (edited in Settings → Solver, consumed by the Builder).
   // workerCount: null = auto (hardwareConcurrency − 1); a number pins the pool
   // size. Shares `gs.solver.workerCount` with the non-React `resolveWorkerCount`.
@@ -174,7 +164,7 @@ export function App() {
       // when an explicit user action (Reload, Capture OK, Manual import)
       // produced the refresh.
       setStatus(label === "Auto-import" ? "" : `${label} · ${r.game ? "stats resolved" : "engine-only fallback"}`);
-    } else setStatus(r.game ? "Game data loaded - no capture found." : source === "steam" ? "No data. Install the capture plugin, then play to the lobby." : "No data. Arm capture to begin.");
+    } else setStatus(r.game ? "Game data loaded - no capture found." : "No data. Install the capture plugin, then play to the lobby.");
   }
 
   // Manual "Sync game data" — pulls fresh tables from the outerpedia repo,
@@ -229,24 +219,22 @@ export function App() {
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { void getEmulators().then(setEmulator); }, []);
   useEffect(() => { void getSteamStatus().then(setSteam); }, []);
   useEffect(() => { void getGameVersion().then(setGameVersion); }, []);
 
-  // Steam source is passive: the plugin writes snapshots whenever the game
-  // fetches them. Poll the plugin status + the snapshot mtime while Steam is
-  // the active source, and re-import the moment user_item.json changes so the
-  // app follows the game without a click. 5 s is plenty (a lobby load writes
-  // once) and the status probe is a cheap tasklist + a few stat() calls.
+  // The capture is passive: the plugin writes snapshots whenever the game
+  // fetches them. Poll the plugin status + the snapshot mtime, and re-import
+  // the moment user_item.json changes so the app follows the game without a
+  // click. 5 s is plenty (a lobby load writes once) and the status probe is a
+  // cheap tasklist + a few stat() calls.
   useEffect(() => {
-    if (source !== "steam") return;
     let alive = true;
     const isAlive = () => alive;
     // The first tick is a no-op until the startup import seeded the mtime.
     void follower.tick(isAlive);
     const id = setInterval(() => { void follower.tick(isAlive); }, 5000);
     return () => { alive = false; clearInterval(id); };
-  }, [source, follower]);
+  }, [follower]);
 
   async function onFiles(input: HTMLInputElement) {
     const files = input.files;
@@ -269,50 +257,9 @@ export function App() {
     }
   }
 
-  async function runCapture(mode: "capture" | "disarm") {
-    if (running !== "none") return;
-    setRunning(mode);
-    setLog([]); setLogOpen(true);
-    try {
-      const { exitCode } = await streamCapture(
-        mode === "disarm" ? "/api/capture/disarm"
-          : debugCaptureFlows ? "/api/capture/run?recordFlows=1" : "/api/capture/run",
-        (line) => setLog((l) => [...l, line]),
-      );
-      if (mode === "capture") {
-        if (exitCode === 0) {
-          await refreshInventory("Capture OK");
-          // Leave the pipeline ARMED. The lobby auto-tap only fetches
-          // /user/{info,asset,character,item} — it never opens the Codex
-          // (Hero Archive) or Gift screens, so /archive/info + /gift/info
-          // (codex level + geas) are missing. Keeping it armed lets the user
-          // open those two screens in-game; the endpoints then decode in the
-          // background and a Disarm picks them up. mitmdump is still torn
-          // down on app quit (disarmIfArmed on before-quit), so nothing leaks.
-          setStatus("Inventory captured — pipeline still armed. Open the Codex and Gift screens in-game to grab codex + geas, then click Disarm.");
-          void getCaptureStatus().then(setCapStatus);
-        }
-        else if (exitCode === 2) setStatus("Pipeline armed — play to the lobby, then reload.");
-        else setStatus(`Capture failed (exit ${exitCode}) — see log.`);
-      } else {
-        // Disarm tears down the pipeline; reload so any supplementary
-        // endpoints captured while armed (codex, geas) get ingested.
-        if (exitCode === 0) await refreshInventory("Pipeline disarmed");
-        else setStatus(`Disarm failed (exit ${exitCode}).`);
-        void getCaptureStatus().then(setCapStatus);
-      }
-    } catch (err) {
-      setLog((l) => [...l, `[client] ${err instanceof Error ? err.message : String(err)}`]);
-      setStatus("Network error during capture.");
-    } finally {
-      setRunning("none");
-      void getCaptureStatus().then(setCapStatus);
-    }
-  }
-
-  /** Steam source: copy the BepInEx plugin into the game folder (downloads
-   *  BepInEx once if the game has none). Streams into the same console as the
-   *  emulator capture. The game must be closed — the backend refuses otherwise. */
+  /** Copy the BepInEx plugin into the game folder (downloads BepInEx once if
+   *  the game has none), streaming into the log console. The game must be
+   *  closed — the backend refuses otherwise. */
   async function runSteamInstall() {
     if (running !== "none") return;
     setRunning("steam-install");
@@ -334,8 +281,6 @@ export function App() {
     const ok = await launchSteamGame();
     setStatus(ok ? "Launching OUTERPLANE through Steam — reach the lobby and the snapshot imports itself." : "Could not ask Steam to launch the game.");
   }
-
-  const captureState = running === "capture" ? "capturing" : (capStatus?.armed ? "armed" : "idle");
 
   return (
     <PageBackground>
@@ -359,21 +304,12 @@ export function App() {
           Worklist: remainingChangeCount(worklist, inv) || null,
         }}
         capture={{
-          state: captureState,
-          source,
           steam: { status: steam, onInstall: () => void runSteamInstall(), onLaunch: () => void runSteamLaunch() },
-          onCapture: () => runCapture("capture"),
-          onDisarm: () => runCapture("disarm"),
           onReload: () => {
             void refreshInventory("Reloaded inventory");
-            void getEmulators().then(setEmulator);
             void getSteamStatus().then(setSteam);
           },
           busy: running !== "none",
-        }}
-        emulator={{
-          label: emulator?.chosen?.label ?? null,
-          port: emulator?.chosenPort ?? null,
         }}
         steam={steam}
         onSetup={() => setWizardOpen(true)}
@@ -384,13 +320,10 @@ export function App() {
         onClose={() => setWizardOpen(false)}
         onReady={() => {
           if (onboardingGate.acceptsReady()) setOnboardingDone(true);
-          // Re-poll the source status so the header badge flips green
+          // Re-poll the plugin status so the header badge flips green
           // immediately after the wizard confirms everything is set.
-          void getEmulators().then(setEmulator);
           void getSteamStatus().then(setSteam);
         }}
-        captureSource={source}
-        onCaptureSourceChange={setSourcePref}
         steam={steam}
         onRefreshSteam={async () => { const st = await getSteamStatus(); setSteam(st); return st; }}
         onSteamInstall={() => void runSteamInstall()}
@@ -403,8 +336,6 @@ export function App() {
         onToggleDebugStatLocks={() => setDebugStatLocks((v) => !v)}
         debugSolver={debugSolver}
         onToggleDebugSolver={() => setDebugSolver((v) => !v)}
-        debugCaptureFlows={debugCaptureFlows}
-        onToggleDebugCaptureFlows={() => setDebugCaptureFlows((v) => !v)}
         solver={{
           workerCount, setWorkerCount,
           topN: solverTopN, setTopN: setSolverTopN,
@@ -445,12 +376,9 @@ export function App() {
                 inventory={inv}
                 game={game}
                 capStatus={capStatus}
-                emulator={emulator}
-                source={source}
                 steam={steam}
                 appVersion={APP_VERSION}
                 busy={running !== "none"}
-                onCapture={() => runCapture("capture")}
                 onSteamInstall={() => void runSteamInstall()}
                 onSteamLaunch={() => void runSteamLaunch()}
                 onReload={() => void refreshInventory("Reloaded inventory")}

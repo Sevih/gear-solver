@@ -2,13 +2,13 @@
  * Electron main process — gear-solver desktop shell.
  *
  * Dev (`npm run desktop:dev`):
- *   The Vite dev server on :5173 already hosts the renderer + `/api/capture/*`
+ *   The Vite dev server on :5173 already hosts the renderer + `/api/*`
  *   middleware, so we just point the window at it and get free HMR.
  *
  * Prod (packaged build):
  *   Vite is no longer running, so we boot an in-process HTTP server
  *   (see server.ts) that mirrors every endpoint the renderer expects —
- *   `/api/capture/*`, `/gamedata/*`, `/captured/*`, `/img/*` (disk cache +
+ *   `/api/*`, `/gamedata/*`, `/captured/*`, `/img/*` (disk cache +
  *   GitHub CDN), plus serving the built `apps/renderer/dist`. The window is
  *   then loaded against that local server's ephemeral 127.0.0.1 port.
  *   Game data syncs in the background once the window is up (startup.ts).
@@ -18,14 +18,15 @@ import type { Server } from "node:http";
 import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { disarmIfArmed, startServer } from "./server.js";
+import { startServer } from "./server.js";
 import { setupAutoUpdate } from "./updater.js";
 import { dlog, dwarn } from "./log.js";
 import { syncGameData } from "./data-sync.js";
-import { BUNDLED_DERIVED, CACHE_ROOT, DERIVED, IMG_CACHE_DIR, REPO_ROOT, REPO_SHA_STATE } from "./paths.js";
+import { BUNDLED_DERIVED, CACHE_ROOT, CAPTURE_OUT, DERIVED, IMG_CACHE_DIR, REPO_ROOT, REPO_SHA_STATE } from "./paths.js";
 import { getCurrentRef, readShaState, setCurrentRef } from "./repo-source.js";
 import { prefetchImages } from "./img-cache.js";
 import { runStartup } from "./startup.js";
+import { removeEmulatorLeftovers } from "./legacy-cleanup.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -115,6 +116,9 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     dlog("server", `app ready — ${IS_DEV ? "dev (Vite)" : "prod (embedded server)"}`);
+    // The emulator capture source is gone: drop what it left in userData (its
+    // CA with the private key, mitmdump, …). No-op once done.
+    for (const p of removeEmulatorLeftovers(app.getPath("userData"), CAPTURE_OUT)) dlog("server", `removed emulator leftover ${p}`);
     // Prod first-launch seed: copy the bundled derived tree into the writable
     // cache so the renderer has working data before any network round-trip.
     if (!IS_DEV && !existsSync(join(DERIVED, "characters.json")) && existsSync(BUNDLED_DERIVED)) {
@@ -159,27 +163,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
-// On quit: first disarm the capture pipeline if it's still armed (otherwise
-// mitmdump.exe survives the Electron process — the provisioned exe under
-// userData stays locked, blocking a later version re-provision), then close
-// the embedded HTTP server. The first
-// before-quit pass calls preventDefault to keep the app alive long enough to
-// finish disarm; once that's done we set `cleaningUp` and re-fire app.quit()
-// which lets the second pass through.
-let cleaningUp = false;
-app.on("before-quit", (event) => {
-  if (cleaningUp) return;
-  event.preventDefault();
-  cleaningUp = true;
-  dlog("capture", "before-quit: disarming pipeline + closing server");
-  // Safety net: never let a hung disarm wedge the quit. If teardown hasn't
-  // finished within the cap, force-exit (disarm.ps1 is itself bounded at 15 s).
-  const force = setTimeout(() => app.exit(0), 16_000);
-  disarmIfArmed()
-    .catch(() => {})
-    .finally(() => {
-      clearTimeout(force);
-      if (httpServer) { httpServer.close(); httpServer = null; }
-      app.quit();
-    });
+// On quit: close the embedded HTTP server.
+app.on("before-quit", () => {
+  if (httpServer) { httpServer.close(); httpServer = null; }
 });

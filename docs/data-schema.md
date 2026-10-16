@@ -1,7 +1,7 @@
 # Data schema (captured)
 
 Décodage des réponses du serveur Outerplane (`glb-game…:38001`).
-Pipeline de capture/déchiffrement : [tools/capture/README.md](../tools/capture/README.md).
+Capture : plugin BepInEx du client Steam, [tools/capture-steam/README.md](../tools/capture-steam/README.md).
 Toutes les réponses : `{"msg":"<hex>"}` → hex → repeating-XOR
 (`ASLDKGFJASPODIFJSOWEI`) → UTF-8 JSON.
 
@@ -144,7 +144,7 @@ node levels par account).
    `version.json` `{ schema, resVersion, hash, builtAt }` — le `hash` ne change que si la
    donnée a réellement bougé ; `resVersion` est la version des tables du jeu). Affiché dans
    Settings → Data.
-3. Re-capture le compte si la version a changé (`tools/capture/capture.ps1`).
+3. Re-capture le compte si la version a changé (lancer le jeu avec le plugin jusqu'au lobby).
 4. Tests verts (`npm test --workspaces`).
 5. Re-validate les stat-locks via le toggle debug de l'app, refresh des
    snapshots dans `data/stat-locks.json` si nécessaire.

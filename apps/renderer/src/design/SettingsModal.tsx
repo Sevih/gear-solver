@@ -2,10 +2,9 @@
  * Settings modal — left-rail tabbed panel (ported from the Claude Design
  * "Settings Redesign" brief). Five sections reachable from a vertical nav:
  *
- *  - Setup  — capture-source picker (Steam plugin / Android emulator) + the
- *             matching preflight: Steam = game found / plugin installed / plugin
- *             live; emulator = install / running / ADB / root. Doubles as the
- *             first-launch wizard; self-dismisses once the checks pass.
+ *  - Setup  — the Steam capture plugin checklist: game found / plugin
+ *             installed / plugin live. Doubles as the first-launch wizard;
+ *             self-dismisses once the checks pass.
  *  - Solver — worker-pool size, result count (topN), per-worker depth (topK,
  *             advanced), results heatmap. Edits persisted settings owned by App.
  *  - Data   — Sync game data · Reset onboarding · Wipe captured (destructive).
@@ -22,75 +21,7 @@ import { applyBackup, buildBackup } from "../lib/storage/transfer.js";
 import { resolveWorkerCount } from "../lib/solver/orchestrator.js";
 import { loadDataVersion, type DataVersion } from "../data.js";
 import { describeDataSync, type DataSyncResult } from "../lib/dataSync.js";
-import { uninstallSteamPlugin, type CaptureSource, type SteamStatus } from "../steam.js";
-
-export type CheckId = "emulator-installed" | "emulator-running" | "adb-connection" | "root-toggle";
-
-export interface PreflightCheck {
-  id: CheckId;
-  ok: boolean;
-  detail: string;
-}
-
-export interface PreflightResult {
-  emulator: { type: string; label: string } | null;
-  device: string | null;
-  checks: PreflightCheck[];
-  ready: boolean;
-}
-
-interface CheckCopy {
-  title: string;
-  fix: string;
-}
-
-/** Per-check copy lives in the renderer so the maintainer can iterate on
- *  UX strings without republishing the Electron app. */
-const COPY: Record<CheckId, CheckCopy> = {
-  "emulator-installed": {
-    title: "Android emulator installed",
-    fix: "Install LDPlayer 9 (recommended), MuMu Player 12, or NoxPlayer at its default location. Any other rooted x86 Android emulator works too — it's auto-detected if running, or pin it under Manual device below. Google Play Games is not supported (Google disables root).",
-  },
-  "emulator-running": {
-    title: "Emulator instance running",
-    fix: "Open your emulator and start an instance. The detector probes the common LDPlayer / MuMu / Nox ports and also lists anything the shared ADB server reports — if nothing shows, no instance is up (or set it under Manual device below).",
-  },
-  "adb-connection": {
-    title: "ADB Debug = Local Connection",
-    fix: "In your emulator's settings → Others (or équivalent), set ADB Debugging to \"Local Connection\" (LDPlayer) / enable ADB (MuMu/Nox). Restart the instance if you changed it.",
-  },
-  "root-toggle": {
-    title: "Root toggle ON",
-    fix: "Enable the Root toggle in your emulator's settings (LDPlayer: Settings → Others → Root permission ON, then restart instance). MuMu / Nox have the same toggle under their own settings panel. Without root we can't bind-mount the MITM cert into Android's system store.",
-  },
-};
-
-const ORDER: CheckId[] = ["emulator-installed", "emulator-running", "adb-connection", "root-toggle"];
-
-/** Brand-specific instructions for the steps whose menu path differs per
- *  emulator. Falls back to the generic `COPY[id].fix` when the emulator brand
- *  isn't known yet (nothing detected) or the step has no brand variant. */
-const BRAND_FIX: Record<string, Partial<Record<CheckId, string>>> = {
-  ldplayer: {
-    "adb-connection": 'LDPlayer 9: ⚙ (top-right) → Other settings → set "ADB debugging" to "Open local connection", then restart the instance.',
-    "root-toggle": 'LDPlayer 9: ⚙ → Other settings → turn "Root permission" ON, then restart the instance.',
-  },
-  mumu: {
-    "adb-connection": 'MuMu Player 12: ☰ → Settings → Others → enable "USB debugging (ADB)", then restart the instance.',
-    "root-toggle": 'MuMu Player 12: ☰ → Settings → Others → turn "Root permission" ON, then restart the instance.',
-  },
-  nox: {
-    "adb-connection": 'NoxPlayer: ⚙ Settings → General/Others → enable "ADB debugging", then restart the instance.',
-    "root-toggle": 'NoxPlayer: ⚙ Settings → General → turn "Root" ON, then restart the instance.',
-  },
-};
-
-/** Supported emulators, shown on the install step when none is detected. */
-const EMULATOR_OPTIONS: { label: string; note: string | null }[] = [
-  { label: "LDPlayer 9", note: "recommended" },
-  { label: "MuMu Player 12", note: null },
-  { label: "NoxPlayer", note: null },
-];
+import { uninstallSteamPlugin, type SteamStatus } from "../steam.js";
 
 /** Solver tuning settings — owned by App (persisted), edited here. */
 export interface SolverSettings {
@@ -131,17 +62,9 @@ interface Props {
   debugSolver: boolean;
   /** Flip the solver logging toggle on/off. */
   onToggleDebugSolver: () => void;
-  /** Current state of the emulator capture's full-traffic recording (`gs.debug.captureFlows`). */
-  debugCaptureFlows: boolean;
-  /** Flip the full-traffic recording on/off. */
-  onToggleDebugCaptureFlows: () => void;
   /** Solver tuning settings (Solver tab). */
   solver: SolverSettings;
-  /** Active acquisition path (auto-resolved by App) + setter for the persisted
-   *  preference (null = back to auto). */
-  captureSource: CaptureSource;
-  onCaptureSourceChange: (s: CaptureSource | null) => void;
-  /** Steam source — last status poll, a re-probe, and the two actions. */
+  /** Steam capture plugin — last status poll, a re-probe, and the two actions. */
   steam: SteamStatus | null;
   onRefreshSteam: () => Promise<SteamStatus | null>;
   onSteamInstall: () => void;
@@ -170,40 +93,27 @@ const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> =
 export function SettingsModal({
   open, onClose, onReady, onResetOnboarding, onAfterWipe, onSyncData,
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
-  debugCaptureFlows, onToggleDebugCaptureFlows, solver,
-  captureSource, onCaptureSourceChange, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy,
+  solver, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy,
 }: Props) {
-  const [result, setResult] = useState<PreflightResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState<SettingsTab>("setup");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const isSteam = captureSource === "steam";
 
-  /** Re-run the active source's checks. Steam: status poll (ready = plugin in
-   *  place); emulator: the four-step ADB preflight. */
+  /** Re-run the checks: a plugin status poll (ready = plugin in place). */
   async function probe() {
     setLoading(true);
     try {
-      if (isSteam) {
-        const st = await onRefreshSteam();
-        if (st?.ready) onReady?.();
-      } else {
-        const r = await fetch("/api/preflight");
-        if (r.ok) {
-          const data = (await r.json()) as PreflightResult;
-          setResult(data);
-          if (data.ready) onReady?.();
-        }
-      }
+      const st = await onRefreshSteam();
+      if (st?.ready) onReady?.();
     } catch {
-      // Backend not reachable; keep prior result so the user can still see history.
+      // Backend not reachable; keep the prior status so the user can still see it.
     } finally {
       setLoading(false);
     }
   }
-  const setupReady = isSteam ? Boolean(steam?.ready) : Boolean(result?.ready);
+  const setupReady = Boolean(steam?.ready);
 
   // The header's only entry point is labeled "Setup", and the modal doubles as
   // the onboarding wizard — so every open lands on the Setup tab (the wizard),
@@ -213,7 +123,7 @@ export function SettingsModal({
   // Re-probe whenever the modal opens AND the Setup tab is showing (no point
   // hitting the backend when the user is on Solver/Data/etc.).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (open && tab === "setup") void probe(); }, [open, tab, captureSource]);
+  useEffect(() => { if (open && tab === "setup") void probe(); }, [open, tab]);
 
   if (!open) return null;
 
@@ -261,7 +171,7 @@ export function SettingsModal({
                   <span className="shrink-0">{t.icon}</span>
                   <span className="flex-1">{t.label}</span>
                   {/* Attention dot on Setup while a check is failing. */}
-                  {t.id === "setup" && (isSteam ? steam != null : result != null) && !setupReady && (
+                  {t.id === "setup" && steam != null && !setupReady && (
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.7)]" />
                   )}
                 </button>
@@ -272,18 +182,11 @@ export function SettingsModal({
           {/* CONTENT COLUMN */}
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto px-4.5 py-4">
-              {tab === "setup"  && (
-                <div className="flex flex-col gap-3.5">
-                  <SourcePicker source={captureSource} steam={steam} onChange={onCaptureSourceChange} />
-                  {isSteam
-                    ? <SteamSetupPane steam={steam} loading={loading} busy={steamBusy} onInstall={onSteamInstall} onLaunch={onSteamLaunch} onProbe={() => void probe()} />
-                    : <SetupPane result={result} loading={loading} onProbe={() => void probe()} />}
-                </div>
-              )}
+              {tab === "setup"  && <SteamSetupPane steam={steam} loading={loading} busy={steamBusy} onInstall={onSteamInstall} onLaunch={onSteamLaunch} onProbe={() => void probe()} />}
               {tab === "solver" && <SolverPane solver={solver} showAdvanced={showAdvanced} onToggleAdvanced={() => setShowAdvanced((v) => !v)} />}
               {tab === "data"   && <DataPane syncing={syncing} setSyncing={setSyncing} onSyncData={onSyncData} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} />}
               {tab === "backup" && <BackupPane importInputRef={importInputRef} />}
-              {tab === "debug"  && <DebugPane debugStatLocks={debugStatLocks} onToggleDebugStatLocks={onToggleDebugStatLocks} debugSolver={debugSolver} onToggleDebugSolver={onToggleDebugSolver} debugCaptureFlows={debugCaptureFlows} onToggleDebugCaptureFlows={onToggleDebugCaptureFlows} />}
+              {tab === "debug"  && <DebugPane debugStatLocks={debugStatLocks} onToggleDebugStatLocks={onToggleDebugStatLocks} debugSolver={debugSolver} onToggleDebugSolver={onToggleDebugSolver} />}
             </div>
 
             {/* CONTEXTUAL FOOTER */}
@@ -322,30 +225,7 @@ export function SettingsModal({
  * Panes
  * ───────────────────────────────────────────────────────────────────────── */
 
-/** Capture-source switch. Steam = a BepInEx plugin inside the PC client
- *  (nothing to root, nothing to proxy); Emulator = the rooted-Android MITM
- *  pipeline. The auto default picks Steam when the game is in a Steam library. */
-function SourcePicker({ source, steam, onChange }: { source: CaptureSource; steam: SteamStatus | null; onChange: (s: CaptureSource | null) => void }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-black/20 px-3 py-2.5">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[12.5px] font-semibold text-white">Capture source</span>
-        <span className="text-[11px] leading-snug text-zinc-400">
-          {source === "steam"
-            ? "Steam client + capture plugin — no emulator, no root, no proxy. Snapshots import while you play."
-            : "Rooted Android emulator + MITM pipeline (LDPlayer / MuMu / Nox). Arm, play to the lobby, Disarm."}
-          {steam && !steam.installed && source === "steam" && <> <b className="text-amber-300">OUTERPLANE isn't in your Steam library.</b></>}
-        </span>
-      </div>
-      <div className="flex shrink-0 overflow-hidden rounded-md border border-white/12">
-        <SegButton label="Steam" on={source === "steam"} onClick={() => onChange("steam")} />
-        <SegButton label="Emulator" on={source === "emulator"} onClick={() => onChange("emulator")} divided />
-      </div>
-    </div>
-  );
-}
-
-/** Steam-source wizard: three checks, the first two gate "ready" (the plugin
+/** Capture setup wizard: three checks, the first two gate "ready" (the plugin
  *  is in place); the third is live status (game running with the plugin
  *  loaded) shown for feedback, since capture itself needs no click. */
 function SteamSetupPane({ steam, loading, busy, onInstall, onLaunch, onProbe }: {
@@ -367,7 +247,7 @@ function SteamSetupPane({ steam, loading, busy, onInstall, onLaunch, onProbe }: 
     : "game not running";
   const steps = [
     { id: "game", title: "OUTERPLANE installed via Steam", ok: installedOk, detail: s?.gameDir ?? (s ? "not found in any Steam library" : ""),
-      fix: "Install OUTERPLANE from Steam (it's free). We find it through your Steam library folders — no path to type. If you play on an emulator instead, switch the source above." },
+      fix: "Install OUTERPLANE from Steam (it's free). We find it through your Steam library folders — no path to type. Without it, you can still import your snapshot files by hand (Manual fallback, at the bottom of the window)." },
     { id: "plugin", title: "Capture plugin installed", ok: pluginOk, detail: pluginDetail,
       fix: "Click Install plugin: it drops the BepInEx loader (downloaded once from the official release, checksum-verified) and our GearSolverCapture.dll into the game folder, then points the plugin at this app's capture folder. The game must be closed while installing." },
     { id: "live", title: "Game running with the plugin loaded", ok: liveOk, detail: liveDetail,
@@ -488,189 +368,6 @@ function SteamRemoveSection({ steam, busy, onDone }: { steam: SteamStatus | null
   );
 }
 
-/** Guided, linear capture-setup wizard. Instead of showing all four checks at
- *  once, it focuses on the CURRENT blocker (the first not-yet-passing step),
- *  with brand-aware instructions for the detected emulator, completed steps
- *  collapsed above and upcoming ones greyed below. "Re-check" (footer) advances
- *  it. When everything passes it shows the actual capture next-steps. */
-function SetupPane({ result, loading, onProbe }: { result: PreflightResult | null; loading: boolean; onProbe: () => void }) {
-  type DisplayStatus = "ok" | "fail" | "pending";
-  const steps = ORDER.map((id) => {
-    const hit = result?.checks.find((c) => c.id === id);
-    const status: DisplayStatus = hit ? (hit.ok ? "ok" : "fail") : "pending";
-    return { id, status, detail: hit?.detail ?? "" };
-  });
-  const ready = result?.ready ?? false;
-  const brand = result?.emulator?.type;
-  const brandLabel = result?.emulator?.label ?? null;
-  const firstOpen = steps.findIndex((s) => s.status !== "ok");
-  const currentIndex = ready || firstOpen < 0 ? steps.length : firstOpen;
-  const doneCount = steps.filter((s) => s.status === "ok").length;
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <SectionStrip title="Capture setup" note={result?.device ? `Target ${result.device}` : brandLabel} />
-
-      {/* Progress segments — one per step, green = done, cyan = current. */}
-      <div className="flex items-center gap-2">
-        <div className="flex flex-1 gap-1">
-          {steps.map((s, i) => (
-            <div key={s.id} className={cx(
-              "h-1.5 flex-1 rounded-full",
-              s.status === "ok" ? "bg-emerald-400"
-              : i === currentIndex && !ready ? "bg-cyan-400"
-              : "bg-white/10",
-            )} />
-          ))}
-        </div>
-        <span className="shrink-0 font-mono text-[10.5px] text-zinc-400">{doneCount}/{steps.length}</span>
-      </div>
-
-      {ready ? (
-        <ReadyCard brandLabel={brandLabel} />
-      ) : (
-        <div className="flex flex-col gap-2">
-          {steps.map((s, i) => {
-            const copy = COPY[s.id];
-            if (s.status === "ok") return <StepDoneRow key={s.id} title={copy.title} />;
-            if (i === currentIndex) {
-              const fix = (brand && BRAND_FIX[brand]?.[s.id]) || copy.fix;
-              return (
-                <CurrentStepCard
-                  key={s.id}
-                  n={i + 1}
-                  total={steps.length}
-                  title={copy.title}
-                  fix={fix}
-                  detail={s.detail}
-                  loading={loading}
-                  showInstall={s.id === "emulator-installed" && !brand}
-                />
-              );
-            }
-            return <StepUpcomingRow key={s.id} n={i + 1} title={copy.title} />;
-          })}
-        </div>
-      )}
-
-      <ManualDeviceSection onSaved={onProbe} sourceLabel={result?.emulator?.label ?? null} sourceType={result?.emulator?.type ?? null} />
-    </div>
-  );
-}
-
-/** Advanced escape hatch: pin an explicit adb path + device so capture works on
- *  ANY rooted emulator (or a non-default install) the auto-detector misses. The
- *  three known brands are auto-detected; this is the "everything else" lever.
- *  Persisted server-side (`/api/capture/manual-device`); saving re-runs preflight. */
-function ManualDeviceSection({ onSaved, sourceLabel, sourceType }: { onSaved: () => void; sourceLabel: string | null; sourceType: string | null }) {
-  const [open, setOpen] = useState(false);
-  const [adbPath, setAdbPath] = useState("");
-  const [device, setDevice] = useState("");
-  const [active, setActive] = useState(false);    // an override is currently persisted
-  const [busy, setBusy] = useState(false);
-
-  // Load the persisted override once, so the fields reflect reality on open.
-  useEffect(() => {
-    let alive = true;
-    void fetch("/api/capture/manual-device").then((r) => r.ok ? r.json() : null).then((md: { adbPath: string; device: string } | null) => {
-      if (!alive || !md) return;
-      setAdbPath(md.adbPath); setDevice(md.device); setActive(true); setOpen(true);
-    }).catch(() => { /* backend not up — leave empty */ });
-    return () => { alive = false; };
-  }, []);
-
-  const save = async () => {
-    if (!adbPath.trim() || !device.trim()) return;
-    setBusy(true);
-    try {
-      const r = await fetch("/api/capture/manual-device", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adbPath: adbPath.trim(), device: device.trim() }),
-      });
-      if (r.ok) { setActive(true); onSaved(); }
-    } catch { /* ignore — user can retry */ } finally { setBusy(false); }
-  };
-  const clear = async () => {
-    setBusy(true);
-    try {
-      const r = await fetch("/api/capture/manual-device", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clear: true }),
-      });
-      if (r.ok || r.status === 204) { setActive(false); onSaved(); }
-    } catch { /* ignore */ } finally { setBusy(false); }
-  };
-
-  // When an override is active, the resolved source is "manual" — surface that.
-  const overriding = active && sourceType === "manual";
-
-  return (
-    <div className="flex flex-col gap-2 border-t border-white/6 pt-3">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-fit items-center gap-1.5 text-[11px] font-semibold text-zinc-400 hover:text-zinc-200"
-      >
-        <span className={cx("inline-block text-[9px] transition-transform", open && "rotate-90")}>▸</span>
-        <span className="tracking-[0.04em]">Manual device (other emulator)</span>
-        {active && <span className="rounded bg-cyan-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-cyan-300">active</span>}
-      </button>
-
-      {open && (
-        <div className="flex flex-col gap-2.5 rounded-lg border border-white/8 bg-black/20 px-3 py-2.5">
-          <p className="text-[11.5px] leading-relaxed text-zinc-400">
-            LDPlayer / MuMu / Nox are auto-detected — and any running emulator the shared ADB server lists is
-            picked up automatically. Use this only to <b className="text-zinc-300">force</b> a specific adb +
-            device (a non-default install, or a brand we don't profile). It must still be a <b className="text-zinc-300">rooted</b> emulator.
-          </p>
-          <label className="flex flex-col gap-1">
-            <span className="text-[10.5px] font-semibold uppercase tracking-wider text-zinc-500">adb.exe path</span>
-            <input
-              type="text" value={adbPath} onChange={(e) => setAdbPath(e.target.value)} spellCheck={false}
-              placeholder="C:\\Program Files\\BlueStacks_nxt\\HD-Adb.exe"
-              className="rounded-md border border-white/12 bg-zinc-900 px-2.5 py-1.5 font-mono text-[11.5px] text-zinc-200 placeholder:text-zinc-600 focus:border-cyan-400/50 focus:outline-none"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[10.5px] font-semibold uppercase tracking-wider text-zinc-500">device (host:port or serial)</span>
-            <input
-              type="text" value={device} onChange={(e) => setDevice(e.target.value)} spellCheck={false}
-              placeholder="127.0.0.1:5555"
-              className="rounded-md border border-white/12 bg-zinc-900 px-2.5 py-1.5 font-mono text-[11.5px] text-zinc-200 placeholder:text-zinc-600 focus:border-cyan-400/50 focus:outline-none"
-            />
-            <span className="text-[10px] text-zinc-500">
-              Find it with <span className="font-mono text-zinc-400">adb devices</span> — e.g. <span className="font-mono text-zinc-400">127.0.0.1:5555</span>. Your emulator's settings also show its ADB port.
-            </span>
-          </label>
-          <div className="flex items-center gap-2 pt-0.5">
-            <button
-              type="button" onClick={() => void save()} disabled={busy || !adbPath.trim() || !device.trim()}
-              className={cx(
-                "inline-flex h-7 items-center rounded-md border px-3 text-[11.5px] font-semibold transition-colors",
-                busy || !adbPath.trim() || !device.trim()
-                  ? "cursor-not-allowed border-white/6 bg-white/2 text-zinc-500"
-                  : "border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
-              )}
-            >{busy ? "Saving…" : "Save & re-check"}</button>
-            {active && (
-              <button
-                type="button" onClick={() => void clear()} disabled={busy}
-                className="inline-flex h-7 items-center rounded-md border border-white/10 bg-zinc-900 px-3 text-[11.5px] text-zinc-400 hover:bg-white/6 hover:text-zinc-200"
-              >Clear</button>
-            )}
-            {overriding && <span className="font-mono text-[10.5px] text-cyan-300/80">using manual override</span>}
-            {active && !overriding && sourceLabel && (
-              <span className="font-mono text-[10.5px] text-amber-300/80" title="The override is saved but its adb path doesn't exist — auto-detection took over.">
-                override saved, but {sourceLabel} is in use
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function StepDoneRow({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-2.5 px-0.5 py-0.5">
@@ -685,62 +382,6 @@ function StepUpcomingRow({ n, title }: { n: number; title: string }) {
     <div className="flex items-center gap-2.5 px-0.5 py-0.5 opacity-45">
       <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-zinc-600 text-[9px] font-mono text-zinc-400">{n}</span>
       <span className="text-[12.5px] text-zinc-400">{title}</span>
-    </div>
-  );
-}
-
-function CurrentStepCard({
-  n, total, title, fix, detail, loading, showInstall,
-}: { n: number; total: number; title: string; fix: string; detail: string; loading: boolean; showInstall: boolean }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border border-cyan-400/35 bg-cyan-500/6 px-3.5 py-3">
-      <div className="flex items-center gap-2">
-        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyan-400 text-[11px] font-bold text-cyan-950">{n}</span>
-        <span className="text-[13.5px] font-semibold text-cyan-200">{title}</span>
-        <span className="ml-auto shrink-0 font-mono text-[10px] text-cyan-300/70">step {n} of {total}</span>
-      </div>
-      <p className="text-[12px] leading-relaxed text-zinc-300">{fix}</p>
-      {showInstall && (
-        <div className="flex flex-col gap-1.5 rounded-md border border-white/8 bg-black/20 px-2.5 py-2">
-          {EMULATOR_OPTIONS.map((e) => (
-            <div key={e.label} className="flex items-center gap-2 text-[11.5px] text-zinc-300">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-400/70" />
-              <span className="font-medium">{e.label}</span>
-              {e.note && <span className="rounded bg-cyan-500/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-cyan-300">{e.note}</span>}
-            </div>
-          ))}
-          <p className="mt-0.5 text-[10.5px] leading-snug text-zinc-500">
-            Install at the default location with <b className="text-zinc-400">root enabled</b> · Google Play Games won't
-            work (root disabled). Other rooted emulators work too — auto-detected if running, or pinned under
-            <b className="text-zinc-400"> Manual device</b> below. Physical phones aren't supported yet (roadmap).
-          </p>
-        </div>
-      )}
-      {detail && <span className="font-mono text-[10.5px] text-zinc-500">{detail}</span>}
-      <span className="text-[11px] text-zinc-500">
-        {loading ? "Re-checking…" : "Do this, then click "}
-        {!loading && <b className="text-cyan-300">Re-check</b>}
-        {!loading && " below."}
-      </span>
-    </div>
-  );
-}
-
-/** Shown once all four checks pass — the actual "now capture" next-steps. */
-function ReadyCard({ brandLabel }: { brandLabel: string | null }) {
-  return (
-    <div className="flex flex-col gap-2.5 rounded-lg border border-emerald-400/35 bg-emerald-500/8 px-3.5 py-3">
-      <div className="flex items-center gap-2">
-        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-400 text-[12px] font-bold text-emerald-950">✓</span>
-        <span className="text-[13.5px] font-semibold text-emerald-200">
-          Ready to capture{brandLabel ? ` · ${brandLabel}` : ""}
-        </span>
-      </div>
-      <ol className="flex flex-col gap-1.5 text-[12px] leading-relaxed text-zinc-300">
-        <li><b className="text-zinc-200">1.</b> Click <b className="text-cyan-300">Arm capture</b> (top-right header).</li>
-        <li><b className="text-zinc-200">2.</b> Open <b className="text-zinc-200">Outerplane</b> in the emulator and play to the lobby — the roster + gear import automatically.</li>
-        <li><b className="text-zinc-200">3.</b> <span className="text-zinc-400">Optional:</span> open the in-game <b className="text-zinc-200">Hero Archive</b> + <b className="text-zinc-200">Gift</b> screens (for codex + geas), then click <b className="text-cyan-300">Disarm</b> to pick them up.</li>
-      </ol>
     </div>
   );
 }
@@ -915,7 +556,7 @@ function DataPane({
       />
       <DataAction
         label="Wipe captured data"
-        description="Empty the whole capture folder: imported snapshots, capture logs, game.flows and unknown endpoints (_unknown/). Cannot be undone · requires confirmation · blocked while capture is armed."
+        description="Empty the whole capture folder: imported snapshots, the seen-paths log and unknown endpoints (_unknown/). Cannot be undone · requires confirmation."
         tone="danger"
         onClick={() => void wipeCaptured(onAfterWipe)}
       />
@@ -952,14 +593,11 @@ function BackupPane({ importInputRef }: { importInputRef: { current: HTMLInputEl
 
 function DebugPane({
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
-  debugCaptureFlows, onToggleDebugCaptureFlows,
 }: {
   debugStatLocks: boolean;
   onToggleDebugStatLocks: () => void;
   debugSolver: boolean;
   onToggleDebugSolver: () => void;
-  debugCaptureFlows: boolean;
-  onToggleDebugCaptureFlows: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -975,12 +613,6 @@ function DebugPane({
         description="Log the solver's fan-out (pool sizes, chunk count, workers) and per-solve merge/duration to the devtools console. Useful when profiling a slow solve — off by default."
         checked={debugSolver}
         onToggle={onToggleDebugSolver}
-      />
-      <ToggleAction
-        label="Record full capture traffic (game.flows) — debugging only"
-        description="Emulator capture: also save every request and response (headers and bodies) to game.flows in the capture folder, until the next Wipe. Takes effect on the next capture — off by default, and a capture with it off deletes an old game.flows."
-        checked={debugCaptureFlows}
-        onToggle={onToggleDebugCaptureFlows}
       />
     </div>
   );
@@ -1206,17 +838,11 @@ async function runDataSync(setSyncing: (b: boolean) => void, onSyncData: () => P
 }
 
 /** POST /api/capture/wipe (empties the whole capture folder) + refresh
- *  inventory. Confirms via native dialog first (destructive). 409 means the
- *  pipeline is armed — we surface it as an alert so the user knows to Disarm
- *  first. */
+ *  inventory. Confirms via native dialog first (destructive). */
 async function wipeCaptured(onAfterWipe?: () => void): Promise<void> {
-  if (!window.confirm("Empty the whole capture folder (gear / character snapshots, capture logs, game.flows, _unknown/)? This cannot be undone (next capture will refill).")) return;
+  if (!window.confirm("Empty the whole capture folder (gear / character snapshots, seen-paths log, _unknown/)? This cannot be undone (next capture will refill).")) return;
   try {
     const r = await fetch("/api/capture/wipe", { method: "POST" });
-    if (r.status === 409) {
-      window.alert("The capture pipeline is still armed. Click Disarm in the header first, then retry.");
-      return;
-    }
     if (!r.ok) {
       window.alert(`Wipe failed: HTTP ${r.status}`);
       return;

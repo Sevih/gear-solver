@@ -2,9 +2,9 @@
  * In-process HTTP server that hosts everything the renderer needs:
  *  - Built `apps/renderer/dist/*` at `/`
  *  - `/gamedata/*`  → DERIVED game data (data/derived in dev, bundled tree in prod)
- *  - `/captured/*`  → captured account JSON (tools/capture/out in dev, userData in prod)
+ *  - `/captured/*`  → captured account JSON (.cache/capture-out in dev, userData in prod)
  *  - `/img/*`       → bundled sprites / disk cache / img.outerpedia.com (R2)
- *  - `/api/capture/{run,disarm,status}` → wraps the PowerShell pipeline (emulator source)
+ *  - `/api/capture/{status,wipe}` → capture folder state / wipe
  *  - `/api/steam/{status,install,uninstall,launch}` → Steam source (BepInEx plugin)
  *  - `/api/stat-locks` GET/POST → stat regression locks
  *  - `/api/data/sync` POST, `/api/data/startup-sync` GET → game-data sync
@@ -16,18 +16,13 @@
  * renderer fast after the first hit; images use a 1-day max-age.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
-  BUNDLED_ADB,
   BUNDLED_IMG,
-  CAPTURE_CA_DIR,
-  CAPTURE_DIR,
   CAPTURE_OUT,
   DERIVED,
   IMG_CACHE_DIR,
-  MANUAL_DEVICE,
   REPO_ROOT,
   REPO_SHA_STATE,
   IS_DEV,
@@ -37,12 +32,9 @@ import {
   STEAM_PLUGIN_DLL,
   findOuterpediaImagesDev,
 } from "./paths.js";
-import { resolveCaptureTarget, targetScriptArgs, loadManualDevice } from "./emulator-detect.js";
 import { createApiHandler, serveStatic } from "./api-handler.js";
 import { resolveInside } from "./safe-path.js";
 import { dlog, dwarn } from "./log.js";
-import { ensureMitmdump, mitmdumpPath } from "./mitm-provision.js";
-import { ensureCaptureCa } from "./capture-ca.js";
 import { getStatus as getUpdateStatus, triggerCheck as triggerUpdateCheck, installUpdate } from "./updater.js";
 
 /**
@@ -72,55 +64,20 @@ const CSP = [
   "form-action 'none'",
 ].join("; ");
 
-/** Resolve the args we hand capture.ps1 / disarm.ps1 so the bundled
- *  binaries are picked up in prod. In dev we pass nothing — the scripts
- *  fall back to their built-in defaults pointing at the LDPlayer-installed
- *  adb + the system mitmproxy + the dev's personal ~/.mitmproxy/ CA.
- *
- *  We resolve a target (manual override > running known brand > generic
- *  `adb devices` > installed-but-stopped) and override `-Adb` with its ADB
- *  (protocol versions differ across LDPlayer / MuMu / Nox vs our bundled one)
- *  and `-Device <serial>` so the script targets the right instance. */
-async function captureScriptArgs(): Promise<string[]> {
-  const target = await resolveCaptureTarget(loadManualDevice(MANUAL_DEVICE), BUNDLED_ADB);
-  if (IS_DEV) return targetScriptArgs(target);
-  return [
-    "-Adb", target?.adbPath || BUNDLED_ADB,
-    "-Mitmdump", mitmdumpPath(),
-    "-Out", CAPTURE_OUT,
-    // -MitmConfDir tells mitmdump where to load the matching CA from; -CertDir
-    // tells capture.ps1 where to find the Android-hash cert file to push.
-    // We point both at the same dir — this install's CA (capture-ca.ts)
-    // holds both files side by side.
-    "-MitmConfDir", CAPTURE_CA_DIR,
-    "-CertDir", CAPTURE_CA_DIR,
-    ...(target?.device ? ["-Device", target.device] : []),
-  ];
-}
-
-/** The shared API (api-handler.ts) wired to the packaged paths, the bundled
- *  binaries, mitmdump + CA provisioning and electron-updater. */
+/** The shared API (api-handler.ts) wired to the packaged paths and
+ *  electron-updater. */
 const api = createApiHandler({
-  captureDir: CAPTURE_DIR,
   captureOut: CAPTURE_OUT,
   derivedDir: DERIVED,
   repoShaState: REPO_SHA_STATE,
   repoRoot: IS_DEV ? REPO_ROOT : null,
   statLocks: STAT_LOCKS,
-  manualDevice: MANUAL_DEVICE,
   steamPluginDll: STEAM_PLUGIN_DLL,
   scratchDir: SCRATCH_DIR,
-  bundledAdb: BUNDLED_ADB,
   img: {
     cacheDir: IMG_CACHE_DIR,
     bundledDir: BUNDLED_IMG,
     localCheckoutDir: IS_DEV ? findOuterpediaImagesDev() : null,
-  },
-  captureScriptArgs,
-  // Prod, first capture: download mitmdump, then let it generate this install's CA.
-  prepareCapture: async (log) => {
-    await ensureMitmdump(log);
-    if (!IS_DEV) await ensureCaptureCa(mitmdumpPath(), CAPTURE_CA_DIR, log);
   },
   update: { status: getUpdateStatus, check: triggerUpdateCheck, install: installUpdate },
 });
@@ -156,41 +113,6 @@ function route(req: IncomingMessage, res: ServerResponse): void {
   }
   const index = join(RENDERER_DIST, "index.html");
   serveStatic(req, res, index, "etag", headersFor(index));
-}
-
-/** Tear the capture pipeline down, if it's still armed. Used
- *  from main.ts on `before-quit` so the user doesn't have to remember to
- *  click Disarm before closing the window — otherwise `mitmdump.exe` and
- *  the device-side iptables redirect survive the Electron exit, and the
- *  next packaged build can't even delete its own bundled mitmdump (file in
- *  use), among other annoyances.
- *
- *  Returns true if a disarm was actually attempted (pipeline was armed).
- *  Runs `disarm.ps1` through an ASYNC `spawn` and resolves when it exits (or
- *  after a 15 s timeout that kills it), so the quit handler awaits it without
- *  blocking the event loop. */
-export async function disarmIfArmed(): Promise<boolean> {
-  const pidFile = join(CAPTURE_OUT, ".mitm.pid");
-  if (!existsSync(pidFile)) return false;
-  dlog("capture", "armed at quit — running disarm.ps1");
-  const args = await captureScriptArgs();
-  // Async spawn (not spawnSync) so the caller's `await` yields to the event
-  // loop instead of freezing it — `before-quit` runs this and a blocking
-  // 15 s spawnSync would lock the UI thread for the whole teardown.
-  await new Promise<void>((resolve) => {
-    const child = spawn("powershell.exe", [
-      "-ExecutionPolicy", "Bypass", "-NoLogo", "-NonInteractive",
-      "-File", join(CAPTURE_DIR, "disarm.ps1"), ...args,
-    ], { cwd: CAPTURE_DIR, windowsHide: true, stdio: "ignore" });
-    const timer = setTimeout(() => {
-      dwarn("capture", "disarm.ps1 exceeded 15s — killing it");
-      try { child.kill(); } catch { /* already gone */ }
-      resolve();
-    }, 15_000);
-    child.on("exit", () => { clearTimeout(timer); resolve(); });
-    child.on("error", () => { clearTimeout(timer); resolve(); });
-  });
-  return true;
 }
 
 /** Preferred fixed port for the embedded HTTP server. We bind here so the

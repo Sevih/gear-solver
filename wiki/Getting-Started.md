@@ -13,38 +13,26 @@ app works under the hood, see [Architecture](Architecture) instead.
 ## 1. What you need
 
 - **Windows** (the app ships as a Windows desktop installer).
-- OUTERPLANE, one of two ways — this is your **capture source**:
-  - **Steam (recommended)** — OUTERPLANE installed **from Steam** and logged into your account.
-    Nothing else: the app drops a small capture plugin into the game folder for you.
-  - **Emulator** — **LDPlayer** (Android) with OUTERPLANE installed and logged in, the **Root
-    toggle ON** (LDPlayer → Settings → Other settings → Root permission → ON, then restart the
-    instance) and **ADB enabled**.
+- OUTERPLANE installed **from Steam** and logged into your account. Nothing else: the app drops
+  a small capture plugin into the game folder for you. (No Steam client? You can still import
+  your snapshot files by hand — the **Manual fallback** picker at the bottom of the window.)
 - The gear-solver app itself (installer, or run from source — see the [README](https://github.com/Sevih/gear-solver/blob/main/README.md)).
 
-> Either way, importing your account reads the game's own network responses **locally on your
-> PC** — nothing is ever sent anywhere, your data stays on your machine. The Steam plugin reads
-> them from inside the game; the emulator path intercepts them, which is why it needs root.
-> (Details: [Capture Pipeline](Capture-Pipeline).)
+> Importing your account reads the game's own network responses **locally on your PC** —
+> nothing is ever sent anywhere, your data stays on your machine. The plugin reads them from
+> inside the game, after the game decrypted them. (Details: [Capture Pipeline](Capture-Pipeline).)
 
 ---
 
 ## 2. First launch — the setup wizard
 
 On first launch the app opens a **Setup wizard** (you can re-open it anytime from the gear icon
-in the top-right). Pick your **capture source** at the top — the app preselects **Steam** when it
-finds OUTERPLANE in your Steam library — then follow the checklist:
+in the top-right). Follow the checklist:
 
-**Steam**
 1. **OUTERPLANE installed via Steam** — found automatically.
 2. **Capture plugin installed** — click **Install plugin** (one time; close the game first if it
    was already running without the plugin, then restart it).
 3. **Game running with the plugin loaded** — launch the game (the wizard has a button for it).
-
-**Emulator**
-1. **Emulator installed** — LDPlayer detected.
-2. **Emulator running** — your instance is up.
-3. **ADB connection** — the app can talk to the emulator.
-4. **Root toggle** — root permission is ON.
 
 When the checks are green, you're ready to import.
 
@@ -54,7 +42,7 @@ When the checks are green, you're ready to import.
 
 Importing reads your gear + heroes straight from the game.
 
-### Steam source — just play
+### Just play
 
 1. Launch OUTERPLANE from Steam (with the plugin installed).
 2. **Play through to the lobby** (the main town screen). The plugin writes your account +
@@ -63,38 +51,9 @@ Importing reads your gear + heroes straight from the game.
 3. For the extra stats (codex + geas), open the in-game **Hero Archive (Codex)** and
    **Gift / Geas** screens once — they import as soon as they load.
 
-Re-importing later = just play again: every lobby load refreshes the snapshot.
-
-### Emulator source — arm, play, disarm
-
-It's a **one-button** flow from the header:
-
-1. Launch OUTERPLANE inside LDPlayer.
-2. In gear-solver, click **Arm capture** (top of the window).
-3. In the game, **play through to the lobby** (the main town screen). This makes the game send
-   your account + inventory, which the app captures automatically.
-4. Back in gear-solver, click **Reload** if the inventory doesn't appear on its own.
-
-That's it — your gear and heroes now show up in the **Inventory** and **Builds** tabs.
-
-### Grab the extra stats (codex + geas)
-
-A couple of stat sources aren't sent on the lobby screen, so your composed stats can be **very
-slightly** off until you grab them:
-
-1. With the pipeline still **armed**, in the game open the **Hero Archive (Codex)** screen and
-   the **Gift / Geas** screen.
-2. Back in gear-solver, click **Disarm**. The app picks up those two extra payloads and your
-   hero stats now match the in-game sheet exactly.
-
-> The app leaves capture **armed** after a successful import precisely so you can do this. When
-> you're done, **Disarm** tears the pipeline down cleanly. (It also disarms automatically when
-> you quit the app.)
-
-### Re-capturing later
-
-Re-run **Arm capture → lobby → Reload** anytime your account changes (new gear, enhanced a
-piece, leveled a hero…). The app always auto-imports the most recent capture on launch.
+Re-importing later = just play again: every lobby load refreshes the snapshot (new gear,
+an enhanced piece, a leveled hero…). The app also auto-imports the most recent capture on
+launch, and **Reload** (top of the window) re-reads it on demand.
 
 ---
 
