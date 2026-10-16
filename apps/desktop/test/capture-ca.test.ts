@@ -6,8 +6,11 @@ import { CA_HASH_FILE, captureCaReady, ensureCaptureCa } from "../src/capture-ca
 
 // Fake mitmdump: like the real one, writes the CA into `--set confdir=<dir>`
 // at startup and keeps running until killed. Each run gets a distinct cert
-// (its pid) and is counted in `<bin>/runs`.
+// (its pid) and is counted in `<bin>/runs` — FIRST: the caller kills it as
+// soon as the certs are on disk, so a count written after them could be lost
+// (seen on CI, 15/10).
 const FAKE_MITMDUMP = `#!/bin/sh
+echo $$ >> "$(dirname "$0")/runs"
 dir=""
 for a in "$@"; do case "$a" in confdir=*) dir="\${a#confdir=}";; esac; done
 cert="-----BEGIN CERTIFICATE-----
@@ -15,7 +18,6 @@ run-$$
 -----END CERTIFICATE-----"
 printf '%s\\n' "-----BEGIN PRIVATE KEY-----" "key-$$" "-----END PRIVATE KEY-----" "$cert" > "$dir/mitmproxy-ca.pem"
 printf '%s\\n' "$cert" > "$dir/mitmproxy-ca-cert.pem"
-echo $$ >> "$(dirname "$0")/runs"
 exec sleep 30
 `;
 // Exits at once without writing anything (broken / blocked binary).
