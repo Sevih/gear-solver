@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.10.0] — 2026-10-17
+
 - **Emulator capture removed.** OUTERPLANE is on Steam, so the app now captures only through
   the Steam plugin; importing your files by hand still works. Settings → Setup no longer asks
   for a source, and an earlier "Emulator" choice simply reads as Steam.
