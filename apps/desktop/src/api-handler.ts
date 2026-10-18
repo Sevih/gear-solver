@@ -281,23 +281,32 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
     // Settings → Data → "Wipe captured data". Empties the whole capture folder
     // (snapshots, sentinel, seen-paths.log, `_unknown/`, the Steam plugin
     // heartbeat) so the renderer reverts to its empty state. The folder itself
-    // stays: the Steam plugin writes into it.
+    // stays: the Steam plugin writes into it. Refused while the plugin is loaded
+    // in a running game (same guard as the user_item write-back): it would
+    // rewrite the folder behind the wipe, heartbeat included.
     if (url === "/api/capture/wipe" && req.method === "POST") {
       res.setHeader("Content-Type", "application/json");
-      let removed = 0;
-      try {
-        for (const f of readdirSync(captureOut)) {
-          rmSync(join(captureOut, f), { recursive: true, force: true });
-          removed++;
+      void steamPluginLive(captureOut).catch(() => false).then((isLive) => {
+        if (isLive) {
+          res.statusCode = 409;
+          res.end(JSON.stringify({ error: "Steam capture plugin live — close the game first" }));
+          return;
         }
-      } catch (err) {
-        dwarn("capture", "wipe failed:", (err as Error).message);
-        res.statusCode = 500;
-        res.end(JSON.stringify({ error: (err as Error).message }));
-        return true;
-      }
-      dlog("capture", `wiped ${removed} capture folder entr(ies)`);
-      res.end(JSON.stringify({ removed }));
+        let removed = 0;
+        try {
+          for (const f of readdirSync(captureOut)) {
+            rmSync(join(captureOut, f), { recursive: true, force: true });
+            removed++;
+          }
+        } catch (err) {
+          dwarn("capture", "wipe failed:", (err as Error).message);
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: (err as Error).message }));
+          return;
+        }
+        dlog("capture", `wiped ${removed} capture folder entr(ies)`);
+        res.end(JSON.stringify({ removed }));
+      });
       return true;
     }
     // --- Steam source: BepInEx plugin in the Steam client (steam-capture.ts) ---

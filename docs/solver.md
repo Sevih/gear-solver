@@ -334,12 +334,13 @@ bonus 2pc/4pc atteignable) ne s'affichent pas. Tooltip 3-sections : nom + (N own
 
 ### Weapons, accessories & talismans
 Trois groupes de chips effect-icon (Weapons / Accessories / Talismans), filtrés par class du héros (gated par `classLimit`), clés sur le `setId` de la pièce. Click cycle `off → required → excluded → off`. Tooltip : nom + (N owned) / desc T4 / state.
-Un talisman conseillé par **Get preset** (`Talisman` de `/api/reco`, `translateReco.ts`) arrive en état
-**`preferred`** (contour pointillé, badge `~`) : si au moins une pièce du pool talisman — après tous les filtres
+Un talisman conseillé par **Get preset** (`Talisman` de `/api/reco`, `translateReco.ts`) arrive, avec toute sa
+famille (les talismans de même `name` dans `equipment.json` : le conseil désigne le 6★, les 4★/5★ ont leur propre
+`setId`, `talismanFamilyKeys`), en état **`preferred`** (contour pointillé, badge `~`) : si au moins une pièce du pool talisman — après tous les filtres
 d'`allow()` — porte l'un des `setId` préférés, le pool est restreint à celles-là ; sinon il reste ouvert, comme sans
 conseil (jamais 0 build à cause d'un talisman préféré, contrairement à `required`). En « keep current », le talisman
-porté reste verrouillé. Un clic le fait passer en `required`. Le statut de Get preset signale quand aucun des
-talismans conseillés n'est possédé.
+porté reste verrouillé. Un clic le fait passer en `required`. Le statut de Get preset signale quand aucun membre
+des familles conseillées n'est possédé.
 
 ### RightSidebar — Library
 Trois sections **câblées** (localStorage, par héros) :

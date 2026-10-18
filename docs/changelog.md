@@ -8,6 +8,71 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧹 Restes des lots G1 à G7 — `resVersion` des données, niveau de set de la fiche, famille du talisman conseillé, portrait fusionné, client de référence, Wipe refusé plugin actif (2026-10-18)
+- ✅ **Pourquoi.** Sept restes notés par G1 à G7 dans leurs entrées (« ⏳ Laissé », « Repéré hors périmètre »),
+  revérifiés le 18/10 ; sept parties indépendantes, un seul commit. Pas de `data:sync`.
+- ✅ **`resVersion` des données chargées** (G1). `DataVersion` (`renderer/src/data.ts`) gagne `resVersion?`,
+  facultatif : `loadDataVersion` ne le pose que s'il est une chaîne, un cache ancien sans lui charge toujours. Le
+  stamp de Settings → Data l'affiche devant le hash (« game 1.11.408 · 79508390003b · built … ») ; l'en-tête
+  (version en ligne) ne change pas. Le `hash` ne couvrant que les 18 tables, `data-sync.ts` gagne
+  `refreshVersionStamp` : à `hash` égal (et sans `force`), le corps compacté de `version.json` est comparé à celui du
+  cache et réécrit seul, atomique, s'il diffère — en CHECKOUT avant de répondre « fresh », en REPO avant
+  d'enregistrer le SHA ; aucune autre table touchée, statut toujours `fresh`. En-tête du module, § 1.2 et liste des
+  modes de `docs/reference.md` / `wiki/Engine-Reference.md`, étape 2 du cycle de `wiki/Data-Schema.md` mis à jour
+  (`{ schema, resVersion, hash, builtAt }`).
+- ✅ **Niveau de set de la fiche** (G3). `pickSetLevel` (`design/GearDetail.tsx`, exporté pour le test) lit
+  `pieceSetLevel` de `@gear-solver/core` au lieu de `bt >= 4 ? 2 : 1` ; son repli (contrat sans
+  `breakLimitCounts` → l'ancienne règle) vient avec, et la ligne la plus haute reste le dernier recours quand le
+  niveau visé n'existe pas.
+- ✅ **Talisman conseillé, toute la famille** (G4). `translateReco.ts` : `talismanFamilyKeys(equipment)` indexe une
+  fois les talismans (`slot` `ooparts`) par `name` et rend, pour l'`itemId` conseillé, tous les `setId` de sa
+  famille (Tactician's Charm 6★ 10207 → `3007`, `3018`, `3029, 3129`) ; `effectPicks` prend un résolveur à
+  plusieurs clés, `translateRecoBuild` un troisième argument facultatif `resolveTalismanFamily` réservé au groupe
+  Talisman (sans lui, l'ancien résolveur à une clé). Armes et accessoires inchangés. `applyRecoBuild`
+  (`BuilderScreen.tsx`) le passe ; la note « None of the recommended talismans is owned » lit les clés du patch,
+  donc teste la même famille. Les chips restent une par `setId` (hors périmètre). `docs/solver.md` /
+  `wiki/Solver.md` et `wiki/Using-the-App.md` le disent.
+- ✅ **Portrait et fiche du héros fusionné dans le Builder** (G5). La carte du héros choisi, les options de
+  `HeroOption` et la liste des héros exclus prennent `effectiveCharacter(c, game?.characters)` (id du portrait,
+  classe, élément, nom par `displayNameOf`), comme la carte Builds (`BuildsScreen.tsx` l.986-987). **Choix à
+  relire** : le texte du champ du sélecteur (`selectedName` de `HeroSelect`) suit aussi, sans quoi il
+  afficherait un autre nom que l'option choisie et la carte. `heroSearchHaystack` inchangé. Comparaison (lecture du
+  code et du contrat, pas à l'écran) : Snow fusionnée (`fusionCharId` 2700003) → les deux écrans passent par
+  `effectiveCharacter`, donc portrait 2700003, Ranger / Water, nom « Core Fusion Snow » ; avant, le Builder
+  montrait le portrait 2000003.
+- ✅ **Client de référence dans Settings** (G6). `steam-capture.ts` exporte `REFERENCE_CLIENT` (bloc `client` de
+  `game-client.json` : `version`, `buildId`, `dumpedAt`) ; `SteamStatus` (et son miroir `renderer/src/steam.ts`)
+  gagne `reference` et `buildDiffers` (build installé connu et différent). L'en-tête du volet Steam affiche « build
+  <installé> · reference v1.4.18 (build 25744766) » (la référence seule sans build connu) et, si `buildDiffers`,
+  une ligne ambre non bloquante « This game build differs from the client outerpedia last read (v1.4.18, build
+  25744766). ». `wiki/Using-the-App.md` le mentionne.
+- ✅ **Wipe refusé plugin actif** (G7). `POST /api/capture/wipe` (`api-handler.ts`) attend `steamPluginLive` et
+  répond 409 `{ error: "Steam capture plugin live — close the game first" }`, comme le write-back de `user_item` ;
+  dossier intact. `wipeCaptured` (`SettingsModal.tsx`) affiche l'`error` du serveur, « HTTP <code> » en repli.
+  `wiki/FAQ.md`, `wiki/Capture-Pipeline.md`, `wiki/Using-the-App.md` le disent.
+- ✅ **En-tête de `outerpediaCheckout.test.ts`** (G1) : il ne dit plus que le desktop n'a pas de lanceur de tests
+  (`apps/desktop/vitest.config.ts` existe) ; fichier non déplacé.
+- ✅ **Tests.** `data-sync.test.ts` : même hash et `resVersion` changé → `version.json` du cache réécrit, les 18
+  autres tables toujours `{}`, en REPO (une seule requête CDN, SHA enregistré) et en CHECKOUT.
+  `dataVersion.test.ts` (nouveau) : `resVersion` lu, absent → pas de plantage, sans `hash` → null.
+  `gearDetailSetLevel.test.ts` (nouveau) : contrat réel BT3 → 1, BT4 → 2 ; `breakLimitCounts` modifié (niveau 2 à
+  BT3) suivi ; contrat privé des champs → ancienne règle. `translateReco.test.ts` : Tactician's Charm 6★ → les
+  trois `setId` de la famille, arme inchangée, talisman non résolu toujours averti. `talismanPreferred.test.ts`
+  (moteur, `precomputeContext`) : seul un Tactician's Charm 5★ possédé → pool réduit à lui ; aucun membre → pool
+  entier. `steam-status.test.ts` : référence dans le statut ; build égal → pas d'avertissement, différent →
+  avertissement, inconnu → rien. `server-writeback.test.ts` : plugin actif → 409, `user_item.json` et heartbeat
+  intacts ; inactif → dossier vidé. Compteurs de `translateReco` et `talismanPreferred` mis à jour dans le tableau
+  § 3.3 de `docs/reference.md` / `wiki/Engine-Reference.md`. `npm run typecheck` : dernière ligne `> tsc --noEmit`
+  (renderer), sans erreur ; `npm test` : core `Tests  125 passed (125)`, desktop `Tests  87 passed (87)`, renderer
+  `Tests  461 passed (461)`.
+- ✅ **Repéré hors périmètre** (rien touché) : le stamp de Settings → Data n'est lu qu'à l'ouverture du volet, une
+  sync manuelle ne le rafraîchit pas ; la ligne « Total » du § 3.3 de `docs/reference.md` est déjà en retard sur
+  le tableau (translateReco 10 contre 13 avant ce lot) ; `wiki/Roadmap.md` cite encore `version.json`
+  `{ hash, builtAt }`.
+- ⏳ **À regarder à l'écran** (Sevih) : Settings → Data (ligne game), Settings → Steam (référence, et
+  l'avertissement quand le build installé n'est plus 25744766), le Builder sur un héros fusionné (carte, options,
+  exclus), un Wipe jeu lancé avec le plugin (message du serveur).
+
 ### ⚔️ Effets de combat des sets (`combatEffects`) affichés à côté de la prose, jamais dans la fiche ni la CP (2026-10-18)
 - ✅ **Pourquoi** (C1, second temps ; décision du 15/10 : retirer ces effets de la CP d'abord — fait en G3 —,
   les afficher ensuite). outerpedia (B53) émet dans chaque entrée `levels[]` de `sets.json` un champ

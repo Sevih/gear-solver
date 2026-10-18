@@ -65,10 +65,13 @@ particular):
 Refresh after a game patch: `npm run data:sync` (`data/sync.mjs`, once
 outerpedia's `datagen:build` + `promote` have run).
 
-The generator also writes `version.json` `{ hash, builtAt }`: `hash` is a `sha256`
+The generator also writes `version.json` `{ schema, resVersion, hash, builtAt }`: `hash` is a `sha256`
 over the content of **every** derived file (name + body, fixed emit order), so it stays
 **stable as long as the data is unchanged** (a no-op rebuild keeps it identical). Read by
-`loadDataVersion()` (`apps/renderer/src/data.ts`) and shown read-only in Settings → Data — the
+`loadDataVersion()` (`apps/renderer/src/data.ts`) and shown read-only in Settings → Data, after
+`resVersion` ("game 1.11.408 · …", the version of the loaded tables; absent from an old cache).
+The `hash` doesn't cover `resVersion`: at an unchanged `hash`, the sync rewrites version.json
+alone when its body differs. The `hash` is also the
 hook for a future localStorage cache invalidation after a patch (compare the `hash`, prune saved
 builds referencing vanished `pieceUids`).
 
@@ -655,8 +658,8 @@ The raw source tables live in outerpedia's datamine; the app only ever sees
 the 19 derived artifacts. Refreshed **at launch** by `data-sync.ts`
 (`apps/desktop/src`) in two modes:
 - **checkout** (dev / maintainer machine) — copy from a local outerpedia
-  checkout (`data/generated/solver/`), guarded by the version.json hash,
-  zero network;
+  checkout (`data/generated/solver/`), guarded by the version.json hash
+  (at an unchanged hash, only a differing version.json is copied), zero network;
 - **repo** (packaged build) — downloads the 19 artifacts from the public repo
   `Sevih/outerpedia` via the jsDelivr CDN, gated on the SHA of the latest
   commit (`api.github.com/.../commits/main`). Allows following patches
@@ -717,7 +720,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidelity, empty maps), import merge (dedup by `id`, collision keeps the existing), replace (overwrite), bundle validation (kind/version/maps) |
 | `apps/renderer/test/solveChunk.test.ts` | 4 tests — end-to-end `solveChunk` (hand-built `SolveContext`): **mid-tree set prune** (req-4pc → 1 scored combo vs 16 brute-force; infeasible → 0), **solver↔Builds 0-diff**, **chunk partition equivalence** (union of N chunks = single-chunk run, no combo lost or duplicated) |
 | `apps/renderer/test/setPlans.test.ts`   | 26 tests — chip expansion (`setPicksToPlans`), `planSetIds`, `planSlots`, `planFeasible` (multi-cond sum), `setsFeasible` OR + leaf-validation at `remaining 0`, mono-plan req-4pc parity, **`armorSetWhitelist`** (full vs partial prune × broken on/off), **`allSetsComplete`** |
-| `apps/renderer/test/translateReco.test.ts` | 13 tests — reco→patch: mains (OR-union), effects (icons required, null skip+warn), talismans (`preferred`, unresolved skip+warn), sets (combo→plan 1:1, unresolved combo dropped entirely), substat priority (tiers→weights, bucket collision, unknown key) |
+| `apps/renderer/test/translateReco.test.ts` | 16 tests — reco→patch: mains (OR-union), effects (icons required, null skip+warn), talismans (`preferred`, unresolved skip+warn, whole family on the real `equipment.json`), sets (combo→plan 1:1, unresolved combo dropped entirely), substat priority (tiers→weights, bucket collision, unknown key) |
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick`: verdict on both sides of the crossover, exact flat-equivalent, equality exactly at the crossover, %=0 tick guard |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains`: descending sort, delta→gain monotonicity, CHC null if crit-cap, base 0 → empty |
 | `apps/renderer/test/buildAdvice.test.ts` | 16 tests — `computeAdvice` (Builds): no-gear silent, missing on a near-complete hero (≤2) vs silent WIP (early-return), sets (singleton / 3-of-4), wasted caps — crit tolerated ≤102 / PEN >100 (rounded threshold >0), empty gem slots Talisman/EE + reach-+5 tip, aggregated upgrade (unused reforges / 6★ not ascended / below enhance cap), singular/plural wording |
@@ -727,7 +730,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/statRegistry.test.ts` | 11 tests — stat registry (`STAT_AXES`): FinalStats coverage, `STAT_TO_PRIORITY` flat/%→axis bridge, design-token completeness, numeric parity snapshot, legacy-key migration |
 | `apps/renderer/test/worklistPlan.test.ts` | 20 tests — `planWorklist` transaction planning: free-before-use ordering, contention flags (one copy wanted twice), **same hero + same slot**: only the newest entry (`createdAt`) is assigned, the older one exposed as `superseded` (and the `equipAssignments` fold hands over the newer piece), cycles applicable atomically, applied/stale changes excluded, empty plan; `worklistClaims` (solver reservations): each unapplied change's target → claiming hero, already-applied changes skipped, newest entry wins a double-claim, empty map without inventory |
 | `apps/renderer/test/deltaCp.test.ts` | 2 tests — `deltaCpLabel`: reforge `Off` → bare `ΔCP ±X`, no tooltip; active mode → `vs equipped (build at <mode>)` + tooltip |
-| `apps/renderer/test/talismanPreferred.test.ts` | 6 tests — `talismanEffectPicks` on the real contract (`precomputeContext`): owned preferred → pool narrowed to it (variants included), not owned or dropped by another filter (class, "equipped" scope) → whole pool, unowned `required` → empty pool, `excluded`, keep current locked, absent field → whole pool |
+| `apps/renderer/test/talismanPreferred.test.ts` | 8 tests — `talismanEffectPicks` on the real contract (`precomputeContext`): owned preferred → pool narrowed to it (variants included; the advice's family: only a 5★ owned → it, no member → whole pool), not owned or dropped by another filter (class, "equipped" scope) → whole pool, unowned `required` → empty pool, `excluded`, keep current locked, absent field → whole pool |
 | `apps/renderer/test/heroTracker.test.ts` | 11 tests — `buildHeroTrackerExport` (outerpedia hero-tracker export): versioned envelope keyed by base hero id, level/affinity resolved from the XP curves (floors lv5 / aff 1), EE level taken from the owned EE item (best copy, non-EE gear ignored), fused hero under its base id + nested `core_fusion` block (omitted when unfused, tier 1 when the level is missing), `transcend_star` clamped to base rarity and out-of-range values clamped, unknown hero still exported |
 
 Run: `npm test --workspaces --if-present`. **Total: 300 tests** (core 22: parse 11 + equip 11 · renderer 278: solver 95, solveChunk 4, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, worklistPlan 11, subValue 5, dmgValue 4, buildAdvice 16, cpPrune 23, heroPriority 21, dominance 10, statRegistry 11, heroTracker 11).

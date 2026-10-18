@@ -8,13 +8,15 @@
  *
  *  - CHECKOUT mode (dev, maintainer machine): a local outerpedia checkout is
  *    present. Copy `data/generated/solver/*.json` into `derivedDir`.
- *    version.json-hash-gated so a launch is a no-op when nothing changed.
+ *    version.json-hash-gated so a launch is a no-op when nothing changed (at
+ *    an unchanged hash, only a version.json whose stamp moved is rewritten).
  *    No network.
  *
  *  - REPO mode (packaged build, any machine): no checkout. Resolve the latest
  *    commit SHA of `Sevih/outerpedia`, and if it changed since last sync,
  *    download its version.json; only when the data hash differs too are the
- *    other 18 artifacts downloaded from the GitHub CDN into the writable cache.
+ *    other 18 artifacts downloaded from the GitHub CDN into the writable cache
+ *    (at an unchanged hash, only version.json is rewritten, when it differs).
  *    This is what lets the app track game patches WITHOUT shipping a new
  *    installer. Degrades cleanly offline (uses whatever derived is already
  *    cached).
@@ -134,6 +136,16 @@ function compact(buf: Buffer | string): Buffer | string {
   try { return JSON.stringify(JSON.parse(buf.toString("utf-8"))); } catch { return buf; }
 }
 
+/** At an unchanged data hash, rewrite the cached version.json when its body
+ *  differs (a new `resVersion` — the hash covers the 18 tables, not the stamp)
+ *  — the only file written. */
+function refreshVersionStamp(derivedDir: string, body: Buffer | string): void {
+  const next = compact(body);
+  let cur: Buffer | string = "";
+  try { cur = compact(readFileSync(join(derivedDir, "version.json"))); } catch { /* rewritten below */ }
+  if (cur.toString() !== next.toString()) writeAtomic(join(derivedDir, "version.json"), next);
+}
+
 export interface SyncResult {
   status: "synced" | "fresh" | "offline" | "unavailable" | "error";
   message: string;
@@ -183,6 +195,7 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
     if (refusal) return refused(refusal, derivedReady);
     const srcHash = readVersionHash(checkout);
     if (!force && srcHash != null && srcHash === readVersionHash(derivedDir)) {
+      refreshVersionStamp(derivedDir, body);
       return { status: "fresh", message: `data already up to date (checkout ${srcHash})` };
     }
     let copied = 0;
@@ -210,8 +223,9 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
 
   // Most outerpedia commits touch the site, not the solver data. Fetch
   // version.json first and compare its content hash with the cached one: the
-  // same hash means the 18 other tables are byte-identical — record the new
-  // SHA and stop there. (The manual Sync — force — still re-downloads all.)
+  // same hash means the 18 other tables are byte-identical — refresh the
+  // version.json stamp if its body moved (`resVersion`), record the new SHA
+  // and stop there. (The manual Sync — force — still re-downloads all.)
   const bufs = new Map<string, Buffer>();
   const version = await fetchRepoFile(latest, `${SOLVER_DIR}/version.json`);
   if (version.status !== 200 || !version.buf) {
@@ -227,6 +241,7 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
   if (refusal) return refused(refusal, derivedReady);
   const remoteHash = hashOf(version.buf);
   if (!force && derivedReady && remoteHash != null && remoteHash === readVersionHash(derivedDir)) {
+    refreshVersionStamp(derivedDir, version.buf);
     writeShaState(shaStateFile, latest);
     return { status: "fresh", message: `data up to date (${latest.slice(0, 7)}, data ${remoteHash})` };
   }

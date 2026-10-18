@@ -50,6 +50,18 @@ describe("syncGameData — REPO mode", () => {
     expect(readFileSync(join(derivedDir, "characters.json"), "utf-8")).toBe("{}");
   });
 
+  it("same data hash with a new resVersion rewrites version.json only", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    const urls = stubRemote("h1", { resVersion: "1.11.409" });
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r.status).toBe("fresh");
+    expect(urls.filter((u) => !u.startsWith("https://api.github.com/"))).toHaveLength(1);
+    expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8")))
+      .toEqual({ resVersion: "1.11.409", hash: "h1", builtAt: "2026-02-02" });
+    for (const f of SOLVER_FILES) if (f !== "version.json") expect(readFileSync(join(derivedDir, f), "utf-8")).toBe("{}");
+    expect(JSON.parse(readFileSync(shaStateFile, "utf-8")).sha).toBe(NEW_SHA);
+  });
+
   it("a data change downloads every table once", async () => {
     const { derivedDir, shaStateFile } = cache("h1");
     const urls = stubRemote("h2");
@@ -185,6 +197,17 @@ describe("syncGameData — contract schema (CHECKOUT mode)", () => {
     expect(r.status).toBe("error");
     expect(r.message).toMatch(/^outerpedia's game data uses format 3, .*; keeping the cached data$/);
     expectCacheIntact(derivedDir, shaStateFile);
+  });
+
+  it("same data hash with a new resVersion rewrites version.json only", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    vi.stubEnv("OUTERPEDIA_NO_CHECKOUT", "");
+    vi.stubEnv("OUTERPEDIA_PATH", fakeCheckout({ schema: 1, resVersion: "1.11.409", hash: "h1", builtAt: "2026-02-02" }));
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r.status).toBe("fresh");
+    expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8")))
+      .toEqual({ schema: 1, resVersion: "1.11.409", hash: "h1", builtAt: "2026-02-02" });
+    for (const f of SOLVER_FILES) if (f !== "version.json") expect(readFileSync(join(derivedDir, f), "utf-8")).toBe("{}");
   });
 
   it.each([1, 2])("schema %i still copies", async (schema) => {

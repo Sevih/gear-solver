@@ -38,7 +38,7 @@ import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../
 import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
 import type { HeroPriority } from "../lib/storage/heroPriority.js";
 import { ARMOR_SLOTS, planSlots } from "../lib/solver/setPlans.js";
-import { translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
+import { talismanFamilyKeys, translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
 import { fetchRecoForHero } from "../lib/reco/fetchReco.js";
 import { equipPieces } from "../equip.js";
 import type { WorklistChange, WorklistEntry } from "../lib/storage/worklist.js";
@@ -1111,12 +1111,13 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const applyRecoBuild = (name: string, build: StructuredRecoBuild) => {
     // Resolve each recommended item to its unique effect key (setId) via the
     // loaded game data — the reco only carries effectIcon, which isn't unique.
+    // A talisman widens to its whole family (4★/5★/6★ share a name, not a setId).
     const resolveEffectKey = (itemId: number | null) =>
       itemId != null && game ? game.equipment[String(itemId)]?.setId ?? null : null;
-    const { patch, warnings } = translateRecoBuild(build, resolveEffectKey);
+    const { patch, warnings } = translateRecoBuild(build, resolveEffectKey, game ? talismanFamilyKeys(game.equipment) : undefined);
     dispatch({ type: "mergePreset", patch });
     setRecoPicker(null);
-    // A preferred talisman the account doesn't own leaves the pool open — say so.
+    // No member of a preferred family owned leaves the pool open — say so.
     const preferredTalismans = Object.keys(patch.talismanEffectPicks);
     const talismanNote = preferredTalismans.length > 0 && game && inventory
       && !inventory.gear.some((g) => g.slot === "ooparts" && preferredTalismans.includes(game.equipment[String(g.itemId)]?.setId ?? ""))
@@ -1817,7 +1818,9 @@ function BuilderToolbar({
     filters.excludedHeroes.size;
 
   const selectedHero = selectedUid ? heroes.find((c) => c.uid === selectedUid) ?? null : null;
-  const selectedMeta = selectedHero && game ? game.characters[String(selectedHero.charId)] ?? null : null;
+  // Fused hero: the fusion's portrait and sheet, as on the Builds card.
+  const selectedDisplay = selectedHero ? effectiveCharacter(selectedHero, game?.characters) : null;
+  const selectedMeta = selectedDisplay?.def ?? null;
 
   return (
     <div className="relative flex shrink-0 flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-2 px-2.5 py-2">
@@ -1825,7 +1828,7 @@ function BuilderToolbar({
       <div className="flex items-center gap-2">
         {selectedHero ? (
           <CharacterPortrait
-            charId={selectedHero.charId}
+            charId={selectedDisplay!.charId}
             name={displayNameOf(selectedHero, selectedMeta)}
             cls={selectedMeta?.cls}
             element={selectedMeta?.element}
@@ -2323,7 +2326,7 @@ function HeroSelect({
   const [activeIdx, setActiveIdx] = useState(0);
   const wrapRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
   const selected = value ? heroes.find((c) => c.uid === value) ?? null : null;
-  const selectedName = selected ? displayNameOf(selected, game?.characters[String(selected.charId)] ?? null) : "";
+  const selectedName = selected ? displayNameOf(selected, effectiveCharacter(selected, game?.characters).def) : "";
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return heroes;
@@ -2386,7 +2389,7 @@ function HeroSelect({
 function HeroOption({
   id, hero, game, active, highlighted, onPick,
 }: { id: string; hero: Character; game: GameData | null; active: boolean; highlighted: boolean; onPick: () => void }) {
-  const meta = game?.characters[String(hero.charId)] ?? null;
+  const { charId: displayCharId, def: meta } = effectiveCharacter(hero, game?.characters);
   const name = displayNameOf(hero, meta);
   const ref = useRef<HTMLLIElement>(null);
   // Keep the keyboard-highlighted option in view as the user arrows through.
@@ -2403,7 +2406,7 @@ function HeroOption({
         )}
       >
         <CharacterPortrait
-          charId={hero.charId}
+          charId={displayCharId}
           name={name}
           cls={meta?.cls}
           element={meta?.element}
@@ -2766,7 +2769,7 @@ function ExcludeHeroesPicker({
             {filtered.length === 0 ? (
               <li className="px-2 py-2 text-[11px] italic text-white/65">No hero matches</li>
             ) : filtered.map((c) => {
-              const meta = game?.characters[String(c.charId)] ?? null;
+              const meta = effectiveCharacter(c, game?.characters).def;
               const checked = excluded.has(c.uid);
               return (
                 <li key={c.uid}>

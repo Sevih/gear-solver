@@ -42,7 +42,8 @@ Then launch the game from Steam and reach the lobby: the app re-imports on its o
 | `.steam-plugin.json` | plugin start + every capture | Heartbeat the app reads to show **Live**. |
 | `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | Discovery of new game endpoints. |
 
-The app's **Settings → Data → Wipe captured data** empties the whole folder.
+The app's **Settings → Data → Wipe captured data** empties the whole folder — refused (409)
+while the plugin is loaded in a running game, like the equip write-back.
 
 ## Key endpoints (POST, on `glb-game …:38001`)
 

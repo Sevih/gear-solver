@@ -24,6 +24,10 @@ export interface SteamStatus {
   installed: boolean;
   gameDir: string | null;
   buildId: string | null;
+  /** The client outerpedia last read (bundled `game-client.json` `client`). */
+  reference: { version: string; buildId: string; dumpedAt: string };
+  /** The installed build is known and differs from the reference's. */
+  buildDiffers: boolean;
   bepinex: { present: boolean; version: string | null };
   plugin: { present: boolean; upToDate: boolean; outDir: string | null; outDirOk: boolean };
   bundleAvailable: boolean;

@@ -1,5 +1,13 @@
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { translateRecoBuild, type ResolveEffectKey, type StructuredRecoBuild } from "../src/lib/reco/translateReco.js";
+import type { GameData } from "@gear-solver/core";
+import { talismanFamilyKeys, translateRecoBuild, type ResolveEffectKey, type StructuredRecoBuild } from "../src/lib/reco/translateReco.js";
+
+const EQUIPMENT = JSON.parse(
+  readFileSync(new URL("../../../data/derived/equipment.json", import.meta.url), "utf8"),
+) as GameData["equipment"];
+const realKey: ResolveEffectKey = (id) => (id != null ? EQUIPMENT[String(id)]?.setId ?? null : null);
 
 // Stub resolver: maps an itemId to a synthetic effect key "eff<itemId>". A null
 // id (or the sentinel 0) resolves to null to exercise the skip+warn path.
@@ -74,6 +82,32 @@ describe("translateRecoBuild — talisman (preferred)", () => {
 
   it("no advice → no talisman pick", () => {
     expect(translateRecoBuild({}, resolve).patch.talismanEffectPicks).toEqual({});
+  });
+});
+
+describe("translateRecoBuild — talisman family (real equipment table)", () => {
+  const tactician = { name: "Tactician's Charm", itemId: 10207, effectIcon: "TI_Icon_UO_Talisman_07", mainStat: [] };
+
+  it("a 6★ Tactician's Charm advice prefers the three setIds of its family", () => {
+    const { patch, warnings } = translateRecoBuild({ Talisman: [tactician] }, realKey, talismanFamilyKeys(EQUIPMENT));
+    // 4★ 10007, 5★ 10107, 6★ 10207 (and its variants, same setId).
+    expect(patch.talismanEffectPicks).toEqual({ "3007": "preferred", "3018": "preferred", "3029, 3129": "preferred" });
+    expect(warnings).toEqual([]);
+  });
+
+  it("weapons and accessories keep their single setId", () => {
+    const { patch } = translateRecoBuild({
+      Weapon: [{ name: "W", itemId: 10207, effectIcon: null, mainStat: [] }],
+    }, realKey, talismanFamilyKeys(EQUIPMENT));
+    expect(patch.weaponEffectPicks).toEqual({ "3029, 3129": "required" });
+  });
+
+  it("an unresolvable talisman is still skipped + warned", () => {
+    const { patch, warnings } = translateRecoBuild({
+      Talisman: [{ name: "Mystery Charm", itemId: null, effectIcon: null, mainStat: [] }],
+    }, realKey, talismanFamilyKeys(EQUIPMENT));
+    expect(patch.talismanEffectPicks).toEqual({});
+    expect(warnings).toHaveLength(1);
   });
 });
 

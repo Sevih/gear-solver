@@ -2,8 +2,9 @@
 // Outerpedia checkout lookup (dev): OUTERPEDIA_PATH env → .env.local → sibling
 // ../outerpedia. Runs the TypeScript resolver (desktop + Vite) and its plain-node
 // twin (data/sync.mjs, fetch-binaries.mjs) on the same fixtures so they can't drift.
-// Lives here because the desktop package has no test runner; the node types
-// reference above is what lets this file (and the desktop module) typecheck.
+// Lives in the renderer suite, though the desktop package has its own runner
+// (apps/desktop/vitest.config.ts); the node types reference above is what lets
+// this file (and the desktop module) typecheck.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

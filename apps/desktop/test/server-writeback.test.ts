@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,5 +50,30 @@ describe("POST /api/captured/user-item vs the Steam source", () => {
       expect(r.status).toBe(204);
     });
     expect(readFileSync(file, "utf-8")).toBe(EDITED);
+  });
+});
+
+describe("POST /api/capture/wipe vs the Steam source", () => {
+  it("is refused while the Steam plugin is live (it would refill the folder behind the wipe)", async () => {
+    const { handle, file } = await setup();
+    const heartbeat = join(file, "..", ".steam-plugin.json");
+    writeFileSync(heartbeat, '{"pid":4242}');
+    steam.live = true;
+    await withServer(handle, async (call) => {
+      const r = await call("/api/capture/wipe", { method: "POST" });
+      expect(r.status).toBe(409);
+      expect(JSON.parse(r.body).error).toMatch(/steam/i);
+    });
+    expect(readFileSync(file, "utf-8")).toBe(ORIGINAL);
+    expect(readFileSync(heartbeat, "utf-8")).toBe('{"pid":4242}');
+  });
+
+  it("empties the folder when no capture source is live", async () => {
+    const { handle, file } = await setup();
+    await withServer(handle, async (call) => {
+      const r = await call("/api/capture/wipe", { method: "POST" });
+      expect(r.status).toBe(200);
+    });
+    expect(readdirSync(join(file, ".."))).toEqual([]);
   });
 });

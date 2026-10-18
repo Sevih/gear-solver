@@ -99,8 +99,8 @@ node levels per account).
 1. Outerpedia side: `datagen:build` + `promote` regenerate `data/generated/solver/*.json`
    (the `solver` generator there carries the old local `build.mjs`/`calc-stats.mjs` distillation).
 2. `npm run data:sync` copies those artifacts into `data/derived/*.json` (including
-   `version.json` `{ hash, builtAt }` — the `hash` only changes if the
-   data actually moved). Shown in Settings → Data.
+   `version.json` `{ schema, resVersion, hash, builtAt }` — the `hash` only changes if the
+   data actually moved; `resVersion` is the game tables' version). Shown in Settings → Data.
 3. Re-capture the account if the version has changed (play to the lobby with the plugin).
 4. Green tests (`npm test --workspaces`).
 5. Re-validate the stat-locks via the app's debug toggle, refresh the

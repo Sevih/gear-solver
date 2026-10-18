@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, Inventory } from "@gear-solver/core";
+import { talismanFamilyKeys, translateRecoBuild } from "../src/lib/reco/translateReco.js";
 import { precomputeContext } from "../src/lib/solver/engine.js";
 import type { SolveFilters, SolveRequest } from "../src/lib/solver/types.js";
 
@@ -92,5 +93,24 @@ describe("talisman effect picks — preferred narrows only when it can", () => {
 
   it("no talisman pick (older payload) → the whole pool", () => {
     expect(poolOf(gear, {})).toEqual(["exe", "tac", "tac-variant"]);
+  });
+});
+
+describe("talisman advice — the whole family is preferred", () => {
+  // The reco names the 6★ (10207); the translator widens it to the family.
+  const picks = translateRecoBuild(
+    { Talisman: [{ name: "Tactician's Charm", itemId: 10207, effectIcon: null, mainStat: [] }] },
+    (id) => (id != null ? GAME.equipment[String(id)]?.setId ?? null : null),
+    talismanFamilyKeys(GAME.equipment),
+  ).patch.talismanEffectPicks;
+
+  it("only a 5★ Tactician's Charm owned → the pool is reduced to it", () => {
+    const gear = [talisman("tac5", 10107, { star: 5 }), talisman("exe", 10201)];
+    expect(poolOf(gear, { talismanEffectPicks: picks })).toEqual(["tac5"]);
+  });
+
+  it("no member of the family owned → the whole pool", () => {
+    const gear = [talisman("exe", 10201), talisman("exe5", 10101, { star: 5 })];
+    expect(poolOf(gear, { talismanEffectPicks: picks })).toEqual(["exe", "exe5"]);
   });
 });

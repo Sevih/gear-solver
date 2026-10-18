@@ -9,7 +9,7 @@
  * passive (talisman/EE), unique-option passive (weapons/accessories), set
  * effect (armor 2/4-pc), and the Singularity active effect on ascended pieces.
  */
-import type { Character, GameData, SetCombatEffect } from "@gear-solver/core";
+import { pieceSetLevel, type Character, type GameData, type SetCombatEffect } from "@gear-solver/core";
 import type { UiPiece } from "./adapter.js";
 import { CharFace, EquipmentIcon, StatIcon } from "./EquipmentIcon.js";
 import { RARITY, SINGULARITY_GRADIENT_H, SLOTS, STAT } from "./tokens.js";
@@ -78,13 +78,14 @@ function SubstatRow({ s }: { s: UiPiece["subs"][number] }) {
 
 type SetLevelEntry = NonNullable<GameData["sets"][string]>["levels"][number];
 
-/** Pick which tier of a set's effect strings to display, driven by the piece's
- *  breakthrough (bt ≥ 4 → set level 2 / 6★ wording, else level 1). */
-function pickSetLevel(game: GameData, setId: string, bt: number) {
+/** Pick which tier of a set's effect strings to display: the piece's set level
+ *  from the contract (`pieceSetLevel` — its fallback included), else the
+ *  highest level the set has. Exported for tests. */
+export function pickSetLevel(game: GameData, setId: string, bt: number) {
   const def = game.sets?.[setId];
   if (!def) return null;
   const wrap = (level: SetLevelEntry) => ({ name: def.name ?? null, desc: def.desc ?? null, level });
-  const targetLevel = bt >= 4 ? 2 : 1;
+  const targetLevel = pieceSetLevel(def, bt);
   const exact = def.levels.find((l) => l.level === targetLevel);
   if (exact) return wrap(exact);
   const sorted = [...def.levels].sort((a, b) => b.level - a.level);

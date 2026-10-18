@@ -102,7 +102,8 @@ there.
 
 **I want a clean slate.**
 **Settings → Data → Wipe captured data** empties the whole capture folder: the imported
-snapshot, the seen-paths log and the unknown endpoints under `_unknown/`.
+snapshot, the seen-paths log and the unknown endpoints under `_unknown/`. Close the game first:
+the wipe is refused while the plugin is loaded in a running game (it would refill the folder).
 
 ---
 

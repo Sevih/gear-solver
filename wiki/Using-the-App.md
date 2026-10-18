@@ -145,7 +145,8 @@ In the right sidebar (**Library**):
   the build it was saved with.
 - **Restore** — push a saved build back into the table + gear band.
 - **Get Preset** — import a recommended build from Outerpedia as a starting filter set. Its
-  advised talismans are only *preferred*: used if you own one, otherwise any talisman is.
+  advised talismans are only *preferred*: used if you own one (any star of the same family),
+  otherwise any talisman is.
 
 ---
 
@@ -173,12 +174,14 @@ target piece's image, stats, and where it currently lives (which hero wears it, 
 A tabbed modal:
 
 - **Setup** — the capture plugin checklist (game found in Steam · plugin installed · plugin
-  loaded in the game), with Install / Update / Remove plugin and Launch game.
+  loaded in the game), with Install / Update / Remove plugin and Launch game. The header shows
+  your game build next to the client outerpedia last read, with a warning line when they differ
+  (informational: capture still works).
 - **Solver** — worker count (Auto = use your CPU; or pin a number), how many results to return,
   results heatmap on/off.
 - **Data** — **Sync game data** (refresh the game tables after a patch), reset the onboarding
-  wizard, **Wipe captured data**, and the current **game-data version** (so you can see which
-  snapshot is loaded).
+  wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
+  (game version of the tables, hash and date — so you can see which snapshot is loaded).
 - **Backup** — **Export / Import** your saved builds + filter presets as a JSON file (move them
   to another PC; captured gear isn't included — re-capture it there).
 - **Debug** — developer toggles (safe to ignore).

@@ -225,6 +225,14 @@ export function SettingsModal({
  * Panes
  * ───────────────────────────────────────────────────────────────────────── */
 
+/** Header note of the Steam pane: the installed build, then the client
+ *  outerpedia last read ("build 123 · reference v1.4.18 (build 25744766)"). */
+function steamBuildNote(s: SteamStatus | null): string | null {
+  if (!s) return null;
+  const reference = `reference v${s.reference.version} (build ${s.reference.buildId})`;
+  return s.buildId ? `build ${s.buildId} · ${reference}` : reference;
+}
+
 /** Capture setup wizard: three checks, the first two gate "ready" (the plugin
  *  is in place); the third is live status (game running with the plugin
  *  loaded) shown for feedback, since capture itself needs no click. */
@@ -261,7 +269,12 @@ function SteamSetupPane({ steam, loading, busy, onInstall, onLaunch, onProbe }: 
 
   return (
     <div className="flex flex-col gap-3.5">
-      <SectionStrip title="Capture setup · Steam" note={s?.buildId ? `build ${s.buildId}` : null} />
+      <SectionStrip title="Capture setup · Steam" note={steamBuildNote(s)} />
+      {s?.buildDiffers && (
+        <p className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11.5px] text-amber-200">
+          This game build differs from the client outerpedia last read (v{s.reference.version}, build {s.reference.buildId}).
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <div className="flex flex-1 gap-1">
           {steps.map((st, i) => (
@@ -537,6 +550,7 @@ function DataPane({
         <span className="text-white/50">Game data version</span>{" "}
         {version
           ? <>
+              {version.resVersion && <span className="text-white/40">game {version.resVersion} · </span>}
               <span className="font-mono text-white/85">{version.hash}</span>
               <span className="text-white/40"> · built {new Date(version.builtAt).toLocaleString()}</span>
             </>
@@ -844,7 +858,9 @@ async function wipeCaptured(onAfterWipe?: () => void): Promise<void> {
   try {
     const r = await fetch("/api/capture/wipe", { method: "POST" });
     if (!r.ok) {
-      window.alert(`Wipe failed: HTTP ${r.status}`);
+      // The server's reason when it gives one (409: the Steam plugin is live).
+      const j = (await r.json().catch(() => null)) as { error?: string } | null;
+      window.alert(`Wipe failed: ${j?.error ?? `HTTP ${r.status}`}`);
       return;
     }
     onAfterWipe?.();

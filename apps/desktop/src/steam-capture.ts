@@ -38,6 +38,14 @@ export const BEPINEX_VERSION = gameClient.bepinex.version;
 export const BEPINEX_SHA256 = gameClient.bepinex.sha256;
 const BEPINEX_URL = gameClient.bepinex.url;
 
+/** The client outerpedia last read (app version, Steam build, dump date),
+ *  shown next to the installed build. */
+export const REFERENCE_CLIENT: SteamReferenceClient = {
+  version: gameClient.client.version,
+  buildId: gameClient.client.buildId,
+  dumpedAt: gameClient.client.dumpedAt,
+};
+
 /** Plugin identity — must match tools/capture-steam/src/Plugin.cs. BepInEx
  *  names the config file after the GUID. */
 export const PLUGIN_GUID = "outerpedia.gearsolver.capture";
@@ -151,11 +159,21 @@ export interface SteamPluginHeartbeat {
   outDir: string;
 }
 
+export interface SteamReferenceClient {
+  version: string;
+  buildId: string;
+  dumpedAt: string;
+}
+
 export interface SteamStatus {
   /** OUTERPLANE found in a Steam library. */
   installed: boolean;
   gameDir: string | null;
   buildId: string | null;
+  /** The client outerpedia last read (`game-client.json` `client`). */
+  reference: SteamReferenceClient;
+  /** The installed build is known and differs from the reference's. */
+  buildDiffers: boolean;
   bepinex: { present: boolean; version: string | null };
   plugin: {
     present: boolean;
@@ -290,6 +308,7 @@ export async function steamStatus(captureOut: string, bundledDll: string): Promi
   if (!game) {
     return {
       installed: false, gameDir: null, buildId: null,
+      reference: REFERENCE_CLIENT, buildDiffers: false,
       bepinex: { present: false, version: null },
       plugin: { present: false, upToDate: false, outDir: null, outDirOk: false },
       bundleAvailable, gameRunning: pids.length > 0, heartbeat, live, ready: false,
@@ -303,6 +322,8 @@ export async function steamStatus(captureOut: string, bundledDll: string): Promi
   const outDirOk = sameDir(outDir, captureOut);
   return {
     installed: true, gameDir: game.gameDir, buildId: game.buildId,
+    reference: REFERENCE_CLIENT,
+    buildDiffers: game.buildId != null && game.buildId !== REFERENCE_CLIENT.buildId,
     bepinex: { present: bepPresent, version: bepPresent ? readBepinexVersion(game.gameDir) : null },
     plugin: { present, upToDate, outDir, outDirOk },
     bundleAvailable,

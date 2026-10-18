@@ -29,16 +29,16 @@ vi.mock("node:crypto", async (importOriginal) => {
   return { ...real, createHash: (alg: string) => { calls.hashes++; return real.createHash(alg); } };
 });
 
-const { resetSteamCaches, steamStatus } = await import("../src/steam-capture.js");
+const { REFERENCE_CLIENT, resetSteamCaches, steamStatus } = await import("../src/steam-capture.js");
 
 /** A Steam library with OUTERPLANE + BepInEx + our plugin, and a capture
  *  folder whose heartbeat belongs to pid 4242. */
-function fakeInstall() {
+function fakeInstall(buildLine = ' "buildid" "123"\n') {
   const root = mkdtempSync(join(tmpdir(), "gs-steam-"));
   const steam = join(root, "Steam");
   const game = join(steam, "steamapps", "common", "OUTERPLANE");
   mkdirSync(join(game, "OUTERPLANE_Data", "Managed"), { recursive: true });
-  writeFileSync(join(steam, "steamapps", "appmanifest_4247320.acf"), '"AppState"\n{\n "installdir" "OUTERPLANE"\n "buildid" "123"\n}\n');
+  writeFileSync(join(steam, "steamapps", "appmanifest_4247320.acf"), `"AppState"\n{\n "installdir" "OUTERPLANE"\n${buildLine}}\n`);
   mkdirSync(join(game, "BepInEx", "core"), { recursive: true });
   writeFileSync(join(game, "BepInEx", "core", "BepInEx.dll"), "core");
   writeFileSync(join(game, "winhttp.dll"), "loader");
@@ -98,5 +98,34 @@ describe("steamStatus — async, cached", () => {
     expect((await steamStatus(out, bundled)).plugin.upToDate).toBe(true);
     writeFileSync(join(calls.steamRoot, "steamapps", "common", "OUTERPLANE", "BepInEx", "plugins", "GearSolverCapture", "GearSolverCapture.dll"), "OLDER PLUGIN BUILD");
     expect((await steamStatus(out, bundled)).plugin.upToDate).toBe(false);
+  });
+});
+
+describe("steamStatus — reference client", () => {
+  it("carries the client outerpedia last read (game-client.json)", async () => {
+    const { out, bundled } = fakeInstall();
+    const st = await steamStatus(out, bundled);
+    expect(st.reference).toEqual(REFERENCE_CLIENT);
+    expect(st.reference.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(st.reference.buildId).toMatch(/^\d+$/);
+  });
+
+  it("installed build equal to the reference → no warning", async () => {
+    const { out, bundled } = fakeInstall(` "buildid" "${REFERENCE_CLIENT.buildId}"\n`);
+    expect((await steamStatus(out, bundled)).buildDiffers).toBe(false);
+  });
+
+  it("installed build different → warning", async () => {
+    const { out, bundled } = fakeInstall();
+    const st = await steamStatus(out, bundled);
+    expect(st.buildId).toBe("123");
+    expect(st.buildDiffers).toBe(true);
+  });
+
+  it("installed build unknown → no warning", async () => {
+    const { out, bundled } = fakeInstall("");
+    const st = await steamStatus(out, bundled);
+    expect(st.buildId).toBeNull();
+    expect(st.buildDiffers).toBe(false);
   });
 });

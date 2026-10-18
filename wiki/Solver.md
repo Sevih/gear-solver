@@ -327,12 +327,13 @@ reachable 2pc/4pc bonus) are not shown. 3-section tooltip: name + (N owned) / 2p
 
 ### Weapons, accessories & talismans
 Three groups of effect-icon chips (Weapons / Accessories / Talismans), filtered by the hero's class (gated by `classLimit`), keyed on the piece's `setId`. Click cycles `off → required → excluded → off`. Tooltip: name + (N owned) / T4 desc / state.
-A talisman advised by **Get preset** (`Talisman` from `/api/reco`, `translateReco.ts`) arrives as
-**`preferred`** (dashed outline, `~` badge): if at least one piece of the talisman pool — after every `allow()`
+A talisman advised by **Get preset** (`Talisman` from `/api/reco`, `translateReco.ts`) arrives, with its whole
+family (the talismans sharing its `name` in `equipment.json`: the advice names the 6★, the 4★/5★ carry their own
+`setId`, `talismanFamilyKeys`), as **`preferred`** (dashed outline, `~` badge): if at least one piece of the talisman pool — after every `allow()`
 filter — carries one of the preferred `setId`s, the pool is narrowed to those; otherwise it stays open, as without
 advice (never 0 builds because of a preferred talisman, unlike `required`). Under "keep current" the worn talisman
-stays locked. A click turns it into `required`. The Get preset status says when none of the advised talismans is
-owned.
+stays locked. A click turns it into `required`. The Get preset status says when no member of the advised families
+is owned.
 
 ### RightSidebar — Library
 Three **wired** sections (localStorage, per hero):

@@ -42,20 +42,24 @@ async function getJSON<T>(url: string): Promise<T | null> {
  *  is a content hash of every derived file (stable iff the data is unchanged);
  *  `builtAt` is an ISO timestamp of the LAST derived-data change (the write is
  *  idempotent — a no-op rebuild keeps the prior stamp, so this is the data
- *  vintage, not wall-clock build time). Both surfaced read-only in Settings →
- *  Data so the user can tell which game-data snapshot is loaded. */
+ *  vintage, not wall-clock build time); `resVersion` is the game version of the
+ *  loaded tables (absent from a cache synced before outerpedia added it). All
+ *  surfaced read-only in Settings → Data so the user can tell which game-data
+ *  snapshot is loaded. */
 export interface DataVersion {
   hash: string;
   builtAt: string;
+  resVersion?: string;
 }
 
 /** Fetch the derived-data version stamp. Null when absent (data built before
  *  the stamp existed, or no build yet) or malformed — callers degrade to "—". */
 export async function loadDataVersion(): Promise<DataVersion | null> {
   const v = await getJSON<Partial<DataVersion>>("/gamedata/version.json");
-  return v && typeof v.hash === "string" && typeof v.builtAt === "string"
-    ? { hash: v.hash, builtAt: v.builtAt }
-    : null;
+  if (!v || typeof v.hash !== "string" || typeof v.builtAt !== "string") return null;
+  return typeof v.resVersion === "string"
+    ? { hash: v.hash, builtAt: v.builtAt, resVersion: v.resVersion }
+    : { hash: v.hash, builtAt: v.builtAt };
 }
 
 export async function loadGameData(): Promise<GameData | null> {
