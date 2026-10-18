@@ -210,13 +210,17 @@ export function toUiPiece(g: GearPiece, game?: GameData | null): UiPiece {
   //     (same lv0 effect rendered twice would look like a bug). The math
   //     contribution is preserved in `g.main` for stat compose; only the
   //     display layer skips it.
+  //   - "uniquePassive"      → weapon / accessory unique-option passive on the
+  //     sheet → DROPPED too: the passive text (`textByTier`, "Reduces Speed
+  //     of the wielder by 30%") already says it; the value stays in `g.main`.
   const realMain: UiMainStat[] = [];
   const effects: UiEffect[] = [];
   for (const r of g.main) {
     const src = r.source ?? "option";
     if (src === "option") realMain.push(fmtStat(r));
     else if (src === "singularity") effects.push(fmtEffect(r));
-    // "eePassive" intentionally dropped — multiTierPassive owns the display.
+    // "eePassive" / "uniquePassive" intentionally dropped — the passive text
+    // (multiTierPassive / passive) owns the display.
   }
   // Resolve the per-piece unique-option passive for the current breakthrough
   // tier. `bt` (0..4) indexes directly into `textByTier` — the build pipeline

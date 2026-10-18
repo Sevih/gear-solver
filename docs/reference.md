@@ -44,7 +44,7 @@ cibles dérivent de la même table — `ItemSpecialOptionTemplet` notamment) :
 | `ItemOptionTemplet.json`             | `options.json`            | OptionID → StatOption (`{st, ap, v}`) OU IOT_BUFF reference |
 | `BuffTemplet.json`                   | `buffs.json`              | BuffID → array of StatOption (per enhanceLevel)        |
 | `ItemSpecialOptionTemplet.json` + curated (outerpedia) | `sets.json` | setId → levels[] → {p2, p4, p2_desc, p4_desc, breakLimitCounts, ignoreLowSet}, name |
-| `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `equipment-passives.json` | ItemID → {name, textByTier[1..4]}            |
+| `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `equipment-passives.json` | ItemID → {name, textByTier[1..4], statsByTier?} |
 | `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `multi-tier-passives.json`| ItemID → list of tier passives               |
 | `ItemOptionTemplet.json` (IDs 15001..15054) | `gems.json`        | OptionID → {type, level, st, ap, v}                    |
 | `ItemSpecialOptionTemplet.json` (groups 30000/31000) | `singularity-options.json`| OptionID → {st, ap, v, name, desc, combatOnly} |
@@ -74,7 +74,7 @@ localStorage après un patch (comparer le `hash`, élaguer les SavedBuild aux `p
 et produit un `Inventory` typé. Chaque `GearPiece` :
 - Identité : `uid, itemId, slot, setId, armorSetId, rarity, star, name, classLimit`.
 - État : `breakthrough, reforgeCount, enhanceLevel, singularityLevel, ascended, locked, equippedBy`.
-- Stats résolues : `main: RolledStat[]` (option + singularity + eePassive)
+- Stats résolues : `main: RolledStat[]` (option + singularity + eePassive + uniquePassive)
   et `subs: RolledStat[]` (substats, OU pour Talisman/EE les **gems socketés** —
   même `SubOptionList` côté API).
 - `gemSlots?: number[]` (Talisman/EE uniquement) — array de 5 OptionIDs
@@ -87,6 +87,10 @@ Conventions clés :
 - Talisman main passe par `BuffTemplet` (`resolveBuffMain`) — IOT_BUFF.
 - Singularity option : `BT_STAT_PREMIUM` permanent unconditional, `fromBuff: true`.
 - EE level-gated passives : ajoutés à `main` quand `enhanceLevel >= levelThreshold`.
+- Passif unique d'arme / d'accessoire sur la fiche (`equipmentPassives[id].statsByTier`,
+  palier `min(breakthrough, longueur − 1)`) : `fromBuff: true, source: "uniquePassive"`,
+  écarté de l'UI comme `eePassive` (Phantasm Necrosis SPD −30 %, Briareos's Ambition
+  RES +20 → +40 %).
 - Combat-only options (`BuffConditionType ≠ NONE`) gardées mais `combatOnly: true`
   → ignorées par les aggregators de stats mais affichées dans l'UI.
 
@@ -128,9 +132,12 @@ le gear par-dessus le no-gear baseline. Couvre :
    pour ATK/DEF/HP/EFF/RES.
 3. Additive simple pour CHC/CHD/PEN/DMG±/CritDmgRed. SPD : vitesse avant taux
    (`scaling.spd.value`) + gear plat + EE + set % (`floor(base × pct / 100)`),
-   puis le taux de buff `scaling.spd.buffPct` appliqué une fois à ce total
-   (`applySpdRate`, même règle que le no-gear) ; additive simple quand le taux
-   est nul (tout héros sauf Snow / Lisha fusionnées).
+   puis le taux de buff appliqué une fois à ce total (`applySpdRate`, même règle
+   que le no-gear) : `scaling.spd.buffPct` (héros) + `buffPct.spdRate` (vitesse
+   en taux d'un `fromBuff` d'équipement, Phantasm Necrosis −30 % ; `buffPct.spd`
+   reste du plat), soit `trunc(total × (1000 + héros‰ + équipement‰) / 1000)` ;
+   additive simple quand le taux est nul. La RES en taux d'un `fromBuff`
+   (Briareos's Ambition) arrive dans `buffPct.effRes`, lu en `gearBuffPct`.
 4. **Gem override** (solver uniquement) : skip les subs des Talisman/EE et
    ajoute les deltas `{flat, pct}` pré-agrégés à la place. Voir §2.4.
 
@@ -212,8 +219,9 @@ diverge de floor sur intermédiaires négatifs (rares mais réels sur debuffs).
 
 **SPD** (`scaling.spd`) : seul l'étage externe est modélisé —
 `final = trunc((vitesse avant taux + gear) × (1000 + buffPct) / 1000)`, où
-`buffPct` est la somme des `spdPct` de la fiche (aujourd'hui le passif de noyau
-seul, au palier de fusion : Snow / Lisha fusionnées 43 ‰). Snow lv1 = `trunc(133 × 1,043)`
+`buffPct` est la somme des taux de vitesse de la fiche (le passif de noyau au palier
+de fusion, Snow / Lisha fusionnées 43 ‰, plus l'équipement `buffPct.spdRate`,
+Phantasm Necrosis −300 ‰ : Snow fusionnée l'arme en main = `trunc(total × 0,743)`). Snow lv1 = `trunc(133 × 1,043)`
 = 138, pas 133 + 6 ; avec +40 SPD plats à lv100, `trunc(189 × 1,043)` = 197.
 
 Fichier : [compose-stats.ts](../packages/core/src/compose-stats.ts) +

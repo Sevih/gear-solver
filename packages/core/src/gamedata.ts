@@ -128,6 +128,14 @@ export interface EquipmentPassive {
    *  Length matches the BuffTemplet level count (5 for the standard
    *  weapon / accessory unique options). */
   textByTier: string[];
+  /** Sheet stats of the passive, indexed like `textByTier` (breakthrough 0..4,
+   *  BuffTemplet Level = bt + 1). Present only when one of the passive's buffs
+   *  lands on the character sheet (hidden buffs included); raw values, `v` in
+   *  ‰ for `OAT_RATE`, sign kept (Phantasm Necrosis: `ST_SPEED OAT_RATE −300`).
+   *  The parser pushes them as `fromBuff` mains (`source: "uniquePassive"`),
+   *  so they feed the stat's buff rate like the core passive. Absent → the
+   *  passive is combat-only text. */
+  statsByTier?: Array<Array<{ st: string; ap?: string; v: number }>>;
 }
 /** Keyed by `ItemID` (the equipment item's ID) — every weapon and
  *  accessory has a row (most other slots don't carry a unique-option

@@ -56,6 +56,11 @@ equipment piece). Stackables (orbs / materials) are dropped.
   `levelThreshold <= 1 || enhanceLevel >= levelThreshold` (a threshold-1
   passive is always on once equipped, even at +0 — cf. `parse.ts`),
   `source: "eePassive"`.
+- Weapon / accessory unique passive that hits the sheet
+  (`game.equipmentPassives[ItemID].statsByTier`) → the tier
+  `min(breakthrough, length − 1)`, each entry resolved by `resolveOption`, added as
+  `fromBuff: true, source: "uniquePassive"` (hidden from the display: the passive
+  text already says it).
 
 Main scaling for non-talisman pieces: see [Engine Reference §1.3](Engine-Reference#13-parse-packagescoresrcparsets).
 
@@ -121,6 +126,16 @@ flat), which contract format 2 drops.
 optional in `SetLevel` (`core/gamedata.ts`): an older cache lacks them and `wornSetRows`
 (`core/set-level.ts`) then falls back to the former rule (cf.
 [Engine Reference §2.6](Engine-Reference#26-set-bonuses-composebuildtscomputesetbonuses)).
+
+**Unique passive stats (`equipment-passives.json`).** Next to `textByTier`, a weapon or
+accessory entry with a buff that hits the sheet (sheet buffs, hidden ones included)
+carries `statsByTier` (added by outerpedia, `schema` still 1): indexed like `textByTier`
+(index = breakthrough 0 to 4, the client takes the buff at level 1 + breakthrough), each
+tier a list of raw `{ st, ap?, v }` (`OAT_RATE` in ‰, sign kept). Today 16 items:
+Phantasm Necrosis (`ST_SPEED OAT_RATE −300` on all five tiers) and Briareos's Ambition
+(`ST_BUFF_RESIST OAT_RATE` 200 → 400). Typed optional in `EquipmentPassive`
+(`core/gamedata.ts`): when absent the piece keeps its mains; read by `parseGearPiece`
+(cf. [Engine Reference §1.3](Engine-Reference#13-parse-packagescoresrcparsets)).
 
 The `version.json` `hash` is the hook for a future automatic localStorage cache invalidation;
 pruning SavedBuilds with vanished `pieceUids` is still to be wired (cf.

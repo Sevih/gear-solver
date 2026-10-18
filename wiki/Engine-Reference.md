@@ -49,7 +49,7 @@ particular):
 | `ItemOptionTemplet.json`             | `options.json`            | OptionID → StatOption (`{st, ap, v}`) OR IOT_BUFF reference |
 | `BuffTemplet.json`                   | `buffs.json`              | BuffID → array of StatOption (per enhanceLevel)        |
 | `ItemSpecialOptionTemplet.json` + curated (outerpedia) | `sets.json` | setId → levels[] → {p2, p4, p2_desc, p4_desc, breakLimitCounts, ignoreLowSet}, name |
-| `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `equipment-passives.json` | ItemID → {name, textByTier[1..4]}            |
+| `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `equipment-passives.json` | ItemID → {name, textByTier[1..4], statsByTier?} |
 | `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `multi-tier-passives.json`| ItemID → list of tier passives               |
 | `ItemOptionTemplet.json` (IDs 15001..15054) | `gems.json`        | OptionID → {type, level, st, ap, v}                    |
 | `ItemSpecialOptionTemplet.json` (groups 30000/31000) | `singularity-options.json`| OptionID → {st, ap, v, name, desc, combatOnly} |
@@ -79,7 +79,7 @@ builds referencing vanished `pieceUids`).
 and produces a typed `Inventory`. Each `GearPiece`:
 - Identity: `uid, itemId, slot, setId, armorSetId, rarity, star, name, classLimit`.
 - State: `breakthrough, reforgeCount, enhanceLevel, singularityLevel, ascended, locked, equippedBy`.
-- Resolved stats: `main: RolledStat[]` (option + singularity + eePassive)
+- Resolved stats: `main: RolledStat[]` (option + singularity + eePassive + uniquePassive)
   and `subs: RolledStat[]` (substats, OR for Talisman/EE the **socketed gems** —
   same `SubOptionList` on the API side).
 - `gemSlots?: number[]` (Talisman/EE only) — array of 5 OptionIDs
@@ -92,6 +92,10 @@ Key conventions:
 - Talisman main goes through `BuffTemplet` (`resolveBuffMain`) — IOT_BUFF.
 - Singularity option: `BT_STAT_PREMIUM` permanent unconditional, `fromBuff: true`.
 - EE level-gated passives: added to `main` when `enhanceLevel >= levelThreshold`.
+- Weapon / accessory unique passive on the sheet (`equipmentPassives[id].statsByTier`,
+  tier `min(breakthrough, length − 1)`): `fromBuff: true, source: "uniquePassive"`,
+  hidden from the UI like `eePassive` (Phantasm Necrosis SPD −30%, Briareos's Ambition
+  RES +20 → +40%).
 - Combat-only options (`BuffConditionType ≠ NONE`) kept but `combatOnly: true`
   → ignored by the stat aggregators but displayed in the UI.
 
@@ -134,9 +138,12 @@ gear on top of the no-gear baseline. Covers:
    for ATK/DEF/HP/EFF/RES.
 3. Simple additive for CHC/CHD/PEN/DMG±/CritDmgRed. SPD: speed before rate
    (`scaling.spd.value`) + gear flat + EE + set % (`floor(base × pct / 100)`),
-   then the buff rate `scaling.spd.buffPct` applied once to that total
-   (`applySpdRate`, same rule as no-gear); simple additive when the rate is
-   zero (every hero but fused Snow / Lisha).
+   then the buff rate applied once to that total (`applySpdRate`, same rule as
+   no-gear): `scaling.spd.buffPct` (hero) + `buffPct.spdRate` (the speed rate of
+   a gear `fromBuff`, Phantasm Necrosis −30%; `buffPct.spd` stays flat), i.e.
+   `trunc(total × (1000 + hero‰ + gear‰) / 1000)`; simple additive when the rate
+   is zero. The RES rate of a `fromBuff` (Briareos's Ambition) lands in
+   `buffPct.effRes`, read as `gearBuffPct`.
 4. **Gem override** (solver only): skip the subs of Talisman/EE and add the
    pre-aggregated `{flat, pct}` deltas in their place. See §2.4.
 
@@ -220,8 +227,9 @@ diverges from floor on negative intermediates (rare but real on debuffs).
 
 **SPD** (`scaling.spd`): only the outer stage is modelled —
 `final = trunc((speed before rate + gear) × (1000 + buffPct) / 1000)`, where
-`buffPct` is the sum of the sheet's `spdPct` (today the core passive alone, at
-the fusion tier: fused Snow / Lisha 43‰). Snow lv1 = `trunc(133 × 1.043)` = 138,
+`buffPct` is the sum of the sheet's speed rates (the core passive at the fusion tier,
+fused Snow / Lisha 43‰, plus the gear's `buffPct.spdRate`, Phantasm Necrosis −300‰:
+fused Snow holding the weapon = `trunc(total × 0.743)`). Snow lv1 = `trunc(133 × 1.043)` = 138,
 not 133 + 6; with +40 flat SPD at lv100, `trunc(189 × 1.043)` = 197.
 
 File: [compose-stats.ts](../packages/core/src/compose-stats.ts) +

@@ -127,8 +127,12 @@ export interface GearBuckets {
 function addPieceToBuckets(p: GearPiece, b: GearBuckets, gemOverrideActive: boolean): void {
   for (const s of p.main) {
     if (s.combatOnly) continue;
+    // A buff-routed SPEED RATE (Phantasm Necrosis' −30 %) gets its own key:
+    // `buffPct.spd` is FLAT (EE mains `ST_SPEED OAT_ADD`), the rate goes on the
+    // speed buff rate, applied once on the total (`finalStatsFromBuckets`).
+    const key = s.fromBuff && s.percent && s.stat === "spd" ? "spdRate" : s.stat;
     const target = s.fromBuff ? b.buffPct : (s.percent ? b.pct : b.flat);
-    target[s.stat] = (target[s.stat] ?? 0) + s.value;
+    target[key] = (target[key] ?? 0) + s.value;
   }
   const isGemSlot = p.slot === "ooparts" || p.slot === "exclusive";
   if (!(isGemSlot && gemOverrideActive)) {
@@ -297,13 +301,15 @@ export function computeFinalStatsFromPrefix(
 function finalStatsFromBuckets(baseline: FinalStatsBaseline, scaling: ScalingMap, { flat, pct, buffPct }: GearBuckets): FinalStats {
   // Speed: the no-gear speed before its buff rate, plus gear, then the rate
   // ONCE on that total (`applySpdRate`, same rule as the no-gear composer).
+  // The rate is the hero's (`scaling.spd.buffPct`, core passive) plus the
+  // gear's (`buffPct.spdRate`, unique passives), summed before the truncation.
   const spdBase = scaling.spd?.value ?? baseline.spd;
   const spdTotal = spdBase + (flat.spd ?? 0) + (buffPct.spd ?? 0) + Math.floor(spdBase * (pct.spd ?? 0) / 100);
   return {
     atk: composeMultStat(scaling.atk, flat.atk ?? 0, pct.atkPct ?? 0, buffPct.atkPct ?? 0),
     def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0, buffPct.defPct ?? 0),
     hp:  composeMultStat(scaling.hp,  flat.hp  ?? 0, pct.hpPct  ?? 0, buffPct.hpPct  ?? 0),
-    spd: applySpdRate(spdTotal, scaling.spd?.buffPct ?? 0),
+    spd: applySpdRate(spdTotal, (scaling.spd?.buffPct ?? 0) + (buffPct.spdRate ?? 0)),
     critRate: round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0)),
     critDmg:  round1(baseline.chd + (pct.critDmg  ?? 0) + (buffPct.critDmg  ?? 0)),
     eff: composeMultStat(scaling.eff, flat.eff    ?? 0, pct.eff    ?? 0, buffPct.eff    ?? 0),

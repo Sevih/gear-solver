@@ -1174,7 +1174,9 @@ export function allocateComboBudget(counts: number[], budget: number): number[] 
  * monotone non-decreasing in each gear bucket entry (`composeMultStat` and the
  * additive stats only ever ADD the gear contribution; SPD's buff rate,
  * `applySpdRate`, truncates total × (1000 + rate‰) / 1000, non-decreasing in
- * the total as long as the rate stays above −100 % — today it is ≥ 0). So if
+ * the rate (`spdRate`, total ≥ 0) and in the total as long as the rate stays
+ * above −100 %: the hero's rate is ≥ 0 and the only negative gear rate is one
+ * weapon's −30 % (Phantasm Necrosis), so the sum stays > −1000‰). So if
  * piece X's stat contribution is ≥ piece Y's on every CP-relevant bucket axis
  * (and > on one), then for ANY fixed choice of the other slots
  * `CP(build with X) ≥ CP(build with Y)` — Y can never produce a higher-CP
@@ -1189,7 +1191,7 @@ export function allocateComboBudget(counts: number[], budget: number): number[] 
  *  prevents dropping a CP-equal piece over an irrelevant stat and tightens the
  *  prune. `pct` and `buffPct` read the same rate keys. */
 const CP_FLAT_KEYS = ["atk", "def", "hp", "spd", "eff", "effRes", "dmgUp", "dmgReduce", "pen", "critDmgReduce"] as const;
-const CP_RATE_KEYS = ["atkPct", "defPct", "hpPct", "spd", "critRate", "critDmg", "eff", "effRes", "dmgUp", "dmgReduce", "pen", "critDmgReduce"] as const;
+const CP_RATE_KEYS = ["atkPct", "defPct", "hpPct", "spd", "spdRate", "critRate", "critDmg", "eff", "effRes", "dmgUp", "dmgReduce", "pen", "critDmgReduce"] as const;
 
 /** Does X's contribution dominate Y's — ≥ on every CP-relevant axis and > on at
  *  least one? Missing keys count as 0. A strict edge on a CP-relevant axis means

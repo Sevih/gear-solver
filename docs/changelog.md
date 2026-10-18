@@ -8,6 +8,59 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗡️ Uniques d'arme et d'accessoire de la fiche lus du contrat (`statsByTier`), vitesse en taux de l'équipement (2026-10-18)
+- ✅ **Pourquoi** (M2, livré sur la preuve par le code, décision du 15/10). Deux passifs uniques touchent la fiche
+  et n'étaient pas comptés : Phantasm Necrosis (arme, set 1021 : objets 24, 174, 324, 474, 624, 774,
+  92201-92203, 93391-93393, `ST_SPEED OAT_RATE −300` caché aux cinq paliers) et Briareos's Ambition (accessoire,
+  set 2033 : 1797, 93291-93293, `ST_BUFF_RESIST OAT_RATE` 200 → 400 du palier 0 au 4). Une fiche à 220 SPD avec
+  Phantasm restait à 220 au lieu de 154 et « Max CP » pouvait élire l'arme à tort. La donnée était déjà synchronisée
+  (`equipment-passives.json`, `statsByTier` à côté de `textByTier`, C20 d'outerpedia) mais rien ne la lisait : pas
+  de `data:sync`. Règle du client : buff pris au niveau 1 + breakthrough, versé au taux de buff (`BuffValueRate`)
+  de la stat, comme le passif de noyau.
+- ✅ **Type** (`core/gamedata.ts`). `EquipmentPassive.statsByTier?: Array<Array<{ st; ap?; v }>>`, optionnel,
+  commenté (index = breakthrough, valeurs brutes, ‰ signé). `docs/data-schema.md` / `wiki/Data-Schema.md` le
+  décrivent (puce de la main stat et paragraphe à côté des paliers de set) ; la ligne `equipment-passives.json` de
+  `docs/reference.md` § 1.2 et de `wiki/Engine-Reference.md` aussi.
+- ✅ **Parse** (`core/parse.ts`). `parseGearPiece`, pour une arme ou un accessoire, lit
+  `statsByTier[min(BreakLimitLevel, longueur − 1)]`, résout chaque entrée par `resolveOption` et la pousse dans
+  `main` en `fromBuff: true, source: "uniquePassive"` (nouvelle valeur de l'union `RolledStat.source`, commentée dans
+  `core/types.ts`). Une entrée sans `ap` serait ignorée : il n'y en a aucune dans le contrat. Sans `statsByTier`,
+  mains inchangées ; la projection au plafond (`projectMainToCeiling`) ne touche pas ces mains (`source` ≠ `option`)
+  et garde le breakthrough, donc le palier.
+- ✅ **Affichage.** `adapter.ts` écarte `uniquePassive` comme `eePassive` (commentaire du tri par `source`) : le
+  texte du passif dit déjà « Reduces Speed of the wielder by 30% ». Le catalogue des mains du Builder
+  (`BuilderScreen.tsx`) et le filtre de main du moteur (`engine.ts`) ne gardent que `option` : rien à changer.
+- ✅ **Calcul** (`composeBuild.ts`). La RES en taux d'un `fromBuff` arrive déjà dans `buffPct.effRes`, lu par
+  `composeMultStat` en `gearBuffPct` : prouvé par un test, rien changé. La vitesse en taux n'avait pas de canal
+  (`buffPct.spd` est du plat, main de l'EE `ST_SPEED OAT_ADD 40`) : `addPieceToBuckets` route un `fromBuff` en %
+  de `spd` vers `buffPct.spdRate`, et `finalStatsFromBuckets` l'ajoute au taux du héros posé par G8 avant l'unique
+  `applySpdRate` : `trunc(total × (1000 + héros‰ + équipement‰) / 1000)`. `computeFinalStatsFromPrefix` passe par
+  les mêmes fonctions (test d'équivalence au bit près vert). `spdRate` entre dans `CP_RATE_KEYS` (`engine.ts`) ;
+  l'en-tête de la dominance dit pourquoi la monotonie tient : taux du héros ≥ 0, seul taux négatif d'équipement
+  −30 % sur l'unique arme, somme > −1000 ‰, et la vitesse croît avec le taux à total ≥ 0.
+- ✅ **Textes.** `docs/reference.md` § 1.3 (nouvelle source, puce de convention), § 1.5 (point 3 : canal
+  `buffPct.spdRate`, RES par `gearBuffPct`) et § 2.1 (paragraphe SPD, qui disait « le passif de noyau seul »), miroirs
+  dans `wiki/Engine-Reference.md`.
+- ✅ **Tests.** `packages/core/test/unique-passive.test.ts` (contrat réel) : armes 24 et 93391 aux breakthrough 0
+  et 4 → une main `uniquePassive` SPD −30 % ; 1797 → RES +20 % au 0, +40 % au 4 ; breakthrough 7 → dernier palier ;
+  Surefire Greatsword (754, sans `statsByTier`) → mains identiques avec et sans la table ; les 16 objets du contrat
+  sont des armes ou accessoires et produisent tous une main. `apps/renderer/test/uniquePassive.test.ts` : le taux
+  dans `buffPct.spdRate` et pas dans `buffPct.spd` ; fiche à 220 SPD → 154 ; Snow fusionnée lv100 (149 + 45 SPD
+  plats) avec Phantasm → `trunc(194 × 743 / 1000)` ; chemin incrémental identique au complet (Phantasm, Briareos,
+  EE plat) ; dominance : de deux armes identiques sauf le taux, celle à −30 % est éliminée dans les deux ordres,
+  jamais l'autre ; `toUiPiece` ne l'affiche ni en main ni en effet ; Briareos au breakthrough 4 sur RES 150 →
+  `composeMultStat(res, 0, 0, 40)` = 210. CP (`calcBattlePower`, fiche de test ATK 3000 / DEF 800 / HP 8000 / CHC 60
+  / CHD 180 à 220 SPD) : 36 135 sans l'arme, 31 371 avec, soit −4 764 (l'écart croît avec l'ATK, d'où les ~8 000 de
+  l'item sur une fiche plus offensive). Rejeu des passifs uniques qui entrent dans la fiche (lecture seule de
+  `outerpedia-gamedata/parsed` et `data/derived`) : 10 lignes, 5 d'arme (`BID_ITEM_UO_WEAPON_21`, niv. 1 à 5,
+  12 objets) et 5 d'accessoire (`BID_IRREGULAR_UO_ACC_05`, niv. 1 à 5, 4 objets), toutes couvertes par un
+  `statsByTier` lu ici, mêmes valeurs ; aucune ligne de talisman. `npm run typecheck` : dernière ligne `tsc --noEmit`
+  (renderer) sans erreur ; `npm test` : dernière ligne `Tests  440 passed (440)` (core 121, desktop 79).
+- ⏳ Rien à faire pour les talismans au rejeu (aucune ligne). Hors périmètre, vu en passant : `priorityScoreOf` et
+  `magnitudeScoreOf` (`engine.ts`) somment toutes les mains non combat, `uniquePassive` compris, contre
+  `ROLL_NORMS` (le −30 % de Phantasm pèse comme −30 SPD plats, −1,5 jet, dans le classement Score sans CP) ; même
+  traitement déjà pour `singularity` / `eePassive`. À trancher si le pré-tri du mode Score doit l'ignorer.
+
 ### ⚡ Passif de cœur au palier de fusion capturé, vitesse du noyau en taux dans les deux compositeurs (2026-10-18)
 - ✅ **Pourquoi.** `composeCharStats` ajoutait `ingredients.corePassive` (un seul bloc, au niveau max) à tout
   fusionné quel que soit son palier : Notia en fusion 1 à 4 recevait EFF +50 %. Et la vitesse en taux du noyau

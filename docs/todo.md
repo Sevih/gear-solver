@@ -51,10 +51,6 @@
       +7 301 sur 59 142), « Max CP » sur-sélectionne ces sets. Ne produire en stat que les IOT_STAT ; côté
       gear-solver, ne rien compter sans `st`. **Décision** : exposer les IOT_BUFF dans un champ `combatEffects`
       affiché, ou seulement les retirer de la CP ?
-- [ ] 🔴 **M2 — Uniques d'arme et d'accessoire qui touchent la fiche, ignorés** — Phantasm Necrosis (SPD −30 % caché,
-      CP trop haute de ~8 000 à 220 SPD), Ambition de Briaréos (RES +20 à 40 %, niveau = 1 + BreakLimitCount).
-      Générer les BT_STAT_PREMIUM/PASSIVE ciblant ME, cachés compris. **Décision** : livrer sur la preuve par le
-      code, ou attendre une capture ?
 - [ ] 🔴 **M3 — Unique IOT_STAT de l'EE de Fatal (2000078) absente** — CHD +30 % à +10 perdu : le contrat ne sort
       que les uniques IOT_BUFF. Seul cas parmi les EE.
 - [ ] 🟡 **Filtre des passifs de skill trop strict** côté contrat (`extractSkillPassiveByLevel` : ME seul, condition

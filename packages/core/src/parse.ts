@@ -261,6 +261,24 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
     }
   }
 
+  // Weapon / accessory unique-option passive, when one of its buffs lands on
+  // the sheet (Phantasm Necrosis: SPD −30 %, Briareos's Ambition: RES +20..40 %).
+  // The client takes the buff at Level = 1 + breakthrough; a breakthrough past
+  // the list reads the last tier. Same shape as the EE passives below: a
+  // `fromBuff` main feeding the stat's buff rate (`BuffValueRate`).
+  if (game && (meta?.slot === "weapon" || meta?.slot === "accessory")) {
+    const tiers = game.equipmentPassives?.[String(item.ItemID)]?.statsByTier;
+    if (tiers && tiers.length > 0) {
+      for (const sb of tiers[Math.min(item.BreakLimitLevel, tiers.length - 1)] ?? []) {
+        // Every contract entry carries `ap`; one without it has no defined
+        // channel, so it is skipped rather than guessed.
+        if (!sb.ap) continue;
+        const resolved = resolveOption({ st: sb.st, ap: sb.ap, v: sb.v }, 1);
+        if (resolved) main.push({ ...resolved, fromBuff: true, source: "uniquePassive" });
+      }
+    }
+  }
+
   // EE level-gated permanent passives. Each entry's `levelThreshold` is the
   // EE enhance level needed to activate: `1` = always-on once equipped, `10`
   // = unlocks at +10 (e.g. Caren's +20% DEF via `BID_CEQUIP_2000089_ADD`).

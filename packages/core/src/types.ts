@@ -50,8 +50,10 @@ export interface RolledStat {
    *                     or IOT_BUFF — talisman/EE IOT_BUFF mains land here)
    *    - "singularity"→ Singularity-ascension roll (per-item-state extra)
    *    - "eePassive"  → EE level-gated permanent stat passive
+   *    - "uniquePassive" → weapon / accessory unique-option passive that hits
+   *                     the sheet (`equipmentPassives[id].statsByTier`)
    *  Substats don't carry this — they always come from the substat pool. */
-  source?: "option" | "singularity" | "eePassive";
+  source?: "option" | "singularity" | "eePassive" | "uniquePassive";
   /** Regular mains only (`source: "option"`, non-buff), set by the parser: the
    *  raw +0 `OptionValue` from `options.json` (‰ for a percent stat) the value
    *  was scaled from. Lets `projectMainToCeiling` re-run the game's exact
