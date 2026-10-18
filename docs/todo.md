@@ -57,10 +57,6 @@
       code, ou attendre une capture ?
 - [ ] 🔴 **M3 — Unique IOT_STAT de l'EE de Fatal (2000078) absente** — CHD +30 % à +10 perdu : le contrat ne sort
       que les uniques IOT_BUFF. Seul cas parmi les EE.
-- [ ] 🟡 **Vitesse en % du noyau** (`spdPct`) émise en taux et cuite au niveau courant par les deux compositeurs
-      (aujourd'hui pré-cuite, erreur commune au wiki et au solver).
-- [ ] 🟡 **Passif de cœur par niveau de fusion** — `corePassive` est un seul bloc pris au niveau max : faux pour une
-      fusion 1 à 4 (Notia).
 - [ ] 🟡 **Filtre des passifs de skill trop strict** côté contrat (`extractSkillPassiveByLevel` : ME seul, condition
       NONE, `TurnDuration −1`) ; sans rejet constaté aujourd'hui.
 - [ ] 🟡 **L6 — Une table `ST_*` → clés unique**, émise dans le contrat (`solver/stat-keys.json`) et lue par

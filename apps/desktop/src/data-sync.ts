@@ -60,8 +60,11 @@ function findSolverCheckout(repoRoot: string | null): string | null {
  * raises this constant to `schema + 1`; (c) outerpedia drops the old field and
  * bumps `schema`. A newer schema is refused and the cache kept (see
  * `schemaRefusal`). Twin: `scripts/solver-schema.mjs` (data/sync.mjs).
+ *
+ * Format 2: `characters.json` drops `ingredients.corePassive`, leaving
+ * `corePassiveByFusion` alone.
  */
-export const SUPPORTED_SOLVER_SCHEMA = 1;
+export const SUPPORTED_SOLVER_SCHEMA = 2;
 
 /** Contract schema of a solver `version.json` body: no `schema` field → 1 (the
  *  contract before outerpedia added it — still what an un-updated cache

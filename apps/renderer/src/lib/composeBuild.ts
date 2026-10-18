@@ -10,7 +10,7 @@
  * NOTE: keep this file pure — no React, no IO. The screens own the React
  * state + memoization; this lib is the deterministic engine.
  */
-import { wornSetRows, type GameData, type GearPiece, type StatScaling } from "@gear-solver/core";
+import { applySpdRate, wornSetRows, type GameData, type GearPiece, type SpeedScaling, type StatScaling } from "@gear-solver/core";
 
 export interface FinalStats {
   atk: number; hp: number; def: number; spd: number;
@@ -22,13 +22,20 @@ export interface FinalStats {
 }
 
 export type ScalingAxis = "atk" | "def" | "hp" | "eff" | "res";
-export type ScalingMap = Record<ScalingAxis, StatScaling>;
+/** The composer's `scaling`. `spd` (speed before its buff rate + the rate) is
+ *  what `composeCharStats` always emits; it is optional only so a hand-built
+ *  map (tests) can leave it out — speed then reads `baseline.spd`, rate 0. */
+export type ScalingMap = Record<ScalingAxis, StatScaling> & { spd?: SpeedScaling };
 
 /** Minimal subset of NoGearStats needed by `computeFinalStats`. Re-typed
  *  here to keep this lib decoupled from the composer's heavier
  *  `NoGearStats` interface (only the additive baselines matter for the
  *  non-compound stats — SPD/CHC/CHD/PEN/DmgInc/DmgRed). */
 export interface FinalStatsBaseline {
+  /** Read only when `scaling.spd` is absent. The composer's `noGearStats.spd`
+   *  already carries the speed buff rate, so the gear side takes the speed
+   *  before that rate from `scaling.spd` and applies the rate once, on the
+   *  total that includes gear. */
   spd: number;
   chc: number;
   chd: number;
@@ -215,7 +222,7 @@ export function setBonusStatKey(st: string, isRate: boolean): string | null {
 /** Compose the full stat sheet for a hero with their equipped gear. The
  *  `baseline` should be the composer's `noGearStats` (additive baseline);
  *  `scaling` carries the per-axis CalcFinalStat ingredients for ATK/DEF/HP
- *  and EFF/RES.
+ *  and EFF/RES, and the speed before its buff rate (`scaling.spd`).
  *
  *  `gemOverride` (optional) tells `aggregateGearBuckets` to use a custom
  *  gem allocation on Talisman/EE pieces instead of their currently
@@ -288,11 +295,15 @@ export function computeFinalStatsFromPrefix(
  *  Shared by both the full-array and incremental compose paths so the final
  *  arithmetic is defined once. */
 function finalStatsFromBuckets(baseline: FinalStatsBaseline, scaling: ScalingMap, { flat, pct, buffPct }: GearBuckets): FinalStats {
+  // Speed: the no-gear speed before its buff rate, plus gear, then the rate
+  // ONCE on that total (`applySpdRate`, same rule as the no-gear composer).
+  const spdBase = scaling.spd?.value ?? baseline.spd;
+  const spdTotal = spdBase + (flat.spd ?? 0) + (buffPct.spd ?? 0) + Math.floor(spdBase * (pct.spd ?? 0) / 100);
   return {
     atk: composeMultStat(scaling.atk, flat.atk ?? 0, pct.atkPct ?? 0, buffPct.atkPct ?? 0),
     def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0, buffPct.defPct ?? 0),
     hp:  composeMultStat(scaling.hp,  flat.hp  ?? 0, pct.hpPct  ?? 0, buffPct.hpPct  ?? 0),
-    spd: baseline.spd + (flat.spd ?? 0) + (buffPct.spd ?? 0) + Math.floor(baseline.spd * (pct.spd ?? 0) / 100),
+    spd: applySpdRate(spdTotal, scaling.spd?.buffPct ?? 0),
     critRate: round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0)),
     critDmg:  round1(baseline.chd + (pct.critDmg  ?? 0) + (buffPct.critDmg  ?? 0)),
     eff: composeMultStat(scaling.eff, flat.eff    ?? 0, pct.eff    ?? 0, buffPct.eff    ?? 0),

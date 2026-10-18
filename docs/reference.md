@@ -104,12 +104,18 @@ héros **sans** son gear. Couvre les couches :
 4. **Skill_8** (transcend passive — passe via `BuffValueRate`).
 5. **Geas** (par node, split IOT_STAT [white] vs IOT_BUFF [yellow]).
 6. **Codex** (archive bonus, +N% sur baseValue uniquement).
-7. **Skill passives** user-leveled (S1/S2/S3) + Core Fusion (Skill_23).
+7. **Skill passives** user-leveled (S1/S2/S3) + Core Fusion (Skill_23), pris
+   au palier de fusion capturé (`fusionLevel`) dans `corePassiveByFusion` ;
+   palier inconnu (absent ou 0) → le plus haut, comme les niveaux de skill ;
+   cache sans ce champ → l'ancien `corePassive` (un bloc au max, vitesse cuite
+   en plat). Sa vitesse en taux (`spdPct`, Snow / Lisha fusionnées +4,3 %)
+   multiplie la vitesse totale, en dernier : `trunc(total × (1000 + taux‰) / 1000)`.
 8. **Limit Break** modifier (CharacterMaxLevelTemplet, amplifie l'interp lv>100).
 
 Output : `{noGearStats, intrinsicStats, scaling}` où `scaling` carry les
 ingrédients per-axe (ATK/DEF/HP/EFF/RES) pour permettre l'ajout de gear
-plus tard via `composeMultStat`.
+plus tard via `composeMultStat`, et `scaling.spd` = `{ value, buffPct }`, la
+vitesse avant son taux et le taux (`noGearStats.spd` l'a déjà appliqué).
 
 ### 1.5 Compose final stats (`apps/renderer/src/lib/composeBuild.ts`)
 
@@ -120,7 +126,11 @@ le gear par-dessus le no-gear baseline. Couvre :
    en trois buckets : `flat`, `pct`, `buffPct` (séparation in-game CalcFinalStat).
 2. Per-axe compound via `composeMultStat(scaling, gearFlat, gearPct, gearBuffPct)`
    pour ATK/DEF/HP/EFF/RES.
-3. Additive simple pour SPD/CHC/CHD/PEN/DMG±/CritDmgRed.
+3. Additive simple pour CHC/CHD/PEN/DMG±/CritDmgRed. SPD : vitesse avant taux
+   (`scaling.spd.value`) + gear plat + EE + set % (`floor(base × pct / 100)`),
+   puis le taux de buff `scaling.spd.buffPct` appliqué une fois à ce total
+   (`applySpdRate`, même règle que le no-gear) ; additive simple quand le taux
+   est nul (tout héros sauf Snow / Lisha fusionnées).
 4. **Gem override** (solver uniquement) : skip les subs des Talisman/EE et
    ajoute les deltas `{flat, pct}` pré-agrégés à la place. Voir §2.4.
 
@@ -199,6 +209,12 @@ diverge de floor sur intermédiaires négatifs (rares mais réels sur debuffs).
 | buffValue    | combined             | OAT_ADD buffs (class passive +EFF, geas [141] +50 EFF, …) |
 | buffPct      | part2 (outermost)    | classPassive + skill_8 + geas IOT_BUFF + skill passives + gear `buffPct.*` |
 | codexPct    | codex term, baseValue| archive bonus                                           |
+
+**SPD** (`scaling.spd`) : seul l'étage externe est modélisé —
+`final = trunc((vitesse avant taux + gear) × (1000 + buffPct) / 1000)`, où
+`buffPct` est la somme des `spdPct` de la fiche (aujourd'hui le passif de noyau
+seul, au palier de fusion : Snow / Lisha fusionnées 43 ‰). Snow lv1 = `trunc(133 × 1,043)`
+= 138, pas 133 + 6 ; avec +40 SPD plats à lv100, `trunc(189 × 1,043)` = 197.
 
 Fichier : [compose-stats.ts](../packages/core/src/compose-stats.ts) +
 [composeBuild.ts](../apps/renderer/src/lib/composeBuild.ts) (gear-side).

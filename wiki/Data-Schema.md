@@ -101,6 +101,18 @@ node levels per account).
 5. Re-validate the stat-locks via the app's debug toggle, refresh the
    snapshots in `data/stat-locks.json` if necessary.
 
+**Core passive per tier (`characters.json`).** Each fused character's `ingredients`
+carry `corePassiveByFusion` (added by outerpedia, `schema` still 1):
+`{ "1": …, "5": … }`, all five keys always present, each block a `StatBlock` plus
+`spdPct` (the `OAT_RATE` speed in raw % points, 4.3 = +4.3%; `spd` there is flat only),
+zeroed when the tier has no sheet buff. `composeCharStats` takes the captured tier's key
+(`Character.fusionLevel`), the highest when the tier is unknown, and applies `spdPct` as a
+rate on the total speed (cf.
+[Engine Reference §1.4](Engine-Reference#14-compose-no-gear-packagescoresrccompose-statsts)).
+Typed optional in `CharacterIngredients`: an older cache lacks it and the composer then
+falls back to the legacy `corePassive` (a single block at max level, speed pre-baked as
+flat), which contract format 2 drops.
+
 **Set levels (`sets.json`).** Each `levels[]` entry carries, next to `p2` / `p4` /
 `p2_desc` / `p4_desc`, two fields added by outerpedia (`schema` still 1):
 `breakLimitCounts` (`number[]`, the breakthroughs that give a piece this level; today

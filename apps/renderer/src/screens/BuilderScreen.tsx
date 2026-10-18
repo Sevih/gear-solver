@@ -1159,6 +1159,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const levelMaxModifier = lbKey ? (game.charLevelMax[lbKey]?.statModifierAfter100 ?? 0) : 0;
     const composed = composeCharStats(meta.ingredients, game.codexCurve, {
       transStar: selected.stars,
+      fusionLevel: selected.fusionLevel,
       level,
       levelMaxModifier,
       levelMaxStep: selected.levelMaxStep,

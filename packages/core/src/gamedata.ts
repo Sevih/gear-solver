@@ -294,10 +294,21 @@ export interface CharacterIngredients {
   s1ByLevel: Record<string, StatBlock>;
   s2ByLevel: Record<string, StatBlock>;
   s3ByLevel: Record<string, StatBlock>;
-  /** Core Fusion passive (Skill_23, only present on `27xxxxx` char IDs).
-   *  Always at max SkillLevel since the user has no slider for it. Null
-   *  for non-core chars or when the Skill_23 buffs are combat-only. */
-  corePassive: StatBlock | null;
+  /** Legacy encoding of the Core Fusion passive (Skill_23, only present on
+   *  `27xxxxx` char IDs): a single block at max SkillLevel whatever the
+   *  fusion tier, its OAT_RATE speed pre-baked as flat `spd`. Read only as a
+   *  fallback when `corePassiveByFusion` is absent (cache synced before
+   *  outerpedia emitted it). Null for non-core chars or when the Skill_23
+   *  buffs are combat-only; absent from contract format 2 on. */
+  corePassive?: StatBlock | null;
+  /** Core Fusion passive (Skill_23) per fusion tier: keys "1".."5", all five
+   *  always present on a fused char; a ZERO block when the tier carries no
+   *  sheet buff. `spdPct` is the OAT_RATE speed in raw display % (4.3 =
+   *  +4.3 %), applied as a buff rate on the whole speed; `spd` stays flat
+   *  only. Optional: absent on non-fused chars and in a cache synced before
+   *  the field existed — `composeCharStats` then falls back to
+   *  `corePassive`. */
+  corePassiveByFusion?: Record<string, StatBlock & { spdPct: number }>;
   /** Geas — per-node table of awakening contributions that apply to this
    *  char (element/class/subclass scope). Outer key = NodeID matching the
    *  GiftID in the captured `/gift/info` GiftList. Each entry carries:

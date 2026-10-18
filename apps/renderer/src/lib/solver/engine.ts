@@ -317,6 +317,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const levelMaxModifier = lbKey ? (game.charLevelMax[lbKey]?.statModifierAfter100 ?? 0) : 0;
   const composed = composeCharStats(meta.ingredients, game.codexCurve, {
     transStar: hero.stars,
+    fusionLevel: hero.fusionLevel,
     level,
     levelMaxModifier,
     levelMaxStep: hero.levelMaxStep,
@@ -1171,12 +1172,15 @@ export function allocateComboBudget(counts: number[], budget: number): number[] 
  * Phase 3 — CP-mode dominance prune
  * CP is monotone non-decreasing in every FinalStat, and every FinalStat is
  * monotone non-decreasing in each gear bucket entry (`composeMultStat` and the
- * additive stats only ever ADD the gear contribution). So if piece X's stat
- * contribution is ≥ piece Y's on every CP-relevant bucket axis (and > on one),
- * then for ANY fixed choice of the other slots `CP(build with X) ≥ CP(build
- * with Y)` — Y can never produce a higher-CP build than X. Drop the dominated
- * pieces before the cartesian (multiplicative combo-count cut, exact at the
- * top of the CP ranking; only weakly-worse near-duplicates leave the tail).
+ * additive stats only ever ADD the gear contribution; SPD's buff rate,
+ * `applySpdRate`, truncates total × (1000 + rate‰) / 1000, non-decreasing in
+ * the total as long as the rate stays above −100 % — today it is ≥ 0). So if
+ * piece X's stat contribution is ≥ piece Y's on every CP-relevant bucket axis
+ * (and > on one), then for ANY fixed choice of the other slots
+ * `CP(build with X) ≥ CP(build with Y)` — Y can never produce a higher-CP
+ * build than X. Drop the dominated pieces before the cartesian
+ * (multiplicative combo-count cut, exact at the top of the CP ranking; only
+ * weakly-worse near-duplicates leave the tail).
  * ───────────────────────────────────────────────────────────────────────── */
 
 /** The bucket axes `finalStatsFromBuckets` actually reads — i.e. the only

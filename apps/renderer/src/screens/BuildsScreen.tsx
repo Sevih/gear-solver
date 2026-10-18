@@ -995,6 +995,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
       const composed = (meta?.ingredients && game?.codexCurve)
         ? composeCharStats(meta.ingredients, game.codexCurve, {
             transStar: c.stars,
+            fusionLevel: c.fusionLevel,
             level,
             levelMaxModifier,
             levelMaxStep: c.levelMaxStep,

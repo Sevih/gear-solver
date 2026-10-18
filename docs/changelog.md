@@ -8,6 +8,72 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚡ Passif de cœur au palier de fusion capturé, vitesse du noyau en taux dans les deux compositeurs (2026-10-18)
+- ✅ **Pourquoi.** `composeCharStats` ajoutait `ingredients.corePassive` (un seul bloc, au niveau max) à tout
+  fusionné quel que soit son palier : Notia en fusion 1 à 4 recevait EFF +50 %. Et la vitesse en taux du noyau
+  (Snow / Lisha fusionnées, +4,3 %) arrivait cuite en plat (+6 / +5) : Snow lv1 / 20 / 40 (LB0) à 139 / 142 / 145
+  contre 138 / 141 / 144 en jeu, et le taux ne touchait jamais la vitesse de l'équipement (+40 SPD plats → 195 au
+  lieu de 197). La règle du client (`CSkillManager.Create`, `CFormula.CalcFinalStat`) : Skill_23 au niveau du palier
+  de fusion, et la vitesse en taux entre dans `BuffValueRate`, qui multiplie la vitesse entière (base, évolutions,
+  équipement) avec troncature. La donnée était déjà dans le contrat (`corePassiveByFusion`, B56 d'outerpedia, hash
+  `79508390003b` identique des deux côtés) : pas de `data:sync`.
+- ✅ **Types** (`core/gamedata.ts`). `CharacterIngredients.corePassiveByFusion?: Record<string, StatBlock & { spdPct
+  }>`, optionnel (cache d'avant le 16/10) ; `corePassive` devient optionnel lui aussi (le format 2 le retire) et son
+  commentaire dit qu'il n'est plus lu qu'en repli. `docs/data-schema.md` et `wiki/Data-Schema.md` décrivent le
+  champ, à côté des paliers de set.
+- ✅ **Palier** (`core/compose-stats.ts`). `ComposeOptions.fusionLevel` ; `pickCoreBlock` prend la clé du palier,
+  la plus haute quand le palier est absent ou 0 (même repli « max-everything » que les niveaux de compétence), zéro
+  pour une clé introuvable ; sans `corePassiveByFusion`, l'ancien `corePassive` exactement comme avant, vitesse
+  cuite comprise (commenté). Les trois appelants (`engine.ts` `precomputeContext`, `BuildsScreen`, `BuilderScreen`)
+  passent `fusionLevel: <héros>.fusionLevel` ; l'oracle du wiki ne le passe pas (couche `full` = palier 5, dit dans
+  son commentaire).
+- ✅ **Vitesse en taux, une seule règle.** `applySpdRate(total, ratePct)` (core) = `trunc(total × (1000 + taux‰) /
+  1000)`, total renvoyé tel quel à taux nul. Le compositeur expose `scaling.spd = { value, buffPct }` (vitesse avant
+  taux, somme des `spdPct` de la fiche — aujourd'hui le noyau seul) et `noGearStats.spd = applySpdRate(value,
+  buffPct)`. Côté équipement, `finalStatsFromBuckets` (donc `computeFinalStats`, `computeFinalStatsPlusRoll` et
+  `computeFinalStatsFromPrefix`) part de `scaling.spd.value`, ajoute plat, EE et set % comme avant, puis applique
+  le taux une fois au total : le `noGearStats.spd` déjà multiplié que reçoivent les appelants en `baseline` n'est
+  plus lu pour la vitesse, et les appelants n'ont rien à recalculer. `ScalingMap.spd` est optionnel (une carte
+  construite à la main dans les tests retombe sur `baseline.spd`, taux 0), `intrinsicStats.spd` inchangé. La
+  vitesse de set reste `floor(base × pct / 100)` (item « Mineurs de fiche ») sur la vitesse avant taux, et le taux
+  multiplie le total qu'elle produit. L'en-tête de la dominance (`engine.ts`) dit pourquoi la monotonie tient (taux
+  au-dessus de −100 %, aujourd'hui ≥ 0) ; `spd` était déjà dans `CP_RATE_KEYS`.
+- ✅ **Contrat, règle (b).** `SUPPORTED_SOLVER_SCHEMA` passe à 2 dans `apps/desktop/src/data-sync.ts` et
+  `scripts/solver-schema.mjs` ; le commentaire dit ce qu'est le format 2 (`corePassive` retiré,
+  `corePassiveByFusion` seul). Les tests de `data-sync.test.ts` qui prenaient 2 pour « plus récent » passent à 3,
+  le schéma 2 est lu (REPO et CHECKOUT), les deux jumeaux acceptent 2 et refusent 3.
+- ✅ **Textes.** `docs/reference.md` § 1.4 (point 7 et sortie `scaling.spd`), § 1.5 (point 3 : la vitesse n'est plus
+  additive simple quand un taux existe), § 2.1 (paragraphe SPD) et leurs miroirs de `wiki/Engine-Reference.md`,
+  dont la ligne de `compose-stats.test.ts` de son § 3.3 (« known divergence » n'existe plus ; `docs/reference.md`
+  § 3.3 n'a pas cette ligne, laissé tel quel).
+- ✅ **Tests.** `packages/core/test/compose-stats.test.ts` : le `describe` « known divergence » devient un accord
+  avec `clientCalcFinalStat` (Snow 138 / 141 / 144 / 148 aux lv1 / 20 / 40 / 60 LB0, égal à lv100 LB0, lv120 LB3 et
+  à tous les niveaux) ; la garde des données vérifie que seuls 2700003 et 2700005 portent un `spdPct` et qu'aucun
+  bloc de noyau ne porte de vitesse plate (et lit les blocs par palier) ; Notia lv100 : EFF 170 sans le +50 % aux
+  fusions 1 et 4, 255 à la 5, palier 0 ou absent = 5, palier inconnu = zéro ; Lisha 124 à tous les niveaux ; un
+  fusionné sans `corePassive` (format 2) compose à l'identique ; aucun non-fusionné n'a de taux ; repli sans
+  `corePassiveByFusion` épinglé sur les chiffres d'avant ce lot (Snow 139 / 142 / 145 / 148 / 155 / 163, autres
+  stats inchangées ; Notia EFF 255 même en fusion 1). `apps/renderer/test/coreFusionSpeed.test.ts` (nouveau) :
+  Snow fusionnée lv100 + 40 SPD plats → 197, sans équipement = la vitesse no-gear, Lisha 124 à tous les niveaux,
+  `computeFinalStatsFromPrefix` identique au bit près au chemin complet avec taux (EE `fromBuff` comprise), héros
+  sans taux = somme d'aujourd'hui. Restent verts sans retouche : `core-fusion-captures.test.ts` (Snow lv100 155),
+  les stat-locks, les équivalences « set-bonus hoist » et accumulateur incrémental de `solver.test.ts`,
+  `coreFusion.test.ts`. Comparaison ancien / nouveau compositeur sur toutes les fiches (options par défaut, lv1 / 50 / 100 / 120) :
+  seule Snow fusionnée bouge.
+  `npm run typecheck` : dernière ligne `> tsc --noEmit`, code 0 ; `npm test` : `Tests  116 passed (116)` (core),
+  `Tests  79 passed (79)` (desktop), `Tests  432 passed (432)` (renderer).
+- ✅ **Oracle du wiki** (`npm run oracle:wiki -- --out` vers un dossier temporaire, comparé à
+  `../outerpedia/src/lib/data/fixtures/gear-solver-oracle.json`) : trois lignes changent, toutes Snow (2700003),
+  couche `full`, vitesse lv1 139 → 138, lv20 142 → 141, lv40 145 → 144. Lisha identique (124 = 119 + 5 =
+  `trunc(119 × 1,043)`), Notia identique (palier max).
+- ⏳ **Côté outerpedia (Sevih)** : la fiche du wiki (`src/lib/data/char-progression.ts`, `sheetPassives` et
+  `blockToParts`, `docs/TODO.md` d'outerpedia l.62-66 et l.76-79) et la régénération de la fixture de l'oracle ;
+  son test d'oracle reste vert tant qu'elle n'est pas régénérée. Puis l'étape (c) — retrait de `corePassive`,
+  `schema` 2 — seulement une fois publiée la release de gear-solver qui porte ce lot.
+- ⏳ Hors lot : M5 (niveaux de compétence des fusionnés), vitesse de set et autres mineurs de fiche, uniques
+  d'équipement (G9, qui ajoutera le taux de vitesse de l'équipement au même `applySpdRate`), version et release.
+  Rin (2700019) et Eliza (2700035) n'ont ni `corePassive` ni `corePassiveByFusion` : sans noyau, comme avant.
+
 ### 🗑️ Capture — retrait de la source émulateur, Steam et import manuel seulement (2026-10-16)
 - ✅ **Décision de Sevih du 16/10** : le jeu étant sur Steam, tout le pipeline émulateur part (retiré, pas
   désactivé). Restent deux entrées de données : le plugin BepInEx du client Steam et l'import manuel de fichiers

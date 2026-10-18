@@ -109,12 +109,18 @@ Files: [parse.ts](../packages/core/src/parse.ts),
 4. **Skill_8** (transcend passive — goes through `BuffValueRate`).
 5. **Geas** (per node, split IOT_STAT [white] vs IOT_BUFF [yellow]).
 6. **Codex** (archive bonus, +N% on baseValue only).
-7. **Skill passives** user-leveled (S1/S2/S3) + Core Fusion (Skill_23).
+7. **Skill passives** user-leveled (S1/S2/S3) + Core Fusion (Skill_23), taken
+   at the captured fusion tier (`fusionLevel`) in `corePassiveByFusion`;
+   unknown tier (missing or 0) → the highest, like the skill levels; cache
+   without that field → the legacy `corePassive` (one block at max, speed
+   pre-baked as flat). Its speed rate (`spdPct`, fused Snow / Lisha +4.3%)
+   multiplies the total speed, last: `trunc(total × (1000 + rate‰) / 1000)`.
 8. **Limit Break** modifier (CharacterMaxLevelTemplet, amplifies the interp lv>100).
 
 Output: `{noGearStats, intrinsicStats, scaling}` where `scaling` carries the
 per-axis ingredients (ATK/DEF/HP/EFF/RES) to allow adding gear later via
-`composeMultStat`.
+`composeMultStat`, and `scaling.spd` = `{ value, buffPct }`, the speed before
+its rate and the rate (`noGearStats.spd` has already applied it).
 
 ### 1.5 Compose final stats (`apps/renderer/src/lib/composeBuild.ts`)
 
@@ -126,7 +132,11 @@ gear on top of the no-gear baseline. Covers:
    separation).
 2. Per-axis compound via `composeMultStat(scaling, gearFlat, gearPct, gearBuffPct)`
    for ATK/DEF/HP/EFF/RES.
-3. Simple additive for SPD/CHC/CHD/PEN/DMG±/CritDmgRed.
+3. Simple additive for CHC/CHD/PEN/DMG±/CritDmgRed. SPD: speed before rate
+   (`scaling.spd.value`) + gear flat + EE + set % (`floor(base × pct / 100)`),
+   then the buff rate `scaling.spd.buffPct` applied once to that total
+   (`applySpdRate`, same rule as no-gear); simple additive when the rate is
+   zero (every hero but fused Snow / Lisha).
 4. **Gem override** (solver only): skip the subs of Talisman/EE and add the
    pre-aggregated `{flat, pct}` deltas in their place. See §2.4.
 
@@ -207,6 +217,12 @@ diverges from floor on negative intermediates (rare but real on debuffs).
 | buffValue    | combined             | OAT_ADD buffs (class passive +EFF, geas [141] +50 EFF, …) |
 | buffPct      | part2 (outermost)    | classPassive + skill_8 + geas IOT_BUFF + skill passives + gear `buffPct.*` |
 | codexPct    | codex term, baseValue| archive bonus                                           |
+
+**SPD** (`scaling.spd`): only the outer stage is modelled —
+`final = trunc((speed before rate + gear) × (1000 + buffPct) / 1000)`, where
+`buffPct` is the sum of the sheet's `spdPct` (today the core passive alone, at
+the fusion tier: fused Snow / Lisha 43‰). Snow lv1 = `trunc(133 × 1.043)` = 138,
+not 133 + 6; with +40 flat SPD at lv100, `trunc(189 × 1.043)` = 197.
 
 File: [compose-stats.ts](../packages/core/src/compose-stats.ts) +
 [composeBuild.ts](../apps/renderer/src/lib/composeBuild.ts) (gear-side).
@@ -686,7 +702,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
 | `packages/core/test/equip.test.ts` | 11 tests — `equipItem`/`unequipItem`: set on empty slot, **displace** the occupied slot (same char), no-op (already equipped / unknown item / non-gear), `charUid "0"` = unequip, displacement scope (other char/other slot untouched), input **immutability** |
-| `packages/core/test/compose-stats.test.ts` | 45 tests — **stat-lock captures** reproducible without gear (Flamberge 8/8, Core Fusion Notia EFF, Aer 6/8, M.S.Ame white ATK/DEF/HP/EFF), `baseAtLevel` (lv1 = Min / lv100 = Max, LB tiers 105/110/120, independent floors, monotonicity), `sumEvoUpTo` (level gates 20…120, `min(TransStar, 6 + LB)` cap, monotonicity), `calcFinalStat` (two-stage trunc, codex on base only, trunc toward 0 + clamp, monotonicity), `composeCharStats` lv1→120 monotonicity over the committed roster, **term-by-term check against the client `CFormula.CalcFinalStat`** (exact-integer reference on 20 000 inputs, white sheet = base/evo/awakening only), data guards for the client terms the composer does not model, known divergence of the pre-baked SPD rate (Core Fusion Snow) |
+| `packages/core/test/compose-stats.test.ts` | 56 tests — **stat-lock captures** reproducible without gear (Flamberge 8/8, Core Fusion Notia EFF, Aer 6/8, M.S.Ame white ATK/DEF/HP/EFF), `baseAtLevel` (lv1 = Min / lv100 = Max, LB tiers 105/110/120, independent floors, monotonicity), `sumEvoUpTo` (level gates 20…120, `min(TransStar, 6 + LB)` cap, monotonicity), `calcFinalStat` (two-stage trunc, codex on base only, trunc toward 0 + clamp, monotonicity), `composeCharStats` lv1→120 monotonicity over the committed roster, **term-by-term check against the client `CFormula.CalcFinalStat`** (exact-integer reference on 20 000 inputs, white sheet = base/evo/awakening only), data guards for the client terms the composer does not model, **Core Fusion**: passive at the captured fusion tier (Notia EFF at tiers 1 / 4 / 5, unknown tier = max, format 2 without `corePassive`), SPD rate applied last in agreement with the client at every level (Snow 138 / 141 / 144 / 148, Lisha 124), legacy `corePassive` fallback pinned |
 | `apps/renderer/test/solver.test.ts`     | 95 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp, **PEN clamp at 100%**), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity**, **incremental bucket accumulator equivalence**, **worklist claims** (a FREE piece claimed by a higher-rank hero is excluded, claimed by the solving hero itself stays in), **"Maxed only" floor** (`maxedFloorOf` / `meetsMaxedFloor`: off / +10R6 / +10R9 / +15R9, talisman gated on enhance only), **`collapseTalismanVariants`** (≤ k builds per 6-gear signature, sorted order, k ≤ 0 = off) |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped`: parity without crit gem, accept up to CHC 100 (overshoot ≤102), stop exactly at 100, total skip at cap, talisman/EE split, null delta if nothing useful, score ≤0 never taken |
 | `apps/renderer/test/workerCount.test.ts` | 7 tests — `resolveWorkerCount`: default `hardwareConcurrency-1`, override `gs.solver.workerCount`, clamp ≥1, hard ceiling 64 |

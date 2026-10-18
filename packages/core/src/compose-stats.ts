@@ -87,6 +87,12 @@ export interface ComposeOptions {
    *  `null` falls back to the highest available level emitted in the
    *  ingredient — matches "max-everything" previews. */
   userSkillLevels?: { first: number; second: number; ultimate: number } | null;
+  /** Captured Core Fusion tier (`Character.fusionLevel`, 1..5; 0 when not
+   *  fused). Picks the `corePassiveByFusion` block — the client takes the
+   *  core passive (Skill_23) at the fusion tier's level. Missing or 0 falls
+   *  back to the highest tier, the same "max-everything" preview as the
+   *  skill levels above. */
+  fusionLevel?: number;
 }
 
 const ZERO: StatBlock = {
@@ -175,6 +181,40 @@ export function pickSkillBlock(table: Record<string, StatBlock>, lv: number | un
   return best > 0 ? (table[String(best)] ?? ZERO) : ZERO;
 }
 
+/** Core Fusion passive (Skill_23) block at the captured fusion tier, plus its
+ *  OAT_RATE speed (`spdPct`, display %). With `corePassiveByFusion`: the
+ *  tier's block, the highest tier when the tier is unknown (missing or 0),
+ *  ZERO when the tier has no block. Without it (a cache synced before the
+ *  field existed): the legacy single `corePassive` block exactly as before —
+ *  taken at max level whatever the tier, its speed rate pre-baked as flat
+ *  `spd` by outerpedia, so `spdPct` is 0. */
+function pickCoreBlock(
+  ingredients: CharacterIngredients,
+  fusionLevel: number | undefined,
+): { block: StatBlock; spdPct: number } {
+  const byFusion = ingredients.corePassiveByFusion;
+  if (!byFusion) return { block: ingredients.corePassive ?? ZERO, spdPct: 0 };
+  let tier = fusionLevel ?? 0;
+  if (tier <= 0) {
+    for (const k of Object.keys(byFusion)) {
+      const n = Number(k);
+      if (n > tier) tier = n;
+    }
+  }
+  const row = byFusion[String(tier)];
+  return row ? { block: row, spdPct: row.spdPct } : { block: ZERO, spdPct: 0 };
+}
+
+/** Apply the speed buff rate (`BuffValueRate`, display %) to a speed total,
+ *  last, as the client's CalcFinalStat outer stage does:
+ *  `trunc(total × (1000 + rate‰) / 1000)`. Shared by the no-gear composer
+ *  and the gear-side `composeBuild.finalStatsFromBuckets`, so the rate
+ *  multiplies the whole total once — base, evolutions, flats and gear alike.
+ *  A zero rate returns the total untouched (bit-identical to the plain sum). */
+export function applySpdRate(total: number, ratePct: number): number {
+  return ratePct === 0 ? total : Math.trunc(total * (1000 + ratePct * 10) / 1000);
+}
+
 /** Character level at which each EvolutionLevel row unlocks in-game.
  *  Evos 2..6 every 20 levels (20/40/60/80/100); 7/8/9 at the Limit-Break
  *  level caps 105/110/120 (NOT linear — LB3 jumps 110→120, skipping 115 —
@@ -255,7 +295,8 @@ export function calcFinalStat(
 }
 
 /** Result of composing the character ingredients without gear. ATK/DEF/HP
- *  come through the compound formula; everything else is additive. */
+ *  (and EFF/RES) come through the compound formula; SPD is additive, then
+ *  multiplied by its buff rate (`applySpdRate`); everything else is additive. */
 export interface NoGearStats {
   atk: number; def: number; hp: number; spd: number;
   chc: number; chd: number; pen: number;
@@ -292,6 +333,18 @@ export interface StatScaling {
   buffValue: number;
 }
 
+/** Speed ingredients for the gear-side composer. The speed buff rate (Core
+ *  Fusion OAT_RATE SPD) must multiply the total that includes gear, so the
+ *  composer hands over the speed BEFORE that rate rather than letting the
+ *  gear side add onto `noGearStats.spd`, which already carries it. */
+export interface SpeedScaling {
+  /** No-gear speed before the buff rate: base + evo + every flat layer. */
+  value: number;
+  /** Speed buff rate, display % (4.3 = +4.3 %), applied last by
+   *  `applySpdRate`. 0 for every hero without a speed-rate passive. */
+  buffPct: number;
+}
+
 export interface ComposedStats {
   /** Full no-gear stat sheet — includes every always-on permanent layer:
    *  base + evo + class passive + Skill_8 + Geas + (codex × transcend
@@ -311,8 +364,9 @@ export interface ComposedStats {
    *  inputs (codex / transcend / class / geas / skill passives); EFF/RES
    *  expose `awakPct` (rare IOT_STAT geas rates) and `buffPct` (Skill_8 /
    *  geas IOT_BUFF / core fusion OAT_RATE) so the gear-side composer can
-   *  route them through the right CalcFinalStat channel. */
-  scaling: Record<"atk" | "def" | "hp" | "eff" | "res", StatScaling>;
+   *  route them through the right CalcFinalStat channel. `spd` carries the
+   *  speed before its buff rate and the rate itself (see `SpeedScaling`). */
+  scaling: Record<"atk" | "def" | "hp" | "eff" | "res", StatScaling> & { spd: SpeedScaling };
 }
 
 /** Compose the no-gear stats and the ATK/DEF/HP scaling ingredients for one
@@ -348,13 +402,16 @@ export function composeCharStats(
   // above) picks the row matching the captured user skill level — ZERO at a
   // level that doesn't carry the buff — and falls back to the highest
   // emitted level only when no user level is provided. The Core Fusion
-  // passive is a single block (no slider).
+  // passive is taken at the captured fusion tier (`pickCoreBlock`).
   const usl = options.userSkillLevels;
   const s1 = pickSkillBlock(ingredients.s1ByLevel ?? {}, usl?.first);
   const s2 = pickSkillBlock(ingredients.s2ByLevel ?? {}, usl?.second);
   const s3 = pickSkillBlock(ingredients.s3ByLevel ?? {}, usl?.ultimate);
-  const core = ingredients.corePassive ?? ZERO;
-  const skillPass = addBlock(addBlock(addBlock(s1, s2), s3), core);
+  const core = pickCoreBlock(ingredients, options.fusionLevel);
+  const skillPass = addBlock(addBlock(addBlock(s1, s2), s3), core.block);
+  // Speed buff rate of the sheet (display %) — today only the core passive
+  // carries one (Core Fusion Snow / Lisha +4.3 %).
+  const spdRatePct = core.spdPct;
 
   // Resolve every base stat at the captured level (with LB modifier above
   // lv 100). Stats where min == max stay constant — baseAtLevel returns max.
@@ -392,7 +449,13 @@ export function composeCharStats(
   const effBuffPct   = classPass.effRate + skill8.effRate + (geas.effRate - geasStat.effRate) + skillPass.effRate;
   const resBuffPct   = classPass.resRate + skill8.resRate + (geas.resRate - geasStat.resRate) + skillPass.resRate;
 
+  // Floor (not round) on the per-level interpolated base stats to match the
+  // in-game truncation — round() would push e.g. Luna's lv120 RES 130.91 to
+  // 131 when the in-game sheet shows 130.
+  const spdBeforeRate = Math.floor(baseSpd + evo.spd + classPass.spd + skill8.spd + geas.spd + skillPass.spd);
+
   const scaling = {
+    spd: { value: spdBeforeRate, buffPct: spdRatePct },
     atk: { baseValue: baseAtk, evoValue: evo.atk, awakValue: geas.atk, awakPct: geasStat.atkPct, transcendPct: transRow.atkPct, codexPct: codexRow.atkPct, buffPct: atkBuffPct, buffValue: 0 },
     def: { baseValue: baseDef, evoValue: evo.def, awakValue: geas.def, awakPct: geasStat.defPct, transcendPct: transRow.defPct, codexPct: codexRow.defPct, buffPct: defBuffPct, buffValue: 0 },
     hp:  { baseValue: baseHp,  evoValue: evo.hp,  awakValue: geas.hp,  awakPct: geasStat.hpPct,  transcendPct: transRow.hpPct,  codexPct: codexRow.hpPct,  buffPct: hpBuffPct, buffValue: 0  },
@@ -410,10 +473,9 @@ export function composeCharStats(
     atk: calcStat(scaling.atk),
     def: calcStat(scaling.def),
     hp:  calcStat(scaling.hp),
-    // Floor (not round) on the per-level interpolated base stats to match the
-    // in-game truncation — round() would push e.g. Luna's lv120 RES 130.91 to
-    // 131 when the in-game sheet shows 130.
-    spd: Math.floor(baseSpd + evo.spd + classPass.spd + skill8.spd + geas.spd + skillPass.spd),
+    // The speed rate multiplies the whole no-gear speed, last (client:
+    // trunc(133 × 1.043) = 138 for Core Fusion Snow lv1, not 133 + 6).
+    spd: applySpdRate(spdBeforeRate, spdRatePct),
     chc: Math.floor(baseChc + evo.chc + classPass.chc + skill8.chc + geas.chc + skillPass.chc),
     chd: Math.floor(baseChd + evo.chd + classPass.chd + skill8.chd + geas.chd + skillPass.chd),
     pen: evo.pen + classPass.pen + skill8.pen + geas.pen + skillPass.pen,

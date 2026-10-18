@@ -81,7 +81,7 @@ export function buildOracle({ characters, codexCurve, charLevelMax }) {
         ...common, userGeasLevels: {}, codexLevel: 0,
       }).intrinsicStats);
       // Full: every option left to its max default (TransStar, codex, Geas,
-      // S1/S2/S3 levels).
+      // S1/S2/S3 levels, Core Fusion tier — no `fusionLevel` → tier 5).
       full[level] = row(composeCharStats(meta.ingredients, codexCurve, common).noGearStats);
     }
     out[id] = { name: meta.name, ...(meta.nickname ? { nickname: meta.nickname } : {}), white, full };

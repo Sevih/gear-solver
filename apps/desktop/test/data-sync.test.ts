@@ -107,13 +107,22 @@ describe("syncGameData — contract schema (REPO mode)", () => {
     expect(JSON.parse(readFileSync(shaStateFile, "utf-8")).sha).toBe(NEW_SHA);
   });
 
-  it.each([false, true])("a newer schema is refused before any table, cache and SHA kept (force: %s)", async (force) => {
+  it("schema 2 (corePassive dropped) is read", async () => {
     const { derivedDir, shaStateFile } = cache("h1");
     const urls = stubRemote("h2", { schema: 2 });
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r.status).toBe("synced");
+    expect(tableUrls(urls)).toHaveLength(SOLVER_FILES.length - 1);
+    expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8"))).toMatchObject({ schema: 2, hash: "h2" });
+  });
+
+  it.each([false, true])("a newer schema is refused before any table, cache and SHA kept (force: %s)", async (force) => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    const urls = stubRemote("h2", { schema: 3 });
     const r = await syncGameData({ derivedDir, shaStateFile, force });
     expect(r.status).toBe("error");
     expect(r.message).toBe(
-      "outerpedia's game data uses format 2, this version of gear-solver reads up to format 1 — update gear-solver; keeping the cached data",
+      "outerpedia's game data uses format 3, this version of gear-solver reads up to format 2 — update gear-solver; keeping the cached data",
     );
     expect(tableUrls(urls)).toEqual([]);
     expectCacheIntact(derivedDir, shaStateFile);
@@ -123,10 +132,10 @@ describe("syncGameData — contract schema (REPO mode)", () => {
     const dir = mkdtempSync(join(tmpdir(), "gs-sync-"));
     const derivedDir = join(dir, "derived");
     const shaStateFile = join(dir, "repo-sha.json");
-    const urls = stubRemote("h2", { schema: 2 });
+    const urls = stubRemote("h2", { schema: 3 });
     const r = await syncGameData({ derivedDir, shaStateFile, force: false });
     expect(r.status).toBe("unavailable");
-    expect(r.message).toMatch(/format 2.*; no cached game data$/);
+    expect(r.message).toMatch(/format 3.*; no cached game data$/);
     expect(tableUrls(urls)).toEqual([]);
     expect(existsSync(join(derivedDir, "characters.json"))).toBe(false);
     expect(existsSync(shaStateFile)).toBe(false);
@@ -144,14 +153,14 @@ describe("syncGameData — contract schema (REPO mode)", () => {
 
   it("after a refusal, an app that reads the newer schema syncs on its next launch", async () => {
     const { derivedDir, shaStateFile } = cache("h1");
-    stubRemote("h2", { schema: 2 });
+    stubRemote("h2", { schema: 3 });
     expect((await syncGameData({ derivedDir, shaStateFile, force: false })).status).toBe("error");
     // Same outerpedia commit, updated app: the unrecorded SHA lets it through the gate.
-    const urls = stubRemote("h2", { schema: 2 });
-    const r = await syncGameData({ derivedDir, shaStateFile, force: false, supportedSchema: 2 });
+    const urls = stubRemote("h2", { schema: 3 });
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false, supportedSchema: 3 });
     expect(r.status).toBe("synced");
     expect(tableUrls(urls)).toHaveLength(SOLVER_FILES.length - 1);
-    expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8"))).toMatchObject({ schema: 2, hash: "h2" });
+    expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8"))).toMatchObject({ schema: 3, hash: "h2" });
     expect(JSON.parse(readFileSync(shaStateFile, "utf-8")).sha).toBe(NEW_SHA);
   });
 });
@@ -170,18 +179,18 @@ describe("syncGameData — contract schema (CHECKOUT mode)", () => {
   it("a newer schema copies nothing", async () => {
     const { derivedDir, shaStateFile } = cache("h1");
     vi.stubEnv("OUTERPEDIA_NO_CHECKOUT", "");
-    vi.stubEnv("OUTERPEDIA_PATH", fakeCheckout({ schema: 2, hash: "h2", builtAt: "2026-02-02" }));
+    vi.stubEnv("OUTERPEDIA_PATH", fakeCheckout({ schema: 3, hash: "h2", builtAt: "2026-02-02" }));
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("no network in CHECKOUT mode"); }));
     const r = await syncGameData({ derivedDir, shaStateFile, force: true });
     expect(r.status).toBe("error");
-    expect(r.message).toMatch(/^outerpedia's game data uses format 2, .*; keeping the cached data$/);
+    expect(r.message).toMatch(/^outerpedia's game data uses format 3, .*; keeping the cached data$/);
     expectCacheIntact(derivedDir, shaStateFile);
   });
 
-  it("schema 1 still copies", async () => {
+  it.each([1, 2])("schema %i still copies", async (schema) => {
     const { derivedDir, shaStateFile } = cache("h1");
     vi.stubEnv("OUTERPEDIA_NO_CHECKOUT", "");
-    vi.stubEnv("OUTERPEDIA_PATH", fakeCheckout({ schema: 1, hash: "h2", builtAt: "2026-02-02" }));
+    vi.stubEnv("OUTERPEDIA_PATH", fakeCheckout({ schema, hash: "h2", builtAt: "2026-02-02" }));
     const r = await syncGameData({ derivedDir, shaStateFile, force: false });
     expect(r.status).toBe("synced");
     expect(JSON.parse(readFileSync(join(derivedDir, "characters.json"), "utf-8"))).toEqual({ from: "checkout" });
@@ -195,7 +204,7 @@ const mjsImpl = (await import(/* @vite-ignore */ mjsPath)) as SchemaImpl;
 
 describe("contract schema — TypeScript and data/sync.mjs twins agree", () => {
   const bodies = [
-    "{}", '{"hash":"h"}', '{"schema":1}', '{"schema":2}', '{"schema":7,"hash":"h"}',
+    "{}", '{"hash":"h"}', '{"schema":1}', '{"schema":2}', '{"schema":3}', '{"schema":7,"hash":"h"}',
     '{"schema":"1"}', '{"schema":1.5}', '{"schema":0}', '{"schema":-3}', '{"schema":null}',
     "[]", "null", "not json", "",
   ];
@@ -204,8 +213,17 @@ describe("contract schema — TypeScript and data/sync.mjs twins agree", () => {
   });
   it.each(bodies)("same reading of %j", (body) => {
     expect(mjsImpl.solverSchemaOf(body)).toBe(tsImpl.solverSchemaOf(body));
-    for (const supported of [1, 2]) {
+    for (const supported of [1, 2, 3]) {
       expect(mjsImpl.schemaRefusal(body, supported)).toBe(tsImpl.schemaRefusal(body, supported));
+    }
+  });
+  it("both read format 2 and refuse format 3", () => {
+    for (const impl of [tsImpl, mjsImpl]) {
+      expect(impl.SUPPORTED_SOLVER_SCHEMA).toBe(2);
+      expect(impl.schemaRefusal('{"schema":2}')).toBeNull();
+      expect(impl.schemaRefusal('{"schema":3}')).toBe(
+        "outerpedia's game data uses format 3, this version of gear-solver reads up to format 2 — update gear-solver",
+      );
     }
   });
   it("reads the documented values", () => {
@@ -224,11 +242,11 @@ describe("data/sync.mjs — contract schema", () => {
     const root = mkdtempSync(join(tmpdir(), "gs-outerpedia-"));
     const solver = join(root, "data", "generated", "solver");
     mkdirSync(solver, { recursive: true });
-    writeFileSync(join(solver, "version.json"), JSON.stringify({ schema: 2, hash: "h2", builtAt: "2026-02-02" }));
+    writeFileSync(join(solver, "version.json"), JSON.stringify({ schema: 3, hash: "h2", builtAt: "2026-02-02" }));
     const script = fileURLToPath(new URL("../../../data/sync.mjs", import.meta.url));
     const run = spawnSync(process.execPath, [script], { env: { ...process.env, OUTERPEDIA_PATH: root }, encoding: "utf-8" });
     expect(run.status).not.toBe(0);
-    expect(run.stderr).toContain("uses format 2, this version of gear-solver reads up to format 1");
+    expect(run.stderr).toContain("uses format 3, this version of gear-solver reads up to format 2");
     expect(readFileSync(derived, "utf-8")).toBe(before);
   });
 });

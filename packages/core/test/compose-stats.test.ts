@@ -617,6 +617,7 @@ describe("client terms gear-solver does not model — data guards", () => {
     ...(["s1ByLevel", "s2ByLevel", "s3ByLevel"] as const).flatMap((s) =>
       Object.entries(ing[s] ?? {}).map(([l, b]) => [`${s}@${l}`, b] as [string, StatBlock])),
     ...(ing.corePassive ? [["corePassive", ing.corePassive] as [string, StatBlock]] : []),
+    ...Object.entries(ing.corePassiveByFusion ?? {}).map(([t, b]) => [`corePassiveByFusion@${t}`, b] as [string, StatBlock]),
   ];
 
   it("no awakening (IOT_STAT geas) rate: the client compounds it into the white value, intrinsicStats does not", () => {
@@ -644,19 +645,24 @@ describe("client terms gear-solver does not model — data guards", () => {
     expect(hits).toEqual([]);
   });
 
-  it("only the two known SPD-rate core passives are pre-baked as flat SPD", () => {
-    // outerpedia's generator turns an OAT_RATE SPD buff into a flat
-    // floor((base max + all evo) × rate / 1000). The client applies the rate
-    // to the whole combined value (current-level base + unlocked evo + gear +
-    // buff flats), so the two only agree at full evolution without gear.
-    const spdCore = allIngredients
-      .filter(([, ing]) => (ing.corePassive?.spd ?? 0) !== 0)
-      .map(([id]) => id);
-    expect(spdCore).toEqual(["2700003", "2700005"]); // Core Fusion Snow, Core Fusion Lisha
+  it("only the two known core passives carry a SPD rate, and none a flat SPD", () => {
+    // `spdPct` is the OAT_RATE speed the client feeds to BuffValueRate; the
+    // composer applies it last (`applySpdRate`). A flat SPD on a core block
+    // would be a new case — check how the client routes it first.
+    const rate = new Set<string>();
+    const flat: string[] = [];
+    for (const [id, ing] of allIngredients) {
+      for (const [tier, b] of Object.entries(ing.corePassiveByFusion ?? {})) {
+        if (b.spdPct !== 0) rate.add(id);
+        if (b.spd !== 0) flat.push(`${id}@${tier}`);
+      }
+    }
+    expect([...rate]).toEqual(["2700003", "2700005"]); // Core Fusion Snow, Core Fusion Lisha
+    expect(flat).toEqual([]);
   });
 });
 
-describe("known divergence — pre-baked SPD rate (Core Fusion Snow, +4.3% SPD)", () => {
+describe("Core Fusion SPD rate (Snow, +4.3 %) — agrees with CFormula.CalcFinalStat", () => {
   const snow = characters["2700003"]!.ingredients!;
   const SPD_RATE = 43; // core_passive_2star_ablity_speed, OAT_RATE per-mille
   const clientSpd = (level: number, step: number, gearFlat = 0) => {
@@ -667,26 +673,116 @@ describe("known divergence — pre-baked SPD rate (Core Fusion Snow, +4.3% SPD)"
   const composedSpd = (level: number, step: number) =>
     composeCharStats(snow, codexCurve, { level, levelMaxStep: step, levelMaxModifier: LB_MOD[step] }).noGearStats.spd;
 
-  // Expected values are derived from the committed base SPD, not written as
-  // literals: the fused base moved from the fusion sheet (138) to the original
-  // hero's (133) in gear-solver#31, and both bases show the same gaps.
-  const pinned = snow.base.spd.min === snow.base.spd.max ? snow.base.spd.max : NaN;
-  const preBaked = snow.corePassive!.spd;
+  it("the rate is read from the tier block, every tier", () => {
+    for (const t of ["1", "2", "3", "4", "5"]) expect(snow.corePassiveByFusion![t]!.spdPct * 10).toBe(SPD_RATE);
+  });
 
-  it("agrees with the client at lv100 (LB0) and lv120 (LB3), without gear", () => {
+  it("138 / 141 / 144 / 148 at lv1 / 20 / 40 / 60 (LB0): trunc(total × 1.043), not total + 6", () => {
+    expect([1, 20, 40, 60].map((lv) => composedSpd(lv, 0))).toEqual([138, 141, 144, 148]);
+    for (const lv of [1, 20, 40, 60]) expect(composedSpd(lv, 0)).toBe(clientSpd(lv, 0));
+  });
+
+  it("agrees with the client at lv100 (LB0) and lv120 (LB3)", () => {
     expect(composedSpd(100, 0)).toBe(clientSpd(100, 0));
     expect(composedSpd(120, 3)).toBe(clientSpd(120, 3));
   });
 
-  it("still overstates SPD by 1 at lv1: base × 1.043 truncated vs base + pre-baked flat", () => {
-    expect(clientSpd(1, 0)).toBe(Math.trunc(pinned * (1000 + SPD_RATE) / 1000));
-    expect(composedSpd(1, 0)).toBe(pinned + preBaked);
-    expect(composedSpd(1, 0) - clientSpd(1, 0)).toBe(1);
+  it("agrees with the client at every level and LB step", () => {
+    const bad: string[] = [];
+    for (const lv of LEVELS) {
+      const step = lbStepFor(lv);
+      if (composedSpd(lv, step) !== clientSpd(lv, step)) bad.push(`lv${lv}`);
+    }
+    expect(bad).toEqual([]);
   });
 
-  it("does not amplify gear SPD: +40 SPD of gear is 2 short of the client", () => {
-    // Renderer side (composeBuild.computeFinalStats) adds gear SPD flat on top
-    // of the no-gear SPD, so the 4.3% never reaches the gear part.
-    expect(composedSpd(100, 0) + 40 - clientSpd(100, 0, 40)).toBe(-2);
+  it("exposes the speed before the rate and the rate, for the gear side", () => {
+    const { noGearStats, scaling } = composeCharStats(snow, codexCurve, { level: 1, levelMaxStep: 0 });
+    expect(scaling.spd).toEqual({ value: snow.base.spd.max, buffPct: 4.3 });
+    expect(noGearStats.spd).toBe(Math.trunc(scaling.spd.value * 1043 / 1000));
+  });
+});
+
+describe("Core Fusion passive at the captured fusion tier (corePassiveByFusion)", () => {
+  const notia = characters["2700056"]!.ingredients!;
+  const lisha = characters["2700005"]!.ingredients!;
+  const notiaAt = (fusionLevel: number | undefined) =>
+    composeCharStats(notia, codexCurve, { level: 100, levelMaxStep: 0, ...(fusionLevel != null ? { fusionLevel } : {}) });
+
+  it("Notia lv100: no +50 % EFF at fusion 1 and 4, the 255 of the capture at fusion 5", () => {
+    for (const t of [1, 4]) {
+      const { noGearStats, scaling } = notiaAt(t);
+      expect(scaling.eff.buffPct).toBe(0);
+      expect(noGearStats.eff).toBe(170); // 10 + 110 + 50 flat, no rate
+    }
+    expect(notiaAt(5).noGearStats.eff).toBe(255);
+    expect(notiaAt(5).scaling.eff.buffPct).toBe(50);
+  });
+
+  it("an unknown tier (0 or missing) takes the highest tier, like fusion 5", () => {
+    expect(notiaAt(0)).toEqual(notiaAt(5));
+    expect(notiaAt(undefined)).toEqual(notiaAt(5));
+  });
+
+  it("a tier with no block contributes nothing", () => {
+    expect(notiaAt(9).noGearStats).toEqual(notiaAt(1).noGearStats);
+  });
+
+  it("Lisha: 124 SPD at every level (trunc(119 × 1.043) = 119 + 5)", () => {
+    for (const lv of LEVELS) {
+      const step = lbStepFor(lv);
+      expect(composeCharStats(lisha, codexCurve, { level: lv, levelMaxStep: step, levelMaxModifier: LB_MOD[step] }).noGearStats.spd).toBe(124);
+    }
+  });
+
+  it("a fused char without corePassive (contract format 2) composes from corePassiveByFusion alone", () => {
+    for (const [id, ing] of allIngredients) {
+      if (!ing.corePassiveByFusion) continue;
+      const { corePassive: _legacy, ...format2 } = ing;
+      for (const fusionLevel of [1, 5]) {
+        const opts = { level: 100, levelMaxStep: 0, fusionLevel };
+        expect(composeCharStats(format2, codexCurve, opts), id).toEqual(composeCharStats(ing, codexCurve, opts));
+      }
+    }
+  });
+
+  it("is a no-op on every non-fused hero: speed scaling has no rate", () => {
+    for (const [id, ing] of allIngredients) {
+      if (ing.corePassiveByFusion) continue;
+      const { noGearStats, scaling } = composeCharStats(ing, codexCurve, { fusionLevel: 0 });
+      expect(scaling.spd.buffPct, id).toBe(0);
+      expect(noGearStats.spd, id).toBe(scaling.spd.value);
+    }
+  });
+});
+
+describe("Core Fusion — fallback on a cache without corePassiveByFusion (legacy corePassive)", () => {
+  // Values pinned from the composer before corePassiveByFusion existed: the
+  // single max-level block whatever the tier, SPD rate pre-baked as flat.
+  const legacy = (id: string): CharacterIngredients => {
+    const { corePassiveByFusion: _byFusion, ...rest } = characters[id]!.ingredients!;
+    return rest;
+  };
+  const compose = (id: string, level: number, step: number, fusionLevel?: number) =>
+    composeCharStats(legacy(id), codexCurve, {
+      level, levelMaxStep: step, levelMaxModifier: LB_MOD[step], ...(fusionLevel != null ? { fusionLevel } : {}),
+    });
+
+  it("Snow: base + pre-baked 6 SPD, no rate — 139 / 142 / 145 / 148 / 155 / 163", () => {
+    const got = ([[1, 0], [20, 0], [40, 0], [60, 0], [100, 0], [120, 3]] as const).map(([lv, st]) => compose("2700003", lv, st).noGearStats.spd);
+    expect(got).toEqual([139, 142, 145, 148, 155, 163]);
+    expect(compose("2700003", 1, 0).scaling.spd.buffPct).toBe(0);
+  });
+
+  it("Snow: every other stat unchanged by the fallback", () => {
+    const viaTier = composeCharStats(characters["2700003"]!.ingredients!, codexCurve, { level: 100, levelMaxStep: 0 }).noGearStats;
+    const { spd: _a, ...rest } = compose("2700003", 100, 0).noGearStats;
+    const { spd: _b, ...restTier } = viaTier;
+    expect(rest).toEqual(restTier);
+  });
+
+  it("Notia: the single block whatever the tier — EFF 255 even at fusion 1", () => {
+    expect(compose("2700056", 100, 0, 1).noGearStats.eff).toBe(255);
+    expect(compose("2700056", 100, 0, 5).noGearStats.eff).toBe(255);
   });
 });

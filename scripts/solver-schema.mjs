@@ -6,8 +6,10 @@
  * documented on the TypeScript constant.
  */
 
-/** Highest `version.json` `schema` this build reads. */
-export const SUPPORTED_SOLVER_SCHEMA = 1;
+/** Highest `version.json` `schema` this build reads. Format 2:
+ *  `characters.json` drops `ingredients.corePassive`, leaving
+ *  `corePassiveByFusion` alone. */
+export const SUPPORTED_SOLVER_SCHEMA = 2;
 
 /** Contract schema of a solver `version.json` body: no `schema` field → 1; an
  *  integer ≥ 1 → itself; anything else, or unparsable JSON → null.

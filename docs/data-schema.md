@@ -162,6 +162,18 @@ l'ancien, `schema` inchangé ; (b) une release de gear-solver lit le nouveau cha
 `SUPPORTED_SOLVER_SCHEMA` à `schema + 1` (constante et jumeau ensemble) ; (c) outerpedia
 retire l'ancien champ et monte `schema`.
 
+**Passif de cœur par palier (`characters.json`).** Les `ingredients` de chaque fusionné
+portent `corePassiveByFusion` (B56 d'outerpedia, `schema` resté à 1) :
+`{ "1": …, "5": … }`, les cinq clés toujours présentes, chaque bloc un `StatBlock` plus
+`spdPct` (la vitesse `OAT_RATE` en points de % bruts, 4,3 = +4,3 % ; `spd` n'y porte que
+du plat), à zéro quand le palier n'a pas de buff de fiche. `composeCharStats` prend la clé
+du palier capturé (`Character.fusionLevel`), la plus haute si le palier est inconnu, et
+applique `spdPct` en taux sur la vitesse totale (cf.
+[reference.md §1.4](reference.md#14-compose-no-gear-packagescoresrccompose-statsts)).
+Typé optionnel dans `CharacterIngredients` : un cache d'avant ne l'a pas, le compositeur
+retombe alors sur l'ancien `corePassive` (un seul bloc au niveau max, vitesse cuite en
+plat), que le format 2 du contrat retire.
+
 **Paliers de set (`sets.json`).** Chaque entrée `levels[]` porte, à côté de `p2` / `p4` /
 `p2_desc` / `p4_desc`, deux champs ajoutés par outerpedia (C20, `schema` resté à 1) :
 `breakLimitCounts` (`number[]`, les breakthroughs qui donnent ce niveau à une pièce ;
