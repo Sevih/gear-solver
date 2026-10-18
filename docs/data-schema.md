@@ -188,6 +188,19 @@ le 2pc). Typés optionnels dans `SetLevel` (`core/gamedata.ts`) : un cache d'ava
 pas, `wornSetRows` (`core/set-level.ts`) retombe alors sur l'ancienne règle (cf.
 [reference.md §2.6](reference.md#26-set-bonuses-composebuildtscomputesetbonuses)).
 
+**Effets de combat des sets (`sets.json`).** Chaque entrée `levels[]` porte aussi
+`combatEffects: { p2, p4 }` (B53 d'outerpedia, `schema` resté à 1), toujours présent :
+`null` quand le palier n'a pas d'effet `IOT_BUFF`, sinon une liste
+`{ buffId, type, st?, ap?, v?, target, cond? }` en enums bruts du jeu (`v` brut et signé,
+‰ pour un taux ; absent sur `BT_IMMUNE`). Le client les verse dans
+`m_ItemSetBuffTempletList`, hors fiche : **affichage seulement**, jamais lus par la fiche
+ni par la CP (Fortification, Revenge, Patience, Pulverization, Immunity, Swiftness,
+Weakness, Augmentation). Typé `SetCombatEffect` et optionnel dans `SetLevel`
+(`core/gamedata.ts`) : un cache d'avant ne l'a pas. L'app le montre en pastille
+« combat » après la prose (panneau Effects du Builder, détail de pièce), libellé par
+`combatEffectLines` (`renderer/src/lib/setCombatEffects.ts`) ; `wornSetRows` y lit le
+4pc d'effet de combat de la règle `ignoreLowSet` (`p4_desc` en repli sans le champ).
+
 **Stats des passifs uniques (`equipment-passives.json`).** À côté de `textByTier`, une
 entrée d'arme ou d'accessoire dont un buff touche la fiche (buffs de fiche, cachés
 compris) porte `statsByTier` (C20 d'outerpedia, `schema` resté à 1) : indexé comme

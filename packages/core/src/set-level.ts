@@ -12,7 +12,8 @@
  *   - the 2-pc is dropped when the 4-pc row has `ignoreLowSet` and carries the
  *     same stat (the client compares stat by stat), or, for a combat effect
  *     without a stat, when that row's 4-pc is a combat effect too
- *     (`CreateBuffSetItem`). E.g. Speed BT [4,4,3,3]: the level-2 2-pc (13 %)
+ *     (`CreateBuffSetItem`; read on `combatEffects.p4`, `p4_desc` for a cache
+ *     without it). E.g. Speed BT [4,4,3,3]: the level-2 2-pc (13 %)
  *     is dropped by the level-1 4-pc (25 %, `ignoreLowSet`) → 25 %, not 38 %. */
 import type { SetDef, SetLevel } from "./gamedata.js";
 
@@ -73,7 +74,11 @@ export function wornSetRows(def: SetDef, breakthroughs: readonly number[]): Worn
     const p2 = row2.p2, p4 = row4.p4;
     drop2 = p2 && p2.st !== "ST_NONE"
       ? p4?.st === p2.st
-      : !(p4 && p4.st !== "ST_NONE") && row4.p4_desc != null;
+      : !(p4 && p4.st !== "ST_NONE") && (row4.combatEffects
+        ? row4.combatEffects.p4 != null
+        // Cache synced before outerpedia B53 (no `combatEffects`): the prose
+        // stands in for the combat-effect 4-pc.
+        : row4.p4_desc != null);
   }
   return { row2, row4, drop2 };
 }

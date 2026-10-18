@@ -9,12 +9,13 @@
  * passive (talisman/EE), unique-option passive (weapons/accessories), set
  * effect (armor 2/4-pc), and the Singularity active effect on ascended pieces.
  */
-import type { Character, GameData } from "@gear-solver/core";
+import type { Character, GameData, SetCombatEffect } from "@gear-solver/core";
 import type { UiPiece } from "./adapter.js";
 import { CharFace, EquipmentIcon, StatIcon } from "./EquipmentIcon.js";
 import { RARITY, SINGULARITY_GRADIENT_H, SLOTS, STAT } from "./tokens.js";
 import { GameText } from "./GameText.js";
 import { HoverHint } from "./HoverHint.js";
+import { SetCombatBadge } from "./SetCombatBadge.js";
 import { cx } from "./cx.js";
 import { QUALITY_COLOR, qualityTierFromScore, type QualityTier } from "../lib/quality.js";
 
@@ -127,14 +128,21 @@ function GemPanel({ slots }: { slots: NonNullable<UiPiece["gemSlots"]> }) {
 }
 
 /** One 2-pc / 4-pc effect row — label column always shown; value column is the
- *  curated in-game prose (em dash when the tier has no effect). */
-function SetEffectRow({ tag, desc }: { tag: "2-pc" | "4-pc"; desc: string | null | undefined }) {
+ *  curated in-game prose (em dash when the tier has no effect), then the
+ *  "combat" pill when the tier carries combat effects (display only). */
+function SetEffectRow({ tag, desc, combat }: {
+  tag: "2-pc" | "4-pc";
+  desc: string | null | undefined;
+  combat?: SetCombatEffect[] | null;
+}) {
   return (
     <div className="flex items-start gap-2 text-[11px]">
       <span className="w-12 shrink-0 font-mono text-white/70">{tag}</span>
       {desc
-        ? <span className="flex-1 text-white"><GameText text={desc} /></span>
-        : <span className="flex-1 text-white/70">—</span>}
+        ? <span className="flex-1 text-white"><GameText text={desc} /><SetCombatBadge effects={combat} /></span>
+        : combat?.length
+          ? <span className="flex-1 text-white"><SetCombatBadge effects={combat} /></span>
+          : <span className="flex-1 text-white/70">—</span>}
     </div>
   );
 }
@@ -286,8 +294,8 @@ export function GearDetailBody({ piece, game, equippedChar = null }: GearDetailB
             <span className="font-mono text-[12px] font-semibold text-white">{setEntry.name ?? "Set"}</span>
           </div>
           <div className="space-y-1 rounded-md border border-white/6 bg-black/25 px-3 py-2">
-            <SetEffectRow tag="2-pc" desc={setEntry.level.p2_desc} />
-            <SetEffectRow tag="4-pc" desc={setEntry.level.p4_desc} />
+            <SetEffectRow tag="2-pc" desc={setEntry.level.p2_desc} combat={setEntry.level.combatEffects?.p2} />
+            <SetEffectRow tag="4-pc" desc={setEntry.level.p4_desc} combat={setEntry.level.combatEffects?.p4} />
           </div>
         </div>
       )}

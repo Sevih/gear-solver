@@ -48,7 +48,7 @@ particular):
 | `ItemTemplet.json`                   | `equipment.json`          | ItemID → slot/grade/star/setId/armorSetId/name/image/effectIcon/class |
 | `ItemOptionTemplet.json`             | `options.json`            | OptionID → StatOption (`{st, ap, v}`) OR IOT_BUFF reference |
 | `BuffTemplet.json`                   | `buffs.json`              | BuffID → array of StatOption (per enhanceLevel)        |
-| `ItemSpecialOptionTemplet.json` + curated (outerpedia) | `sets.json` | setId → levels[] → {p2, p4, p2_desc, p4_desc, breakLimitCounts, ignoreLowSet}, name |
+| `ItemSpecialOptionTemplet.json` + curated (outerpedia) | `sets.json` | setId → levels[] → {p2, p4, p2_desc, p4_desc, breakLimitCounts, ignoreLowSet, combatEffects}, name |
 | `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `equipment-passives.json` | ItemID → {name, textByTier[1..4], statsByTier?} |
 | `ItemTemplet.json` + `ItemSpecialOptionTemplet.json` | `multi-tier-passives.json`| ItemID → list of tier passives               |
 | `ItemOptionTemplet.json` (IDs 15001..15054) | `gems.json`        | OptionID → {type, level, st, ap, v}                    |
@@ -443,7 +443,7 @@ client `CStatValue.SetSetItemValue`, `CItem.SetOptionLevel`):
   `[4,4,3,3]` → 2pc level 2 + 4pc level 1.
 - `ignoreLowSet`: when the 4pc row carries it, the 2pc is dropped if it carries the same
   stat (the client compares stat by stat), or, for a combat effect without a stat, if
-  that row's 4pc is one too. Today Penetration, Speed and Bursting at level 1 (empty
+  that row's 4pc is one too (`combatEffects.p4`, `p4_desc` for a cache without it). Today Penetration, Speed and Bursting at level 1 (empty
   2pc, the 4pc holds the whole bonus), Fortification at level 2 (empty 4pc, nothing
   dropped). Speed `[4,4,3,3]` → 25 %, not 13 + 25.
 - Skip if `p2`/`p4` is null or `ST_NONE` (combat effect, e.g. Counterattack which

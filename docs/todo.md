@@ -45,12 +45,6 @@
 - [ ] 🔴 **L1 d'abord — versionner le contrat** — `schema` (entier) et `resVersion` dans `solver/version.json` ;
       `data-sync.ts` refuse un schéma plus récent que le sien et garde son cache. Aujourd'hui un push d'outerpedia
       qui change la forme casse toutes les installations à la fois (le chargeur caste le JSON sans le valider).
-- [~] 🔴 **C1 — Sets à effet de combat comptés comme stats de fiche** — côté gear-solver fait (G3) ; Pulvérisation (17), Faiblesse (20, signe et
-      cible retournés par `abs()`), Augmentation (21), Immunité 4P niveau 2 (18) : `resolveSetEffectEntry`
-      (outerpedia) convertit leurs IOT_BUFF en stat, `computeSetBonuses` ne filtre pas → CP gonflée (+1 477 à
-      +7 301 sur 59 142), « Max CP » sur-sélectionne ces sets. Ne produire en stat que les IOT_STAT ; côté
-      gear-solver, ne rien compter sans `st`. **Décision** : exposer les IOT_BUFF dans un champ `combatEffects`
-      affiché, ou seulement les retirer de la CP ?
 - [ ] 🔴 **M3 — Unique IOT_STAT de l'EE de Fatal (2000078) absente** — CHD +30 % à +10 perdu : le contrat ne sort
       que les uniques IOT_BUFF. Seul cas parmi les EE.
 - [ ] 🟡 **Filtre des passifs de skill trop strict** côté contrat (`extractSkillPassiveByLevel` : ME seul, condition

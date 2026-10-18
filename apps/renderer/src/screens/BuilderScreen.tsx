@@ -15,13 +15,14 @@
  */
 import { Fragment, memo, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
+import type { Character, GameData, GearPiece, Inventory, SetCombatEffect, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, effectiveCharacter, expToLevel, wornSetRows } from "@gear-solver/core";
 import { CharacterPortrait, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
 import { Pill } from "../design/Chips.js";
 import { cx } from "../design/cx.js";
 import { HoverHint } from "../design/HoverHint.js";
 import { HoverCard } from "../design/HoverCard.js";
+import { SetCombatBadge } from "../design/SetCombatBadge.js";
 import { GameText } from "../design/GameText.js";
 import { RichTooltip } from "../design/RichTooltip.js";
 import { SLOT_BY, toDesignSlot, type SlotId } from "../design/tokens.js";
@@ -2183,16 +2184,19 @@ function BuildEffectsPanel({ build, pieceByUid, game }: {
       if (e) e.bts.push(p.breakthrough);
       else groups.set(p.armorSetId, { bts: [p.breakthrough], sample: p });
     }
-    const sets: Array<{ id: string; name: string; icon: string | null; pc: number; descs: Array<{ tag: string; desc: string }> }> = [];
+    const sets: Array<{ id: string; name: string; icon: string | null; pc: number; descs: Array<{ tag: string; desc: string | null; combat: SetCombatEffect[] | null }> }> = [];
     for (const [setId, { bts, sample }] of groups) {
       const count = bts.length;
       if (count < 2) continue;
       const def = game.sets?.[setId];
       if (!def) continue;
       const { row2, row4, drop2 } = wornSetRows(def, bts);
-      const descs: Array<{ tag: string; desc: string }> = [];
-      if (!drop2 && row2?.p2_desc) descs.push({ tag: "2-pc", desc: row2.p2_desc });
-      if (row4?.p4_desc) descs.push({ tag: "4-pc", desc: row4.p4_desc });
+      // Combat effects (display only) ride on the same rows; a tier with
+      // effects but no prose still gets its line, the pill alone.
+      const descs: Array<{ tag: string; desc: string | null; combat: SetCombatEffect[] | null }> = [];
+      const combat2 = row2?.combatEffects?.p2 ?? null, combat4 = row4?.combatEffects?.p4 ?? null;
+      if (!drop2 && (row2?.p2_desc || combat2)) descs.push({ tag: "2-pc", desc: row2?.p2_desc ?? null, combat: combat2 });
+      if (row4?.p4_desc || combat4) descs.push({ tag: "4-pc", desc: row4?.p4_desc ?? null, combat: combat4 });
       if (descs.length === 0) continue;
       sets.push({ id: setId, name: def.name ?? "Set", icon: toUiPiece(sample, game).setIcon, pc: count >= 4 ? 4 : 2, descs });
     }
@@ -2218,7 +2222,8 @@ function BuildEffectsPanel({ build, pieceByUid, game }: {
                 {s.descs.map((d) => (
                   <div key={d.tag}>
                     <span className="mr-1 font-mono text-[10px] font-semibold text-white/60">{d.tag}</span>
-                    <GameText text={d.desc} />
+                    {d.desc && <GameText text={d.desc} />}
+                    <SetCombatBadge effects={d.combat} expanded />
                   </div>
                 ))}
               </div>

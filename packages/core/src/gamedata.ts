@@ -80,6 +80,23 @@ export interface SetEffect {
   ap: string;
   v: number;
 }
+/** One `IOT_BUFF` effect of a set tier, in the game's raw enums (outerpedia B53).
+ *  The client puts them in `m_ItemSetBuffTempletList`, off the stat sheet: for
+ *  display only, never read by the sheet nor the CP. */
+export interface SetCombatEffect {
+  buffId: string;
+  /** `BuffTemplet.Type` (`BT_DMG_REDUCE`, `BT_STAT_OWNER_LOST_HP_RATE`, …). */
+  type: string;
+  /** Stat of a stat-shaped buff (`ST_ATK`, `ST_SPEED`, …). */
+  st?: string;
+  ap?: string;
+  /** Raw and signed (‰ for a rate); absent on a valueless buff (`BT_IMMUNE`). */
+  v?: number;
+  /** `ME`, `ENEMY_TEAM`, … */
+  target: string;
+  /** Trigger condition (`OWNER_HAS_BUFF`, …); the prose words it. */
+  cond?: string;
+}
 export interface SetLevel {
   level: number;
   /** Engine-facing resolved stat (kept for solver scoring). Null when the
@@ -100,6 +117,9 @@ export interface SetLevel {
    *  today Penetration, Speed and Bursting at level 1, Fortification at
    *  level 2). Optional, same as `breakLimitCounts`. */
   ignoreLowSet?: boolean;
+  /** The tier's combat effects (`IOT_BUFF`), `null` for a 2-pc / 4-pc without
+   *  one. Display only. Optional: a cache synced before outerpedia B53 has none. */
+  combatEffects?: { p2: SetCombatEffect[] | null; p4: SetCombatEffect[] | null };
 }
 export interface SetDef {
   name: string | null;

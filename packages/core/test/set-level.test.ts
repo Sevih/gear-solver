@@ -125,3 +125,53 @@ describe("set level — ignoreLowSet compares stat by stat (built rows)", () => 
     expect(wornSetRows(fort, [4, 4, 4, 4]).drop2).toBe(false);
   });
 });
+
+describe("set level — the combat-effect 4-pc read on `combatEffects` (outerpedia B53)", () => {
+  /** The same rows without `combatEffects`: the former `p4_desc` reading. */
+  function withoutCombat(def: SetDef): SetDef {
+    return { ...def, levels: def.levels.map(({ combatEffects: _c, ...l }) => l) };
+  }
+  /** Every breakthrough combination of 2 to 4 pieces (BT0-4). */
+  function* combos(n: number, prefix: number[] = []): Generator<number[]> {
+    if (prefix.length === n) { yield prefix; return; }
+    for (let bt = 0; bt <= 4; bt++) yield* combos(n, [...prefix, bt]);
+  }
+
+  it("the contract carries combatEffects on every row", () => {
+    for (const def of Object.values(SETS)) for (const l of def.levels) expect(l.combatEffects).toBeDefined();
+  });
+
+  it("the ignoreLowSet rows are Fortification L2, Penetration L1, Speed L1, Bursting L1", () => {
+    const rows = Object.entries(SETS).flatMap(([id, def]) => def.levels.filter((l) => l.ignoreLowSet).map((l) => `${id}:${l.level}`));
+    expect(rows.sort()).toEqual(["11:1", "13:1", "14:1", "8:2"]);
+  });
+
+  it("drop2 is identical before / after for every set and every breakthrough combination", () => {
+    let dropped = 0;
+    for (const [id, def] of Object.entries(SETS)) {
+      const legacyDef = withoutCombat(def);
+      for (const n of [2, 3, 4]) {
+        for (const bts of combos(n)) {
+          const after = wornSetRows(def, bts).drop2;
+          expect(after, `${id} [${bts.join(",")}]`).toBe(wornSetRows(legacyDef, bts).drop2);
+          if (after) dropped++;
+        }
+      }
+    }
+    expect(dropped).toBeGreaterThan(0);
+  });
+
+  it("drops a stat-less 2-pc on combatEffects.p4, not on the prose", () => {
+    const row = (level: number, bt: number[], ignoreLowSet: boolean, p4: boolean, p4_desc: string | null) => ({
+      level, breakLimitCounts: bt, ignoreLowSet, p2: null, p4: null, p2_desc: "2pc", p4_desc,
+      combatEffects: {
+        p2: [{ buffId: "B2", type: "BT_DMG", ap: "OAT_RATE", v: 100, target: "ME" }],
+        p4: p4 ? [{ buffId: "B4", type: "BT_DMG", ap: "OAT_RATE", v: 100, target: "ME" }] : null,
+      },
+    });
+    const effectNoProse: SetDef = { name: "X", desc: null, levels: [row(1, [0, 1, 2, 3], true, true, null), row(2, [4], false, false, null)] };
+    expect(wornSetRows(effectNoProse, [3, 3, 3, 3]).drop2).toBe(true);
+    const proseNoEffect: SetDef = { name: "X", desc: null, levels: [row(1, [0, 1, 2, 3], true, false, "4pc"), row(2, [4], false, false, null)] };
+    expect(wornSetRows(proseNoEffect, [3, 3, 3, 3]).drop2).toBe(false);
+  });
+});

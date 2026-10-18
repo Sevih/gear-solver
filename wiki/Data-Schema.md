@@ -127,6 +127,19 @@ optional in `SetLevel` (`core/gamedata.ts`): an older cache lacks them and `worn
 (`core/set-level.ts`) then falls back to the former rule (cf.
 [Engine Reference §2.6](Engine-Reference#26-set-bonuses-composebuildtscomputesetbonuses)).
 
+**Set combat effects (`sets.json`).** Each `levels[]` entry also carries
+`combatEffects: { p2, p4 }` (added by outerpedia, `schema` still 1), always present:
+`null` when the tier has no `IOT_BUFF` effect, otherwise a list of
+`{ buffId, type, st?, ap?, v?, target, cond? }` in the game's raw enums (`v` raw and
+signed, ‰ for a rate; absent on `BT_IMMUNE`). The client puts them in
+`m_ItemSetBuffTempletList`, off the sheet: **display only**, never read by the sheet nor
+the CP (Fortification, Revenge, Patience, Pulverization, Immunity, Swiftness, Weakness,
+Augmentation). Typed `SetCombatEffect`, optional in `SetLevel` (`core/gamedata.ts`): an
+older cache lacks it. The app shows it as a "combat" pill after the prose (Builder
+Effects panel, piece detail), worded by `combatEffectLines`
+(`renderer/src/lib/setCombatEffects.ts`); `wornSetRows` reads on it the combat-effect 4pc
+of the `ignoreLowSet` rule (`p4_desc` as fallback without the field).
+
 **Unique passive stats (`equipment-passives.json`).** Next to `textByTier`, a weapon or
 accessory entry with a buff that hits the sheet (sheet buffs, hidden ones included)
 carries `statsByTier` (added by outerpedia, `schema` still 1): indexed like `textByTier`

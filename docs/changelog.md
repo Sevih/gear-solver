@@ -8,6 +8,62 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚔️ Effets de combat des sets (`combatEffects`) affichés à côté de la prose, jamais dans la fiche ni la CP (2026-10-18)
+- ✅ **Pourquoi** (C1, second temps ; décision du 15/10 : retirer ces effets de la CP d'abord — fait en G3 —,
+  les afficher ensuite). outerpedia (B53) émet dans chaque entrée `levels[]` de `sets.json` un champ
+  `combatEffects: { p2, p4 }`, `null` sans effet `IOT_BUFF`, sinon une liste en enums bruts du jeu ; déjà
+  synchronisé, aucun type ni écran ne le lisait. Huit sets n'ont que de la prose à l'écran (Fortification,
+  Revenge, Patience, Pulverization, Immunity, Swiftness, Weakness, Augmentation) et rien ne disait au joueur que
+  ces effets ne sont comptés ni dans la fiche ni dans la CP. Pas de `data:sync`.
+- ✅ **Type** (`core/gamedata.ts`). `SetCombatEffect` exporté (`buffId`, `type`, `st?`, `ap?`, `v?`, `target`,
+  `cond?`, commentés) et `SetLevel.combatEffects?: { p2; p4 }`, optionnel (un cache d'avant B53 ne l'a pas).
+  `docs/data-schema.md` / `wiki/Data-Schema.md` le décrivent (paragraphe après les paliers de set : affichage
+  seulement, jamais la fiche ni la CP) ; la ligne `sets.json` de `docs/reference.md` § 1.2 et de
+  `wiki/Engine-Reference.md` le liste.
+- ✅ **Étiquetage** (`renderer/src/lib/setCombatEffects.ts`, nouveau). `combatEffectLines(effects)`, pure : un
+  libellé par `type` (`BT_DMG_REDUCE` « Damage reduction », `BT_DMG` « Damage dealt », `BT_DMG_TARGET_BREAK`
+  « Damage vs Broken targets », `BT_IMMUNE` « Debuff immunity », `BT_STAT` le libellé court de la stat
+  (`setBonusStatKey` puis `STAT[…].label`), `BT_STAT_OWNER_LOST_HP_RATE` / `_HALF` « <stat> by missing HP, up
+  to » ; type inconnu → l'enum brut), puis `v / 10` % signé (signe moins typographique) quand `v` existe, puis
+  « · enemies » quand `target` n'est pas `ME` ; `cond` n'est pas paraphrasé. `COMBAT_EFFECT_NOTE` porte la phrase
+  fixe « Applies in battle only — not counted in stats or CP. ».
+- ✅ **Affichage** (`design/SetCombatBadge.tsx`, nouveau). Une pastille « combat » (le style du badge `4pc` de
+  `EffectRow`) après la prose ; son infobulle (`HoverCard`) : la phrase fixe puis une ligne par effet. Rien pour un
+  palier sans effet de combat. Dans `GearDetail`, `SetEffectRow` prend `combat` (la ligne du niveau de la pièce,
+  `combatEffects.p2` / `.p4`) ; un palier d'effet sans prose montre la pastille seule au lieu du tiret. Dans
+  `BuildEffectsPanel` (`BuilderScreen.tsx`), les lignes 2-pc / 4-pc suivent `row2` / `row4` de `wornSetRows` (rien
+  pour un 2P effacé) et une ligne existe désormais aussi pour un palier d'effet sans prose. **Choix à relire** : le
+  contenu de cette carte est déjà une infobulle (`HoverCard`, `pointer-events-none`), une infobulle imbriquée n'y
+  serait jamais survolable ; la pastille y est donc posée en mode `expanded`, le texte de son infobulle écrit
+  dessous. Palier sans effet de combat : même DOM qu'avant (`SetCombatBadge` rend `null`, la prose passe par le même
+  `GameText`) — comparé à la lecture du code pour Attack et Speed, pas à l'écran.
+- ✅ **Calcul inchangé**. Aucun calcul ne lit `combatEffects` (grep) ; test de garde
+  (`apps/renderer/test/setCombatEffects.test.ts`) : fiche (`computeFinalStats`) et CP (`calcBattlePower`) d'un build
+  Pulverization 4P (BT 4 et BT 3) puis Weakness 2P (BT 4 et BT 0) identiques avec le vrai `sets.json` et le même
+  privé de `combatEffects`.
+- ✅ **`wornSetRows`** (`core/set-level.ts`). La branche « 2P d'effet de combat effacé par le 4P » lit
+  `row4.combatEffects.p4 != null` quand le champ existe, `p4_desc` en repli commenté (cache d'avant B53) : la règle
+  `CreateBuffSetItem` de l'en-tête de `datagen/generators/solver.ts` d'outerpedia. En-tête du module et § 2.6 de
+  `docs/reference.md` / `wiki/Engine-Reference.md` le disent. Zéro écart : test d'équivalence
+  (`packages/core/test/set-level.test.ts`) sur le contrat réel, `drop2` identique avec et sans `combatEffects` pour
+  les 306 sets et toutes les combinaisons de 2 à 4 pièces de BT0 à BT4 ; les lignes `ignoreLowSet` restent
+  Fortification L2, Penetration L1, Speed L1, Bursting L1. Plus un cas construit : 4P d'effet sans prose → 2P
+  retiré, prose sans effet → gardé.
+- ✅ **Tests.** `combatEffectLines` : Weakness L2 → « Damage reduction −35% · enemies », Immunity L1 → « Debuff
+  immunity », Fortification L1 → « Damage reduction +40% » et « SPD −30% », Revenge L2 → « ATK by missing HP, up
+  to +160% », Pulverization L1, type inconnu → enum brut. `npm run typecheck` : dernière ligne `> tsc --noEmit`
+  (renderer), sans erreur ; `npm test` : core `Tests  125 passed (125)`, desktop `Tests  79 passed (79)`, renderer
+  `Tests  450 passed (450)`.
+- ✅ **Prose et données qui divergent** (signalé, rien touché) : Weakness, la prose dit « Increases damage dealt
+  against targets inflicted with a debuff by 25 % / 35 % », la donnée est un `BT_DMG_REDUCE` −250 / −350 posé sur
+  `ENEMY_TEAM` sous `OWNER_HAS_BUFF` ; Pulverization L2 4P, la prose dit 50 %, `combatEffects.p4` porte 700
+  (70 %, le même buff `BID_ITEM_UO_SET_17` que le 2P). La pastille montre la donnée.
+- ✅ **Hors périmètre, vu en passant** : `pickSetLevel` de `GearDetail.tsx` choisit encore le niveau par `bt ≥ 4`
+  et non par `breakLimitCounts` (même résultat aujourd'hui) ; le catalogue de sets du Builder et
+  `buildAdvice.ts` lisent toujours `p4_desc` pour savoir si un 4P existe.
+- ⏳ À l'écran : le panneau Effects d'un build Pulverization 4P (2-pc et 4-pc, pastille et texte dessous), le
+  détail d'une pièce Weakness (pastille, infobulle au survol), celui d'une pièce Attack (inchangé).
+
 ### 🗡️ Uniques d'arme et d'accessoire de la fiche lus du contrat (`statsByTier`), vitesse en taux de l'équipement (2026-10-18)
 - ✅ **Pourquoi** (M2, livré sur la preuve par le code, décision du 15/10). Deux passifs uniques touchent la fiche
   et n'étaient pas comptés : Phantasm Necrosis (arme, set 1021 : objets 24, 174, 324, 474, 624, 774,
