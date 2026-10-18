@@ -20,10 +20,8 @@ tools/capture-steam/obj/
 tools/capture-steam/bin/
 apps/desktop/resources/capture-steam/
 
-# PERSONAL account data — never commit. The dev capture folder is now
-# .cache/capture-out (ignored above); tools/capture/out/ is where older dev
-# setups kept it, still ignored if left over.
-tools/capture/out/
+# PERSONAL account data — never commit. The dev capture folder is
+# .cache/capture-out (ignored above).
 *.log
 
 # OS / editor
