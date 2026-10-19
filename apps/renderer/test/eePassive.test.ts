@@ -22,7 +22,7 @@ const FATAL = "2000078";
 const eclipse = (level: number) => {
   const raw: RawItem = {
     ItemUID: `ee${level}`, CharUID: "0", ItemID: 2000078, Exp: game.enhance.expCurves["exclusive|unique|6"]![level]!,
-    BreakLimitLevel: 0, Quantity: 1, SmeltingCount: 0, IsLock: 0, InvenType: 0, SelectSubOptionNum: 0,
+    BreakLimitLevel: 0, Quantity: 1, SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 0,
     SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0, OptionList: [], SubOptionList: [],
   };
   const piece = parseGearPiece(raw, game);

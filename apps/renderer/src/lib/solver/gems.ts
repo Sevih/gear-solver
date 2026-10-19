@@ -85,13 +85,6 @@ export interface ScoredGem {
 }
 
 export interface ScoreGemOptions {
-  /** When true AND `priority` is uniformly zero, score gems by
-   *  `value / norm` (raw per-roll magnitude) instead of collapsing every
-   *  gem to 0. Use in SOLVE CP mode: "maximize CP" implies "use the best
-   *  gems available", so the allocator must not silently degrade to the
-   *  currently-socketed gems just because the user didn't tick a priority
-   *  chip. */
-  allowZeroPriority?: boolean;
   /** Relative `dmg` gain of one gem (stat, value, percent) on the hero's
    *  equipped build — the `fill` key of the zero-score gems. Omitted → every
    *  filler gains 0 and they rank by raw magnitude alone. */
@@ -107,13 +100,9 @@ export interface ScoreGemOptions {
  *  meaningful (a +24 ATK% gem vs a +10 CHC gem with equal user priority
  *  must score comparably, not "24 > 10").
  *
- *  When NO priority is set anywhere AND `options.allowZeroPriority` is
- *  false (default), every score collapses to 0 — `aggregateGemDelta` then
- *  returns `null` and the solver falls back to the piece's own socketed
- *  gems (preserves "no intent" semantics for SOLVE mode). With the flag
- *  on, the score becomes `value / norm` so the allocator still picks the
- *  strongest gems by raw magnitude (SOLVE CP needs this — "max CP"
- *  without a priority hint should still re-allocate gems).
+ *  When NO priority is set anywhere, every score collapses to 0 —
+ *  `aggregateGemDelta` then returns `null` and the solver falls back to the
+ *  piece's own socketed gems (preserves "no intent" semantics for SOLVE mode).
  *
  *  With a priority, the zero-score gems (stats the priority leaves out) carry
  *  a `fill` key and sort after the priority ones, by `dmg` gain then raw
@@ -130,7 +119,6 @@ export function scoreGemPool(
   for (const k in priority) {
     if (priority[k]) { hasPriority = true; break; }
   }
-  const useRawFallback = !hasPriority && options.allowZeroPriority === true;
   const out: ScoredGem[] = [];
   for (const [id, count] of pool) {
     const r = resolveStat(id, 1, game.options);
@@ -139,9 +127,7 @@ export function scoreGemPool(
     // Per-roll norm (atkPct≈40, flat atk≈300, crc≈20…), NOT final-stat norm
     // — gems are per-roll contributions, not endgame totals.
     const norm = ROLL_NORMS[r.stat] ?? 100;
-    const score = useRawFallback
-      ? r.value / norm
-      : (priority[pk] ?? 0) * r.value / norm;
+    const score = (priority[pk] ?? 0) * r.value / norm;
     const fill = hasPriority && score === 0 && !options.noFill?.has(pk)
       ? Math.max(0, options.fillGain?.(r.stat, r.value, r.percent) ?? 0)
       : undefined;

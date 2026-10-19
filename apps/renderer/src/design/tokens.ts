@@ -123,10 +123,3 @@ export function toDesignSlot(s: string | null | undefined): SlotId | null {
   // weapon | helmet | armor | gloves | boots | accessory | talisman | exclusive
   return s as SlotId;
 }
-
-/** Optional helper to choose the chip tone given a stat color kind. */
-export function statColor(kind: StatKind | undefined): string {
-  return kind === "off" ? "rgba(252,211,77,0.92)"
-       : kind === "def" ? "rgba(147,197,253,0.85)"
-       : "rgba(103,232,249,0.85)";
-}

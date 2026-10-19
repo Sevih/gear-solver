@@ -773,7 +773,6 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const dmgStat = meta.dmgStat ?? "atk";
   const noCrit = meta.noCrit ?? false;
   const scoredGems = scoreGemPool(gemPool, gemPriority, game, {
-    allowZeroPriority: false,
     fillGain: gemDmgGains(
       composed.noGearStats, composed.scaling, inv.gear.filter((g) => g.equippedBy === heroUid), game,
       dmgStat, meta.dmgSec, noCrit,

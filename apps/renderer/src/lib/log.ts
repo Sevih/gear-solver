@@ -14,7 +14,7 @@
  * worker stays silent. Capture / desktop run in the Electron main process and
  * log through their own Node channel.
  */
-export type DebugFlag = "solver" | "statLocks" | "capture";
+export type DebugFlag = "solver" | "statLocks";
 
 /** True when `gs.debug.<flag>` is set to a truthy string. `usePersistedState`
  *  stores booleans as JSON (`"true"`/`"false"`); a hand-set `"1"` works too. */

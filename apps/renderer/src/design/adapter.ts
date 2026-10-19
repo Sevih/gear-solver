@@ -159,7 +159,7 @@ export interface UiPiece {
   class: string | null;
   /** Pre-computed `IconPiece` projection — pin it on the UiPiece so render
    *  passes can hand a STABLE reference to memo'd `EquipmentIcon`/`SlotMini`.
-   *  Computing `toIconPiece(p)` inline in JSX defeats the memo (fresh object
+   *  Building an IconPiece inline in JSX defeats the memo (fresh object
    *  every render), so we materialize it once when the UiPiece is built. */
   iconPiece: IconPiece;
 }
@@ -306,12 +306,4 @@ export function toUiPiece(g: GearPiece, game?: GameData | null): UiPiece {
       image, effectIcon, setIcon, class: cls,
     },
   };
-}
-
-/** @deprecated Use `piece.iconPiece` directly — kept for the rare callers
- *  that still construct ad-hoc IconPieces. The cached `iconPiece` on UiPiece
- *  is referentially stable across renders so it activates `memo` on the
- *  consuming icon components. */
-export function toIconPiece(p: UiPiece): IconPiece {
-  return p.iconPiece;
 }

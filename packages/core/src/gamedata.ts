@@ -55,8 +55,8 @@ export interface EquipmentDef {
   image: string | null;
   /** Unique-option icon filename (ItemSpecialOptionTemplet.IconName), served at /img/ui/effect/<effectIcon>.webp. */
   effectIcon: string | null;
-  /** Armor 4-piece set icon filename — resolved at build time from the
-   *  curated outerpedia-v2 sets.json mapping (the setId-to-icon order is
+  /** Armor 4-piece set icon filename — resolved at build time by outerpedia's
+   *  datagen from its equipment sets view (the setId-to-icon order is
    *  non-linear). Served at /img/ui/effect/<armorSetIcon>.webp. Null on
    *  non-armor pieces. */
   armorSetIcon: string | null;
@@ -65,7 +65,7 @@ export interface EquipmentDef {
 }
 export type EquipmentTable = Record<string, EquipmentDef>;
 
-/** Main-stat enhancement scaling tables (mirrors outerpedia-v2 item-stats-detail). */
+/** Main-stat enhancement scaling tables (outerpedia's `datagen/generators/enhance.ts`). */
 export interface EnhanceData {
   enhanceFactor: number;        // +40% per enhance level (stored as 0.4, applied as 1 + factor × lv, lv = 0..10 → ×5 at +10)
   tierFactor: number;           // +0.05 per breakthrough tier
@@ -103,8 +103,8 @@ export interface SetLevel {
    *  set has no stat at this tier — e.g. Revenge has no 2-pc effect. */
   p2: SetEffect | null;
   p4: SetEffect | null;
-  /** UI-facing localized prose pulled from outerpedia-v2's curated
-   *  `data/equipment/sets.json` — canonical wording per tier (e.g.
+  /** UI-facing localized prose pulled by outerpedia's datagen from its
+   *  equipment sets view — canonical wording per tier (e.g.
    *  "Attack +30%", "Increases damage dealt against targets inflicted with
    *  Break by 35%"). Null when no curated string exists. */
   p2_desc: string | null;
@@ -487,7 +487,9 @@ export interface GameData {
   codexCurve: CodexCurve;
   archiveBonus: ArchiveBonusCurve;
   trustCharacter: TrustExpCurve;
-  trustBuffs: TrustBuffTable;
+  /** Synced with the solver contract, never loaded: combat buffs, which the
+   *  stat sheet does not apply. Test fixtures may still carry it. */
+  trustBuffs?: TrustBuffTable;
   /** Per-tick substat values by gear star (keys "5"/"6"), for the flat-vs-%
    *  rentability panel. Only the ATK/DEF/HP flat+% duals. Possibly empty when
    *  the source table wasn't synced. */

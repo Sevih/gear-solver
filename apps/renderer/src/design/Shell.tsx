@@ -165,8 +165,8 @@ interface GsHeaderProps {
    *  first launch via App-level state. */
   onSetup: () => void;
   version: string;
-  /** Live Outerplane resource version pulled from outerpedia-v2's
-   *  `game-version.json`. Null while loading / on fetch failure (we just
+  /** Live Outerplane resource version pulled from outerpedia's
+   *  `data/generated/game-version.json`. Null while loading / on fetch failure (we just
    *  omit it from the subtitle rather than show a placeholder). */
   gameVersion: string | null;
   /** Per-tab counts rendered as a chip next to each label — replaces the

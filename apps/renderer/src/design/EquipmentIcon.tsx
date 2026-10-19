@@ -59,8 +59,8 @@ export function SlotIcon({
 }
 
 /**
- * EquipmentIcon — composite item tile mirroring outerpedia-v2's
- * `EquipmentIcon.tsx`. Layered top-to-bottom:
+ * EquipmentIcon — composite item tile mirroring outerpedia's
+ * `src/components/equipment/EquipmentIcon.tsx`. Layered top-to-bottom:
  *   1. rarity slot background (TI_Slot_<Normal|Magic|Rare|Unique|Singularity>)
  *   2. item art (TI_Equipment_*), centered with small padding
  *   3. effect icon — top-right (only unique pieces with a curated UO)
@@ -180,7 +180,7 @@ export interface EquipmentIconProps {
 
 /** Memo'd — `piece` must be a stable reference for the shallow compare to
  *  actually skip renders. Callers should hand `UiPiece.iconPiece` (cached
- *  once when the UiPiece is built) rather than `toIconPiece(p)` inline. */
+ *  once when the UiPiece is built) rather than an IconPiece built inline. */
 export const EquipmentIcon = memo(EquipmentIconImpl);
 function EquipmentIconImpl({ piece, size = 50, detail = "full", className }: EquipmentIconProps) {
   const k = size / 50;
@@ -434,7 +434,7 @@ const ELEMENT_FILE: Record<string, string> = {
 /** Below this frame size overlays are suppressed — they'd be unreadable. */
 const PORTRAIT_OVERLAY_MIN = 40;
 
-// Transcend star colors (ports outerpedia-v2's src/lib/stars.ts).
+// Transcend star colors.
 // g = empty (gray/white), y = yellow, o = orange (+1 above base 4), r = red
 // (+1 above 5), p = violet (+2 above 5 → max trans for 3★).
 type StarColor = "g" | "y" | "o" | "r" | "p";
@@ -446,7 +446,7 @@ const STAR_ICONS: Record<StarColor, string> = {
   p: "/img/ui/star/CM_icon_star_v.webp",
 };
 
-/** Captured `TransStar` (numeric) → outerpedia-v2 LevelId. The mapping depends
+/** Captured `TransStar` (numeric) → transcend level key. The mapping depends
  *  on BasicStar because 3★ chars have extra "split" stars (4_1/4_2, 5_1/5_2/5_3)
  *  while 1★/2★ chars walk a simpler 1→6 ladder. */
 function transcendLevelKey(basicStar: number, transStar: number): string {
@@ -459,7 +459,7 @@ function transcendLevelKey(basicStar: number, transStar: number): string {
     } as Record<number, string>)[transStar] ?? "3";
   }
   // 1★ / 2★ path: 1→2→3→4→6→9 maps to 1 / 2 / 3 / 4 / 5 / 6 (the "6" only
-  // unlocks at TransStar 9 — same convention as outerpedia-v2's slider).
+  // unlocks at TransStar 9).
   return ({
     1: "1", 2: "2", 3: "3", 4: "4",
     5: "5", 6: "5", 7: "5", 8: "5",
@@ -467,8 +467,7 @@ function transcendLevelKey(basicStar: number, transStar: number): string {
   } as Record<number, string>)[transStar] ?? String(Math.min(transStar, 6));
 }
 
-/** Full 6-slot star row for a transcend level key. Mirrors `starRowForLevel`
- *  in outerpedia-v2/src/lib/stars.ts so the visual matches the site. */
+/** Full 6-slot star row for a transcend level key. */
 function starRowForLevel(lv: string): StarColor[] {
   switch (lv) {
     case "1":             return ["y", "g", "g", "g", "g", "g"];
@@ -484,7 +483,8 @@ function starRowForLevel(lv: string): StarColor[] {
   }
 }
 
-/** Character portrait with the same overlays as outerpedia-v2: element icon
+/** Character portrait with the same overlays as outerpedia's
+ *  `src/components/character/CharacterPortrait.tsx`: element icon
  *  top-right, class icon middle-right (with optional level chip just below
  *  it), and an overlapping transcend-colored star row at the bottom matching
  *  the in-game character sheet. Percentages reference the UICharacterThumbnail

@@ -8,6 +8,66 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧹 Nettoyage — code mort, commentaires vers outerpedia-v2, `trust-buffs.json` plus chargé, `InvenType` retiré (2026-10-19)
+- ✅ **Pourquoi.** Items « Code mort » et « Commentaires morts vers outerpedia-v2 » de l'audit, « `trust-buffs.json`
+  chargé, jamais appliqué » et sa phrase dans « Règles du jeu recopiées à la main », puce `InvenType` de « Desktop »
+  (`docs/todo.md`). Chaque symbole n'avait plus que sa définition ; aucun changement de comportement ni visuel.
+- ✅ **Code mort retiré.** `addWorklistEntry`/`removeWorklistEntry`/`toggleWorklistChange`
+  (`lib/storage/worklist.ts`, réimplémentés inline dans `App.tsx` et `WorklistScreen.tsx`) ; la valeur `"capture"` de
+  `DebugFlag` (`lib/log.ts`, plus aucun `debug("capture", …)` depuis le retrait de l'émulateur) ; `equipPiece` et
+  `unequipPiece` (`equip.ts`, l'import de `unequipItem` et sa mention dans l'en-tête suivent ; `equipPieces` et
+  `equipAssignments` restent) ; `toIconPiece` (`design/adapter.ts`, les commentaires de `adapter.ts` et
+  `EquipmentIcon.tsx` parlent d'un IconPiece construit inline) ; `statColor` (`design/tokens.ts`) ;
+  `loadHeroPriority`/`persistHeroPriority` (`lib/storage/heroPriority.ts`, App passe par
+  `usePersistedState(HERO_PRIORITY_KEY)`) ; l'option `allowZeroPriority` de `scoreGemPool` (`lib/solver/gems.ts`,
+  `useRawFallback` et le `allowZeroPriority: false` explicite de `engine.ts` avec : SOLVE CP passe déjà les poids
+  `cpStatWeights` en priorité).
+- ✅ **`GearCard` (`screens/BuilderScreen.tsx`).** Les props « reserved for pimp » (`recommendedGems`, `reforged`,
+  `reforgeMode`, `equippedSelf`, `equippedOther`, `hasEquipInfo`, `changed`, `replacesName`) sortent du type et de
+  l'appel ; en cascade dans `BottomGearBand`, les locaux qui ne servaient qu'à elles (`equippedSelf`, `equippedOther`,
+  `changed`, `replacesName`), les champs `reforged`/`currentPiece`/`changed` de `pieceBySlot` et les props `selfUid` et
+  `currentLoadout` de la bande (le `currentLoadout` du Builder reste, `addToWorklist` le lit ; son commentaire ne renvoie plus à « l'accent de la bande »). `recommendedGems` reste un
+  local : il habille toujours la pièce du talisman et de l'EE (`pieceForCard`). Le docstring « STEP 1 … pimp passes »
+  sort. Conséquence : le « slot changé » de `pieceBySlot` n'existait que pour ces props, l'item « Duplications » de
+  `docs/todo.md` passe de 3 à 2 définitions (`equipPlan`, `addToWorklist`).
+- ✅ **Tests `allowZeroPriority`** (`apps/renderer/test/solver.test.ts`). « priority empty + allowZeroPriority=true → raw
+  value/norm » supprimé (ne testait que l'option) ; « allowZeroPriority ignored when priority is non-empty » réécrit sans
+  l'option (« a stat the non-empty priority leaves out scores 0 ») ; « end-to-end: SOLVE CP without priority yields a
+  non-null delta » réécrit sur le chemin réel, une priorité en forme de poids CP (`{ atk: 1, dmgUp: 1 }`) ; les poids
+  eux-mêmes sont couverts par `cpPrune.test.ts` (`cpStatWeights`). Un test de moins au total.
+- ✅ **Commentaires outerpedia-v2.** Référence remplacée par la source actuelle du checkout `../outerpedia` quand elle
+  existe : `design/EquipmentIcon.tsx` (tuile → `src/components/equipment/EquipmentIcon.tsx`, portrait →
+  `src/components/character/CharacterPortrait.tsx`), `design/GameText.tsx` (`src/components/ui/GameText.tsx`),
+  `design/Shell.tsx` (`data/generated/game-version.json`, l'URL de `game-version.ts`), `screens/BuilderScreen.tsx`
+  (abréviations de `src/lib/stats.ts`), `packages/core/src/gamedata.ts` (`armorSetIcon` et `p2_desc` : datagen depuis sa
+  vue des sets d'équipement ; `EnhanceData` : `datagen/generators/enhance.ts`). Provenance retirée, explication gardée,
+  quand la source n'a plus d'équivalent direct : les étoiles de transcendance d'`EquipmentIcon.tsx` (outerpedia lit
+  désormais `CharacterTranscendentTemplet` via `src/lib/transcendence.ts`, sans la table `stars.ts` recopiée ici) et le
+  sprite `CT_Slot_Lock` de `screens/InventoryScreen.tsx` (servi par `apps/renderer/public`). `core/parse.ts`, cité par
+  l'item, ne renvoie plus qu'à `src/lib/damage/item.ts` d'outerpedia, qui existe. Après : `git grep -n "outerpedia-v2"`
+  hors docs ne trouve que `game-version.ts:3` et `test/gameVersion.test.ts:11` (dépôt archivé comme repli réel,
+  gardés) ; restent dans `docs/design-prompt.md` (le brief d'origine, historique) et la note de suppression de
+  `docs/reference.md`/`wiki/Engine-Reference.md`.
+- ✅ **`trust-buffs.json` plus chargé.** `apps/renderer/src/data.ts` le retire du `Promise.all`, du test de nullité et de
+  l'objet rendu ; `GameData.trustBuffs` devient optionnel avec une docstring (synchronisé avec le contrat, jamais chargé :
+  buffs de combat) ; les fixtures de test gardent le champ. La synchronisation n'est pas touchée (`solver-files.json` le
+  liste toujours, la liste du contrat appartient au lot CHECKOUT). `docs/reference.md` et `wiki/Engine-Reference.md`
+  (tableau des tables dérivées) le disent. S'il sert un jour : la chaîne d'affinité par perso (une seule stat par héros),
+  qu'outerpedia corrige côté site.
+- ✅ **`InvenType`** sort de `RawUserItem` (`packages/core/src/raw.ts`, absent de `WSItemData` côté client) et des
+  fixtures (`packages/core/test/parse.test.ts`, `equip.test.ts`, `unique-passive.test.ts`,
+  `apps/renderer/test/eePassive.test.ts`).
+- ✅ **Docs suivies.** `docs/reference.md`/`wiki/Engine-Reference.md` : le client d'équipement cite `equipPieces`
+  (« Equip build », Apply locally) et `equipAssignments` (Apply all) au lieu de `equipPiece`/`unequipPiece` et d'un
+  déclencheur « à câbler » ; le repli des gemmes en SOLVE CP ne parle plus de `allowZeroPriority`.
+- ✅ **Hors périmètre, constaté.** `has4pc` est vivant (`nextPlanCount` et `SetsPanel` dans `BuilderScreen.tsx`,
+  `lib/buildAdvice.ts`) ; `SourcePicker` n'existe plus depuis `0ef65f5` ; les deux sortent de la liste avec l'item.
+- ✅ **Vérifications.** `npm run typecheck` : dernière ligne `> tsc --noEmit` (sortie 0) ; `npm test` : core 154, desktop
+  131, renderer 471 verts (472 avant, le test de l'option seule en moins), dernière ligne `Duration 1.02s (transform
+  2.31s, setup 0ms, import 3.98s, tests 666ms, environment 4ms)` ; `npm run lint` : `✖ 24 problems (0 errors, 24
+  warnings)`, sortie 0, les mêmes 24 qu'avant le lot.
+- ⏳ **Sevih.** Rien à faire : pas de changement visible, la prochaine release embarque le ménage.
+
 ### 🧰 Outillage — la release vérifie avant de publier, ESLint posé, `vite` retiré de `packages/core` (2026-10-19)
 - ✅ **Pourquoi.** Items « `scripts/release.mjs` ne lance ni typecheck ni tests », « Aucun ESLint configuré », « `packages/core`
   déclare `vite` » de l'audit du 07/09 et puce « `release.mjs` ne restaure que `package.json` » de l'item « Desktop » de

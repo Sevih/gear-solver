@@ -52,22 +52,15 @@
 - [ ] ⚪ **Règles du jeu recopiées à la main** au lieu de venir du contrat : `REFORGE_PER_SUB_CAP`
       (`OptionMaxValue`, que `parse.ts` n'applique pas non plus : sans effet tant que max = 6 × valeur), budgets
       6/9 (`AddSmeltingCount`), emplacements de gemme (`GemSlot`), `EVO_UNLOCK_LEVEL`. `ee-passives` ne garde que
-      TargetType ME et le niveau de buff le plus haut (0 écart, fragile). `trust-buffs.json` synchronisé et chargé
-      mais jamais lu (à raison : buffs de combat) → cesser de le charger.
+      TargetType ME et le niveau de buff le plus haut (0 écart, fragile).
 
 ### 🟡 Revue 2026-10 — divers
-- [ ] ⚪ **`trust-buffs.json` chargé, jamais appliqué** (`apps/renderer/src/data.ts:79`) — s'il sert un jour, il
-      faudra la chaîne d'affinité par perso (une seule stat par héros, pas les trois) : outerpedia la corrige côté
-      site (lot C24) sans toucher au contrat.
 - [ ] 🟡 **Plugin Steam en repli** : `GiftList` entre en collision avec `PVPStart` → écrit les geas de l'adversaire ·
       écritures du plugin dans un ordre non FIFO · ré-import déclenché par le seul mtime de `user_item`.
 - [ ] 🟡 **data-sync** — `derivedReady` ne teste que `characters.json` · échecs de `writeAtomic` avalés · octets
       non JSON écrits tels quels · pas de verrou contre deux syncs simultanées.
 - [ ] ⚪ **Desktop** — écritures du serveur non atomiques · `img-cache` ne revalide jamais une image en cache ·
-      une route `/api/*` inconnue répond 200 avec `index.html` · champ `InvenType` déclaré dans `raw.ts` mais absent
-      des captures.
-- [ ] ⚪ **Commentaires morts vers outerpedia-v2** — `EquipmentIcon.tsx`, `GameText.tsx`, `Shell.tsx`,
-      `InventoryScreen.tsx`, `BuilderScreen.tsx`, `core/gamedata.ts`, `core/parse.ts`.
+      une route `/api/*` inconnue répond 200 avec `index.html`.
 
 ### 🟡 Audit projet (2026-09-07) — reste
 - [ ] 🟡 **`emptyReason` accuse l'EE** — `poolSizes.exclusive.hit = ee ? 1 : 0` : un héros sans EE affiche
@@ -78,18 +71,13 @@
       nouveaux plans (ou avertir).
 - [ ] ⚪ **Stat-locks (debug) : `renameLegacyStatKeys` non appliqué** au fichier lu via `/api/stat-locks` — un
       fichier ancien (`crc`, `chd`, …) ne matchera jamais.
-- [ ] ⚪ **Code mort** — `SourcePicker` n'offre jamais le retour à « auto » (`onChange(null)`) ·
-      `addWorklistEntry`/`removeWorklistEntry`/`toggleWorklistChange` (worklist.ts) réimplémentés inline ·
-      `DebugFlag "capture"` · `GearCard` reçoit des props « reserved for pimp » jamais rendues · `equipPiece`/
-      `unequipPiece` (renderer `equip.ts`) · `toIconPiece` · `statColor` · `loadHeroPriority`/`persistHeroPriority` ·
-      option `allowZeroPriority` · `has4pc`.
 - [ ] ⚪ **Reset (Builds)** remet aussi le tri `byRank` à CP alors que la condition d'affichage ne le regarde pas ·
       clamp worker count à `hardwareConcurrency` côté Settings vs `WORKER_COUNT_CEILING` côté orchestrateur.
 - [ ] 🟡 **Dépendance inversée `lib → screens`** — `filterPresets.ts` et `heroFilters.ts` importent `SolverFilters`
       depuis `screens/BuilderScreen`. Déplacer le type + le reducer dans `lib/solver/builderFilters.ts`.
 - [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer) · calcul de
       qualité en 3 exemplaires (`computeQuality` de GearDetail et ResultGearDetail, `quality.ts`) · « slot changé »
-      défini 3× dans le Builder (`equipPlan`, `addToWorklist`, `pieceBySlot`) → une `diffBuildVsLoadout` partagée,
+      défini 2× dans le Builder (`equipPlan`, `addToWorklist`) → une `diffBuildVsLoadout` partagée,
       même invariant que `upg` moteur.
 - [ ] 🟡 **Effets de bord dans des updaters `setState`** (persist localStorage dans App/Builds — exécutés 2× en
       StrictMode) · `setState` après `await` sans garde d'unmount (BuildsScreen stat-locks, WorklistScreen,

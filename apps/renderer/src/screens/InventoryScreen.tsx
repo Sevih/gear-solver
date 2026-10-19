@@ -671,8 +671,8 @@ interface GearItemProps {
  *    - top-left:  "E" badge when equipped (white-on-black, replaces the
  *                 character portrait — too noisy at this density).
  *    - bottom-left, above the EquipmentIcon's own T<n> tier badge: the
- *                 in-game CT_Slot_Lock sprite, sourced from outerpedia-v2's
- *                 datamine and served at /img/ui/inven/CT_Slot_Lock.webp.
+ *                 in-game CT_Slot_Lock sprite, served at
+ *                 /img/ui/inven/CT_Slot_Lock.webp.
  *  Selection is conveyed by a soft cyan halo (ring + outer glow) rather
  *  than a hard border so the focus reads as ambient light, not a frame. */
 const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect, excluded, onToggleExclude }: GearItemProps) {

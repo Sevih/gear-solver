@@ -4,8 +4,8 @@
  *   - `<color=#hex>…</color>`   → `<span style="color: #hex">…</span>`
  *   - literal `\n` / `\r\n` / `\n`  → `<br />`
  *
- * Ported (slimmed) from outerpedia-v2's EquipmentDetailInteractive `GameText`
- * helper. Source strings come from TextSkill / TextItem etc. via the data
+ * Slimmed counterpart of outerpedia's `src/components/ui/GameText.tsx`.
+ * Source strings come from TextSkill / TextItem etc. via the data
  * pipeline — both the original game wraps (e.g. Singularity grade colors,
  * dynamic value highlights) and the build-time substitutions
  * (`<color=#28d9ed>…</color>` around resolved `[Value]/[Rate]/[Turn]`

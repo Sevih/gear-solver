@@ -69,7 +69,7 @@ const sample: RawUserItem = {
     {
       // T4, Exp=0 (= +0), not ascended. Sub values use (Level + 1) × per-tick.
       ItemUID: "1", CharUID: "0", ItemID: 754, Exp: 0, BreakLimitLevel: 4, Quantity: 1,
-      SmeltingCount: 2, IsLock: 1, InvenType: 0, SelectSubOptionNum: 99,
+      SmeltingCount: 2, IsLock: 1, SelectSubOptionNum: 99,
       SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0,
       OptionList: [24],
       SubOptionList: [
@@ -83,7 +83,7 @@ const sample: RawUserItem = {
       // mult = 1 + 0.4*10 + 0.15 + 0.6 (steps) = 5.75 ; × 1.20 (T4) = 6.90
       // Subs pinned against the user's actual capture + in-game readout.
       ItemUID: "1asc", CharUID: "0", ItemID: 754, Exp: 25000, BreakLimitLevel: 4, Quantity: 1,
-      SmeltingCount: 9, IsLock: 1, InvenType: 0, SelectSubOptionNum: 99,
+      SmeltingCount: 9, IsLock: 1, SelectSubOptionNum: 99,
       SingularityOptionID: 300121, SingularityStep: 1, SingularityLevel: 5,
       OptionList: [24],
       SubOptionList: [
@@ -95,7 +95,7 @@ const sample: RawUserItem = {
       // Overdrive accessory unique +0 T0 — ST_BUFF_CHANCE OAT_ADD v=21
       // should display flat (EFF +21), NOT 2.1%. EFF/RES are context-dependent.
       ItemUID: "od", CharUID: "0", ItemID: 1764, Exp: 0, BreakLimitLevel: 0, Quantity: 1,
-      SmeltingCount: 0, IsLock: 0, InvenType: 0, SelectSubOptionNum: 99,
+      SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 99,
       SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0,
       OptionList: [1093, 0], SubOptionList: [],
     },
@@ -103,14 +103,14 @@ const sample: RawUserItem = {
       // Rogue's Charm talisman unique +10 — main is IOT_BUFF (buffId), resolved per level.
       // At enhanceLevel=10, Lv11 in BuffTemplet → ST_DMG_BOOST OAT_ADD v=120 → 12% DMG_UP.
       ItemUID: "tal", CharUID: "0", ItemID: 10203, Exp: 11910000, BreakLimitLevel: 0, Quantity: 1,
-      SmeltingCount: 0, IsLock: 0, InvenType: 0, SelectSubOptionNum: 99,
+      SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 99,
       SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0,
       OptionList: [10207, 0], SubOptionList: [],
     },
     {
       // Non-gear (no equipment lookup): dropped.
       ItemUID: "2", CharUID: "0", ItemID: 1, Exp: 0, BreakLimitLevel: 0, Quantity: 50,
-      SmeltingCount: 0, IsLock: 0, InvenType: 0, SelectSubOptionNum: 0,
+      SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 0,
       SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0,
       OptionList: [0, 0], SubOptionList: [],
     },
@@ -242,7 +242,7 @@ describe("EE level-gated passive — Fatal's Eclipse (2000078), the one IOT_STAT
   const eclipse = (level: number): RawUserItem => ({
     ItemList: [{
       ItemUID: `ee${level}`, CharUID: "0", ItemID: 2000078, Exp: curve[level]!, BreakLimitLevel: 0, Quantity: 1,
-      SmeltingCount: 0, IsLock: 0, InvenType: 0, SelectSubOptionNum: 0,
+      SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 0,
       SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0, OptionList: [], SubOptionList: [],
     }],
   });

@@ -18,7 +18,7 @@ const game = {
 function mkItem(p: Partial<RawItem> & Pick<RawItem, "ItemUID" | "ItemID">): RawItem {
   return {
     CharUID: "0", Exp: 0, BreakLimitLevel: 0, Quantity: 1, SmeltingCount: 0,
-    IsLock: 0, InvenType: 0, SelectSubOptionNum: 0, SingularityOptionID: 0,
+    IsLock: 0, SelectSubOptionNum: 0, SingularityOptionID: 0,
     SingularityStep: 0, SingularityLevel: 0, OptionList: [], SubOptionList: [],
     ...p,
   };

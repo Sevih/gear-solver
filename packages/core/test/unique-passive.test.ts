@@ -22,7 +22,7 @@ const game = {
 
 const item = (ItemID: number, BreakLimitLevel: number, OptionList: number[] = []): RawItem => ({
   ItemUID: `u${ItemID}`, CharUID: "0", ItemID, Exp: 0, BreakLimitLevel, Quantity: 1,
-  SmeltingCount: 0, IsLock: 0, InvenType: 0, SelectSubOptionNum: 0,
+  SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 0,
   SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0, OptionList, SubOptionList: [],
 });
 const unique = (id: number, bt: number) =>

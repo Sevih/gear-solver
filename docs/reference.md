@@ -55,7 +55,7 @@ cibles dérivent de la même table — `ItemSpecialOptionTemplet` notamment) :
 | `CharacterMaxLevelTemplet.json`      | `char-level-max.json`     | `${star}|${step}` → {maxLevel, statModifierAfter100}   |
 | `ArchiveBonusTemplet.json`           | `archive-bonus.json`      | `CompleteCount` → codex level (1..11)                  |
 | `CharacterArchiveStatTemplet.json` (via `computeCharacterIngredients`) | `codex-curve.json` | codex level idx 0..11 → {atkPct, defPct, hpPct} |
-| `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data |
+| `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data ; `trust-buffs.json` synchronisé avec le contrat mais jamais chargé par le renderer (buffs de combat, absents de la fiche) |
 | `datagen/lib/stat-keys.ts` (outerpedia ; règle `CUtilUI.IsPercentStat` / `GetStatValue` du client) | `stat-keys.json` | `ST_*` → `OAT_*` → {key (vocabulaire du contrat : `atk`, `atkPct`, `chc`, `resRate`…), percent, abbr} ; lu par un test seulement (`packages/core/test/stat-keys.test.ts`), `GAME_STAT` reste la table d'exécution |
 
 Rafraîchir après un patch jeu : `npm run data:sync` (une fois le
@@ -169,8 +169,8 @@ d'une pièce est `RawItem.CharUID` (`"0"` = libre, même convention qu'au parse)
 Persistance : le **renderer** applique le transform (il a core + la game data chargée), puis POST
 le snapshot complet à `POST /api/captured/user-item` (writer bête : valide `{ ItemList[] }` +
 `writeFileSync` du `user_item.json` capturé, refus 409 si le plugin Steam est actif dans le jeu). Client :
-[apps/renderer/src/equip.ts](../apps/renderer/src/equip.ts) (`equipPiece`/`unequipPiece`). Le
-déclencheur UI (Builder/Builds) reste à câbler.
+[apps/renderer/src/equip.ts](../apps/renderer/src/equip.ts) (`equipPieces` pour l'« Equip build » du
+Builder et l'Apply locally de la Worklist, `equipAssignments` pour son Apply all).
 
 ---
 
@@ -504,14 +504,12 @@ appels `resolveStat` dans le hot loop.
   Préserve la stat in-game-équivalente quand le joueur n'a pas exprimé d'intention.
 - **SOLVE CP** + priority vide → l'engine passe à `scoreGemPool` le vecteur
   de poids CP `cpStatWeights(...)` (ΔCP pour un bump d'un ROLL_NORM de chaque
-  stat, évalué sur le build courant) en guise de priorité — `allowZeroPriority`
-  reste `false` (l'option existe encore dans `gems.ts` mais rien ne l'active
-  sur le chemin de solve). Le greedy pick alors les gems qui rapportent le
-  plus de CP. Nécessaire parce que "max CP" sous-entend "use the best gems
-  available" — préserver les gems actuels désactiverait silencieusement
+  stat, évalué sur le build courant) en guise de priorité. Le greedy pick
+  alors les gems qui rapportent le plus de CP. Nécessaire parce que "max CP"
+  sous-entend "use the best gems available" — préserver les gems actuels désactiverait silencieusement
   l'optimisation gem pour le cas d'usage typique du mode CP.
 - **N'importe quel mode** + priority non-vide → `priority × value / norm`
-  pour les deux modes (la priorité utilisateur domine, le flag CP est ignoré).
+  pour les deux modes (la priorité utilisateur domine, les poids CP ne servent pas).
 
 ### 2.8 Prune par budget de combos (`engine.ts`, dans `precomputeContext`)
 

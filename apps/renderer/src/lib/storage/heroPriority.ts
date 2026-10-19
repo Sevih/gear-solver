@@ -23,30 +23,6 @@ export const HERO_PRIORITY_SEEN_KEY = "gs.priority.seen";
 /** charUid → unique integer rank. Absent = unranked (lowest priority). */
 export type HeroPriority = Record<string, number>;
 
-export function loadHeroPriority(): HeroPriority {
-  try {
-    const raw = localStorage.getItem(HERO_PRIORITY_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return {};
-    const out: HeroPriority = {};
-    for (const [uid, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof v === "number" && Number.isFinite(v)) out[uid] = v;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-export function persistHeroPriority(map: HeroPriority): void {
-  try {
-    localStorage.setItem(HERO_PRIORITY_KEY, JSON.stringify(map));
-  } catch {
-    // Quota / locked-down context — skip; next save retries.
-  }
-}
-
 export function loadSeenHeroes(): Set<string> {
   try {
     const parsed = JSON.parse(localStorage.getItem(HERO_PRIORITY_SEEN_KEY) ?? "[]") as unknown;

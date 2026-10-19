@@ -150,8 +150,8 @@ const RESULT_GEAR_SLOTS: SlotId[] = [
 /** Compact main-stat-axis labels rendered in the Stats / Stat filters /
  *  Substat priority panels (and across as table columns). Ordered to match
  *  the Builds tab's StatBlock column reading so muscle memory transfers. */
-// Labels are the in-game stat abbreviations (source of truth:
-// outerpedia-v2/data/stats.json) — used as the column-header tooltips and any
+// Labels are the in-game stat abbreviations (as in outerpedia's
+// `src/lib/stats.ts`) — used as the column-header tooltips and any
 // text fallback. The table headers themselves render the stat icon, not the
 // text, so a long label like "CDMG RED%" never crowds the column.
 const SOLVER_STATS: ReadonlyArray<{ key: string; iconKey: string; label: string; unit: string }> = [
@@ -1226,8 +1226,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     : null;
 
   // Queue the selected build's per-slot diff (changed slots only) onto the
-  // cross-hero worklist. Same "changed" definition as the gear-band accent /
-  // `upg` (piece not currently on the hero). No-op when nothing moves.
+  // cross-hero worklist. Same "changed" definition as `upg` (piece not
+  // currently on the hero). No-op when nothing moves.
   const addToWorklist = () => {
     if (!selectedBuild || !selectedUid || !selected || !onAddToWorklist) return;
     const nameOf = (x: GearPiece) => game?.equipment[String(x.itemId)]?.name ?? x.name ?? `Item ${x.itemId}`;
@@ -1409,7 +1409,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} selfUid={selectedUid} currentLoadout={currentLoadout} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} />
+              <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} />
             </div>
           </div>
         </div>
@@ -4522,7 +4522,7 @@ function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
  * Bottom gear band — one card per main slot for the selected result
  * ───────────────────────────────────────────────────────────────────────── */
 function BottomGearBand({
-  build, pieceByUid, game, reforge, charsByUid, selfUid, currentLoadout, excludedPieceUids, onToggleExclude,
+  build, pieceByUid, game, reforge, charsByUid, excludedPieceUids, onToggleExclude,
 }: {
   build: SolveBuild | null;
   pieceByUid: Map<string, GearPiece>;
@@ -4534,12 +4534,6 @@ function BottomGearBand({
   reforge: ReforgeContext;
   /** Roster indexed by uid — resolves each piece's `equippedBy` to a character. */
   charsByUid: Map<string, Character>;
-  /** The hero this build was solved for — pieces equipped on it are "current",
-   *  pieces on anyone else would be stolen when this build is applied. */
-  selfUid: string | null;
-  /** Hero's current piece per engine slot — the "before" of the per-slot diff:
-   *  a card whose proposed piece differs from this shows what it replaces. */
-  currentLoadout: Map<string, GearPiece>;
   /** Global exclusion set + toggle — drives the inventory-style card's exclude
    *  footer so a trash roll can be excluded right from the results. */
   excludedPieceUids?: Set<string>;
@@ -4550,9 +4544,9 @@ function BottomGearBand({
   // when a reforge mode is active, swap in the projected clone.
   // `projectPieceForReforge` self-filters (returns the original for Talisman/EE,
   // "disable" mode, or when there's nothing left to project), so identity
-  // inequality is a reliable "was projected" signal for the badge.
+  // inequality is a reliable "was projected" signal.
   const pieceBySlot = useMemo(() => {
-    const map = new Map<string, { piece: GearPiece; reforged: boolean; equippedBy: string | null; addedTicks: number[]; currentPiece: GearPiece | null; changed: boolean }>();
+    const map = new Map<string, { piece: GearPiece; equippedBy: string | null; addedTicks: number[] }>();
     if (!build) return map;
     for (const uid of build.pieceUids) {
       const original = pieceByUid.get(uid);
@@ -4566,15 +4560,10 @@ function BottomGearBand({
       const addedTicks = reforged && piece.subs.length === original.subs.length
         ? piece.subs.map((s, i) => (s.ticks ?? 0) - (original.subs[i]?.ticks ?? 0))
         : [];
-      // Per-slot diff: the proposed piece (by its captured uid, not the reforge
-      // clone) vs whatever the hero wears in this slot now. `changed` mirrors the
-      // engine's `upg` definition (piece uid not currently on the hero).
-      const currentPiece = currentLoadout.get(original.slot) ?? null;
-      const changed = currentPiece?.uid !== uid;
-      map.set(original.slot, { piece, reforged, equippedBy: original.equippedBy, addedTicks, currentPiece, changed });
+      map.set(original.slot, { piece, equippedBy: original.equippedBy, addedTicks });
     }
     return map;
-  }, [build, pieceByUid, game, reforge, currentLoadout]);
+  }, [build, pieceByUid, game, reforge]);
 
   return (
     <div className="flex shrink-0 flex-wrap gap-2">
@@ -4593,16 +4582,7 @@ function BottomGearBand({
           : slot === "exclusive"
             ? build?.gemAllocation?.ee
             : undefined;
-        // Resolve where the piece currently lives: on this hero (current),
-        // on someone else (would be stolen), or unequipped (free).
         const equippedBy = entry?.equippedBy ?? null;
-        const equippedSelf = equippedBy != null && equippedBy === selfUid;
-        const equippedOther = equippedBy != null && equippedBy !== selfUid ? (charsByUid.get(equippedBy) ?? null) : null;
-        // "Before" of the diff — the piece this card replaces, when the slot
-        // changes. Null when the slot is unchanged or was empty (→ "new").
-        const changed = entry?.changed ?? false;
-        const cp = entry?.currentPiece ?? null;
-        const replacesName = changed && cp ? (game?.equipment[String(cp.itemId)]?.name ?? cp.name ?? `Item ${cp.itemId}`) : null;
         // The character currently wearing the piece (any owner) — mirrors the
         // Inventory card's header portrait. Excluded = this piece is in the
         // global "never use" set, for the card's exclude-footer state.
@@ -4615,7 +4595,7 @@ function BottomGearBand({
         const pieceForCard = piece && recommendedGems && recommendedGems.some((id) => id > 0)
           ? { ...piece, gemSlots: recommendedGems }
           : piece;
-        return <GearCard key={slot} slot={slot} piece={pieceForCard} game={game} equippedChar={equippedChar} excluded={excluded} onToggleExclude={onToggleExclude} recommendedGems={recommendedGems} reforged={entry?.reforged ?? false} reforgeMode={reforge.reforgeMode} equippedSelf={equippedSelf} equippedOther={equippedOther} hasEquipInfo={!!entry} addedTicks={entry?.addedTicks} changed={changed} replacesName={replacesName} />;
+        return <GearCard key={slot} slot={slot} piece={pieceForCard} game={game} equippedChar={equippedChar} excluded={excluded} onToggleExclude={onToggleExclude} addedTicks={entry?.addedTicks} />;
       })}
     </div>
   );
@@ -4625,12 +4605,7 @@ function BottomGearBand({
  *  panel (`ResultItemDetail`: same container, scroll wrapper, equipped-char
  *  portrait, exclude footer, empty state) so the results look pixel-identical to
  *  the Inventory tab's left card. The piece (already reforge-projected upstream
- *  in `BottomGearBand`) goes through the same `toUiPiece` adapter.
- *
- *  STEP 1: intentionally identical to the inventory card. The remaining
- *  Builder-specific chrome (per-slot diff, reforge-projection badges, recommended
- *  gems) is still threaded in via props — kept so the band wiring is unchanged —
- *  but not yet rendered; it gets layered back on in the follow-up "pimp" passes. */
+ *  in `BottomGearBand`) goes through the same `toUiPiece` adapter. */
 function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedTicks }: {
   slot: SlotId;
   piece: GearPiece | null;
@@ -4641,16 +4616,8 @@ function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedT
   excluded?: boolean;
   /** Toggle the piece's exclusion (App-owned). Gates the exclude footer. */
   onToggleExclude?: (uid: string) => void;
-  // ── Remaining Builder-specific props, passed by the band, reserved for pimp ──
-  recommendedGems?: number[];
-  reforged?: boolean;
-  reforgeMode?: ReforgeMode;
-  equippedSelf?: boolean;
-  equippedOther?: Character | null;
-  hasEquipInfo?: boolean;
+  /** Per-sub reforge procs the projection added — tick markers on the subs. */
   addedTicks?: number[];
-  changed?: boolean;
-  replacesName?: string | null;
 }) {
   // Adapt the (reforge-projected) engine piece through the same adapter the
   // Inventory tab uses, then render the duplicated inspect panel verbatim.

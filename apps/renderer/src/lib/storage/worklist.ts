@@ -87,22 +87,6 @@ export function persistWorklist(list: WorklistEntry[]): void {
   }
 }
 
-/** Append an entry (newest first). */
-export function addWorklistEntry(list: WorklistEntry[], entry: WorklistEntry): WorklistEntry[] {
-  return [entry, ...list];
-}
-
-export function removeWorklistEntry(list: WorklistEntry[], id: string): WorklistEntry[] {
-  return list.filter((e) => e.id !== id);
-}
-
-/** Toggle one change's manual `done` flag (immutably). */
-export function toggleWorklistChange(list: WorklistEntry[], id: string, slot: string, done: boolean): WorklistEntry[] {
-  return list.map((e) =>
-    e.id !== id ? e : { ...e, changes: e.changes.map((c) => (c.slot === slot ? { ...c, done } : c)) },
-  );
-}
-
 /** Map heroUid → set of currently-equipped piece uids. The "is this change
  *  already applied?" oracle the screen and badge both derive from. */
 export function equippedByHero(inventory: Inventory | null): Map<string, Set<string>> {

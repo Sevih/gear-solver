@@ -60,7 +60,7 @@ particular):
 | `CharacterMaxLevelTemplet.json`      | `char-level-max.json`     | `${star}|${step}` → {maxLevel, statModifierAfter100}   |
 | `ArchiveBonusTemplet.json`           | `archive-bonus.json`      | `CompleteCount` → codex level (1..11)                  |
 | `CharacterArchiveStatTemplet.json` (via `computeCharacterIngredients`) | `codex-curve.json` | codex level idx 0..11 → {atkPct, defPct, hpPct} |
-| `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data |
+| `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data; `trust-buffs.json` is synced with the contract but never loaded by the renderer (combat buffs, absent from the stat sheet) |
 | `datagen/lib/stat-keys.ts` (outerpedia; client rule `CUtilUI.IsPercentStat` / `GetStatValue`) | `stat-keys.json` | `ST_*` → `OAT_*` → {key (contract vocabulary: `atk`, `atkPct`, `chc`, `resRate`…), percent, abbr}; read by a test only (`packages/core/test/stat-keys.test.ts`), `GAME_STAT` stays the runtime table |
 
 Refresh after a game patch: `npm run data:sync` (`data/sync.mjs`, once
@@ -179,7 +179,8 @@ Persistence: the **renderer** runs the transform (it already holds core + the lo
 for the slot lookup), then POSTs the full rewritten snapshot to `POST /api/captured/user-item`
 (a dumb writer: validates `{ ItemList[] }` + `writeFileSync`s the captured `user_item.json`, refuses
 with 409 while the Steam plugin is live in a running game). Client: `apps/renderer/src/equip.ts`
-(`equipPiece`/`unequipPiece`). A Builder/Builds trigger UI is the remaining step.
+(`equipPieces` for the Builder's "Equip build" and the Worklist's Apply locally, `equipAssignments`
+for its Apply all).
 
 ---
 
@@ -508,8 +509,7 @@ in the hot loop.
 - **SOLVE CP** + empty priority → the "priority" passed to `scoreGemPool` is the
   **CP-weight vector** `cpStatWeights(...)`: ΔCP from a ROLL_NORM-sized bump of
   each stat, evaluated at the hero's current build (a stat already at its CP cap,
-  e.g. CRC ~100%, weighs ~0). `scoreGemPool` itself is always called with
-  `allowZeroPriority: false`. The greedy then picks the gems that actually
+  e.g. CRC ~100%, weighs ~0). The greedy then picks the gems that actually
   maximize CP. Necessary because "max CP" implies "use the best gems available" —
   ranking by raw magnitude favored big-number dmg-reduce/flat gems that barely
   move CP, and preserving the current gems would silently disable gem

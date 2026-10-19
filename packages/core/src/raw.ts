@@ -31,7 +31,6 @@ export interface RawItem {
   Quantity: number;
   SmeltingCount: number;
   IsLock: number;
-  InvenType: number;
   SelectSubOptionNum: number;
   SingularityOptionID: number;
   SingularityStep: number;
