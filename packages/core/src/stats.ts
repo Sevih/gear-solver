@@ -13,6 +13,16 @@
  * EFF (ST_BUFF_CHANCE) and RES (ST_BUFF_RESIST) are context-dependent: flat on gear
  * (OAT_ADD on accessories/armor) and percent on talismans/EE (OAT_RATE). The percent
  * flag follows ApplyingType only — addPercent stays false for these two.
+ *
+ * Two tables:
+ *  - `GAME_STAT` (ST_* + OAT_* → engine StatType) is the runtime table; every
+ *    caller goes through `resolveOption`.
+ *  - `CONTRACT_STAT_TO_ENGINE` maps outerpedia's contract stat vocabulary
+ *    (`stat-keys.json`: `atk`, `atkPct`, `chc`, `resRate`, …) to the same
+ *    engine StatType. Nothing reads `stat-keys.json` at runtime:
+ *    test/stat-keys.test.ts resolves every contract pair through `GAME_STAT`
+ *    and checks it against this table and the contract's % nature, so a pair
+ *    outerpedia adds fails CI here instead of silently dropping out of the panel.
  */
 import type { StatType } from "./types.js";
 import type { OptionDef, OptionsTable, StatOption } from "./gamedata.js";
@@ -46,6 +56,37 @@ const GAME_STAT: Record<string, StatMeta> = {
   ST_VAMPIRIC:      { add: "lifesteal", rate: "lifesteal", addPercent: true  },
   ST_COUNTER_RATE:  { add: "counter",   rate: "counter",   addPercent: true  },
   ST_ENTER_AP:      { add: "enterAp",   rate: "enterAp",   addPercent: false },
+};
+
+/** Contract stat key (outerpedia `stat-keys.json` › `key`) → engine StatType,
+ *  or null for a key that is not an engine stat. Keyed by KEY, not by pair:
+ *  `dmgInc` / `dmgRed` carry both OAT_ADD and OAT_RATE in the contract.
+ *  `GAME_STAT` rows no contract pair carries yet are allowed (ST_HIT_AP,
+ *  ST_KILL_AP as of 2026-10-18). */
+export const CONTRACT_STAT_TO_ENGINE: Record<string, StatType | null> = {
+  atk: "atk",
+  atkPct: "atkPct",
+  def: "def",
+  defPct: "defPct",
+  hp: "hp",
+  hpPct: "hpPct",
+  spd: "spd",
+  spdPct: "spd", // the % channel of resolveOption (OAT_RATE → percent)
+  chc: "critRate",
+  chd: "critDmg",
+  pen: "pen",
+  dmgInc: "dmgUp",
+  dmgRed: "dmgReduce",
+  eff: "eff",
+  effRate: "eff",
+  res: "effRes",
+  resRate: "effRes",
+  cdmgRed: "critDmgReduce",
+  lifesteal: "lifesteal",
+  counter: "counter",
+  enterAp: "enterAp",
+  // Combat-only, not an engine stat: per-element accuracy on an EE main.
+  avoid: null,
 };
 
 export interface ResolvedStat {

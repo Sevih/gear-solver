@@ -27,7 +27,8 @@ import { REPO_ROOT, findOuterpediaCheckout } from "../scripts/outerpedia-checkou
 import { schemaRefusal } from "../scripts/solver-schema.mjs";
 // The one list of solver artifacts, shared with the app's runtime sync
 // (apps/desktop/src/data-sync.ts); outerpedia's datagen/generators/solver.ts
-// emits the same set.
+// emits the same set of 20 tables. `stat-keys.json` is copied like the others
+// but only packages/core/test/stat-keys.test.ts reads it.
 import SOLVER_FILES from "../apps/desktop/src/solver-files.json" with { type: "json" };
 
 const here = dirname(fileURLToPath(import.meta.url));

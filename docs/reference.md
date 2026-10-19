@@ -56,6 +56,7 @@ cibles dérivent de la même table — `ItemSpecialOptionTemplet` notamment) :
 | `ArchiveBonusTemplet.json`           | `archive-bonus.json`      | `CompleteCount` → codex level (1..11)                  |
 | `CharacterArchiveStatTemplet.json` (via `computeCharacterIngredients`) | `codex-curve.json` | codex level idx 0..11 → {atkPct, defPct, hpPct} |
 | `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data |
+| `datagen/lib/stat-keys.ts` (outerpedia ; règle `CUtilUI.IsPercentStat` / `GetStatValue` du client) | `stat-keys.json` | `ST_*` → `OAT_*` → {key (vocabulaire du contrat : `atk`, `atkPct`, `chc`, `resRate`…), percent, abbr} ; lu par un test seulement (`packages/core/test/stat-keys.test.ts`), `GAME_STAT` reste la table d'exécution |
 
 Rafraîchir après un patch jeu : `npm run data:sync` (une fois le
 `datagen:build` + `promote` d'outerpedia passés).
@@ -661,15 +662,15 @@ dans `buf`, `workersDone` incrémenté à tort, flush prématuré.
 ### 3.1 Tables in-game référencées
 
 Les tables brutes vivent dans le datamine d'outerpedia ; l'app ne voit que les
-19 artefacts dérivés. Rafraîchis **au lancement** par `data-sync.ts`
+20 artefacts dérivés. Rafraîchis **au lancement** par `data-sync.ts`
 (`apps/desktop/src`) en deux modes :
 - **checkout** (dev / machine mainteneur) — copie depuis un checkout local
   d'outerpedia (`data/generated/solver/`), gardé par le hash de version.json
   (à hash égal, seul un version.json différent est recopié), zéro réseau ;
-  les 19 fichiers sont lus avant toute écriture : un artefact absent ou
+  les 20 fichiers sont lus avant toute écriture : un artefact absent ou
   illisible refuse la synchro et garde le cache, comme `data/sync.mjs` (même
   liste, `apps/desktop/src/solver-files.json`) ;
-- **repo** (build packagé) — télécharge les 19 artefacts depuis le repo public
+- **repo** (build packagé) — télécharge les 20 artefacts depuis le repo public
   `Sevih/outerpedia` via le CDN jsDelivr, gaté sur le SHA du dernier commit
   (`api.github.com/.../commits/main`). Permet de suivre les patchs **sans
   publier de nouveau build**. Dégrade proprement hors-ligne (utilise le

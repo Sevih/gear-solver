@@ -17,7 +17,7 @@
  *  - REPO mode (packaged build, any machine): no checkout. Resolve the latest
  *    commit SHA of `Sevih/outerpedia`, and if it changed since last sync,
  *    download its version.json; only when the data hash differs too are the
- *    other 18 artifacts downloaded from the GitHub CDN into the writable cache
+ *    other 19 artifacts downloaded from the GitHub CDN into the writable cache
  *    (at an unchanged hash, only version.json is rewritten, when it differs).
  *    This is what lets the app track game patches WITHOUT shipping a new
  *    installer. Degrades cleanly offline (uses whatever derived is already
@@ -38,8 +38,12 @@ import solverFiles from "./solver-files.json" with { type: "json" };
 /** Repo-relative dir holding the solver artifacts. */
 const SOLVER_DIR = "data/generated/solver";
 
-/** The 19 derived tables the engine consumes — the exact set outerpedia's
- *  solver generator emits (and the committed `data/derived/` tree mirrors). */
+/** The 20 derived tables — the exact set outerpedia's solver generator emits
+ *  (and the committed `data/derived/` tree mirrors). All but one feed the
+ *  engine: `stat-keys.json` (`ST_*` / `OAT_*` → contract stat key, % nature,
+ *  abbreviation) is downloaded like the others but never loaded — only
+ *  `packages/core/test/stat-keys.test.ts` reads it, to hold `GAME_STAT`
+ *  (packages/core/src/stats.ts) against the contract. */
 export const SOLVER_FILES: readonly string[] = solverFiles;
 
 /** Locate a local outerpedia checkout carrying the solver artifacts, if any.

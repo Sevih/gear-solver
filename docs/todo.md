@@ -44,9 +44,11 @@
 ### 🔴 Contrat solver (avec outerpedia)
 > Ordre pour tout changement de forme : outerpedia ajoute sans retirer et pose `schema` ; une version de gear-solver
 > qui lit le nouveau champ est publiée ; ensuite seulement on retire l'ancien.
-- [ ] 🟡 **L6 — Une table `ST_*` → clés unique**, émise dans le contrat (`solver/stat-keys.json`) et lue par
+- [~] 🟡 **L6 — Une table `ST_*` → clés unique**, émise dans le contrat (`solver/stat-keys.json`) et lue par
       `GAME_STAT` et par le wiki. Y faire entrer les mains d'EE `ST_AVOID` (précision vs élément), présentes dans
       `buffs.json` mais inconnues de `GAME_STAT` → le main disparaît du panneau au lieu d'être affiché combat-only.
+      Table du contrat tenue sous test (G30) ; reste le main d'EE `ST_AVOID` affiché combat-only, et la lecture par
+      le wiki côté outerpedia.
 - [ ] ⚪ **Règles du jeu recopiées à la main** au lieu de venir du contrat : `REFORGE_PER_SUB_CAP`
       (`OptionMaxValue`, que `parse.ts` n'applique pas non plus : sans effet tant que max = 6 × valeur), budgets
       6/9 (`AddSmeltingCount`), emplacements de gemme (`GemSlot`), `EVO_UNLOCK_LEVEL`. `ee-passives` ne garde que

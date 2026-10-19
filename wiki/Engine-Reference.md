@@ -61,6 +61,7 @@ particular):
 | `ArchiveBonusTemplet.json`           | `archive-bonus.json`      | `CompleteCount` → codex level (1..11)                  |
 | `CharacterArchiveStatTemplet.json` (via `computeCharacterIngredients`) | `codex-curve.json` | codex level idx 0..11 → {atkPct, defPct, hpPct} |
 | `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data |
+| `datagen/lib/stat-keys.ts` (outerpedia; client rule `CUtilUI.IsPercentStat` / `GetStatValue`) | `stat-keys.json` | `ST_*` → `OAT_*` → {key (contract vocabulary: `atk`, `atkPct`, `chc`, `resRate`…), percent, abbr}; read by a test only (`packages/core/test/stat-keys.test.ts`), `GAME_STAT` stays the runtime table |
 
 Refresh after a game patch: `npm run data:sync` (`data/sync.mjs`, once
 outerpedia's `datagen:build` + `promote` have run).
@@ -655,15 +656,15 @@ incremented wrongly, premature flush.
 ### 3.1 In-game tables referenced
 
 The raw source tables live in outerpedia's datamine; the app only ever sees
-the 19 derived artifacts. Refreshed **at launch** by `data-sync.ts`
+the 20 derived artifacts. Refreshed **at launch** by `data-sync.ts`
 (`apps/desktop/src`) in two modes:
 - **checkout** (dev / maintainer machine) — copy from a local outerpedia
   checkout (`data/generated/solver/`), guarded by the version.json hash
   (at an unchanged hash, only a differing version.json is copied), zero network;
-  all 19 files are read before anything is written: a missing or unreadable
+  all 20 files are read before anything is written: a missing or unreadable
   artifact refuses the sync and keeps the cache, like `data/sync.mjs` (same
   list, `apps/desktop/src/solver-files.json`);
-- **repo** (packaged build) — downloads the 19 artifacts from the public repo
+- **repo** (packaged build) — downloads the 20 artifacts from the public repo
   `Sevih/outerpedia` via the jsDelivr CDN, gated on the SHA of the latest
   commit (`api.github.com/.../commits/main`). Allows following patches
   **without publishing a new build**. Degrades gracefully offline (uses the
@@ -671,7 +672,7 @@ the 19 derived artifacts. Refreshed **at launch** by `data-sync.ts`
 
 `data/sync.mjs` (the dev-time copy) finds the outerpedia checkout via the
 `OUTERPEDIA_PATH` env var, else a list of known local paths, and exits non-zero
-if the checkout or any of the 19 artifacts is missing or not JSON, before
+if the checkout or any of the 20 artifacts is missing or not JSON, before
 writing anything.
 
 `sub-ticks.json` (derived): per-tick values of the ATK/DEF/HP flat+% subs per

@@ -8,6 +8,52 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧪 Contrat — `GAME_STAT` tenu contre `stat-keys.json`, data:sync après C26 d'outerpedia (2026-10-19)
+- ✅ **Pourquoi.** Item L6 de `docs/todo.md`. outerpedia émet depuis C26 (`f391a76e`) `data/generated/solver/stat-keys.json` :
+  `{ [ST_*]: { [OAT_*]: { key, percent, abbr } } }`, la clé du vocabulaire du contrat (`atk`, `atkPct`, `chc`, `resRate`,
+  `spdPct`…), la nature « % » (règle `CUtilUI.IsPercentStat` / `GetStatValue` du client, per-mille ÷ 10) et l'abréviation
+  du wiki. Décision du 15/10 : gear-solver garde sa table contrat → moteur sous un test. `GAME_STAT`
+  (`packages/core/src/stats.ts`) RESTE la table d'exécution : `resolveOption` et ses appelants ne changent pas, rien ne
+  lit `stat-keys.json` à l'exécution. Une paire nouvelle chez outerpedia casse désormais la CI ici au lieu de disparaître
+  du panneau en silence (ce qui arrive aux mains d'EE `ST_AVOID`).
+- ✅ **Liste des tables.** `"stat-keys.json"` ajouté à `apps/desktop/src/solver-files.json` (liste unique depuis G12) :
+  l'app le télécharge comme les autres mais ne le charge pas (`apps/renderer/src/data.ts` et `GameData` inchangés) ; le
+  commentaire de `SOLVER_FILES` (`apps/desktop/src/data-sync.ts`) le dit, celui de `data/sync.mjs` aussi. Les « 19 »
+  deviennent 20 : `apps/desktop/test/data-sync.test.ts` (« synced 20 tables », `size toBe(20)`), « other 19 artifacts »
+  de l'en-tête de `data-sync.ts`, `docs/reference.md` § 3.1 et `wiki/Engine-Reference.md` § 3.1. `schema` reste 1 et
+  `SUPPORTED_SOLVER_SCHEMA` ne bouge pas : un fichier ajouté n'est pas un changement de forme.
+- ✅ **Table.** `CONTRACT_STAT_TO_ENGINE: Record<string, StatType | null>` exportée à côté de `GAME_STAT`, par CLÉ et non
+  par paire (`dmgInc` et `dmgRed` portent les deux `OAT`) : `spdPct`→`spd` (le canal % de `resolveOption`), `chc`→`critRate`,
+  `chd`→`critDmg`, `dmgInc`→`dmgUp`, `dmgRed`→`dmgReduce`, `eff`/`effRate`→`eff`, `res`/`resRate`→`effRes`,
+  `cdmgRed`→`critDmgReduce`, les autres à l'identique, et `avoid`→`null` (combat-only, la précision par élément d'un main
+  d'EE). L'en-tête du module dit les deux tables et le test qui les tient. Aucun désaccord de nature ni de clé entre
+  `GAME_STAT` et le contrat : `GAME_STAT` n'est pas touché.
+- ✅ **Test.** `packages/core/test/stat-keys.test.ts` sur `data/derived/stat-keys.json` (import JSON comme
+  `set-level.test.ts`) : toute clé du fichier a son entrée dans `CONTRACT_STAT_TO_ENGINE` (couverture des clés, pas les 24
+  lignes figées) ; pour chaque paire, `resolveOption({ st, ap, v: 10 }, 1)` rend `null` si la clé vaut `null`, sinon
+  `{ stat, percent, value: percent ? 1 : 10 }` avec le `percent` du contrat ; au 18/10, 23 paires résolues et
+  `ST_AVOID` / `OAT_ADD` à `null`. Les lignes de `GAME_STAT` qu'aucune paire ne porte (`ST_HIT_AP`, `ST_KILL_AP`) sont
+  permises (commentaire). Échec forcé à la main (entrée `cdmgRed` retirée) : « contract key(s) cdmgRed unknown to
+  packages/core/src/stats.ts: add the CONTRACT_STAT_TO_ENGINE entry (and the GAME_STAT row for its ST_*), or map it to
+  null if it is not an engine stat », 1 failed | 25 passed ; table restaurée ensuite. Une paire inconnue de `GAME_STAT`
+  échoue de même, avec le même conseil.
+- ✅ **Données.** `npm run data:sync` (outerpedia à `2b7762a0`, propre et poussé) : « synced 20 tables », version
+  `66681131bd9f` (built 2026-10-19T09:25:31.001Z). `git diff --stat data/derived` : `buffs.json`, `characters.json`,
+  `enhance.json`, `sets.json`, `version.json` (5 files changed, 5 insertions(+), 5 deletions(-), JSON compact sur une
+  ligne) plus `stat-keys.json` nouveau. Depuis le dernier sync (`7733858`) : A67 (`c905ef7f`) — `sets.json`, set 17
+  niveau 2, `combatEffects.p4[0]` passe de `BID_ITEM_UO_SET_17` à `BID_ITEM_UO_SET_17_1`, `v` 700 → 500 (le 4P T4 de
+  Pulverization à 50 %) ; B62 (`949cacd0`) — `enhance.json` gagne `gemSlots` et `reforge`, `buffs.json` marque
+  `combatOnly` sur les 11 rangs de `BID_CEQUIP_MAIN_DMG_REDUCE_CORE` ; bestSkill (`2b7762a0`) — `characters.json`,
+  2000057 (S1 burst 3, 2080 → 2672), 2000085 et 2000103 (burst retiré), 2000090 (S2 → S1). `game-client.json` inchangé.
+- ✅ **Vérification.** `npm run typecheck` : vert (dernière ligne `> tsc --noEmit`, renderer). `npm test` : core
+  `Tests  154 passed (154)`, desktop `Tests  131 passed (131)`, renderer `Tests  472 passed (472)` (dernière ligne) ;
+  `apps/desktop/test/data-sync.test.ts` passe avec la liste allongée.
+- ⏳ **Reste (Sevih).** Aucune release requise (rien ne change à l'exécution qu'un fichier de plus téléchargé). Hors
+  périmètre, relevé en route : B62 émet aussi `progression.json` (`evoUnlockLevel`), absent de `solver-files.json` —
+  le « exactement ce qu'outerpedia émet » du commentaire de `SOLVER_FILES` et les « 19 artefacts » de `docs/STATUS.md`
+  ne tiennent plus (outerpedia émet 21 fichiers) ; à trancher avec l'item « Règles du jeu recopiées à la main ». Le main
+  d'EE `ST_AVOID` affiché combat-only et l'abréviation du contrat dans l'interface restent à faire (L6).
+
 ### 🎯 Solver — plancher « Maxed only » au plafond de chaque pièce (2026-10-19)
 - ✅ **Pourquoi.** Item « Plancher de « Maxed only » pour une pièce sous 6★ » de `docs/todo.md`, décision du 15/10
   (`a4cb02c`) : « Maxed only » veut dire « au plafond de la pièce ». Il attendait G2 (`d73e3ba`), qui a posé ce
