@@ -1,0 +1,196 @@
+/**
+ * Inventory gear grid — virtualized grid of gear tiles.
+ */
+import { memo, useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import type { Character } from "@gear-solver/core";
+import { cx } from "../../design/cx.js";
+import { EquipmentIcon } from "../../design/EquipmentIcon.js";
+import type { UiPiece } from "../../design/adapter.js";
+
+/** Common props for the grid card — parent passes the resolved
+ *  `equippedChar` (looked up once via the `charsByUid` Map in the screen)
+ *  + a stable `onSelect(id)` callback so `memo` actually skips renders
+ *  when scrolling / filtering / selecting a different row. */
+interface GearItemProps {
+  piece: UiPiece;
+  equippedChar: Character | null;
+  active: boolean;
+  onSelect: (id: string) => void;
+  /** Globally excluded from the solver (right-click toggles it). */
+  excluded?: boolean;
+  /** Stable handler (App-owned, useCallback) so the memo stays effective. */
+  onToggleExclude?: (id: string) => void;
+}
+
+/** Icon-only grid tile — clicking it surfaces the full detail in the left
+ *  ItemDetail panel. Keeping the tile down to ~96px lets us pack ~10 columns
+ *  on a 1480px window instead of ~6 with the old name+stats card.
+ *  Overlays:
+ *    - top-left:  "E" badge when equipped (white-on-black, replaces the
+ *                 character portrait — too noisy at this density).
+ *    - bottom-left, above the EquipmentIcon's own T<n> tier badge: the
+ *                 in-game CT_Slot_Lock sprite, served at
+ *                 /img/ui/inven/CT_Slot_Lock.webp.
+ *  Selection is conveyed by a soft cyan halo (ring + outer glow) rather
+ *  than a hard border so the focus reads as ambient light, not a frame. */
+const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect, excluded, onToggleExclude }: GearItemProps) {
+  const onClick = useCallback(() => onSelect(piece.id), [onSelect, piece.id]);
+  // Right-click toggles global solver exclusion — the discoverable surface is
+  // the detail panel's button, this is the power-user shortcut.
+  const onCtx = useCallback((e: MouseEvent) => {
+    if (!onToggleExclude) return;
+    e.preventDefault();
+    onToggleExclude(piece.id);
+  }, [onToggleExclude, piece.id]);
+  return (
+    <button
+      onClick={onClick}
+      onContextMenu={onCtx}
+      title={excluded ? `${piece.name} — excluded from the solver (right-click to include)` : piece.name}
+      className={cx(
+        "group relative grid place-items-center rounded-lg border-2 p-0 transition-all",
+        // Selection halo: thicker (2px) cyan stroke hugging the tile edge,
+        // plus a two-layer glow - a tight bright inner bloom for "shine"
+        // and a wider soft aura around it. Lateral whitespace between
+        // ring and art is removed by sizing the icon to fit the grid
+        // column (see size below).
+        active
+          ? "border-cyan-300 bg-cyan-500/10 shadow-[0_0_8px_0_rgba(34,211,238,0.9),0_0_22px_4px_rgba(34,211,238,0.5)]"
+          : excluded
+            ? "border-rose-400/60 bg-rose-500/5"
+            : "border-white/5 bg-white/[0.012] hover:border-white/15 hover:bg-white/3",
+      )}
+    >
+      {/* Icon size tuned to grid column min (96px) minus the 4px border so
+          the cyan stroke sits right on the icon's visual edge with no
+          leftover lateral whitespace. Excluded pieces are dimmed. */}
+      <EquipmentIcon piece={piece.iconPiece} size={92} className={excluded ? "opacity-40" : undefined} />
+      {excluded && (
+        <span
+          title="Excluded from the solver (right-click to include)"
+          className="pointer-events-none absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-rose-500/85 text-[10px] font-bold leading-none text-white"
+        >
+          ⊘
+        </span>
+      )}
+      {/* "E" sits well inside the icon's top-left art area (not on the tile
+          frame) so it reads as an overlay on the gear, not a tile chrome. */}
+      {equippedChar && (
+        <span
+          title={`Equipped on ${equippedChar.name ?? `#${equippedChar.charId}`}`}
+          className="absolute left-2.75 top-1 grid h-4 w-4 place-items-center bg-black/85 font-mono text-[9px] font-bold text-white"
+        >
+          E
+        </span>
+      )}
+      {/* Lock sits noticeably above the EquipmentIcon's own T<n> tier badge
+          (the tier text in an 84px icon lives near bottom 20-34px). Bumped
+          to bottom-12 + h-5 to read as a clear "locked" stamp rather than a
+          tiny corner indicator. */}
+      {piece.locked && (
+        <img
+          src="/img/ui/inven/CT_Slot_Lock.webp"
+          alt="Locked"
+          className="pointer-events-none absolute left-2.5 bottom-10.5 h-4.5 w-4.5"
+        />
+      )}
+    </button>
+  );
+});
+
+// ── virtualized grid ────────────────────────────────────────────────────
+/** Row-virtualized tile grid built on @tanstack/react-virtual. Columns are
+ *  derived from the live container width (ResizeObserver) so the grid
+ *  reflows when the side panels open/close or the window resizes. Only the
+ *  visible rows + a small overscan window are mounted as React subtrees,
+ *  which keeps DOM/JS footprint flat regardless of inventory size — the
+ *  legacy non-virtualized grid mounted every GearTile up-front, which
+ *  ballooned past 2k mounted components on heavy inventories. */
+const TILE_SIZE = 96;
+const TILE_GAP = 4;
+export function VirtualGearGrid({
+  items, selectedId, onSelect, charsByUid, excludedPieces, onToggleExclude,
+}: {
+  items: UiPiece[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  charsByUid: Map<string, Character>;
+  excludedPieces?: Set<string>;
+  onToggleExclude?: (id: string) => void;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  // ResizeObserver keeps `width` synced to the scroll container. We can't
+  // rely on a one-shot measurement because layout shifts (filter modal
+  // open/close, devtools dock toggle, …) all change available space.
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    const obs = new ResizeObserver(([entry]) => {
+      if (entry) setWidth(entry.contentRect.width);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // Column math: same packing logic as the old `repeat(auto-fill, minmax(96px, 1fr))`.
+  // Min 1 column so the math doesn't blow up before the first ResizeObserver
+  // callback fires (width=0 at first paint).
+  const cols = Math.max(1, Math.floor((width + TILE_GAP) / (TILE_SIZE + TILE_GAP)));
+  const rowCount = Math.ceil(items.length / cols);
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => TILE_SIZE + TILE_GAP,
+    overscan: 4,
+  });
+
+  return (
+    <div ref={parentRef} className="mt-2 flex-1 min-h-0 overflow-y-auto pr-1">
+      {items.length === 0 ? (
+        <div className="rounded-lg border border-white/5 bg-white/[0.012] px-6 py-12 text-center text-[13px] text-white">
+          No piece matches the current filters.
+        </div>
+      ) : (
+        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative", width: "100%" }}>
+          {virtualizer.getVirtualItems().map((vrow) => {
+            const start = vrow.index * cols;
+            const rowItems = items.slice(start, start + cols);
+            return (
+              <div
+                key={vrow.key}
+                style={{
+                  position: "absolute",
+                  top: vrow.start,
+                  left: 0,
+                  width: "100%",
+                  height: vrow.size,
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                  gap: `${TILE_GAP}px`,
+                }}
+              >
+                {rowItems.map((p) => {
+                  const ec = p.equippedBy ? charsByUid.get(p.equippedBy) ?? null : null;
+                  return (
+                    <GearTile
+                      key={p.id}
+                      piece={p}
+                      equippedChar={ec}
+                      active={p.id === selectedId}
+                      onSelect={onSelect}
+                      excluded={excludedPieces?.has(p.id) ?? false}
+                      onToggleExclude={onToggleExclude}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

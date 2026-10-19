@@ -14,7 +14,7 @@ import { HomeScreen } from "./screens/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
 import { equippedByHero, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
-import type { InventoryDrill } from "./screens/InventoryScreen.js";
+import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
 import { reconcileDataHash } from "./lib/storage/dataHash.js";
 import { createOnboardingGate } from "./lib/onboarding.js";
@@ -25,7 +25,7 @@ import { createOnboardingGate } from "./lib/onboarding.js";
 // pulls the design tokens + the GearRow/Card pair; Builder is mostly empty
 // today but isolated for future growth. Suspense boundary below renders a
 // minimal placeholder while the chunk arrives (one-time, then cached).
-const InventoryScreen = lazy(() => import("./screens/InventoryScreen.js").then((m) => ({ default: m.InventoryScreen })));
+const InventoryScreen = lazy(() => import("./screens/inventory/InventoryScreen.js").then((m) => ({ default: m.InventoryScreen })));
 const BuildsScreen = lazy(() => import("./screens/BuildsScreen.js").then((m) => ({ default: m.BuildsScreen })));
 const BuilderScreen = lazy(() => import("./screens/builder/BuilderScreen.js").then((m) => ({ default: m.BuilderScreen })));
 const WorklistScreen = lazy(() => import("./screens/WorklistScreen.js").then((m) => ({ default: m.WorklistScreen })));

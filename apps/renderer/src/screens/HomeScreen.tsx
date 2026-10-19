@@ -25,7 +25,7 @@ import { Spinner } from "../design/Shell.js";
 import { SLOTS, SLOT_BY, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { gearPieceQualityTier, QUALITY_COLOR, type QualityTier } from "../lib/quality.js";
 import { buildHeroTrackerExport } from "../lib/heroTracker.js";
-import type { InventoryDrill } from "./InventoryScreen.js";
+import type { InventoryDrill } from "./inventory/InventoryScreen.js";
 import { loadSavedBuilds } from "../lib/storage/savedBuilds.js";
 import { loadFilterPresets } from "../lib/storage/filterPresets.js";
 import {

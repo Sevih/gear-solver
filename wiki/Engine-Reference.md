@@ -843,7 +843,7 @@ apps/renderer/src/
 ├── workers/
 │   └── solver.worker.ts            ← IPC adapter, MessageChannel yield
 └── screens/
-    ├── InventoryScreen.tsx         ← gear table + detail
+    ├── inventory/                  ← InventoryScreen.tsx (gear table) + filters.ts, FilterModal, VirtualGearGrid, ItemDetail…
     ├── BuildsScreen.tsx            ← per-hero current build cards (uses calcBattlePower)
     └── builder/                    ← BuilderScreen.tsx (useReducer(SolverFilters) + layout) + useSolverSession.ts
                                       (orchestrator wiring) + one module per panel, ResultsTable, RightSidebar (Library)…
