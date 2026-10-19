@@ -21,7 +21,10 @@ client can import the same JSON files by hand in the app.
   The game decrypts them itself (`CWebManager.DecryptMsg`), so the plugin never has to.
 - Two read-only Harmony **postfixes**: `CWebManager.Log2InternalWeb` (primary — the decrypted
   JSON + its path, e.g. `/user/item`) and `CWebManager.DecryptMsg` (fallback, identifies the
-  payload by its top-level keys). Nothing is sent to the server, gameplay is untouched.
+  payload by its top-level keys — a `GiftList` next to `TicketData`/`CharList`/`ItemList` is the
+  PvP opponent's and is skipped). Nothing is sent to the server, gameplay is untouched.
+- The hooks only enqueue: one background thread writes the files, in arrival order, each one
+  atomically (`.tmp` + replace).
 
 ## Install (what the app does on "Install plugin")
 
@@ -31,7 +34,9 @@ client can import the same JSON files by hand in the app.
 3. Copies `GearSolverCapture.dll` to `BepInEx/plugins/GearSolverCapture/` and points the plugin
    config (`OutDir`) at the app's capture folder (`%APPDATA%\Outerpedia Gear Solver\capture-out`).
 
-Then launch the game from Steam and reach the lobby: the app re-imports on its own.
+Then launch the game from Steam and reach the lobby: the app re-imports on its own — whenever
+`user_item.json`, `user_character.json`, `user_gift.json` or `user_archive.json` changes (a hero
+or geas level gained without a new inventory is picked up too).
 
 ## Output (the app's capture folder)
 

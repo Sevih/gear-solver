@@ -55,8 +55,6 @@
       TargetType ME et le niveau de buff le plus haut (0 écart, fragile).
 
 ### 🟡 Revue 2026-10 — divers
-- [ ] 🟡 **Plugin Steam en repli** : `GiftList` entre en collision avec `PVPStart` → écrit les geas de l'adversaire ·
-      écritures du plugin dans un ordre non FIFO · ré-import déclenché par le seul mtime de `user_item`.
 - [ ] 🟡 **data-sync** — `derivedReady` ne teste que `characters.json` · échecs de `writeAtomic` avalés · octets
       non JSON écrits tels quels · pas de verrou contre deux syncs simultanées.
 - [ ] ⚪ **Desktop** — écritures du serveur non atomiques · `img-cache` ne revalide jamais une image en cache ·

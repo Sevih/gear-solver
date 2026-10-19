@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -39,7 +39,11 @@ describe("shared API handler", () => {
       for (const [url, method] of [["/api/capture/run", "POST"], ["/api/capture/disarm", "POST"], ["/api/emulators", "GET"], ["/api/preflight", "GET"], ["/api/capture/manual-device", "GET"]] as const) {
         expect((await call(url, { method })).status).toBe(418);
       }
-      expect(JSON.parse((await call("/api/capture/status")).body)).toEqual({ captured: false, userItemMtime: null });
+      expect(JSON.parse((await call("/api/capture/status")).body)).toEqual({
+        captured: false,
+        userItemMtime: null,
+        mtimes: { user_item: null, user_character: null, user_gift: null, user_archive: null },
+      });
     });
   });
 
@@ -47,6 +51,29 @@ describe("shared API handler", () => {
     const handle = createApiHandler(devConfig());
     await withServer((req, res) => { handle(req, res); }, async (call) => {
       expect(JSON.parse((await call("/api/update/status")).body)).toEqual({ state: "uptodate" });
+    });
+  });
+});
+
+describe("/api/capture/status — mtimes of every imported snapshot", () => {
+  it("reports user_item, user_character, user_gift and user_archive; absent files are null", async () => {
+    const cfg = devConfig();
+    const out = cfg.captureOut;
+    const stamp = (name: string, sec: number) => {
+      writeFileSync(join(out, `${name}.json`), "{}");
+      utimesSync(join(out, `${name}.json`), sec, sec);
+    };
+    stamp("user_item", 1_000);
+    stamp("user_character", 2_000);
+    stamp("user_gift", 3_000);
+    writeFileSync(join(out, ".captured"), "x");
+    const handle = createApiHandler(cfg);
+    await withServer((req, res) => { handle(req, res); }, async (call) => {
+      expect(JSON.parse((await call("/api/capture/status")).body)).toEqual({
+        captured: true,
+        userItemMtime: 1_000_000,
+        mtimes: { user_item: 1_000_000, user_character: 2_000_000, user_gift: 3_000_000, user_archive: null },
+      });
     });
   });
 });

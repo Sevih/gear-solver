@@ -7,10 +7,14 @@
  * still unseeded and the tick re-imported — a second full import at launch.
  * A tick slower than the 5 s interval could also overlap the next one.
  *
- * Here `init()` is the only startup path (status → seed mtime → import),
+ * Here `init()` is the only startup path (status → seed mtimes → import),
  * ticks do nothing until it finished, and a tick never overlaps another.
+ *
+ * The follower watches the mtimes of every file the import reads
+ * (user_item, user_character, user_gift, user_archive): a hero or geas level
+ * gained without a new inventory must be picked up too.
  */
-import type { CaptureStatus } from "../capture.js";
+import type { CaptureStatus, ImportedSnapshot } from "../capture.js";
 import type { SteamStatus } from "../steam.js";
 
 export interface SnapshotFollowerDeps {
@@ -27,14 +31,23 @@ export interface SnapshotFollower {
    *  Repeated calls return the first run. */
   init(): Promise<void>;
   /** One Steam poll: refresh the plugin status and re-import if the plugin
-   *  rewrote user_item.json. No-op before init() completes or while another
+   *  rewrote any imported snapshot. No-op before init() completes or while another
    *  tick runs. `isAlive` lets the caller drop results after unmount. */
   tick(isAlive?: () => boolean): Promise<void>;
 }
 
+const WATCHED: readonly ImportedSnapshot[] = ["user_item", "user_character", "user_gift", "user_archive"];
+
+/** One comparable key for the watched mtimes; null = no user_item.json on
+ *  disk (the import has no inventory to load, nothing to follow yet). */
+function snapshotKey(cs: CaptureStatus | null): string | null {
+  if (cs?.userItemMtime == null) return null;
+  return WATCHED.map((n) => cs.mtimes[n] ?? "-").join("|");
+}
+
 export function createSnapshotFollower(deps: SnapshotFollowerDeps): SnapshotFollower {
   // undefined = not seeded yet (init pending); null = no snapshot on disk.
-  let lastMtime: number | null | undefined;
+  let lastKey: string | null | undefined;
   let ticking = false;
   let started: Promise<void> | null = null;
 
@@ -44,14 +57,14 @@ export function createSnapshotFollower(deps: SnapshotFollowerDeps): SnapshotFoll
       started ??= (async () => {
         const cs = await deps.getCaptureStatus();
         deps.onCaptureStatus(cs);
-        lastMtime = cs?.userItemMtime ?? null;
+        lastKey = snapshotKey(cs);
         await deps.refresh("Auto-import");
       })();
       return started;
     },
 
     async tick(isAlive = () => true) {
-      if (lastMtime === undefined || ticking) return;
+      if (lastKey === undefined || ticking) return;
       ticking = true;
       try {
         const st = await deps.getSteamStatus();
@@ -61,9 +74,9 @@ export function createSnapshotFollower(deps: SnapshotFollowerDeps): SnapshotFoll
         const cs = await deps.getCaptureStatus();
         if (!isAlive()) return;
         deps.onCaptureStatus(cs);
-        const m = cs?.userItemMtime ?? null;
-        if (m != null && m !== lastMtime) {
-          lastMtime = m;
+        const key = snapshotKey(cs);
+        if (key != null && key !== lastKey) {
+          lastKey = key;
           await deps.refresh("Steam capture");
         }
       } finally {

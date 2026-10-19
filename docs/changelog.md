@@ -8,6 +8,40 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔌 Plugin Steam en repli — `GiftList` sans `PVPStart`, écritures dans l'ordre d'arrivée, ré-import sur tous les fichiers lus (2026-10-19)
+- ✅ **Pourquoi.** Item « Plugin Steam en repli » (`docs/todo.md`, revue 2026-10). Trois défauts : le repli par forme
+  (`CaptureByShape`, quand le hook de chemin a été inliné) nommait `user_gift` tout objet portant `GiftList`, or la
+  réponse de début de PvP en porte une aussi (celle de l'adversaire) → ses geas écrasaient ceux du joueur ; chaque
+  capture partait par `ThreadPool.QueueUserWorkItem` puis prenait un verrou, sans garantie d'ordre (deux `/user/item`
+  rapprochés pouvaient s'écrire dans le désordre, le plus ancien gagnant) ; le suiveur Steam ne ré-importait que sur
+  le mtime de `user_item.json` alors que l'import lit aussi `user_character`, `user_gift`, `user_archive` (un niveau
+  de héros ou de geas gagné sans nouvel inventaire n'était pas repris).
+- ✅ **Forme.** Vérifié dans le client décompilé : à la profondeur 1, `GiftList` n'existe que dans `CWebRES_GiftInfo`
+  (seul champ) et `CWebRES_PVPStart` (avec `TicketData`, `CharList`, `ItemList`, `MatchUserArchiveCompleteCount`,
+  `Var1`…`Var5`) ; `CWebResponseBase`/`CWebResponseError` n'ajoutent que `status`, `code`, `message` ; les autres
+  porteurs (`WSPvpMatchUserData`, `WSWorldBossRankingSaveDeckData`) sont imbriqués, donc invisibles au relevé des clés
+  de premier niveau. `NameByShape` (`tools/capture-steam/src/Plugin.cs`) ne rend plus `user_gift` que pour `GiftList`
+  sans aucune de `TicketData`/`CharList`/`ItemList`, commentaire qui nomme les deux classes.
+- ✅ **Écritures.** `Sink` tient une `BlockingCollection<Action>` (net472) vidée par UN thread de fond
+  (`Drain`, `IsBackground`) ; les hooks ne font qu'enfiler (capture par chemin, repli par forme, heartbeat initial),
+  le verrou `Gate` et le `ThreadPool` disparaissent. Écriture atomique (`.tmp` + `File.Replace`) et dédoublonnage
+  du repli (`LastHash`) inchangés.
+- ✅ **Ré-import.** `captureStatus` (`apps/desktop/src/api-handler.ts`) renvoie `mtimes` (`user_item`,
+  `user_character`, `user_gift`, `user_archive`, null si absent) en plus de `userItemMtime`, gardé pour la ligne
+  « dernière capture » de Home (`HomeScreen.tsx`). `CaptureStatus` (`apps/renderer/src/capture.ts`) suit ;
+  `snapshotFollower.ts` compare une clé des quatre mtimes et ré-importe quand l'une change, tant qu'un
+  `user_item.json` existe (sans inventaire l'import n'a rien à charger ; son arrivée change la clé de toute façon).
+- ✅ **Docs.** `tools/capture-steam/README.md` (repli `GiftList`, écrivain unique dans l'ordre d'arrivée) et
+  `wiki/Capture-Pipeline.md` (idem + les quatre fichiers qui déclenchent le ré-import) ; pas de pendant dans `docs/`.
+- ✅ **Tests.** `snapshotFollower.test.ts` gagne « `user_character` seul change → ré-import » et « rien ne change →
+  pas de ré-import » ; `api-handler.test.ts` gagne les mtimes des quatre fichiers (`utimesSync`, absent → null) et
+  le statut vide les inclut. `npm run typecheck` → `> tsc --noEmit` sans erreur ; `npm test` → `Tests  510 passed
+  (510)` ; `npm run lint` → `✖ 28 problems (0 errors, 28 warnings)` (aucun dans les fichiers du lot) ;
+  `npm run capture-steam:build` → `0 Erreur(s)`, `0 Avertissement(s)` (jeu et BepInEx présents sur le portable).
+- ⏳ Sevih : test en jeu (une session avec un PvP lancé, `user_gift.json` garde ses geas — le repli ne sert que si
+  le hook de chemin est inliné, donc vérifier surtout que la capture normale reste saine) ; le plugin reconstruit
+  part avec la prochaine release (version du plugin inchangée, `0.1.0`).
+
 ### ⚡ Inventory — qualité et texte de recherche précalculés, un seul calcul de qualité (2026-10-19)
 - ✅ **Pourquoi.** Items « Perf Inventory », « Optims mineures Inventory » (`[~]`, report « tant que le profilage ne
   le réclame pas » levé le 18/10) et puce qualité de « Duplications » (`docs/todo.md`). `matchesFilters`

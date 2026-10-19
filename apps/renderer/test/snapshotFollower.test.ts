@@ -11,7 +11,11 @@ function deferred<T>() {
 }
 
 const live = { live: true, gameRunning: true } as SteamStatus;
-const status = (mtime: number | null): CaptureStatus => ({ captured: mtime != null, userItemMtime: mtime });
+const status = (mtime: number | null, others: Partial<CaptureStatus["mtimes"]> = {}): CaptureStatus => ({
+  captured: mtime != null,
+  userItemMtime: mtime,
+  mtimes: { user_item: mtime, user_character: null, user_gift: null, user_archive: null, ...others },
+});
 
 function harness(capture: () => Promise<CaptureStatus | null>, steam: () => Promise<SteamStatus | null> = async () => live) {
   const refresh = vi.fn(async (_label: string) => {});
@@ -58,6 +62,25 @@ describe("snapshot follower — one import at launch", () => {
     mtime = 3000;
     await follower.tick();
     expect(refresh.mock.calls.map((c) => c[0])).toEqual(["Auto-import", "Steam capture"]);
+  });
+
+  it("re-imports when user_character alone changes", async () => {
+    let char = 500;
+    const { follower, refresh } = harness(async () => status(1000, { user_character: char, user_gift: 700 }));
+    await follower.init();
+    await follower.tick();
+    char = 900;                     // hero level-up, no new inventory
+    await follower.tick();
+    await follower.tick();
+    expect(refresh.mock.calls.map((c) => c[0])).toEqual(["Auto-import", "Steam capture"]);
+  });
+
+  it("does not re-import when nothing changes", async () => {
+    const { follower, refresh } = harness(async () => status(1000, { user_character: 500, user_gift: 700, user_archive: 800 }));
+    await follower.init();
+    await follower.tick();
+    await follower.tick();
+    expect(refresh.mock.calls.map((c) => c[0])).toEqual(["Auto-import"]);
   });
 
   it("a tick slower than the interval is not overlapped by the next one", async () => {

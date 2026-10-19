@@ -47,9 +47,14 @@ export async function streamCapture(
   return { exitCode };
 }
 
+/** Captured files `autoImport` reads (data.ts) — the follower watches all four. */
+export type ImportedSnapshot = "user_item" | "user_character" | "user_gift" | "user_archive";
+
 export interface CaptureStatus {
   captured: boolean;
   userItemMtime: number | null;
+  /** mtime of each imported snapshot, null when absent. */
+  mtimes: Record<ImportedSnapshot, number | null>;
 }
 
 export async function getCaptureStatus(): Promise<CaptureStatus | null> {

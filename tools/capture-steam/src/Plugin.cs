@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -149,10 +150,11 @@ namespace GearSolverCapture
         }
     }
 
-    /// <summary>File writer. All disk I/O happens on the thread pool (the hooks
-    /// run inside the game's main-thread network callback; a 5 MB inventory
-    /// write would otherwise hitch a frame), serialized by one lock so files
-    /// are never interleaved.</summary>
+    /// <summary>File writer. The hooks only enqueue (they run inside the game's
+    /// main-thread network callback; a 5 MB inventory write would otherwise
+    /// hitch a frame); ONE background thread drains the queue, so writes land
+    /// in arrival order — two close /user/item responses can't swap and leave
+    /// the older one on disk — and files are never interleaved.</summary>
     internal static class Sink
     {
         /// <summary>Exact response path → output basename. Same table as
@@ -173,7 +175,7 @@ namespace GearSolverCapture
         /// <summary>Login / heartbeat noise never worth keeping.</summary>
         private static readonly string[] IgnorePrefixes = { "/account/", "/server/" };
 
-        private static readonly object Gate = new object();
+        private static readonly BlockingCollection<Action> Writes = new BlockingCollection<Action>();
         private static readonly HashSet<string> SeenPaths = new HashSet<string>(StringComparer.Ordinal);
         private static readonly Dictionary<string, int> LastHash = new Dictionary<string, int>(StringComparer.Ordinal);
         private static string _dir;
@@ -197,7 +199,19 @@ namespace GearSolverCapture
         {
             _dir = dir;
             _keepUnknown = keepUnknown;
-            ThreadPool.QueueUserWorkItem(_ => { lock (Gate) WriteHeartbeat(); });
+            new Thread(Drain) { IsBackground = true, Name = "GearSolverCapture writer" }.Start();
+            Writes.Add(WriteHeartbeat);
+        }
+
+        /// <summary>The single writer: runs queued writes one by one, in the
+        /// order the hooks enqueued them, for the life of the process.</summary>
+        private static void Drain()
+        {
+            foreach (var write in Writes.GetConsumingEnumerable())
+            {
+                try { write(); }
+                catch (Exception e) { Plugin.Log.LogError($"writer: {e.Message}"); }
+            }
         }
 
         /// <summary>Path-aware capture (primary hook).</summary>
@@ -217,20 +231,17 @@ namespace GearSolverCapture
                 name = null;
             }
             var p2 = path;
-            ThreadPool.QueueUserWorkItem(_ =>
+            Writes.Add(() =>
             {
-                lock (Gate)
+                try
                 {
-                    try
-                    {
-                        NoteSeen(p2);
-                        if (name != null) WriteKnown(name, json, p2);
-                        else WriteUnknown(p2, json);
-                    }
-                    catch (Exception e)
-                    {
-                        Plugin.Log.LogError($"write {p2}: {e.Message}");
-                    }
+                    NoteSeen(p2);
+                    if (name != null) WriteKnown(name, json, p2);
+                    else WriteUnknown(p2, json);
+                }
+                catch (Exception e)
+                {
+                    Plugin.Log.LogError($"write {p2}: {e.Message}");
                 }
             });
         }
@@ -240,33 +251,30 @@ namespace GearSolverCapture
         public static void CaptureByShape(string json)
         {
             if (_dir == null || string.IsNullOrEmpty(json) || json[0] != '{') return;
-            ThreadPool.QueueUserWorkItem(_ =>
+            Writes.Add(() =>
             {
-                lock (Gate)
+                if (Hooks.PathHookFired) return;
+                try
                 {
-                    if (Hooks.PathHookFired) return;
-                    try
-                    {
-                        var keys = TopLevelKeys(json, 16);
-                        var name = NameByShape(keys);
-                        if (name == null) return;
-                        // DecryptMsg runs twice per response (CheckResponse + the
-                        // callback) — skip an identical repeat.
-                        int h = json.Length ^ json.GetHashCode();
-                        int prev;
-                        if (LastHash.TryGetValue(name, out prev) && prev == h) return;
-                        LastHash[name] = h;
-                        WriteKnown(name, json, "(shape)");
-                    }
-                    catch (Exception e)
-                    {
-                        Plugin.Log.LogError($"shape write: {e.Message}");
-                    }
+                    var keys = TopLevelKeys(json, 16);
+                    var name = NameByShape(keys);
+                    if (name == null) return;
+                    // DecryptMsg runs twice per response (CheckResponse + the
+                    // callback) — skip an identical repeat.
+                    int h = json.Length ^ json.GetHashCode();
+                    int prev;
+                    if (LastHash.TryGetValue(name, out prev) && prev == h) return;
+                    LastHash[name] = h;
+                    WriteKnown(name, json, "(shape)");
+                }
+                catch (Exception e)
+                {
+                    Plugin.Log.LogError($"shape write: {e.Message}");
                 }
             });
         }
 
-        // ---- helpers (all called under Gate) --------------------------------
+        // ---- helpers (all called on the writer thread) ----------------------
 
         private static void WriteKnown(string name, string json, string path)
         {
@@ -359,7 +367,12 @@ namespace GearSolverCapture
             if (k.Contains("SlotList") && k.Contains("CharList")) return "user_character";
             if (k.Contains("SupporterList") && k.Contains("ResetInfo")) return "user_info";
             if (k.Contains("ArchiveItemRewardInfo")) return "user_archive";
-            if (k.Contains("GiftList")) return "user_gift";
+            // GiftList at depth 1 is in two responses: CWebRES_GiftInfo (the
+            // player's geas, GiftList only) and CWebRES_PVPStart (the PvP
+            // OPPONENT's, next to TicketData/CharList/ItemList). Only the first
+            // is ours — PvP start would overwrite the player's geas otherwise.
+            if (k.Contains("GiftList") && !k.Contains("TicketData") && !k.Contains("CharList") && !k.Contains("ItemList"))
+                return "user_gift";
             if (k.Contains("LobbyList")) return "user_lobby";
             if (k.Contains("PersonalBuffInfo")) return "user_etc";
             if (k.Contains("ItemCustomData")) return "item_customInfo";

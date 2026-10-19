@@ -27,13 +27,15 @@ Two Harmony **postfixes**, both read-only (`src/Plugin.cs`):
 | Hook | Role |
 |------|------|
 | `CWebManager.Log2InternalWeb(string message, string cmd, bool request)` | **Primary.** Called on every successful response with the decrypted JSON and the path (`/user/item`). Path → file name (the files the renderer reads). `request == true` (outgoing) is skipped. |
-| `CWebManager.DecryptMsg(string)` (static) | **Fallback.** The stub above is tiny and Mono's JIT may inline it into its caller, in which case the patch never fires. `DecryptMsg` is too big to inline; its postfix identifies the payload by its **top-level keys** (`ItemList`+`PresetList` → `user_item`, `CharList`+`SlotList` → `user_character`, …) and stays silent once the primary hook has fired. |
+| `CWebManager.DecryptMsg(string)` (static) | **Fallback.** The stub above is tiny and Mono's JIT may inline it into its caller, in which case the patch never fires. `DecryptMsg` is too big to inline; its postfix identifies the payload by its **top-level keys** (`ItemList`+`PresetList` → `user_item`, `CharList`+`SlotList` → `user_character`, …) and stays silent once the primary hook has fired. `GiftList` alone is `user_gift` (`CWebRES_GiftInfo`); the PvP start response (`CWebRES_PVPStart`) carries the opponent's `GiftList` next to `TicketData`/`CharList`/`ItemList` and is skipped. |
 
 Both targets are resolved **by name at runtime** (`AccessTools.TypeByName`, no reference to
 `Assembly-CSharp.dll`), so a game update that renames them logs an error instead of crashing
 the plugin. Every hook body is wrapped in try/catch: a plugin bug can never bubble into the
-game's network callback. Disk writes happen on the thread pool (a 5 MB inventory would
-otherwise hitch a frame), atomically (`.tmp` + replace) so the app never reads a half file.
+game's network callback. The hooks only enqueue; disk writes happen on one background writer
+thread (a 5 MB inventory would otherwise hitch a frame), in arrival order (two close
+`/user/item` responses can't swap), atomically (`.tmp` + replace) so the app never reads a
+half file.
 
 ## Output
 

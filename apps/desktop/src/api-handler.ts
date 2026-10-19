@@ -199,21 +199,30 @@ function readBody(req: IncomingMessage, res: ServerResponse, maxBytes: number, o
   });
 }
 
+/** Captured snapshots the renderer's `autoImport` reads (apps/renderer/src/data.ts). */
+const IMPORTED_SNAPSHOTS = ["user_item", "user_character", "user_gift", "user_archive"] as const;
+
 /** Build the request handler. It returns false for a URL it doesn't own (the
  *  renderer's own files), so the caller can fall through. */
 export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: ServerResponse) => boolean {
   const { captureOut } = cfg;
 
-  /** GET /api/capture/status — whether a snapshot exists, and its mtime (the
-   *  Steam follower re-imports when it changes). */
+  /** GET /api/capture/status — whether a snapshot exists, and the mtime of
+   *  every file the renderer's import reads (the Steam follower re-imports
+   *  when any of them changes: a hero or geas level can land without a new
+   *  inventory). `userItemMtime` stays for the Home "last capture" line. */
   function captureStatus(res: ServerResponse): void {
-    const itemPath = join(captureOut, "user_item.json");
     const sentinel = join(captureOut, ".captured");
-    const userItem = existsSync(itemPath) ? statSync(itemPath) : null;
+    const mtimes: Record<string, number | null> = {};
+    for (const name of IMPORTED_SNAPSHOTS) {
+      const file = join(captureOut, `${name}.json`);
+      mtimes[name] = existsSync(file) ? statSync(file).mtimeMs : null;
+    }
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({
       captured: existsSync(sentinel),
-      userItemMtime: userItem ? userItem.mtimeMs : null,
+      userItemMtime: mtimes.user_item ?? null,
+      mtimes,
     }));
   }
 
