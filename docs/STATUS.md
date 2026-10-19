@@ -24,7 +24,7 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
 
 2. **Données statiques du jeu** (`data/`)
    - La distillation vit **côté outerpedia** (`datagen/generators/solver.ts`, port de l'ancien
-     `build.mjs`/`calc-stats.mjs`) : elle émet 19 artefacts committés à `data/generated/solver/`.
+     `build.mjs`/`calc-stats.mjs`) : elle émet 20 artefacts committés à `data/generated/solver/`.
    - `data/derived/` : miroir committé de ces artefacts (tables compactes `options`, `equipment`,
      `sets`, `characters`, `sub-ticks`, … que le moteur consomme), rafraîchi via `npm run data:sync`
      depuis le checkout outerpedia. `version.json` `{ hash, builtAt }` — `hash` = hash de contenu

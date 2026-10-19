@@ -40,7 +40,7 @@ by hand (manual import).
   rewrites the captured snapshot for equip/unequip edits — the transform lives in core, so the
   server stays a dumb writer); in dev the Vite middleware covers the same role. At launch it
   **syncs the derived game data from the public `Sevih/outerpedia` repo** (`data-sync.ts`
-  dual-mode checkout/repo, SHA-gated download of the 19 `data/generated/solver/*.json`
+  dual-mode checkout/repo, SHA-gated download of the 20 `data/generated/solver/*.json`
   artifacts emitted by outerpedia's datagen ; shared `/img/*` handler `img-cache.ts`
   cascading bundled sprites→checkout→disk cache→R2 bucket `img.outerpedia.com`) so the
   app follows game patches **without a new build**.

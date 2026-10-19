@@ -6,12 +6,12 @@ Static game data the engine needs, independent of any account.
 
 The distillation pipeline lives in the **outerpedia repo** (`datagen/generators/solver.ts`,
 a faithful port of the old local `build.mjs` + `calc-stats.mjs`): outerpedia reads the raw
-game tables and emits the 19 compact solver artifacts at `data/generated/solver/*.json`
+game tables and emits the 20 compact solver artifacts at `data/generated/solver/*.json`
 (committed there, promoted with the rest of `data/generated/`).
 
 ```
 outerpedia datagen (solver generator)
-  └─ <outerpedia>/data/generated/solver/*.json     19 ready-to-consume tables
+  └─ <outerpedia>/data/generated/solver/*.json     20 ready-to-consume tables
       ├─ data/sync.mjs   →  data/derived/*.json    committed mirror (this repo)
       └─ data-sync.ts    →  app runtime cache      packaged app, via GitHub CDN
 ```
