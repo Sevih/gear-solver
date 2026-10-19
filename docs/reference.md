@@ -671,8 +671,15 @@ Les tables brutes vivent dans le datamine d'outerpedia ; l'app ne voit que les
 - **repo** (build packagé) — télécharge les 20 artefacts depuis le repo public
   `Sevih/outerpedia` via le CDN jsDelivr, gaté sur le SHA du dernier commit
   (`api.github.com/.../commits/main`). Permet de suivre les patchs **sans
-  publier de nouveau build**. Dégrade proprement hors-ligne (utilise le
-  `data/derived` déjà en cache).
+  publier de nouveau build**. Chaque artefact téléchargé doit se parser en
+  JSON, sinon rien n'est écrit. Dégrade proprement hors-ligne (utilise le
+  `data/derived` déjà en cache, s'il est complet).
+
+Dans les deux modes, un cache ne compte que si les 20 fichiers y sont ;
+l'écriture se fait en deux temps (tous les `.tmp`, puis les renommages,
+version.json en dernier) et un échec d'écriture rend un statut `error` qui
+nomme le fichier ; une seule synchro à la fois (un appel pendant qu'une
+synchro tourne reçoit sa promesse).
 
 `sub-ticks.json` (dérivé) : valeurs par tick des subs ATK/DEF/HP flat+% par étoile
 (5★/6★), recomposées par le generator solver d'outerpedia depuis `ItemOptionTemplet`

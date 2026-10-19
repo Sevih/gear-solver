@@ -54,10 +54,6 @@
       6/9 (`AddSmeltingCount`), emplacements de gemme (`GemSlot`), `EVO_UNLOCK_LEVEL`. `ee-passives` ne garde que
       TargetType ME et le niveau de buff le plus haut (0 écart, fragile).
 
-### 🟡 Revue 2026-10 — divers
-- [ ] 🟡 **data-sync** — `derivedReady` ne teste que `characters.json` · échecs de `writeAtomic` avalés · octets
-      non JSON écrits tels quels · pas de verrou contre deux syncs simultanées.
-
 ### 🟡 Audit projet (2026-09-07) — reste
 - [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer).
 - [ ] 🟡 **Composants monolithiques** — BuilderScreen ~4600 lignes (~40 composants + reducer), InventoryScreen 1350,

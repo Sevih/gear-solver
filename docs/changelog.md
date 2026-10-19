@@ -8,6 +8,56 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔄 Synchro des données — cache complet vérifié, octets non JSON refusés, échecs d'écriture rapportés, une sync à la fois (2026-10-19)
+- ✅ **Pourquoi.** Item « data-sync » de `docs/todo.md` (revue 2026-10), le reste laissé par le lot du mode CHECKOUT
+  (`55798f5`, prérequis vérifié). Dans `apps/desktop/src/data-sync.ts` : `derivedReady` ne testait que
+  `characters.json`, un cache à moitié présent passait pour prêt (`fresh`, repli `offline`) ; en REPO, `compact`
+  rendait les octets bruts quand le parse échouait, donc une réponse 200 qui n'est pas du JSON (page d'erreur) était
+  écrite telle quelle ; un `writeAtomic` qui levait sortait de `syncGameData` (docstring « Never throws ») et pouvait
+  laisser `data/derived` à moitié écrit ; rien n'empêchait la sync manuelle (`/api/data/sync`) de chevaucher celle
+  du lancement.
+- ✅ **Cache complet.** `cacheComplete` : les 20 fichiers de `solver-files.json` (la liste unique du lot CHECKOUT)
+  présents, sinon pas prêt — REPO ne répond plus `fresh` (ni au même SHA ni au même hash) et télécharge tout, hors
+  ligne c'est `unavailable` au lieu d'`offline`. En CHECKOUT, la porte « même hash → `fresh` » exige aussi un cache
+  complet (elle ne le testait pas du tout) ; rien d'autre du mode CHECKOUT n'a bougé.
+- ✅ **Octets non JSON refusés (REPO).** Après le téléchargement, chaque table est parsée et recompactée avant toute
+  écriture ; un échec → `refused()` « <fichier> downloaded from outerpedia is not valid JSON; keeping the cached
+  data » (`unavailable` sans cache), rien d'écrit, SHA non enregistré. `version.json` passait déjà par
+  `schemaRefusal`, qui refuse un corps illisible ; `compact` ne reçoit plus que ce corps-là.
+- ✅ **Écriture en deux temps, échecs rapportés.** `commitFiles` remplace le `writeAtomic` local (les deux modes et
+  la réécriture du tampon de version) : tous les corps en `.tmp` voisins d'abord, puis les renommages, `version.json`
+  en dernier ; une erreur → les `.tmp` restants supprimés, « could not write <fichier> to the game data folder
+  (<code>); keeping the cached data » par `refused()` (`unavailable` sans cache complet), SHA non enregistré, aucune
+  exception. Un échec à l'étape `.tmp` laisse l'ancien cache entier ; un échec de renommage (rare : cible occupée)
+  peut laisser des tables déjà remplacées, mais l'ancien `version.json` fait retenter la sync au lancement suivant.
+- ✅ **Une sync à la fois.** `syncGameData` n'est plus `async` : il garde la promesse en cours (`inFlight`) et la
+  rend telle quelle à un appel qui arrive pendant la sync (ses options ignorées, `force` compris), la relâche quand
+  elle se règle ; un `.catch` final change toute exception restante (`mkdirSync`, `writeShaState`) en statut
+  `error`, ce qui rend la docstring vraie.
+- ✅ **Docs.** `docs/reference.md` § 3.1 et `wiki/Engine-Reference.md` : le mode repo refuse un artefact non JSON,
+  le repli hors ligne exige un cache complet ; un paragraphe commun aux deux modes dit le cache complet, l'écriture
+  en deux temps, le statut `error` et la sync unique. Item « data-sync » sorti de `docs/todo.md`, avec sa section
+  « Revue 2026-10 — divers » restée vide.
+- ✅ **Tests.** `apps/desktop/test/data-sync.test.ts` (réseau stubé ; `writeFileSync` de `node:fs` défaillant à la
+  demande par `vi.mock`, un dossier en lecture seule n'étant pas portable sur la CI Windows) : cache sans
+  `sets.json` → REPO au même hash `synced`, au même SHA `synced`, hors ligne `unavailable`, CHECKOUT au même hash
+  `synced` ; une table servie en `<html>` (force ou non) → refus qui la nomme, toutes les tables, `version.json` et
+  le SHA intacts, aucun `.tmp` ; `sets.json`, puis `version.json` (après toutes les tables) qui ne s'écrivent pas →
+  `error` qui les nomme, ancien cache entier, aucun `.tmp` ; le tampon de version non réécrit → `error`, SHA non
+  enregistré ; CHECKOUT, même règle ; sans cache et rien d'inscriptible → `unavailable`, dossier vide ; deux appels
+  simultanés → même promesse, un seul appel à l'API GitHub et 19 tables téléchargées une fois ; le verrou relâché
+  après. L'ancien test « a write failure mid-sync » (renommage bloqué par un dossier) attendait une exception : il
+  attend désormais `error` nommant `trust-character.json`, l'ancien hash et aucun `.tmp`. Contre-épreuve :
+  `derivedReady` remis sur `characters.json` seul et le verrou retiré → `Tests  5 failed | 91 passed (96)`, code
+  restauré. `npm run typecheck` : dernière ligne `> tsc --noEmit` (renderer), sans erreur ; `npm test` : core
+  `Tests  154 passed (154)`, desktop `Tests  157 passed (157)`, renderer `Tests  510 passed (510)` ;
+  `npm run lint` : `✖ 28 problems (0 errors, 28 warnings)`, aucun dans les fichiers touchés (`eslint` sur eux seuls :
+  rien).
+- ✅ **Repéré hors périmètre** (rien touché) : la graine du premier lancement (`apps/desktop/src/main.ts`) ne copie
+  encore le `data/derived` embarqué que si `characters.json` manque — un cache à qui manque une autre table n'est
+  pas réensemencé (la sync la retélécharge désormais, sauf hors ligne).
+- ⏳ Sevih : rien ; le comportement visible ne change que sur un cache incomplet ou une écriture qui échoue.
+
 ### 🖥️ Bureau — écritures atomiques du serveur, `/api/*` inconnue en 404, `img-cache` revalidé (2026-10-19)
 - ✅ **Pourquoi.** Item « Desktop » (`docs/todo.md`, revue 2026-10). Cinq écritures passaient par `writeFileSync`
   direct : un lecteur pouvait voir un fichier à moitié écrit (les stat-locks, `user_item.json` réécrit par Equip et

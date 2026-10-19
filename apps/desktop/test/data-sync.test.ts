@@ -7,6 +7,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as tsImpl from "../src/data-sync.js";
 import { SOLVER_FILES, syncGameData } from "../src/data-sync.js";
 
+// `writeFileSync` that fails for the paths `fsFault.failWrite` picks — a
+// read-only folder can't be made portably (the CI also runs on Windows).
+const fsFault = vi.hoisted(() => ({ failWrite: null as ((path: string) => boolean) | null }));
+vi.mock("node:fs", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:fs")>();
+  const writeFileSync: typeof real.writeFileSync = (file, ...rest) => {
+    if (fsFault.failWrite?.(String(file))) throw Object.assign(new Error(`EACCES: permission denied, open '${String(file)}'`), { code: "EACCES" });
+    real.writeFileSync(file, ...rest);
+  };
+  return { ...real, default: { ...real, writeFileSync }, writeFileSync };
+});
+
 const OLD_SHA = "a".repeat(40);
 const NEW_SHA = "b".repeat(40);
 
@@ -36,7 +48,7 @@ function stubRemote(remoteHash: string, extra: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => { vi.stubEnv("OUTERPEDIA_NO_CHECKOUT", "1"); });
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); fsFault.failWrite = null; });
 
 describe("syncGameData — REPO mode", () => {
   it("a site-only commit (same data hash) downloads version.json only", async () => {
@@ -83,18 +95,24 @@ describe("syncGameData — REPO mode", () => {
   });
 });
 
+/** Temp files left in `derivedDir`. */
+const leftoverTmps = (derivedDir: string) => readdirSync(derivedDir).filter((f) => f.endsWith(".tmp"));
+
 describe("syncGameData — version.json is the commit marker", () => {
-  it("a write failure mid-sync leaves the old data hash in place", async () => {
+  it("a rename failure mid-sync is an error status that names it, old data hash in place", async () => {
     const { derivedDir, shaStateFile } = cache("h1");
     stubRemote("h2");
-    // A non-empty directory where a table goes makes its atomic rename fail.
+    // A non-empty directory where a table goes makes its rename fail.
     rmSync(join(derivedDir, "trust-character.json"));
     mkdirSync(join(derivedDir, "trust-character.json", "x"), { recursive: true });
-    await expect(syncGameData({ derivedDir, shaStateFile, force: false })).rejects.toThrow();
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r.status).toBe("error");
+    expect(r.message).toMatch(/^could not write trust-character\.json to the game data folder \(\w+\); keeping the cached data$/);
     // version.json must still say h1 so the next launch retries the download
     // instead of trusting a half-written tree as "fresh".
     expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8")).hash).toBe("h1");
     expect(JSON.parse(readFileSync(shaStateFile, "utf-8")).sha).toBe(OLD_SHA);
+    expect(leftoverTmps(derivedDir)).toEqual([]);
   });
 });
 
@@ -108,6 +126,142 @@ function expectCacheIntact(derivedDir: string, shaStateFile: string) {
   expect(readFileSync(join(derivedDir, "characters.json"), "utf-8")).toBe("{}");
   expect(JSON.parse(readFileSync(shaStateFile, "utf-8")).sha).toBe(OLD_SHA);
 }
+
+describe("syncGameData — a cache missing a table is not ready", () => {
+  it("REPO, same data hash: downloads everything instead of answering fresh", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    rmSync(join(derivedDir, "sets.json"));
+    const urls = stubRemote("h1");
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r.status).toBe("synced");
+    expect(tableUrls(urls)).toHaveLength(SOLVER_FILES.length - 1);
+    expect(JSON.parse(readFileSync(join(derivedDir, "sets.json"), "utf-8"))).toEqual({ from: "remote" });
+  });
+
+  it("REPO, same SHA: not fresh either", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    writeFileSync(shaStateFile, JSON.stringify({ sha: NEW_SHA, resolvedAt: 0 }));
+    rmSync(join(derivedDir, "stat-keys.json"));
+    stubRemote("h1");
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r.status).toBe("synced");
+  });
+
+  it("REPO offline: unavailable, not offline", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    rmSync(join(derivedDir, "equipment.json"));
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "unavailable", message: "offline and no cached game data" });
+  });
+
+  it("CHECKOUT, same data hash: copies everything instead of answering fresh", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    rmSync(join(derivedDir, "sets.json"));
+    vi.stubEnv("OUTERPEDIA_NO_CHECKOUT", "");
+    vi.stubEnv("OUTERPEDIA_PATH", fakeCheckout({ schema: 2, hash: "h1", builtAt: "2026-02-02" }));
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r.status).toBe("synced");
+    expect(JSON.parse(readFileSync(join(derivedDir, "sets.json"), "utf-8"))).toEqual({ from: "checkout" });
+  });
+});
+
+describe("syncGameData — REPO artifacts must be JSON", () => {
+  it.each([false, true])("a 200 that is not JSON refuses the sync, cache and SHA kept (force: %s)", async (force) => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.startsWith("https://api.github.com/")) return new Response(NEW_SHA);
+      if (url.endsWith("/version.json")) return Response.json({ hash: "h2", builtAt: "2026-02-02" });
+      if (url.endsWith("/trust-character.json")) return new Response("<html>Bad gateway</html>");
+      return Response.json({ from: "remote" });
+    }));
+    const r = await syncGameData({ derivedDir, shaStateFile, force });
+    expect(r).toEqual({ status: "error", message: "trust-character.json downloaded from outerpedia is not valid JSON; keeping the cached data" });
+    expectAllTablesIntact(derivedDir, shaStateFile);
+    expect(leftoverTmps(derivedDir)).toEqual([]);
+  });
+});
+
+describe("syncGameData — write failures are reported", () => {
+  it("REPO: a table that can't be written is an error status, no exception, old cache intact", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    stubRemote("h2");
+    fsFault.failWrite = (p) => p.startsWith(join(derivedDir, "sets.json.")) && p.endsWith(".tmp");
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "error", message: "could not write sets.json to the game data folder (EACCES); keeping the cached data" });
+    expectAllTablesIntact(derivedDir, shaStateFile);
+    expect(leftoverTmps(derivedDir)).toEqual([]);
+  });
+
+  it("REPO: version.json that can't be written, after every table, still leaves the old one", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    stubRemote("h2");
+    fsFault.failWrite = (p) => p.startsWith(join(derivedDir, "version.json.")) && p.endsWith(".tmp");
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "error", message: "could not write version.json to the game data folder (EACCES); keeping the cached data" });
+    // No rename ran: the temp files of the tables are gone too.
+    expectAllTablesIntact(derivedDir, shaStateFile);
+    expect(leftoverTmps(derivedDir)).toEqual([]);
+  });
+
+  it("REPO: the version stamp that can't be rewritten is an error, SHA not recorded", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    stubRemote("h1", { resVersion: "1.11.409" });
+    fsFault.failWrite = (p) => p.endsWith(".tmp");
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "error", message: "could not write version.json to the game data folder (EACCES); keeping the cached data" });
+    expectCacheIntact(derivedDir, shaStateFile);
+  });
+
+  it("CHECKOUT: same rule", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    vi.stubEnv("OUTERPEDIA_NO_CHECKOUT", "");
+    vi.stubEnv("OUTERPEDIA_PATH", fakeCheckout({ schema: 2, hash: "h2", builtAt: "2026-02-02" }));
+    fsFault.failWrite = (p) => p.startsWith(join(derivedDir, "characters.json.")) && p.endsWith(".tmp");
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "error", message: "could not write characters.json to the game data folder (EACCES); keeping the cached data" });
+    expectAllTablesIntact(derivedDir, shaStateFile);
+    expect(leftoverTmps(derivedDir)).toEqual([]);
+  });
+
+  it("no cache and nothing writable: unavailable, no exception", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gs-sync-"));
+    const derivedDir = join(dir, "derived");
+    stubRemote("h2");
+    fsFault.failWrite = (p) => p.endsWith(".tmp");
+    const r = await syncGameData({ derivedDir, shaStateFile: join(dir, "repo-sha.json"), force: false });
+    expect(r.status).toBe("unavailable");
+    expect(r.message).toMatch(/^could not write \S+ to the game data folder \(EACCES\); no cached game data$/);
+    expect(readdirSync(derivedDir)).toEqual([]);
+  });
+});
+
+describe("syncGameData — one sync at a time", () => {
+  it("a call while a sync runs gets the same promise: one download", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    const urls = stubRemote("h2");
+    const first = syncGameData({ derivedDir, shaStateFile, force: false });
+    const second = syncGameData({ derivedDir, shaStateFile, force: true });
+    expect(second).toBe(first);
+    const [a, b] = await Promise.all([first, second]);
+    expect(a.status).toBe("synced");
+    expect(b).toBe(a);
+    expect(tableUrls(urls)).toHaveLength(SOLVER_FILES.length - 1);
+    expect(urls.filter((u) => u.startsWith("https://api.github.com/"))).toHaveLength(1);
+  });
+
+  it("the lock is released once it settles", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    stubRemote("h2");
+    const first = syncGameData({ derivedDir, shaStateFile, force: false });
+    await first;
+    const urls = stubRemote("h2");
+    const again = syncGameData({ derivedDir, shaStateFile, force: true });
+    expect(again).not.toBe(first);
+    expect((await again).status).toBe("synced");
+    expect(tableUrls(urls)).toHaveLength(SOLVER_FILES.length - 1);
+  });
+});
 
 describe("syncGameData — contract schema (REPO mode)", () => {
   it("schema 1 behaves like no schema", async () => {

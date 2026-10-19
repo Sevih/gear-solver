@@ -20,14 +20,18 @@
  *    other 19 artifacts downloaded from the GitHub CDN into the writable cache
  *    (at an unchanged hash, only version.json is rewritten, when it differs).
  *    This is what lets the app track game patches WITHOUT shipping a new
- *    installer. Degrades cleanly offline (uses whatever derived is already
- *    cached).
+ *    installer. Every download must parse as JSON, else nothing is written.
+ *    Degrades cleanly offline (uses the cached derived tree, when complete).
+ *
+ * Both modes write in two steps — every file to a temp file, then the renames,
+ * version.json last — and report a write failure as a status. One sync runs at
+ * a time: a call while one is in flight gets that sync's promise.
  *
  * The artifact list is `solver-files.json`, shared with `data/sync.mjs`.
  *
  * Electron-free (paths passed in) so the Vite config can import it.
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { findOuterpediaCheckout } from "./outerpedia-checkout.js";
 import { fetchRepoFile, readShaState, resolveLatestSha, writeShaState } from "./repo-source.js";
@@ -127,28 +131,61 @@ async function pool<T>(items: T[], concurrency: number, fn: (t: T) => Promise<vo
 }
 
 let tmpCounter = 0;
-/** Atomic single-file write (tmp + rename). */
-function writeAtomic(file: string, buf: Buffer | string): void {
-  const tmp = `${file}.${process.pid}.${tmpCounter++}.tmp`;
-  writeFileSync(tmp, buf);
-  renameSync(tmp, file);
+
+/** Write `tables` (name → JSON text), then `version` as version.json when
+ *  given, into `derivedDir` in two steps: every body to a sibling temp file
+ *  first, then the renames, version.json last — its hash is what the next
+ *  launch compares, so it must never claim tables a failed write didn't
+ *  deliver. Returns null when done, else why, naming the file; the temp files
+ *  are removed. Never throws. */
+function commitFiles(derivedDir: string, tables: ReadonlyMap<string, string>, version: string | null): string | null {
+  const files = [...tables];
+  if (version != null) files.push(["version.json", version]);
+  const tmps = new Map<string, string>();
+  let current = "";
+  try {
+    for (const [f, body] of files) {
+      current = f;
+      const tmp = `${join(derivedDir, f)}.${process.pid}.${tmpCounter++}.tmp`;
+      tmps.set(f, tmp);
+      writeFileSync(tmp, body);
+    }
+    for (const [f] of files) {
+      current = f;
+      renameSync(tmps.get(f)!, join(derivedDir, f));
+      tmps.delete(f);
+    }
+    return null;
+  } catch (err) {
+    for (const tmp of tmps.values()) try { rmSync(tmp, { force: true }); } catch { /* best-effort */ }
+    const code = (err as NodeJS.ErrnoException).code ?? (err instanceof Error ? err.message : String(err));
+    return `could not write ${current} to the game data folder (${code})`;
+  }
 }
 
 /** Re-serialize a JSON artifact compact — the generator pretty-prints, which
  *  would ~2.6× the disk/parse cost for the renderer. Falls back to the raw
- *  bytes when parsing fails (never lose data over formatting). */
+ *  bytes when parsing fails; only a version.json body that already passed
+ *  `schemaRefusal` is written through it. */
 function compact(buf: Buffer | string): Buffer | string {
   try { return JSON.stringify(JSON.parse(buf.toString("utf-8"))); } catch { return buf; }
 }
 
 /** At an unchanged data hash, rewrite the cached version.json when its body
  *  differs (a new `resVersion` — the hash covers the 18 tables, not the stamp)
- *  — the only file written. */
-function refreshVersionStamp(derivedDir: string, body: Buffer | string): void {
-  const next = compact(body);
+ *  — the only file written. Null when done or nothing to do, else why. */
+function refreshVersionStamp(derivedDir: string, body: Buffer | string): string | null {
+  const next = compact(body).toString();
   let cur: Buffer | string = "";
   try { cur = compact(readFileSync(join(derivedDir, "version.json"))); } catch { /* rewritten below */ }
-  if (cur.toString() !== next.toString()) writeAtomic(join(derivedDir, "version.json"), next);
+  return cur.toString() !== next ? commitFiles(derivedDir, new Map(), next) : null;
+}
+
+/** A usable cache holds every artifact of the list: one missing table (a
+ *  half-seeded or hand-pruned folder) is neither "fresh" nor an offline
+ *  fallback. */
+function cacheComplete(derivedDir: string): boolean {
+  return SOLVER_FILES.every((f) => existsSync(join(derivedDir, f)));
 }
 
 export interface SyncResult {
@@ -181,15 +218,32 @@ function refused(reason: string, derivedReady: boolean): SyncResult {
     : { status: "unavailable", message: `${reason}; no cached game data` };
 }
 
+/** The sync in flight, if any — the launch sync and the manual Sync button
+ *  (`/api/data/sync`) must never write the same folder at once. */
+let inFlight: Promise<SyncResult> | null = null;
+
 /**
  * Refresh the derived game data. Picks CHECKOUT or REPO mode by whether a
- * local outerpedia checkout carries the solver artifacts. Never throws —
- * returns a status.
+ * local outerpedia checkout carries the solver artifacts. One at a time: a
+ * call while a sync runs gets that sync's promise (its options ignored).
+ * Never throws — returns a status.
  */
-export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
+export function syncGameData(opts: SyncOptions): Promise<SyncResult> {
+  if (inFlight) return inFlight;
+  const run = runSync(opts)
+    .catch((err: unknown): SyncResult => ({
+      status: "error",
+      message: `game data sync failed (${err instanceof Error ? err.message : String(err)})`,
+    }))
+    .finally(() => { inFlight = null; });
+  inFlight = run;
+  return run;
+}
+
+async function runSync(opts: SyncOptions): Promise<SyncResult> {
   const { derivedDir, shaStateFile, force, repoRoot = null, supportedSchema = SUPPORTED_SOLVER_SCHEMA } = opts;
   mkdirSync(derivedDir, { recursive: true });
-  const derivedReady = existsSync(join(derivedDir, "characters.json"));
+  const derivedReady = cacheComplete(derivedDir);
 
   // ── CHECKOUT mode ─────────────────────────────────────────────────────────
   const checkout = findSolverCheckout(repoRoot);
@@ -199,8 +253,9 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
     const refusal = schemaRefusal(body, supportedSchema);
     if (refusal) return refused(refusal, derivedReady);
     const srcHash = readVersionHash(checkout);
-    if (!force && srcHash != null && srcHash === readVersionHash(derivedDir)) {
-      refreshVersionStamp(derivedDir, body);
+    if (!force && derivedReady && srcHash != null && srcHash === readVersionHash(derivedDir)) {
+      const unwritten = refreshVersionStamp(derivedDir, body);
+      if (unwritten) return refused(unwritten, derivedReady);
       return { status: "fresh", message: `data already up to date (checkout ${srcHash})` };
     }
     // Read and parse EVERY artifact before writing any: a missing or broken
@@ -215,9 +270,8 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
       try { text = readFileSync(src, "utf-8"); } catch { return refused(`${f} is unreadable in the outerpedia checkout`, derivedReady); }
       try { tables.set(f, JSON.stringify(JSON.parse(text))); } catch { return refused(`${f} is not valid JSON in the outerpedia checkout`, derivedReady); }
     }
-    // version.json goes LAST, as in REPO mode below.
-    for (const [f, json] of tables) writeAtomic(join(derivedDir, f), json);
-    writeAtomic(join(derivedDir, "version.json"), compact(body));
+    const unwritten = commitFiles(derivedDir, tables, compact(body).toString());
+    if (unwritten) return refused(unwritten, derivedReady);
     const copied = tables.size + 1;
     return { status: "synced", message: `synced ${copied} tables (checkout ${srcHash ?? "?"})`, copied };
   }
@@ -256,7 +310,8 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
   if (refusal) return refused(refusal, derivedReady);
   const remoteHash = hashOf(version.buf);
   if (!force && derivedReady && remoteHash != null && remoteHash === readVersionHash(derivedDir)) {
-    refreshVersionStamp(derivedDir, version.buf);
+    const unwritten = refreshVersionStamp(derivedDir, version.buf);
+    if (unwritten) return refused(unwritten, derivedReady);
     writeShaState(shaStateFile, latest);
     return { status: "fresh", message: `data up to date (${latest.slice(0, 7)}, data ${remoteHash})` };
   }
@@ -278,10 +333,17 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
       ? { status: "error", message: `download failed: ${failed} — keeping cached data` }
       : { status: "unavailable", message: `download failed: ${failed} and no cached data` };
   }
-  // version.json goes LAST: its hash is what the next launch compares, so it
-  // must never claim data a half-finished write didn't deliver.
-  for (const [f, buf] of bufs) if (f !== "version.json") writeAtomic(join(derivedDir, f), compact(buf));
-  writeAtomic(join(derivedDir, "version.json"), compact(version.buf));
+  // Every artifact must be JSON: a 200 carrying an error page or a truncated
+  // body is refused whole, nothing written, SHA not recorded.
+  const tables = new Map<string, string>();
+  for (const f of SOLVER_FILES) {
+    if (f === "version.json") continue;
+    try { tables.set(f, JSON.stringify(JSON.parse(bufs.get(f)!.toString("utf-8")))); } catch {
+      return refused(`${f} downloaded from outerpedia is not valid JSON`, derivedReady);
+    }
+  }
+  const unwritten = commitFiles(derivedDir, tables, compact(version.buf).toString());
+  if (unwritten) return refused(unwritten, derivedReady);
   // Only record the SHA after a complete write — a failed sync retries next launch.
   writeShaState(shaStateFile, latest);
   return { status: "synced", message: `synced ${bufs.size} tables @ ${latest.slice(0, 7)}`, copied: bufs.size };

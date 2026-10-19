@@ -667,8 +667,14 @@ the 20 derived artifacts. Refreshed **at launch** by `data-sync.ts`
 - **repo** (packaged build) — downloads the 20 artifacts from the public repo
   `Sevih/outerpedia` via the jsDelivr CDN, gated on the SHA of the latest
   commit (`api.github.com/.../commits/main`). Allows following patches
-  **without publishing a new build**. Degrades gracefully offline (uses the
-  already-cached `data/derived`).
+  **without publishing a new build**. Every downloaded artifact must parse as
+  JSON, else nothing is written. Degrades gracefully offline (uses the
+  already-cached `data/derived`, when complete).
+
+In both modes a cache counts only if all 20 files are there; writes go in two
+steps (every `.tmp`, then the renames, version.json last) and a write failure
+is an `error` status naming the file; one sync at a time (a call while a sync
+runs gets its promise).
 
 `data/sync.mjs` (the dev-time copy) finds the outerpedia checkout via the
 `OUTERPEDIA_PATH` env var, else a list of known local paths, and exits non-zero
