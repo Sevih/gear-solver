@@ -666,6 +666,9 @@ Les tables brutes vivent dans le datamine d'outerpedia ; l'app ne voit que les
 - **checkout** (dev / machine mainteneur) — copie depuis un checkout local
   d'outerpedia (`data/generated/solver/`), gardé par le hash de version.json
   (à hash égal, seul un version.json différent est recopié), zéro réseau ;
+  les 19 fichiers sont lus avant toute écriture : un artefact absent ou
+  illisible refuse la synchro et garde le cache, comme `data/sync.mjs` (même
+  liste, `apps/desktop/src/solver-files.json`) ;
 - **repo** (build packagé) — télécharge les 19 artefacts depuis le repo public
   `Sevih/outerpedia` via le CDN jsDelivr, gaté sur le SHA du dernier commit
   (`api.github.com/.../commits/main`). Permet de suivre les patchs **sans

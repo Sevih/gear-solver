@@ -8,6 +8,80 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔗 Synchro et contrat — mode CHECKOUT sans saut muet, une seule liste des tables, test de forme croisé, M3 testé ; todo remis à jour (2026-10-19)
+- ✅ **Pourquoi.** Trois items de la section « Contrat solver » de `docs/todo.md` (Mode CHECKOUT, Test de forme
+  croisé, M3), puis la remise à jour de ce fichier, en retard sur le code. Prérequis vérifié : le passif de cœur par
+  palier de fusion (`corePassiveByFusion`, `76c37f3`) est commité. Pas de `data:sync`.
+- ✅ **Mode CHECKOUT, une seule règle d'échec.** `syncGameData` (`apps/desktop/src/data-sync.ts`) copiait fichier
+  par fichier : un artefact absent sautait par un `continue` muet, un illisible par un `catch` vide, et le statut
+  disait quand même « synced N tables » — d'où un `data/derived` à moitié d'une version. Désormais les 18 tables
+  sont lues et passées par `JSON.parse` AVANT toute écriture (`version.json` est le corps déjà lu pour le contrôle
+  de schéma) ; un artefact absent, illisible ou non JSON → rien n'est écrit, `refused()` rend `error` « <fichier>
+  is missing from / is unreadable in / is not valid JSON in the outerpedia checkout; keeping the cached data »
+  (`unavailable` « …; no cached game data » sans cache) ; complet → les tables puis `version.json` en dernier,
+  comme en REPO, « synced 19 tables (checkout <hash>) ». `data/sync.mjs` suit la même règle : il sortait en erreur
+  sur un absent mais après avoir déjà réécrit les fichiers précédents de `data/derived/` ; il lit et parse tout
+  d'abord (« missing artifact: … » ou « unreadable or not JSON: … », « data/derived left untouched », sortie 1),
+  écrit `version.json` en dernier.
+- ✅ **Une seule liste.** `apps/desktop/src/solver-files.json` (les 19 noms, à côté de `game-client.json`) est
+  importé par `data-sync.ts` (`with { type: "json" }`, `SOLVER_FILES: readonly string[]`, même export) et par
+  `data/sync.mjs` ; le « Keep in sync » et la copie disparaissent, les en-têtes des deux fichiers le disent. Les
+  deux chemins d'import vérifiés : `tsc -p apps/desktop --outDir <scratch>` émet `solver-files.json` à côté de
+  `data-sync.js`, le module compilé importé par Node rend `19 version.json` ; `loadConfigFromFile` de Vite charge
+  `apps/renderer/vite.config.ts` et liste `../desktop/src/solver-files.json` et `../desktop/src/data-sync.ts` dans
+  ses dépendances. Pas de repli sur des jumeaux. `files: ["dist/**/*"]` de l'installeur emporte le JSON émis, comme
+  `game-client.json`. `docs/reference.md` § 3.1 / `wiki/Engine-Reference.md` : le mode checkout lit tout avant
+  d'écrire ; le wiki disait que `data/sync.mjs` sort sur un artefact absent, il ajoute « or not JSON, before
+  writing anything ».
+- ✅ **Test de forme croisé** (`apps/renderer/test/contractShape.test.ts`, là où les tests cherchent déjà le
+  checkout). Les clés de `StatBlock` et celles de `CharacterIngredients` (obligatoires et facultatives séparées, par
+  `RequiredKeys` / `OptionalKeys`) sont déclarées `satisfies Record<…, true>` : une clé oubliée ou en trop ne passe
+  pas `tsc` (essayé : `spdPct` ajouté → TS2353, `corePassiveByFusion` retiré → TS1360). Sur chaque personnage,
+  chaque bloc (`classPassive`, `evoByLevel`, `skill8ByLevel`, `s1/s2/s3ByLevel`, `geasByNode.*.levels`,
+  `corePassive` non nul) a exactement les 16 clés, `corePassiveByFusion` les 16 plus `spdPct` ; `ingredients` n'a
+  que des clés déclarées et toutes les obligatoires. Vert sur `data/derived/characters.json` (129 personnages) et
+  sur le checkout de ce poste : « outerpedia's data/generated/solver/characters.json » passé, non sauté (sans
+  checkout, « (skipped: no outerpedia checkout found) »). Un quatrième cas prouve qu'il attrape une dérive (stat en
+  trop, stat manquante, ingrédient non déclaré, ingrédient manquant). Lancé pendant qu'un lot d'outerpedia
+  réécrivait `sets.json` et `version.json` de son `data/generated/solver/` ; `characters.json`, seul lu ici, n'y
+  était pas touché.
+- ✅ **M3 testé.** L'unique `IOT_STAT` de l'EE de Fatal (Eclipse, 2000078 : CHD +30 % à +10) est dans le contrat
+  depuis C20 d'outerpedia et `parse.ts` le lit ; rien ne le tenait. `packages/core/test/parse.test.ts` (contrat
+  réel : `ee-passives.json`, `enhance.json`, l'entrée d'`equipment.json`) : l'entrée du contrat est
+  `{ levelThreshold: 10, ST_CRITICAL_DMG_RATE, OAT_ADD, 300 }` ; à +9 aucun main `eePassive` ; à +10
+  `{ stat: "critDmg", value: 30, percent: true, fromBuff: true, source: "eePassive" }`.
+  `apps/renderer/test/eePassive.test.ts` : fiche de Fatal composée (niveau 100), `computeFinalStats` → CHD
+  inchangé avec l'EE à +9, +30 à +10. Rejeu du simulateur de client sur les 129 EE à +0/+1/+5/+9/+10 : tel quel,
+  1 écart, 2000078 à +10, parce que son côté jeu ne compte que les buffs `IOT_BUFF` et liste les `IOT_STAT` à part
+  (il nomme justement celui-ci) ; l'`IOT_STAT` compté côté jeu (`StatType ApplyingType OptionValue`) → 0 écart.
+- ✅ **`docs/todo.md` remis à jour** (preuves) : L1 sort (fait par G1, `ba7d2c0`, `SUPPORTED_SOLVER_SCHEMA` et
+  `schemaRefusal`) ; L10 sort (abandonné le 15/10, décision de Sevih : outerpedia est la source, gear-solver lit) ;
+  « Filtre des passifs de skill trop strict » sort (fait côté contrat par outerpedia, B56, `feae32fe` « filtre
+  client des passifs de competence ») ; C1 et M2 étaient déjà sortis (rien) ; « Externe — packaging desktop »
+  devient « Externe — vérifs sur la version installée » et perd la puce « Bake prod du `data/` · installeur ·
+  mise à jour automatique · bouton capture natif » : `extraResources` porte `../../data/derived`, `win.target`
+  `nsis`, `apps/desktop/src/updater.ts` (`electron-updater`, `publish` GitHub) et les tags `v1.8.0` à `v1.10.0`
+  existent, le « bouton capture natif » datait d'avant la source Steam ; « Capture no-root » et « Vérif sync repo
+  en prod packagé » restent, inchangés ; Mode CHECKOUT, Test de forme croisé et M3 sortent ; « Dernier passage »
+  daté du 19/10. `git diff --stat docs/todo.md` : `1 file changed, 6 insertions(+), 20 deletions(-)`.
+- ✅ **Tests.** `apps/desktop/test/data-sync.test.ts` : CHECKOUT complet → `synced 19 tables (checkout h2)`,
+  `copied: 19` ; chacune des 18 tables absente (`it.each` sur la liste partagée ; `version.json` exclu, sans lui
+  le checkout n'est pas trouvé) → `error`, aucun fichier écrit, cache intact ; une table non JSON et une table
+  illisible (un dossier à sa place) → idem ; absent sans cache → `unavailable`, dossier vide. `SOLVER_FILES` égale
+  `solver-files.json`, 19 noms distincts. `data/sync.mjs` : chacune des 18 tables absente d'un faux checkout
+  (rempli des octets mêmes de `data/derived/`, inoffensif même si le script écrivait avant d'échouer) → sortie non
+  nulle, fichier nommé, `data/derived` identique ; une table non JSON → idem. Preuve que la liste partagée pilote
+  les deux : `trust-buffs.json` retiré à l'essai de `solver-files.json` → `Tests  2 failed | 77 passed (79)` au
+  lieu de 81 (un cas de moins dans chacun des deux `it.each`, le « 19 tables » des deux côtés rouge), fichier
+  restauré. `npm run typecheck` : dernière ligne `> tsc --noEmit` (renderer), sans erreur ; `npm test` : core
+  `Tests  128 passed (128)`, desktop `Tests  129 passed (129)`, renderer `Tests  467 passed (467)`.
+- ✅ **Repéré hors périmètre** (rien touché) : `wiki/Engine-Reference.md` dit encore que `data/sync.mjs` cherche
+  « a list of known local paths » (c'est `.env.local` puis `../outerpedia`) ; le reste de l'item « data-sync »
+  (`derivedReady`, verrou, `writeAtomic`) n'est pas traité.
+- ⏳ **`docs/roadmap.md` (M8, « Prod packagé encore à vérifier ») et `docs/STATUS.md` (« packaging … câblé mais
+  non vérifié end-to-end »)** disent encore le packaging à vérifier : à requalifier comme la section du todo
+  (Sevih).
+
 ### 🧹 Restes des lots G1 à G7 — `resVersion` des données, niveau de set de la fiche, famille du talisman conseillé, portrait fusionné, client de référence, Wipe refusé plugin actif (2026-10-18)
 - ✅ **Pourquoi.** Sept restes notés par G1 à G7 dans leurs entrées (« ⏳ Laissé », « Repéré hors périmètre »),
   revérifiés le 18/10 ; sept parties indépendantes, un seul commit. Pas de `data:sync`.

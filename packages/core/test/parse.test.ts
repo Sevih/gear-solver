@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import { parseInventory, isGear, projectMainToCeiling } from "../src/parse.js";
 import type { RawUserItem } from "../src/raw.js";
 import type { GameData } from "../src/gamedata.js";
+import eePassivesJson from "../../../data/derived/ee-passives.json";
+import enhanceJson from "../../../data/derived/enhance.json";
+import equipmentJson from "../../../data/derived/equipment.json";
 
 const game: GameData = {
   options: {
@@ -224,5 +227,40 @@ describe("projectMainToCeiling", () => {
   it("leaves Talisman (ooparts) mains untouched (enhance doesn't scale them)", () => {
     const tal = parseInventory(sample, undefined, game).gear.find((g) => g.uid === "tal")!;
     expect(projectMainToCeiling(tal, game, ASCENDED)).toBe(tal); // identity
+  });
+});
+
+describe("EE level-gated passive — Fatal's Eclipse (2000078), the one IOT_STAT EE unique", () => {
+  // Committed contract: ee-passives.json carries it since outerpedia's C20.
+  const eeGame: GameData = {
+    ...game,
+    equipment: { ...game.equipment, "2000078": equipmentJson["2000078"] as GameData["equipment"][string] },
+    eePassives: eePassivesJson as GameData["eePassives"],
+    enhance: enhanceJson as GameData["enhance"],
+  };
+  const curve = eeGame.enhance.expCurves["exclusive|unique|6"]!;
+  const eclipse = (level: number): RawUserItem => ({
+    ItemList: [{
+      ItemUID: `ee${level}`, CharUID: "0", ItemID: 2000078, Exp: curve[level]!, BreakLimitLevel: 0, Quantity: 1,
+      SmeltingCount: 0, IsLock: 0, InvenType: 0, SelectSubOptionNum: 0,
+      SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0, OptionList: [], SubOptionList: [],
+    }],
+  });
+  const eeMains = (level: number) => {
+    const g = parseInventory(eclipse(level), undefined, eeGame).gear[0]!;
+    expect(g.enhanceLevel).toBe(level);
+    return g.main.filter((m) => m.source === "eePassive");
+  };
+
+  it("the contract gates CHD +30 % at +10", () => {
+    expect(eeGame.eePassives["2000078"]).toEqual([{ levelThreshold: 10, st: "ST_CRITICAL_DMG_RATE", ap: "OAT_ADD", v: 300 }]);
+  });
+
+  it("+9 → no eePassive main", () => {
+    expect(eeMains(9)).toEqual([]);
+  });
+
+  it("+10 → critDmg 30 %, fromBuff", () => {
+    expect(eeMains(10)).toEqual([{ stat: "critDmg", value: 30, percent: true, fromBuff: true, source: "eePassive" }]);
   });
 });

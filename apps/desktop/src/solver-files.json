@@ -1,0 +1,21 @@
+[
+  "archive-bonus.json",
+  "buffs.json",
+  "char-level-max.json",
+  "characters.json",
+  "codex-curve.json",
+  "ee-passives.json",
+  "enhance.json",
+  "equipment-passives.json",
+  "equipment.json",
+  "exp-character.json",
+  "gems.json",
+  "multi-tier-passives.json",
+  "options.json",
+  "sets.json",
+  "singularity-options.json",
+  "sub-ticks.json",
+  "trust-buffs.json",
+  "trust-character.json",
+  "version.json"
+]

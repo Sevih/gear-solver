@@ -14,28 +14,24 @@
  *
  * Checkout lookup (scripts/outerpedia-checkout.mjs): `OUTERPEDIA_PATH` env →
  * `OUTERPEDIA_PATH` in `.env.local` → sibling `../outerpedia`. Exits non-zero when
- * the checkout or an expected artifact is missing so a release can't silently
- * ship stale data, and when the checkout's `version.json` carries a contract
- * schema this build can't read (scripts/solver-schema.mjs).
+ * the checkout or an expected artifact is missing or not JSON so a release can't
+ * silently ship stale data, and when the checkout's `version.json` carries a
+ * contract schema this build can't read (scripts/solver-schema.mjs). Every
+ * artifact is read before anything is written, `version.json` last — the same
+ * rule as the app's CHECKOUT mode (apps/desktop/src/data-sync.ts).
  */
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { REPO_ROOT, findOuterpediaCheckout } from "../scripts/outerpedia-checkout.mjs";
 import { schemaRefusal } from "../scripts/solver-schema.mjs";
+// The one list of solver artifacts, shared with the app's runtime sync
+// (apps/desktop/src/data-sync.ts); outerpedia's datagen/generators/solver.ts
+// emits the same set.
+import SOLVER_FILES from "../apps/desktop/src/solver-files.json" with { type: "json" };
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DERIVED = join(here, "derived");
-
-// Keep in sync with SOLVER_FILES in apps/desktop/src/data-sync.ts (the
-// runtime downloader) and outerpedia's datagen/generators/solver.ts (emitter).
-const SOLVER_FILES = [
-  "archive-bonus.json", "buffs.json", "char-level-max.json", "characters.json",
-  "codex-curve.json", "ee-passives.json", "enhance.json", "equipment-passives.json",
-  "equipment.json", "exp-character.json", "gems.json", "multi-tier-passives.json",
-  "options.json", "sets.json", "singularity-options.json", "sub-ticks.json",
-  "trust-buffs.json", "trust-character.json", "version.json",
-];
 
 const SOLVER_DIR = join("data", "generated", "solver");
 const root = findOuterpediaCheckout(REPO_ROOT, join(SOLVER_DIR, "version.json"));
@@ -53,22 +49,31 @@ if (refusal) {
   process.exit(1);
 }
 
-let copied = 0;
+// Read and parse every artifact first: a missing or broken one stops the sync
+// before `data/derived/` is touched.
+const tables = new Map();
 for (const f of SOLVER_FILES) {
   const src = join(checkout, f);
   if (!existsSync(src)) {
-    console.error(`missing artifact: ${src}`);
+    console.error(`missing artifact: ${src}; data/derived left untouched`);
     process.exit(1);
   }
-  // Re-serialize compact: the generator pretty-prints its output, which would
-  // bloat the committed tree / installer / runtime downloads ~2.6×. The
-  // version.json hash identifies the SNAPSHOT (emitted content), not our
-  // bytes, so compacting is safe.
-  writeFileSync(join(DERIVED, f), JSON.stringify(JSON.parse(readFileSync(src, "utf-8"))));
-  copied++;
+  try {
+    // Re-serialize compact: the generator pretty-prints its output, which would
+    // bloat the committed tree / installer / runtime downloads ~2.6×. The
+    // version.json hash identifies the SNAPSHOT (emitted content), not our
+    // bytes, so compacting is safe.
+    tables.set(f, JSON.stringify(JSON.parse(readFileSync(src, "utf-8"))));
+  } catch {
+    console.error(`unreadable or not JSON: ${src}; data/derived left untouched`);
+    process.exit(1);
+  }
 }
-const version = JSON.parse(readFileSync(join(DERIVED, "version.json"), "utf-8"));
-console.log(`synced ${copied} tables from ${checkout}`);
+// version.json last: its hash is what the app compares.
+for (const [f, json] of tables) if (f !== "version.json") writeFileSync(join(DERIVED, f), json);
+writeFileSync(join(DERIVED, "version.json"), tables.get("version.json"));
+const version = JSON.parse(tables.get("version.json"));
+console.log(`synced ${tables.size} tables from ${checkout}`);
 console.log(`derived version: ${version.hash} (built ${version.builtAt})`);
 
 // Shared Steam client reference, copied verbatim (outerpedia's tests guard its

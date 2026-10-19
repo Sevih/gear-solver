@@ -10,7 +10,9 @@
  *    present. Copy `data/generated/solver/*.json` into `derivedDir`.
  *    version.json-hash-gated so a launch is a no-op when nothing changed (at
  *    an unchanged hash, only a version.json whose stamp moved is rewritten).
- *    No network.
+ *    Every artifact is read and parsed before anything is written: one missing
+ *    or unreadable file refuses the whole sync and keeps the cache, like
+ *    `data/sync.mjs`. No network.
  *
  *  - REPO mode (packaged build, any machine): no checkout. Resolve the latest
  *    commit SHA of `Sevih/outerpedia`, and if it changed since last sync,
@@ -21,25 +23,24 @@
  *    installer. Degrades cleanly offline (uses whatever derived is already
  *    cached).
  *
+ * The artifact list is `solver-files.json`, shared with `data/sync.mjs`.
+ *
  * Electron-free (paths passed in) so the Vite config can import it.
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { findOuterpediaCheckout } from "./outerpedia-checkout.js";
 import { fetchRepoFile, readShaState, resolveLatestSha, writeShaState } from "./repo-source.js";
+// The one list of solver artifacts, also imported by `data/sync.mjs` (the
+// committed-tree refresh) — a table added or dropped changes both.
+import solverFiles from "./solver-files.json" with { type: "json" };
 
 /** Repo-relative dir holding the solver artifacts. */
 const SOLVER_DIR = "data/generated/solver";
 
 /** The 19 derived tables the engine consumes — the exact set outerpedia's
  *  solver generator emits (and the committed `data/derived/` tree mirrors). */
-export const SOLVER_FILES = [
-  "archive-bonus.json", "buffs.json", "char-level-max.json", "characters.json",
-  "codex-curve.json", "ee-passives.json", "enhance.json", "equipment-passives.json",
-  "equipment.json", "exp-character.json", "gems.json", "multi-tier-passives.json",
-  "options.json", "sets.json", "singularity-options.json", "sub-ticks.json",
-  "trust-buffs.json", "trust-character.json", "version.json",
-];
+export const SOLVER_FILES: readonly string[] = solverFiles;
 
 /** Locate a local outerpedia checkout carrying the solver artifacts, if any.
  *  `OUTERPEDIA_PATH` env wins; with a `repoRoot` (dev) `.env.local` and a
@@ -198,12 +199,22 @@ export async function syncGameData(opts: SyncOptions): Promise<SyncResult> {
       refreshVersionStamp(derivedDir, body);
       return { status: "fresh", message: `data already up to date (checkout ${srcHash})` };
     }
-    let copied = 0;
+    // Read and parse EVERY artifact before writing any: a missing or broken
+    // file must never leave `derivedDir` half one snapshot, half another.
+    // version.json is the body already checked above.
+    const tables = new Map<string, string>();
     for (const f of SOLVER_FILES) {
+      if (f === "version.json") continue;
       const src = join(checkout, f);
-      if (!existsSync(src)) continue;
-      try { writeAtomic(join(derivedDir, f), compact(readFileSync(src))); copied++; } catch { /* skip unreadable */ }
+      if (!existsSync(src)) return refused(`${f} is missing from the outerpedia checkout`, derivedReady);
+      let text: string;
+      try { text = readFileSync(src, "utf-8"); } catch { return refused(`${f} is unreadable in the outerpedia checkout`, derivedReady); }
+      try { tables.set(f, JSON.stringify(JSON.parse(text))); } catch { return refused(`${f} is not valid JSON in the outerpedia checkout`, derivedReady); }
     }
+    // version.json goes LAST, as in REPO mode below.
+    for (const [f, json] of tables) writeAtomic(join(derivedDir, f), json);
+    writeAtomic(join(derivedDir, "version.json"), compact(body));
+    const copied = tables.size + 1;
     return { status: "synced", message: `synced ${copied} tables (checkout ${srcHash ?? "?"})`, copied };
   }
 

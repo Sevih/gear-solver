@@ -8,9 +8,11 @@
 > `[ ]` = à faire · `[~]` = partiellement fait (le détail livré est dans le changelog).
 > **Décision** = à trancher avant de coder.
 >
-> Dernier passage : 2026-10-15. Les bugs confirmés de l'audit du 2026-09-07 sont livrés (T3, T4, T10, T14,
-> #23-#29 ; cf. git log). En tête : les constats de la revue du 2026-10-09 (identifiants C/M de la revue),
-> tous revérifiés sur `main` au 2026-10-15.
+> Dernier passage : 2026-10-19 — sortis : L1 (fait), L10 (abandonné), le filtre des passifs de skill (fait côté
+> contrat), le mode CHECKOUT, le test de forme croisé et M3 ; section packaging requalifiée (installeur, données
+> embarquées, mise à jour automatique et releases livrés). Les bugs confirmés de l'audit du 2026-09-07 sont
+> livrés (T3, T4, T10, T14, #23-#29 ; cf. git log). En tête : les constats de la revue du 2026-10-09
+> (identifiants C/M de la revue), tous revérifiés sur `main` au 2026-10-15.
 
 ---
 
@@ -42,28 +44,14 @@
 ### 🔴 Contrat solver (avec outerpedia)
 > Ordre pour tout changement de forme : outerpedia ajoute sans retirer et pose `schema` ; une version de gear-solver
 > qui lit le nouveau champ est publiée ; ensuite seulement on retire l'ancien.
-- [ ] 🔴 **L1 d'abord — versionner le contrat** — `schema` (entier) et `resVersion` dans `solver/version.json` ;
-      `data-sync.ts` refuse un schéma plus récent que le sien et garde son cache. Aujourd'hui un push d'outerpedia
-      qui change la forme casse toutes les installations à la fois (le chargeur caste le JSON sans le valider).
-- [ ] 🔴 **M3 — Unique IOT_STAT de l'EE de Fatal (2000078) absente** — CHD +30 % à +10 perdu : le contrat ne sort
-      que les uniques IOT_BUFF. Seul cas parmi les EE.
-- [ ] 🟡 **Filtre des passifs de skill trop strict** côté contrat (`extractSkillPassiveByLevel` : ME seul, condition
-      NONE, `TurnDuration −1`) ; sans rejet constaté aujourd'hui.
 - [ ] 🟡 **L6 — Une table `ST_*` → clés unique**, émise dans le contrat (`solver/stat-keys.json`) et lue par
       `GAME_STAT` et par le wiki. Y faire entrer les mains d'EE `ST_AVOID` (précision vs élément), présentes dans
       `buffs.json` mais inconnues de `GAME_STAT` → le main disparaît du panneau au lieu d'être affiché combat-only.
-- [ ] 🟡 **Mode CHECKOUT : fichier absent sauté par un `continue` muet** (`data-sync.ts`) alors que `data/sync.mjs`
-      sort en erreur ; `SOLVER_FILES` recopié dans `data/sync.mjs` et `data-sync.ts`. Une seule liste exportée
-      (core) et la même règle d'échec.
-- [ ] 🟡 **Test de forme croisé** — `CharacterIngredients` et `StatBlock` définis deux fois (outerpedia
-      `solver-ingredients.ts`, `core/gamedata.ts`), identiques aujourd'hui, rien ne le garantit.
 - [ ] ⚪ **Règles du jeu recopiées à la main** au lieu de venir du contrat : `REFORGE_PER_SUB_CAP`
       (`OptionMaxValue`, que `parse.ts` n'applique pas non plus : sans effet tant que max = 6 × valeur), budgets
       6/9 (`AddSmeltingCount`), emplacements de gemme (`GemSlot`), `EVO_UNLOCK_LEVEL`. `ee-passives` ne garde que
       TargetType ME et le niveau de buff le plus haut (0 écart, fragile). `trust-buffs.json` synchronisé et chargé
       mais jamais lu (à raison : buffs de combat) → cesser de le charger.
-- [ ] ⚪ **L10 — outerpedia consommateur de `packages/core`** : abandon recommandé (deux compositeurs tenus par un
-      oracle client commun). **Décision**.
 
 ### 🟡 Revue 2026-10 — divers
 - [ ] 🟡 **Plancher de « Maxed only » pour une pièce sous 6★** — une 5★ n'atteint jamais le budget du mode.
@@ -165,12 +153,10 @@
 - [~] **Equip / Unequip** — Builder « Equip build » et Worklist livrés. **Reste (optionnel)** : un déclencheur côté
       **Builds** (unequip / assignation par slot).
 
-### Externe — packaging desktop (vérif sur un vrai build, le plumbing existe)
+### Externe — vérifs sur la version installée
 - [~] 🟢 **Capture no-root** — livrée par la source Steam (plugin BepInEx, validé en jeu le 2026-09-05). **Reste** :
       (a) vérifier qu'un compte mobile se lie au client Steam (FAQ MAJOR9) avant de le vendre aux joueurs ; (b) tester
       le chemin « BepInEx absent » (download + pose dans le dossier du jeu) sur une install vierge.
-- [ ] Bake prod du `data/` (`extraResources` → `process.resourcesPath`) · installeur qui lance serveur local + renderer
-      · mise à jour automatique sur un vrai feed de release · bouton capture natif en packagé (sans `npm run dev`).
 - [ ] **Vérif sync repo en prod packagé** — 1er lancement online : seed `data/derived` bundlé → comparaison du hash de
       `version.json` → download des artefacts solver depuis `Sevih/outerpedia` ; images en cache à la demande depuis
       R2. Vérifier `/img/*` ne tape R2 que sur miss · 2e lancement inchangé = instantané · simuler un patch

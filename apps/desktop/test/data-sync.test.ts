@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -220,6 +220,78 @@ describe("syncGameData — contract schema (CHECKOUT mode)", () => {
   });
 });
 
+const TABLES = SOLVER_FILES.filter((f) => f !== "version.json");
+
+/** The cache `cache("h1")` built, every table included, untouched. */
+function expectAllTablesIntact(derivedDir: string, shaStateFile: string) {
+  expectCacheIntact(derivedDir, shaStateFile);
+  for (const f of TABLES) expect(readFileSync(join(derivedDir, f), "utf-8")).toBe("{}");
+}
+
+describe("syncGameData — CHECKOUT mode reads every artifact before writing", () => {
+  function checkoutMode(version: Record<string, unknown> = { schema: 2, hash: "h2", builtAt: "2026-02-02" }) {
+    const root = fakeCheckout(version);
+    vi.stubEnv("OUTERPEDIA_NO_CHECKOUT", "");
+    vi.stubEnv("OUTERPEDIA_PATH", root);
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("no network in CHECKOUT mode"); }));
+    return join(root, "data", "generated", "solver");
+  }
+
+  it("a complete checkout copies every table, version.json included", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    checkoutMode();
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "synced", message: "synced 19 tables (checkout h2)", copied: 19 });
+    for (const f of TABLES) expect(JSON.parse(readFileSync(join(derivedDir, f), "utf-8"))).toEqual({ from: "checkout" });
+    expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8"))).toEqual({ schema: 2, hash: "h2", builtAt: "2026-02-02" });
+  });
+
+  // version.json is not in the list: without it the checkout isn't found at all (REPO mode).
+  it.each(TABLES)("a missing %s writes nothing and keeps the cache", async (f) => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    rmSync(join(checkoutMode(), f));
+    const r = await syncGameData({ derivedDir, shaStateFile, force: true });
+    expect(r).toEqual({ status: "error", message: `${f} is missing from the outerpedia checkout; keeping the cached data` });
+    expectAllTablesIntact(derivedDir, shaStateFile);
+  });
+
+  it("an artifact that is not JSON writes nothing and keeps the cache", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    writeFileSync(join(checkoutMode(), "trust-character.json"), "{ truncated");
+    const r = await syncGameData({ derivedDir, shaStateFile, force: true });
+    expect(r).toEqual({ status: "error", message: "trust-character.json is not valid JSON in the outerpedia checkout; keeping the cached data" });
+    expectAllTablesIntact(derivedDir, shaStateFile);
+  });
+
+  it("an artifact that can't be read writes nothing and keeps the cache", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    const solver = checkoutMode();
+    rmSync(join(solver, "sets.json"));
+    mkdirSync(join(solver, "sets.json"));
+    const r = await syncGameData({ derivedDir, shaStateFile, force: true });
+    expect(r).toEqual({ status: "error", message: "sets.json is unreadable in the outerpedia checkout; keeping the cached data" });
+    expectAllTablesIntact(derivedDir, shaStateFile);
+  });
+
+  it("a missing artifact with no cache is unavailable, nothing written", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gs-sync-"));
+    const derivedDir = join(dir, "derived");
+    rmSync(join(checkoutMode(), "characters.json"));
+    const r = await syncGameData({ derivedDir, shaStateFile: join(dir, "repo-sha.json"), force: false });
+    expect(r).toEqual({ status: "unavailable", message: "characters.json is missing from the outerpedia checkout; no cached game data" });
+    expect(readdirSync(derivedDir)).toEqual([]);
+  });
+});
+
+describe("one list of solver artifacts", () => {
+  it("data-sync.ts exports solver-files.json, 19 distinct names", () => {
+    const shared = JSON.parse(readFileSync(fileURLToPath(new URL("../src/solver-files.json", import.meta.url)), "utf-8"));
+    expect(SOLVER_FILES).toEqual(shared);
+    expect(new Set(SOLVER_FILES).size).toBe(19);
+    expect(SOLVER_FILES).toContain("version.json");
+  });
+});
+
 // data/sync.mjs can't import TypeScript and uses the plain-node twin.
 type SchemaImpl = Pick<typeof tsImpl, "SUPPORTED_SOLVER_SCHEMA" | "solverSchemaOf" | "schemaRefusal">;
 const mjsPath = fileURLToPath(new URL("../../../scripts/solver-schema.mjs", import.meta.url));
@@ -271,5 +343,45 @@ describe("data/sync.mjs — contract schema", () => {
     expect(run.status).not.toBe(0);
     expect(run.stderr).toContain("uses format 3, this version of gear-solver reads up to format 2");
     expect(readFileSync(derived, "utf-8")).toBe(before);
+  });
+});
+
+describe("data/sync.mjs — reads the shared list, every artifact before writing", () => {
+  const script = fileURLToPath(new URL("../../../data/sync.mjs", import.meta.url));
+  const derived = fileURLToPath(new URL("../../../data/derived", import.meta.url));
+  const snapshot = () => Object.fromEntries(SOLVER_FILES.map((f) => [f, readFileSync(join(derived, f), "utf-8")]));
+
+  /** A fake checkout holding the committed tree's own bytes: even a broken
+   *  script that wrote before failing would leave data/derived unchanged. */
+  function checkoutOfCommittedTree(): { root: string; solver: string } {
+    const root = mkdtempSync(join(tmpdir(), "gs-outerpedia-"));
+    const solver = join(root, "data", "generated", "solver");
+    mkdirSync(solver, { recursive: true });
+    for (const f of SOLVER_FILES) cpSync(join(derived, f), join(solver, f));
+    // The copied game-client.json would make a full run touch the repo: never reached here.
+    return { root, solver };
+  }
+
+  const run = (root: string) =>
+    spawnSync(process.execPath, [script], { env: { ...process.env, OUTERPEDIA_PATH: root }, encoding: "utf-8" });
+
+  it.each(TABLES)("a checkout without %s (an entry of solver-files.json) exits non-zero, data/derived untouched", (f) => {
+    const before = snapshot();
+    const { root, solver } = checkoutOfCommittedTree();
+    rmSync(join(solver, f));
+    const r = run(root);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(`missing artifact: ${join(solver, f)}; data/derived left untouched`);
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("an artifact that is not JSON exits non-zero, data/derived untouched", () => {
+    const before = snapshot();
+    const { root, solver } = checkoutOfCommittedTree();
+    writeFileSync(join(solver, "trust-character.json"), "{ truncated");
+    const r = run(root);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(`unreadable or not JSON: ${join(solver, "trust-character.json")}; data/derived left untouched`);
+    expect(snapshot()).toEqual(before);
   });
 });

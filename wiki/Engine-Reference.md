@@ -660,6 +660,9 @@ the 19 derived artifacts. Refreshed **at launch** by `data-sync.ts`
 - **checkout** (dev / maintainer machine) — copy from a local outerpedia
   checkout (`data/generated/solver/`), guarded by the version.json hash
   (at an unchanged hash, only a differing version.json is copied), zero network;
+  all 19 files are read before anything is written: a missing or unreadable
+  artifact refuses the sync and keeps the cache, like `data/sync.mjs` (same
+  list, `apps/desktop/src/solver-files.json`);
 - **repo** (packaged build) — downloads the 19 artifacts from the public repo
   `Sevih/outerpedia` via the jsDelivr CDN, gated on the SHA of the latest
   commit (`api.github.com/.../commits/main`). Allows following patches
@@ -668,7 +671,8 @@ the 19 derived artifacts. Refreshed **at launch** by `data-sync.ts`
 
 `data/sync.mjs` (the dev-time copy) finds the outerpedia checkout via the
 `OUTERPEDIA_PATH` env var, else a list of known local paths, and exits non-zero
-if the checkout or any of the 19 artifacts is missing.
+if the checkout or any of the 19 artifacts is missing or not JSON, before
+writing anything.
 
 `sub-ticks.json` (derived): per-tick values of the ATK/DEF/HP flat+% subs per
 star (5★/6★), recomposed by outerpedia's solver generator from `ItemOptionTemplet`
