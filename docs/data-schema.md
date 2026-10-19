@@ -211,6 +211,8 @@ cinq paliers) et Briareos's Ambition (`ST_BUFF_RESIST OAT_RATE` 200 → 400). Ty
 dans `EquipmentPassive` (`core/gamedata.ts`) : absent, la pièce garde ses mains ; lu par
 `parseGearPiece` (cf. [reference.md §1.3](reference.md#13-parse-packagescoresrcparsets)).
 
-Le `hash` de `version.json` est le crochet d'une future invalidation auto des caches localStorage ;
-l'élagage des SavedBuild aux `pieceUids` disparus reste à brancher (cf.
-[todo.md](todo.md) "Snapshot data versioning").
+Au chargement de la donnée (`refreshInventory`, `App.tsx`), le `hash` de `version.json` est comparé
+au dernier vu (`gs.data.hash`, localStorage) : au changement, `reconcileDataHash`
+(`apps/renderer/src/lib/storage/dataHash.ts`) retire des presets de filtres et des filtres par héros les
+ids de set et les clés d'effet que la nouvelle donnée ne connaît plus, sans rien effacer d'autre ; les
+builds sauvés ne sont pas touchés.

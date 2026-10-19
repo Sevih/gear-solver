@@ -1,6 +1,6 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
-import { autoImport, parseFiles, readManualFiles } from "./data.js";
+import { autoImport, loadDataVersion, parseFiles, readManualFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
 import { getSteamStatus, launchSteamGame, type SteamStatus } from "./steam.js";
 import { getGameVersion } from "./game-version.js";
@@ -16,6 +16,7 @@ import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority
 import { equippedByHero, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
+import { reconcileDataHash } from "./lib/storage/dataHash.js";
 import { createOnboardingGate } from "./lib/onboarding.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
@@ -188,7 +189,10 @@ export function App() {
   const toggleExclude = useCallback((uid: string) => setExcludedPieces((prev) => toggleExcludedPiece(prev, uid)), []);
 
   async function refreshInventory(label: string) {
-    const r = await autoImport();
+    const [r, version] = await Promise.all([autoImport(), loadDataVersion()]);
+    // New game data (patch synced in) → prune the stored filters of the set /
+    // effect ids it no longer knows, before a Builder mount reads them.
+    if (r.game && version) reconcileDataHash(version.hash, r.game);
     setGame(r.game);
     setInv(r.inventory);
     setUserGeas(r.userGeasLevels);

@@ -70,9 +70,6 @@
       principe du module exclut ce qui demande de deviner l'intention).
 
 ### Persistence
-- [~] **Snapshot `data/` versioning** — stamp `version.json` livré. **Reste** : comparer le `hash` au démarrage à un
-      `gs.data.hash` stocké et, au changement, invalider/élaguer les caches localStorage (SavedBuild référençant des
-      `pieceUids` disparus, presets). Dans la couche storage / au boot, hors UI Builder.
 - [~] **Equip / Unequip** — Builder « Equip build » et Worklist livrés. **Reste (optionnel)** : un déclencheur côté
       **Builds** (unequip / assignation par slot).
 

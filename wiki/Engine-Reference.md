@@ -72,9 +72,9 @@ over the content of **every** derived file (name + body, fixed emit order), so i
 `loadDataVersion()` (`apps/renderer/src/data.ts`) and shown read-only in Settings → Data, after
 `resVersion` ("game 1.11.408 · …", the version of the loaded tables; absent from an old cache).
 The `hash` doesn't cover `resVersion`: at an unchanged `hash`, the sync rewrites version.json
-alone when its body differs. The `hash` is also the
-hook for a future localStorage cache invalidation after a patch (compare the `hash`, prune saved
-builds referencing vanished `pieceUids`).
+alone when its body differs. On a `hash`
+change, `reconcileDataHash` (`lib/storage/dataHash.ts`) prunes the filter presets and per-hero
+filters of the sets and effects the data no longer knows (cf. [Data Schema](Data-Schema#re-capture-cycle-after-a-game-patch)).
 
 
 ### 1.3 Parse (`packages/core/src/parse.ts`)

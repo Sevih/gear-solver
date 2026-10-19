@@ -67,8 +67,9 @@ donc **stable tant que la donnée est inchangée** (un rebuild no-op ne le bouge
 renderer par `loadDataVersion()` ([data.ts](../apps/renderer/src/data.ts)) et affiché en
 lecture seule dans Settings → Data, précédé de `resVersion` (« game 1.11.408 · … », la version
 des tables chargées ; absent d'un cache ancien). Le `hash` ne couvre pas `resVersion` : à
-`hash` égal, la sync réécrit le seul `version.json` quand son corps diffère. Le `hash` est
-le crochet d'une future invalidation des caches localStorage après un patch (comparer le `hash`, élaguer les SavedBuild aux `pieceUids` disparus).
+`hash` égal, la sync réécrit le seul `version.json` quand son corps diffère. Au changement de
+`hash`, `reconcileDataHash` (`lib/storage/dataHash.ts`) élague des presets et des filtres par héros les sets et
+effets que la donnée ne connaît plus (cf. [data-schema.md](data-schema.md#cycle-de-re-capture-après-patch-jeu)).
 
 
 ### 1.3 Parse (`packages/core/src/parse.ts`)

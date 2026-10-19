@@ -150,6 +150,8 @@ Phantasm Necrosis (`ST_SPEED OAT_RATE −300` on all five tiers) and Briareos's 
 (`core/gamedata.ts`): when absent the piece keeps its mains; read by `parseGearPiece`
 (cf. [Engine Reference §1.3](Engine-Reference#13-parse-packagescoresrcparsets)).
 
-The `version.json` `hash` is the hook for a future automatic localStorage cache invalidation;
-pruning SavedBuilds with vanished `pieceUids` is still to be wired (cf.
-`todo.md` "Snapshot data versioning").
+When the data loads (`refreshInventory`, `App.tsx`), the `version.json` `hash` is compared to the
+last one seen (`gs.data.hash`, localStorage): on a change, `reconcileDataHash`
+(`apps/renderer/src/lib/storage/dataHash.ts`) removes from the filter presets and the per-hero filters
+the set ids and effect keys the new data no longer knows, deleting nothing else; saved builds are
+left untouched.

@@ -8,6 +8,39 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗂️ Données — références mortes élaguées au changement de `hash` du contrat (2026-10-19)
+- ✅ **Pourquoi.** Item « Snapshot `data/` versioning » de `docs/todo.md` : le `hash` de `version.json` n'était lu
+  que par Settings → Data. Après un patch qui retire un set d'armure ou un effet d'arme / d'accessoire / de
+  talisman, un preset qui l'exigeait encore vidait le pool sans rien dire (« no builds »).
+- ✅ **Comment.** Nouveau module `apps/renderer/src/lib/storage/dataHash.ts`. `knownRefs(game)` collecte les ids de
+  set (`game.sets`) et les clés d'effet (`EquipmentDef.setId`, celles que le moteur compare dans `allow`) ;
+  `pruneFilters` (pure) retire des `setPlans` et `excludedSets` les sets inconnus et des trois `…EffectPicks` les
+  clés inconnues, laisse le reste tel quel (même objet rendu quand rien n'est mort), écarte un plan vidé par
+  l'élagage (un plan vide accepterait tout) et garde `[[]]` au minimum, comme l'éditeur. `reconcileDataHash(hash,
+  game)` lit `gs.data.hash` (localStorage, en `try`) : première fois, il le stocke ; même `hash`, rien ; `hash`
+  changé, il élague les presets (`filterPresets.ts`) et les filtres par héros (`heroFilters.ts`, sessionStorage),
+  ne réécrit que ce qui a bougé, puis stocke le nouveau `hash`. Une donnée qui ne connaît aucun set ou aucun effet
+  (chargement cassé) n'élague rien et ne stocke pas le `hash`, pour que le chargement suivant réessaie.
+- ✅ **Branchement.** `refreshInventory` (`App.tsx`) lit `loadDataVersion()` en parallèle d'`autoImport()` et
+  appelle `reconcileDataHash` avant `setGame`, donc au démarrage comme après une synchro (« Game data updated »,
+  « Game data synced »), avant qu'un Builder monté ensuite ne relise le stockage.
+- ✅ **Décision suivie.** On n'efface jamais une donnée de l'utilisateur : seules les références que la donnée ne
+  connaît plus sortent ; les builds sauvés (`savedBuilds.ts`) restent intacts, les pièces disparues de
+  l'inventaire et le cache disque du bureau sont hors périmètre.
+- ✅ **Docs.** `docs/data-schema.md` / `wiki/Data-Schema.md` (cycle après patch) et le paragraphe du `hash` de
+  `docs/reference.md` / `wiki/Engine-Reference.md`, qui annonçaient encore une invalidation « future ».
+- ✅ **Tests.** `apps/renderer/test/dataHash.test.ts` (7) : `pruneFilters` (sets et effets morts retirés, plan
+  vidé écarté, `[[]]` au minimum, même objet sans référence morte) ; `reconcileDataHash` première fois (`hash`
+  stocké, rien touché), même `hash` (rien), `hash` changé avec un set disparu dans un preset et dans un filtre par
+  héros (élagués, nom, `excludedHeroes` et `topPct` gardés), donnée sans set (rien élagué, ancien `hash` gardé).
+  `npm run typecheck` : `> tsc --noEmit` sans erreur (dernière ligne) ; `npm test` : `Tests  569 passed (569)` ;
+  `npm run lint` : `✖ 28 problems (0 errors, 28 warnings)`, `App.tsx` en garde 11 avant comme après, les deux
+  nouveaux fichiers sont propres.
+- ⏳ **Laissé.** Un Builder déjà monté au moment d'une synchro garde ses cartes en mémoire (`filterPresetsMap`,
+  `heroFiltersRef`, filtres vivants) : son prochain enregistrement peut réécrire une référence morte jusqu'au
+  `hash` suivant. Le corriger demande d'écouter l'élagage dans `BuilderScreen.tsx` (comme `onBackupImported`),
+  hors du périmètre de ce lot.
+
 ### 💡 Advices (Builds) — pièce libre pour le 4P, pièces de basse qualité (2026-10-19)
 - ✅ **Pourquoi.** Item « `Advices` (tab Builds) » de `docs/todo.md`, lot secondaire : `computeAdvice`
   (`apps/renderer/src/lib/buildAdvice.ts`) ne voyait que les pièces portées, si bien que la règle 3/4 disait
