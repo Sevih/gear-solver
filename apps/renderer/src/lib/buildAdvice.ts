@@ -139,7 +139,8 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
       const waste = round1(v - cap);
       if (waste > 0) out.push({ tone: "warn", text: `${label} ${round1(v)}% — ${waste}% wasted over the ${cap}% cap` });
     };
-    capWaste("Crit rate", entry.stats.critRate, 102);
+    // The sheet's CHC is bounded at 100: the waste reads the raw sum.
+    capWaste("Crit rate", entry.stats.critRateUncapped ?? entry.stats.critRate, 102);
     capWaste("Penetration", entry.stats.pen, 100);
   }
 

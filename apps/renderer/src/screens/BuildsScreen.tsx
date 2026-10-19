@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch,
 import type { Character, CharacterDef, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
 import { fillUnrankedByOrder, loadSeenHeroes, moveRankBefore, persistSeenHeroes, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
 import { composeCharStats, effectiveCharacter, expToLevel } from "@gear-solver/core";
-import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
+import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap, type SheetStatKey } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { computeAdvice, type AdviceItem } from "../lib/buildAdvice.js";
 import { parseStatLocks, type LockEntry, type LocksMap } from "../lib/statLocks.js";
@@ -54,7 +54,7 @@ function buildStatsDump(
   pieces: GearPiece[],
   game: GameData | null,
 ): string {
-  const { flat, pct, buffPct } = aggregateGearBuckets(pieces, game);
+  const { flat, pct, buffPct, buffFlat } = aggregateGearBuckets(pieces, game);
   const lines: string[] = [];
   lines.push(`${displayName} (id=${charId}, lv${level})`);
   for (const { key, flatKey, pctKey } of DUMP_AXES) {
@@ -63,7 +63,8 @@ function buildStatsDump(
       `[${key}] base=${sc.baseValue} evo=${sc.evoValue} awak=${sc.awakValue} ` +
       `awakPct=${sc.awakPct} transcend=${sc.transcendPct} codex=${sc.codexPct} ` +
       `buff=${sc.buffPct} buffVal=${sc.buffValue} | ` +
-      `gearFlat=${flat[flatKey] ?? 0} gearPct=${pct[pctKey] ?? 0} gearBuffPct=${buffPct[pctKey] ?? 0}`
+      `gearFlat=${flat[flatKey] ?? 0} gearPct=${pct[pctKey] ?? 0} gearBuffPct=${buffPct[pctKey] ?? 0} ` +
+      `gearBuffFlat=${buffFlat[flatKey] ?? 0}`
     );
   }
   lines.push("pieces:");
@@ -84,7 +85,7 @@ function buildStatsDump(
  *  in parens beside the total. Stats with no base (dmgUp/pen) are hidden
  *  when both total and gear are zero. */
 interface StatRowConfig {
-  key: keyof FinalStats;
+  key: SheetStatKey;
   /** Matching field on NoGearStats — omitted for stats with no character
    *  baseline (e.g. `critDmgRed` is gear-only). Treated as 0 in that case. */
   baselineKey?: keyof NoGearStats;
@@ -135,7 +136,7 @@ function StatBlock({ stats, baseline, locked, onToggleLock }: {
   locked?: Partial<FinalStats> | null;
   /** Click handler on a stat row — toggles the lock state for that stat key
    *  (lock to current `stats[key]` if unlocked, remove key if locked). */
-  onToggleLock?: (key: keyof FinalStats) => void;
+  onToggleLock?: (key: SheetStatKey) => void;
 }) {
   return (
     <div className="grid grid-cols-4 gap-x-3 font-mono text-[12px] tabular-nums">
@@ -155,7 +156,7 @@ function StatCell({ row, stats, baseline, locked, onToggleLock }: {
   stats: FinalStats;
   baseline: NoGearStats;
   locked?: Partial<FinalStats> | null;
-  onToggleLock?: (key: keyof FinalStats) => void;
+  onToggleLock?: (key: SheetStatKey) => void;
 }) {
   const v = stats[row.key];
   // `baselineKey` is optional for gear-only stats (e.g. critDmgRed) — fall
@@ -656,7 +657,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
   // the debug toggle is off so the StatBlock renders plain values without
   // amber/rose tints or Δ badges.
   const locked = debug ? (lockEntry?.stats ?? null) : null;
-  const lockedKeys = locked ? Object.keys(locked) as (keyof FinalStats)[] : [];
+  const lockedKeys = locked ? Object.keys(locked) as SheetStatKey[] : [];
   const hasAnyLock = lockedKeys.length > 0;
   const hasDrift = stats && hasAnyLock
     ? lockedKeys.some((k) => round1(stats[k] - (locked![k] ?? 0)) !== 0)
@@ -673,7 +674,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
     name: displayName, charId: char.charId, level, stats: s,
   }), [displayName, char.charId, level]);
 
-  const toggleStatLock = useCallback((key: keyof FinalStats) => {
+  const toggleStatLock = useCallback((key: SheetStatKey) => {
     if (!stats) return;
     setLocks((prev) => {
       const next = { ...prev };
@@ -1063,7 +1064,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
         }
         if (!debug || filters.locks === "all") return true;
         const lockedSnap = lockedStats[char.uid]?.stats;
-        const lockedKs = lockedSnap ? Object.keys(lockedSnap) as (keyof FinalStats)[] : [];
+        const lockedKs = lockedSnap ? Object.keys(lockedSnap) as SheetStatKey[] : [];
         if (filters.locks === "locked") return lockedKs.length > 0;
         // "drift": at least one locked stat whose live value drifted
         if (!stats || lockedKs.length === 0) return false;

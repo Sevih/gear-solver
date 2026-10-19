@@ -3,6 +3,10 @@
  * `CalcBattlePower` in libil2cpp.so (1.4.9 build), validated 0-diff on 5
  * characters covering LB0/1/2/3.
  *
+ * The client computes in FLOAT32: every operation is ported as is, in its
+ * order, under `Math.fround` (as outerpedia's `calcNoGearBattlePower` does) —
+ * in double, ~0.5 % of the sheets came out ±1.
+ *
  * Stat conventions (critical):
  *  - CRC is CAPPED at 100% before entering the formula.
  *  - CRC/CHD/PEN/DMGup/DMGRed/ECDR are × 10 raw internally — these inputs
@@ -28,8 +32,8 @@ export interface CpArgs {
 }
 
 /** The four constant-per-solve additive bonuses, captured once. All are exact
- *  integers, so pre-computing them and re-summing in the original order below
- *  is byte-identical to the all-inline formula (no float-order drift). */
+ *  integers (exact in float32 too), so pre-computing them changes nothing; they
+ *  are added in the client's order below. */
 interface CpBonuses {
   starBonus: number;
   /** Σ (skillLevel − 1) over the four skills — already summed (still an int). */
@@ -60,41 +64,50 @@ function cpBonuses(showUIStar: number, starPlus: number, skills: CpArgs["skills"
   };
 }
 
+const f = Math.fround;
+
 /** Stat-dependent CP core + the captured constant bonuses + the talisman's
- *  per-piece bonus. The final summation order is exactly the original
- *  all-inline formula, so results are bit-for-bit identical. */
+ *  per-piece bonus, in the client's float32 chain. */
 function cpFrom(s: FinalStats, ooparts: GearPiece | null, b: CpBonuses): number {
-  const crcRaw = Math.min(s.critRate * 10, 1000); // cap at 100%
-  const chdRaw = s.critDmg * 10;
-  const penRaw = s.pen * 10;
-  const dmgupRaw = s.dmgUp * 10;
-  const dmgredRaw = s.dmgReduce * 10;
+  // Raw values (display × 10) are integers on the client; `round` drops the
+  // ×10 float noise of the 1-decimal display values (41.2 × 10).
+  const crcRaw = Math.min(Math.round(s.critRate * 10), 1000); // cap at 100%
+  const chdRaw = Math.round(s.critDmg * 10);
+  const penRaw = Math.round(s.pen * 10);
+  const dmgupRaw = Math.round(s.dmgUp * 10);
+  const dmgredRaw = Math.round(s.dmgReduce * 10);
   // ECDR (Crit Damage Reduction) IS exposed in FinalStats: it's summed from
   // `critDmgReduce` substats / mains in composeBuild. Same ×10 raw convention
   // as the other rate inputs. Builds stacking CDR were previously undervalued
   // (defR collapsed to the dmgredRaw-only contribution).
-  const ecdrRaw = s.critDmgReduce * 10;
-  const sumCd = dmgupRaw + chdRaw;
-  let critF: number;
-  if (sumCd < 2001) {
-    critF = sumCd / 1000;
-  } else {
-    const x = Math.min((sumCd - 2000) / 2500, 1.0);
-    critF = 2.0 * (1 - (1 - x) ** 2) + 2.5;
-  }
-  const crcF = (crcRaw + 1000) / 1000;
-  const penF = (penRaw * 1.5 + 1000) / 1000;
-  const spdF = 1 + s.spd / 50;
-  const effF = 1.7 * s.eff / (s.eff + 130);
-  const hdF = 44000 / (s.hp + s.def + 44000);
-  const defF = hdF * 0.15 + 1.05;
-  const resR = 1 + 0.25 * s.effRes / (s.effRes + 200);
-  const defR = 1 + 0.25 * (ecdrRaw + dmgredRaw) / ((ecdrRaw + dmgredRaw) + 200);
-  const chain = (1 + effF) * crcF * critF * penF * spdF;
-  const atkPart = 0.125 * s.atk * (1 + chain);
-  const defPart = (s.hp + s.def) * defF * defR * resR;
+  const ecdrRaw = Math.round(s.critDmgReduce * 10);
+  // Crit factor: linear up to 2000 raw (CHD + DMG+), then a saturating knee
+  // (`Mathf.Pow` = `Math.pow` rounded to float).
+  const sumCd = f(chdRaw + dmgupRaw);
+  const critF = sumCd < 2001
+    ? f(sumCd / 1000)
+    : f(2.5 + f(2 * f(1 - f(Math.pow(f(1 - Math.min(1, f(f(sumCd - 2000) / 2500))), 2)))));
+  // ATK part: (atk + atk × CHC × crit × PEN × SPD × EFF) / 8.
+  const crcF = f(f(1000 + crcRaw) * f(0.001));
+  const penF = f(f(1000 + f(penRaw * 1.5)) * f(0.001));
+  const spdF = f(1 + f(s.spd / 50));
+  const effF = f(1 + f(f(1.7) * f(s.eff / f(s.eff + 130))));
+  let chain = f(s.atk * crcF);
+  chain = f(chain * critF);
+  chain = f(chain * penF);
+  chain = f(chain * spdF);
+  chain = f(chain * effF);
+  const atkPart = f(f(s.atk + chain) / 8);
+  // HP + DEF part: × DEF, × reductions, × RES.
+  const hd = f(s.hp + s.def);
+  const red = f(ecdrRaw + dmgredRaw);
+  let defPart = f(hd * f(f(1.05) + f(f(0.15) * f(44000 / f(hd + 44000)))));
+  defPart = f(defPart * f(1 + f(f(0.25) * f(red / f(red + 200)))));
+  defPart = f(defPart * f(1 + f(f(0.25) * f(s.effRes / f(s.effRes + 200)))));
+  // Additive constants: stars + skills, then EE, talisman, fusion.
+  const constants = f(f(b.starBonus) + f(b.skillSum * 100));
   const ooBp = ooparts ? ooparts.enhanceLevel * 100 + (ooparts.star ?? 0) * 50 : 0;
-  return Math.floor(atkPart + defPart + b.starBonus + b.skillSum * 100 + b.eeBp + ooBp + b.fusionBp);
+  return Math.floor(f(f(f(f(f(atkPart + defPart) + constants) + b.eeBp) + ooBp) + b.fusionBp));
 }
 
 export function calcBattlePower(args: CpArgs): number {
@@ -104,8 +117,8 @@ export function calcBattlePower(args: CpArgs): number {
 /** Hot-loop CP evaluator. The solver computes CP for every surviving combo in
  *  SOLVE CP mode, so it pre-captures the constant bonuses ONCE and returns a
  *  closure `(stats, talisman) → cp` — no per-combo `CpArgs` allocation and no
- *  re-derivation of the star / skill / EE / fusion constants. Bit-identical to
- *  `calcBattlePower` with the same inputs (see `cpFrom`). */
+ *  re-derivation of the star / skill / EE / fusion constants. Same `cpFrom` as
+ *  `calcBattlePower`, so the same result. */
 export function makeCpEvaluator(c: Omit<CpArgs, "stats" | "ooparts">): (s: FinalStats, ooparts: GearPiece | null) => number {
   const bonuses = cpBonuses(c.showUIStar, c.starPlus, c.skills, c.ee, c.fused);
   return (s, ooparts) => cpFrom(s, ooparts, bonuses);

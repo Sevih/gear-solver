@@ -121,8 +121,10 @@ héros **sans** son gear. Couvre les couches :
 
 Output : `{noGearStats, intrinsicStats, scaling}` où `scaling` carry les
 ingrédients per-axe (ATK/DEF/HP/EFF/RES) pour permettre l'ajout de gear
-plus tard via `composeMultStat`, et `scaling.spd` = `{ value, buffPct }`, la
-vitesse avant son taux et le taux (`noGearStats.spd` l'a déjà appliqué).
+plus tard via `composeMultStat`, et `scaling.spd` = `{ value, rateBase, buffPct }`,
+la vitesse avant son taux, la part qu'un taux d'équipement multiplie (base + évo +
+éveil IOT_STAT, sans les buffs OAT_ADD) et le taux (`noGearStats.spd` l'a déjà
+appliqué).
 
 ### 1.5 Compose final stats (`apps/renderer/src/lib/composeBuild.ts`)
 
@@ -130,17 +132,26 @@ vitesse avant son taux et le taux (`noGearStats.spd` l'a déjà appliqué).
 le gear par-dessus le no-gear baseline. Couvre :
 
 1. `aggregateGearBuckets(pieces, game, gemOverride?)` — agrège mains/subs/sets
-   en trois buckets : `flat`, `pct`, `buffPct` (séparation in-game CalcFinalStat).
-2. Per-axe compound via `composeMultStat(scaling, gearFlat, gearPct, gearBuffPct)`
-   pour ATK/DEF/HP/EFF/RES.
-3. Additive simple pour CHC/CHD/PEN/DMG±/CritDmgRed. SPD : vitesse avant taux
-   (`scaling.spd.value`) + gear plat + EE + set % (`floor(base × pct / 100)`),
-   puis le taux de buff appliqué une fois à ce total (`applySpdRate`, même règle
-   que le no-gear) : `scaling.spd.buffPct` (héros) + `buffPct.spdRate` (vitesse
-   en taux d'un `fromBuff` d'équipement, Phantasm Necrosis −30 % ; `buffPct.spd`
-   reste du plat), soit `trunc(total × (1000 + héros‰ + équipement‰) / 1000)` ;
-   additive simple quand le taux est nul. La RES en taux d'un `fromBuff`
-   (Briareos's Ambition) arrive dans `buffPct.effRes`, lu en `gearBuffPct`.
+   en quatre buckets : `flat`, `pct`, puis les `fromBuff` en taux (`buffPct`) et
+   en plat (`buffFlat`) — séparation in-game CalcFinalStat (`BuffValueRate`,
+   `BuffValue`).
+2. Per-axe compound via `composeMultStat(scaling, gearFlat, gearPct, gearBuffPct,
+   gearBuffFlat)` pour ATK/DEF/HP/EFF/RES : un appel au `calcFinalStat` du core
+   (une seule copie de la formule), `gearBuffFlat` ajouté au `buffValue`.
+3. Additive simple pour CHC/CHD/PEN/DMG±/CritDmgRed ; CHC bornée à [0, 100] comme
+   la fiche du client (`CStatValue.SetFinalValue`, [0, 1000] brut), la somme non
+   bornée gardée dans `critRateUncapped` pour la réallocation crit-cap des gemmes
+   (`CRC_OVERSHOOT_CEIL`) et le conseil « wasted over the cap ». SPD : vitesse avant
+   taux (`scaling.spd.value`) + gear plat + plat de buff (`buffFlat.spd`, mains
+   d'EE) + set % (`floor(scaling.spd.rateBase × pct / 100)` : le taux d'objet
+   multiplie base + évo + éveil, pas le +10 SPD du Skill_8), puis le taux de buff
+   appliqué une fois à ce total (`applySpdRate`, même règle que le no-gear) :
+   `scaling.spd.buffPct` (héros) + `buffPct.spdRate` (vitesse en taux d'un
+   `fromBuff` d'équipement, Phantasm Necrosis −30 %), soit
+   `trunc(total × (1000 + héros‰ + équipement‰) / 1000)` ; additive simple quand
+   le taux est nul. La RES en taux d'un `fromBuff` (Briareos's Ambition) arrive
+   dans `buffPct.effRes`, lu en `gearBuffPct` ; un `fromBuff` plat (ATK, EFF en
+   OAT_ADD) dans `buffFlat`, lu en `gearBuffFlat`.
 4. **Gem override** (solver uniquement) : skip les subs des Talisman/EE et
    ajoute les deltas `{flat, pct}` pré-agrégés à la place. Voir §2.4.
 
@@ -211,16 +222,20 @@ diverge de floor sur intermédiaires négatifs (rares mais réels sur debuffs).
 |--------------|----------------------|---------------------------------------------------------|
 | baseValue    | sum_flat             | per-level base interpolation                            |
 | evoValue     | sum_flat             | sum des evolution rows                                  |
-| awakValue    | sum_flat             | geas IOT_STAT flat adds                                 |
+| awakValue    | sum_flat             | geas IOT_STAT flat adds (seule source d'éveil, tous axes) |
 | awakPct      | sum_rate             | geas IOT_STAT % bonuses                                 |
 | transcendPct | sum_rate             | TranscendByStar.{atkPct,defPct,hpPct} row matching star |
 | gearPct      | sum_rate             | aggregated `pct.{atkPct,defPct,hpPct}` from gear        |
 | gearFlat     | combined             | aggregated `flat.{atk,def,hp}` from gear                |
-| buffValue    | combined             | OAT_ADD buffs (class passive +EFF, geas [141] +50 EFF, …) |
+| buffValue    | combined             | OAT_ADD buffs (classe, skill_8, geas IOT_BUFF, passifs de skill / noyau : +EFF de classe, geas [141] +50 EFF ; 0 en ATK/DEF/HP dans la donnée actuelle) + gear `buffFlat.*` |
 | buffPct      | part2 (outermost)    | classPassive + skill_8 + geas IOT_BUFF + skill passives + gear `buffPct.*` |
 | codexPct    | codex term, baseValue| archive bonus                                           |
 
-**SPD** (`scaling.spd`) : seul l'étage externe est modélisé —
+**SPD** (`scaling.spd`) : le taux d'objet (set Vitesse, OAT_RATE) multiplie
+`rateBase` = base + évo + éveil IOT_STAT, le `sum_flat` du client — les buffs
+OAT_ADD (Skill_8 +10 SPD de Claire, Faenan, Delta…) restent dans `combined` :
+Claire en 4P Vitesse = `trunc(99 × 1,25)` + 10 = 133, pas `trunc(109 × 1,25)` = 136.
+Puis l'étage externe —
 `final = trunc((vitesse avant taux + gear) × (1000 + buffPct) / 1000)`, où
 `buffPct` est la somme des taux de vitesse de la fiche (le passif de noyau au palier
 de fusion, Snow / Lisha fusionnées 43 ‰, plus l'équipement `buffPct.spdRate`,
@@ -236,12 +251,18 @@ Reverse-engineered de `CalcBattlePower` (libil2cpp.so 1.4.9, RVA `0x2C59EE4` ;
 `0x2CB1D08` en 1.4.14, signature inchangée), validé 0-diff
 sur 5 chars (LB0/1/2/3). Implémentation : [cp.ts](../apps/renderer/src/lib/solver/cp.ts).
 
+**Float32** : le client calcule en `float` ; chaque opération est portée telle
+quelle, dans son ordre, sous `Math.fround`, constantes comprises (`1.7f`, `1.05f`,
+`0.15f`, `0.25f`, `0.001f`), comme `calcNoGearBattlePower` d'outerpedia (0 écart
+avec lui sur 200 000 fiches tirées). Les entrées brutes (affiché × 10) sont
+arrondies à l'entier, comme côté client. En double, ±1 sur ~0,5 % des fiches.
+
 **Hot path SOLVE CP** : `makeCpEvaluator(consts)` pré-capture les bonus additifs
 constants par solve (`starBonus`, `skillSum`, `eeBp`, `fusionBp` — tous entiers
 exacts) et retourne une closure `(stats, talisman) → cp`. Évite l'allocation d'un
 objet `CpArgs` et la re-dérivation des constantes à chaque combo. **Bit-identique**
-à `calcBattlePower` : les constantes hoistées sont des entiers (sommation sans perte)
-et l'ordre de la somme finale est préservé. Test d'identité dédié.
+à `calcBattlePower` : même `cpFrom`, les constantes hoistées sont des entiers
+(exacts en float32). Test d'identité dédié.
 
 **Conventions critiques** :
 - **CRC capped at 100%** AVANT entrée dans la formule.
@@ -249,7 +270,7 @@ et l'ordre de la somme finale est préservé. Test d'identité dédié.
   Le code reçoit le display value et multiplie par 10 en interne.
 - EFF/RES : entier display direct.
 
-**Formule** :
+**Formule** (chaque pas arrondi en float32, voir plus haut) :
 ```
 critF =  sumCd < 2001 ? sumCd / 1000
                       : 2.0 × (1 − (1 − x)²) + 2.5  where x = min((sumCd-2000)/2500, 1)
@@ -273,7 +294,7 @@ eeBp      = ee ? ee.enhanceLevel × 100 + 300 : 0
 ooBp      = ooparts ? ooparts.enhanceLevel × 100 + (ooparts.star ?? 0) × 50 : 0
 fusionBp  = fused ? 5000 : 0
 
-CP = floor(atkPart + defPart + starBonus + skillSum × 100 + eeBp + ooBp + fusionBp)
+CP = floor(((((atkPart + defPart) + (starBonus + skillSum × 100)) + eeBp) + ooBp) + fusionBp)
 ```
 
 **`max(0, level − 1)` par skill** : les 4 skills débutent à Lv1 in-game (max
@@ -340,8 +361,10 @@ ranke pareil pour n'importe quel `TARGET_DEF`.
 Conventions :
 - `CRC` et `CHD` sont en **DISPLAY percent** (35 = 35%) ; le diviseur /100 les
   rend décimaux pour les produits.
-- **CRC cappée à 100%** in-game — overflow wasted. La valeur brute reste
-  dans `FinalStats.critRate` pour l'affichage UI.
+- **CRC cappée à 100%** in-game — overflow wasted. `FinalStats.critRate` est
+  déjà bornée à [0, 100] (fiche, affichage, filtres, scaling secondaire `crc` de
+  Regina) ; la somme brute est dans `critRateUncapped` (crit-cap des gemmes,
+  conseil « wasted over the cap »).
 - **PEN cappée à 100%** — `PPR` (PiercePowerRate) cappe à 1000‰ in-game (§1.2).
   Le `PiercePower` flat n'est pas modélisé (rare sur les builds).
 - **Plancher 30% du DR** — `CheckDamageRate` clampe `rate = Max(rate, 300)`
@@ -355,7 +378,7 @@ CHC ») retombe sur le hit non-crit (`mcdFactor === drFactor`) puisqu'il n'y a p
 de plafond crit à atteindre. Sans ça le solveur récompensait de la CHC/CHD qu'un
 no-crit ne peut jamais encaisser. `noCrit` vient de `meta.noCrit`, propagé via le
 contexte de solve comme `dmgStat`/`dmgSec`. **CP non affecté** : `calcBattlePower`
-reste un miroir fidèle de l'in-game (qui utilise le critRate brut), donc SOLVE CP
+reste un miroir fidèle de l'in-game (CHC de la fiche, bornée à 100 %), donc SOLVE CP
 optimise bien le nombre CP réel du jeu.
 
 **Pas inclus** dans les ratings (defender-dependent, hors scope build-trait) :
@@ -741,6 +764,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/buildAdvice.test.ts` | 16 tests — `computeAdvice` (Builds) : no-gear silencieux, missing quasi-complet (≤2) vs WIP silencieux (early-return), sets (singleton / 3-of-4), caps gaspillés — crit toléré ≤102 / PEN >100 (seuil arrondi >0), gem slots vides Talisman/EE + tip +5, upgrade agrégé (reforges non utilisés / 6★ non ascensionné / sous cap d'enhance), singularier/pluraliser |
 | `apps/renderer/test/cpPrune.test.ts` | 23 tests — budget-combos & scorers : `keepTopN`/`keepTopPct` (top-N, préservation set requis, pin de la pièce équipée), `priorityScoreOf`/`magnitudeScoreOf` (pondération, exclusion combat-only), `allocateComboBudget` (produit borné, petits slots entiers, ordre d'entrée), proxy CP qui classe le gear fort, `cpStatWeights` (offensif ≫ dmg-reduce, poids ≥ 0) |
 | `apps/renderer/test/heroPriority.test.ts` | 21 tests — store priorité par héros : `rankOrder` / `isLowerPriority` (non-classé < classé, unicité, strict), `reorderRank` / `moveRankBefore` (insertion positionnelle contiguë 1..N, drag, clamp, immutabilité), `fillUnrankedByOrder` (préserve les rangs manuels, complète les non-classés par CP, compacte les trous, ignore les uid périmés) |
+| `apps/renderer/test/sheetMinors.test.ts` | 14 tests — mineurs de fiche (revue 2026-10) : set Vitesse sur base + évo + éveil (Claire 133, Faenan 137, Delta 146), CHC bornée et `critRateUncapped` (Regina `crc`, conseil, réallocation crit-cap de `solveChunk`), CP float32 (trois fiches à ±1 en double), plats de `fromBuff` en `buffFlat` (ATK, EFF OAT_ADD, dominance), `composeMultStat` = `calcFinalStat` exact (héros × codex × valeurs) |
 | `apps/renderer/test/dominance.test.ts` | 10 tests — `pruneDominatedForCp` : drop strict, ties/Pareto/groupes gardés, projection reforge, équivalence top-CP end-to-end via `solveChunk` |
 | `apps/renderer/test/statRegistry.test.ts` | 11 tests — registre de stats : `FINAL_STAT_KEYS` ↔ champs `FinalStats` (aucune clé legacy crc/chd/res…), pont `STAT_TO_PRIORITY` (couvre chaque variante `ROLL_NORMS`, cibles = vrais axes, identité hors collapses flat/%), tokens design complets, snapshot numérique `ROLL_NORMS`/`STAT_NORMS`, migration des clés legacy (idempotente, ordre préservé, entrée nullish) |
 | `apps/renderer/test/worklistPlan.test.ts` | 20 tests — `planWorklist` (planification de transaction) : plan vide sans inventaire/entrées, entrées indépendantes (pas de deps), ordre **free-before-use** (l'entrée qui libère une pièce passe d'abord), **contention** (une copie voulue par deux héros) flaggée — même héros ×2 ≠ contention, **même héros + même slot** : seule l'entrée la plus récente (`createdAt`) est assignée, l'ancienne exposée en `superseded` (et le repli `equipAssignments` donne la pièce récente), cycles free/need marqués mais applicables atomiquement (seuls les membres du cycle ; une entrée qui en dépend s'ordonne après), exclusion des changes applied (déjà équipé) / stale (disparu de l'inventaire) ; `worklistClaims` (réservations solveur) : cible de chaque change non appliqué → héros réclamant, changes déjà appliqués ignorés, double-claim = l'entrée la plus récente gagne, map vide sans inventaire |

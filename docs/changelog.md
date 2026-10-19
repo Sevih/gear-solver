@@ -8,6 +8,74 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧮 Fiche — les mineurs de la revue : set Vitesse, CHC bornée, CP float32, plats de buff, `composeMultStat` sur `calcFinalStat` (2026-10-19)
+- ✅ **Pourquoi.** Item « Mineurs de fiche (revue) » et puce CalcFinalStat de « Duplications » de `docs/todo.md`
+  (revue du 09/10, revérifiés le 18/10). Après la série contrat (passif de cœur par fusion, `spdPct` en taux : passés,
+  `pickCoreBlock` et `applySpdRate` relus tels quels), les gemmes SOLVE CP (M8) et les mineurs moteur / Builder.
+  Sept points, dans l'ordre, chacun vérifié réel avant correction ; le huitième (`combatOnly` des mains d'EE décidé
+  par le nom) reste, il est posé par le générateur d'outerpedia (contrat).
+- ✅ **1. Set Vitesse sur une base sans les buffs OAT_ADD.** `finalStatsFromBuckets` multipliait le taux d'objet par
+  `scaling.spd.value`, qui porte le +10 SPD du Skill_8 ; le client (`CalcFinalStat`) ne multiplie que base + évo +
+  éveil (`sum_flat`). `SpeedScaling` gagne `rateBase` (base + évo + éveil IOT_STAT, `compose-stats.ts`) et le set
+  % se lit `floor(rateBase × pct / 100)` ; repli sur `value` pour une carte sans `spd` (tests).
+- ✅ **2. CHC bornée.** `FinalStats.critRate` est bornée à [0, 100] comme la fiche du client (`SetFinalValue`) : la
+  fiche, l'affichage, les filtres et le scaling secondaire `crc` (Regina, `ratings.ts`) la lisent. La somme brute
+  est dans le nouveau champ `critRateUncapped` (optionnel dans le type, toujours posé par le composeur : les fiches
+  écrites à la main des tests restent valides), lu par les deux calculs qui mesurent le débordement : la
+  réallocation crit-cap des gemmes (`engine.ts`, `preGemCrc` et le seuil `CRC_OVERSHOOT_CEIL`) et le conseil
+  « wasted over the cap » (`buildAdvice.ts`). `BuildsScreen` type ses clés de fiche en `SheetStatKey` (le champ
+  brut n'est ni affiché ni verrouillable). Aucun autre résultat de solve ne bouge : le score bornait déjà à 100
+  (`SCORE_CAP_100`), la CP aussi (`min(…, 1000)`), `cpStatWeights` donne 0 au-delà du cap dans les deux cas ; le
+  seul changement est celui demandé (filtres et `crc` de Regina, donc aussi le gain `dmg` de ses gemmes de
+  remplissage au-delà du cap).
+- ✅ **3. CP en float32.** `cpFrom` (`cp.ts`) porte la chaîne du client sous `Math.fround`, opération par opération,
+  constantes comprises (`1.7f`, `1.05f`, `0.15f`, `0.25f`, `0.001f`), comme `calcNoGearBattlePower` d'outerpedia
+  (C25) ; les entrées brutes (affiché × 10) arrondies à l'entier ; somme finale dans l'ordre du client (étoiles +
+  skills, EE, talisman, fusion). `makeCpEvaluator` garde le même `cpFrom`. Contrôle hors dépôt : 0 écart sur
+  200 000 fiches avec `calcNoGearBattlePower` d'outerpedia.
+- ✅ **4. Plats de buff.** `addPieceToBuckets` envoyait tout `fromBuff` dans `buffPct` : un ATK/DEF/HP plat était
+  perdu, un EFF/RES OAT_ADD lu comme un taux. Nouveau bucket `buffFlat` (`GearBuckets`), lu en `BuffValue` de
+  CalcFinalStat (`composeMultStat(…, gearBuffFlat)`) ; le SPD plat des mains d'EE y passe aussi (`buffFlat.spd`,
+  il était `buffPct.spd`), la vitesse en taux garde `buffPct.spdRate`. La dominance CP (`bucketDominatesStrict`)
+  compare `buffFlat` sur les clés plates, le prefix du solveur le clone, le dump de debug de Builds l'affiche.
+- ✅ **5 et 6. ATK/DEF/HP plats de la fiche nue.** `composeCharStats` met désormais classe + Skill_8 + geas
+  IOT_BUFF + passifs de skill et de cœur dans `buffValue` (il valait 0) et la seule geas IOT_STAT dans
+  `awakValue` (il prenait `geas.atk` toutes sources) : une règle pour les cinq axes. 0 écart sur la donnée : aucune
+  source non IOT_STAT ne porte d'ATK/DEF/HP plat dans `characters.json` (vérifié, test qui le garde).
+- ✅ **7. `composeMultStat` = `calcFinalStat`.** Le renderer appelle la fonction du core au lieu de sa copie.
+  Égalité EXACTE vérifiée avant de toucher au code : 129 héros × 12 niveaux de codex × lv 1/50/100/120 × 5 axes ×
+  7 plats × 12 taux × 6 taux de buff = 15 603 840 cas, 0 écart (le terme du codex `× codexPct / 100` contre
+  `× (codexPct × 10) / 1000` et l'ordre des additions ne bougent rien sur la donnée).
+- ✅ **Tests.** `apps/renderer/test/sheetMinors.test.ts` (14) : set Vitesse 4P sur le vrai contrat (Claire 133,
+  Faenan 137, Delta 146) ; CHC 95 + 10 → 100 / 105, Regina `crc` à 130 brut = à 100, conseil sur la somme brute,
+  réallocation crit-cap de bout en bout dans `solveChunk` (fiche 100, brut 107 → deux gemmes crit gardées, brut
+  101) ; CP des trois fiches ±1 de la revue ; ATK plat de buff compté, EFF OAT_ADD 150 et non 156, dominance sur
+  `buffFlat` ; `composeMultStat` contre l'ancienne copie, héros × codex × valeurs (557 280 cas). Douze des
+  quatorze échouent sur l'ancien code (les deux autres gardent le conseil et le point 7, identiques avant).
+  `packages/core/test/compose-stats.test.ts` (+2) : `buffValue` ATK/DEF/HP nul sur tous les héros, et la règle
+  (classe + geas IOT_BUFF en `buffValue`, IOT_STAT en `awakValue`). Formes `scaling.spd` mises à jour
+  (`rateBase`) dans `compose-stats.test.ts`, `coreFusionSpeed.test.ts`, `uniquePassive.test.ts`.
+- ✅ **Rejeu de la revue** (copie hors du dépôt, chemins vers la racine du dépôt). `sets.ts` § A inchangé (les
+  quatre cas égaux au jeu) ; § B avant : Claire 136 contre 133, Faenan 140/137, Delta 148/146, Snow 193/192 ; après :
+  133/133, 137/137, 146/146, Snow 193/192 — le « jeu » du script pour Snow suppose l'ancien cœur cuit en plat ;
+  avec le taux de 4,3 % de la série contrat, le client donne `trunc(trunc(149 × 1,25) × 1,043)` = 193, le solveur
+  a raison. `moteur/t3.ts` avant : 1 148 écarts sur 200 000 ; après : 152, tous dus aux constantes en double du
+  script (`1.7`, `1.05`, `0.15`, `0.25` sans `fround`) : 0 avec des constantes float32. `cp32.cjs` est autonome
+  (son « solveur » est une copie de l'ancien `cp.ts`) : avant 798 / 200 000 (tirage `Math.random`) ; branché sur
+  le nouveau `calcBattlePower` 603, 0 avec ses constantes en float32.
+- ✅ **Docs.** `docs/reference.md` et `wiki/Engine-Reference.md` (§ 1.4 sortie du composeur, § 1.5 quatre buckets
+  et CHC bornée, § 2.1 tableau des couches et SPD, § 2.2 float32 et ordre de la somme, § 2.3 CHC, table des tests) ;
+  `docs/solver.md` et `wiki/Solver.md` (crit-cap sur `critRateUncapped`, CP et CHC bornée).
+- ✅ **Vérifié.** `npm run typecheck` : dernière ligne `> tsc --noEmit` (renderer, sans erreur). `npm test` : core
+  « Tests 156 passed (156) », desktop « Tests 157 passed (157) », renderer « Tests 544 passed (544) ». `npm run
+  lint` : « ✖ 28 problems (0 errors, 28 warnings) », les deux de `BuildsScreen.tsx` préexistants (lignes non
+  modifiées par le lot).
+- ⏳ **Sevih — en jeu.** Un héros à Skill_8 SPD (Claire, Faenan, Delta…) en 4P Vitesse : la fiche montre la
+  vitesse du solveur ; une CP de build comparée à celle du jeu (le ±1 occasionnel doit avoir disparu).
+- ⏳ **Hors lot, vu en passant.** Les perturbations de `dmgTickGains` / `cpStatWeights` ajoutent un pas à la CHC
+  déjà bornée sans la reborner (`{ ...cur, critRate: cur.critRate + pas }`) : sans effet sur la CP ni sur `pCrit`
+  (bornés en aval), mais le `crc` secondaire de Regina voit 102 au cap dans le panneau « DMG per 1 % ».
+
 ### 🧹 Moteur et Builder — les mineurs de la revue : tri, variantes, erreurs, sets cassés, épinglage, recos, en-tête, cycles (2026-10-19)
 - ✅ **Pourquoi.** Item « Mineurs moteur / Builder (revue) » de `docs/todo.md` (revue du 09/10, revérifié dans le code
   le 18/10). Huit points indépendants, traités dans l'ordre ; tous vérifiés réels avant correction (aucun n'était

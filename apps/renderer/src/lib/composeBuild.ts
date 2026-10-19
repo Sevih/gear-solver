@@ -10,16 +10,29 @@
  * NOTE: keep this file pure — no React, no IO. The screens own the React
  * state + memoization; this lib is the deterministic engine.
  */
-import { applySpdRate, wornSetRows, type GameData, type GearPiece, type SpeedScaling, type StatScaling } from "@gear-solver/core";
+import { applySpdRate, calcFinalStat, wornSetRows, type GameData, type GearPiece, type SpeedScaling, type StatScaling } from "@gear-solver/core";
 
 export interface FinalStats {
   atk: number; hp: number; def: number; spd: number;
-  critRate: number; critDmg: number; eff: number; effRes: number;
+  /** Crit chance, bounded to [0, 100] as the client bounds CHC on the sheet
+   *  (`CStatValue.SetFinalValue`, [0, 1000] raw): the sheet, the stat
+   *  filters and every rating read this one. */
+  critRate: number;
+  /** Crit chance BEFORE that bound — for the reads that measure the overflow:
+   *  the solver's crit-cap gem reallocation (`CRC_OVERSHOOT_CEIL`) and the
+   *  "wasted over the cap" advice. Always set by the composer; optional so a
+   *  hand-built sheet reads `critRate` instead. */
+  critRateUncapped?: number;
+  critDmg: number; eff: number; effRes: number;
   dmgUp: number; dmgReduce: number; pen: number;
   /** Critical Damage Reduction — gear-only (no character baseline). Summed
    *  from `critDmgReduce` substats / mains, displayed as a percent. */
   critDmgReduce: number;
 }
+
+/** The sheet's stat keys — every `FinalStats` field but the raw CHC overflow
+ *  (`critRateUncapped`), which nothing displays or locks. */
+export type SheetStatKey = Exclude<keyof FinalStats, "critRateUncapped">;
 
 export type ScalingAxis = "atk" | "def" | "hp" | "eff" | "res";
 /** The composer's `scaling`. `spd` (speed before its buff rate + the rate) is
@@ -48,15 +61,17 @@ export interface FinalStatsBaseline {
  *  (CHC/CHD/DMG±/…). Shared with BuildsScreen's drift comparison. */
 export const round1 = (x: number) => Math.round(x * 10) / 10;
 
-/** Plug gear flat + gear % into the in-game CalcFinalStat formula. */
-export function composeMultStat(sc: StatScaling, gearFlat: number, gearPct: number, gearBuffPct: number): number {
-  const sumFlat = sc.baseValue + sc.evoValue + sc.awakValue;
-  const sumRate = sc.awakPct * 10 + sc.transcendPct * 10 + gearPct * 10;
-  const part1 = Math.trunc(sumFlat * (1000 + sumRate) / 1000);
-  const combined = part1 + gearFlat + sc.buffValue;
-  const part2 = Math.trunc(combined * (1000 + (sc.buffPct + gearBuffPct) * 10) / 1000);
-  const codex = Math.trunc(sc.baseValue * sc.codexPct / 100);
-  return Math.max(0, part2 + codex);
+/** Plug gear flat + gear % (and the gear's buff rate / flat buff) into the
+ *  in-game CalcFinalStat formula — core's `calcFinalStat`, the single copy. */
+export function composeMultStat(sc: StatScaling, gearFlat: number, gearPct: number, gearBuffPct: number, gearBuffFlat = 0): number {
+  return calcFinalStat(
+    sc.baseValue, sc.evoValue, sc.awakValue,
+    sc.awakPct * 10, sc.transcendPct * 10,
+    gearFlat, gearPct * 10,
+    sc.codexPct * 10,
+    (sc.buffPct + gearBuffPct) * 10,
+    sc.buffValue + gearBuffFlat,
+  );
 }
 
 /** Aggregate active 2pc / 4pc armor-set bonuses into one list of stat options.
@@ -112,11 +127,14 @@ export interface GemOverride {
 /** Result of `computeSetBonuses` — the active 2pc/4pc bonus stat options. */
 export type SetBonusList = ReadonlyArray<{ st: string; ap: string; v: number }>;
 
-/** The three stat buckets fed to the in-game CalcFinalStat split. */
+/** The four stat buckets fed to the in-game CalcFinalStat split: the gear's
+ *  own flats and rates, then its buff-routed (`fromBuff`) rates and flats —
+ *  `BuffValueRate` and `BuffValue` of CalcFinalStat. */
 export interface GearBuckets {
   flat: Record<string, number>;
   pct: Record<string, number>;
   buffPct: Record<string, number>;
+  buffFlat: Record<string, number>;
 }
 
 /** Fold one piece's mains + subs into the buckets, IN PLACE. Shared by the
@@ -127,11 +145,12 @@ export interface GearBuckets {
 function addPieceToBuckets(p: GearPiece, b: GearBuckets, gemOverrideActive: boolean): void {
   for (const s of p.main) {
     if (s.combatOnly) continue;
-    // A buff-routed SPEED RATE (Phantasm Necrosis' −30 %) gets its own key:
-    // `buffPct.spd` is FLAT (EE mains `ST_SPEED OAT_ADD`), the rate goes on the
-    // speed buff rate, applied once on the total (`finalStatsFromBuckets`).
+    // A buff-routed SPEED RATE (Phantasm Necrosis' −30 %) gets its own key,
+    // the speed buff rate, applied once on the total (`finalStatsFromBuckets`).
+    // A buff-routed FLAT (EE mains `ST_SPEED OAT_ADD`, an ATK / EFF OAT_ADD
+    // buff) goes to `buffFlat` — CalcFinalStat's `BuffValue`, never a rate.
     const key = s.fromBuff && s.percent && s.stat === "spd" ? "spdRate" : s.stat;
-    const target = s.fromBuff ? b.buffPct : (s.percent ? b.pct : b.flat);
+    const target = s.fromBuff ? (s.percent ? b.buffPct : b.buffFlat) : (s.percent ? b.pct : b.flat);
     target[key] = (target[key] ?? 0) + s.value;
   }
   const isGemSlot = p.slot === "ooparts" || p.slot === "exclusive";
@@ -161,8 +180,8 @@ function addSetBonuses(setBonuses: SetBonusList, b: GearBuckets): void {
   }
 }
 
-/** Aggregate gear pieces (mains, subs, set bonuses) into flat/pct/buffPct
- *  buckets keyed by engine stat key. Three-way split mirrors the in-game
+/** Aggregate gear pieces (mains, subs, set bonuses) into flat/pct/buffPct/buffFlat
+ *  buckets keyed by engine stat key. The split mirrors the in-game
  *  CalcFinalStat input separation.
  *
  *  Talisman/EE handling: the in-game SubOptionList for these slots IS the
@@ -182,7 +201,7 @@ export function aggregateGearBuckets(
    *  result (the BuildsScreen / non-solver path stays unchanged). */
   precomputedSetBonuses?: SetBonusList,
 ): GearBuckets {
-  const b: GearBuckets = { flat: {}, pct: {}, buffPct: {} };
+  const b: GearBuckets = { flat: {}, pct: {}, buffPct: {}, buffFlat: {} };
   // Skip current-gems-as-subs on Talisman/EE when an override is supplied; the
   // override's deltas land after the per-piece loop. Non-override paths read
   // `p.subs` normally (parser pushes socketed gems into `subs`).
@@ -200,7 +219,7 @@ export function aggregateGearBuckets(
  *  Returned buckets are owned by the caller — `computeFinalStatsFromPrefix`
  *  clones them per combo so this prefix can be reused across the talisman loop. */
 export function aggregatePrefixBuckets(prefix: GearPiece[]): GearBuckets {
-  const b: GearBuckets = { flat: {}, pct: {}, buffPct: {} };
+  const b: GearBuckets = { flat: {}, pct: {}, buffPct: {}, buffFlat: {} };
   for (const p of prefix) addPieceToBuckets(p, b, false);
   return b;
 }
@@ -287,7 +306,7 @@ export function computeFinalStatsFromPrefix(
   gemOverride: GemOverride | undefined,
   setBonuses: SetBonusList,
 ): FinalStats {
-  const b: GearBuckets = { flat: { ...prefix.flat }, pct: { ...prefix.pct }, buffPct: { ...prefix.buffPct } };
+  const b: GearBuckets = { flat: { ...prefix.flat }, pct: { ...prefix.pct }, buffPct: { ...prefix.buffPct }, buffFlat: { ...prefix.buffFlat } };
   if (talisman) addPieceToBuckets(talisman, b, !!gemOverride);
   if (ee) addPieceToBuckets(ee, b, !!gemOverride);
   if (gemOverride) addGemOverride(gemOverride, b);
@@ -298,22 +317,29 @@ export function computeFinalStatsFromPrefix(
 /** Plug the aggregated gear buckets into the per-axis CalcFinalStat formula.
  *  Shared by both the full-array and incremental compose paths so the final
  *  arithmetic is defined once. */
-function finalStatsFromBuckets(baseline: FinalStatsBaseline, scaling: ScalingMap, { flat, pct, buffPct }: GearBuckets): FinalStats {
+function finalStatsFromBuckets(baseline: FinalStatsBaseline, scaling: ScalingMap, { flat, pct, buffPct, buffFlat }: GearBuckets): FinalStats {
   // Speed: the no-gear speed before its buff rate, plus gear, then the rate
   // ONCE on that total (`applySpdRate`, same rule as the no-gear composer).
   // The rate is the hero's (`scaling.spd.buffPct`, core passive) plus the
   // gear's (`buffPct.spdRate`, unique passives), summed before the truncation.
+  // The gear's own speed rate (Speed set) multiplies `rateBase` only — base +
+  // evo + IOT_STAT geas, the client's sum_flat — not the OAT_ADD buffs
+  // (Skill_8 +10 SPD) that `value` also carries.
   const spdBase = scaling.spd?.value ?? baseline.spd;
-  const spdTotal = spdBase + (flat.spd ?? 0) + (buffPct.spd ?? 0) + Math.floor(spdBase * (pct.spd ?? 0) / 100);
+  const spdRateBase = scaling.spd?.rateBase ?? spdBase;
+  const spdTotal = spdBase + (flat.spd ?? 0) + (buffFlat.spd ?? 0) + Math.floor(spdRateBase * (pct.spd ?? 0) / 100);
+  // CHC bounded to [0, 100] like the client's sheet; the raw sum rides along.
+  const critRateUncapped = round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0));
   return {
-    atk: composeMultStat(scaling.atk, flat.atk ?? 0, pct.atkPct ?? 0, buffPct.atkPct ?? 0),
-    def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0, buffPct.defPct ?? 0),
-    hp:  composeMultStat(scaling.hp,  flat.hp  ?? 0, pct.hpPct  ?? 0, buffPct.hpPct  ?? 0),
+    atk: composeMultStat(scaling.atk, flat.atk ?? 0, pct.atkPct ?? 0, buffPct.atkPct ?? 0, buffFlat.atk ?? 0),
+    def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0, buffPct.defPct ?? 0, buffFlat.def ?? 0),
+    hp:  composeMultStat(scaling.hp,  flat.hp  ?? 0, pct.hpPct  ?? 0, buffPct.hpPct  ?? 0, buffFlat.hp  ?? 0),
     spd: applySpdRate(spdTotal, (scaling.spd?.buffPct ?? 0) + (buffPct.spdRate ?? 0)),
-    critRate: round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0)),
+    critRate: Math.min(100, Math.max(0, critRateUncapped)),
+    critRateUncapped,
     critDmg:  round1(baseline.chd + (pct.critDmg  ?? 0) + (buffPct.critDmg  ?? 0)),
-    eff: composeMultStat(scaling.eff, flat.eff    ?? 0, pct.eff    ?? 0, buffPct.eff    ?? 0),
-    effRes: composeMultStat(scaling.res, flat.effRes ?? 0, pct.effRes ?? 0, buffPct.effRes ?? 0),
+    eff: composeMultStat(scaling.eff, flat.eff    ?? 0, pct.eff    ?? 0, buffPct.eff    ?? 0, buffFlat.eff    ?? 0),
+    effRes: composeMultStat(scaling.res, flat.effRes ?? 0, pct.effRes ?? 0, buffPct.effRes ?? 0, buffFlat.effRes ?? 0),
     dmgUp: round1(baseline.dmgInc + (pct.dmgUp ?? 0) + (flat.dmgUp ?? 0) + (buffPct.dmgUp ?? 0)),
     dmgReduce: round1(baseline.dmgRed + (pct.dmgReduce ?? 0) + (flat.dmgReduce ?? 0) + (buffPct.dmgReduce ?? 0)),
     pen:    round1(baseline.pen    + (pct.pen ?? 0) + (flat.pen ?? 0) + (buffPct.pen ?? 0)),

@@ -1213,7 +1213,8 @@ export function allocateComboBudget(counts: number[], budget: number): number[] 
  *  contributions that move a FinalStat (and thus CP). Dominance compares these
  *  ONLY: a difference on any other key can't change CP, so ignoring it both
  *  prevents dropping a CP-equal piece over an irrelevant stat and tightens the
- *  prune. `pct` and `buffPct` read the same rate keys. */
+ *  prune. `pct` and `buffPct` read the same rate keys, `flat` and `buffFlat`
+ *  the same flat keys. */
 const CP_FLAT_KEYS = ["atk", "def", "hp", "spd", "eff", "effRes", "dmgUp", "dmgReduce", "pen", "critDmgReduce"] as const;
 const CP_RATE_KEYS = ["atkPct", "defPct", "hpPct", "spd", "spdRate", "critRate", "critDmg", "eff", "effRes", "dmgUp", "dmgReduce", "pen", "critDmgReduce"] as const;
 
@@ -1236,6 +1237,11 @@ function bucketDominatesStrict(x: GearBuckets, y: GearBuckets): boolean {
   }
   for (const k of CP_RATE_KEYS) {
     const xv = x.buffPct[k] ?? 0, yv = y.buffPct[k] ?? 0;
+    if (xv < yv) return false;
+    if (xv > yv) strict = true;
+  }
+  for (const k of CP_FLAT_KEYS) {
+    const xv = x.buffFlat[k] ?? 0, yv = y.buffFlat[k] ?? 0;
     if (xv < yv) return false;
     if (xv > yv) strict = true;
   }
@@ -1713,14 +1719,16 @@ export async function solveChunk(
                 // CHC-blind, so it neither guarantees the crit cap nor avoids
                 // overshooting it. The pre-gem CHC for THIS combo is recoverable
                 // from the composed CHC minus the default gem crc contribution
-                // (crit rate is purely additive — no scaling compounding).
+                // (crit rate is purely additive — no scaling compounding) —
+                // on the UNBOUNDED CHC: the sheet's is clamped at 100.
                 const defaultCrcGem = gemDelta?.pct?.critRate ?? 0;
+                const crcUncapped = fs.critRateUncapped ?? fs.critRate;
                 if (wantCritCap) {
                   // User prioritized crc → REACH the 100% cap with crit gems
                   // first, then fill the rest by priority. Recompose only when
                   // the cap-aware allocation actually differs from the default
                   // greedy (it often won't, when crit gems already rank high).
-                  const preGemCrc = fs.critRate - defaultCrcGem;
+                  const preGemCrc = crcUncapped - defaultCrcGem;
                   const cacheKey = talismanSlots * 1_000_000 + preGemCrc;
                   let reached = capAllocCache.get(cacheKey);
                   if (!reached) {
@@ -1731,12 +1739,12 @@ export async function solveChunk(
                     fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, reached.delta ?? undefined, setBonuses);
                     gemAlloc = reached.alloc;
                   }
-                } else if (fs.critRate > CRC_OVERSHOOT_CEIL && defaultCrcGem > 0) {
+                } else if (crcUncapped > CRC_OVERSHOOT_CEIL && defaultCrcGem > 0) {
                   // No crc priority (e.g. SOLVE CP raw-gem fallback): just avoid
-                  // overshoot. `fs.critRate > 102` ⟺ ≥1 crit gem landed past the cap;
+                  // overshoot. `crcUncapped > 102` ⟺ ≥1 crit gem landed past the cap;
                   // reallocate this combo's pre-gem CHC so wasted crit gems
                   // become useful non-crit ones. Untriggered combos pay nothing.
-                  const preGemCrc = fs.critRate - defaultCrcGem;
+                  const preGemCrc = crcUncapped - defaultCrcGem;
                   const cacheKey = talismanSlots * 1_000_000 + preGemCrc;
                   let capped = capAllocCache.get(cacheKey);
                   if (!capped) {

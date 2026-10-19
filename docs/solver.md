@@ -452,7 +452,7 @@ Em-dash quand aucun build n'est sélectionné.
 1. **Étage 1** — dépenser des gems crit pour **atteindre** le cap CHC à 100 % (en priorité, même si l'atk score plus haut), overshoot ≤ un gem 3 %.
 2. **Étage 2** — remplir le reste **par priorité puis par remplissage** (en sautant tout gem crit une fois le cap atteint, désormais gaspillé — une gemme crit de remplissage suit le même saut).
 
-Le pré-gem CHC du combo est récupéré depuis `fs.crc − defaultCrcGem` (le crit rate est purement additif). On ne **recompose** que si le delta cap-aware diffère du greedy par défaut (`gemDeltaEquals`) — souvent identique quand les gems crit rankent déjà haut. Le cas sans priorité crc (ex. fallback SOLVE CP, ou des gemmes crit de remplissage) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.crc > 102`) — lui aussi gated par `gemDeltaEquals` avant recompose.
+Le pré-gem CHC du combo est récupéré depuis `fs.critRateUncapped − defaultCrcGem` (le crit rate est purement additif ; la somme non bornée, la CHC de la fiche étant bornée à 100). On ne **recompose** que si le delta cap-aware diffère du greedy par défaut (`gemDeltaEquals`) — souvent identique quand les gems crit rankent déjà haut. Le cas sans priorité crc (ex. fallback SOLVE CP, ou des gemmes crit de remplissage) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.critRateUncapped > 102`) — lui aussi gated par `gemDeltaEquals` avant recompose.
 
 Les deux allocateurs sont **mémoïsés par `(talismanSlots, preGemCrc)`** (`capAllocCache`, par run
 `solveChunk`) : purs en (pool, slots, preGemCrc) avec pool + slots EE constants par solve, et le CHC

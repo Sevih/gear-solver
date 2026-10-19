@@ -38,14 +38,15 @@ const sc = (baseValue: number): StatScaling => ({
   baseValue, evoValue: 0, awakValue: 0, awakPct: 0, transcendPct: 0, codexPct: 0, buffPct: 0, buffValue: 0,
 });
 // A sheet at 220 SPD with no other speed rate.
-const SCALING: ScalingMap = { atk: sc(3000), def: sc(800), hp: sc(8000), eff: sc(120), res: sc(150), spd: { value: 220, buffPct: 0 } };
+const SCALING: ScalingMap = { atk: sc(3000), def: sc(800), hp: sc(8000), eff: sc(120), res: sc(150), spd: { value: 220, rateBase: 220, buffPct: 0 } };
 const BASELINE: FinalStatsBaseline = { spd: 220, chc: 60, chd: 180, pen: 10, dmgInc: 0, dmgRed: 0 };
 
 describe("Phantasm Necrosis — SPD −30 % on the speed buff rate", () => {
-  it("lands in buffPct.spdRate, not in the flat buffPct.spd (EE flat SPD)", () => {
+  it("lands in buffPct.spdRate, not in the flat buffFlat.spd (EE flat SPD)", () => {
     const b = aggregateGearBuckets([piece("weapon", [atkMain, phantasm])], null);
     expect(b.buffPct.spdRate).toBe(-30);
     expect(b.buffPct.spd).toBeUndefined();
+    expect(b.buffFlat.spd).toBeUndefined();
   });
 
   it("220 SPD with the weapon → 154 (220 × 0.7)", () => {
@@ -57,7 +58,7 @@ describe("Phantasm Necrosis — SPD −30 % on the speed buff rate", () => {
     const characters = derived("characters.json") as CharactersTable;
     const codexCurve = derived("codex-curve.json") as CodexCurve;
     const c = composeCharStats(characters["2700003"]!.ingredients!, codexCurve, { level: 100, levelMaxStep: 0, levelMaxModifier: 0 });
-    expect(c.scaling.spd).toEqual({ value: 149, buffPct: 4.3 });
+    expect(c.scaling.spd).toEqual({ value: 149, rateBase: 149, buffPct: 4.3 });
     const boots = piece("boots", [{ stat: "spd", value: 45, percent: false, source: "option" }]);
     const fs = computeFinalStats(c.noGearStats, c.scaling, [piece("weapon", [atkMain, phantasm]), boots], null);
     expect(fs.spd).toBe(Math.trunc((149 + 45) * 743 / 1000));

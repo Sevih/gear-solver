@@ -37,7 +37,7 @@ describe("Core Fusion SPD rate — applied once, on the total with gear", () => 
   it("fused Snow lv100 + 40 flat SPD → 197 (trunc((149 + 40) × 1.043)), not 155 + 40", () => {
     const c = compose("2700003");
     expect(c.noGearStats.spd).toBe(155);
-    expect(c.scaling.spd).toEqual({ value: 149, buffPct: 4.3 });
+    expect(c.scaling.spd).toEqual({ value: 149, rateBase: 149, buffPct: 4.3 });
     const fs = computeFinalStats(c.noGearStats, c.scaling, [piece("boots", [flatSpd(40)])], null);
     expect(fs.spd).toBe(197);
   });

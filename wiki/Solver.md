@@ -174,7 +174,7 @@ For each combo that passes phase 4:
    gets `noCrit=true` → `pCrit=0` (the CHD term drops out) and `mcd` falls back to the
    non-crit hit: CHC/CHD no longer inflate its ratings. In SOLVE CP with no rating-band
    filter other than Score, the 8 products are **deferred** to `finalizeBuilds` (top-N
-   only) — the heap sorts by CP. CP itself stays a faithful in-game mirror (its formula uses raw crc).
+   only) — the heap sorts by CP. CP itself stays a faithful in-game mirror (the sheet's CHC, bounded at 100%).
 4. **Score**: `Σ priority × (final / STAT_NORMS) × 100`, **unrounded** (it is the sort key; the
    table rounds it for display only — rounded, two close builds used to tie).
 5. **Rating filter**: same as the stat filter, on ratings + score.
@@ -427,7 +427,7 @@ Em-dash when no build is selected.
 1. **Stage 1** — spend crit gems to **reach** the 100% CHC cap (as a priority, even if atk scores higher), overshoot ≤ one 3% gem.
 2. **Stage 2** — fill the rest **by priority, then by filler** (skipping any crit gem once the cap is reached, now wasted — a filler crit gem follows the same skip).
 
-The combo's pre-gem CHC is recovered from `fs.crc − defaultCrcGem` (crit rate is purely additive). We only **recompose** if the cap-aware delta differs from the default greedy (`gemDeltaEquals`) — often identical when crit gems already rank high. The case without a crc priority (e.g. SOLVE CP fallback, or filler crit gems) keeps the old anti-overshoot (`allocateGemsCapped`, triggered only if `fs.crc > 102`).
+The combo's pre-gem CHC is recovered from `fs.critRateUncapped − defaultCrcGem` (crit rate is purely additive; the unbounded sum, the sheet's CHC being bounded at 100). We only **recompose** if the cap-aware delta differs from the default greedy (`gemDeltaEquals`) — often identical when crit gems already rank high. The case without a crc priority (e.g. SOLVE CP fallback, or filler crit gems) keeps the old anti-overshoot (`allocateGemsCapped`, triggered only if `fs.critRateUncapped > 102`).
 
 **Pre-aggregation**: the gem contribution is converted into `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`, returned by the allocator along with the split (`GemAllocation`). The compose just adds these deltas to the buckets after the piece aggregation. Avoids `resolveStat` × 10 gems × N combos.
 

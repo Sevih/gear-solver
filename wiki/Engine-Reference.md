@@ -127,8 +127,9 @@ Files: [parse.ts](../packages/core/src/parse.ts),
 
 Output: `{noGearStats, intrinsicStats, scaling}` where `scaling` carries the
 per-axis ingredients (ATK/DEF/HP/EFF/RES) to allow adding gear later via
-`composeMultStat`, and `scaling.spd` = `{ value, buffPct }`, the speed before
-its rate and the rate (`noGearStats.spd` has already applied it).
+`composeMultStat`, and `scaling.spd` = `{ value, rateBase, buffPct }`, the speed
+before its rate, the part a gear rate multiplies (base + evo + IOT_STAT awakening,
+without the OAT_ADD buffs) and the rate (`noGearStats.spd` has already applied it).
 
 ### 1.5 Compose final stats (`apps/renderer/src/lib/composeBuild.ts`)
 
@@ -136,18 +137,25 @@ its rate and the rate (`noGearStats.spd` has already applied it).
 gear on top of the no-gear baseline. Covers:
 
 1. `aggregateGearBuckets(pieces, game, gemOverride?)` — aggregates mains/subs/sets
-   into three buckets: `flat`, `pct`, `buffPct` (matching the in-game CalcFinalStat
-   separation).
-2. Per-axis compound via `composeMultStat(scaling, gearFlat, gearPct, gearBuffPct)`
-   for ATK/DEF/HP/EFF/RES.
-3. Simple additive for CHC/CHD/PEN/DMG±/CritDmgRed. SPD: speed before rate
-   (`scaling.spd.value`) + gear flat + EE + set % (`floor(base × pct / 100)`),
-   then the buff rate applied once to that total (`applySpdRate`, same rule as
-   no-gear): `scaling.spd.buffPct` (hero) + `buffPct.spdRate` (the speed rate of
-   a gear `fromBuff`, Phantasm Necrosis −30%; `buffPct.spd` stays flat), i.e.
-   `trunc(total × (1000 + hero‰ + gear‰) / 1000)`; simple additive when the rate
+   into four buckets: `flat`, `pct`, then the `fromBuff` rates (`buffPct`) and
+   flats (`buffFlat`) — matching the in-game CalcFinalStat separation
+   (`BuffValueRate`, `BuffValue`).
+2. Per-axis compound via `composeMultStat(scaling, gearFlat, gearPct, gearBuffPct,
+   gearBuffFlat)` for ATK/DEF/HP/EFF/RES: a call to core's `calcFinalStat` (one copy
+   of the formula), `gearBuffFlat` added to `buffValue`.
+3. Simple additive for CHC/CHD/PEN/DMG±/CritDmgRed; CHC bounded to [0, 100] like the
+   client's sheet (`CStatValue.SetFinalValue`, [0, 1000] raw), the unbounded sum kept
+   in `critRateUncapped` for the crit-cap gem reallocation (`CRC_OVERSHOOT_CEIL`) and
+   the "wasted over the cap" advice. SPD: speed before rate (`scaling.spd.value`) +
+   gear flat + buff flat (`buffFlat.spd`, EE mains) + set %
+   (`floor(scaling.spd.rateBase × pct / 100)`: the item rate multiplies base + evo +
+   awakening, not the Skill_8 +10 SPD), then the buff rate applied once to that total
+   (`applySpdRate`, same rule as no-gear): `scaling.spd.buffPct` (hero) +
+   `buffPct.spdRate` (the speed rate of a gear `fromBuff`, Phantasm Necrosis −30%),
+   i.e. `trunc(total × (1000 + hero‰ + gear‰) / 1000)`; simple additive when the rate
    is zero. The RES rate of a `fromBuff` (Briareos's Ambition) lands in
-   `buffPct.effRes`, read as `gearBuffPct`.
+   `buffPct.effRes`, read as `gearBuffPct`; a flat `fromBuff` (ATK, OAT_ADD EFF) in
+   `buffFlat`, read as `gearBuffFlat`.
 4. **Gem override** (solver only): skip the subs of Talisman/EE and add the
    pre-aggregated `{flat, pct}` deltas in their place. See §2.4.
 
@@ -221,17 +229,20 @@ diverges from floor on negative intermediates (rare but real on debuffs).
 |--------------|----------------------|---------------------------------------------------------|
 | baseValue    | sum_flat             | per-level base interpolation                            |
 | evoValue     | sum_flat             | sum of evolution rows                                   |
-| awakValue    | sum_flat             | geas IOT_STAT flat adds                                 |
+| awakValue    | sum_flat             | geas IOT_STAT flat adds (the only awakening source, every axis) |
 | awakPct      | sum_rate             | geas IOT_STAT % bonuses                                 |
 | transcendPct | sum_rate             | TranscendByStar.{atkPct,defPct,hpPct} row matching star |
 | gearPct      | sum_rate             | aggregated `pct.{atkPct,defPct,hpPct}` from gear        |
 | gearFlat     | combined             | aggregated `flat.{atk,def,hp}` from gear                |
-| buffValue    | combined             | OAT_ADD buffs (class passive +EFF, geas [141] +50 EFF, …) |
+| buffValue    | combined             | OAT_ADD buffs (class, skill_8, geas IOT_BUFF, skill / core passives: class +EFF, geas [141] +50 EFF; 0 on ATK/DEF/HP in today's data) + gear `buffFlat.*` |
 | buffPct      | part2 (outermost)    | classPassive + skill_8 + geas IOT_BUFF + skill passives + gear `buffPct.*` |
 | codexPct    | codex term, baseValue| archive bonus                                           |
 
-**SPD** (`scaling.spd`): only the outer stage is modelled —
-`final = trunc((speed before rate + gear) × (1000 + buffPct) / 1000)`, where
+**SPD** (`scaling.spd`): the item rate (Speed set, OAT_RATE) multiplies
+`rateBase` = base + evo + IOT_STAT awakening, the client's `sum_flat` — the OAT_ADD
+buffs (Skill_8 +10 SPD of Claire, Faenan, Delta…) stay in `combined`: Claire in 4P
+Speed = `trunc(99 × 1.25)` + 10 = 133, not `trunc(109 × 1.25)` = 136. Then the outer
+stage — `final = trunc((speed before rate + gear) × (1000 + buffPct) / 1000)`, where
 `buffPct` is the sum of the sheet's speed rates (the core passive at the fusion tier,
 fused Snow / Lisha 43‰, plus the gear's `buffPct.spdRate`, Phantasm Necrosis −300‰:
 fused Snow holding the weapon = `trunc(total × 0.743)`). Snow lv1 = `trunc(133 × 1.043)` = 138,
@@ -246,12 +257,17 @@ Reverse-engineered from `CalcBattlePower` (libil2cpp.so 1.4.9, RVA `0x2C59EE4`;
 `0x2CB1D08` in 1.4.14, signature unchanged), validated 0-diff
 on 5 chars (LB0/1/2/3). Implementation: [cp.ts](../apps/renderer/src/lib/solver/cp.ts).
 
+**Float32**: the client computes in `float`; every operation is ported as is, in its
+order, under `Math.fround`, constants included (`1.7f`, `1.05f`, `0.15f`, `0.25f`,
+`0.001f`), like outerpedia's `calcNoGearBattlePower` (0 difference with it over 200,000
+drawn sheets). The raw inputs (display × 10) are rounded to integers, as on the client.
+In double, ±1 on ~0.5% of the sheets.
+
 **SOLVE CP hot path**: `makeCpEvaluator(consts)` pre-captures the per-solve constant
 additive bonuses (`starBonus`, `skillSum`, `eeBp`, `fusionBp` — all exact integers) and
 returns a closure `(stats, talisman) → cp`. Avoids the per-combo `CpArgs` object allocation
-and the constant re-derivation. **Bit-identical** to `calcBattlePower`: the hoisted
-constants are integers (lossless summation) and the final sum order is preserved. Dedicated
-identity test.
+and the constant re-derivation. **Bit-identical** to `calcBattlePower`: same `cpFrom`, the
+hoisted constants are integers (exact in float32). Dedicated identity test.
 
 **Critical conventions**:
 - **CRC capped at 100%** BEFORE entering the formula.
@@ -259,7 +275,7 @@ identity test.
   The code receives the display value and multiplies by 10 internally.
 - EFF/RES: integer display direct.
 
-**Formula**:
+**Formula** (each step rounded to float32, see above):
 ```
 critF =  sumCd < 2001 ? sumCd / 1000
                       : 2.0 × (1 − (1 − x)²) + 2.5  where x = min((sumCd-2000)/2500, 1)
@@ -283,7 +299,7 @@ eeBp      = ee ? ee.enhanceLevel × 100 + 300 : 0
 ooBp      = ooparts ? ooparts.enhanceLevel × 100 + (ooparts.star ?? 0) × 50 : 0
 fusionBp  = fused ? 5000 : 0
 
-CP = floor(atkPart + defPart + starBonus + skillSum × 100 + eeBp + ooBp + fusionBp)
+CP = floor(((((atkPart + defPart) + (starBonus + skillSum × 100)) + eeBp) + ooBp) + fusionBp)
 ```
 
 **`max(0, level − 1)` per skill**: the 4 skills start at Lv1 in-game (max
@@ -349,8 +365,10 @@ for any `TARGET_DEF`.
 Conventions:
 - `CRC` and `CHD` are in **DISPLAY percent** (35 = 35%); the /100 divisor makes
   them decimal for the products.
-- **CRC capped at 100%** in-game — overflow wasted. The raw value stays in
-  `FinalStats.critRate` for the UI display.
+- **CRC capped at 100%** in-game — overflow wasted. `FinalStats.critRate` is
+  already bounded to [0, 100] (sheet, display, filters, Regina's `crc` secondary
+  scaling); the raw sum is in `critRateUncapped` (crit-cap gems, "wasted over the
+  cap" advice).
 - **PEN capped at 100%** — `PPR` (PiercePowerRate) caps at 1000‰ in-game (§1.2).
   The `PiercePower` flat is not modeled (rare on builds).
 - **30% DR floor** — `CheckDamageRate` clamps `rate = Max(rate, 300)`
@@ -363,7 +381,7 @@ term drops out of every offensive rating, and `mcd` ("assume 100% CHC") falls ba
 non-crit hit (`mcdFactor === drFactor`) since there's no crit ceiling to reach. Without
 this the solver rewarded CHC/CHD a no-crit hero can never cash in. `noCrit` comes from
 `meta.noCrit`, propagated through the solve context like `dmgStat`/`dmgSec`. **CP is not
-affected**: `calcBattlePower` stays a faithful in-game mirror (which uses raw crc), so
+affected**: `calcBattlePower` stays a faithful in-game mirror (the sheet's CHC, bounded at 100%), so
 SOLVE CP still maximizes the game's real CP number.
 
 **Not included** in the ratings (defender-dependent, out of build-trait scope):
@@ -743,6 +761,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/buildAdvice.test.ts` | 16 tests — `computeAdvice` (Builds): no-gear silent, missing on a near-complete hero (≤2) vs silent WIP (early-return), sets (singleton / 3-of-4), wasted caps — crit tolerated ≤102 / PEN >100 (rounded threshold >0), empty gem slots Talisman/EE + reach-+5 tip, aggregated upgrade (unused reforges / 6★ not ascended / below enhance cap), singular/plural wording |
 | `apps/renderer/test/cpPrune.test.ts` | 23 tests — combo-budget & scorers: `keepTopN`/`keepTopPct`/`keepTopUnion` (top-N, required-set preservation, equipped-piece pin, min-stat floor retention), `priorityScoreOf`/`magnitudeScoreOf` (weighting, combat-only exclusion), `allocateComboBudget` (product bound, small slots kept whole, input order), CP proxy ranking high-CP gear, `cpStatWeights` (offensive ≫ dmg-reduce, weight ≥ 0) |
 | `apps/renderer/test/heroPriority.test.ts` | 21 tests — per-hero priority store: `rankOrder` / `isLowerPriority` (unranked < ranked, uniqueness, strict), `reorderRank` / `moveRankBefore` (contiguous 1..N positional insert, drag, clamp, immutability), `fillUnrankedByOrder` (keeps manual ranks, fills unranked by CP, compacts gaps, ignores stale uids) |
+| `apps/renderer/test/sheetMinors.test.ts` | 14 tests — sheet minors (2026-10 review): Speed set on base + evo + awakening (Claire 133, Faenan 137, Delta 146), bounded CHC and `critRateUncapped` (Regina `crc`, advice, `solveChunk` crit-cap reallocation), float32 CP (three sheets ±1 in double), `fromBuff` flats in `buffFlat` (ATK, OAT_ADD EFF, dominance), `composeMultStat` = `calcFinalStat` exactly (heroes × codex × values) |
 | `apps/renderer/test/dominance.test.ts` | 10 tests — `pruneDominatedForCp`: strict drop, ties/Pareto/groups kept, reforge projection, end-to-end top-CP equivalence via `solveChunk` |
 | `apps/renderer/test/statRegistry.test.ts` | 11 tests — stat registry (`STAT_AXES`): FinalStats coverage, `STAT_TO_PRIORITY` flat/%→axis bridge, design-token completeness, numeric parity snapshot, legacy-key migration |
 | `apps/renderer/test/worklistPlan.test.ts` | 20 tests — `planWorklist` transaction planning: free-before-use ordering, contention flags (one copy wanted twice), **same hero + same slot**: only the newest entry (`createdAt`) is assigned, the older one exposed as `superseded` (and the `equipAssignments` fold hands over the newer piece), cycles applicable atomically (only the cycle's members; an entry depending on one is ordered after it), applied/stale changes excluded, empty plan; `worklistClaims` (solver reservations): each unapplied change's target → claiming hero, already-applied changes skipped, newest entry wins a double-claim, empty map without inventory |

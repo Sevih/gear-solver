@@ -22,12 +22,8 @@
 - [ ] 🟡 **M5 — Niveaux de compétence des fusionnés** — le jeu les reconstruit depuis `CharacterFusionLevel`, l'outil
       prend `First..Ultimate` de la capture (jusqu'à +1 200 CP d'écart). **Bloqué** : il faut une capture d'un
       fusionné dont les compétences d'origine dépassent celles de la fusion.
-- [ ] 🟡 **Mineurs de fiche (revue)** — set Vitesse appliqué sur une base qui inclut les buffs OAT_ADD (~+3 SPD en 4P
-      sur Claire, Faenan, Delta…) · `critRate` non borné à [0, 100] dans `FinalStats` (affichage, filtres, scaling
-      secondaire crc de Regina) · CP en double au lieu de float32 (±1 sur ~0,5 % des fiches) · ATK/DEF/HP plats
-      issus de `fromBuff` perdus, OAT_ADD sur EFF/RES traité en taux (latent) · `combatOnly` des mains d'EE décidé
-      par le nom et non par le Type (latent) · `composeCharStats` ignore l'ATK plat de classe/skill8/cœur (vaut 0
-      aujourd'hui) · `awakValue` : ATK prend `geas.atk` toutes sources, EFF/RES `geasStat` — unifier.
+- [~] 🟡 **Mineurs de fiche (revue)** — reste : `combatOnly` des mains d'EE décidé par le nom et non par le Type
+      (latent ; posé par le générateur d'outerpedia, contrat).
 
 ### 🔴 Revue 2026-10 — moteur et Builder
 - [~] 🟡 **Mineurs moteur / Builder (revue)** — reste : `buildAdvice` propose « +5 pour un 5e emplacement de gemme »
@@ -47,7 +43,6 @@
       TargetType ME et le niveau de buff le plus haut (0 écart, fragile).
 
 ### 🟡 Audit projet (2026-09-07) — reste
-- [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer).
 - [ ] 🟡 **Composants monolithiques** — BuilderScreen ~4600 lignes (~40 composants + reducer), InventoryScreen 1350,
       SettingsModal 1210 (5 panes + helpers réseau), HomeScreen `computeStats` 200 lignes. Découpage proposé :
       `builderFilters.ts`, `catalogs.ts`, `ResultsTable`, `BottomGearBand`, `BuilderToolbar` + panels, `RightSidebar`,

@@ -309,6 +309,7 @@ export interface NoGearStats {
  *   - baseValue  : per-level interpolated base stat (Min/Max bracket)
  *   - evoValue   : sum of evolution row flats up to evoCap
  *   - awakValue  : sum of geas IOT_STAT flats (raw stat adds from gift nodes)
+ *                  — the ONLY geas source counted here, on every axis
  *   - awakPct    : sum of geas IOT_STAT rates                    (compounded first)
  *   - transcendPct: per-TransStar % bonus                         (compounded first)
  *   - codexPct   : ArchiveStatRate %                              (codex term, on baseValue only)
@@ -324,12 +325,12 @@ export interface StatScaling {
   transcendPct: number;
   codexPct: number;
   buffPct: number;
-  /** Flat BuffValue contributions (BT_STAT_PREMIUM OAT_ADD via `SetBuffPremiumValue`).
-   *  ATK / DEF / HP buffs from class passive / Skill_8 / Geas are all OAT_RATE for
-   *  those axes, so buffValue stays 0. EFF / RES use OAT_ADD on buff routing
-   *  (e.g. RANGER_PASSIVE_3_10 → +50 EFF, ATTACKER_PASSIVE_2 → +5 CHC), so
-   *  buffValue carries that flat additive layer applied to `combined` before
-   *  the BR amplifier. */
+  /** Flat BuffValue contributions (BT_STAT_PREMIUM OAT_ADD via `SetBuffPremiumValue`):
+   *  class passive + Skill_8 + Geas IOT_BUFF + S1/S2/S3 + core passive, the
+   *  same sources on every axis. EFF / RES carry real ones (e.g.
+   *  RANGER_PASSIVE_3_10 → +50 EFF); ATK / DEF / HP buffs are all OAT_RATE in
+   *  today's data, so their buffValue is 0 — still summed, so a flat one lands
+   *  here. Added to `combined` before the BR amplifier. */
   buffValue: number;
 }
 
@@ -340,6 +341,11 @@ export interface StatScaling {
 export interface SpeedScaling {
   /** No-gear speed before the buff rate: base + evo + every flat layer. */
   value: number;
+  /** The part of `value` a gear speed RATE (Speed set, OAT_RATE) multiplies:
+   *  base + evo + IOT_STAT geas — the client's `sum_flat`. The OAT_ADD buffs
+   *  (Skill_8 +10 SPD, class / skill / core passives, Geas IOT_BUFF) sit in
+   *  `combined`, outside that rate. */
+  rateBase: number;
   /** Speed buff rate, display % (4.3 = +4.3 %), applied last by
    *  `applySpdRate`. 0 for every hero without a speed-rate passive. */
   buffPct: number;
@@ -453,12 +459,19 @@ export function composeCharStats(
   // in-game truncation — round() would push e.g. Luna's lv120 RES 130.91 to
   // 131 when the in-game sheet shows 130.
   const spdBeforeRate = Math.floor(baseSpd + evo.spd + classPass.spd + skill8.spd + geas.spd + skillPass.spd);
+  const spdRateBase = Math.floor(baseSpd + evo.spd + geasStat.spd);
+
+  // ATK / DEF / HP flats, same split as EFF / RES: IOT_STAT geas in
+  // `awakValue`, every buff source (OAT_ADD) in `buffValue`.
+  const atkBuffValue = classPass.atk + skill8.atk + (geas.atk - geasStat.atk) + skillPass.atk;
+  const defBuffValue = classPass.def + skill8.def + (geas.def - geasStat.def) + skillPass.def;
+  const hpBuffValue  = classPass.hp  + skill8.hp  + (geas.hp  - geasStat.hp)  + skillPass.hp;
 
   const scaling = {
-    spd: { value: spdBeforeRate, buffPct: spdRatePct },
-    atk: { baseValue: baseAtk, evoValue: evo.atk, awakValue: geas.atk, awakPct: geasStat.atkPct, transcendPct: transRow.atkPct, codexPct: codexRow.atkPct, buffPct: atkBuffPct, buffValue: 0 },
-    def: { baseValue: baseDef, evoValue: evo.def, awakValue: geas.def, awakPct: geasStat.defPct, transcendPct: transRow.defPct, codexPct: codexRow.defPct, buffPct: defBuffPct, buffValue: 0 },
-    hp:  { baseValue: baseHp,  evoValue: evo.hp,  awakValue: geas.hp,  awakPct: geasStat.hpPct,  transcendPct: transRow.hpPct,  codexPct: codexRow.hpPct,  buffPct: hpBuffPct, buffValue: 0  },
+    spd: { value: spdBeforeRate, rateBase: spdRateBase, buffPct: spdRatePct },
+    atk: { baseValue: baseAtk, evoValue: evo.atk, awakValue: geasStat.atk, awakPct: geasStat.atkPct, transcendPct: transRow.atkPct, codexPct: codexRow.atkPct, buffPct: atkBuffPct, buffValue: atkBuffValue },
+    def: { baseValue: baseDef, evoValue: evo.def, awakValue: geasStat.def, awakPct: geasStat.defPct, transcendPct: transRow.defPct, codexPct: codexRow.defPct, buffPct: defBuffPct, buffValue: defBuffValue },
+    hp:  { baseValue: baseHp,  evoValue: evo.hp,  awakValue: geasStat.hp,  awakPct: geasStat.hpPct,  transcendPct: transRow.hpPct,  codexPct: codexRow.hpPct,  buffPct: hpBuffPct,  buffValue: hpBuffValue },
     // IOT_STAT geas EFF/RES rate (rare — e.g. some `Awakening_*` nodes) goes
     // to `awakPct` so it amplifies sum_flat at the inner CalcFinalStat layer,
     // mirroring how ATK/DEF/HP IOT_STAT geas rates route to `awakPct` above.

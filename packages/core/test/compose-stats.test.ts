@@ -698,7 +698,7 @@ describe("Core Fusion SPD rate (Snow, +4.3 %) — agrees with CFormula.CalcFinal
 
   it("exposes the speed before the rate and the rate, for the gear side", () => {
     const { noGearStats, scaling } = composeCharStats(snow, codexCurve, { level: 1, levelMaxStep: 0 });
-    expect(scaling.spd).toEqual({ value: snow.base.spd.max, buffPct: 4.3 });
+    expect(scaling.spd).toEqual({ value: snow.base.spd.max, rateBase: snow.base.spd.max, buffPct: 4.3 });
     expect(noGearStats.spd).toBe(Math.trunc(scaling.spd.value * 1043 / 1000));
   });
 });
@@ -784,5 +784,39 @@ describe("Core Fusion — fallback on a cache without corePassiveByFusion (legac
   it("Notia: the single block whatever the tier — EFF 255 even at fusion 1", () => {
     expect(compose("2700056", 100, 0, 1).noGearStats.eff).toBe(255);
     expect(compose("2700056", 100, 0, 5).noGearStats.eff).toBe(255);
+  });
+});
+
+// ATK / DEF / HP flats follow the EFF / RES split: IOT_STAT geas in
+// `awakValue`, every buff source (class, Skill_8, Geas IOT_BUFF, skill and
+// core passives) in `buffValue` — added to `combined`, outside sum_flat's rates.
+describe("composeCharStats — ATK / DEF / HP flats: IOT_STAT geas in awakValue, buffs in buffValue", () => {
+  it("every committed hero (geas at max): no flat ATK / DEF / HP buff — buffValue 0, the sheet unchanged", () => {
+    const bad: string[] = [];
+    for (const [id, ing] of allIngredients) {
+      const { scaling } = composeCharStats(ing, codexCurve, {});
+      for (const ax of ["atk", "def", "hp"] as const) if (scaling[ax].buffValue !== 0) bad.push(`${id} ${ax}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("a class passive / Skill_8 / IOT_BUFF geas flat lands in buffValue, an IOT_STAT geas flat in awakValue", () => {
+    const [, real] = allIngredients[0]!;
+    const ing: CharacterIngredients = {
+      ...real,
+      classPassive: { ...real.classPassive, atk: 40 },
+      geasByNode: {
+        stat: { source: "stat", levels: { "1": block({ atk: 100 }) } },
+        buff: { source: "buff", levels: { "1": block({ atk: 30, hp: 50 }) } },
+      },
+    };
+    const { scaling, noGearStats } = composeCharStats(ing, codexCurve, {});
+    expect(scaling.atk.awakValue).toBe(100);
+    // The real hero carries no other flat ATK buff (first test): 40 + 30.
+    expect(scaling.atk.buffValue).toBe(70);
+    expect(scaling.hp.awakValue).toBe(0);
+    expect(scaling.hp.buffValue).toBe(50);
+    const s = scaling.atk;
+    expect(noGearStats.atk).toBe(calcFinalStat(s.baseValue, s.evoValue, 100, s.awakPct * 10, s.transcendPct * 10, 0, 0, s.codexPct * 10, s.buffPct * 10, s.buffValue));
   });
 });
