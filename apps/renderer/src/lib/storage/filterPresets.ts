@@ -7,7 +7,7 @@
  * Sets need conversion before/after JSON. `excludedHeroes` is the only
  * non-JSON-safe field; we round-trip via array.
  */
-import type { SolverFilters } from "../../screens/BuilderScreen.js";
+import type { SolverFilters } from "../solver/builderFilters.js";
 import { setPicksToPlans } from "../solver/setPlans.js";
 import { renameLegacyStatKeys } from "../statRegistry.js";
 

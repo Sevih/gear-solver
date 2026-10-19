@@ -203,7 +203,7 @@ For each combo that passes phase 4:
 
 The top panels (Hero, Stats, Sub tick value / Damage info, Options, filters,
 priority, mains, sets, effects) + the Actions/Library sidebar + the pinned footer. Each filter panel
-pushes its state into the `SolverFilters` reducer (`apps/renderer/src/screens/BuilderScreen.tsx`).
+pushes its state into the `SolverFilters` reducer (`apps/renderer/src/lib/solver/builderFilters.ts`, wired by `apps/renderer/src/screens/BuilderScreen.tsx`).
 
 ### Hero
 Picker (searchable combobox) + portrait + 4 action buttons.
@@ -365,7 +365,8 @@ the header (null → desc → asc → null). The **Columns** menu (show/hide col
 `gs.builder.cols`) opens from the toolbar button **or by right-clicking any column header**
 (`ColumnsMenu` controlled, `onContextMenu` on the header `<tr>`). Click on a row → the `BottomGearBand`
 shows the 8 pieces. `solving…` / error / **explicit empty state** (an `emptyReason`
-derived from `poolSizes` lists the slots that fell to 0 pieces after filters).
+derived from `poolSizes` lists the slots that fell to 0 pieces after filters, the EE aside: a hero without one solves
+without it; a client "Filter" that keeps no build shows "No build passes the current filter.").
 
 ### BottomGearBand
 8 cards (compact mirror of the inventory) — one per slot. Each card shows name,
@@ -541,6 +542,7 @@ apps/renderer/src/
 │   │   └── filterPresets.ts        ← per-hero filter snapshots (localStorage)
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
+│       ├── builderFilters.ts       ← SolverFilters + Builder reducer + INITIAL_FILTERS + buildSolveFilters
 │       ├── orchestrator.ts         ← Web Worker pool, fan-out/fan-in, top-N merge
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + simulateReforges
 │       ├── setPlans.ts             ← setsFeasible + armorSetWhitelist + allSetsComplete (set OR-of-AND model)
@@ -548,7 +550,7 @@ apps/renderer/src/
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + STAT_TO_PRIORITY
 │       └── cp.ts                   ← calcBattlePower + makeCpEvaluator (reverse-engineered)
 └── screens/
-    ├── BuilderScreen.tsx           ← SolverFilters reducer + all panels + orchestrator wiring
+    ├── BuilderScreen.tsx           ← useReducer(SolverFilters) + all panels + orchestrator wiring
     └── BuildsScreen.tsx            ← equipped/composed roster + computeAdvice + Optimize →
 ```
 

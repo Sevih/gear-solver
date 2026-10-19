@@ -204,7 +204,7 @@ Pour chaque combo qui passe phase 4 :
 
 Les panneaux du haut (Hero, Stats, Sub tick value / Damage info, Options, filtres,
 priorité, mains, sets, effets) + sidebar Actions/Library + footer fixé. Chaque panneau
-de filtre pousse son state dans le reducer `SolverFilters` ([BuilderScreen.tsx](../apps/renderer/src/screens/BuilderScreen.tsx)).
+de filtre pousse son state dans le reducer `SolverFilters` ([builderFilters.ts](../apps/renderer/src/lib/solver/builderFilters.ts), branché par [BuilderScreen.tsx](../apps/renderer/src/screens/BuilderScreen.tsx)).
 
 ### Hero
 Picker (combobox searchable) + portrait + 4 boutons d'action.
@@ -387,7 +387,8 @@ sur l'en-tête (null → desc → asc → null). Menu **Columns** (show/hide col
 `gs.builder.cols`) ouvrable par le bouton de la toolbar **ou par clic-droit sur n'importe
 quel en-tête** (`ColumnsMenu` contrôlé, `onContextMenu` sur le `<tr>` d'en-tête). Click sur
 une ligne → la `BottomGearBand` affiche les 8 pièces. État `solving…` / erreur / **état vide explicite** (un `emptyReason`
-dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres).
+dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres, EE exceptée : un héros sans EE solve sans elle ;
+un « Filter » client qui ne garde aucun build affiche « No build passes the current filter. »).
 
 ### BottomGearBand
 8 cartes (mirror compact de l'inventaire) — une par slot. Chaque carte montre nom,
@@ -598,13 +599,14 @@ apps/renderer/src/
 │   │   └── filterPresets.ts        ← snapshots de filtres par héros (localStorage)
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
+│       ├── builderFilters.ts       ← SolverFilters + reducer du Builder + INITIAL_FILTERS + buildSolveFilters
 │       ├── orchestrator.ts         ← pool de Web Workers, fan-out/fan-in, top-N merge
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + simulateReforges
 │       ├── gems.ts                 ← buildGemPool + scoreGemPool + aggregateGemDelta + allocateGems
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + STAT_TO_PRIORITY
 │       └── cp.ts                   ← calcBattlePower (reverse-engineered)
 └── screens/
-    ├── BuilderScreen.tsx           ← reducer SolverFilters + tous les panneaux + orchestrator wiring
+    ├── BuilderScreen.tsx           ← useReducer(SolverFilters) + tous les panneaux + orchestrator wiring
     └── BuildsScreen.tsx            ← roster équipé/composé + computeAdvice + Optimize →
 ```
 

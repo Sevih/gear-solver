@@ -801,6 +801,7 @@ apps/renderer/src/
 │       ├── orchestrator.ts         ← pool de Web Workers, fan-out/in, merge top-N
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + simulateReforges + TopKHeap
 │       ├── setPlans.ts             ← setsFeasible + armorSetWhitelist + allSetsComplete (set OR-of-AND model)
+│       ├── builderFilters.ts       ← SolverFilters + reducer du Builder + INITIAL_FILTERS + buildSolveFilters
 │       ├── gems.ts                 ← buildGemPool + scoreGemPool + aggregateGemDelta + allocateGems + gemSlotsOf
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + ROLL_NORMS + STAT_TO_PRIORITY
 │       └── cp.ts                   ← calcBattlePower + makeCpEvaluator
@@ -809,7 +810,7 @@ apps/renderer/src/
 └── screens/
     ├── InventoryScreen.tsx         ← gear table + detail
     ├── BuildsScreen.tsx            ← per-hero current build cards (uses calcBattlePower)
-    └── BuilderScreen.tsx           ← reducer SolverFilters + tous les panneaux + orchestrator wiring + Library sidebar
+    └── BuilderScreen.tsx           ← useReducer(SolverFilters) + tous les panneaux + orchestrator wiring + Library sidebar
 
 packages/core/src/
 ├── types.ts                       ← GearPiece, Character, Inventory, StatType, RolledStat

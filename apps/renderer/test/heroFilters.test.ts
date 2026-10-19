@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SolverFilters } from "../src/screens/BuilderScreen.js";
+import type { SolverFilters } from "../src/lib/solver/builderFilters.js";
 import { filtersForHero, snapshotOnHeroSwitch, type HeroFiltersMap } from "../src/lib/storage/heroFilters.js";
 
 const DEFAULTS = { topPct: 60, excludedHeroes: new Set<string>() } as unknown as SolverFilters;

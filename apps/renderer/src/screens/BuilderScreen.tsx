@@ -35,10 +35,14 @@ import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { projectPieceForReforge, type ReforgeMode, type ReforgeTickWeights } from "../lib/solver/engine.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../lib/solver/orchestrator.js";
-import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveFilters, SolveMode } from "../lib/solver/types.js";
+import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveMode } from "../lib/solver/types.js";
 import type { HeroPriority } from "../lib/storage/heroPriority.js";
 import { ARMOR_SLOTS, planSlots } from "../lib/solver/setPlans.js";
-import { talismanFamilyKeys, translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
+import {
+  buildSolveFilters, INITIAL_FILTERS, solverFiltersReducer,
+  type ChipState, type MinMax, type SolverAction, type SolverFilters, type SolverOptions,
+} from "../lib/solver/builderFilters.js";
+import { talismanFamilyKeys, translateRecoBuild, type StructuredCharacterReco, type StructuredRecoBuild } from "../lib/reco/translateReco.js";
 import { fetchRecoForHero } from "../lib/reco/fetchReco.js";
 import { equipPieces } from "../equip.js";
 import type { WorklistChange, WorklistEntry } from "../lib/storage/worklist.js";
@@ -297,33 +301,6 @@ function statHeaderTooltip(key: string, label: string): string {
   return t ? `${t.full} — ${t.desc}` : label;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
- * Solver filters — one reducer drives every panel. Lifting state up here
- * means we can hand the whole shape to the worker on SOLVE, and that the
- * "Reset filters" / "Clear" buttons are 1-line dispatches instead of having
- * to chase callbacks across each panel.
- * ───────────────────────────────────────────────────────────────────────── */
-interface SolverOptions {
-  onlyMaxed: boolean;
-  /** Reforge-mode preview — replaces the old `useReforged` boolean.
-   *  "disable" scores gear as captured; "classic"/"ascended" project each
-   *  piece to the +10 / +15 endgame (main re-scale + substat reforge ticks). */
-  reforgeMode: ReforgeMode;
-  /** Which equipped gear (on OTHER heroes) may enter the candidate pool — the
-   *  selected hero's own + free gear is always in. "none" = own+free only;
-   *  "lower" = also heroes of strictly lower priority (never strips an
-   *  equal/higher hero); "all" = any equipped gear (legacy). */
-  equippedScope: EquippedScope;
-  /** Lock the selected hero's currently-equipped pieces — only fill empty
-   *  slots and leave the rest alone. */
-  keepCurrent: boolean;
-  /** Allow builds with incomplete sets (singleton / set-less filler pieces).
-   *  True (default) keeps legacy behavior: a partial set requirement leaves the
-   *  free armor slots open to any piece. False forces every armor piece to be
-   *  part of a 2pc/4pc — and lets the solver pre-prune the armor pools. */
-  allowBrokenSets: boolean;
-}
-
 /** Reforge context carried alongside a result set — the mode + priority the
  *  build was solved with, so the bottom gear band can re-project the same
  *  main/substats it was scored against. */
@@ -361,47 +338,6 @@ const EQUIPPED_SCOPES: ReadonlyArray<{ value: EquippedScope; label: string; hint
   { value: "all",   label: "All",     hint: "Any equipped gear, regardless of which hero wears it (legacy)." },
 ];
 
-type MinMax = { min?: number; max?: number };
-
-/** Subset of `ArmorSetEntry` the reducer needs to compute the chip's next
- *  state (avoids coupling the reducer module to the panel's render type). */
-interface SetChipReach {
-  has2pc: boolean;
-  has4pc: boolean;
-  canForm2pc: boolean;
-  canForm4pc: boolean;
-}
-
-export interface SolverFilters {
-  options: SolverOptions;
-  /** Hero UIDs whose currently-equipped gear is locked out of the pool. */
-  excludedHeroes: ReadonlySet<string>;
-  /** Per-stat min/max bands on final composed stats. Missing entry = no bound. */
-  statFilters: Record<string, MinMax>;
-  /** Per-rating min/max bands on derived ratings (HpS, Ehp, CP, …). */
-  ratingFilters: Record<string, MinMax>;
-  /** Per-stat priority in -1..3 (heuristic weight for the Top-% per-slot prune). */
-  priority: Record<string, number>;
-  /** Percentile of per-slot pool to keep after priority scoring. 5..100. */
-  topPct: number;
-  /** Per-slot OR-list of acceptable main stats. Empty inner = any main allowed. */
-  mainPicks: Record<string, Record<string, boolean>>;
-  /** Set requirements as an OR-list of AND-plans (a build matches if ANY plan
-   *  holds). The editor keeps at least one (possibly empty) plan so there's
-   *  always a tab to edit; empty plans are dropped before the engine sees them. */
-  setPlans: SetPlan[];
-  /** Set ids hard-excluded from every build — orthogonal to `setPlans`. */
-  excludedSets: string[];
-  weaponEffectPicks: Record<string, ChipState>;
-  accessoryEffectPicks: Record<string, ChipState>;
-  /** Talisman effect picks — same cycle, plus `preferred`, set only by a
-   *  recommendation (narrows the pool when the hero can use one, else open). */
-  talismanEffectPicks: Record<string, ChipState>;
-  /** Minimum gear quality tier admitted into the solve pool. Null = no gate.
-   *  Talisman / EE have no quality and are always kept. */
-  minQuality: QualityTier | null;
-}
-
 /** Cartesian size (∏ per-slot pools) above which the Builder warns the solve
  *  will be slow and nudges the user to prune. Sits above the combo budget of
  *  any pruned solve (`COMBO_BUDGET × topPct/30`: ~16M at the default Top% 60,
@@ -415,211 +351,6 @@ function formatCombos(n: number): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(0)}M`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`;
   return String(n);
-}
-
-/** Reducer `SolverFilters` → engine `SolveFilters` (Sets → arrays, empty set
- *  plans dropped). Shared by the live solve and the pre-solve cartesian estimate
- *  so both see the exact same pools. */
-function buildSolveFilters(filters: SolverFilters): SolveFilters {
-  return {
-    options: filters.options,
-    excludedHeroes: Array.from(filters.excludedHeroes),
-    statFilters: filters.statFilters,
-    ratingFilters: filters.ratingFilters,
-    priority: filters.priority,
-    topPct: filters.topPct,
-    mainPicks: filters.mainPicks,
-    // Drop empty plans before the engine sees them — an empty plan has no conds,
-    // so `every` is vacuously true and it would nullify the whole OR (everything
-    // matches). The editor keeps an empty plan around only so a tab exists.
-    setPlans: filters.setPlans.filter((p) => p.length > 0),
-    excludedSets: filters.excludedSets,
-    weaponEffectPicks: filters.weaponEffectPicks as SolveFilters["weaponEffectPicks"],
-    accessoryEffectPicks: filters.accessoryEffectPicks as SolveFilters["accessoryEffectPicks"],
-    talismanEffectPicks: filters.talismanEffectPicks as SolveFilters["talismanEffectPicks"],
-    minQuality: filters.minQuality,
-  };
-}
-
-const INITIAL_FILTERS: SolverFilters = {
-  // Safe defaults that reflect how the game is actually played:
-  //   reforgeMode "classic" — score gear at the +10 endgame norm (most players
-  //     stop there; +15 is resource-gated), not the captured +0/+9 state.
-  //   equippedScope "lower" — may only pull gear off STRICTLY lower-priority
-  //     heroes (ranks set in the Builds tab; an unranked hero gets a default
-  //     rank by CP there, below the manual ones), never strip an equal/higher one.
-  //     With no ranks it degrades to own+free (isLowerPriority ∞>∞ is false).
-  options: { onlyMaxed: false, reforgeMode: "classic", equippedScope: "lower", keepCurrent: false, allowBrokenSets: true },
-  excludedHeroes: new Set(),
-  statFilters: {},
-  ratingFilters: {},
-  priority: {},
-  // Default to Top% 30, not 100 (= keep everything). On a real account the
-  // full cartesian is billions of combos; the combo budget bites even without
-  // a hand-set priority (SOLVE CP ranks each slot by a CP proxy, SOLVE Score
-  // falls back to raw roll magnitude). Drag to 100 = exhaustive.
-  // 60 (was 30): the combo-budget prune is a lossy heuristic — field feedback
-  // showed the true best build regularly living just past the 30% slice (users
-  // "fixed" it by stacking stat filters). 60 doubles the walked budget (~16M
-  // combos, still a few seconds) for materially better recall; 100 = exhaustive.
-  topPct: 60,
-  mainPicks: {},
-  setPlans: [[]],
-  excludedSets: [],
-  weaponEffectPicks: {},
-  accessoryEffectPicks: {},
-  talismanEffectPicks: {},
-  minQuality: null,
-};
-
-type SolverAction =
-  | { type: "setOption"; key: Exclude<keyof SolverOptions, "reforgeMode" | "equippedScope">; value: boolean }
-  | { type: "setReforgeMode"; value: ReforgeMode }
-  | { type: "setEquippedScope"; value: EquippedScope }
-  | { type: "setMinQuality"; value: QualityTier | null }
-  | { type: "toggleHeroExcluded"; uid: string }
-  | { type: "setStatFilter"; stat: string; bound: "min" | "max"; value: number | undefined }
-  | { type: "setRatingFilter"; rating: string; bound: "min" | "max"; value: number | undefined }
-  | { type: "setPriority"; stat: string; value: number }
-  | { type: "setTopPct"; value: number }
-  | { type: "toggleMainPick"; slot: SlotId; stat: string }
-  /** Cycle a set's piece-count within one plan: off → 2pc → 4pc → off
-   *  (skipping any step the inventory can't form). */
-  | { type: "cycleSetInPlan"; planIdx: number; setId: string; reach: SetChipReach }
-  /** Append a new empty OR-alternative plan. */
-  | { type: "addPlan" }
-  /** Remove a plan by index (keeps at least one). */
-  | { type: "removePlan"; planIdx: number }
-  /** Toggle a set in/out of the hard-excluded list. */
-  | { type: "toggleExcludedSet"; setId: string }
-  | { type: "cycleEffectPick"; group: "weapon" | "accessory" | "talisman"; key: string }
-  | { type: "clearPriority" }
-  | { type: "resetAll" }
-  /** Replace the entire filter state — used to apply a saved preset.
-   *  Keeps the reducer as the single mutation point so React batches
-   *  the rerender as a single update. */
-  | { type: "loadPreset"; filters: SolverFilters }
-  /** Overlay an imported reco onto the current state — replaces the gear-shape
-   *  fields (weapon / accessory / talisman effects, sets, priority) and the
-   *  weapon+accessory mains, but
-   *  keeps options, excluded heroes, stat/rating bands, topPct and any other
-   *  slot's main picks. */
-  | { type: "mergePreset"; patch: RecoFilterPatch }
-  /** Reset the excluded-heroes list (action button on the multi-select). */
-  | { type: "clearExcludedHeroes" };
-
-function solverFiltersReducer(state: SolverFilters, action: SolverAction): SolverFilters {
-  switch (action.type) {
-    case "setOption":
-      return { ...state, options: { ...state.options, [action.key]: action.value } };
-    case "setReforgeMode":
-      return { ...state, options: { ...state.options, reforgeMode: action.value } };
-    case "setEquippedScope":
-      return { ...state, options: { ...state.options, equippedScope: action.value } };
-    case "setMinQuality":
-      return { ...state, minQuality: action.value };
-    case "toggleHeroExcluded": {
-      const next = new Set(state.excludedHeroes);
-      if (next.has(action.uid)) next.delete(action.uid); else next.add(action.uid);
-      return { ...state, excludedHeroes: next };
-    }
-    case "setStatFilter": {
-      const prev = state.statFilters[action.stat] ?? {};
-      const updated: MinMax = { ...prev, [action.bound]: action.value };
-      const next = { ...state.statFilters };
-      if (updated.min == null && updated.max == null) delete next[action.stat];
-      else next[action.stat] = updated;
-      return { ...state, statFilters: next };
-    }
-    case "setRatingFilter": {
-      const prev = state.ratingFilters[action.rating] ?? {};
-      const updated: MinMax = { ...prev, [action.bound]: action.value };
-      const next = { ...state.ratingFilters };
-      if (updated.min == null && updated.max == null) delete next[action.rating];
-      else next[action.rating] = updated;
-      return { ...state, ratingFilters: next };
-    }
-    case "setPriority": {
-      const next = { ...state.priority };
-      if (action.value === 0) delete next[action.stat];
-      else next[action.stat] = action.value;
-      return { ...state, priority: next };
-    }
-    case "setTopPct":
-      return { ...state, topPct: action.value };
-    case "toggleMainPick": {
-      const slotMap = state.mainPicks[action.slot] ?? {};
-      const next = { ...slotMap };
-      if (next[action.stat]) delete next[action.stat];
-      else next[action.stat] = true;
-      return { ...state, mainPicks: { ...state.mainPicks, [action.slot]: next } };
-    }
-    case "cycleSetInPlan": {
-      const plans = state.setPlans.length > 0 ? state.setPlans : [[]];
-      const plan = plans[action.planIdx] ?? [];
-      const curCount = plan.find((c) => c.setId === action.setId)?.count ?? 0;
-      // Armor slots the plan's OTHER sets already consume — a step that would
-      // push the plan past the 4 armor slots is unreachable in-game (the
-      // engine skips such a plan entirely), so the cycle must skip it too:
-      // with `2pc A + 2pc B` set, C can only stay off, and A can't go 4pc.
-      const othersTotal = plan.reduce((n, c) => n + (c.setId === action.setId ? 0 : c.count), 0);
-      const nextCount = nextPlanCount(curCount, action.reach, ARMOR_SLOTS - othersTotal);
-      // Rebuild the plan: drop the set, then re-add at the new count (unless off).
-      const rebuilt = plan.filter((c) => c.setId !== action.setId);
-      if (nextCount !== 0) rebuilt.push({ setId: action.setId, count: nextCount });
-      const nextPlans = plans.map((p, i) => (i === action.planIdx ? rebuilt : p));
-      return { ...state, setPlans: nextPlans };
-    }
-    case "addPlan":
-      return { ...state, setPlans: [...state.setPlans, []] };
-    case "removePlan": {
-      const filtered = state.setPlans.filter((_, i) => i !== action.planIdx);
-      // Always keep at least one (empty) plan so the editor has a tab.
-      return { ...state, setPlans: filtered.length > 0 ? filtered : [[]] };
-    }
-    case "toggleExcludedSet": {
-      const has = state.excludedSets.includes(action.setId);
-      return {
-        ...state,
-        excludedSets: has
-          ? state.excludedSets.filter((id) => id !== action.setId)
-          : [...state.excludedSets, action.setId],
-      };
-    }
-    case "cycleEffectPick": {
-      const mapKey = action.group === "weapon" ? "weaponEffectPicks"
-        : action.group === "accessory" ? "accessoryEffectPicks" : "talismanEffectPicks";
-      const cur = state[mapKey][action.key] ?? "off";
-      const nxt = nextChipState(cur);
-      const map = { ...state[mapKey] };
-      if (nxt === "off") delete map[action.key];
-      else map[action.key] = nxt;
-      return { ...state, [mapKey]: map };
-    }
-    case "clearPriority":
-      return { ...state, priority: {} };
-    case "resetAll":
-      return INITIAL_FILTERS;
-    case "loadPreset":
-      return action.filters;
-    case "mergePreset": {
-      const p = action.patch;
-      return {
-        ...state,
-        // Overlay per-slot so a talisman main the user set survives (the reco
-        // only ever specifies weapon + accessory mains).
-        mainPicks: { ...state.mainPicks, ...p.mainPicks },
-        // The reco fully specifies these — replace wholesale.
-        weaponEffectPicks: { ...p.weaponEffectPicks },
-        accessoryEffectPicks: { ...p.accessoryEffectPicks },
-        talismanEffectPicks: { ...p.talismanEffectPicks },
-        setPlans: p.setPlans.length > 0 ? p.setPlans : [[]],
-        priority: { ...p.priority },
-      };
-    }
-    case "clearExcludedHeroes":
-      return { ...state, excludedHeroes: new Set() };
-  }
 }
 
 /** Client-side equivalent of the solver's stat/rating band check — used by the
@@ -924,11 +655,12 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // the cause (filters too strict, or the hero owns no piece for that slot).
   // Surface exactly which slots collapsed to 0 so "0 builds" isn't a silent
   // dead-end. Derived from the last solve's pool sizes (null until a solve
-  // runs → falls back to the generic "pick a hero" hint).
+  // runs → falls back to the generic "pick a hero" hint). The EE slot is
+  // skipped: a hero without one reports `exclusive: 0` and solves without it.
   const emptyReason = useMemo(() => {
     const ps = solveProgress.poolSizes;
     if (!ps) return null;
-    const dead = Object.keys(ps).filter((s) => (ps[s]?.hit ?? 0) === 0);
+    const dead = Object.keys(ps).filter((s) => s !== "exclusive" && (ps[s]?.hit ?? 0) === 0);
     if (dead.length === 0) return null;
     return dead.map((s) => `${SLOT_BY[s]?.label ?? s}: 0 pieces after filters`).join(" · ");
   }, [solveProgress.poolSizes]);
@@ -1350,6 +1082,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               solving={solving}
               error={solveError}
               emptyReason={emptyReason}
+              filteredOut={solveResults.length > 0 && displayedResults.length === 0}
               statFilters={filters.statFilters}
               rows={resultRows}
               onRowsChange={setResultRows}
@@ -3354,29 +3087,7 @@ function EffectGroup({
  *                    (each step the inventory/set can't form is skipped —
  *                    cf. `nextPlanCount` + the Sets panel hint)
  * ───────────────────────────────────────────────────────────────────────── */
-type ChipState = "off" | "required" | "excluded" | "preferred";
 type SetChipState = "off" | "req-4pc" | "req-2pc" | "excluded";
-
-function nextChipState(s: ChipState | undefined): ChipState {
-  if (s === "preferred") return "required";
-  if (s === "required") return "excluded";
-  if (s === "excluded") return "off";
-  return "required";
-}
-
-/** Cycle a set's piece-count within a plan: 0 → 2 → 4 → 0, skipping any step
- *  the inventory can't form (need ≥2/≥4 pieces) OR that doesn't fit in the
- *  plan's remaining armor slots (`slotsFree` = 4 minus what the plan's other
- *  sets already consume — a plan over 4 slots is infeasible in-game and the
- *  engine skips it entirely). Mirrors `nextSetChipState` minus the `excluded`
- *  state (exclusion is a separate, global toggle now). */
-function nextPlanCount(cur: number, reach: SetChipReach, slotsFree: number = ARMOR_SLOTS): number {
-  const can2 = reach.has2pc && reach.canForm2pc && slotsFree >= 2;
-  const can4 = reach.has4pc && reach.canForm4pc && slotsFree >= 4;
-  if (cur === 0) return can2 ? 2 : can4 ? 4 : 0;
-  if (cur === 2) return can4 ? 4 : 0;
-  return 0; // was 4
-}
 
 /** State-driven chip styling — cyan for required, rose for excluded, dim
  *  for off. Reused by both chip flavors. */
@@ -3605,7 +3316,7 @@ function ColumnsMenu({
 }
 
 function ResultsTable({
-  builds, selectedIdx, onSelect, solving, error, emptyReason, statFilters, rows, onRowsChange,
+  builds, selectedIdx, onSelect, solving, error, emptyReason, filteredOut, statFilters, rows, onRowsChange,
   pieceByUid, armorSets, game, heatmap, dmgSkill,
 }: {
   builds: SolveBuild[];
@@ -3619,6 +3330,9 @@ function ResultsTable({
   /** Why the last solve returned nothing (e.g. a slot pool collapsed to 0
    *  after filters). Null → show the generic "pick a hero" hint instead. */
   emptyReason: string | null;
+  /** The last solve has builds but the post-solve client filter keeps none —
+   *  says so instead of the "pick a hero" hint. */
+  filteredOut: boolean;
   /** Active stat bands — the table always shows the first 8 stat columns;
    *  any of the remaining stats (dmgRed/eff/res) that carry a live min/max
    *  band get appended so you never filter on an invisible column. */
@@ -3865,6 +3579,8 @@ function ResultsTable({
                     No builds — a slot has no pieces left after filtering.<br />
                     <span className="not-italic font-mono text-[10.5px]">{emptyReason}</span>
                   </span>
+                ) : filteredOut ? (
+                  <span className="text-white/65">No build passes the current filter.</span>
                 ) : (
                   <span className="text-white/65">Pick a hero and click SOLVE to populate the results.</span>
                 )}

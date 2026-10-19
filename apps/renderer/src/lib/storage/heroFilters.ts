@@ -10,7 +10,7 @@
  * else in `SolverFilters` is already JSON-safe. No legacy migration: snapshots
  * are written by the current code within the same session.
  */
-import type { SolverFilters } from "../../screens/BuilderScreen.js";
+import type { SolverFilters } from "../solver/builderFilters.js";
 
 export const HERO_FILTERS_KEY = "gs.solver.heroFilters";
 const KEY = HERO_FILTERS_KEY;

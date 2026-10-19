@@ -8,6 +8,41 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎛️ Builder — filtres du solveur dans `lib`, `mergePreset` cohérent, `emptyReason` juste (2026-10-19)
+- ✅ **Pourquoi.** Items « Dépendance inversée `lib → screens` », « `mergePreset` peut rendre les filtres
+  contradictoires » et « `emptyReason` accuse l'EE » de l'audit (`docs/todo.md`). `filterPresets.ts` et
+  `heroFilters.ts` importaient `SolverFilters` depuis l'écran de 4 600 lignes, où vivait un reducer sans aucun test ;
+  une reco appliquée sur un set exclu le rendait requis ET exclu (0 build sans explication) ; un héros sans EE lisait
+  « Exclusive: 0 pieces after filters » alors que le solve tourne sans EE.
+- ✅ **Déplacement (`apps/renderer/src/lib/solver/builderFilters.ts`).** `SolverOptions`, `MinMax`, `SetChipReach`,
+  `SolverFilters`, `ChipState`, `nextChipState`, `nextPlanCount`, `buildSolveFilters`, `INITIAL_FILTERS`,
+  `SolverAction` et `solverFiltersReducer` sortent de `screens/BuilderScreen.tsx` tels quels (commentaires compris),
+  exportés ; un en-tête de module en plus. `BuilderScreen.tsx`, `lib/storage/filterPresets.ts`,
+  `lib/storage/heroFilters.ts` et `test/heroFilters.test.ts` (chemin d'import seul) l'importent ;
+  `git grep -n "screens/" apps/renderer/src/lib` est vide. `SetChipState` et l'en-tête des chips restent dans l'écran
+  (types de rendu). Le module importe `SlotId` de `design/tokens.ts`, comme `lib/buildAdvice.ts` déjà.
+- ✅ **`mergePreset`.** Retire des `excludedSets` tout set présent dans les nouveaux plans de la reco (l'intention de la
+  reco prime) ; les autres exclusions restent ; la docstring de l'action le dit.
+- ✅ **`emptyReason` / table vide.** `emptyReason` ignore le slot `exclusive` (`engine.ts` pose `hit: ee ? 1 : 0`).
+  `ResultsTable` reçoit `filteredOut` (des builds existent mais le « Filter » client n'en garde aucun) et affiche alors
+  « No build passes the current filter. » au lieu de « Pick a hero and click SOLVE… », même style que ce dernier —
+  le seul changement d'interface du lot.
+- ✅ **Tests (`apps/renderer/test/builderFilters.test.ts`, 8).** `mergePreset` (set exclu puis requis → plus exclu,
+  exclusion hors plans gardée ; mains d'un autre emplacement gardés, weapon remplacé ; reco sans plans → un plan vide
+  et exclusions intactes) ; `cycleSetInPlan` (0 → 2 → 4 → 0, palier que l'inventaire ne peut pas former sauté, palier
+  qui déborderait les 4 emplacements sauté) ; `resetAll` ; `loadPreset`. `filterPresets.test.ts` et
+  `heroFilters.test.ts` verts sans retouche de fond.
+- ✅ **Docs suivies.** `docs/solver.md`/`wiki/Solver.md` (arbre, § 4 « Les panneaux », état vide de la table) et
+  `docs/reference.md`/`wiki/Engine-Reference.md` (arbre) placent le reducer dans `lib/solver/builderFilters.ts`.
+- ✅ **Vérifications.** `npm run typecheck` : dernière ligne `> tsc --noEmit` (sortie 0) ; `npm test` : core 154,
+  desktop 131, renderer 479 verts (471 + 8), dernière ligne `Duration 1.04s (transform 2.47s, setup 0ms, import
+  4.08s, tests 638ms, environment 5ms)` ; `npm run lint` : `✖ 24 problems (0 errors, 24 warnings)`, sortie 0, les
+  mêmes 24 qu'avant le lot (aucun dans le nouveau module). `git diff --stat` : `BuilderScreen.tsx` −300/+16, le gros du
+  diff est le déplacement.
+- ✅ **Hors périmètre, constaté.** L'arbre de `docs/solver.md` n'a pas la ligne `setPlans.ts` que `wiki/Solver.md` a.
+- ⏳ **Sevih.** Contrôle à l'écran : un héros sans EE ne voit plus « Exclusive: 0 pieces » ; une reco appliquée sur un
+  set exclu le rend requis ; un « Filter » qui vide la table affiche « No build passes the current filter. ».
+
 ### 🧹 Nettoyage — code mort, commentaires vers outerpedia-v2, `trust-buffs.json` plus chargé, `InvenType` retiré (2026-10-19)
 - ✅ **Pourquoi.** Items « Code mort » et « Commentaires morts vers outerpedia-v2 » de l'audit, « `trust-buffs.json`
   chargé, jamais appliqué » et sa phrase dans « Règles du jeu recopiées à la main », puce `InvenType` de « Desktop »

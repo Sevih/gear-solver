@@ -63,18 +63,10 @@
       une route `/api/*` inconnue répond 200 avec `index.html`.
 
 ### 🟡 Audit projet (2026-09-07) — reste
-- [ ] 🟡 **`emptyReason` accuse l'EE** — `poolSizes.exclusive.hit = ee ? 1 : 0` : un héros sans EE affiche
-      « Exclusive: 0 pieces after filters » alors que le solve tourne sans EE. Exclure `exclusive` de `dead`. Même
-      écran : après un « Filter » client qui vide la table, message « Pick a hero and click SOLVE » au lieu de « filtré ».
-- [ ] 🟡 **`mergePreset` peut rendre les filtres contradictoires** — remplace `setPlans` par ceux de la reco mais
-      laisse `excludedSets` : set requis + exclu → 0 build sans explication. Retirer des `excludedSets` les sets des
-      nouveaux plans (ou avertir).
 - [ ] ⚪ **Stat-locks (debug) : `renameLegacyStatKeys` non appliqué** au fichier lu via `/api/stat-locks` — un
       fichier ancien (`crc`, `chd`, …) ne matchera jamais.
 - [ ] ⚪ **Reset (Builds)** remet aussi le tri `byRank` à CP alors que la condition d'affichage ne le regarde pas ·
       clamp worker count à `hardwareConcurrency` côté Settings vs `WORKER_COUNT_CEILING` côté orchestrateur.
-- [ ] 🟡 **Dépendance inversée `lib → screens`** — `filterPresets.ts` et `heroFilters.ts` importent `SolverFilters`
-      depuis `screens/BuilderScreen`. Déplacer le type + le reducer dans `lib/solver/builderFilters.ts`.
 - [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer) · calcul de
       qualité en 3 exemplaires (`computeQuality` de GearDetail et ResultGearDetail, `quality.ts`) · « slot changé »
       défini 2× dans le Builder (`equipPlan`, `addToWorklist`) → une `diffBuildVsLoadout` partagée,
