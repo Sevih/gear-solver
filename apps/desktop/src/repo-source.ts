@@ -16,7 +16,8 @@
  * launch via the GitHub API) so jsDelivr URLs are infinitely cacheable and
  * all 19 solver artifacts always come from the same repo snapshot.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { writeAtomic } from "./atomic-write.js";
 
 const REPO_OWNER = "Sevih";
 const REPO_NAME = "outerpedia";
@@ -112,7 +113,7 @@ export function readShaState(file: string): ShaState | null {
 /** Persist the SHA state. Best-effort — swallows write errors. */
 export function writeShaState(file: string, sha: string): void {
   try {
-    writeFileSync(file, JSON.stringify({ sha, resolvedAt: Date.now() } satisfies ShaState));
+    writeAtomic(file, JSON.stringify({ sha, resolvedAt: Date.now() } satisfies ShaState));
   } catch {
     /* best-effort */
   }

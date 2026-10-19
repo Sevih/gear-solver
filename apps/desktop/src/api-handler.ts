@@ -11,7 +11,7 @@
  *  - `/api/capture/{status,wipe}` → capture folder state / wipe
  *  - `/api/steam/{status,install,uninstall,launch}` → Steam capture plugin
  *  - `/api/data/sync`, `/api/data/startup-sync`, `/api/reco/:id`, `/api/stat-locks`,
- *    `/api/captured/user-item`, `/api/update/*`
+ *    `/api/captured/user-item`, `/api/update/*` — any other `/api/*` is a JSON 404
  *
  * What differs between dev and prod is injected (`ApiConfig`): the paths
  * and the auto-updater. Electron-free on purpose — nothing here imports `electron`
@@ -20,15 +20,14 @@
 import {
   createReadStream,
   existsSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   rmSync,
   statSync,
-  writeFileSync,
 } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { dirname, extname, join } from "node:path";
+import { extname, join } from "node:path";
+import { writeAtomic } from "./atomic-write.js";
 import { dlog, dwarn } from "./log.js";
 import { installSteamPlugin, launchGame, steamPluginLive, steamStatus, uninstallSteamPlugin } from "./steam-capture.js";
 import { proxyReco } from "./reco-proxy.js";
@@ -375,8 +374,7 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       readBody(req, res, 1_000_000, (body) => {
         try {
           JSON.parse(body); // validate
-          mkdirSync(dirname(cfg.statLocks), { recursive: true });
-          writeFileSync(cfg.statLocks, body, "utf-8");
+          writeAtomic(cfg.statLocks, body);
           res.statusCode = 204;
           res.end();
         } catch (err) {
@@ -408,7 +406,7 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
         try {
           const parsed = JSON.parse(body) as { ItemList?: unknown };
           if (!Array.isArray(parsed.ItemList)) throw new Error("missing ItemList[]");
-          writeFileSync(join(captureOut, "user_item.json"), body, "utf-8");
+          writeAtomic(join(captureOut, "user_item.json"), body);
           dlog("capture", `user_item.json rewritten (${parsed.ItemList.length} items)`);
           res.statusCode = 204;
           res.end();
@@ -448,6 +446,16 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       }
     }
     if (tryMount(req, res, url, "/captured/", captureOut, "etag")) return true;
+
+    // Any other `/api/*` is a typo or a removed route: answer it here, or the
+    // caller's SPA fallback (server.ts in prod, Vite in dev) would serve
+    // index.html with a 200 and the caller would get HTML instead of an error.
+    if (url.startsWith("/api/")) {
+      res.statusCode = 404;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "unknown endpoint" }));
+      return true;
+    }
 
     return false;
   };

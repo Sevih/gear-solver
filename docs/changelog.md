@@ -8,6 +8,44 @@
 
 ## Items de backlog clôturés (index)
 
+### 🖥️ Bureau — écritures atomiques du serveur, `/api/*` inconnue en 404, `img-cache` revalidé (2026-10-19)
+- ✅ **Pourquoi.** Item « Desktop » (`docs/todo.md`, revue 2026-10). Cinq écritures passaient par `writeFileSync`
+  direct : un lecteur pouvait voir un fichier à moitié écrit (les stat-locks, `user_item.json` réécrit par Equip et
+  relu aussitôt par l'app, la config BepInEx du plugin, le SHA suivi, le marqueur de préchargement des images). Une
+  URL `/api/…` inconnue tombait dans le repli SPA (`server.ts` en prod, Vite en dev) et recevait `index.html` en 200.
+  Une image du cache disque était servie pour toujours, jamais revalidée contre R2.
+- ✅ **Écritures.** Nouveau `apps/desktop/src/atomic-write.ts` : `writeAtomic(file, data)` crée le dossier, écrit un
+  `.tmp` voisin (pid + compteur) puis `renameSync` ; en cas d'échec le `.tmp` est supprimé et l'erreur relancée,
+  l'ancien fichier intact. Sans Electron (Vite le charge). Utilisé par `api-handler.ts` (stat-locks, `user_item.json`),
+  `steam-capture.ts` (`writePluginConfig`), `repo-source.ts` (`writeShaState`, qui crée désormais son dossier),
+  `main.ts` (`prefetch.json`) et `img-cache.ts`, dont la copie locale disparaît. `data-sync.ts` garde la sienne (G23).
+- ✅ **404.** Fin de `createApiHandler` : toute URL commençant par `/api/` non reconnue (route inconnue ou méthode non
+  servie) répond 404 `{ "error": "unknown endpoint" }` en JSON et rend `true` ; prod et dev en même temps puisque les
+  deux passent par ce handler. `/api` seul et les préfixes voisins (`/apix/…`) restent au repli SPA.
+- ✅ **Revalidation d'`img-cache`.** Politique de la rédaction du lot : une image du cache disque plus vieille que
+  7 jours (`REVALIDATE_AFTER_MS`, sur le mtime) est servie tout de suite depuis le cache, puis revalidée en
+  arrière-plan par une requête conditionnelle — `If-None-Match` sur l'ETag gardé dans
+  `<cacheDir>/image-etags/<rel>.etag` (hors de `images/`, donc jamais servi par `/img/*`), sinon `If-Modified-Since`
+  sur le mtime. 304 → mtime rafraîchi ; 200 → image et ETag réécrits atomiquement ; erreur réseau ou autre statut
+  (404 compris) → rien, l'image en cache reste servie. Une `Map` des revalidations en vol par fichier : jamais deux à
+  la fois pour la même image. `fetchR2` rend l'ETag ; le premier téléchargement (`serveAndCache`) et le préchargement
+  (`prefetchImages`) le stockent via `cacheImage`. Les sprites embarqués et le checkout local ne sont pas concernés.
+  Docstring de la cascade, `docs/architecture.md` et `wiki/Architecture.md` mis à jour.
+- ✅ **Tests.** `atomic-write.test.ts` (dossier créé et fichier complet sans `.tmp`, remplacement d'un fichier
+  existant, échec du rename → erreur et pas de `.tmp`) ; `api-handler.test.ts` gagne le 404 JSON (route mal
+  orthographiée, POST inconnu, méthode non servie, `/api/`) et la non-capture de `/api` et `/apix/…`, les routes de
+  l'ancienne source émulateur passent de « repli » à 404, et l'écriture des stat-locks (fichier complet, pas de
+  `.tmp`) ; `img-cache-revalidate.test.ts` (`fetch` stubé, `settleImgRevalidations` pour attendre l'arrière-plan) :
+  frais → aucune requête, vieux + 304 (`If-None-Match`, mtime rafraîchi), vieux sans ETag → `If-Modified-Since`,
+  vieux + 200 (ancien octet servi, cache et ETag réécrits, pas de `.tmp`, plus de revalidation ensuite), vieux +
+  réseau en panne (servi, fichier et mtime inchangés), trois requêtes simultanées → une seule revalidation, ETag du
+  premier fetch hors de `images/`. `npm run typecheck` → `> tsc --noEmit` sans erreur ; `npm test` → `Tests  154
+  passed (154)`, `Tests  144 passed (144)`, `Tests  510 passed (510)` ; `npm run lint` → `✖ 28 problems (0 errors,
+  28 warnings)` (aucun dans les fichiers du lot).
+- ⏳ Rien pour Sevih au-delà de la release habituelle. Repéré hors périmètre : le repli `.png` → `.webp` met en cache
+  sous le nom `.webp`, si bien qu'une requête `.png` suivante repasse par R2 (deux fetchs) au lieu de trouver le
+  cache.
+
 ### 🔌 Plugin Steam en repli — `GiftList` sans `PVPStart`, écritures dans l'ordre d'arrivée, ré-import sur tous les fichiers lus (2026-10-19)
 - ✅ **Pourquoi.** Item « Plugin Steam en repli » (`docs/todo.md`, revue 2026-10). Trois défauts : le repli par forme
   (`CaptureByShape`, quand le hook de chemin a été inliné) nommait `user_gift` tout objet portant `GiftList`, or la

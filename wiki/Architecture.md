@@ -43,7 +43,8 @@ by hand (manual import).
   **syncs the derived game data from the public `Sevih/outerpedia` repo** (`data-sync.ts`
   dual-mode checkout/repo, SHA-gated download of the 20 `data/generated/solver/*.json`
   artifacts emitted by outerpedia's datagen ; shared `/img/*` handler `img-cache.ts`
-  cascading bundled sprites→checkout→disk cache→R2 bucket `img.outerpedia.com`) so the
+  cascading bundled sprites→checkout→disk cache→R2 bucket `img.outerpedia.com`, a cache entry
+  older than 7 days served then revalidated in the background) so the
   app follows game patches **without a new build**.
   Packaging is live: `scripts/release.mjs` refreshes `data/derived`, runs typecheck, tests and
   lint against it (a failure stops before anything is published and reverts the version bump and

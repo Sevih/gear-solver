@@ -20,8 +20,9 @@
  */
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { dirname, join, normalize, resolve } from "node:path";
+import { writeAtomic } from "./atomic-write.js";
 import { downloadVerified, expandZip } from "./download.js";
 // Committed copy of outerpedia's `data/curated/game-client.json` (the shared
 // reference for the Steam client), refreshed by `npm run data:sync`. Bundled at
@@ -351,7 +352,7 @@ function writePluginConfig(cfg: string, captureOut: string): void {
   } else {
     txt = `## Settings file was created by the Outerpedia Gear Solver app\n## Plugin GUID: ${PLUGIN_GUID}\n\n[Capture]\n\n## Folder where the decoded snapshots are written (set by the Gear Solver app).\n# Setting type: String\nOutDir = ${captureOut}\n`;
   }
-  writeFileSync(cfg, txt, "utf-8");
+  writeAtomic(cfg, txt);
 }
 
 export interface InstallOpts {

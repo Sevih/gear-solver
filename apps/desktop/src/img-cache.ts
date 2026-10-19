@@ -11,7 +11,12 @@
  *   1. bundled sprites (apps/renderer/public/img — the few `ui/inven/*` UI
  *      sprites the R2 manifest doesn't carry)
  *   2. dev local checkout (outerpedia `.assets-staging/images`) — zero network
- *   3. persistent disk cache (steady state after first fetch)
+ *   3. persistent disk cache (steady state after first fetch). An entry older
+ *      than REVALIDATE_AFTER_MS is still served at once, then revalidated in
+ *      the background by a conditional request (`If-None-Match` on the ETag
+ *      kept under `<cacheDir>/image-etags/`, else `If-Modified-Since` on the
+ *      file's mtime): 304 → mtime refreshed, 200 → rewritten, anything else
+ *      (network error included) → left as is
  *   4. R2 fetch + cache to disk
  *   5. `.png`/`.jpg` miss → retry as `.webp` (webp-preferred source)
  *   6. a bucket 404 is remembered for MISS_TTL_MS (negative cache) and
@@ -25,9 +30,10 @@
  *
  * Electron-free (paths passed in) so Vite can import it without electron.
  */
-import { createReadStream, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { dirname, extname, join } from "node:path";
+import { extname, join } from "node:path";
+import { writeAtomic } from "./atomic-write.js";
 import { resolveInside } from "./safe-path.js";
 
 /** Public R2 image base (the outerpedia site's asset bucket). */
@@ -50,8 +56,6 @@ function mime(file: string): string {
 // `..\`) is rejected before it can hit the filesystem.
 const SAFE_PATH = /^[\w./%-]*$/;
 
-let tmpCounter = 0;
-
 /** How long a bucket 404 is remembered before the image is asked for again —
  *  also the `max-age` of the 404 itself, so the renderer doesn't re-request it
  *  on every render either. Network failures (502) are never remembered. */
@@ -72,6 +76,17 @@ function knownMiss(rel: string): boolean {
   return false;
 }
 
+/** Age past which a disk-cached image is revalidated against R2 (it is still
+ *  served from the cache first — the revalidation runs in the background). */
+const REVALIDATE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+/** cache file → its in-flight revalidation: never more than one per image. */
+const revalidating = new Map<string, Promise<void>>();
+
+/** Wait for every background revalidation in flight (tests). */
+export async function settleImgRevalidations(): Promise<void> {
+  await Promise.all([...revalidating.values()]);
+}
+
 function sendMiss(res: ServerResponse): void {
   res.statusCode = 404;
   res.setHeader("Cache-Control", `public, max-age=${MISS_TTL_MS / 1000}`);
@@ -89,14 +104,18 @@ export interface ImgCacheOptions {
   localCheckoutDir?: string | null;
 }
 
-/** Fetch one image from the R2 bucket. 200 → bytes, anything else → null. */
-async function fetchR2(rel: string, timeoutMs = 10_000): Promise<{ status: number; buf: Buffer | null }> {
+interface R2Reply { status: number; buf: Buffer | null; etag: string | null }
+
+/** Fetch one image from the R2 bucket. 200 → bytes (+ its ETag), anything else
+ *  → null; a network error is status 0. `headers` carries the conditional
+ *  headers of a revalidation. */
+async function fetchR2(rel: string, headers?: Record<string, string>, timeoutMs = 10_000): Promise<R2Reply> {
   try {
-    const r = await fetch(`${OUTERPEDIA_IMAGE_BASE}/${rel}`, { signal: AbortSignal.timeout(timeoutMs) });
-    if (!r.ok) return { status: r.status, buf: null };
-    return { status: r.status, buf: Buffer.from(await r.arrayBuffer()) };
+    const r = await fetch(`${OUTERPEDIA_IMAGE_BASE}/${rel}`, { headers, signal: AbortSignal.timeout(timeoutMs) });
+    if (!r.ok) return { status: r.status, buf: null, etag: null };
+    return { status: r.status, buf: Buffer.from(await r.arrayBuffer()), etag: r.headers.get("etag") };
   } catch {
-    return { status: 0, buf: null };
+    return { status: 0, buf: null, etag: null };
   }
 }
 
@@ -119,24 +138,53 @@ function safeJoin(base: string, rel: string): string | null {
   return resolveInside(base, rel);
 }
 
-/** Write bytes atomically (tmp + rename) so a concurrent reader never sees a
- *  half-written file (common on Windows). */
-function writeAtomic(file: string, buf: Buffer): void {
-  mkdirSync(dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.${tmpCounter++}.tmp`;
-  writeFileSync(tmp, buf);
-  renameSync(tmp, file);
+/** Where the ETag of a cached image is kept — outside `images/`, so `/img/*`
+ *  can never serve it. */
+function etagFile(cacheDir: string, rel: string): string | null {
+  return safeJoin(join(cacheDir, "image-etags"), `${rel}.etag`);
 }
 
-/** Serve a freshly-fetched buffer and mirror it into the cache under `cacheRel`. */
-function serveAndCache(res: ServerResponse, cacheImagesDir: string, cacheRel: string, buf: Buffer, contentType: string): void {
-  const cacheFile = safeJoin(cacheImagesDir, cacheRel);
-  if (cacheFile) {
-    try { writeAtomic(cacheFile, buf); } catch { /* cache write best-effort */ }
-  }
+/** Mirror fetched bytes into the disk cache under `rel` (atomic writes), with
+ *  their ETag next to it — or none, so a stale tag can't outlive its bytes.
+ *  Best-effort: returns whether the image itself was written. */
+function cacheImage(cacheDir: string, rel: string, buf: Buffer, etag: string | null): boolean {
+  const file = safeJoin(join(cacheDir, "images"), rel);
+  if (!file) return false;
+  try { writeAtomic(file, buf); } catch { return false; }
+  const tag = etagFile(cacheDir, rel);
+  try {
+    if (tag && etag) writeAtomic(tag, etag);
+    else if (tag) rmSync(tag, { force: true });
+  } catch { /* no tag → If-Modified-Since */ }
+  return true;
+}
+
+/** Serve a freshly-fetched image and mirror it into the cache under `cacheRel`. */
+function serveAndCache(res: ServerResponse, cacheDir: string, cacheRel: string, got: R2Reply & { buf: Buffer }, contentType: string): void {
+  cacheImage(cacheDir, cacheRel, got.buf, got.etag);
   res.setHeader("Content-Type", contentType);
   res.setHeader("Cache-Control", "public, max-age=86400");
-  res.end(buf);
+  res.end(got.buf);
+}
+
+/** Background conditional re-fetch of a stale cached image (see the module
+ *  docstring). Joins the revalidation already in flight for `file`, if any. */
+function revalidate(cacheDir: string, rel: string, file: string, mtimeMs: number): Promise<void> {
+  const inFlight = revalidating.get(file);
+  if (inFlight) return inFlight;
+  const run = (async () => {
+    let etag: string | null = null;
+    const tag = etagFile(cacheDir, rel);
+    try { if (tag && existsSync(tag)) etag = readFileSync(tag, "utf-8").trim() || null; } catch { /* → date */ }
+    const got = await fetchR2(rel, etag ? { "If-None-Match": etag } : { "If-Modified-Since": new Date(mtimeMs).toUTCString() });
+    if (got.status === 304) {
+      try { const now = new Date(); utimesSync(file, now, now); } catch { /* best-effort */ }
+    } else if (got.status === 200 && got.buf) {
+      cacheImage(cacheDir, rel, got.buf, got.etag);
+    }
+  })().finally(() => revalidating.delete(file));
+  revalidating.set(file, run);
+  return run;
 }
 
 /** V2 → R2 namespace alias (see module docstring). */
@@ -167,7 +215,7 @@ export async function prefetchImages(cacheDir: string, imageRels: string[], conc
       if (!dest || existsSync(dest)) continue;
       try {
         const got = await fetchR2(rel);
-        if (got.status === 200 && got.buf) { writeAtomic(dest, got.buf); cached++; }
+        if (got.status === 200 && got.buf && cacheImage(cacheDir, rel, got.buf, got.etag)) cached++;
       } catch { /* best-effort */ }
     }
   };
@@ -205,15 +253,22 @@ export async function serveImg(_req: IncomingMessage, res: ServerResponse, urlPa
     if (f && existsSync(f) && statSync(f).isFile()) { streamFile(res, f); return true; }
   }
 
-  // 3. disk cache
+  // 3. disk cache — served at once; a stale entry is revalidated behind it
   const cached = safeJoin(cacheImagesDir, rel);
-  if (cached && existsSync(cached) && statSync(cached).isFile()) { streamFile(res, cached); return true; }
+  if (cached && existsSync(cached)) {
+    const st = statSync(cached);
+    if (st.isFile()) {
+      streamFile(res, cached);
+      if (Date.now() - st.mtimeMs > REVALIDATE_AFTER_MS) void revalidate(opts.cacheDir, rel, cached, st.mtimeMs);
+      return true;
+    }
+  }
 
   // 4. R2 fetch (+ cache) — unless the bucket 404'd this path recently
   if (knownMiss(rel)) { sendMiss(res); return true; }
   const got = await fetchR2(rel);
   if (got.status === 200 && got.buf) {
-    serveAndCache(res, cacheImagesDir, rel, got.buf, mime(rel));
+    serveAndCache(res, opts.cacheDir, rel, { ...got, buf: got.buf }, mime(rel));
     return true;
   }
 
@@ -228,7 +283,7 @@ export async function serveImg(_req: IncomingMessage, res: ServerResponse, urlPa
     if (webp.status === 200 && webp.buf) {
       // Serve the webp bytes under the originally-requested URL; cache them
       // under the webp name (so a later direct .webp request also hits).
-      serveAndCache(res, cacheImagesDir, webpRel, webp.buf, "image/webp");
+      serveAndCache(res, opts.cacheDir, webpRel, { ...webp, buf: webp.buf }, "image/webp");
       return true;
     }
   }

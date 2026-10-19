@@ -15,9 +15,10 @@
  */
 import { app, BrowserWindow, dialog } from "electron";
 import type { Server } from "node:http";
-import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeAtomic } from "./atomic-write.js";
 import { startServer } from "./server.js";
 import { setupAutoUpdate } from "./updater.js";
 import { dlog, dwarn } from "./log.js";
@@ -64,7 +65,7 @@ async function warmImageCache(): Promise<void> {
     if (existsSync(marker) && (JSON.parse(readFileSync(marker, "utf-8")) as { hash?: string }).hash === hash) return;
   } catch { /* corrupt marker → re-prefetch */ }
   const n = await prefetchImages(IMG_CACHE_DIR, [...rels], 6);
-  try { writeFileSync(marker, JSON.stringify({ hash, count: n, of: rels.size })); } catch { /* best-effort */ }
+  try { writeAtomic(marker, JSON.stringify({ hash, count: n, of: rels.size })); } catch { /* best-effort */ }
   dlog("server", `image prefetch: ${n}/${rels.size} cached @ data ${hash}`);
 }
 

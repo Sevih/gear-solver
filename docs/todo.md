@@ -57,8 +57,6 @@
 ### 🟡 Revue 2026-10 — divers
 - [ ] 🟡 **data-sync** — `derivedReady` ne teste que `characters.json` · échecs de `writeAtomic` avalés · octets
       non JSON écrits tels quels · pas de verrou contre deux syncs simultanées.
-- [ ] ⚪ **Desktop** — écritures du serveur non atomiques · `img-cache` ne revalide jamais une image en cache ·
-      une route `/api/*` inconnue répond 200 avec `index.html`.
 
 ### 🟡 Audit projet (2026-09-07) — reste
 - [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer).

@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createApiHandler, type ApiConfig } from "../src/api-handler.js";
 import { withServer } from "./http-harness.js";
@@ -37,7 +37,7 @@ describe("shared API handler", () => {
     const handle = createApiHandler(devConfig());
     await withServer((req, res) => { if (!handle(req, res)) { res.statusCode = 418; res.end("fallthrough"); } }, async (call) => {
       for (const [url, method] of [["/api/capture/run", "POST"], ["/api/capture/disarm", "POST"], ["/api/emulators", "GET"], ["/api/preflight", "GET"], ["/api/capture/manual-device", "GET"]] as const) {
-        expect((await call(url, { method })).status).toBe(418);
+        expect((await call(url, { method })).status).toBe(404);
       }
       expect(JSON.parse((await call("/api/capture/status")).body)).toEqual({
         captured: false,
@@ -45,6 +45,32 @@ describe("shared API handler", () => {
         mtimes: { user_item: null, user_character: null, user_gift: null, user_archive: null },
       });
     });
+  });
+
+  it("answers an unknown /api/* with a JSON 404 instead of falling through to the SPA", async () => {
+    const handle = createApiHandler(devConfig());
+    await withServer((req, res) => { if (!handle(req, res)) { res.statusCode = 418; res.end("fallthrough"); } }, async (call) => {
+      for (const [url, method] of [["/api/capture/stauts", "GET"], ["/api/nope", "POST"], ["/api/stat-locks?x=1", "DELETE"], ["/api/", "GET"]] as const) {
+        const r = await call(url, { method });
+        expect(r.status).toBe(404);
+        expect(r.headers["content-type"]).toBe("application/json");
+        expect(JSON.parse(r.body)).toEqual({ error: "unknown endpoint" });
+      }
+      // `/api` alone and look-alike prefixes are not API routes.
+      expect((await call("/api")).status).toBe(418);
+      expect((await call("/apix/foo")).status).toBe(418);
+    });
+  });
+
+  it("writes stat-locks atomically: full file, folder created, no temp file left", async () => {
+    const cfg = devConfig();
+    const handle = createApiHandler(cfg);
+    const body = JSON.stringify({ hero: { atk: 1234 } });
+    await withServer((req, res) => { handle(req, res); }, async (call) => {
+      expect((await call("/api/stat-locks", { method: "POST", body })).status).toBe(204);
+    });
+    expect(readFileSync(cfg.statLocks, "utf-8")).toBe(body);
+    expect(readdirSync(dirname(cfg.statLocks)).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 
   it("serves the dev update payload through the injected updater", async () => {
