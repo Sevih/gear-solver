@@ -20,6 +20,17 @@ describe("readManualFiles — manual capture import", () => {
     expect(r.error).toMatch(/^broken\.json: /);
   });
 
+  it("reports a file whose ItemList / CharList is not an array", async () => {
+    const item = await readManualFiles([file("user_item.json", JSON.stringify({ ItemList: { a: 1 } }))]);
+    expect(item.userItem).toBeNull();
+    expect(item.error).toBe("user_item.json: ItemList is not a list");
+    const char = await readManualFiles([
+      file("user_item.json", JSON.stringify({ ItemList: [] })),
+      file("user_character.json", JSON.stringify({ CharList: null })),
+    ]);
+    expect(char).toEqual({ userItem: null, userChar: undefined, error: "user_character.json: CharList is not a list" });
+  });
+
   it("ignores JSON that is not an object (null, numbers) instead of throwing", async () => {
     const r = await readManualFiles([file("null.json", "null"), file("n.json", "42")]);
     expect(r).toEqual({ userItem: null, userChar: undefined, error: null });

@@ -164,8 +164,9 @@ export interface ManualFiles {
 }
 
 /** Manual fallback: sort the picked captures into user_item (`ItemList`) and
- *  user_character (`CharList`). Never throws — a broken file comes back as
- *  `error` so the caller can say so instead of leaking a rejected promise. */
+ *  user_character (`CharList`). Never throws — a broken file (not JSON, or
+ *  whose list is not an array) comes back as `error` so the caller can say so
+ *  instead of leaking a rejected promise. */
 export async function readManualFiles(files: Iterable<PickedFile>): Promise<ManualFiles> {
   let userItem: RawUserItem | null = null;
   let userChar: RawUserCharacter | undefined;
@@ -177,8 +178,13 @@ export async function readManualFiles(files: Iterable<PickedFile>): Promise<Manu
       return { userItem: null, userChar: undefined, error: `${f.name}: ${err instanceof Error ? err.message : String(err)}` };
     }
     if (!j || typeof j !== "object") continue;
-    if ("ItemList" in j) userItem = j as RawUserItem;
-    else if ("CharList" in j) userChar = j as RawUserCharacter;
+    if ("ItemList" in j) {
+      if (!Array.isArray(j.ItemList)) return { userItem: null, userChar: undefined, error: `${f.name}: ItemList is not a list` };
+      userItem = j as RawUserItem;
+    } else if ("CharList" in j) {
+      if (!Array.isArray(j.CharList)) return { userItem: null, userChar: undefined, error: `${f.name}: CharList is not a list` };
+      userChar = j as RawUserCharacter;
+    }
   }
   return { userItem, userChar, error: null };
 }

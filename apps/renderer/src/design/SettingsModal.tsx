@@ -18,9 +18,9 @@ import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetSta
 import { cx } from "./cx.js";
 import { Spinner } from "./Shell.js";
 import { applyBackup, buildBackup } from "../lib/storage/transfer.js";
-import { resolveWorkerCount } from "../lib/solver/orchestrator.js";
+import { availableCores, clampWorkerCount, resolveWorkerCount } from "../lib/solver/orchestrator.js";
 import { loadDataVersion, type DataVersion } from "../data.js";
-import { describeDataSync, type DataSyncResult } from "../lib/dataSync.js";
+import type { DataSyncResult } from "../lib/dataSync.js";
 import { uninstallSteamPlugin, type SteamStatus } from "../steam.js";
 
 /** Solver tuning settings — owned by App (persisted), edited here. */
@@ -52,8 +52,11 @@ interface Props {
   onResetOnboarding: () => void;
   /** Refresh the inventory after a destructive action (wipe captured). */
   onAfterWipe?: () => void;
-  /** "Sync game data" — App's single sync path (syncs + re-imports, no reload). */
+  /** "Sync game data" — App's single sync path (syncs + re-imports, no reload;
+   *  it reports the outcome on the status bar itself). */
   onSyncData: () => Promise<DataSyncResult>;
+  /** Report an action's outcome on the App's status bar (no blocking dialogs). */
+  onStatus: (message: string) => void;
   /** Current state of the developer-only stat-lock toggle (Builds tab). */
   debugStatLocks: boolean;
   /** Flip the stat-lock debug toggle on/off. */
@@ -90,8 +93,38 @@ const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> =
   { id: "debug",  label: "Debug",  icon: <IconCode /> },
 ];
 
+/** Second-click window of a destructive button ("Click again to confirm"). */
+const CONFIRM_WINDOW_MS = 4000;
+
+/** False once the component unmounted — guards local state set after an
+ *  `await` (the action can outlive a tab switch or the modal). */
+function useMountedRef() {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  return mounted;
+}
+
+/** In-modal confirmation for a destructive button: the first click arms it
+ *  (the caller relabels it "Click again to confirm"), a second click within
+ *  `CONFIRM_WINDOW_MS` runs the action, otherwise it disarms itself. */
+function useConfirmClick(): readonly [boolean, (run: () => void) => void] {
+  const [armed, setArmed] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current != null) clearTimeout(timer.current); }, []);
+  const click = (run: () => void) => {
+    if (timer.current != null) { clearTimeout(timer.current); timer.current = null; }
+    if (armed) { setArmed(false); run(); return; }
+    setArmed(true);
+    timer.current = setTimeout(() => { timer.current = null; setArmed(false); }, CONFIRM_WINDOW_MS);
+  };
+  return [armed, click] as const;
+}
+
 export function SettingsModal({
-  open, onClose, onReady, onResetOnboarding, onAfterWipe, onSyncData,
+  open, onClose, onReady, onResetOnboarding, onAfterWipe, onSyncData, onStatus,
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
   solver, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy,
 }: Props) {
@@ -100,6 +133,7 @@ export function SettingsModal({
   const [tab, setTab] = useState<SettingsTab>("setup");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const mounted = useMountedRef();
 
   /** Re-run the checks: a plugin status poll (ready = plugin in place). */
   async function probe() {
@@ -110,7 +144,19 @@ export function SettingsModal({
     } catch {
       // Backend not reachable; keep the prior status so the user can still see it.
     } finally {
-      setLoading(false);
+      if (mounted.current) setLoading(false);
+    }
+  }
+
+  /** Settings → Data → "Sync": App's sync path re-imports on a real sync (no
+   *  window reload, so a running solve survives) and reports the outcome on
+   *  the status bar. */
+  async function runDataSync() {
+    setSyncing(true);
+    try {
+      await onSyncData();
+    } finally {
+      if (mounted.current) setSyncing(false);
     }
   }
   const setupReady = Boolean(steam?.ready);
@@ -182,10 +228,10 @@ export function SettingsModal({
           {/* CONTENT COLUMN */}
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto px-4.5 py-4">
-              {tab === "setup"  && <SteamSetupPane steam={steam} loading={loading} busy={steamBusy} onInstall={onSteamInstall} onLaunch={onSteamLaunch} onProbe={() => void probe()} />}
+              {tab === "setup"  && <SteamSetupPane steam={steam} loading={loading} busy={steamBusy} onInstall={onSteamInstall} onLaunch={onSteamLaunch} onProbe={() => void probe()} onStatus={onStatus} />}
               {tab === "solver" && <SolverPane solver={solver} showAdvanced={showAdvanced} onToggleAdvanced={() => setShowAdvanced((v) => !v)} />}
-              {tab === "data"   && <DataPane syncing={syncing} setSyncing={setSyncing} onSyncData={onSyncData} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} />}
-              {tab === "backup" && <BackupPane importInputRef={importInputRef} />}
+              {tab === "data"   && <DataPane syncing={syncing} onSync={() => void runDataSync()} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} onStatus={onStatus} />}
+              {tab === "backup" && <BackupPane importInputRef={importInputRef} onStatus={onStatus} />}
               {tab === "debug"  && <DebugPane debugStatLocks={debugStatLocks} onToggleDebugStatLocks={onToggleDebugStatLocks} debugSolver={debugSolver} onToggleDebugSolver={onToggleDebugSolver} />}
             </div>
 
@@ -236,9 +282,10 @@ function steamBuildNote(s: SteamStatus | null): string | null {
 /** Capture setup wizard: three checks, the first two gate "ready" (the plugin
  *  is in place); the third is live status (game running with the plugin
  *  loaded) shown for feedback, since capture itself needs no click. */
-function SteamSetupPane({ steam, loading, busy, onInstall, onLaunch, onProbe }: {
+function SteamSetupPane({ steam, loading, busy, onInstall, onLaunch, onProbe, onStatus }: {
   steam: SteamStatus | null; loading: boolean; busy: boolean;
   onInstall: () => void; onLaunch: () => void; onProbe: () => void;
+  onStatus: (message: string) => void;
 }) {
   const s = steam;
   const installedOk = Boolean(s?.installed);
@@ -337,25 +384,27 @@ function SteamSetupPane({ steam, loading, busy, onInstall, onLaunch, onProbe }: 
         </div>
       )}
 
-      <SteamRemoveSection steam={s} busy={busy} onDone={onProbe} />
+      <SteamRemoveSection steam={s} busy={busy} onDone={onProbe} onStatus={onStatus} />
     </div>
   );
 }
 
 /** Collapsed "Remove plugin" escape hatch (also strips BepInEx when nothing
- *  else uses it). Confirms first; refused by the backend while the game runs. */
-function SteamRemoveSection({ steam, busy, onDone }: { steam: SteamStatus | null; busy: boolean; onDone: () => void }) {
+ *  else uses it). Asks for a second click first; refused by the backend while
+ *  the game runs. */
+function SteamRemoveSection({ steam, busy, onDone, onStatus }: { steam: SteamStatus | null; busy: boolean; onDone: () => void; onStatus: (message: string) => void }) {
   const [open, setOpen] = useState(false);
   const [working, setWorking] = useState(false);
+  const [armed, confirmClick] = useConfirmClick();
+  const mounted = useMountedRef();
   if (!steam?.plugin.present) return null;
   const remove = async () => {
-    if (!window.confirm("Remove the capture plugin from the Steam game folder? (BepInEx is removed too unless other plugins use it.)")) return;
     setWorking(true);
     try {
       const r = await uninstallSteamPlugin(true);
-      if (!r.ok) window.alert(`Remove failed: ${r.error ?? "unknown error"}`);
+      if (!r.ok) onStatus(`Remove failed: ${r.error ?? "unknown error"}`);
       onDone();
-    } finally { setWorking(false); }
+    } finally { if (mounted.current) setWorking(false); }
   };
   return (
     <div className="flex flex-col gap-2 border-t border-white/6 pt-3">
@@ -369,12 +418,12 @@ function SteamRemoveSection({ steam, busy, onDone }: { steam: SteamStatus | null
             Deletes <span className="font-mono text-zinc-300">BepInEx/plugins/GearSolverCapture</span> and its config from the game folder. Your captured snapshots stay in the app. Close the game first.
           </p>
           <button
-            type="button" onClick={() => void remove()} disabled={busy || working || steam.gameRunning}
+            type="button" onClick={() => confirmClick(() => void remove())} disabled={busy || working || steam.gameRunning}
             className={cx(
               "inline-flex h-7 shrink-0 items-center rounded-md border px-3 text-[11.5px] font-semibold",
               busy || working || steam.gameRunning ? "cursor-not-allowed border-white/6 bg-white/2 text-zinc-500" : "border-rose-400/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20",
             )}
-          >{working ? "Removing…" : "Remove"}</button>
+          >{working ? "Removing…" : armed ? "Click again to confirm" : "Remove"}</button>
         </div>
       )}
     </div>
@@ -406,7 +455,7 @@ function SolverPane({
   showAdvanced: boolean;
   onToggleAdvanced: () => void;
 }) {
-  const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
+  const cores = availableCores();
   const autoEffective = resolveWorkerCount(null);
   const isAuto = solver.workerCount == null;
   // Local buffer so toggling Auto→Manual→Auto preserves the last manual count
@@ -414,7 +463,7 @@ function SolverPane({
   const [manualBuf, setManualBuf] = useState(() => solver.workerCount ?? autoEffective);
   const manualVal = solver.workerCount ?? manualBuf;
   const setManualWorkers = (v: number) => {
-    const clamped = Math.max(1, Math.min(cores, v));
+    const clamped = clampWorkerCount(v, cores);
     setManualBuf(clamped);
     solver.setWorkerCount(clamped);
   };
@@ -526,14 +575,15 @@ function SolverPane({
 }
 
 function DataPane({
-  syncing, setSyncing, onSyncData, onResetOnboarding, onAfterWipe,
+  syncing, onSync, onResetOnboarding, onAfterWipe, onStatus,
 }: {
   syncing: boolean;
-  setSyncing: (b: boolean) => void;
-  onSyncData: () => Promise<DataSyncResult>;
+  onSync: () => void;
   onResetOnboarding: () => void;
   onAfterWipe?: () => void;
+  onStatus: (message: string) => void;
 }) {
+  const [wipeArmed, confirmWipe] = useConfirmClick();
   // Read-only stamp of the loaded derived-data snapshot (data/derived/version.json,
   // written by build.mjs). Fetched once on open; absent on data built before the
   // stamp existed → renders an em-dash.
@@ -561,7 +611,7 @@ function DataPane({
         description="Refresh the raw tables from the local outerpedia checkout and rebuild the derived data (run after a game patch). Auto-runs at launch when the source is newer."
         actionLabel={syncing ? "Syncing…" : "Sync"}
         disabled={syncing}
-        onClick={() => void runDataSync(setSyncing, onSyncData)}
+        onClick={onSync}
       />
       <DataAction
         label="Reset onboarding prompt"
@@ -572,13 +622,14 @@ function DataPane({
         label="Wipe captured data"
         description="Empty the whole capture folder: imported snapshots, the seen-paths log and unknown endpoints (_unknown/). Cannot be undone · requires confirmation."
         tone="danger"
-        onClick={() => void wipeCaptured(onAfterWipe)}
+        actionLabel={wipeArmed ? "Click again to confirm" : undefined}
+        onClick={() => confirmWipe(() => void wipeCaptured(onStatus, onAfterWipe))}
       />
     </div>
   );
 }
 
-function BackupPane({ importInputRef }: { importInputRef: { current: HTMLInputElement | null } }) {
+function BackupPane({ importInputRef, onStatus }: { importInputRef: { current: HTMLInputElement | null }; onStatus: (message: string) => void }) {
   return (
     <div className="flex flex-col gap-3">
       <SectionStrip title="Backup" />
@@ -586,7 +637,7 @@ function BackupPane({ importInputRef }: { importInputRef: { current: HTMLInputEl
         label="Export builds & presets"
         description="Download your saved builds and filter presets as a JSON file (backup / move to another device). Captured gear is not included — re-capture it there."
         actionLabel="Export"
-        onClick={exportBackupFile}
+        onClick={() => exportBackupFile(onStatus)}
       />
       <DataAction
         label="Import builds & presets"
@@ -599,7 +650,7 @@ function BackupPane({ importInputRef }: { importInputRef: { current: HTMLInputEl
         type="file"
         accept="application/json,.json"
         className="hidden"
-        onChange={(e) => void importBackupFile(e.target.files?.[0] ?? null, () => { if (importInputRef.current) importInputRef.current.value = ""; })}
+        onChange={(e) => void importBackupFile(e.target.files?.[0] ?? null, onStatus, () => { if (importInputRef.current) importInputRef.current.value = ""; })}
       />
     </div>
   );
@@ -794,12 +845,12 @@ function IconCode() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Side-effect helpers (unchanged behavior)
+ * Side-effect helpers — outcomes go to the App's status bar
  * ───────────────────────────────────────────────────────────────────────── */
 
 /** Snapshot saved builds + filter presets and trigger a browser download.
  *  Filename carries the date so multiple backups don't collide. */
-function exportBackupFile(): void {
+function exportBackupFile(onStatus: (message: string) => void): void {
   try {
     const now = Date.now();
     const bundle = buildBackup(now);
@@ -815,56 +866,43 @@ function exportBackupFile(): void {
     // Revoke on the next tick so the click has consumed the URL.
     setTimeout(() => URL.revokeObjectURL(url), 0);
   } catch (err) {
-    window.alert(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
+    onStatus(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
 /** Read a user-picked JSON file, merge it into localStorage, and report the
  *  count. Always clears the input (via `done`) so re-picking the same file
  *  fires `onChange` again. */
-async function importBackupFile(file: File | null, done: () => void): Promise<void> {
+async function importBackupFile(file: File | null, onStatus: (message: string) => void, done: () => void): Promise<void> {
   if (!file) return;
   try {
     const parsed = JSON.parse(await file.text()) as unknown;
     const { builds, presets } = applyBackup(parsed);
     if (builds === 0 && presets === 0) {
-      window.alert("Nothing new to import — every build and preset in this file is already present.");
+      onStatus("Nothing new to import — every build and preset in this file is already present.");
     } else {
-      window.alert(`Imported ${builds} build${builds === 1 ? "" : "s"} and ${presets} preset${presets === 1 ? "" : "s"}.`);
+      onStatus(`Imported ${builds} build${builds === 1 ? "" : "s"} and ${presets} preset${presets === 1 ? "" : "s"}.`);
     }
   } catch (err) {
-    window.alert(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+    onStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     done();
   }
 }
 
-/** Settings → Data → "Sync": run App's sync path (it re-imports on a real
- *  sync — no window reload, so a running solve survives) and report the
- *  outcome. */
-async function runDataSync(setSyncing: (b: boolean) => void, onSyncData: () => Promise<DataSyncResult>): Promise<void> {
-  setSyncing(true);
-  try {
-    window.alert(describeDataSync(await onSyncData()));
-  } finally {
-    setSyncing(false);
-  }
-}
-
 /** POST /api/capture/wipe (empties the whole capture folder) + refresh
- *  inventory. Confirms via native dialog first (destructive). */
-async function wipeCaptured(onAfterWipe?: () => void): Promise<void> {
-  if (!window.confirm("Empty the whole capture folder (gear / character snapshots, seen-paths log, _unknown/)? This cannot be undone (next capture will refill).")) return;
+ *  inventory. The Data pane's button asks for a second click first. */
+async function wipeCaptured(onStatus: (message: string) => void, onAfterWipe?: () => void): Promise<void> {
   try {
     const r = await fetch("/api/capture/wipe", { method: "POST" });
     if (!r.ok) {
       // The server's reason when it gives one (409: the Steam plugin is live).
       const j = (await r.json().catch(() => null)) as { error?: string } | null;
-      window.alert(`Wipe failed: ${j?.error ?? `HTTP ${r.status}`}`);
+      onStatus(`Wipe failed: ${j?.error ?? `HTTP ${r.status}`}`);
       return;
     }
     onAfterWipe?.();
   } catch (err) {
-    window.alert(`Wipe failed: ${err instanceof Error ? err.message : String(err)}`);
+    onStatus(`Wipe failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

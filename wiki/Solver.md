@@ -445,7 +445,8 @@ CP-weighted auto-prune (phase 3b) makes "max CP" playable with nothing tuned.
 1. **Pure engine, no React** (`engine.ts`, `gems.ts`, `ratings.ts`, `cp.ts`) — importable from any worker or test, no DOM or Suspense to drag around.
 
 2. **Worker pool = `hardwareConcurrency − 1`** (`resolveWorkerCount`, override
-   `gs.solver.workerCount`, hard cap 64) — one core left to the UI, the rest to
+   `gs.solver.workerCount` brought to [1, min(cores, 64)] by `clampWorkerCount`, the same
+   rule as the Settings input) — one core left to the UI, the rest to
    the search. The old fixed cap of 8 left many-core machines
    under-employed (8 workers / 32 threads = 25% CPU); the postMessage clone
    of inventory/game per worker is a *fixed* cost per solve, amortized over a solve

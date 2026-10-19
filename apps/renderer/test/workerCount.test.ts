@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveWorkerCount } from "../src/lib/solver/orchestrator.js";
+import { clampWorkerCount, resolveWorkerCount } from "../src/lib/solver/orchestrator.js";
 
 /** Stub the two browser globals `resolveWorkerCount` reads. `localStorage` is
  *  a minimal getItem-only shim; pass `throws` to simulate a locked-down
@@ -33,12 +33,26 @@ describe("resolveWorkerCount", () => {
   });
 
   it("a valid override wins over the default", () => {
+    stubEnv(8, "6");
+    expect(resolveWorkerCount()).toBe(6);
+    stubEnv(8, "8");
+    expect(resolveWorkerCount()).toBe(8);
+  });
+
+  it("brings a persisted override above the core count back to the cores", () => {
     stubEnv(8, "20");
-    expect(resolveWorkerCount()).toBe(20);
+    expect(resolveWorkerCount()).toBe(8);
+    stubEnv(8, null);
+    expect(resolveWorkerCount(20)).toBe(8);
   });
 
   it("clamps an absurd override to the hard ceiling (64)", () => {
-    stubEnv(8, "9999");
+    stubEnv(128, "9999");
+    expect(resolveWorkerCount()).toBe(64);
+  });
+
+  it("caps the default at the hard ceiling on a huge machine", () => {
+    stubEnv(256, null);
     expect(resolveWorkerCount()).toBe(64);
   });
 
@@ -52,5 +66,26 @@ describe("resolveWorkerCount", () => {
   it("falls back to the default when localStorage access throws", () => {
     stubEnv(10, "20", true);
     expect(resolveWorkerCount()).toBe(9);
+  });
+});
+
+describe("clampWorkerCount — the rule shared with the Settings input", () => {
+  it("keeps a count within [1, cores]", () => {
+    expect(clampWorkerCount(5, 8)).toBe(5);
+    expect(clampWorkerCount(0, 8)).toBe(1);
+    expect(clampWorkerCount(-3, 8)).toBe(1);
+    expect(clampWorkerCount(9, 8)).toBe(8);
+  });
+
+  it("never exceeds the hard ceiling, whatever the core count", () => {
+    expect(clampWorkerCount(100, 128)).toBe(64);
+    expect(clampWorkerCount(64, 128)).toBe(64);
+  });
+
+  it("reads hardwareConcurrency when no core count is given (4 when unavailable)", () => {
+    stubEnv(6, null);
+    expect(clampWorkerCount(12)).toBe(6);
+    stubEnv(undefined, null);
+    expect(clampWorkerCount(12)).toBe(4);
   });
 });

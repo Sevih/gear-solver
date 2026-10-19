@@ -5,6 +5,7 @@ import { composeCharStats, effectiveCharacter, expToLevel } from "@gear-solver/c
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { computeAdvice, type AdviceItem } from "../lib/buildAdvice.js";
+import { parseStatLocks, type LockEntry, type LocksMap } from "../lib/statLocks.js";
 import { cx } from "../design/cx.js";
 import { jsonWithSets, usePersistedState, useSessionState } from "../hooks/usePersistedState.js";
 import { CyanButton } from "../design/Shell.js";
@@ -383,7 +384,7 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
       {(f.query || f.elements.size || f.classes.size || (debug && f.locks !== "all")) ? (
         <button
           type="button"
-          onClick={() => setF({ query: "", elements: new Set(), classes: new Set(), locks: "all" })}
+          onClick={() => setF({ query: "", elements: new Set(), classes: new Set(), locks: "all", byRank: f.byRank })}
           className="ml-1 text-[11px] text-cyan-300 hover:text-cyan-200"
         >Reset</button>
       ) : null}
@@ -400,19 +401,17 @@ function displayNameOf(c: Character, meta: { nickname: string | null } | null): 
   return c.fusionCharId !== 0 ? `Core Fusion ${base}` : base;
 }
 
-/** Per-(char, stat) lock snapshot — persisted at `data/stat-locks.json` via
- *  the vite dev API so regressions on validated stats stay visible across
- *  reloads. `name`/`charId`/`level` are debug context for the json file. */
-interface LockEntry { name: string; charId: number; level: number; stats: Partial<FinalStats>; }
-
-/** Stable functional-updater type — `BuildCard`s call this through `useCallback`
+/** Per-(char, stat) lock snapshots (`LockEntry`, `lib/statLocks.ts`) are
+ *  persisted at `data/stat-locks.json` via the dev API so regressions on
+ *  validated stats stay visible across reloads.
+ *
+ *  Stable functional-updater type — `BuildCard`s call this through `useCallback`
  *  closures that only depend on `setLocks` (referentially stable). */
-type LocksMap = Record<string, LockEntry>;
 type SetLocks = (next: LocksMap | ((prev: LocksMap) => LocksMap)) => void;
 
-/** Custom hook bundling the locked-stats state + persistence. Migrates the
- *  pre-rich legacy shape (a bare `Partial<FinalStats>` keyed by uid) to the
- *  enriched `LockEntry` on first load. `setLocks` accepts either a value or a
+/** Custom hook bundling the locked-stats state + persistence. The fetched
+ *  file goes through `parseStatLocks` (validated, legacy shape and stat keys
+ *  migrated). `setLocks` accepts either a value or a
  *  React-style functional updater and stays stable across renders so the
  *  memoized cards never need to break their handler closures.
  *
@@ -423,6 +422,10 @@ type SetLocks = (next: LocksMap | ((prev: LocksMap) => LocksMap)) => void;
 const PERSIST_DEBOUNCE_MS = 300;
 function useStatLocks(enabled: boolean): readonly [LocksMap, SetLocks] {
   const [locks, setLocksRaw] = useState<LocksMap>({});
+  // Latest committed map — `setLocks` resolves functional updaters against it
+  // so the debounce is armed outside any `setState` updater (StrictMode runs
+  // updaters twice).
+  const locksRef = useRef<LocksMap>({});
   const pendingRef = useRef<{ snapshot: LocksMap | null; timer: ReturnType<typeof setTimeout> | null }>({ snapshot: null, timer: null });
 
   const flush = useCallback(() => {
@@ -440,15 +443,14 @@ function useStatLocks(enabled: boolean): readonly [LocksMap, SetLocks] {
     // listener entirely when it's off (normal usage), so the Builds tab makes
     // no /api/stat-locks request and registers no global handler.
     if (!enabled) return;
+    let alive = true;
     fetch("/api/stat-locks")
-      .then((r) => r.ok ? r.json() : {})
-      .then((data: Record<string, LockEntry | Partial<FinalStats>>) => {
-        const migrated: LocksMap = {};
-        for (const [uid, v] of Object.entries(data ?? {})) {
-          if (v && typeof v === "object" && "stats" in v) migrated[uid] = v as LockEntry;
-          else migrated[uid] = { name: "?", charId: 0, level: 0, stats: v as Partial<FinalStats> };
-        }
-        setLocksRaw(migrated);
+      .then((r) => r.ok ? r.json() as Promise<unknown> : {})
+      .then((data) => {
+        if (!alive) return;
+        const parsed = parseStatLocks(data);
+        locksRef.current = parsed;
+        setLocksRaw(parsed);
       })
       .catch(() => { /* leave empty */ });
     // Flush pending writes if the user reloads / closes mid-debounce so the
@@ -456,20 +458,22 @@ function useStatLocks(enabled: boolean): readonly [LocksMap, SetLocks] {
     const onUnload = () => flush();
     window.addEventListener("beforeunload", onUnload);
     return () => {
+      alive = false;
       window.removeEventListener("beforeunload", onUnload);
       flush();
     };
   }, [flush, enabled]);
 
   const setLocks = useCallback<SetLocks>((nextOrFn) => {
-    setLocksRaw((prev) => {
-      const next = typeof nextOrFn === "function" ? nextOrFn(prev) : nextOrFn;
-      const pending = pendingRef.current;
-      pending.snapshot = next;
-      if (pending.timer != null) clearTimeout(pending.timer);
-      pending.timer = setTimeout(flush, PERSIST_DEBOUNCE_MS);
-      return next;
-    });
+    const prev = locksRef.current;
+    const next = typeof nextOrFn === "function" ? nextOrFn(prev) : nextOrFn;
+    if (next === prev) return;
+    locksRef.current = next;
+    setLocksRaw(next);
+    const pending = pendingRef.current;
+    pending.snapshot = next;
+    if (pending.timer != null) clearTimeout(pending.timer);
+    pending.timer = setTimeout(flush, PERSIST_DEBOUNCE_MS);
   }, [flush]);
 
   return [locks, setLocks] as const;

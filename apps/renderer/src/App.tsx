@@ -363,6 +363,7 @@ export function App() {
         onResetOnboarding={() => { onboardingGate.reset(); setOnboardingDone(false); }}
         onAfterWipe={() => void refreshInventory("Wiped captured data")}
         onSyncData={syncGameData}
+        onStatus={setStatus}
         debugStatLocks={debugStatLocks}
         onToggleDebugStatLocks={() => setDebugStatLocks((v) => !v)}
         debugSolver={debugSolver}

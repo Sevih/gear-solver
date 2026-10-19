@@ -30,7 +30,8 @@ by hand (manual import).
   locally), plus a tabbed **Settings** modal. The gear detail panel
   (`design/GearDetail.tsx`) is shared between Inventory and the Builds hover tooltip.
   Heavy solves fan out across a **pool of Web Workers** (size = `hardwareConcurrency - 1`,
-  override `gs.solver.workerCount`, hard cap 64) that import the pure engine modules in
+  override `gs.solver.workerCount` clamped to the core count, hard cap 64 — one rule,
+  `clampWorkerCount`) that import the pure engine modules in
   `apps/renderer/src/lib/solver/`. See [Solver](Solver) for the solver pipeline + UI
   panels, and [Engine Reference](Engine-Reference) for the full formula + data-pipeline reference.
 - **apps/desktop** — Electron shell that hosts the renderer. `main.ts` boots a local

@@ -78,9 +78,23 @@ const WORKER_COUNT_KEY = "gs.solver.workerCount";
  *  thousands of workers. */
 const WORKER_COUNT_CEILING = 64;
 
+/** The one worker-count rule, shared by the Settings input and
+ *  `resolveWorkerCount`: [1, min(cores, ceiling)]. More workers than logical
+ *  cores only adds contention. `cores` defaults to `hardwareConcurrency` (4
+ *  when unavailable). */
+export function clampWorkerCount(n: number, cores: number = availableCores()): number {
+  return Math.max(1, Math.min(n, cores, WORKER_COUNT_CEILING));
+}
+
+/** Logical core count, 4 when the browser does not say. */
+export function availableCores(): number {
+  return (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
+}
+
 /** Resolve how many solver workers to spawn. Default = `hardwareConcurrency - 1`
  *  (use every logical core but one, kept free for the main thread / UI). A valid
- *  manual override wins (clamped to [1, ceiling]).
+ *  manual override wins, through `clampWorkerCount` (a persisted count above
+ *  the cores is brought back to the cores).
  *
  *  `override` lets a React caller pass the live setting value directly (for a
  *  reactive read-out) instead of going through localStorage: pass `undefined`
@@ -88,10 +102,10 @@ const WORKER_COUNT_CEILING = 64;
  *  manual count, or `null` to force the auto default. The non-React orchestrator
  *  always uses the localStorage path. */
 export function resolveWorkerCount(override?: number | null): number {
-  const hwc = navigator.hardwareConcurrency || 4;
+  const cores = availableCores();
   const ov = override !== undefined ? override : readWorkerCountOverride();
-  if (ov != null && Number.isFinite(ov) && ov >= 1) return Math.min(ov, WORKER_COUNT_CEILING);
-  return Math.max(1, Math.min(WORKER_COUNT_CEILING, hwc - 1));
+  if (ov != null && Number.isFinite(ov) && ov >= 1) return clampWorkerCount(ov, cores);
+  return clampWorkerCount(cores - 1, cores);
 }
 
 /** Read the persisted manual worker-count override, or null when unset/auto. */

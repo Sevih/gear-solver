@@ -720,11 +720,11 @@ export function HomeScreen({
   const stats = useMemo(() => (inventory ? computeStats(inventory, game) : null), [inventory, game]);
   // Library counts (saved builds + filter presets) live in localStorage. Read
   // once on mount — they don't change while the user sits on Home.
-  const library = useMemo(() => {
+  const [library] = useState(() => {
     const builds = Object.values(loadSavedBuilds()).reduce((n, l) => n + l.length, 0);
     const presets = Object.values(loadFilterPresets()).reduce((n, l) => n + l.length, 0);
     return { builds, presets };
-  }, []);
+  });
 
   // "Live" = the plugin is loaded in a running game.
   const live = Boolean(steam?.live);

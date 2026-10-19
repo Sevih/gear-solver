@@ -8,6 +8,61 @@
 
 ## Items de backlog clôturés (index)
 
+### 🐛 Builds, Settings, Home — stat-locks migrés et validés, Reset qui garde le tri, plus d'`alert`/`confirm`, une règle de workers (2026-10-19)
+- ✅ **Pourquoi.** Items « Stat-locks (debug) : `renameLegacyStatKeys` non appliqué », « Reset (Builds) », « `window.alert` /
+  `confirm` bloquants », « Casts JSON non validés », « `useMemo(…, [])` comme lire une fois » et puces Builds
+  (stat-locks) / SettingsModal de « Effets de bord dans des updaters `setState` » (`docs/todo.md`). Le fichier
+  `/api/stat-locks` était casté sans validation ni migration des clés : `data/stat-locks.json` (9 héros) porte encore
+  `crc`, `chd`, `res`, `dmgRed`, donc les locks de taux crit, dégâts crit, résistance et réduction ne correspondaient
+  jamais. Le debounce d'écriture était armé dans l'updater de `setLocksRaw` (doublé en StrictMode) ; Reset du filtre
+  Builds repassait le tri par rang au tri par CP ; Settings bornait les workers aux cœurs et `resolveWorkerCount` à
+  64 (deux règles) ; Settings ouvrait dix boîtes natives bloquantes ; `readManualFiles` prenait tout JSON portant
+  `ItemList`/`CharList` sans vérifier que c'est une liste.
+- ✅ **Stat-locks.** Nouveau `apps/renderer/src/lib/statLocks.ts` (pur) : `LockEntry`/`LocksMap` y déménagent et
+  `parseStatLocks(data: unknown)` valide la lecture — hors objet → `{}` ; entrée non objet écartée ; entrée riche
+  (`stats` présent) : `name`/`charId`/`level` gardés s'ils ont le bon type (sinon `"?"`/0/0) ; forme ancienne nue
+  enveloppée comme avant ; dans les deux cas `renameLegacyStatKeys` puis seules les valeurs numériques finies
+  restent, et une entrée sans aucun lock est écartée (l'app n'en écrit jamais : déverrouiller la dernière stat
+  supprime l'uid). Dans `useStatLocks` (`screens/BuildsScreen.tsx`) : garde `alive` sur le `fetch` du montage, et
+  `setLocks` résout l'updater contre une ref de la dernière carte puis appelle `setLocksRaw(next)` et arme le
+  debounce hors de tout updater (un updater qui rend la même carte ne programme plus d'écriture). Le fichier n'est
+  pas réécrit d'office : ses clés passent au nom canonique à la prochaine écriture (un lock basculé).
+- ✅ **Reset (Builds).** `setF({ …, byRank: f.byRank })` : le Reset vide recherche, éléments, classes et filtre de
+  locks, le tri choisi reste.
+- ✅ **Workers.** `clampWorkerCount(n, cores = availableCores())` exportée par `lib/solver/orchestrator.ts` :
+  [1, min(cœurs, 64)] ; `availableCores()` = `hardwareConcurrency`, 4 à défaut. `resolveWorkerCount` l'applique à
+  l'override (une valeur persistée au-delà des cœurs, ex. 20 sur 8 cœurs, est ramenée à 8 — avant : 20) et au défaut
+  (`cœurs − 1`) ; la saisie de Settings (`SolverPane`) l'applique aussi et lit les cœurs par `availableCores()`.
+  `docs/architecture.md`, `docs/solver.md` et leurs miroirs `wiki/` le disent.
+- ✅ **Settings sans boîte bloquante.** `SettingsModal` gagne une prop `onStatus` (l'App passe `setStatus`, seul
+  changement de `App.tsx`) : échecs d'export, d'import, de wipe et de retrait du plugin, et compte rendu de l'import
+  vont à la barre de status. La sync n'a plus de message propre : `syncGameData` de l'App écrivait déjà
+  `describeDataSync` dans la barre. Les deux confirmations (Wipe captured data, Remove plugin) passent par
+  `useConfirmClick` : le premier clic arme le bouton, libellé « Click again to confirm », un second clic dans les
+  4 s (`CONFIRM_WINDOW_MS`) lance l'action, sinon il se désarme (minuteur nettoyé au démontage) — changement
+  d'interface demandé. Gardes de démontage (`useMountedRef`, même forme que dans `WorklistScreen.tsx`) sur
+  `setLoading` après le probe, `setWorking` après le retrait du plugin et `setSyncing` après la sync (la sync est
+  remontée dans `SettingsModal`, `DataPane` reçoit `onSync`).
+- ✅ **Import manuel.** `readManualFiles` (`data.ts`) vérifie `Array.isArray` sur `ItemList`/`CharList` et renvoie
+  `<fichier>: ItemList is not a list` (resp. `CharList`), que l'App affiche déjà en « Manual import failed — … ».
+- ✅ **HomeScreen.** Les compteurs de bibliothèque sont lus par `useState(() => …)` au lieu de `useMemo(…, [])`.
+- ✅ **Tests (renderer +12).** `test/statLocks.test.ts` (6 : `crc`/`chd`/`res` → `critRate`/`critDmg`/`effRes` dans une
+  entrée riche, forme nue migrée, clés canoniques intactes, seules les stats numériques finies, entrées écartées,
+  fichier non objet) ; `test/workerCount.test.ts` (+5 : override au-delà des cœurs ramené, défaut plafonné à 64 sur
+  256 cœurs, `clampWorkerCount` borné à [1, cœurs], plafond 64, lecture de `hardwareConcurrency`) — les cas « override
+  20 sur 8 cœurs = 20 » et « 9999 sur 8 cœurs = 64 » deviennent 6/8 et 9999 sur 128 cœurs ; `test/manualImport.test.ts`
+  (+1 : `ItemList` objet, `CharList` null).
+- ✅ **Vérifications.** `npm run typecheck` : dernière ligne `> tsc --noEmit` (sortie 0) ; `npm test` : core 154,
+  desktop 131, renderer 501 verts (489 + 12), dernière ligne `Duration 1.06s (transform 2.33s, setup 0ms, import
+  4.19s, tests 674ms, environment 4ms)` ; `npm run lint` : `✖ 28 problems (0 errors, 28 warnings)`, sortie 0, mêmes
+  avertissements qu'avant dans chaque fichier touché (comparés par `git show HEAD:<fichier> | eslint --stdin`).
+- ⏳ **À contrôler par Sevih.** Settings → Export / Import / Sync / Remove plugin / Wipe : aucune boîte bloquante, le
+  double clic de Remove et Wipe, les messages dans la barre de status (elle reste derrière le fond flouté de la
+  modale : lisible en la fermant) ; Reset du filtre Builds en tri par rang. Laissé : la table des tests de
+  `docs/reference.md` / `wiki/Engine-Reference.md` (ligne `workerCount` mise à jour, mais le total « 300 tests » et
+  les fichiers absents, dont `manualImport` et `statLocks`, datent d'avant) ; `data/stat-locks.json` garde ses clés
+  anciennes jusqu'à la prochaine écriture.
+
 ### ⚡ App et Worklist — badges mémoïsés, `equippedByHero` calculé une fois, journal linéaire, persistance hors des updaters (2026-10-19)
 - ✅ **Pourquoi.** Item « Perf render App » et puces App / WorklistScreen de « Effets de bord dans des updaters
   `setState` » (`docs/todo.md`). Chaque rendu de l'App (donc chaque ligne du journal d'installation du plugin)

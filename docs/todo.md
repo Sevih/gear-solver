@@ -63,23 +63,14 @@
       une route `/api/*` inconnue répond 200 avec `index.html`.
 
 ### 🟡 Audit projet (2026-09-07) — reste
-- [ ] ⚪ **Stat-locks (debug) : `renameLegacyStatKeys` non appliqué** au fichier lu via `/api/stat-locks` — un
-      fichier ancien (`crc`, `chd`, …) ne matchera jamais.
-- [ ] ⚪ **Reset (Builds)** remet aussi le tri `byRank` à CP alors que la condition d'affichage ne le regarde pas ·
-      clamp worker count à `hardwareConcurrency` côté Settings vs `WORKER_COUNT_CEILING` côté orchestrateur.
 - [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer) · calcul de
       qualité en 3 exemplaires (`computeQuality` de GearDetail et ResultGearDetail, `quality.ts`).
-- [ ] 🟡 **Effets de bord dans des updaters `setState`** (persist localStorage dans Builds — exécutés 2× en
-      StrictMode) · `setState` après `await` sans garde d'unmount (BuildsScreen stat-locks, SettingsModal).
 - [ ] 🟡 **Perf Inventory** — `matchesFilters` reconstruit la chaîne `hay` et rappelle `computeQuality` par pièce à
       chaque frappe (2×1000 recalculs) → précalculer dans `toUiPiece` (cf. item « Optims mineures Inventory »).
 - [ ] 🟡 **Composants monolithiques** — BuilderScreen ~4600 lignes (~40 composants + reducer), InventoryScreen 1350,
       SettingsModal 1210 (5 panes + helpers réseau), HomeScreen `computeStats` 200 lignes. Découpage proposé :
       `builderFilters.ts`, `catalogs.ts`, `ResultsTable`, `BottomGearBand`, `BuilderToolbar` + panels, `RightSidebar`,
       `FilterFooter`, hook `useSolverSession` ; une pane par fichier côté Settings.
-- [ ] ⚪ **`window.alert` / `confirm` bloquants** dans SettingsModal alors que l'app a une barre de status.
-- [ ] ⚪ **Casts JSON non validés** (stat-locks `as Record<…>`, `j.ItemList` sur `any`).
-- [ ] ⚪ **`useMemo(…, [])` comme « lire une fois »** (HomeScreen) → initialiseur `useState`.
 
 ### 🟢 Ratings offensifs — après la colonne « meilleur skill » (2026-09-05)
 - [ ] 🟢 **DPS de rotation pondéré par les cooldowns** — `dmgs` = hit du meilleur skill × SPD, pas une rotation. La

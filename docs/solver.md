@@ -479,7 +479,8 @@ lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloqu
 1. **Engine pur, sans React** (`engine.ts`, `gems.ts`, `ratings.ts`, `cp.ts`) — importable depuis n'importe quel worker ou test, pas de DOM ni de Suspense à se trimballer.
 
 2. **Worker pool = `hardwareConcurrency − 1`** (`resolveWorkerCount`, override
-   `gs.solver.workerCount`, plafond dur 64) — un cœur laissé à l'UI, le reste à
+   `gs.solver.workerCount` ramené à [1, min(cœurs, 64)] par `clampWorkerCount`, la même
+   règle que la saisie de Settings) — un cœur laissé à l'UI, le reste à
    la recherche. L'ancien plafond fixe à 8 laissait les machines many-core
    sous-employées (8 workers / 32 threads = 25 % CPU) ; le clone postMessage
    inventaire/game par worker est un coût *fixe* par solve, amorti sur un solve
