@@ -12,7 +12,68 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Speed 4-piece follows the game.** The Speed set's % bonus is now computed on base + evolution
+  + awakening speed only, as the game does — not on the +10 SPD some heroes get from their 8th
+  skill. Heroes like Claire, Faenan or Delta show 2–3 SPD less in a 4-piece Speed set than before;
+  that is the number you see in game, not a bug.
+- **Crit Chance stops at 100 %.** The sheet, the filters and the "Crit DMG per 1 %" panel read the
+  capped value; the solver still sees the raw total when it decides whether crit gems are wasted.
+- **CP matches the game to the point.** CP is now computed with the game's own single-precision
+  arithmetic, so the occasional ±1 difference against the in-game number is gone. Saved builds
+  may shift by 1 when re-opened.
+- **Weapon and accessory uniques count.** Phantasm Necrosis (−30 % SPD) and Briareos's Ambition
+  (+20 % to +40 % RES by breakthrough) now enter the sheet and the CP, so "Max CP" no longer
+  elects that weapon by mistake.
+- **Core Fusion passive at your fusion tier.** A Core Fusion hero gets the core passive of the
+  tier you actually reached (Notia's +50 % EFF only at fusion 5, not from fusion 1), and the
+  core's speed bonus is applied as a rate on the whole speed, like the game — Snow's speed moves
+  by 1 at some levels, and gear speed now benefits from it.
+- **Set combat effects are shown.** Sets whose bonus only acts in battle (Pulverization, Weakness,
+  Immunity, Revenge…) show a "combat" badge next to the description, in gear details and in the
+  build's Effects panel, listing the actual values. They are never added to the sheet or the CP.
+- **Data refresh.** Pulverization's 4-piece at tier 4 is now 50 % (it read 70 %), so the full set
+  totals 120 % with the 2-piece. Best-skill damage updated: Sterope's S1 at burst 3, Regina and
+  Luna without burst, Dahlia on S1, Saeran's combat form — the Dmg column of these heroes changes.
+- **"Maxed only" means each piece's own ceiling.** A 5★ piece at +10 R5, or a non-Unique 6★ at
+  +10 R6, is already maxed and stays in a +10R6 / +15R9 "Maxed only" solve instead of being dropped.
+- **Gems picked by real CP gain.** In SOLVE CP without a priority, each gem slot takes the gem
+  that raises the CP the most, re-evaluated after each pick (crit cap included), instead of a
+  fixed stat order — builds reach the CP they should.
+- **Stable ranking.** Ties between builds are broken the same way every time, whatever the number
+  of workers; the Score keeps its decimals internally and is rounded only on screen.
+- **Talisman variants.** A worker no longer fills its top results with the same six pieces under
+  different talismans; distinct builds survive to the final list.
+- **Clearer empty results.** With "Allow broken sets" off, a solve that finds no armor combination
+  completing its sets says so and suggests raising Top %. A client-side Filter that hides every
+  build shows "No build passes the current filter." A hero without an Exclusive Equipment is no
+  longer blamed for an empty pool. A worker crash shows its error alone, without a partial table.
+- **Builder fixes.** SOLVE CP with a priority keeps your currently equipped piece in the running
+  (it could drop below the worn CP); a recommended build on an excluded set un-excludes it; a
+  recommended talisman matches every piece of its family; the "N slots change" header updates after
+  Equip; a fused hero shows its fused portrait and name in the hero picker.
+- **Advices (Builds).** A 3/4 set now tells you when a free matching piece sits in your inventory
+  ("a free Boots of this set is in your inventory"), and worn pieces of poor quality are listed.
+- **Builds tab.** Reset keeps your sort order; stat locks saved by older versions for Crit Chance,
+  Crit DMG, RES and DMG reduction are read again.
+- **Inventory search is faster.** Typing in the search box no longer re-scores every piece on
+  each keystroke; gear quality is computed once per import.
+- **Game data update is all-or-nothing.** Every table (20 now) is downloaded and checked before
+  anything is written; a bad download or a failed write keeps your current data and tells you why.
+  Settings → Data shows the game version next to the data hash.
+- **After a patch.** Presets and per-hero filters that still named a set or an effect the game
+  removed are pruned when the data changes, so they no longer silently return "no builds". Your
+  saved builds are untouched.
+- **Images refresh.** Cached icons older than a week are re-checked against the server in the
+  background; nothing waits on it.
+- **Steam capture.** Captured files are written in the order they arrive; the roster re-imports
+  when your characters, geas or archive change, not only your inventory; a PvP opponent's geas can
+  no longer overwrite yours. Wipe captured data is refused while the game is running, and Settings
+  → Steam shows the client build the data was read from and warns when yours differs.
+- **Settings without pop-ups.** Export, import, sync, plugin removal and wipe report in the status
+  bar instead of blocking dialogs; destructive buttons ask to "Click again to confirm". The worker
+  count is capped to your CPU cores everywhere.
+- **Under the hood.** Builder, Inventory, Home and Settings were split into smaller modules with no
+  change in behaviour; dead code and unused data were removed.
 
 ## [1.10.0] — 2026-10-17
 
