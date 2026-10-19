@@ -8,6 +8,44 @@
 
 ## Items de backlog clôturés (index)
 
+### 🤖 CI — Dependabot npm et github-actions hebdomadaires, actions épinglées par SHA (2026-10-19)
+- ✅ **Pourquoi.** Lot de clôture de la CI (G33) : le dépôt n'avait ni `dependabot.yml` ni actions épinglées par
+  SHA — un tag mobile `@v4` peut être déplacé sous la CI sans que rien ne change dans le dépôt, et aucune mise à jour
+  de dépendance n'était proposée. Dependabot `npm` est voulu ici : une PR ne déclenche que `ci.yml`, rien n'est publié
+  au merge, la release reste un geste manuel. Le lot ne monte aucune dépendance (ni `package.json` ni
+  `package-lock.json` touchés) et ne change la majeure d'aucune action.
+- ✅ **`.github/dependabot.yml`** (nouveau, `version: 2`, commentaires en français) : (a) `npm`, `directory: '/'` (le
+  lockfile unique de la racine et les `workspaces` du `package.json` racine couvrent `apps/desktop`,
+  `apps/renderer` et `packages/core`), hebdomadaire, groupe `minor-and-patch` (`patterns: ['*']`,
+  `update-types: ['minor', 'patch']`) — un PR hebdo pour mineures et patchs, les majeures une par une —,
+  `commit-message.prefix: 'chore(deps)'`, aucune liste `ignore` (Electron, electron-builder, Vite, React, ESLint
+  compris : chaque PR se juge à part) ; (b) `github-actions`, `directory: '/'`, hebdomadaire, même groupe,
+  `commit-message.prefix: 'ci(deps)'`, avec le rappel que Dependabot réécrit le SHA et le commentaire ` # vX.Y.Z`.
+  `open-pull-requests-limit` laissé au défaut (5).
+- ✅ **Épinglage**, les deux actions restant sur leur majeure v4 (v7 existe pour les deux : viendra par une PR
+  Dependabot à part) : `ci.yml` → `actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0` et
+  `actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0` ; `publish-wiki.yml` → le même SHA de
+  `actions/checkout`. Rien d'autre ne change dans les workflows (`git diff .github/workflows/` : les trois lignes
+  `uses:` seules). SHA relevés le 19/10 par
+  `gh api repos/actions/checkout/git/matching-refs/tags/v4. --jq '.[] | "\(.ref) \(.object.sha) \(.object.type)"'`
+  (dernier : `refs/tags/v4.4.0 11d5960a… commit`) et la même commande sur `actions/setup-node` (dernier : `refs/tags/v4.4.0 49933ea5… commit`), contrôlés par
+  `gh api repos/actions/<repo>/git/ref/tags/v4.4.0 --jq '.object.sha'` : tags légers (`commit`), rien à
+  déréférencer.
+- ✅ **Vérification** (pas d'`actionlint` sur le poste) : les trois YAML parsent avec `js-yaml` de `node_modules`, et
+  PyYAML relit `dependabot.yml` avec les clés attendues (`version`, puis pour chaque entrée de `updates` :
+  `package-ecosystem`, `directory`, `schedule.interval`, `groups`, `commit-message`) ;
+  `grep -n "uses:" .github/workflows/*.yml` ne laisse aucune ligne hors de la forme
+  `uses: [a-z0-9-]+/[a-z0-9-]+@[0-9a-f]{40} # v[0-9]+\.[0-9]+\.[0-9]+$` ;
+  `gh api repos/actions/checkout/commits/11d5960a… --jq '.sha'` et
+  `gh api repos/actions/setup-node/commits/49933ea5… --jq '.sha'` répondent (les commits existent sur le dépôt de
+  l'action). `npm run typecheck` : `tsc --noEmit` (code 0) ; `npm test` : `Tests  573 passed (573)` ;
+  `npm run lint` inchangé : `✖ 28 problems (0 errors, 28 warnings)`. Docs : ni `docs/architecture.md` ni
+  `docs/STATUS.md` ne décrivent la CI, et `README.md` ne cite `publish-wiki.yml` que pour la publication du wiki —
+  rien à y ajouter ; `docs/todo.md` n'a aucun item CI, non touché.
+- ⏳ **Sevih** : au push, la CI doit passer avec les SHA (première exécution réelle de l'épinglage, Linux et
+  Windows, et `publish-wiki.yml` au prochain changement de `wiki/`) ; la première série de PR Dependabot arrive dans
+  la semaine ; Settings → Dependabot « Security updates » est à activer à part sur GitHub si voulu (hors fichier).
+
 ### 📜 Données — règles du jeu lues du contrat, `progression.json` synchronisé, main d'EE Accuracy affiché combat-only, suivis de G12 (2026-10-19)
 - ✅ **Pourquoi.** Lot de clôture (G31) de trois restes : les règles recopiées à la main (emplacements de gemme,
   budget de reforge, niveaux de déblocage des évolutions) sont émises par le contrat depuis B62 d'outerpedia ; le
