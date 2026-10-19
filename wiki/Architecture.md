@@ -25,7 +25,8 @@ by hand (manual import).
 - **apps/renderer** — Vite + React. Loads the JSON, drives the engine, renders results.
   Screens: **Home** (account dashboard + gear-quality distribution + update center),
   **Inventory** (table + per-piece detail), **Builds** (equipped/composed roster + Optimize→),
-  **Builder** (the solver), **Worklist** (cross-hero queue of gear changes — the Builder's
+  **Builder** (the solver — `screens/builder/`: one module per panel, the solve state in the
+  `useSolverSession` hook), **Worklist** (cross-hero queue of gear changes — the Builder's
   "+ Worklist" pushes a build's per-slot diff here as a checklist, `equipPieces` applies it
   locally), plus a tabbed **Settings** modal. The gear detail panel
   (`design/GearDetail.tsx`) is shared between Inventory and the Builds hover tooltip.

@@ -27,7 +27,7 @@ import { createOnboardingGate } from "./lib/onboarding.js";
 // minimal placeholder while the chunk arrives (one-time, then cached).
 const InventoryScreen = lazy(() => import("./screens/InventoryScreen.js").then((m) => ({ default: m.InventoryScreen })));
 const BuildsScreen = lazy(() => import("./screens/BuildsScreen.js").then((m) => ({ default: m.BuildsScreen })));
-const BuilderScreen = lazy(() => import("./screens/BuilderScreen.js").then((m) => ({ default: m.BuilderScreen })));
+const BuilderScreen = lazy(() => import("./screens/builder/BuilderScreen.js").then((m) => ({ default: m.BuilderScreen })));
 const WorklistScreen = lazy(() => import("./screens/WorklistScreen.js").then((m) => ({ default: m.WorklistScreen })));
 
 /** Per-screen error boundary — a throw in a `useMemo`/render (e.g. a bad

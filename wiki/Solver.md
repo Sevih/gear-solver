@@ -218,7 +218,7 @@ For each combo that passes phase 4:
 
 The top panels (Hero, Stats, Sub tick value / Damage info, Options, filters,
 priority, mains, sets, effects) + the Actions/Library sidebar + the pinned footer. Each filter panel
-pushes its state into the `SolverFilters` reducer (`apps/renderer/src/lib/solver/builderFilters.ts`, wired by `apps/renderer/src/screens/BuilderScreen.tsx`).
+pushes its state into the `SolverFilters` reducer (`apps/renderer/src/lib/solver/builderFilters.ts`, wired by `apps/renderer/src/screens/builder/BuilderScreen.tsx`).
 
 ### Hero
 Picker (searchable combobox) + portrait + 4 action buttons.
@@ -572,7 +572,13 @@ apps/renderer/src/
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + STAT_TO_PRIORITY
 │       └── cp.ts                   ← calcBattlePower + makeCpEvaluator (reverse-engineered)
 └── screens/
-    ├── BuilderScreen.tsx           ← useReducer(SolverFilters) + all panels + orchestrator wiring
+    ├── builder/
+    │   ├── BuilderScreen.tsx       ← useReducer(SolverFilters) + layout + hero switch + builds/presets/reco
+    │   ├── useSolverSession.ts     ← orchestrator wiring: solve/cancel, pre-solve estimate, progress, results
+    │   ├── BuilderToolbar.tsx      ← hero · Solve · toggles + popovers (one file per panel: OptionsPanel, SetsPanel…)
+    │   ├── ResultsTable.tsx        ← virtualized table, sorting, heatmap, columns menu
+    │   ├── BottomGearBand.tsx · RightSidebar.tsx · FilterFooter.tsx · StatsPanel.tsx · …
+    │   └── catalogs.ts · statColumns.ts ← inventory-driven catalogs, stat/rating tables
     └── BuildsScreen.tsx            ← equipped/composed roster + computeAdvice + Optimize →
 ```
 

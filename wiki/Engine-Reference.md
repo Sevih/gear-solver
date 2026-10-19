@@ -845,7 +845,8 @@ apps/renderer/src/
 └── screens/
     ├── InventoryScreen.tsx         ← gear table + detail
     ├── BuildsScreen.tsx            ← per-hero current build cards (uses calcBattlePower)
-    └── BuilderScreen.tsx           ← useReducer(SolverFilters) + all panels + orchestrator wiring + Library sidebar
+    └── builder/                    ← BuilderScreen.tsx (useReducer(SolverFilters) + layout) + useSolverSession.ts
+                                      (orchestrator wiring) + one module per panel, ResultsTable, RightSidebar (Library)…
 
 packages/core/src/
 ├── types.ts                       ← GearPiece, Character, Inventory, StatType, RolledStat
