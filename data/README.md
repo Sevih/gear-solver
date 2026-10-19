@@ -6,7 +6,7 @@ Static game data the engine needs, independent of any account.
 
 The distillation pipeline lives in the **outerpedia repo** (`datagen/generators/solver.ts`,
 a faithful port of the old local `build.mjs` + `calc-stats.mjs`): outerpedia reads the raw
-game tables and emits the 20 compact solver artifacts at `data/generated/solver/*.json`
+game tables and emits the 21 compact solver artifacts at `data/generated/solver/*.json`
 (committed there, promoted with the rest of `data/generated/`).
 
 ```
@@ -37,7 +37,11 @@ outerpedia datagen (solver generator)
 - **`options.json`** — `OptionID` → stat type + per-tick value (IOT_STAT), or a
   `buffId` indirection (IOT_BUFF) resolved per enhance level through `buffs.json`.
 - **`enhance.json`** — main-stat scaling constants + per-(slot, grade, star)
-  cumulative Exp curves.
+  cumulative Exp curves, plus the gem-slot (`gemSlots`) and reforge-budget
+  (`reforge`) rules read by `gameRulesOf` (`packages/core/src/rules.ts`).
+- **`progression.json`** — `evoUnlockLevel`: EvolutionLevel row → character level
+  it unlocks at (`gameRulesOf`; optional, a cache without it falls back to the
+  built-in rules).
 - **`characters.json`** — per-hero identity, stat ingredients and the damage-model
   hints: `dmgStat` / `dmgSec` / `noCrit`, plus `bestSkill` = the strongest S1/S2/S3 hit's
   total factor (‰, max level, bursts included) that scales the Builder's Dmg columns.

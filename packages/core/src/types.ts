@@ -18,7 +18,9 @@ export type StatType =
   // Set-bonus only stats (not rollable as gear subs):
   | "lifesteal"             // ST_VAMPIRIC — Lifesteal Set
   | "counter"               // ST_COUNTER_RATE — Counterattack Set
-  | "enterAp";              // ST_ENTER_AP — Bursting Set (starting AP)
+  | "enterAp"               // ST_ENTER_AP — Bursting Set (starting AP)
+  // Combat-only EE main (never on the stat sheet):
+  | "avoid";                // ST_AVOID — Accuracy vs <element>
 
 export type GearSlot =
   | "weapon" | "helmet" | "armor" | "gloves" | "boots"

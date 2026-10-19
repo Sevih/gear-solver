@@ -9,10 +9,11 @@ import type { QualityTier } from "../../lib/quality.js";
 
 // Gear-rollable stat keys — everything in `STAT` minus the three set-only
 // stats (lifesteal / counter / enterAp) which never appear as a piece's
-// main or sub. Used to populate the Main / Sub filter pill lists and the
+// main or sub, and the combat-only EE main `avoid` (never a main filter nor
+// a sub sort). Used to populate the Main / Sub filter pill lists and the
 // "sort by sub" dropdown.
 export const GEAR_STATS: string[] = Object.keys(STAT).filter(
-  (k) => k !== "lifesteal" && k !== "counter" && k !== "enterAp",
+  (k) => k !== "lifesteal" && k !== "counter" && k !== "enterAp" && k !== "avoid",
 );
 
 // ── filter state ────────────────────────────────────────────────────────

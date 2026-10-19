@@ -19,6 +19,7 @@ import type {
   StatBracket,
   UserGeasLevels,
 } from "./gamedata.js";
+import { DEFAULT_RULES } from "./rules.js";
 
 /** In-game per-level stat interpolation. Integer arithmetic — the per-level
  *  growth is FLOORED before being added to Min, never propagated as a float:
@@ -74,6 +75,9 @@ export interface ComposeOptions {
    *  full 2..9 range. Defaults to 3 (max — preserves the old behavior of
    *  summing every evo up to TransStar). */
   levelMaxStep?: number;
+  /** EvolutionLevel row → character level it unlocks at — the contract's
+   *  `gameRulesOf(game).evoUnlockLevel`. Omitted: `DEFAULT_RULES`. */
+  evoUnlockLevel?: Record<number, number>;
   /** Account-wide Geas node levels from the captured `/gift/info` GiftList
    *  (NodeID → unlock level). Missing nodes are treated as Lv 0 (no bonus);
    *  pass `null`/omit to fall back to the per-node max level (assumes every
@@ -215,22 +219,20 @@ export function applySpdRate(total: number, ratePct: number): number {
   return ratePct === 0 ? total : Math.trunc(total * (1000 + ratePct * 10) / 1000);
 }
 
-/** Character level at which each EvolutionLevel row unlocks in-game.
+/** Character level at which an EvolutionLevel row unlocks in-game, from the
+ *  contract's `progression.json › evoUnlockLevel` (fallback: DEFAULT_RULES).
  *  Evos 2..6 every 20 levels (20/40/60/80/100); 7/8/9 at the Limit-Break
  *  level caps 105/110/120 (NOT linear — LB3 jumps 110→120, skipping 115 —
  *  so a table, not a formula). Reaching those caps already requires the
  *  matching LB, so this level gate subsumes the LB gate for 7..9. Unknown
  *  rows fall back to lv120 (never unlocked below max). */
-const EVO_UNLOCK_LEVEL: Record<number, number> = {
-  2: 20, 3: 40, 4: 60, 5: 80, 6: 100, 7: 105, 8: 110, 9: 120,
-};
-function evoUnlockLevel(evoLevel: number): number {
-  return EVO_UNLOCK_LEVEL[evoLevel] ?? 120;
+function evoUnlockLevelOf(table: Record<number, number>, evoLevel: number): number {
+  return table[evoLevel] ?? 120;
 }
 
 /** Sum every evolution row that is BOTH unlocked by progression
  *  (EvolutionLevel ≤ min(targetStar, evoCap)) AND reached by the captured
- *  character `level` (`level ≥ evoUnlockLevel(row)`). The level gate is what
+ *  character `level` (`level ≥ evoUnlockLevel[row]`). The level gate is what
  *  the in-game sheet actually enforces: a transcended-but-underleveled hero
  *  (e.g. 6★ at lv5) shows NO evo bonuses until it hits lv20/40/… Previously
  *  only the star/LB cap was checked, so such heroes were over-credited every
@@ -244,12 +246,13 @@ export function sumEvoUpTo(
   targetStar: number,
   evoCap: number,
   level: number,
+  evoUnlockLevel: Record<number, number> = DEFAULT_RULES.evoUnlockLevel,
 ): StatBlock {
   const cap = Math.min(targetStar, evoCap);
   let acc: StatBlock = { ...ZERO };
   for (const k of Object.keys(evoByLevel)) {
     const e = Number(k);
-    if (e <= cap && level >= evoUnlockLevel(e)) acc = addBlock(acc, evoByLevel[k]!);
+    if (e <= cap && level >= evoUnlockLevelOf(evoUnlockLevel, e)) acc = addBlock(acc, evoByLevel[k]!);
   }
   return acc;
 }
@@ -392,7 +395,7 @@ export function composeCharStats(
   // `sumEvoUpTo`), so it must be resolved before the evo sum, not just for
   // the base-stat interpolation below.
   const level = options.level ?? 100;
-  const evo = sumEvoUpTo(ingredients.evoByLevel, transStar, 6 + levelMaxStep, level);
+  const evo = sumEvoUpTo(ingredients.evoByLevel, transStar, 6 + levelMaxStep, level, options.evoUnlockLevel);
   const transRow = ingredients.transcendByStar[String(transStar)]
     ?? { atkPct: 0, defPct: 0, hpPct: 0, skillLevel: 0 };
   const codexRow = codexCurve[codexLevel] ?? { atkPct: 0, defPct: 0, hpPct: 0 };

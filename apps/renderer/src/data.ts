@@ -63,7 +63,7 @@ export async function loadDataVersion(): Promise<DataVersion | null> {
 }
 
 export async function loadGameData(): Promise<GameData | null> {
-  const [options, equipment, sets, equipmentPassives, multiTierPassives, gems, singularityOptions, eePassives, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, subTicks] = await Promise.all([
+  const [options, equipment, sets, equipmentPassives, multiTierPassives, gems, singularityOptions, eePassives, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, subTicks, progression] = await Promise.all([
     getJSON<GameData["options"]>("/gamedata/options.json"),
     getJSON<GameData["equipment"]>("/gamedata/equipment.json"),
     getJSON<GameData["sets"]>("/gamedata/sets.json"),
@@ -81,11 +81,17 @@ export async function loadGameData(): Promise<GameData | null> {
     getJSON<GameData["archiveBonus"]>("/gamedata/archive-bonus.json"),
     getJSON<GameData["trustCharacter"]>("/gamedata/trust-character.json"),
     getJSON<GameData["subTicks"]>("/gamedata/sub-ticks.json"),
+    getJSON<NonNullable<GameData["progression"]>>("/gamedata/progression.json"),
   ]);
   if (!options || !equipment || !sets || !equipmentPassives || !multiTierPassives || !gems || !singularityOptions || !eePassives || !characters || !enhance || !buffs || !expCharacter || !charLevelMax || !codexCurve || !archiveBonus || !trustCharacter) return null;
   // subTicks is optional — only powers the flat-vs-% info panel; default to {}
   // so a stale cache built before the table existed doesn't fail the load.
-  return { options, equipment, sets, equipmentPassives, multiTierPassives, gems, singularityOptions, eePassives, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, subTicks: subTicks ?? {} };
+  // progression is optional too: a cache synced before it existed (the launch
+  // sync fetches it on its next pass) falls back to DEFAULT_RULES (rules.ts).
+  return {
+    options, equipment, sets, equipmentPassives, multiTierPassives, gems, singularityOptions, eePassives, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, subTicks: subTicks ?? {},
+    ...(progression ? { progression } : {}),
+  };
 }
 
 export interface LoadResult {

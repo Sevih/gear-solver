@@ -55,7 +55,8 @@ particular):
 | `ItemSpecialOptionTemplet.json` (groups 30000/31000) | `singularity-options.json`| OptionID → {st, ap, v, name, desc, combatOnly} |
 | `ItemSpecialOptionTemplet.json` (EE groups) | `ee-passives.json` | ItemID → list of {st, ap, v, levelThreshold}           |
 | `CharacterTemplet.json` etc.         | `characters.json`         | charId → {ingredients, cls, element, star, …}          |
-| `ItemEnchantTemplet.json` + `SingularityEquipEnchantTemplet.json` | `enhance.json` | enhanceFactor, tierFactor, expCurves, singularity (standalone file) |
+| `ItemEnchantTemplet.json` + `SingularityEquipEnchantTemplet.json` | `enhance.json` | enhanceFactor, tierFactor, expCurves, singularity, gemSlots, reforge (standalone file; `gemSlots` / `reforge` read by `gameRulesOf`, `packages/core/src/rules.ts`) |
+| `CharacterEvolutionTemplet.json`     | `progression.json`        | `evoUnlockLevel`: EvolutionLevel → unlock level (`gameRulesOf`) |
 | `ExpCharacterTemplet.json`           | `exp-character.json`      | array idx 1..120 → cumulative XP                       |
 | `CharacterMaxLevelTemplet.json`      | `char-level-max.json`     | `${star}|${step}` → {maxLevel, statModifierAfter100}   |
 | `ArchiveBonusTemplet.json`           | `archive-bonus.json`      | `CompleteCount` → codex level (1..11)                  |
@@ -680,29 +681,30 @@ incremented wrongly, premature flush.
 ### 3.1 In-game tables referenced
 
 The raw source tables live in outerpedia's datamine; the app only ever sees
-the 20 derived artifacts. Refreshed **at launch** by `data-sync.ts`
+the 21 derived artifacts. Refreshed **at launch** by `data-sync.ts`
 (`apps/desktop/src`) in two modes:
 - **checkout** (dev / maintainer machine) — copy from a local outerpedia
   checkout (`data/generated/solver/`), guarded by the version.json hash
   (at an unchanged hash, only a differing version.json is copied), zero network;
-  all 20 files are read before anything is written: a missing or unreadable
+  all 21 files are read before anything is written: a missing or unreadable
   artifact refuses the sync and keeps the cache, like `data/sync.mjs` (same
   list, `apps/desktop/src/solver-files.json`);
-- **repo** (packaged build) — downloads the 20 artifacts from the public repo
+- **repo** (packaged build) — downloads the 21 artifacts from the public repo
   `Sevih/outerpedia` via the jsDelivr CDN, gated on the SHA of the latest
   commit (`api.github.com/.../commits/main`). Allows following patches
   **without publishing a new build**. Every downloaded artifact must parse as
   JSON, else nothing is written. Degrades gracefully offline (uses the
   already-cached `data/derived`, when complete).
 
-In both modes a cache counts only if all 20 files are there; writes go in two
+In both modes a cache counts only if all 21 files are there; writes go in two
 steps (every `.tmp`, then the renames, version.json last) and a write failure
 is an `error` status naming the file; one sync at a time (a call while a sync
 runs gets its promise).
 
 `data/sync.mjs` (the dev-time copy) finds the outerpedia checkout via the
-`OUTERPEDIA_PATH` env var, else a list of known local paths, and exits non-zero
-if the checkout or any of the 20 artifacts is missing or not JSON, before
+`OUTERPEDIA_PATH` env var, then `OUTERPEDIA_PATH` in `.env.local`, then the
+sibling `../outerpedia` checkout, and exits non-zero
+if the checkout or any of the 21 artifacts is missing or not JSON, before
 writing anything.
 
 `sub-ticks.json` (derived): per-tick values of the ATK/DEF/HP flat+% subs per
@@ -749,7 +751,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
 | `packages/core/test/equip.test.ts` | 11 tests — `equipItem`/`unequipItem`: set on empty slot, **displace** the occupied slot (same char), no-op (already equipped / unknown item / non-gear), `charUid "0"` = unequip, displacement scope (other char/other slot untouched), input **immutability** |
 | `packages/core/test/compose-stats.test.ts` | 56 tests — **stat-lock captures** reproducible without gear (Flamberge 8/8, Core Fusion Notia EFF, Aer 6/8, M.S.Ame white ATK/DEF/HP/EFF), `baseAtLevel` (lv1 = Min / lv100 = Max, LB tiers 105/110/120, independent floors, monotonicity), `sumEvoUpTo` (level gates 20…120, `min(TransStar, 6 + LB)` cap, monotonicity), `calcFinalStat` (two-stage trunc, codex on base only, trunc toward 0 + clamp, monotonicity), `composeCharStats` lv1→120 monotonicity over the committed roster, **term-by-term check against the client `CFormula.CalcFinalStat`** (exact-integer reference on 20 000 inputs, white sheet = base/evo/awakening only), data guards for the client terms the composer does not model, **Core Fusion**: passive at the captured fusion tier (Notia EFF at tiers 1 / 4 / 5, unknown tier = max, format 2 without `corePassive`), SPD rate applied last in agreement with the client at every level (Snow 138 / 141 / 144 / 148, Lisha 124), legacy `corePassive` fallback pinned |
-| `apps/renderer/test/solver.test.ts`     | 95 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp, **PEN clamp at 100%**), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity**, **incremental bucket accumulator equivalence**, **worklist claims** (a FREE piece claimed by a higher-rank hero is excluded, claimed by the solving hero itself stays in), **"Maxed only" floor** (`maxedFloorOf` / `meetsMaxedFloor`: off / +10R6 / +10R9 / +15R9, the piece's own ceiling — a 5★ at +10 R5, a non-`unique` 6★ at +10 R6, no star = the mode's floor —, talisman gated on enhance only), **`collapseTalismanVariants`** (≤ k builds per 6-gear signature, sorted order, k ≤ 0 = off) |
+| `apps/renderer/test/solver.test.ts`     | 117 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp, **PEN clamp at 100%**), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity**, **incremental bucket accumulator equivalence**, **worklist claims** (a FREE piece claimed by a higher-rank hero is excluded, claimed by the solving hero itself stays in), **"Maxed only" floor** (`maxedFloorOf` / `meetsMaxedFloor`: off / +10R6 / +10R9 / +15R9, the piece's own ceiling — a 5★ at +10 R5, a non-`unique` 6★ at +10 R6, no star = the mode's floor —, talisman gated on enhance only), **`collapseTalismanVariants`** (≤ k builds per 6-gear signature, sorted order, k ≤ 0 = off) |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped`: parity without crit gem, accept up to CHC 100 (overshoot ≤102), stop exactly at 100, total skip at cap, talisman/EE split, null delta if nothing useful, score ≤0 never taken |
 | `apps/renderer/test/workerCount.test.ts` | 12 tests — `resolveWorkerCount`: default `hardwareConcurrency-1`, override `gs.solver.workerCount` brought back to the core count, clamp ≥1, hard ceiling 64; `clampWorkerCount` (the rule shared with Settings) |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidelity, empty maps), import merge (dedup by `id`, collision keeps the existing), replace (overwrite), bundle validation (kind/version/maps) |
@@ -855,5 +857,6 @@ packages/core/src/
 ├── stats.ts                       ← resolveStat (OptionID → ResolvedStat)
 ├── parse.ts                       ← parseInventory (raw → Inventory)
 ├── compose-stats.ts               ← composeCharStats (no-gear stats per hero)
+├── rules.ts                       ← gameRulesOf / DEFAULT_RULES (gem slots, reforges, evolutions read from the contract)
 └── index.ts                       ← public re-exports
 ```

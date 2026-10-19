@@ -37,7 +37,8 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 - **Repo sync (game data).** On launch, the app downloads the solver artifacts from the
   public repo `Sevih/outerpedia` (`data-sync.ts` dual-mode checkout/repo SHA-gated; images via
   the R2 bucket `img.outerpedia.com`, `/img/*` handler cascades bundled→checkout→cache→R2) →
-  tracks game patches **without a new build**. Packaged prod still to be verified (M8).
+  tracks game patches **without a new build**. The repo sync in a packaged build remains to be
+  verified (`docs/todo.md`).
 - **Home dashboard.** Home tab (`HomeScreen.tsx`): account snapshot (2×2),
   gear quality breakdown by tier with explanations, roster breakdowns
   (element / class / rarity), a 4-view **Gear breakdown** toggle (Overview /
@@ -65,11 +66,11 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   per-slot unequip.
 - **Production build path** for `data` (bake derived + snapshot into the prod bundle).
 
-### M8 — Desktop packaging (wired, to verify)
-- The plumbing is in place (electron-builder `extraResources` baking `data/derived` into
-  `resources`, prod local server, `setupAutoUpdate` / `electron-updater`). What remains is to
-  **verify it end-to-end on a real packaged build**: working installer, validated `data/`
-  bake, auto-update tested against a signed release + feed.
+### M8 — Desktop packaging — ✅ delivered
+- Installer (electron-builder), bundled data (`extraResources` baking `data/derived` into
+  `resources`, prod local server), auto-update (`setupAutoUpdate` / `electron-updater`) and
+  published releases (1.9.0 on 10/16, 1.10.0 on 10/17). **Remains**: verifying the repo sync in
+  a packaged build (the "Vérif sync repo en prod packagé" item of `docs/todo.md`).
 
 ### Perf hot-path (as profiling dictates)
 - Incremental bucket accumulator — ✅ **delivered**: `aggregatePrefixBuckets` sums the 6

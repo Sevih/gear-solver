@@ -3,7 +3,7 @@
  * shape the design components expect. Keeps the design layer free of any
  * engine-specific knowledge.
  */
-import { resolveOption } from "@gear-solver/core";
+import { DEFAULT_RULES, gameRulesOf, resolveOption } from "@gear-solver/core";
 import type { GameData, GearPiece, RolledStat } from "@gear-solver/core";
 import type { IconPiece } from "./EquipmentIcon.js";
 import { type SlotId, toDesignRarity, toDesignSlot, STAT } from "./tokens.js";
@@ -304,8 +304,9 @@ export function toUiPiece(g: GearPiece, game?: GameData | null): UiPiece {
     passive,
     multiTierPassive,
     gemSlots,
-    // Reforge max = the game's budget: star tier, 9 for a 6★ ascended.
-    reforge: { n: g.reforgeCount, max: maxReforgesOf(g) },
+    // Reforge max = contract `enhance.json › reforge` (fallback: DEFAULT_RULES):
+    // star tier, 9 for a 6★ ascended.
+    reforge: { n: g.reforgeCount, max: maxReforgesOf(g, g.ascended, game ? gameRulesOf(game) : DEFAULT_RULES) },
     quality: gearPieceQuality(g),
     searchText: `${name} ${slot ?? ""} ${rarity} ${realMain.map((m) => m.label).join(" ")} ${subs.map((s) => s.stat).join(" ")}`.toLowerCase(),
     status: g.equippedBy ? "equipped" : "free",

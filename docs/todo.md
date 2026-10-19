@@ -22,25 +22,10 @@
 - [ ] 🟡 **M5 — Niveaux de compétence des fusionnés** — le jeu les reconstruit depuis `CharacterFusionLevel`, l'outil
       prend `First..Ultimate` de la capture (jusqu'à +1 200 CP d'écart). **Bloqué** : il faut une capture d'un
       fusionné dont les compétences d'origine dépassent celles de la fusion.
-- [~] 🟡 **Mineurs de fiche (revue)** — reste : `combatOnly` des mains d'EE décidé par le nom et non par le Type
-      (latent ; posé par le générateur d'outerpedia, contrat).
-
-### 🔴 Revue 2026-10 — moteur et Builder
-- [~] 🟡 **Mineurs moteur / Builder (revue)** — reste : `buildAdvice` propose « +5 pour un 5e emplacement de gemme »
-      aux talismans 4★/5★ qui n'en ont pas.
 
 ### 🔴 Contrat solver (avec outerpedia)
 > Ordre pour tout changement de forme : outerpedia ajoute sans retirer et pose `schema` ; une version de gear-solver
 > qui lit le nouveau champ est publiée ; ensuite seulement on retire l'ancien.
-- [~] 🟡 **L6 — Une table `ST_*` → clés unique**, émise dans le contrat (`solver/stat-keys.json`) et lue par
-      `GAME_STAT` et par le wiki. Y faire entrer les mains d'EE `ST_AVOID` (précision vs élément), présentes dans
-      `buffs.json` mais inconnues de `GAME_STAT` → le main disparaît du panneau au lieu d'être affiché combat-only.
-      Table du contrat tenue sous test (G30) ; reste le main d'EE `ST_AVOID` affiché combat-only, et la lecture par
-      le wiki côté outerpedia.
-- [ ] ⚪ **Règles du jeu recopiées à la main** au lieu de venir du contrat : `REFORGE_PER_SUB_CAP`
-      (`OptionMaxValue`, que `parse.ts` n'applique pas non plus : sans effet tant que max = 6 × valeur), budgets
-      6/9 (`AddSmeltingCount`), emplacements de gemme (`GemSlot`), `EVO_UNLOCK_LEVEL`. `ee-passives` ne garde que
-      TargetType ME et le niveau de buff le plus haut (0 écart, fragile).
 
 ### 🟢 Ratings offensifs — après la colonne « meilleur skill » (2026-09-05)
 - [ ] 🟢 **DPS de rotation pondéré par les cooldowns** — `dmgs` = hit du meilleur skill × SPD, pas une rotation. La

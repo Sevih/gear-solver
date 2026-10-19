@@ -42,7 +42,7 @@ import solverFiles from "./solver-files.json" with { type: "json" };
 /** Repo-relative dir holding the solver artifacts. */
 const SOLVER_DIR = "data/generated/solver";
 
-/** The 20 derived tables — the exact set outerpedia's solver generator emits
+/** The 21 derived tables — the exact set outerpedia's solver generator emits
  *  (and the committed `data/derived/` tree mirrors). All but one feed the
  *  engine: `stat-keys.json` (`ST_*` / `OAT_*` → contract stat key, % nature,
  *  abbreviation) is downloaded like the others but never loaded — only

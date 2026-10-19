@@ -35,7 +35,8 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 - **Repo sync (game data).** Au lancement, l'app télécharge les artefacts solver du repo
   public `Sevih/outerpedia` (`data-sync.ts` dual-mode checkout/repo SHA-gated ; images via le
   bucket R2 `img.outerpedia.com`, handler `/img/*` cascade bundlés→checkout→cache→R2) → suit
-  les patchs jeu **sans nouveau build**. Prod packagé encore à vérifier (M8).
+  les patchs jeu **sans nouveau build**. Reste la vérification de la sync repo en prod packagé
+  (`docs/todo.md`).
 - **Home dashboard.** Onglet d'accueil (`HomeScreen.tsx`) : snapshot du compte (2×2),
   répartition de la qualité du gear par tier avec explications, breakdowns roster
   (élément / classe / rareté), centre de mise à jour inline (pas de popups natifs).
@@ -62,11 +63,12 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   Reste (optionnel) : un unequip par slot côté Builds.
 - **Production build path** pour `data` (bake derived + snapshot dans le bundle prod).
 
-### M8 — Packaging desktop (câblé, à vérifier)
-- Le plumbing est en place (electron-builder `extraResources` baking `data/derived` dans
-  `resources`, serveur local prod, `setupAutoUpdate` / `electron-updater`). Reste à le
-  **vérifier end-to-end sur un vrai build packagé** : installeur fonctionnel, bake `data/`
-  validé, auto-update testé contre une release signée + feed.
+### M8 — Packaging desktop — ✅ livré
+- Installeur (electron-builder), données embarquées (`extraResources` baking `data/derived`
+  dans `resources`, serveur local prod), mise à jour automatique (`setupAutoUpdate` /
+  `electron-updater`) et releases publiées (1.9.0 du 16/10, 1.10.0 du 17/10). **Reste** : la
+  vérification de la sync repo en prod packagé (item « Vérif sync repo en prod packagé » de
+  `docs/todo.md`).
 
 ### Perf hot-path (au fil du profilage)
 - Accumulateur de buckets incrémental — ✅ **livré** : `aggregatePrefixBuckets` somme les

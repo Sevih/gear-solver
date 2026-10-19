@@ -73,6 +73,27 @@ export interface EnhanceData {
   singularity: { activation: number; steps: number[] };  // ascended (lv 11..15) extras
   /** `${slot}|${grade}|${star}` → cumulative Exp threshold at levels 0..maxEnhanceLevel. */
   expCurves: Record<string, number[]>;
+  /** Gem slots of the gem-bearing pieces (outerpedia B62): the base count by
+   *  grade, plus the slots each enhance tier unlocks per slot (`exclusive`,
+   *  `ooparts`). Optional: a cache synced before B62 doesn't carry it — read
+   *  through `gameRulesOf` (rules.ts), which falls back to `DEFAULT_RULES`. */
+  gemSlots?: EnhanceGemSlots;
+  /** Reforge budget (outerpedia B62): per-sub tick cap, reforge count by
+   *  star, extra reforges of an ascended 6★. Optional, same fallback. */
+  reforge?: EnhanceReforge;
+}
+
+/** `enhance.json › gemSlots`. */
+export interface EnhanceGemSlots {
+  baseByGrade: Record<string, number>;
+  unlocks: Record<string, { enhanceLevel: number; slots: number }[]>;
+}
+
+/** `enhance.json › reforge`. `countByStar` is keyed by star ("1".."6"). */
+export interface EnhanceReforge {
+  maxTicksPerSub: number;
+  countByStar: Record<string, number>;
+  ascendedBonus: number;
 }
 
 export interface SetEffect {
@@ -494,6 +515,11 @@ export interface GameData {
    *  rentability panel. Only the ATK/DEF/HP flat+% duals. Possibly empty when
    *  the source table wasn't synced. */
   subTicks: SubTickTable;
+  /** Character progression rules (`progression.json`, outerpedia B62): the
+   *  character level each EvolutionLevel row unlocks at. Optional — a cache
+   *  synced before the table existed doesn't have it yet; `gameRulesOf`
+   *  (rules.ts) falls back to `DEFAULT_RULES`. */
+  progression?: { evoUnlockLevel: Record<string, number> };
 }
 
 /** `{ "<star>": { "<engine stat key>": { step, percent } } }` — `step` is the

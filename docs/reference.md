@@ -50,7 +50,8 @@ cibles dérivent de la même table — `ItemSpecialOptionTemplet` notamment) :
 | `ItemSpecialOptionTemplet.json` (groups 30000/31000) | `singularity-options.json`| OptionID → {st, ap, v, name, desc, combatOnly} |
 | `ItemSpecialOptionTemplet.json` (EE groups) | `ee-passives.json` | ItemID → list of {st, ap, v, levelThreshold}           |
 | `CharacterTemplet.json` etc.         | `characters.json`         | charId → {ingredients, cls, element, star, …}          |
-| `ItemEnchantTemplet.json` + `SingularityEquipEnchantTemplet.json` | `enhance.json` | enhanceFactor, tierFactor, expCurves, singularity (fichier standalone) |
+| `ItemEnchantTemplet.json` + `SingularityEquipEnchantTemplet.json` | `enhance.json` | enhanceFactor, tierFactor, expCurves, singularity, gemSlots, reforge (fichier standalone ; `gemSlots` / `reforge` lus par `gameRulesOf`, `packages/core/src/rules.ts`) |
+| `CharacterEvolutionTemplet.json`     | `progression.json`        | `evoUnlockLevel` : EvolutionLevel → niveau de déblocage (`gameRulesOf`) |
 | `ExpCharacterTemplet.json`           | `exp-character.json`      | array idx 1..120 → cumulative XP                       |
 | `CharacterMaxLevelTemplet.json`      | `char-level-max.json`     | `${star}|${step}` → {maxLevel, statModifierAfter100}   |
 | `ArchiveBonusTemplet.json`           | `archive-bonus.json`      | `CompleteCount` → codex level (1..11)                  |
@@ -690,22 +691,22 @@ dans `buf`, `workersDone` incrémenté à tort, flush prématuré.
 ### 3.1 Tables in-game référencées
 
 Les tables brutes vivent dans le datamine d'outerpedia ; l'app ne voit que les
-20 artefacts dérivés. Rafraîchis **au lancement** par `data-sync.ts`
+21 artefacts dérivés. Rafraîchis **au lancement** par `data-sync.ts`
 (`apps/desktop/src`) en deux modes :
 - **checkout** (dev / machine mainteneur) — copie depuis un checkout local
   d'outerpedia (`data/generated/solver/`), gardé par le hash de version.json
   (à hash égal, seul un version.json différent est recopié), zéro réseau ;
-  les 20 fichiers sont lus avant toute écriture : un artefact absent ou
+  les 21 fichiers sont lus avant toute écriture : un artefact absent ou
   illisible refuse la synchro et garde le cache, comme `data/sync.mjs` (même
   liste, `apps/desktop/src/solver-files.json`) ;
-- **repo** (build packagé) — télécharge les 20 artefacts depuis le repo public
+- **repo** (build packagé) — télécharge les 21 artefacts depuis le repo public
   `Sevih/outerpedia` via le CDN jsDelivr, gaté sur le SHA du dernier commit
   (`api.github.com/.../commits/main`). Permet de suivre les patchs **sans
   publier de nouveau build**. Chaque artefact téléchargé doit se parser en
   JSON, sinon rien n'est écrit. Dégrade proprement hors-ligne (utilise le
   `data/derived` déjà en cache, s'il est complet).
 
-Dans les deux modes, un cache ne compte que si les 20 fichiers y sont ;
+Dans les deux modes, un cache ne compte que si les 21 fichiers y sont ;
 l'écriture se fait en deux temps (tous les `.tmp`, puis les renommages,
 version.json en dernier) et un échec d'écriture rend un statut `error` qui
 nomme le fichier ; une seule synchro à la fois (un appel pendant qu'une
@@ -753,7 +754,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 |---------|------------|
 | `packages/core/test/parse.test.ts` | 11 tests — parser substats/main/talisman/EFF flat, scaling enchant, singularity |
 | `packages/core/test/equip.test.ts` | 11 tests — `equipItem`/`unequipItem` : pose sur slot vide, **déplacement** du slot occupé (même perso), no-op (déjà équipé / item inconnu / non-gear), `charUid "0"` = unequip, scope du déplacement (autre perso/autre slot intacts), **immutabilité** de l'entrée |
-| `apps/renderer/test/solver.test.ts`     | 95 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp, **PEN clamp 100 %**), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), **projection ascended du passif de singularité** (DMG+/DMG- par slot, classic = absent, non-écrasement d'un vrai roll, Talisman/EE intouchés), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`**, **incremental bucket accumulator equivalence** (`computeFinalStatsFromPrefix` vs full-array), **worklist claims** (pièce FREE réclamée par un héros mieux classé = exclue, réclamée par le héros lui-même = conservée), **plancher "Maxed only"** (`maxedFloorOf` / `meetsMaxedFloor` : off / +10R6 / +10R9 / +15R9, plafond de la pièce — 5★ à +10 R5, 6★ non `unique` à +10 R6, sans étoile = plancher du mode —, talisman gaté sur l'enhance seul), **`collapseTalismanVariants`** (≤ k builds par signature 6-gear, ordre trié, k ≤ 0 = off) |
+| `apps/renderer/test/solver.test.ts`     | 117 tests — gem pool/score/alloc/delta (+ eligibility filter), gem override equivalence, **set-bonus hoist equivalence**, cheap ratings (+ CRC clamp, **damage-stat scaling atk/def/hp + secondary additive**, **noCrit heroes**), score normalization (+ CRC clamp, **PEN clamp 100 %**), reforge sim (+ 6★ ascended budget, Talisman/EE rejection), **projection ascended du passif de singularité** (DMG+/DMG- par slot, classic = absent, non-écrasement d'un vrai roll, Talisman/EE intouchés), top-K heap, STAT_TO_PRIORITY mapping, CP clamps (skills.first, ECDR), **`makeCpEvaluator` bit-identity vs `calcBattlePower`**, **incremental bucket accumulator equivalence** (`computeFinalStatsFromPrefix` vs full-array), **worklist claims** (pièce FREE réclamée par un héros mieux classé = exclue, réclamée par le héros lui-même = conservée), **plancher "Maxed only"** (`maxedFloorOf` / `meetsMaxedFloor` : off / +10R6 / +10R9 / +15R9, plafond de la pièce — 5★ à +10 R5, 6★ non `unique` à +10 R6, sans étoile = plancher du mode —, talisman gaté sur l'enhance seul), **`collapseTalismanVariants`** (≤ k builds par signature 6-gear, ordre trié, k ≤ 0 = off) |
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped` : parité sans gemme crit, accept jusqu'à CHC 100 (overshoot ≤102), stop pile à 100, skip total au cap, split talisman/EE, delta null si rien d'utile, score ≤0 jamais pris |
 | `apps/renderer/test/workerCount.test.ts` | 12 tests — `resolveWorkerCount` : défaut `hardwareConcurrency-1`, override `gs.solver.workerCount` ramené aux cœurs, clamp ≥1, plafond dur 64 ; `clampWorkerCount` (la règle partagée avec Settings) |
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidélité, maps vides), import merge (dédup par `id`, collision garde l'existant), replace (overwrite), validation du bundle (kind/version/maps) |
@@ -860,5 +861,6 @@ packages/core/src/
 ├── stats.ts                       ← resolveStat (OptionID → ResolvedStat)
 ├── parse.ts                       ← parseInventory (raw → Inventory)
 ├── compose-stats.ts               ← composeCharStats (no-gear stats per hero)
+├── rules.ts                       ← gameRulesOf / DEFAULT_RULES (gemmes, reforges, évolutions lues du contrat)
 └── index.ts                       ← re-exports publics
 ```

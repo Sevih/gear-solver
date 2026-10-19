@@ -14,7 +14,7 @@
  * into postMessage events.
  */
 import type { GameData, GearPiece, ReforgeCeiling, RolledStat } from "@gear-solver/core";
-import { composeCharStats, effectiveCharacter, expToLevel, pieceSetLevel, projectMainToCeiling } from "@gear-solver/core";
+import { composeCharStats, DEFAULT_RULES, effectiveCharacter, expToLevel, gameRulesOf, pieceSetLevel, projectMainToCeiling, type GameRules } from "@gear-solver/core";
 import {
   aggregatePrefixBuckets,
   computeFinalStats,
@@ -61,6 +61,10 @@ function engineToDesign(slot: string): string {
  *  +10 with its own reforge count and no passive, whatever the mode. */
 export type ReforgeMode = "disable" | "classic" | "ascended10" | "ascended";
 
+type ReforgePlans = Record<Exclude<ReforgeMode, "disable">, { ceiling: ReforgeCeiling; budget: number }>;
+
+const reforgePlansCache = new WeakMap<GameRules, ReforgePlans>();
+
 /** Per-mode projection plan — the MODE's ceiling: the enhance ceiling fed to
  *  `projectMainToCeiling` (main-stat re-scale) and the reforge budget fed to
  *  `simulateReforges` (substat ticks), as a 6★ `unique` piece reaches them. A
@@ -68,12 +72,21 @@ export type ReforgeMode = "disable" | "classic" | "ascended10" | "ascended";
  *  (`pieceReforgePlan`). `ceiling.ascended` is a MAIN-STAT formula flag (use the
  *  Singularity main-stat path) AND gates the passive — so `ascended10` keeps
  *  `ascended: false` (its +10 main stat is unchanged by ascending; only the
- *  reforge budget grows). */
-const REFORGE_PLANS: Record<Exclude<ReforgeMode, "disable">, { ceiling: ReforgeCeiling; budget: number }> = {
-  classic:    { ceiling: { enhanceLevel: 10, ascended: false, singularityLevel: 0 }, budget: 6 },
-  ascended10: { ceiling: { enhanceLevel: 10, ascended: false, singularityLevel: 0 }, budget: 9 },
-  ascended:   { ceiling: { enhanceLevel: 15, ascended: true,  singularityLevel: 5 }, budget: 9 },
-};
+ *  reforge budget grows). The budgets come from the contract `enhance.json ›
+ *  reforge` (fallback: DEFAULT_RULES): a 6★'s count, plus the ascended bonus in
+ *  the modes that ascend. Memoized per rules object. */
+function reforgePlansOf(rules: GameRules): ReforgePlans {
+  const hit = reforgePlansCache.get(rules);
+  if (hit) return hit;
+  const six = rules.reforge.countByStar[6] ?? 6;
+  const plans: ReforgePlans = {
+    classic:    { ceiling: { enhanceLevel: 10, ascended: false, singularityLevel: 0 }, budget: six },
+    ascended10: { ceiling: { enhanceLevel: 10, ascended: false, singularityLevel: 0 }, budget: six + rules.reforge.ascendedBonus },
+    ascended:   { ceiling: { enhanceLevel: 15, ascended: true,  singularityLevel: 5 }, budget: six + rules.reforge.ascendedBonus },
+  };
+  reforgePlansCache.set(rules, plans);
+  return plans;
+}
 
 /** Reforge mode the "Maxed only" toggle gates on, or null when nothing is
  *  gated (toggle off, or reforge mode "disable" = pieces in their current
@@ -103,12 +116,14 @@ export function meetsMaxedFloor(
   slot: string,
   mode: Exclude<ReforgeMode, "disable"> | null,
   talismanMaxEnhance: number,
+  rules: GameRules = DEFAULT_RULES,
 ): boolean {
   if (!mode) return true;
-  const modeEnhance = REFORGE_PLANS[mode].ceiling.enhanceLevel;
+  const plans = reforgePlansOf(rules);
+  const modeEnhance = plans[mode].ceiling.enhanceLevel;
   if (slot === "ooparts") return g.enhanceLevel >= Math.min(modeEnhance, talismanMaxEnhance);
   if (slot === "exclusive") return g.enhanceLevel >= modeEnhance;
-  const floor = g.star == null ? REFORGE_PLANS[mode] : pieceReforgePlan(g, mode);
+  const floor = g.star == null ? plans[mode] : pieceReforgePlan(g, mode, rules);
   return g.enhanceLevel >= floor.ceiling.enhanceLevel && g.reforgeCount >= floor.budget;
 }
 
@@ -120,18 +135,23 @@ function canAscend(piece: GearPiece): boolean {
 }
 
 /** The ceiling a piece is projected to in a reforge mode: the min of the mode
- *  (`REFORGE_PLANS`) and what the piece can reach. A piece that can't ascend
+ *  (`reforgePlansOf`) and what the piece can reach. A piece that can't ascend
  *  stops at +10 (the `classic` ceiling: no ascension, no passive) whatever the
  *  mode; its reforge budget is the game's (`maxReforgesOf`: its star under 6★,
  *  6 for a 6★, 9 for a 6★ `unique` in a mode that ascends — +10R9, +15R9),
  *  capped by the mode's. `projectMainToCeiling` still never downgrades a piece
  *  already above the ceiling. */
-export function pieceReforgePlan(piece: GearPiece, mode: Exclude<ReforgeMode, "disable">): { ceiling: ReforgeCeiling; budget: number } {
-  const plan = REFORGE_PLANS[mode];
+export function pieceReforgePlan(
+  piece: GearPiece,
+  mode: Exclude<ReforgeMode, "disable">,
+  rules: GameRules = DEFAULT_RULES,
+): { ceiling: ReforgeCeiling; budget: number } {
+  const plans = reforgePlansOf(rules);
+  const plan = plans[mode];
   const ascends = canAscend(piece);
   return {
-    ceiling: ascends ? plan.ceiling : REFORGE_PLANS.classic.ceiling,
-    budget: Math.min(plan.budget, maxReforgesOf(piece, ascends && mode !== "classic")),
+    ceiling: ascends ? plan.ceiling : plans.classic.ceiling,
+    budget: Math.min(plan.budget, maxReforgesOf(piece, ascends && mode !== "classic", rules)),
   };
 }
 
@@ -150,8 +170,9 @@ export function projectPieceForReforge(
   tickWeights?: ReforgeTickWeights,
 ): GearPiece {
   if (mode === "disable" || piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
-  const plan = pieceReforgePlan(piece, mode);
-  const projected = simulateReforges(projectMainToCeiling(piece, game, plan.ceiling), priority, plan.budget, tickWeights);
+  const rules = gameRulesOf(game);
+  const plan = pieceReforgePlan(piece, mode, rules);
+  const projected = simulateReforges(projectMainToCeiling(piece, game, plan.ceiling), priority, plan.budget, tickWeights, rules);
   // The unconditional Singularity passive (DMG+ on weapon/accessory, DMG- on the
   // four armor pieces) unlocks ONLY at +15 — not at ascension. So only the +15
   // plan carries `ceiling.ascended`; +10R9 (ascended for reforges) and +10R6
@@ -311,6 +332,9 @@ export function prepareContext(req: SolveRequest): SolveContext {
  *  caller that doesn't go through the orchestrator). */
 export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const { inventory: inv, game, filters, heroUid } = req;
+  // Game rules read from the contract (gem slots, reforge budget, evolution
+  // unlock levels) — once per solve, passed to every reader below.
+  const rules = gameRulesOf(game);
   const hero = inv.characters.find((c) => c.uid === heroUid);
   if (!hero) throw new Error(`hero ${heroUid} not found in inventory`);
   // The fused variant when Core Fusion is active — its own base, core passive,
@@ -327,6 +351,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     level,
     levelMaxModifier,
     levelMaxStep: hero.levelMaxStep,
+    evoUnlockLevel: rules.evoUnlockLevel,
     userGeasLevels: req.userGeasLevels,
     userSkillLevels: req.userSkills,
     ...(req.userCodexLevel != null ? { codexLevel: req.userCodexLevel } : {}),
@@ -414,7 +439,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       if (equippedScope === "lower" && !isLowerPriority(heroPriority, owner, heroUid)) return false;
       if (excludedSet.has(owner)) return false;
     }
-    if (!meetsMaxedFloor(g, slot, maxedFloor, game.enhance.maxEnhanceLevel)) return false;
+    if (!meetsMaxedFloor(g, slot, maxedFloor, game.enhance.maxEnhanceLevel, rules)) return false;
     // Quality gate — only on slots that have a quality tier (null → keep).
     if (minQualityRank >= 0) {
       const tier = gearPieceQualityTier(g);
@@ -789,9 +814,10 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     ),
     noFill: new Set(Object.entries(filters.statFilters).filter(([, b]) => b?.max != null).map(([k]) => k)),
   });
-  const eeSlotCount = gemSlotsOf(ee);
-  // Allocate the gems once per talismanSlots variant — at most two variants
-  // (4 and 5) cover every talisman in the inventory. One allocator call gives
+  const eeSlotCount = gemSlotsOf(ee, rules);
+  // Allocate the gems once per talismanSlots variant — the base count and one
+  // per unlock tier of the rules (4 and 5 today) cover every talisman in the
+  // inventory. One allocator call gives
   // both the displayed split and the pre-aggregated delta. A `null` delta
   // signals "no positive-scoring gems for this variant" so the solver passes
   // `undefined` to computeFinalStats (current subs path). SOLVE CP without a
@@ -799,7 +825,10 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // not per combo.
   const gemDeltaByTalismanSlots = new Map<number, GemOverride | null>();
   const gemAllocByTalismanSlots = new Map<number, { talisman: number[]; ee: number[] }>();
-  for (const ts of [4, 5] as const) {
+  const talismanGemRule = rules.gemSlots.ooparts;
+  const talismanVariants = [talismanGemRule.base];
+  for (const u of talismanGemRule.unlocks) talismanVariants.push(talismanVariants[talismanVariants.length - 1]! + u.slots);
+  for (const ts of talismanVariants) {
     const { alloc, delta } = cpRef
       ? allocateGemsByCp(scoredGems, ts, eeSlotCount, (d) =>
           cpRef.cpEval(computeFinalStats(composed.noGearStats, composed.scaling, equipped, game, d), cpRef.talisman))
@@ -854,22 +883,18 @@ function computeFormableSets(armorPools: GearPiece[][]): Set<string> {
   return formable;
 }
 
-/** Per-substat tick cap for the reforge simulator. Observed max in real
- *  captures is LV6 (`ticks: 6`), beyond which the in-game reforge UI no
- *  longer accepts ticks. Conservative cap — keeps the predicted stat sheet
- *  within reachable in-game bounds. */
-const REFORGE_PER_SUB_CAP = 6;
-
-/** In-game reforge budget for a piece: N reforges for a 1★→6★ piece (= its
- *  star), with a 6★ ascended (Singularity) piece getting an extra +3 → 9 total.
- *  The +3 is exclusive to 6★ Singularity items; lower-star ascension doesn't
- *  exist (ascension is a 6★-only mechanic). `ascended` defaults to the piece's
- *  own state; the reforge projection passes the state it projects to
- *  (`pieceReforgePlan`). Exported so non-solver surfaces (the Builds advice,
- *  the gear cards) read the same budget instead of re-deriving it. */
-export function maxReforgesOf(piece: GearPiece, ascended = piece.ascended): number {
+/** Reforge budget for a piece, from the contract `enhance.json › reforge`
+ *  (fallback: DEFAULT_RULES): N reforges for a 1★→6★ piece (`countByStar`, = its
+ *  star), with a 6★ ascended (Singularity) piece getting `ascendedBonus` more
+ *  (+3 → 9 total). The bonus is exclusive to 6★ Singularity items; lower-star
+ *  ascension doesn't exist (ascension is a 6★-only mechanic). `ascended`
+ *  defaults to the piece's own state; the reforge projection passes the state
+ *  it projects to (`pieceReforgePlan`). Exported so non-solver surfaces (the
+ *  Builds advice, the gear cards) read the same budget instead of re-deriving it. */
+export function maxReforgesOf(piece: GearPiece, ascended = piece.ascended, rules: GameRules = DEFAULT_RULES): number {
   const star = piece.star ?? 0;
-  return star === 6 && ascended ? star + 3 : star;
+  const count = rules.reforge.countByStar[star] ?? star;
+  return star === 6 && ascended ? count + rules.reforge.ascendedBonus : count;
 }
 
 /** Key of a sub in `ReforgeTickWeights`: stat + flat/percent, since the same
@@ -933,12 +958,13 @@ export function simulateReforges(
   priority: Record<string, number>,
   maxReforgesOverride?: number,
   tickWeights?: ReforgeTickWeights,
+  rules: GameRules = DEFAULT_RULES,
 ): GearPiece {
   if (piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
   // `maxReforgesOverride` lets the reforge-mode preview impose the budget of the
   // state it projects to (`pieceReforgePlan`: the mode's, capped by the piece's
   // own — a 6★ that ascends goes to 9 though it isn't ascended yet).
-  const maxReforges = maxReforgesOverride ?? maxReforgesOf(piece);
+  const maxReforges = maxReforgesOverride ?? maxReforgesOf(piece, piece.ascended, rules);
   const remaining = Math.max(0, maxReforges - piece.reforgeCount);
   if (remaining === 0 || piece.subs.length === 0) return piece;
   const hasPriority = Object.values(priority).some((v) => v !== 0);
@@ -960,7 +986,9 @@ export function simulateReforges(
     let bestN = -Infinity;
     for (let j = 0; j < subs.length; j++) {
       const s = subs[j]!;
-      if ((s.ticks ?? 0) >= REFORGE_PER_SUB_CAP) continue;
+      // Per-sub tick cap: contract `enhance.json › reforge` (fallback:
+      // DEFAULT_RULES) — LV6, beyond which the reforge UI accepts no tick.
+      if ((s.ticks ?? 0) >= rules.reforge.maxTicksPerSub) continue;
       const m = meta[j]!;
       // Primary: weighted value. Secondary: normalized tick (subs the weight
       // can't separate, e.g. all at 0 CP once the useful ones are capped).
@@ -1499,9 +1527,10 @@ export async function solveChunk(
 ): Promise<SolveChunkResult> {
   const { req, pools, baseline, scaling, ee, gemDeltaByTalismanSlots, gemAllocByTalismanSlots,
           scoredGems, setPlans, allowBrokenSets, skills, starMeta, dmgStat, dmgSec, noCrit, skillFactor } = ctx;
-  // EE gem-slot count is constant per solve (same EE piece across every combo).
-  const eeSlots = gemSlotsOf(ee);
   const { mode, filters, game } = req;
+  const rules = gameRulesOf(game);
+  // EE gem-slot count is constant per solve (same EE piece across every combo).
+  const eeSlots = gemSlotsOf(ee, rules);
   const heap = new TopKHeap(topK, mode, TALISMAN_VARIANTS_KEPT);
   const tickEvery = options.tickEvery ?? 4096;
 
@@ -1710,7 +1739,7 @@ export async function solveChunk(
                 // gem resolve. `null` delta = no priority set → no override,
                 // talisman+EE pieces contribute their currently-socketed
                 // gems via their `subs` (correct in-game-equivalent stats).
-                const talismanSlots = gemSlotsOf(talisman);
+                const talismanSlots = gemSlotsOf(talisman, rules);
                 const gemDelta = gemDeltaByTalismanSlots.get(talismanSlots) ?? null;
                 let gemAlloc = gemAllocByTalismanSlots.get(talismanSlots) ?? { talisman: [], ee: [] };
                 let fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, gemDelta ?? undefined, setBonuses);

@@ -19,7 +19,7 @@
  * regardless.
  */
 import type { GameData, GearPiece, Inventory } from "@gear-solver/core";
-import { resolveStat } from "@gear-solver/core";
+import { DEFAULT_RULES, gemSlotsAt, resolveStat, type GameRules } from "@gear-solver/core";
 import { ROLL_NORMS, STAT_TO_PRIORITY } from "./ratings.js";
 import { isLowerPriority, type HeroPriority } from "../storage/heroPriority.js";
 import type { EquippedScope } from "./types.js";
@@ -165,13 +165,13 @@ function pickOrder(scored: ScoredGem[]): ScoredGem[] {
   return out;
 }
 
-/** Number of gem slots open on a Talisman / EE piece. The 5th slot is
- *  gated behind `enhanceLevel >= 5` in-game; below that only 4 slots accept
- *  a gem. */
-export function gemSlotsOf(piece: GearPiece | null): number {
+/** Number of gem slots open on a Talisman / EE piece, by the contract's
+ *  `enhance.json › gemSlots` (`gameRulesOf`; fallback: DEFAULT_RULES): 4, and a
+ *  5th from +5. */
+export function gemSlotsOf(piece: GearPiece | null, rules: GameRules = DEFAULT_RULES): number {
   if (!piece) return 0;
   if (piece.slot !== "ooparts" && piece.slot !== "exclusive") return 0;
-  return piece.enhanceLevel >= 5 ? 5 : 4;
+  return gemSlotsAt(rules.gemSlots[piece.slot], piece.enhanceLevel);
 }
 
 /** CHC% (crit rate) at/above which crit-rate gems are wasted — in-game CHC

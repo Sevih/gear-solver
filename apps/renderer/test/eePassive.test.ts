@@ -45,3 +45,15 @@ describe("Fatal's Eclipse (2000078) — CHD +30 % at +10", () => {
     expect(chd([eclipse(10)])).toBe(chd([]) + 30);
   });
 });
+
+describe("EE combat-only main — Accuracy vs <element> (ST_AVOID) stays off the sheet", () => {
+  const characters = derived("characters.json") as CharactersTable;
+  const codexCurve = derived("codex-curve.json") as CodexCurve;
+  const c = composeCharStats(characters[FATAL]!.ingredients!, codexCurve, { level: 100, levelMaxStep: 0, levelMaxModifier: 0 });
+
+  it("the sheet is identical with and without the accuracy main", () => {
+    const ee = eclipse(10);
+    const withAcc = { ...ee, main: [...ee.main, { stat: "avoid" as const, value: -30, percent: false, combatOnly: true, name: "Accuracy vs Earth", fromBuff: true, source: "option" as const }] };
+    expect(computeFinalStats(c.noGearStats, c.scaling, [withAcc], null)).toEqual(computeFinalStats(c.noGearStats, c.scaling, [ee], null));
+  });
+});

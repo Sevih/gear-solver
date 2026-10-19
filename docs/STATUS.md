@@ -24,7 +24,7 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
 
 2. **Données statiques du jeu** (`data/`)
    - La distillation vit **côté outerpedia** (`datagen/generators/solver.ts`, port de l'ancien
-     `build.mjs`/`calc-stats.mjs`) : elle émet 20 artefacts committés à `data/generated/solver/`.
+     `build.mjs`/`calc-stats.mjs`) : elle émet 21 artefacts committés à `data/generated/solver/`.
    - `data/derived/` : miroir committé de ces artefacts (tables compactes `options`, `equipment`,
      `sets`, `characters`, `sub-ticks`, … que le moteur consomme), rafraîchi via `npm run data:sync`
      depuis le checkout outerpedia. `version.json` `{ hash, builtAt }` — `hash` = hash de contenu
@@ -104,9 +104,10 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      inventaire envoyés aux workers **une fois** (init), compteur « ⚙ N workers » dans le footer.
 
 5. **Desktop Electron** (`apps/desktop/`) — `main.ts` + serveur local (`server.ts`) +
-   capture Steam (`steam-capture.ts` : détection du jeu, install BepInEx + plugin, statut/heartbeat). App fonctionnelle en dev ; le
-   **packaging** prod (electron-builder `extraResources`, `setupAutoUpdate`) est **câblé mais
-   non vérifié end-to-end** sur un vrai build packagé (cf. todo M7+).
+   capture Steam (`steam-capture.ts` : détection du jeu, install BepInEx + plugin, statut/heartbeat). Le
+   **packaging** prod est **livré** : installeur (electron-builder), données embarquées
+   (`extraResources`), mise à jour automatique (`setupAutoUpdate`) et releases (1.9.0 du 16/10,
+   1.10.0 du 17/10). Reste la vérification de la sync repo en prod packagé (`docs/todo.md`).
 
 ## Comment lancer
 
@@ -144,11 +145,11 @@ npm run data:sync        # rafraîchit data/derived depuis le checkout outerpedi
   la virtualisation de la table et les optims SOLVE CP (évaluateur CP préparé + ratings différés)
   sont **livrés**. Reste **structurel** : réduire le **nombre** de combos atteignant le compose/CP
   (pré-filtre de pool plus agressif, borne CP par upper-bound) — demande un profilage sur vrai compte.
-- **Packaging desktop (M8)** : le plumbing existe (electron-builder `extraResources`,
-  `setupAutoUpdate`) ; reste à **vérifier sur un vrai build packagé** (bake `data/`,
-  installeur, auto-update contre une release signée + feed). **Inclut la vérif de la sync
-  repo en prod** : 1er lancement online seed→SHA→download→rebuild, cache image à la demande,
-  2e lancement SHA inchangé instantané, offline cold-cache sans crash.
+- **Packaging desktop (M8)** : **livré** (installeur, données embarquées, mise à jour
+  automatique, releases 1.9.0 et 1.10.0). **Reste la vérif de la sync repo en prod packagé**
+  (item « Vérif sync repo en prod packagé » de `docs/todo.md`) : 1er lancement online
+  seed→SHA→download→rebuild, cache image à la demande, 2e lancement SHA inchangé instantané,
+  offline cold-cache sans crash.
 - **Édition d'équipement** : les méthodes core (`equipItem`/`unequipItem`), l'endpoint writer
   `POST /api/captured/user-item`, le client renderer **et l'UI déclencheur** (bouton « Equip
   build » du Builder + Apply locally / Apply all du Worklist) sont **livrés** — édition du JSON

@@ -264,3 +264,33 @@ describe("EE level-gated passive — Fatal's Eclipse (2000078), the one IOT_STAT
     expect(eeMains(10)).toEqual([{ stat: "critDmg", value: 30, percent: true, fromBuff: true, source: "eePassive" }]);
   });
 });
+
+describe("EE combat-only main — Accuracy vs <element> (ST_AVOID)", () => {
+  // A fake EE whose main option points at the contract's accuracy buff.
+  const avoidGame: GameData = {
+    ...game,
+    options: { ...game.options, "2999101": { buffId: "BID_CEQUIP_MAIN_ACCURACY_FIRE" } },
+    equipment: {
+      ...game.equipment,
+      "2999001": { slot: "exclusive", grade: "unique", star: 6, classLimit: null, setId: null, armorSetId: null, name: "Test EE", mainGroup: null, subGroup: null, image: null, effectIcon: null, armorSetIcon: null, class: null },
+    },
+    buffs: {
+      ...game.buffs,
+      "BID_CEQUIP_MAIN_ACCURACY_FIRE": [{ st: "ST_AVOID", ap: "OAT_ADD", v: -30, combatOnly: true, name: "Accuracy vs Earth" }],
+    },
+  };
+  const ee: RawUserItem = {
+    ItemList: [{
+      ItemUID: "acc", CharUID: "0", ItemID: 2999001, Exp: 0, BreakLimitLevel: 0, Quantity: 1,
+      SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 0,
+      SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0, OptionList: [2999101], SubOptionList: [],
+    }],
+  };
+
+  it("keeps the main, flagged combat-only with its contract name", () => {
+    const g = parseInventory(ee, undefined, avoidGame).gear[0]!;
+    expect(g.main).toEqual([
+      { stat: "avoid", value: -30, percent: false, combatOnly: true, name: "Accuracy vs Earth", fromBuff: true, source: "option" },
+    ]);
+  });
+});

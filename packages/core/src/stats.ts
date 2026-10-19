@@ -56,6 +56,10 @@ const GAME_STAT: Record<string, StatMeta> = {
   ST_VAMPIRIC:      { add: "lifesteal", rate: "lifesteal", addPercent: true  },
   ST_COUNTER_RATE:  { add: "counter",   rate: "counter",   addPercent: true  },
   ST_ENTER_AP:      { add: "enterAp",   rate: "enterAp",   addPercent: false },
+  // Combat-only EE main: accuracy against one element ("Accuracy vs Earth").
+  // Shown on the piece, never on the sheet — `combatOnly` comes from the
+  // contract's buff row, not from this table.
+  ST_AVOID:         { add: "avoid",     rate: "avoid",     addPercent: false },
 };
 
 /** Contract stat key (outerpedia `stat-keys.json` › `key`) → engine StatType,
@@ -85,8 +89,9 @@ export const CONTRACT_STAT_TO_ENGINE: Record<string, StatType | null> = {
   lifesteal: "lifesteal",
   counter: "counter",
   enterAp: "enterAp",
-  // Combat-only, not an engine stat: per-element accuracy on an EE main.
-  avoid: null,
+  // Combat-only EE main (per-element accuracy): resolved for display, skipped
+  // by the sheet through the row's `combatOnly`.
+  avoid: "avoid",
 };
 
 export interface ResolvedStat {

@@ -8,6 +8,72 @@
 
 ## Items de backlog clôturés (index)
 
+### 📜 Données — règles du jeu lues du contrat, `progression.json` synchronisé, main d'EE Accuracy affiché combat-only, suivis de G12 (2026-10-19)
+- ✅ **Pourquoi.** Lot de clôture (G31) de trois restes : les règles recopiées à la main (emplacements de gemme,
+  budget de reforge, niveaux de déblocage des évolutions) sont émises par le contrat depuis B62 d'outerpedia ; le
+  main d'EE `ST_AVOID` (« Accuracy vs <élément> ») disparaissait de la fiche de la pièce au lieu d'y être affiché
+  combat-only (suite de L6) ; petits suivis documentaires de G12.
+- ✅ **Module de règles** `packages/core/src/rules.ts` (exporté par l'index de core) : `GameRules` (`gemSlots` par
+  slot `ooparts` / `exclusive` = `{ base, unlockLevel, unlockSlots, unlocks }`, `reforge` = `{ maxTicksPerSub,
+  countByStar, ascendedBonus }`, `evoUnlockLevel`), `DEFAULT_RULES` (les constantes d'avant, à l'identique : 4 + 1 à
+  +5, 6, 1..6, +3, 20/40/60/80/100/105/110/120) et `gameRulesOf(game)`, qui lit `enhance.gemSlots`
+  (`baseByGrade.unique` + `unlocks[slot]`), `enhance.reforge` et `progression.evoUnlockLevel`, chaque bloc avec repli
+  sur `DEFAULT_RULES` quand la clé (ou la table, fixtures partielles) manque — cache synchronisé avant B62,
+  installation dont la sync au lancement n'a pas encore récupéré `progression.json` : jamais de jet. Mémoïsé par objet
+  `GameData` (`WeakMap`). Écart de forme assumé : `GemSlotRule` porte en plus `unlocks` (tous les paliers triés),
+  car la somme de plusieurs paliers dépend du niveau de la pièce et ne tient pas dans `{ unlockLevel, unlockSlots }`
+  (premier palier, gardé pour le texte du conseil) ; `gemSlotsAt(rule, level)` fait la somme. `GameData` gagne
+  `progression?`, `EnhanceData` gagne `gemSlots?` / `reforge?` (types `EnhanceGemSlots`, `EnhanceReforge`) ;
+  `loadGameData` charge `/gamedata/progression.json` en option (absent → pas de clé, le chargement n'échoue pas).
+- ✅ **Lecteurs**, par paramètre explicite avec défaut `DEFAULT_RULES` : `gemSlotsOf(piece, rules)` ;
+  `maxReforgesOf(piece, ascended, rules)` (`countByStar[star] ?? star`, `+ ascendedBonus` en 6★ ascendée) ;
+  `simulateReforges(…, rules)` lit `maxTicksPerSub` (fin de `REFORGE_PER_SUB_CAP`) ; `REFORGE_PLANS` devient
+  `reforgePlansOf(rules)` mémoïsé (plafonds de mode inchangés, budgets = `countByStar[6]` et `+ ascendedBonus`),
+  lu par `pieceReforgePlan(piece, mode, rules)` et `meetsMaxedFloor(…, rules)` ; `sumEvoUpTo(…, evoUnlockLevel)` et
+  `ComposeOptions.evoUnlockLevel`, passé par les trois appelants de `composeCharStats` (`engine.ts`,
+  `BuilderScreen.tsx`, `BuildsScreen.tsx`). `precomputeContext` et `solveChunk` calculent `rules` une fois ;
+  `projectPieceForReforge`, `buildAdvice` (règle 5 : `gemSlotsOf`, texte « reach +N » lu du palier) et `adapter.ts`
+  lisent `gameRulesOf(game)` quand `game` est là. Les variantes de talisman précalculées (`[4, 5]` en dur) sont
+  dérivées des paliers (base, puis chaque palier cumulé) : mêmes variantes aujourd'hui, pas de trou si le contrat
+  change. Commentaires « Observed max in real captures » / « in-game budget » → « contract `enhance.json › reforge`
+  (fallback: DEFAULT_RULES) ». L'item « `buildAdvice` propose +5 aux talismans 4★/5★ » était faux (tous `unique` :
+  4 + 1 à +5, l'étoile n'entre pas dans la règle) : retiré sans changement.
+- ✅ **`progression.json` synchronisé** : ajouté à `apps/desktop/src/solver-files.json` (21 noms) ; « 20 » → « 21 »
+  dans `data-sync.ts`, `data/sync.mjs`, `data-sync.test.ts`, `docs/reference.md` / `wiki/Engine-Reference.md`,
+  `docs/STATUS.md`, `data/README.md`, `docs/architecture.md` / `wiki/Architecture.md` ; tableau des sources : ligne
+  `CharacterEvolutionTemplet.json` → `progression.json`, `gemSlots` / `reforge` sur la ligne `enhance.json` ;
+  `data/README.md` décrit `progression.json` ; `rules.ts` dans l'arbre de core des deux références. `npm run
+  data:sync` : `data/derived/progression.json` nouveau et rien d'autre, hash `66681131bd9f` inchangé.
+- ✅ **`ST_AVOID`** : `StatType` gagne `"avoid"`, `GAME_STAT` gagne `ST_AVOID` (flat), `CONTRACT_STAT_TO_ENGINE.avoid`
+  = `"avoid"` ; `STAT` (`tokens.ts`, `ACC` / « Accuracy », sans icône), `STAT_DISPLAY_ORDER` et `STAT_LABEL` le
+  gagnent en dernier, `GEAR_STATS` l'exclut comme les stats de set. Le main s'affiche dans le panneau avec son
+  `name` du contrat et le drapeau `combatOnly` de la ligne ; la fiche et la CP ne le lisent pas (déjà sauté par
+  `composeBuild.ts`). Aucun autre changement visuel.
+- ✅ **Suivis de G12** : `wiki/Engine-Reference.md` donne le vrai ordre de recherche du checkout (`OUTERPEDIA_PATH`
+  env → `.env.local` → `../outerpedia`) ; M8 requalifié « livré » (installeur, données embarquées, mise à jour
+  automatique, releases 1.9.0 et 1.10.0) dans `docs/roadmap.md` / `wiki/Roadmap.md` et `docs/STATUS.md`, reste la
+  vérification de la sync repo en prod packagé (`docs/todo.md`) ; « 95 tests » de `solver.test.ts` → 117 (compte
+  affiché par vitest, `it.each` compris). L'item « data-sync, octets non JSON » n'existe plus dans `docs/todo.md` :
+  rien à faire. Le script de rejeu des EE qui ne compte pas l'`IOT_STAT` n'est pas dans ce dépôt (aucun script
+  sous `scripts/` ni `data/` ne lit `IOT_STAT`) : rien à faire ici.
+- ✅ **Tests.** `packages/core/test/rules.test.ts` (nouveau, 5) : garde de non-régression (`gameRulesOf` sur
+  `enhance.json` + `progression.json` committés = `DEFAULT_RULES`), repli sans `gemSlots` / `reforge` /
+  `progression`, lecture d'un contrat modifié (4 sous +7, 6 à +7 ; `countByStar["6"] = 7`, bonus 2 ; ligne 7 à
+  lv 100 comptée par `sumEvoUpTo`), somme de deux paliers, mémoïsation. Le cas (c) côté renderer est dans
+  `apps/renderer/test/gameRules.test.ts` (nouveau, 3 : `gemSlotsOf`, `maxReforgesOf` 7 / 9, `pieceReforgePlan`,
+  texte du conseil « reach +7 to unlock 2 more gem slots ») — core ne dépend pas du renderer. `parse.test.ts` :
+  fausse EE dont le main pointe `BID_CEQUIP_MAIN_ACCURACY_FIRE` → `{ stat: "avoid", value: -30, combatOnly,
+  name: "Accuracy vs Earth", fromBuff, source: "option" }` ; `eePassive.test.ts` : fiche identique avec et sans
+  ce main ; `stat-keys.test.ts` : 24 paires résolues, aucune à null ; `data-sync.test.ts` : 21 tables.
+  `solver.test.ts` (`gemSlotsOf`), `buildAdvice.test.ts`, `cpPin`, `solveChunkCritCap`, `setCombatEffects`,
+  `calcBattlePower` : aucune attente modifiée. `npm run typecheck` : vert (dernière ligne `> tsc --noEmit`, renderer) ;
+  `npm test` : core `Tests 162 passed (162)`, desktop `Tests 159 passed (159)`, renderer `Tests 573 passed (573)` ;
+  `npm run lint` : `✖ 28 problems (0 errors, 28 warnings)`, comme avant.
+- ⏳ **Laissé.** Le total « 300 tests » de `docs/reference.md` / `wiki/Engine-Reference.md` n'est pas recompté
+  (hors périmètre). Un commentaire de `lib/storage/filterPresets.ts` cite encore `REFORGE_PLANS[undefined]` (hors des
+  fichiers du lot). `OptionMaxValue` à la lecture des subs et le filtre TargetType d'`ee-passives` restent hors
+  périmètre.
+
 ### 🧩 Renderer — composants monolithiques découpés, un dossier par écran, sans changement de comportement (2026-10-19)
 - ✅ **Pourquoi.** Item « Composants monolithiques » de `docs/todo.md` : à `edc18fe`, `BuilderScreen.tsx` faisait
   4 435 lignes (~45 composants, le reducer déjà parti dans `lib/solver/builderFilters.ts`), `InventoryScreen.tsx`

@@ -93,6 +93,7 @@ export const STAT_DISPLAY_ORDER: ReadonlyArray<string> = [
   "eff", "effRes",
   "hitAp", "killAp",
   "lifesteal", "counter", "enterAp",
+  "avoid",
 ];
 
 /** Engine stat key → short user-facing label rendered on the chip tooltip.
@@ -116,6 +117,7 @@ const STAT_LABEL: Record<string, string> = {
   lifesteal: "LIFE",
   counter:   "CTR",
   enterAp:   "AP+",
+  avoid:     "ACC",
 };
 
 export function statLabelFor(key: string): string {

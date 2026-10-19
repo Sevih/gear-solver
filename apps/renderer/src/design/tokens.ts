@@ -79,6 +79,9 @@ export const STAT: Record<string, StatTokens> = {
   lifesteal: { label: "LIFE",  longLabel: "Lifesteal",         kind: "util", color: "#fb7185", icon: null },
   counter:   { label: "CTR",   longLabel: "Counterattack",     kind: "util", color: "#fca5a5", icon: null },
   enterAp:   { label: "AP+",   longLabel: "Starting AP",       kind: "util", color: "#22d3ee", icon: null },
+  // Combat-only EE main ("Accuracy vs <element>", labelled by its contract
+  // `name`) — no in-game stat icon, text fallback.
+  avoid:     { label: "ACC",   longLabel: "Accuracy",          kind: "util", color: "#22d3ee", icon: null },
 };
 
 export interface SlotMeta {

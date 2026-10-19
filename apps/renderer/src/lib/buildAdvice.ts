@@ -8,9 +8,10 @@
  * caps mirror the damage model (`ratings.ts`), and the reforge budget reuses
  * the solver's `maxReforgesOf` rather than re-deriving it.
  */
-import type { GameData, GearPiece } from "@gear-solver/core";
+import { DEFAULT_RULES, gameRulesOf, type GameData, type GearPiece } from "@gear-solver/core";
 import { round1, type FinalStats } from "./composeBuild.js";
 import { maxReforgesOf } from "./solver/engine.js";
+import { gemSlotsOf } from "./solver/gems.js";
 import { gearPieceQualityTier } from "./quality.js";
 import { toDesignSlot, type SlotId } from "../design/tokens.js";
 
@@ -168,24 +169,34 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
     capWaste("Penetration", entry.stats.pen, 100);
   }
 
+  // The contract's rules (gem slots, reforge budget) — DEFAULT_RULES without
+  // game data.
+  const rules = game ? gameRulesOf(game) : DEFAULT_RULES;
+
   // Rule 5 — gem slots on the gem-bearing pieces (Talisman / EE). `gemSlots` is
-  // always length 5 with `0` = empty; the 5th slot is gated behind enhance +5.
-  // An empty usable slot is free stats left on the table.
+  // always length 5 with `0` = empty; the open count comes from the rules
+  // (`gemSlotsOf`: 4, a 5th from +5). An empty usable slot is free stats left
+  // on the table.
   for (const p of rawPieces) {
     if (!p.gemSlots) continue;
     const label = ADVICE_SLOT_LABEL[toDesignSlot(p.slot) ?? ""] ?? "Piece";
-    const usable = p.enhanceLevel >= 5 ? 5 : 4;
+    const usable = gemSlotsOf(p, rules);
     const empty = usable - p.gemSlots.slice(0, usable).filter((g) => g !== 0).length;
+    const unlock = p.slot === "ooparts" || p.slot === "exclusive" ? rules.gemSlots[p.slot] : null;
     if (empty > 0) {
       out.push({ tone: "warn", text: `${label}: ${empty} empty gem slot${empty > 1 ? "s" : ""}` });
-    } else if (p.enhanceLevel < 5) {
-      out.push({ tone: "tip", text: `${label}: reach +5 to unlock a 5th gem slot` });
+    } else if (unlock && unlock.unlockSlots > 0 && p.enhanceLevel < unlock.unlockLevel) {
+      const unlocked = unlock.unlockSlots === 1
+        ? `a ${unlock.base + 1}th gem slot`
+        : `${unlock.unlockSlots} more gem slots`;
+      out.push({ tone: "tip", text: `${label}: reach +${unlock.unlockLevel} to unlock ${unlocked}` });
     }
   }
 
   // Rule 6 — upgrade headroom on the main-gear pieces, each kind aggregated
   // into one line so a roster of half-finished gear doesn't spam the card.
-  // `maxReforgesOf` is the solver's own in-game budget (no duplicated formula).
+  // `maxReforgesOf` is the solver's own budget, from the contract `enhance.json ›
+  // reforge` (fallback: DEFAULT_RULES) — no duplicated formula.
   // Gem pieces are skipped — gems aren't reforged/ascended like gear.
   // The enhance cap is +10 for a normal piece, +15 once ascended (Singularity
   // extends the bar past +10), mirroring `GearPiece.enhanceLevel`'s 0..10/10..15
@@ -197,7 +208,7 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
     if (p.gemSlots) continue;
     const ds = toDesignSlot(p.slot);
     if (!ds || !ADVICE_REQUIRED_SLOTS.includes(ds)) continue;
-    if (p.reforgeCount < maxReforgesOf(p)) unusedReforges++;
+    if (p.reforgeCount < maxReforgesOf(p, p.ascended, rules)) unusedReforges++;
     if (p.star === 6 && !p.ascended) unascended6++;
     if (p.enhanceLevel < (p.ascended ? 15 : 10)) underEnhanced++;
   }

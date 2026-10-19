@@ -45,9 +45,9 @@ describe("GAME_STAT against the contract's stat-keys.json", () => {
     expect(resolved).toEqual({ stat: engine, percent, value: percent ? 1 : 10 });
   });
 
-  it("matches the contract as of 2026-10-18: 23 pairs resolved, ST_AVOID / OAT_ADD to null", () => {
+  it("matches the contract as of 2026-10-19: 24 pairs resolved, none to null", () => {
     const nulls = PAIRS.filter((p) => CONTRACT_STAT_TO_ENGINE[p.key] === null);
-    expect(nulls.map((p) => `${p.st}/${p.ap}`)).toContain("ST_AVOID/OAT_ADD");
-    expect(PAIRS.length - nulls.length).toBeGreaterThanOrEqual(23);
+    expect(nulls.map((p) => `${p.st}/${p.ap}`)).toEqual([]);
+    expect(PAIRS.length - nulls.length).toBeGreaterThanOrEqual(24);
   });
 });

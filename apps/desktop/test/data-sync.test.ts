@@ -395,7 +395,7 @@ describe("syncGameData — CHECKOUT mode reads every artifact before writing", (
     const { derivedDir, shaStateFile } = cache("h1");
     checkoutMode();
     const r = await syncGameData({ derivedDir, shaStateFile, force: false });
-    expect(r).toEqual({ status: "synced", message: "synced 20 tables (checkout h2)", copied: 20 });
+    expect(r).toEqual({ status: "synced", message: "synced 21 tables (checkout h2)", copied: 21 });
     for (const f of TABLES) expect(JSON.parse(readFileSync(join(derivedDir, f), "utf-8"))).toEqual({ from: "checkout" });
     expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8"))).toEqual({ schema: 2, hash: "h2", builtAt: "2026-02-02" });
   });
@@ -438,10 +438,10 @@ describe("syncGameData — CHECKOUT mode reads every artifact before writing", (
 });
 
 describe("one list of solver artifacts", () => {
-  it("data-sync.ts exports solver-files.json, 20 distinct names", () => {
+  it("data-sync.ts exports solver-files.json, 21 distinct names", () => {
     const shared = JSON.parse(readFileSync(fileURLToPath(new URL("../src/solver-files.json", import.meta.url)), "utf-8"));
     expect(SOLVER_FILES).toEqual(shared);
-    expect(new Set(SOLVER_FILES).size).toBe(20);
+    expect(new Set(SOLVER_FILES).size).toBe(21);
     expect(SOLVER_FILES).toContain("version.json");
   });
 });

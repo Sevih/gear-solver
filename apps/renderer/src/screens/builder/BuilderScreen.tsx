@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
-import { composeCharStats, effectiveCharacter, expToLevel } from "@gear-solver/core";
+import { composeCharStats, effectiveCharacter, expToLevel, gameRulesOf } from "@gear-solver/core";
 import { cx } from "../../design/cx.js";
 import { SLOT_BY } from "../../design/tokens.js";
 import { dmgSkillInfo } from "../../lib/dmgSkill.js";
@@ -469,6 +469,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       level,
       levelMaxModifier,
       levelMaxStep: selected.levelMaxStep,
+      evoUnlockLevel: gameRulesOf(game).evoUnlockLevel,
       userGeasLevels,
       userSkillLevels: { first: selected.skills.first, second: selected.skills.second, ultimate: selected.skills.ultimate },
       ...(userCodexLevel != null ? { codexLevel: userCodexLevel } : {}),

@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, CharacterDef, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
 import { fillUnrankedByOrder, loadSeenHeroes, moveRankBefore, persistSeenHeroes, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
-import { composeCharStats, effectiveCharacter, expToLevel } from "@gear-solver/core";
+import { composeCharStats, effectiveCharacter, expToLevel, gameRulesOf } from "@gear-solver/core";
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap, type SheetStatKey } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { computeAdvice, type AdviceItem } from "../lib/buildAdvice.js";
@@ -1009,6 +1009,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
             level,
             levelMaxModifier,
             levelMaxStep: c.levelMaxStep,
+            evoUnlockLevel: gameRulesOf(game).evoUnlockLevel,
             userGeasLevels,
             userSkillLevels: { first: c.skills.first, second: c.skills.second, ultimate: c.skills.ultimate },
             ...(userCodexLevel != null ? { codexLevel: userCodexLevel } : {}),
