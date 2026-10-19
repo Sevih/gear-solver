@@ -56,12 +56,6 @@
 - [ ] ⚪ **DoT dans le meilleur hit** — assumé non modélisé (Gnosis Beth sous-estimée) ; ne traiter que si le moteur
       damage expose un facteur DoT par skill comparable au hit direct.
 
-### 🟢 Tests manquants — audit Builder (2026-07-03)
-- [ ] 🟢 **Crit-cap slow path de bout en bout** — rien ne teste le trigger `wantCritCap` + recompose dans `solveChunk`
-      (le chemin par-combo `allocateGemsReachingCap` + `gemDeltaEquals` + le memo `capAllocCache`).
-- [ ] 🟢 **Flux orchestrateur** — cancel / supersede / `solveId` anti-stale / `workersDone === activeChunks` / crash
-      worker (`onerror` → cancel) / flux `estimate` (id anti-stale, null-on-error) : aucun test.
-
 ### 🟠 Perf solver
 - [~] **Solver CP** — perf résolue (> 100 s → < 4 s sur un vrai compte : auto-prune CP-pondéré + budget de combos,
       gemmes notées par apport CP, pin du build courant ; cf. changelog). **Reste** : (a) confirmer en jeu la justesse

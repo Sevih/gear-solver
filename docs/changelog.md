@@ -8,6 +8,50 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧪 Tests — crit-cap de bout en bout dans `solveChunk`, flux de l'orchestrateur (2026-10-19)
+- ✅ **Pourquoi.** Items « Crit-cap slow path de bout en bout » et « Flux orchestrateur » de `docs/todo.md` (audit
+  Builder du 03/07, revérifiés le 18/10) : aucun test ne passait par `wantCritCap` dans `solveChunk`, et
+  `SolverOrchestrator` n'était instancié que par `orchestratorFailure.test.ts` (échec d'un worker et cause d'un
+  résultat vide, ajoutés par la série des mineurs moteur). Tests seulement : aucune ligne de source ne bouge.
+- ✅ **Crit-cap (`apps/renderer/test/solveChunkCritCap.test.ts`, 3 tests).** `SolveContext` construit à la main
+  (comme `solveChunk.test.ts`), solve CP avec priorité `critRate` + `atk` : les gants portent le CHC (avant gemmes
+  85, 94, 100 et 105 : sous, au plafond, au-dessus), un talisman 5 slots et un 4 slots couvrent les deux variantes
+  du memo `capAllocCache`, les allocations par défaut sont celles d'`allocateGems` comme dans `precomputeContext`.
+  Chaque build est revérifié contre une recomposition indépendante : CHC avant gemmes par `computeFinalStats` sans
+  gemmes → `allocateGemsReachingCap` → `computeFinalStats` avec son delta → `calcBattlePower` ; gemmes, fiche et CP
+  égales. Quand le delta du plafond égale le défaut, le build porte l'objet d'allocation précalculé lui-même (pas
+  de recomposition), sinon une autre allocation. Deux pools : gemmes crit classées sous l'ATK (le défaut n'a aucune
+  crit : recomposition sous le plafond seulement, valeurs ponctuelles 85 + 5 crit = 100, 4 slots = 97, 94 → 2 crit
+  + 3 ATK) et au-dessus (le défaut est tout crit : seul le CHC 85 le garde, la soustraction `defaultCrcGem` est
+  traversée). Deux chunks (partition sur les gants) redonnent exactement les builds du chunk unique, dans les deux
+  cas. Contrôle par mutation : `wantCritCap` forcé à `false` fait tomber le premier test.
+- ✅ **Orchestrateur (`apps/renderer/test/orchestratorFlow.test.ts`, 10 tests).** `vi.mock` du module
+  `solver.worker.ts?worker` avec un faux `Worker` piloté par le test (Vitest le mocke : pas d'injection au
+  constructeur), précompute stubé (pool partitionnable réglable). Cas : tous les chunks répondent → un seul
+  `onResult` avec les builds fusionnés, un doublon ensuite sans effet ; 4 workers pour 2 chunks → les deux
+  derniers ne reçoivent pas de `solve` et le flush n'attend que les dispatchés (`workersDone === activeChunks`) ;
+  `solve` pendant un solve → `cancel` posté avant le nouveau `solve`, pas de second `init` (mêmes références), le
+  `result` et le `progress` de l'ancien `solveId` ignorés (sans la garde, l'ancien solve se complétait), seul le
+  nouveau émet ; `cancel` → flush immédiat de ce qui a fini (cause `null`), `cancel` à chaque worker, la suite
+  ignorée, `cancel` au repos sans effet ; `onerror` pendant un solve → un `onError`, `cancel` partout, ni résultat
+  ni second `onError` après, et ignoré au repos ; estimation → worker dédié, seule la dernière requête répond (la
+  périmée et le doublon ignorés), `poolSizes: null` d'un précompute en échec livré tel quel, un crash du worker
+  d'estimation abandonne la requête sans bannière et la suivante passe, un `solve` remplace l'estimation en
+  attente et aucune estimation ne part pendant un solve. Contrôle par mutation : la garde `solveId` retirée de
+  `handle()` fait tomber le test du solve remplacé.
+- ✅ **Docs.** Les deux fichiers ajoutés au tableau des tests (`docs/reference.md` §3.3, miroir
+  `wiki/Engine-Reference.md`) ; les deux items sortent de `docs/todo.md` (la section « Tests manquants » est vide
+  et retirée).
+- ✅ **Vérification.** Tests 857 → 870 (renderer 544 → 557, core 156 et desktop 157 inchangés).
+  `npm run typecheck` : dernière ligne `> tsc --noEmit`, sortie 0 ; `npm test` : `Tests  557 passed (557)` puis
+  `Duration  1.82s (…)`, sortie 0 ; `npm run lint` : `✖ 28 problems (0 errors, 28 warnings)` / `0 errors and 1
+  warning potentially fixable with the --fix option.`, aucun dans les fichiers ajoutés.
+- ⏳ **Constaté, hors périmètre.** Aucun bug trouvé, donc aucun `it.skip`. Le crash du worker d'estimation
+  n'appelle pas le callback avec `null` (la requête est abandonnée, le Builder garde l'estimation précédente) :
+  c'est le comportement documenté dans `orchestrator.ts`, testé tel quel ; seul l'échec du précompute côté worker
+  donne `null`. Un premier `npm test`, lancé avant toute modification, a fini sur `npm error command sh -c vitest
+  run` sans échec visible dans la fin de sortie ; les cinq passes suivantes sont vertes, cause non reproduite.
+
 ### 🧮 Fiche — les mineurs de la revue : set Vitesse, CHC bornée, CP float32, plats de buff, `composeMultStat` sur `calcFinalStat` (2026-10-19)
 - ✅ **Pourquoi.** Item « Mineurs de fiche (revue) » et puce CalcFinalStat de « Duplications » de `docs/todo.md`
   (revue du 09/10, revérifiés le 18/10). Après la série contrat (passif de cœur par fusion, `spdPct` en taux : passés,
