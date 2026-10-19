@@ -329,7 +329,7 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
     if (url === "/api/steam/uninstall" && req.method === "POST") {
       readBody(req, res, 10_000, (raw) => {
         res.setHeader("Content-Type", "application/json");
-        let removeBepinex = false;
+        let removeBepinex: boolean;
         try {
           // An empty body means "plugin only" (the renderer may POST none).
           removeBepinex = raw ? Boolean((JSON.parse(raw) as { removeBepinex?: unknown } | null)?.removeBepinex) : false;

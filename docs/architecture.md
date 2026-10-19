@@ -45,7 +45,9 @@ by hand (manual import).
   artifacts emitted by outerpedia's datagen ; shared `/img/*` handler `img-cache.ts`
   cascading bundled sprites→checkout→disk cache→R2 bucket `img.outerpedia.com`) so the
   app follows game patches **without a new build**.
-  Packaging is live: `scripts/release.mjs` builds and publishes the installer via
+  Packaging is live: `scripts/release.mjs` refreshes `data/derived`, runs typecheck, tests and
+  lint against it (a failure stops before anything is published and reverts the version bump and
+  the stamped journals), then builds and publishes the installer via
   electron-builder (`--publish always`, `extraResources` for `data/`), and packaged builds
   auto-update in production (`updater.ts` / `setupAutoUpdate`). The installer bundles the
   plugin DLL (`resources/capture-steam`, built by `scripts/fetch-binaries.mjs`); BepInEx itself is

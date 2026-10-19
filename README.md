@@ -137,10 +137,11 @@ Play to the lobby: the renderer imports the snapshot on its own, and the latest 
 
 ---
 
-## Testing & type-check
+## Testing, type-check & lint
 
 ```bash
 npm run typecheck             # all workspaces (strict + noUnusedLocals/Parameters)
+npm run lint                  # ESLint, whole repo (eslint.config.js, no type info)
 npm test                      # core (22 tests) + renderer (251 tests) = 273
 ```
 

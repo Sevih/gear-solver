@@ -46,6 +46,6 @@ export const GameText = memo(function GameText({
     );
     last = COLOR_RE.lastIndex;
   }
-  if (last < text.length) k = pushPlain(out, text.slice(last), k);
+  if (last < text.length) pushPlain(out, text.slice(last), k);
   return <span className={className}>{out}</span>;
 });

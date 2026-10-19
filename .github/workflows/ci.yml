@@ -1,6 +1,6 @@
 name: CI
 
-# Typecheck + tests of every workspace, on each PR and each push to main.
+# Typecheck + lint + tests of every workspace, on each PR and each push to main.
 # Linux is the dev platform, Windows the one the app ships on: both run.
 on:
   pull_request:
@@ -17,14 +17,14 @@ concurrency:
 
 jobs:
   check:
-    name: typecheck + test (${{ matrix.os }})
+    name: typecheck + lint + test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     env:
-      # Neither typecheck nor the tests launch Electron: skip its ~100 MB download.
+      # Neither typecheck, lint nor the tests launch Electron: skip its ~100 MB download.
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v4
@@ -37,5 +37,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
 
       - run: npm run typecheck
+
+      - run: npm run lint
 
       - run: npm test

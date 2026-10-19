@@ -13,6 +13,7 @@
     "build": "npm run build -w @gear-solver/core && npm run build -w @gear-solver/renderer",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
     "data:sync": "node data/sync.mjs",
     "oracle:wiki": "node --experimental-strip-types scripts/export-wiki-oracle.mjs",
     "capture-steam:build": "dotnet build tools/capture-steam -c Release --nologo -v q",
@@ -21,7 +22,12 @@
     "release": "node scripts/release.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "concurrently": "^9.0.1",
+    "eslint": "10.12.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "typescript-eslint": "8.71.0",
     "wait-on": "^8.0.1"
   },
   "engines": {

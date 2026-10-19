@@ -64,8 +64,8 @@
 - [ ] 🟡 **data-sync** — `derivedReady` ne teste que `characters.json` · échecs de `writeAtomic` avalés · octets
       non JSON écrits tels quels · pas de verrou contre deux syncs simultanées.
 - [ ] ⚪ **Desktop** — écritures du serveur non atomiques · `img-cache` ne revalide jamais une image en cache ·
-      une route `/api/*` inconnue répond 200 avec `index.html` · `release.mjs` ne restaure que `package.json` en
-      cas d'échec · champ `InvenType` déclaré dans `raw.ts` mais absent des captures.
+      une route `/api/*` inconnue répond 200 avec `index.html` · champ `InvenType` déclaré dans `raw.ts` mais absent
+      des captures.
 - [ ] ⚪ **Commentaires morts vers outerpedia-v2** — `EquipmentIcon.tsx`, `GameText.tsx`, `Shell.tsx`,
       `InventoryScreen.tsx`, `BuilderScreen.tsx`, `core/gamedata.ts`, `core/parse.ts`.
 
@@ -85,11 +85,6 @@
       option `allowZeroPriority` · `has4pc`.
 - [ ] ⚪ **Reset (Builds)** remet aussi le tri `byRank` à CP alors que la condition d'affichage ne le regarde pas ·
       clamp worker count à `hardwareConcurrency` côté Settings vs `WORKER_COUNT_CEILING` côté orchestrateur.
-- [ ] 🟠 **`scripts/release.mjs` ne lance ni typecheck ni tests avant `publish`** (la CI les passe sur PR et `main`).
-- [ ] 🟠 **Aucun ESLint configuré** — les `eslint-disable-next-line react-hooks/exhaustive-deps` sont inertes, les deps
-      de hooks ne sont vérifiées par rien. Ajouter `eslint.config.js` (typescript-eslint + react-hooks) et corriger ce
-      qui sort.
-- [ ] 🟡 **`packages/core` déclare `vite` en dependency** (jamais importé, le package est « pure TS ») — supprimer.
 - [ ] 🟡 **Dépendance inversée `lib → screens`** — `filterPresets.ts` et `heroFilters.ts` importent `SolverFilters`
       depuis `screens/BuilderScreen`. Déplacer le type + le reducer dans `lib/solver/builderFilters.ts`.
 - [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer) · calcul de

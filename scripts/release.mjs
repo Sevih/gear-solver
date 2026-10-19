@@ -10,23 +10,27 @@
  *   npm run release -- --force --no-undraft   # skip safety checks / leave as draft
  *
  * Pipeline (each step quits on failure — re-run safe once you fixed the
- * blocker since version bump is the first idempotency-breaker):
+ * blocker: a failure before the step-6 upload succeeds reverts the version
+ * bump and both journal stamps):
  *   1. Pre-checks (clean git tree, GH_TOKEN set, gh CLI present)
  *   2. Bump apps/desktop/package.json (this version drives the tag + the
- *      installer filename + the electron-updater compare)
+ *      installer filename + the electron-updater compare) and stamp
+ *      docs/release-notes.md + docs/changelog.md
  *   3. Regenerate data/derived/* (passives, gems, multi-tier, EE labels…)
- *   4. Build web + desktop TS
- *   5. electron-builder --publish always → uploads installer + latest.yml
+ *   4. Checks: typecheck, tests, lint (after the data refresh, so the tests
+ *      run against the tables the installer will ship)
+ *   5. Build web + desktop TS
+ *   6. electron-builder --publish always → uploads installer + latest.yml
  *      to a DRAFT release on GitHub (provider config in apps/desktop pkg)
- *   6. git add + commit "chore: release vX.Y.Z" + tag + push (--follow-tags)
- *   7. Promote the draft to a live release via gh + post the curated,
+ *   7. git add + commit "chore: release vX.Y.Z" + tag + push (--follow-tags)
+ *   8. Promote the draft to a live release via gh + post the curated,
  *      player-facing notes from docs/release-notes.md ([Unreleased] section).
  *      Falls back to the `${prevTag}..HEAD~1` commit log when that section is
  *      empty (skip undraft with --no-undraft to edit the body manually).
  *
  * Env:
  *   GH_TOKEN / GITHUB_TOKEN   required — electron-builder publish + gh.
- *   VT_API_KEY                optional — when set, step 5 auto-submits the
+ *   VT_API_KEY                optional — when set, step 6 auto-submits the
  *                             installer to VirusTotal and folds the scan link
  *                             into the release notes. Get a free key at
  *                             https://www.virustotal.com/gui/my-apikey
@@ -35,7 +39,7 @@
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -94,7 +98,7 @@ const FORCE = flag("--force");
 const NO_UNDRAFT = flag("--no-undraft");
 const bumpArg = args.find((a) => !a.startsWith("--")) ?? "patch";
 
-const step = (n, msg) => console.log(`\n\x1b[36m[${n}/7]\x1b[0m \x1b[1m${msg}\x1b[0m`);
+const step = (n, msg) => console.log(`\n\x1b[36m[${n}/8]\x1b[0m \x1b[1m${msg}\x1b[0m`);
 const ok = (msg) => console.log(`  \x1b[32m✓\x1b[0m ${msg}`);
 const skip = (msg) => console.log(`  \x1b[90m↷ ${msg}\x1b[0m`);
 const die = (msg, hint) => {
@@ -135,6 +139,25 @@ function restoreVersion(pkgPath, pristineVersion) {
   }
 }
 
+/** Rewrite the journals stamped in step 2 with their pre-stamp text when a
+ *  later step blows up before anything reached GitHub — same contract as
+ *  restoreVersion. `snapshots` maps each path to its pristine text (null when
+ *  the file couldn't be read, i.e. nothing was stamped). */
+function restoreJournals(snapshots) {
+  for (const [path, pristine] of snapshots) {
+    if (pristine === null) continue;
+    const name = relative(ROOT, path).replace(/\\/g, "/");
+    try {
+      if (readFileSync(path, "utf-8") !== pristine) {
+        writeFileSync(path, pristine);
+        console.error(`  \x1b[90m↻ Reverted ${name} to its pre-release text\x1b[0m`);
+      }
+    } catch {
+      console.error(`  \x1b[33m! Could not auto-revert ${name} — restore it with git\x1b[0m`);
+    }
+  }
+}
+
 /** Find the Setup .exe electron-builder just produced for `version` and return
  *  `{ name, sha256 }`, or null if it isn't there (dry-run, or a build that
  *  didn't emit an installer). Matches on `Setup` + the version so a stale exe
@@ -150,7 +173,7 @@ function hashInstaller(version) {
   return { name, sha256 };
 }
 
-// Populated by submitToVirusTotal() in step 5; integrityNote() folds the scan
+// Populated by submitToVirusTotal() in step 6; integrityNote() folds the scan
 // link into the notes when the auto-submit succeeded.
 let vtResult = null;
 
@@ -254,7 +277,7 @@ const branch = runSilent("git rev-parse --abbrev-ref HEAD");
 ok(`On branch ${branch}`);
 
 // Snapshot the previous release tag NOW (before we create the new one) so
-// step 7 can build release notes from the commit range. `--match v*` skips
+// step 8 can build release notes from the commit range. `--match v*` skips
 // any non-release tags that might have been created manually.
 let prevTag = null;
 try {
@@ -288,6 +311,11 @@ try {
 // BOTH journals so the release commit carries them version-anchored.
 const dateStr = new Date().toISOString().slice(0, 10);
 const unreleasedBody = readUnreleasedNotes(RELEASE_NOTES);
+// Pre-stamp text of both journals, rewritten by the catch below on a failure
+// before publication (the stamp is otherwise left behind in the tree).
+const journalSnapshots = [RELEASE_NOTES, CHANGELOG].map((path) => {
+  try { return [path, readFileSync(path, "utf-8")]; } catch { return [path, null]; }
+});
 if (!DRY_RUN) {
   pkgJson.version = toVersion;
   writeFileSync(DESKTOP_PKG, JSON.stringify(pkgJson, null, 2) + "\n");
@@ -300,7 +328,7 @@ ok(unreleasedBody
   : `release-notes has no [Unreleased] entries — notes fall back to the commit log`);
 
 // Past this point a failure leaves the local package.json bumped but with
-// no matching artefact. We track when GitHub state becomes real (step 5
+// no matching artefact. We track when GitHub state becomes real (step 6
 // onwards) so the catch block only auto-reverts BEFORE that — once the
 // release exists on GitHub, reverting locally would just desync things.
 let releasedToGitHub = false;
@@ -309,19 +337,28 @@ try {
   step(3, "Refresh derived game data from the outerpedia checkout");
   run("node data/sync.mjs");
 
+  // ── CHECKS ───────────────────────────────────────────────────────────
+  // After the data refresh, so the tests (contract shape, oracles) run against
+  // the derived tables the installer is about to ship. A failure lands in the
+  // catch below, before anything is published.
+  step(4, "Checks: typecheck + tests + lint");
+  run("npm run typecheck");
+  run("npm test");
+  run("npm run lint");
+
   // ── BUILD ────────────────────────────────────────────────────────────
-  step(4, "Build web + desktop TS");
+  step(5, "Build web + desktop TS");
   run("npm run desktop:build");
 
   // ── PUBLISH (electron-builder) ───────────────────────────────────────
-  step(5, "Build installer + upload to GitHub (draft)");
+  step(6, "Build installer + upload to GitHub (draft)");
   // `electron-builder --publish always` reads `publish` block from apps/desktop
   // package.json (provider: github / Sevih / gear-solver). Default releaseType
-  // is draft — we promote it in step 7.
+  // is draft — we promote it in step 8.
   run("npm run publish -w @gear-solver/desktop");
   releasedToGitHub = true;
 
-  // Hash the freshly-built installer so step 7 can publish a verifiable
+  // Hash the freshly-built installer so step 8 can publish a verifiable
   // SHA-256 alongside the notes.
   const installer = hashInstaller(toVersion);
   if (installer) ok(`Installer SHA-256: ${installer.sha256}`);
@@ -331,7 +368,7 @@ try {
   vtResult = await submitToVirusTotal(installer);
 
   // ── COMMIT + PUSH ────────────────────────────────────────────────────
-  step(6, `Commit + tag ${tag} + push`);
+  step(7, `Commit + tag ${tag} + push`);
   // Stage the version bump AND the derived-data snapshot this release built +
   // published (step 3). The idempotent `version.json` write means this is a
   // no-op unless the game data genuinely changed since the last commit — in
@@ -344,7 +381,7 @@ try {
   run(`git push --follow-tags origin ${branch}`);
 
   // ── UNDRAFT + RELEASE NOTES ──────────────────────────────────────────
-  step(7, NO_UNDRAFT ? "Skip undraft (--no-undraft)" : "Promote draft → release + write notes");
+  step(8, NO_UNDRAFT ? "Skip undraft (--no-undraft)" : "Promote draft → release + write notes");
   if (NO_UNDRAFT) {
     skip("Draft left as-is — promote manually on GitHub when ready.");
   } else {
@@ -412,10 +449,11 @@ try {
   if (!DRY_RUN) {
     if (releasedToGitHub) {
       console.error(`  \x1b[33m! Release ${tag} already exists on GitHub — fix the issue and finish manually:\x1b[0m`);
-      console.error(`  \x1b[90m    git add apps/desktop/package.json && git commit -m "chore: release ${tag}" && git tag ${tag} && git push --follow-tags\x1b[0m`);
+      console.error(`  \x1b[90m    git add apps/desktop/package.json data/derived docs/release-notes.md docs/changelog.md && git commit -m "chore: release ${tag}" && git tag ${tag} && git push --follow-tags\x1b[0m`);
       console.error(`  \x1b[90m    gh release edit ${tag} --draft=false --latest\x1b[0m`);
     } else {
       restoreVersion(DESKTOP_PKG, fromVersion);
+      restoreJournals(journalSnapshots);
     }
   }
   process.exit(1);

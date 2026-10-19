@@ -8,6 +8,65 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧰 Outillage — la release vérifie avant de publier, ESLint posé, `vite` retiré de `packages/core` (2026-10-19)
+- ✅ **Pourquoi.** Items « `scripts/release.mjs` ne lance ni typecheck ni tests », « Aucun ESLint configuré », « `packages/core`
+  déclare `vite` » de l'audit du 07/09 et puce « `release.mjs` ne restaure que `package.json` » de l'item « Desktop » de
+  `docs/todo.md`. La release publiait sans rien vérifier (la CI ne couvre que les PR et `main`, pas les tables que
+  `data/sync.mjs` régénère juste avant le build) ; un échec avant publication laissait `docs/release-notes.md` et
+  `docs/changelog.md` tamponnés ; les six `eslint-disable-next-line react-hooks/exhaustive-deps` étaient inertes faute
+  d'ESLint ; `vite` était déclaré en dependency d'un package TS pur qui ne l'importe pas.
+- ✅ **Release.** `scripts/release.mjs` passe à 8 étapes (`step(n, …)` en `/8`, en-tête et renvois « step N » des
+  commentaires renumérotés) : nouvelle étape 4 « Checks: typecheck + tests + lint » (`run("npm run typecheck")`,
+  `run("npm test")`, `run("npm run lint")`) APRÈS `node data/sync.mjs` — les tests tournent sur les tables qui partent dans
+  l'installeur — et AVANT `npm run desktop:build` ; un échec tombe dans le `catch` existant. Le tampon des journaux est
+  réversible : `journalSnapshots` garde le texte des deux journaux avant `stampUnreleased`, et `restoreJournals` (même
+  contrat que `restoreVersion`, n'écrit que si le texte a changé) les réécrit dans le `catch` tant que `releasedToGitHub`
+  est faux. Le message de reprise manuelle (release déjà sur GitHub) indexe aussi `data/derived`, `docs/release-notes.md`
+  et `docs/changelog.md`, comme l'étape 7. Non lancé (pas même `--dry-run`, `gh release view` est hors du garde) :
+  `node --check scripts/release.mjs` vert et diff relu.
+- ✅ **ESLint.** `eslint.config.js` (ESM, config plate, `defineConfig` + `globalIgnores`) : `@eslint/js` recommended,
+  `typescript-eslint` recommended sans information de types (pas de `parserOptions.project`), globals navigateur pour
+  `apps/renderer/src`, Node pour `apps/desktop`, `scripts/`, `data/*.mjs` et `*.config.ts` ; `eslint-plugin-react-hooks`
+  par `reactHooks.configs.flat.recommended` (nom donné par le README du paquet en 7.1.1) sur `apps/renderer/**/*.{ts,tsx}`,
+  `rules-of-hooks` en `error`, `exhaustive-deps` en `warn`. Ignorés : `**/dist/**`, `**/node_modules/**`,
+  `apps/desktop/release/**`, `apps/desktop/resources/**`, `.cache/**`, `tools/**`, `wiki/**`, `data/derived/**`. Script
+  racine `"lint": "eslint ."` ; CI : étape `npm run lint` après `npm run typecheck` (nom du job et commentaires suivis) ;
+  `README.md` (§ « Testing, type-check & lint ») liste `npm run lint`, `docs/architecture.md` et `wiki/Architecture.md`
+  disent les vérifications de la release avant publication.
+- ✅ **Règles réglées dans la config.** Toutes les règles « compilateur React » du preset v7 (tout le preset sauf
+  `rules-of-hooks` et `exhaustive-deps` : `refs`, `set-state-in-effect`, `static-components`, `purity`, `immutability`,
+  `use-memo`…) en `warn`, leurs corrections relèvent des lots du renderer. `@typescript-eslint/no-unused-vars` garde
+  `error` avec `argsIgnorePattern`/`varsIgnorePattern` `^_` et `ignoreRestSiblings` : 13 des 14 cas étaient des
+  omissions volontaires (`const { a: _a, ...rest } = x` dans les tests, un paramètre `_label`), la convention du code.
+- ✅ **Fichiers retouchés pour la lint** (mécanique, sans effet de comportement) : `apps/renderer/vite.config.ts`
+  (import `existsSync` inutilisé retiré) ; `no-useless-assignment` sur trois valeurs initiales jamais lues —
+  `apps/desktop/src/api-handler.ts` (`let removeBepinex: boolean;`, le `catch` répond et sort), `apps/desktop/src/main.ts`
+  (`let hash: string | null;`, idem), `apps/renderer/src/design/GameText.tsx` (le dernier `pushPlain` n'affecte plus `k`,
+  jamais relu) ; `no-empty` : `apps/renderer/src/capture.ts` (`catch { /* already released */ }` autour de
+  `reader.releaseLock()`).
+- ✅ **Warnings restants (24, `npm run lint` sort en 0).** `react-hooks/set-state-in-effect` 10 (BuilderScreen 5,
+  SettingsModal 2, BuildsScreen 1, InventoryScreen 2), `react-hooks/refs` 6 (BuilderScreen 4, `hooks/usePersistedState.ts`
+  2), `react-hooks/static-components` 3 (InventoryScreen), `react-hooks/incompatible-library` 2 (BuilderScreen,
+  InventoryScreen), `react-hooks/exhaustive-deps` 1 (`BuildsScreen.tsx:655`, `lockedKeys` à mémoïser), et 2 directives
+  `eslint-disable` désormais rapportées comme inutiles (`App.tsx:220`, `BuilderScreen.tsx:1069` : aucun problème de deps
+  à ces lignes) — gardées comme demandé, les quatre autres sont actives.
+- ✅ **Dépendances.** Les deux seules commandes npm autorisées pour ce lot :
+  `ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm install --save-dev --save-exact --no-audit --no-fund eslint@10.12.0 @eslint/js@10.0.1
+  typescript-eslint@8.71.0 eslint-plugin-react-hooks@7.1.1 globals@17.13.0` (« added 79 packages », aucun pair refusé) et
+  `npm uninstall --no-audit --no-fund vite -w @gear-solver/core` (« up to date », `vite` sort de
+  `packages/core/package.json` et du lock). `package-lock.json` : 1202 insertions, 35 suppressions. Contrôle `node -e`
+  entre `git show HEAD:package-lock.json` et le nouveau lock : 79 entrées ajoutées (la chaîne ESLint), aucune version de
+  paquet tiers changée, `node_modules/vite` reste en 6.4.3 ; changent aussi l'entrée racine (devDependencies),
+  `packages/core` (`dependencies` retirée), le drapeau `dev: true` sur 79 entrées (esbuild/rollup et 5 autres comme
+  `@types/node`, que `vite` en dependency de core rendait « prod »), et deux restes d'un lock en retard sur l'arbre :
+  `apps/desktop` 0.5.0 → 1.10.0 (la version réelle du `package.json`) et l'entrée `apps/web` (« extraneous », workspace
+  disparu) retirée.
+- ✅ **Vérifications.** `npm run typecheck` : dernière ligne `> tsc --noEmit` (sortie 0) ; `npm test` : core 154, desktop
+  131, renderer 472 verts, dernière ligne `Duration 968ms (transform 2.14s, setup 0ms, import 3.68s, tests 596ms,
+  environment 4ms)` ; `npm run lint` : `✖ 24 problems (0 errors, 24 warnings)`, sortie 0.
+- ⏳ **Sevih.** Les 24 warnings restent aux lots du renderer (deps de hooks, règles compilateur) ; la prochaine release
+  passera par l'étape 4 — un rouge y annule le bump et le tampon des journaux avant tout envoi.
+
 ### 🧪 Contrat — `GAME_STAT` tenu contre `stat-keys.json`, data:sync après C26 d'outerpedia (2026-10-19)
 - ✅ **Pourquoi.** Item L6 de `docs/todo.md`. outerpedia émet depuis C26 (`f391a76e`) `data/generated/solver/stat-keys.json` :
   `{ [ST_*]: { [OAT_*]: { key, percent, abbr } } }`, la clé du vocabulaire du contrat (`atk`, `atkPct`, `chc`, `resRate`,

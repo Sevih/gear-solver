@@ -41,7 +41,7 @@ let httpServer: Server | null = null;
  *  file), in the background, and is fully best-effort. Character art is
  *  intentionally left on-demand. */
 async function warmImageCache(): Promise<void> {
-  let hash: string | null = null;
+  let hash: string | null;
   const rels = new Set<string>();
   try {
     hash = (JSON.parse(readFileSync(join(DERIVED, "version.json"), "utf-8")) as { hash?: string }).hash ?? null;

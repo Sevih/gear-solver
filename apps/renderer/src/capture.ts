@@ -41,7 +41,7 @@ export async function streamCapture(
       }
     }
   } finally {
-    try { reader.releaseLock(); } catch {}
+    try { reader.releaseLock(); } catch { /* already released */ }
   }
   if (buf.length > 0) take(buf);
   return { exitCode };
