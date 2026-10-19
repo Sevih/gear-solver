@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.11.0] — 2026-10-19
+
 - **Speed 4-piece follows the game.** The Speed set's % bonus is now computed on base + evolution
   + awakening speed only, as the game does — not on the +10 SPD some heroes get from their 8th
   skill. Heroes like Claire, Faenan or Delta show 2–3 SPD less in a 4-piece Speed set than before;

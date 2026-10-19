@@ -2196,6 +2196,10 @@
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
 
+## [1.11.0] — 2026-10-19
+
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
 ## [1.10.0] — 2026-10-17
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
