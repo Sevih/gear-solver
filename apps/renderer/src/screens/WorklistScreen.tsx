@@ -11,22 +11,21 @@
  * a slot a newer build of the same hero also targets reads as superseded, and
  * a target that vanished from the inventory (post data-sync) reads as stale.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Character, GameData, GearPiece, Inventory } from "@gear-solver/core";
 import { CharacterPortrait, EquipmentIcon, SlotIcon, StatIcon } from "../design/EquipmentIcon.js";
 import { toUiPiece } from "../design/adapter.js";
 import { cx } from "../design/cx.js";
 import { SLOT_BY, toDesignSlot } from "../design/tokens.js";
 import { equipAssignments, equipPieces } from "../equip.js";
-import {
-  equippedByHero,
-  type WorklistEntry,
-} from "../lib/storage/worklist.js";
+import type { EquippedByHero, WorklistEntry } from "../lib/storage/worklist.js";
 import { changeState, planWorklist } from "../lib/worklist/plan.js";
 
 interface WorklistScreenProps {
   inventory: Inventory | null;
   game: GameData | null;
+  /** heroUid → equipped piece uids, memoized once per inventory by the App. */
+  equipped: EquippedByHero;
   worklist: WorklistEntry[];
   /** Persisted mutation — App owns the list and writes localStorage. */
   onChange: (next: WorklistEntry[]) => void;
@@ -34,13 +33,24 @@ interface WorklistScreenProps {
   onAfterApply: () => void;
 }
 
-export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApply }: WorklistScreenProps) {
+/** False once the component unmounted — an apply can outlive a tab switch,
+ *  and its local state must not be set after that. */
+function useMountedRef() {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  return mounted;
+}
+
+export function WorklistScreen({ inventory, game, equipped, worklist, onChange, onAfterApply }: WorklistScreenProps) {
   const [applyingAll, setApplyingAll] = useState(false);
   const [applyAllError, setApplyAllError] = useState<string | null>(null);
+  const mounted = useMountedRef();
 
   // Live oracles derived from the current snapshot — recomputed each render so
   // the cards stay truthful as the inventory changes underneath them.
-  const equipped = useMemo(() => equippedByHero(inventory), [inventory]);
   const invUids = useMemo(() => {
     const s = new Set<string>();
     if (inventory) for (const g of inventory.gear) s.add(g.uid);
@@ -75,9 +85,12 @@ export function WorklistScreen({ inventory, game, worklist, onChange, onAfterApp
     setApplyingAll(true);
     setApplyAllError(null);
     const ok = await equipAssignments(game, plan.assignments);
-    setApplyingAll(false);
+    // The snapshot is rewritten even if the user left the tab meanwhile: the
+    // App still re-imports, only this screen's own state is skipped.
     if (ok) onAfterApply();
-    else setApplyAllError("Apply failed — close the game while the Steam plugin is live, then retry.");
+    if (!mounted.current) return;
+    setApplyingAll(false);
+    if (!ok) setApplyAllError("Apply failed — close the game while the Steam plugin is live, then retry.");
   };
 
   if (worklist.length === 0) {
@@ -189,6 +202,7 @@ function WorklistCard({
 }) {
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const mounted = useMountedRef();
 
   // Per-change live state — applied (target already on hero), stale (target
   // gone from the inventory), or conflicting (wanted by another hero too, the
@@ -226,9 +240,10 @@ function WorklistCard({
     setApplying(true);
     setApplyError(null);
     const ok = await equipPieces(game, uids, entry.heroUid);
-    setApplying(false);
     if (ok) onAfterApply();
-    else setApplyError("Apply failed — close the game while the Steam plugin is live, then retry.");
+    if (!mounted.current) return;
+    setApplying(false);
+    if (!ok) setApplyError("Apply failed — close the game while the Steam plugin is live, then retry.");
   };
 
   return (

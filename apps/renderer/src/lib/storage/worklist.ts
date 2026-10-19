@@ -87,9 +87,14 @@ export function persistWorklist(list: WorklistEntry[]): void {
   }
 }
 
+/** heroUid → set of currently-equipped piece uids. */
+export type EquippedByHero = Map<string, Set<string>>;
+
 /** Map heroUid → set of currently-equipped piece uids. The "is this change
- *  already applied?" oracle the screen and badge both derive from. */
-export function equippedByHero(inventory: Inventory | null): Map<string, Set<string>> {
+ *  already applied?" oracle the screen and badge both derive from. The App
+ *  builds it once per inventory and hands it to the helpers below; their
+ *  `equipped` parameter falls back to building it when omitted. */
+export function equippedByHero(inventory: Inventory | null): EquippedByHero {
   const m = new Map<string, Set<string>>();
   if (!inventory) return m;
   for (const g of inventory.gear) {
@@ -112,9 +117,9 @@ export function equippedByHero(inventory: Inventory | null): Map<string, Set<str
 export function reconcileWorklist(
   list: WorklistEntry[],
   inventory: Inventory | null,
+  equipped: EquippedByHero = equippedByHero(inventory),
 ): { next: WorklistEntry[]; changed: boolean } {
   if (!inventory) return { next: list, changed: false };
-  const equipped = equippedByHero(inventory);
   let changed = false;
   const next: WorklistEntry[] = [];
   for (const e of list) {
@@ -136,8 +141,11 @@ export function reconcileWorklist(
  *  one; `none` keeps all claimed pieces out; `all` ignores claims like it
  *  ignores equipment. Newest entry wins a double-claim (list is newest-first);
  *  claims on pieces gone from the inventory are harmless (never matched). */
-export function worklistClaims(list: WorklistEntry[], inventory: Inventory | null): Record<string, string> {
-  const equipped = equippedByHero(inventory);
+export function worklistClaims(
+  list: WorklistEntry[],
+  inventory: Inventory | null,
+  equipped: EquippedByHero = equippedByHero(inventory),
+): Record<string, string> {
   const claims: Record<string, string> = {};
   for (const e of list) {
     const onHero = equipped.get(e.heroUid);
@@ -152,9 +160,12 @@ export function worklistClaims(list: WorklistEntry[], inventory: Inventory | nul
 /** Total changes still NOT applied (target piece not yet on the hero) across
  *  the whole worklist — the Worklist tab's badge count. Null when no inventory
  *  is loaded (can't tell what's applied yet). */
-export function remainingChangeCount(list: WorklistEntry[], inventory: Inventory | null): number | null {
+export function remainingChangeCount(
+  list: WorklistEntry[],
+  inventory: Inventory | null,
+  equipped: EquippedByHero = equippedByHero(inventory),
+): number | null {
   if (!inventory) return null;
-  const equipped = equippedByHero(inventory);
   let n = 0;
   for (const e of list) {
     const onHero = equipped.get(e.heroUid);

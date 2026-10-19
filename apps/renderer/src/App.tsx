@@ -13,7 +13,7 @@ import { SettingsModal } from "./design/SettingsModal.js";
 import { HomeScreen } from "./screens/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
-import { loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
+import { equippedByHero, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
 import { createOnboardingGate } from "./lib/onboarding.js";
@@ -71,6 +71,18 @@ const APP_VERSION =
   (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_APP_VERSION?: string } }).env?.VITE_APP_VERSION) ||
   "0.4";
 
+/** Write `value` to storage whenever it changes — from an effect, never from a
+ *  `setState` updater (StrictMode runs those twice). The ref starts on the
+ *  initial (loaded) value, so mounting writes nothing. */
+function usePersistOnChange<T>(value: T, persist: (v: T) => void) {
+  const persisted = useRef(value);
+  useEffect(() => {
+    if (persisted.current === value) return;
+    persisted.current = value;
+    persist(value);
+  }, [value, persist]);
+}
+
 export function App() {
   // Home is the default landing tab (fresh installs open here). Returning
   // users keep whatever tab they last left via the persisted value.
@@ -96,6 +108,26 @@ export function App() {
   const [gameVersion, setGameVersion] = useState<string | null>(null);
   const [running, setRunning] = useState<"none" | "steam-install">("none");
   const [log, setLog] = useState<string[]>([]);
+  // Install-log lines stream in one at a time: buffer them and flush at most
+  // once per frame, so a verbose install doesn't re-copy the log per line.
+  const logPending = useRef<string[]>([]);
+  const logFrame = useRef<number | null>(null);
+  const pushLog = useCallback((line: string) => {
+    logPending.current.push(line);
+    logFrame.current ??= requestAnimationFrame(() => {
+      logFrame.current = null;
+      const batch = logPending.current;
+      logPending.current = [];
+      setLog((l) => l.concat(batch));
+    });
+  }, []);
+  const clearLog = useCallback(() => {
+    if (logFrame.current != null) cancelAnimationFrame(logFrame.current);
+    logFrame.current = null;
+    logPending.current = [];
+    setLog([]);
+  }, []);
+  useEffect(() => () => { if (logFrame.current != null) cancelAnimationFrame(logFrame.current); }, []);
   const [logOpen, setLogOpen] = useState(false);
   // Onboarding wizard — persisted "seen" flag so the modal only auto-opens
   // once per fresh install. The header's gear icon re-opens it on demand.
@@ -131,12 +163,18 @@ export function App() {
   // worked through on the Worklist tab. Owned here so an add in the (kept-mounted)
   // Builder is live on the Worklist tab. Persisted to localStorage on each change.
   const [worklist, setWorklist] = useState<WorklistEntry[]>(() => loadWorklist());
-  const commitWorklist = (next: WorklistEntry[]) => { setWorklist(next); persistWorklist(next); };
+  usePersistOnChange(worklist, persistWorklist);
+  // heroUid → equipped piece uids, built once per inventory and shared by the
+  // worklist helpers, the tab badges and the Worklist screen.
+  const equipped = useMemo(() => equippedByHero(inv), [inv]);
   // Worklist reservations for the solver — pieceUid → claiming heroUid (unapplied
   // changes only). A claimed piece behaves as if equipped on the claiming hero,
   // so solving the NEXT hero respects what earlier builds already reserved
   // (equipped scope + rank rules apply to claims like to real equipment).
-  const solverWorklistClaims = useMemo(() => worklistClaims(worklist, inv), [worklist, inv]);
+  const solverWorklistClaims = useMemo(() => worklistClaims(worklist, inv, equipped), [worklist, inv, equipped]);
+  // Pending (not-yet-applied) gear changes across all queued builds — the
+  // Worklist tab badge.
+  const worklistRemaining = useMemo(() => remainingChangeCount(worklist, inv, equipped), [worklist, inv, equipped]);
   // Pending Inventory drill-down from a Home dashboard click — set + switch to
   // the Inventory tab, consumed (and cleared) by InventoryScreen on apply.
   const [invDrill, setInvDrill] = useState<InventoryDrill | null>(null);
@@ -144,13 +182,10 @@ export function App() {
   // consumed by the Builder's solver. Owned here so an Inventory edit is live
   // for the (kept-mounted) Builder. Durable (localStorage).
   const [excludedPieces, setExcludedPieces] = useState<Set<string>>(() => loadExcludedPieces());
+  usePersistOnChange(excludedPieces, persistExcludedPieces);
   // Stable identity so the memoized Inventory GearTiles don't all re-render on
   // every App render (only the toggled tile's `excluded` prop changes).
-  const toggleExclude = useCallback((uid: string) => setExcludedPieces((prev) => {
-    const next = toggleExcludedPiece(prev, uid);
-    persistExcludedPieces(next);
-    return next;
-  }), []);
+  const toggleExclude = useCallback((uid: string) => setExcludedPieces((prev) => toggleExcludedPiece(prev, uid)), []);
 
   async function refreshInventory(label: string) {
     const r = await autoImport();
@@ -183,13 +218,10 @@ export function App() {
   // local apply, data sync): any queued change whose target piece is now on the
   // hero is done for real → drop it (and any entry it empties). Source of truth
   // is the fresh snapshot, not the manual "done" ticks.
+  // An unchanged list keeps its ref, so nothing re-renders or gets written.
   useEffect(() => {
-    setWorklist((prev) => {
-      const { next, changed } = reconcileWorklist(prev, inv);
-      if (changed) persistWorklist(next);
-      return next;
-    });
-  }, [inv]);
+    setWorklist((prev) => reconcileWorklist(prev, inv, equipped).next);
+  }, [inv, equipped]);
 
   // Startup import + Steam snapshot following share one state machine (the
   // last-seen user_item.json mtime, an init-before-ticks order, no overlapping
@@ -263,13 +295,13 @@ export function App() {
   async function runSteamInstall() {
     if (running !== "none") return;
     setRunning("steam-install");
-    setLog([]); setLogOpen(true);
+    clearLog(); setLogOpen(true);
     try {
-      const { exitCode } = await streamCapture("/api/steam/install", (line) => setLog((l) => [...l, line]));
+      const { exitCode } = await streamCapture("/api/steam/install", pushLog);
       if (exitCode === 0) setStatus("Capture plugin installed — launch OUTERPLANE from Steam and play to the lobby.");
       else setStatus(`Plugin install failed (exit ${exitCode}) — see log.`);
     } catch (err) {
-      setLog((l) => [...l, `[client] ${err instanceof Error ? err.message : String(err)}`]);
+      pushLog(`[client] ${err instanceof Error ? err.message : String(err)}`);
       setStatus("Network error during plugin install.");
     } finally {
       setRunning("none");
@@ -296,12 +328,11 @@ export function App() {
           // "equipped/total" (we always know it from inv.gear.length without
           // resolving char ownership). Null while no capture has loaded yet.
           Inventory: inv ? inv.gear.length : null,
-          // Builds = number of distinct equipped characters. Computed on the
-          // fly — sparse enough to not need memoization.
-          Builds: inv ? new Set(inv.gear.filter((g) => g.equippedBy).map((g) => g.equippedBy)).size : null,
+          // Builds = number of distinct equipped characters — the keys of
+          // the memoized `equipped` map.
+          Builds: inv ? equipped.size : null,
           Builder: null,
-          // Pending (not-yet-applied) gear changes across all queued builds.
-          Worklist: remainingChangeCount(worklist, inv) || null,
+          Worklist: worklistRemaining || null,
         }}
         capture={{
           steam: { status: steam, onInstall: () => void runSteamInstall(), onLaunch: () => void runSteamLaunch() },
@@ -394,8 +425,9 @@ export function App() {
               <WorklistScreen
                 inventory={inv}
                 game={game}
+                equipped={equipped}
                 worklist={worklist}
-                onChange={commitWorklist}
+                onChange={setWorklist}
                 onAfterApply={() => void refreshInventory("Applied worklist change")}
               />
             </ScreenErrorBoundary>
@@ -408,7 +440,7 @@ export function App() {
           {builderMounted.current && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} onToggleExclude={toggleExclude} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={(entry) => setWorklist((prev) => { const next = [entry, ...prev]; persistWorklist(next); return next; })} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} onToggleExclude={toggleExclude} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={(entry) => setWorklist((prev) => [entry, ...prev])} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
               </ScreenErrorBoundary>
             </div>
           )}

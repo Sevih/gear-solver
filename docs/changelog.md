@@ -8,6 +8,51 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚡ App et Worklist — badges mémoïsés, `equippedByHero` calculé une fois, journal linéaire, persistance hors des updaters (2026-10-19)
+- ✅ **Pourquoi.** Item « Perf render App » et puces App / WorklistScreen de « Effets de bord dans des updaters
+  `setState` » (`docs/todo.md`). Chaque rendu de l'App (donc chaque ligne du journal d'installation du plugin)
+  reparcourait `inv.gear` pour le badge Builds et `remainingChangeCount` ; `equippedByHero` était reconstruit quatre
+  fois par changement d'inventaire (réconciliation, réservations du solveur, badge Worklist, `WorklistScreen`) ;
+  `setLog((l) => [...l, line])` recopiait tout le journal à chaque ligne (O(n²)) ; trois écritures localStorage
+  vivaient dans des updaters `setState`, que StrictMode exécute deux fois.
+- ✅ **Une map par inventaire.** `const equipped = useMemo(() => equippedByHero(inv), [inv])` dans `App.tsx`, passée
+  à `reconcileWorklist`, `worklistClaims` et `remainingChangeCount` (`lib/storage/worklist.ts`, nouveau paramètre
+  `equipped` dont la valeur par défaut la reconstruit — mêmes appels qu'avant pour les tests ; type `EquippedByHero`
+  exporté) et à `WorklistScreen` (prop `equipped`, son `useMemo` disparaît). Badge Builds = `equipped.size` (les clés
+  sont exactement les `equippedBy` non vides que comptait l'ancien `Set`) ; badge Worklist = `worklistRemaining`,
+  `useMemo` sur `[worklist, inv, equipped]`.
+- ✅ **Journal.** `pushLog` empile les lignes dans une ref et programme un seul `requestAnimationFrame` qui les verse
+  d'un bloc (`setLog((l) => l.concat(batch))`) : au plus une mise à jour par frame, mêmes lignes dans le même ordre
+  (y compris la ligne `[client] …` d'une erreur réseau). `clearLog` annule la frame en attente et vide le tampon au
+  lancement d'une installation ; la frame est aussi annulée au démontage. `LogView` reçoit toujours un nouveau
+  tableau à chaque lot, son défilement automatique ne change pas.
+- ✅ **Persistance.** Petit hook local `usePersistOnChange(value, persist)` : écriture dans un effet quand la valeur
+  change, la ref partant de la valeur chargée — rien n'est écrit au montage, ni deux fois en StrictMode. Les updaters
+  deviennent purs : `toggleExclude` = `toggleExcludedPiece(prev, uid)` (identité stable conservée), ajout depuis le
+  Builder = `[entry, ...prev]`, réconciliation = `reconcileWorklist(prev, inv, equipped).next` (même référence quand
+  rien n'est appliqué, donc ni rendu ni écriture), et `WorklistScreen` reçoit `setWorklist` en `onChange` à la place
+  de `commitWorklist`. Mêmes clés (`gs.worklist`, `gs.solver.excludedPieces`), mêmes données.
+- ✅ **Garde de démontage.** `useMountedRef` dans `WorklistScreen.tsx` ; après `await equipAssignments(…)` (Apply all)
+  et `await equipPieces(…)` (Apply locally d'une carte), `onAfterApply()` part toujours si l'écriture a réussi (le
+  snapshot est réécrit même si l'utilisateur a changé d'onglet, l'App doit réimporter), puis l'état local
+  (`applying`, message d'erreur) n'est touché que si le composant est encore monté — cas courant pour une carte : la
+  réconciliation qui suit l'application la retire.
+- ✅ **Tests (`apps/renderer/test/worklistPlan.test.ts`, +4).** Les trois fonctions donnent le même résultat avec la
+  map passée et sans, sur un inventaire avec pièces équipées, un inventaire vide et `null` ; un cas vérifie qu'elles
+  lisent bien la map fournie (réconciliation, réservations, compte, et une map vide qui fait tout recompter).
+- ✅ **Vérifications.** `npm run typecheck` : dernière ligne `> tsc --noEmit` (sortie 0) ; `npm test` : core 154,
+  desktop 131, renderer 489 verts (485 + 4), dernière ligne `Duration 1.03s (transform 2.24s, setup 0ms, import
+  3.94s, tests 672ms, environment 5ms)` ; `npm run lint` : `✖ 28 problems (0 errors, 28 warnings)`, sortie 0 (20
+  avant). Les huit nouveaux sont tous sur `App.tsx` : avant ce lot le compilateur React abandonnait l'analyse du
+  composant (seule la directive `eslint-disable` inutilisée de l'effet de synchro au démarrage remontait) ; il va
+  maintenant au bout et signale sept `react-hooks/refs` sur du code inchangé (`refreshRef.current = …`,
+  `followerRef.current` lu au rendu, `builderMounted.current` dans le JSX) et un `set-state-in-effect` sur l'effet de
+  réconciliation, qui appelait déjà `setWorklist` dans un effet avant ce lot.
+- ⏳ **Sevih contrôle** : Install plugin (journal qui défile, compteur « Show log (n) », lignes complètes à la fin),
+  exclusion d'une pièce (droit-clic dans Inventory, survit au rechargement), ajout d'une entrée depuis le Builder puis
+  Apply locally / Apply all dans la Worklist (badge, entrée retirée, pas d'avertissement React en console). Les
+  avertissements `react-hooks/refs` de l'App sont hors périmètre (motifs de ref pendant le rendu à revoir à part).
+
 ### ⚡ Builder — filtres par héros lus une fois, progression isolée du rendu, diff build/équipement partagé (2026-10-19)
 - ✅ **Pourquoi.** Items « Perf render Builder », puce « slot changé » de « Duplications » et puces Builder de « Effets
   de bord » (`docs/todo.md`). Pendant un solve, chaque tick de progression (~10/s, throttle de l'orchestrateur)

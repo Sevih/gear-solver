@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GameData, Inventory, RawUserItem } from "@gear-solver/core";
 import { equipAssignments } from "../src/equip.js";
 import { changeState, planWorklist } from "../src/lib/worklist/plan.js";
-import { worklistClaims, type WorklistChange, type WorklistEntry } from "../src/lib/storage/worklist.js";
+import {
+  equippedByHero,
+  reconcileWorklist,
+  remainingChangeCount,
+  worklistClaims,
+  type WorklistChange,
+  type WorklistEntry,
+} from "../src/lib/storage/worklist.js";
 
 // --- Minimal fixtures. The planner only reads `gear[].uid` / `gear[].equippedBy`
 //     and the entries' (heroUid, changes[{slot,toUid,fromUid}]) — everything else
@@ -222,6 +229,40 @@ describe("worklistClaims — solver reservations", () => {
   it("returns an empty map with no inventory", () => {
     expect(worklistClaims([entry("a", "h1", [change("weapon", "P")])], null)).toEqual({ P: "h1" });
     expect(worklistClaims([], inv([]))).toEqual({});
+  });
+});
+
+describe("worklist helpers — shared equippedByHero map", () => {
+  // The App builds the map once per inventory and passes it in; omitting it
+  // (tests, other callers) rebuilds it — both must agree.
+  const list = [
+    entry("new", "h2", [change("weapon", "P"), change("helmet", "S")]),
+    entry("mid", "h1", [change("weapon", "P"), change("helmet", "Q")]),
+    entry("old", "h3", [change("gloves", "R")]),
+  ];
+  const inventories: Array<Inventory | null> = [
+    inv([{ uid: "P" }, { uid: "Q", owner: "h1" }, { uid: "R", owner: "h3" }, { uid: "S", owner: "h1" }]),
+    inv([]),
+    null,
+  ];
+
+  it.each(inventories.map((i) => [i]))("same results with and without the map (%#)", (inventory) => {
+    const equipped = equippedByHero(inventory);
+    expect(reconcileWorklist(list, inventory, equipped)).toEqual(reconcileWorklist(list, inventory));
+    expect(worklistClaims(list, inventory, equipped)).toEqual(worklistClaims(list, inventory));
+    expect(remainingChangeCount(list, inventory, equipped)).toBe(remainingChangeCount(list, inventory));
+  });
+
+  it("reads the passed map rather than rebuilding it", () => {
+    const inventory = inventories[0]!;
+    const equipped = equippedByHero(inventory);
+    // Q on h1 → the "mid" entry keeps only P; R on h3 → "old" is dropped.
+    expect(reconcileWorklist(list, inventory, equipped).next.map((e) => [e.id, e.changes.map((c) => c.toUid)]))
+      .toEqual([["new", ["P", "S"]], ["mid", ["P"]]]);
+    expect(worklistClaims(list, inventory, equipped)).toEqual({ P: "h2", S: "h2" });
+    expect(remainingChangeCount(list, inventory, equipped)).toBe(3);
+    // An empty map means "nothing equipped": every change counts again.
+    expect(remainingChangeCount(list, inventory, new Map())).toBe(5);
   });
 });
 
