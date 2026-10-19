@@ -8,6 +8,69 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧩 Renderer — composants monolithiques découpés, un dossier par écran, sans changement de comportement (2026-10-19)
+- ✅ **Pourquoi.** Item « Composants monolithiques » de `docs/todo.md` : à `edc18fe`, `BuilderScreen.tsx` faisait
+  4 435 lignes (~45 composants, le reducer déjà parti dans `lib/solver/builderFilters.ts`), `InventoryScreen.tsx`
+  1 340, `HomeScreen.tsx` 1 178 (dont `computeStats` ~200), `design/SettingsModal.tsx` 908. Déplacements seulement :
+  aucun changement de logique, de rendu, de texte ni de perf.
+- ✅ **Commits.** `041d3a1` `refactor(builder)`, `7ec25e8` `refactor(settings)`, `7bb058f` `refactor(inventory)`,
+  `31b8b5a` `refactor(home)`, puis cette entrée. Diffstat : 39 fichiers (+4 773 / −4 444), 14 (+961 / −915),
+  14 (+1 397 / −1 351), 14 (+1 242 / −1 188) ; le surplus est fait des imports et d'un en-tête par module.
+- ✅ **Méthode.** Découpage outillé par l'API du compilateur TypeScript : chaque déclaration de tête est recopiée
+  telle quelle (texte et commentaires de tête compris, séparateurs `/* ─── */` inclus) dans son module, `export`
+  ajouté seulement si un autre module la lit, imports recalculés d'après les symboles réellement référencés,
+  aucun cycle entre modules, pas de barrel. Contrôle : chaque ligne non vide de l'ancien fichier se retrouve dans
+  le nouvel ensemble (seuls les imports diffèrent) ; `git log -p --color-moved=zebra` marque déplacées 8 388 /
+  1 656 / 2 506 / 2 152 lignes du diff, contre 137 / 28 / 40 / 64 lignes simples hors imports et en-têtes
+  (préfixes `export`, lignes trop courtes pour la détection, docs).
+- ✅ **Builder** (`screens/builder/`, 4 435 → 4 748 lignes en 30 fichiers) : `BuilderScreen.tsx` 781,
+  `useSolverSession.ts` 275, `ResultsTable.tsx` 631 (table, lignes, heatmap, menu des colonnes), `BuilderToolbar.tsx`
+  394, `catalogs.ts` 232, `OptionsPanel.tsx` 189, `SetsPanel.tsx` 176, `IconChips.tsx` 164, `statColumns.ts` 156,
+  `RightSidebar.tsx` 155, `FilterFooter.tsx` 148, `BottomGearBand.tsx` 136, `HeroSelect.tsx` 119,
+  `BuildEffectsPanel.tsx` 119, `DmgPer1PctPanel.tsx` 108, `StatFiltersPanel.tsx` 99, `AccessoryMainStatsPanel.tsx`
+  98, `EquipBuildButton.tsx` 95, `SubstatPriorityPanel.tsx` 93, `WeaponsAccessoriesPanel.tsx` 84, `SubValuePanel.tsx`
+  70, `StatsPanel.tsx` 62, `PromptDialog.tsx` 60, `RecoBuildPicker.tsx` 60, `RatingFiltersPanel.tsx` 56, `Panel.tsx`
+  39, `reforge.ts` 35, `composition.ts` 34, `solveCounts.ts` 32, `heroName.ts` 25, `useClickOutside.ts` 23.
+- ✅ **`useSolverSession`** regroupe l'état qui existait : mode de solve, orchestrateur (création paresseuse,
+  dispose au démontage, reconstruction au changement de `workerCount`), `startSolve` / `cancelSolve`, estimation
+  pré-solve débouncée, progression, résultats, filtre client post-solve (`buildPassesFilters`, `applyClientFilter`).
+  Ordre des effets inchangé : l'appel du hook prend la place du premier effet qu'il porte (après le layout effect
+  des refs et l'abonnement `onBackupImported`), et ses trois effets (dispose, `workerCount`, estimation) se
+  suivaient déjà sans autre effet entre eux. Seuls le mémo pur `selected` et des `useState` sans effet de bord
+  remontent ou restent avant l'appel.
+- ✅ **Laissé dans `BuilderScreen.tsx`, et pourquoi.** L'effet de changement de héros : il réinitialise à la fois
+  les filtres (refs et `dispatch` de l'écran) et la session, et le mettre dans le hook le ferait passer avant
+  l'effet qui efface le statut de reco. Il lit désormais les setters rendus par le hook : `exhaustive-deps` ne les
+  sait plus stables et levait un avertissement de plus ; tableau de dépendances inchangé, un
+  `eslint-disable-next-line` commenté l'explique. Restent aussi les builds sauvés, presets, reco, Equip et
+  Worklist (pas de l'état de solve).
+- ✅ **Settings** (`design/settings/`, 908 → 954 lignes en 8 fichiers) : `SettingsModal.tsx` 266 (onglets, pied,
+  icônes de navigation), `SteamSetupPane.tsx` 190, `SolverPane.tsx` 150 (avec le type `SolverSettings`),
+  `SettingsControls.tsx` 106 (primitives partagées), `DataPane.tsx` 79, `BackupPane.tsx` 78, `DebugPane.tsx` 50,
+  `useConfirmClick.ts` 35 (avec `useMountedRef`) ; les helpers export / import / wipe suivent leur pane.
+- ✅ **Inventory** (`screens/inventory/`, 1 340 → 1 386 lignes en 7 fichiers) : `InventoryScreen.tsx` 333,
+  `FilterModal.tsx` 474 (avec le bouton Filter), `VirtualGearGrid.tsx` 196, `filters.ts` 175 (état des filtres et
+  des onglets, codec de session, prédicats), `InventoryTabs.tsx` 82, `SortHeader.tsx` 66, `ItemDetail.tsx` 60. Le
+  commentaire glissé entre deux imports (helpers de `design/GearDetail`) suit l'import de `ItemDetail.tsx`.
+- ✅ **Home** (`screens/home/`, 1 178 → 1 230 lignes en 9 fichiers) : `HomeScreen.tsx` 425, `lib/homeStats.ts` 307
+  (`computeStats` et son vocabulaire, pur), `HomePrimitives.tsx` 125, `UpdateCard.tsx` 104, `ExportRosterButton.tsx`
+  68, `OopartsTable.tsx` 61, `ClassEffectRow.tsx` 57, `EmptyDashboard.tsx` 49, `HomeIcons.tsx` 34. `homeSets.test.ts`
+  importe `computeStats` depuis `lib/homeStats.js` ; sa doc « Exported for tests » dit maintenant que l'écran le lit.
+- ✅ **Docs.** `docs/architecture.md` / `wiki/Architecture.md` (dossiers des écrans), arborescences de
+  `docs/solver.md` / `wiki/Solver.md` et `docs/reference.md` / `wiki/Engine-Reference.md`, lien vers
+  `BuilderScreen.tsx`, chemin de `SettingsModal.tsx` dans `docs/roadmap.md` / `wiki/Roadmap.md`.
+- ✅ **Vérifié.** `npm run typecheck` : `> tsc --noEmit` sans erreur (dernière ligne) ; `npm test` : `Tests  569
+  passed (569)` (core 156, desktop 157) ; `npm run lint` : `✖ 28 problems (0 errors, 28 warnings)` puis `0 errors
+  and 1 warning potentially fixable with the --fix option.`, les mêmes 28 qu'avant (ceux de Builder, Settings et
+  Inventory ont suivi leur code). `vite build` : le chunk `BuilderScreen` passe de 104,55 à 105,98 kB (32,40 →
+  32,63 kB gzip, les liaisons entre modules), les autres chunks inchangés.
+- ✅ **Vu en route, hors périmètre.** `apps/desktop/test/img-cache-revalidate.test.ts` a échoué une fois sur un
+  `npm test` complet puis est passé trois fois de suite (minutage) ; directive `eslint-disable` inutile à
+  `App.tsx:256` ; dans `startSolve`, la constante locale `selected` masque désormais le paramètre du même nom du
+  hook (même valeur, comme avant avec le mémo de l'écran).
+- ⏳ **Sevih** : contrôle à l'écran de chaque onglet — Builder (solve, filtres, presets, Equip, Worklist),
+  Inventory, Home, Settings.
+
 ### 🗂️ Données — références mortes élaguées au changement de `hash` du contrat (2026-10-19)
 - ✅ **Pourquoi.** Item « Snapshot `data/` versioning » de `docs/todo.md` : le `hash` de `version.json` n'était lu
   que par Settings → Data. Après un patch qui retire un set d'armure ou un effet d'arme / d'accessoire / de

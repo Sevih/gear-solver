@@ -42,12 +42,6 @@
       6/9 (`AddSmeltingCount`), emplacements de gemme (`GemSlot`), `EVO_UNLOCK_LEVEL`. `ee-passives` ne garde que
       TargetType ME et le niveau de buff le plus haut (0 écart, fragile).
 
-### 🟡 Audit projet (2026-09-07) — reste
-- [ ] 🟡 **Composants monolithiques** — BuilderScreen ~4600 lignes (~40 composants + reducer), InventoryScreen 1350,
-      SettingsModal 1210 (5 panes + helpers réseau), HomeScreen `computeStats` 200 lignes. Découpage proposé :
-      `builderFilters.ts`, `catalogs.ts`, `ResultsTable`, `BottomGearBand`, `BuilderToolbar` + panels, `RightSidebar`,
-      `FilterFooter`, hook `useSolverSession` ; une pane par fichier côté Settings.
-
 ### 🟢 Ratings offensifs — après la colonne « meilleur skill » (2026-09-05)
 - [ ] 🟢 **DPS de rotation pondéré par les cooldowns** — `dmgs` = hit du meilleur skill × SPD, pas une rotation. La
       donnée damage d'outerpedia porte déjà `levels[].cool` / `startCool` par skill : un facteur « moyen par tour »
