@@ -72,6 +72,14 @@
 - **Settings without pop-ups.** Export, import, sync, plugin removal and wipe report in the status
   bar instead of blocking dialogs; destructive buttons ask to "Click again to confirm". The worker
   count is capped to your CPU cores everywhere.
+- **Game rules read from the data.** Gem slots, reforge caps and budgets and evolution levels now
+  come from the synced game data instead of being hard-coded, so a balance change reaches the app
+  with a data update. Exclusive-equipment mains that only act in battle (Accuracy) are shown as
+  combat-only instead of being dropped.
+- **Small fixes.** A piece reserved in the Worklist for another hero is no longer offered as
+  "free" in Advices; the "upg" column follows what you actually wear; Settings messages show in
+  the dialog's footer; the "combat" badge tooltip in Builds can be hovered; Phantasm's −30 % SPD
+  no longer counts as −30 flat in the Score pre-sort.
 - **Under the hood.** Builder, Inventory, Home and Settings were split into smaller modules with no
   change in behaviour; dead code and unused data were removed.
 
