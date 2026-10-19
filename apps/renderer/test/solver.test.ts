@@ -1086,6 +1086,31 @@ describe("maxedFloorOf / meetsMaxedFloor — the 'Maxed only' investment floor",
     expect(meetsMaxedFloor(at(10, 0), "ooparts", classic, TALISMAN_MAX)).toBe(true);
     expect(meetsMaxedFloor(at(9, 0), "ooparts", classic, TALISMAN_MAX)).toBe(false);
   });
+
+  // The floor is the piece's own ceiling in the mode (`pieceReforgePlan`).
+  const of = (o: Partial<GearPiece>, enhanceLevel: number, reforgeCount: number): GearPiece =>
+    ({ ...gearPiece("weapon"), ...o, enhanceLevel, reforgeCount });
+
+  it("a 5★ is maxed at +10 with its own 5 reforges", () => {
+    const floor = maxedFloorOf(true, "classic")!;
+    expect(meetsMaxedFloor(of({ star: 5 }, 10, 5), "weapon", floor, TALISMAN_MAX)).toBe(true);
+    expect(meetsMaxedFloor(of({ star: 5 }, 10, 4), "weapon", floor, TALISMAN_MAX)).toBe(false);
+    expect(meetsMaxedFloor(of({ star: 5 }, 9, 5), "weapon", floor, TALISMAN_MAX)).toBe(false);
+  });
+
+  it("a 6★ that can't ascend (not `unique`) is maxed at +10 R6 in every mode", () => {
+    const floor = maxedFloorOf(true, "ascended")!;
+    expect(meetsMaxedFloor(of({ rarity: "rare" }, 10, 6), "weapon", floor, TALISMAN_MAX)).toBe(true);
+    expect(meetsMaxedFloor(of({ rarity: "rare" }, 10, 5), "weapon", floor, TALISMAN_MAX)).toBe(false);
+    // A 6★ `unique` still needs the mode's state: +10 R6 is short of +10R9.
+    expect(meetsMaxedFloor(of({}, 10, 6), "weapon", maxedFloorOf(true, "ascended10")!, TALISMAN_MAX)).toBe(false);
+  });
+
+  it("a piece with no star (absent from the contract) keeps the mode's floor", () => {
+    const floor = maxedFloorOf(true, "classic")!;
+    expect(meetsMaxedFloor(of({ star: null }, 10, 6), "weapon", floor, TALISMAN_MAX)).toBe(true);
+    expect(meetsMaxedFloor(of({ star: null }, 10, 0), "weapon", floor, TALISMAN_MAX)).toBe(false);
+  });
 });
 
 /* ─────────────────────────────────────────────────────────────────────────

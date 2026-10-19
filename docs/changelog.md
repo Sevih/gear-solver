@@ -8,6 +8,34 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎯 Solver — plancher « Maxed only » au plafond de chaque pièce (2026-10-19)
+- ✅ **Pourquoi.** Item « Plancher de « Maxed only » pour une pièce sous 6★ » de `docs/todo.md`, décision du 15/10
+  (`a4cb02c`) : « Maxed only » veut dire « au plafond de la pièce ». Il attendait G2 (`d73e3ba`), qui a posé ce
+  plafond pour la projection (`pieceReforgePlan`). Jusqu'ici `maxedFloorOf` rendait le plancher du MODE et
+  `meetsMaxedFloor` l'imposait à toutes les pièces : une 5★ +10 R5 (son maximum) sortait d'un solve +10R6 que la
+  projection tenait pour maxé, une 6★ non `unique` (pas d'élévation) sortait de +10R9 et +15R9 à +10 R6, son plafond.
+- ✅ **Comment.** `maxedFloorOf` rend désormais le mode gaté (`Exclude<ReforgeMode, "disable"> | null`) et
+  `meetsMaxedFloor(g, slot, mode, talismanMaxEnhance)` calcule le plancher de la pièce : `pieceReforgePlan(g, mode)`
+  — enhance ≥ `ceiling.enhanceLevel`, reforges ≥ `budget` (`apps/renderer/src/lib/solver/engine.ts`). Talisman
+  (enhance seul, borné à `enhance.maxEnhanceLevel`) et EE (enhance du mode, sans reforge) inchangés. Une pièce sans
+  étoile (`star: null`, objet absent du contrat, budget 0 dans `pieceReforgePlan`) garde le plancher du mode : une
+  pièce inconnue n'est pas « maxée » par défaut (commenté). Appelant unique `precomputeContext`, dont le commentaire
+  suit. Textes : l'infobulle du bouton (`BuilderScreen.tsx`) ; `docs/solver.md` et `wiki/Solver.md` (filtre du pool
+  et § Options) ; la ligne du tableau des tests (`docs/reference.md`, `wiki/Engine-Reference.md`) ; et
+  `wiki/Using-the-App.md`, qui décrivait l'ancien plancher (pas d'équivalent dans `docs/`).
+- ✅ **Tests.** `apps/renderer/test/solver.test.ts`, bloc « maxedFloorOf / meetsMaxedFloor » : les cas d'une 6★
+  `unique` inchangés (le test passe le mode rendu par `maxedFloorOf`, corps intacts) ; 5★ en +10R6 : +10 R5 admise,
+  +10 R4 et +9 R5 exclues ; 6★ non `unique` en +15R9 : +10 R6 admise, +10 R5 exclue ; 6★ `unique` +10 R6 en +10R9
+  exclue ; talisman inchangé ; `star: null` → plancher du mode. Pool de bout en bout sur le vrai contrat
+  (`apps/renderer/test/reforgeProjection.test.ts`) : `precomputeContext` en « Maxed only » +10R6, une arme 5★
+  +10 R5 est dans le pool, à R4 elle n'y est pas. `npm run typecheck` : `tsc --noEmit` sans erreur (sortie 0) ;
+  `npm test` : `Tests  472 passed (472)`.
+- ✅ Hors périmètre, laissé : la projection (G2), les budgets 6/9 recopiés à la main, le mode « disable », les
+  résultats affichés en « Maxed only » ; le compte « 95 tests » du tableau de `docs/reference.md` était déjà
+  périmé, non retouché ; `docs/release-notes.md` (notes des versions publiées) non modifié.
+- ⏳ Sevih : une note de version pour la prochaine release (« Maxed only » admet une pièce sous 6★ ou une 6★ non
+  Unique à son propre plafond).
+
 ### 🔗 Synchro et contrat — mode CHECKOUT sans saut muet, une seule liste des tables, test de forme croisé, M3 testé ; todo remis à jour (2026-10-19)
 - ✅ **Pourquoi.** Trois items de la section « Contrat solver » de `docs/todo.md` (Mode CHECKOUT, Test de forme
   croisé, M3), puis la remise à jour de ce fichier, en retard sur le code. Prérequis vérifié : le passif de cœur par

@@ -54,8 +54,6 @@
       mais jamais lu (à raison : buffs de combat) → cesser de le charger.
 
 ### 🟡 Revue 2026-10 — divers
-- [ ] 🟡 **Plancher de « Maxed only » pour une pièce sous 6★** — une 5★ n'atteint jamais le budget du mode.
-      Décidé le 15/10 : il voudra dire « au plafond de la pièce » ; petit lot après G2.
 - [ ] ⚪ **`trust-buffs.json` chargé, jamais appliqué** (`apps/renderer/src/data.ts:79`) — s'il sert un jour, il
       faudra la chaîne d'affinité par perso (une seule stat par héros, pas les trois) : outerpedia la corrige côté
       site (lot C24) sans toucher au contrat.

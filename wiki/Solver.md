@@ -89,7 +89,7 @@ filters the inventory pieces:
 - `g.slot === slot`
 - excluded per `equippedScope` (`none`/`lower`/`all`) if equipped on **another** hero — `lower` gated via `isLowerPriority(heroPriority, …)` (cf. § Options, Equipped items). The "owner" is the **worklist claim if any, else `equippedBy`**: a piece reserved by another hero's queued build (`worklistClaims`, uid → claiming hero, unapplied changes only) is treated as equipped on that hero — the scope + rank rules apply to reservations exactly like to real equipment
 - excluded if `g.equippedBy ∈ excludedHeroes` (likewise via the effective owner)
-- excluded if below the **"Maxed only" investment floor** (`meetsMaxedFloor`): the toggle = **zero extrapolation** — the reforge mode becomes a floor (only pieces **already** at that state or better, scored on their real rolls, projection skipped). Off → no gate; +10R6 → enhance ≥ 10 & reforges ≥ 6; +10R9 → ≥ 10 & ≥ 9; +15R9 → ≥ 15 & ≥ 9. Talisman: enhance floor only (gems replace reforge), capped at its +10 ceiling (`enhance.maxEnhanceLevel`: no Singularity — a +15 floor emptied the pool)
+- excluded if below the **"Maxed only" investment floor** (`meetsMaxedFloor`): the toggle = **zero extrapolation** — each piece's ceiling in the reforge mode (`pieceReforgePlan`, the projection's) becomes its floor (only pieces **already** at their ceiling or better, scored on their real rolls, projection skipped). Off → no gate; 6★ `unique`: +10R6 → enhance ≥ 10 & reforges ≥ 6; +10R9 → ≥ 10 & ≥ 9; +15R9 → ≥ 15 & ≥ 9; a piece that can't ascend (under 6★, or a non-`unique` 6★): +10 & its own budget (its star, 6 for a 6★) whatever the mode; a piece with no star (absent from the contract): the mode's floor. Talisman: enhance floor only (gems replace reforge), capped at its +10 ceiling (`enhance.maxEnhanceLevel`: no Singularity — a +15 floor emptied the pool)
 - excluded if `classLimit` ≠ the hero's class
 - excluded if **main pick** is active for this slot and `g.main[0].stat ∉ picks`
 - excluded if **effect chip** (weapon/accessory) marked `excluded`; or marked `required` and the piece's `setId` (the `UniqueOptionID` effect identity) does not match — the comparison is **deliberately** on `setId`, not `effectIcon` (distinct effects can share an icon, e.g. the Recklessness family)
@@ -259,11 +259,14 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   The main re-scale starts again from the table's +0 value (`rawBase`, set by the parser) and
   re-runs the game's float32 chain (`scaleMain`) — the same numbers as in-game (test
   `projectMainToCeiling`: 240 → 1380); a piece without `rawBase` falls back to the multiplier ratio.
-- **Maxed only** (`onlyMaxed`) — **zero extrapolation**: the reforge mode becomes an
-  **investment floor** and the projection is **skipped** (pieces scored on their real rolls,
-  gear cards included — the display context is snapshotted to `disable`). Floors
-  (`maxedFloorOf`/`meetsMaxedFloor`): Off → none (any piece as-is) · +10R6 → enhance ≥ 10 &
-  ≥ 6 reforges · +10R9 → ≥ 10 & ≥ 9 · +15R9 → +15 & ≥ 9. "Or better" keeps its better rolls
+- **Maxed only** (`onlyMaxed`) — **zero extrapolation**: each piece's ceiling in the reforge
+  mode becomes its **investment floor** and the projection is **skipped** (pieces scored on
+  their real rolls, gear cards included — the display context is snapshotted to `disable`).
+  Floors (`maxedFloorOf`/`meetsMaxedFloor`, on `pieceReforgePlan`): Off → none (any piece
+  as-is) · 6★ `unique`: +10R6 → enhance ≥ 10 & ≥ 6 reforges · +10R9 → ≥ 10 & ≥ 9 · +15R9 →
+  +15 & ≥ 9 · a piece that can't ascend (under 6★, or a non-`unique` 6★): +10 & its own
+  budget (a 5★ at +10 R5 is maxed), whatever the mode · a piece with no star (absent from the
+  contract): the mode's floor, an unknown piece is not maxed by default. "Or better" keeps its better rolls
   (a +15R9 piece in a +10R6 solve is not scaled down to the +10 ceiling). Talisman: enhance
   only, +10 at most (its ceiling); the hero's own EE is never filtered. (Replaces the old mode-blind flat
   `enhanceLevel < 15` cut.)

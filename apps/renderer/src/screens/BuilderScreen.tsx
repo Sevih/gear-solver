@@ -1876,7 +1876,7 @@ function BuilderToolbar({
           label="Maxed only"
           on={filters.options.onlyMaxed}
           onClick={() => dispatch({ type: "setOption", key: "onlyMaxed", value: !filters.options.onlyMaxed })}
-          title="No extrapolation — only pieces ALREADY at the reforge mode's investment state (or better), scored on their real rolls. Off mode: any piece as-is · +10R6: enhance ≥10 & ≥6 reforges · +10R9: enhance ≥10 & ≥9 reforges · +15R9: +15 & ≥9 reforges."
+          title="No extrapolation — only pieces ALREADY at their own ceiling in the reforge mode (or better), scored on their real rolls. Off mode: any piece as-is · +10R6: enhance ≥10 & ≥6 reforges · +10R9: enhance ≥10 & ≥9 reforges · +15R9: +15 & ≥9 reforges. A piece that can't ascend (under 6★, or a 6★ that isn't Unique) only needs +10 and its own reforges (its star, 6 for a 6★)."
         />
         <ToolbarDivider />
         <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>

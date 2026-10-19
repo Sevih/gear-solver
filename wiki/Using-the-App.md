@@ -101,10 +101,11 @@ results, the bottom band shows the selected build's pieces.
   Singularity passive). Lets you compare builds as if the gear were maxed — each piece up to
   its own ceiling: a piece under 6★, or a 6★ that isn't Unique, stops at +10 with its own
   number of reforges and no Singularity passive, whatever the mode.
-- **Maxed only** — no extrapolation: only pieces **already at the reforge mode's investment
-  state (or better)**, scored on their real rolls (no projection). Off: any piece as-is ·
+- **Maxed only** — no extrapolation: only pieces **already at their own ceiling in the reforge
+  mode (or better)**, scored on their real rolls (no projection). Off: any piece as-is ·
   +10R6: +10 with ≥ 6 reforges done · +10R9: +10 with ≥ 9 reforges · +15R9: +15 with ≥ 9
-  reforges (the talisman, which stops at +10, only needs +10). Use it to answer "what's my best build with zero further investment?".
+  reforges (the talisman, which stops at +10, only needs +10; a piece that can't ascend only
+  needs +10 and its own reforges — a 5★ at +10 with 5 reforges counts as maxed). Use it to answer "what's my best build with zero further investment?".
 - **Equipped items** — a three-way control for which gear worn by *other* heroes the solver
   may pull in: **None** (only the hero's own gear + free gear), **≤ Lower** (default — also
   gear on heroes ranked strictly lower in the Builds priority ranking; with no ranks set this

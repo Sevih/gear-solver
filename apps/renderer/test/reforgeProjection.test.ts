@@ -2,14 +2,15 @@
 // End-to-end checks of two precompute rules on the real contract
 // (`data/derived/`, hero 2000001):
 //  - "Maxed only" in +15R9 keeps a +10 talisman (it has no Singularity, +10 is
-//    its ceiling) instead of emptying the talisman pool → 0 builds;
+//    its ceiling) instead of emptying the talisman pool → 0 builds, and in
+//    +10R6 keeps a 5★ weapon at +10 R5 (its own ceiling);
 //  - without a priority, the reforge projection spends its ticks by CP weight
 //    (not on flat HP), and hands those weights back so the Builder's gear band
 //    re-projects the same ticks.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, Inventory, RolledStat } from "@gear-solver/core";
-import { prepareContext, projectPieceForReforge, reforgeTickKey, solveChunk } from "../src/lib/solver/engine.js";
+import { precomputeContext, prepareContext, projectPieceForReforge, reforgeTickKey, solveChunk } from "../src/lib/solver/engine.js";
 import type { SolveFilters, SolveMode, SolveRequest } from "../src/lib/solver/types.js";
 
 const derived = (f: string): unknown =>
@@ -83,6 +84,22 @@ describe("'Maxed only' +15R9 — the talisman is held to its own +10 ceiling", (
     const gear = maxedGear().map((g) => (g.slot === "ooparts" ? { ...g, enhanceLevel: 9 } : g));
     const ctx = prepareContext(request(gear, "cp", { options: { onlyMaxed: true, reforgeMode: "ascended" } as SolveFilters["options"] }));
     expect(ctx.poolSizes.talisman?.hit).toBe(0);
+  });
+});
+
+describe("'Maxed only' +10R6 — a piece is held to its own ceiling", () => {
+  const classicMaxed = { options: { onlyMaxed: true, reforgeMode: "classic" } as SolveFilters["options"] };
+  const weapon = (reforgeCount: number) =>
+    piece("w5", "weapon", { star: 5, enhanceLevel: 10, reforgeCount, ascended: false, singularityLevel: 0, main: [r("atk", 400, false)] });
+
+  it("a 5★ weapon at +10 R5 (its maximum) is in the pool", () => {
+    const gear = maxedGear().map((g) => (g.slot === "weapon" ? weapon(5) : g));
+    expect(precomputeContext(request(gear, "cp", classicMaxed)).pools.weapon.map((g) => g.uid)).toEqual(["w5"]);
+  });
+
+  it("a 5★ weapon at +10 R4 stays out", () => {
+    const gear = maxedGear().map((g) => (g.slot === "weapon" ? weapon(4) : g));
+    expect(precomputeContext(request(gear, "cp", classicMaxed)).pools.weapon).toEqual([]);
   });
 });
 

@@ -75,35 +75,41 @@ const REFORGE_PLANS: Record<Exclude<ReforgeMode, "disable">, { ceiling: ReforgeC
   ascended:   { ceiling: { enhanceLevel: 15, ascended: true,  singularityLevel: 5 }, budget: 9 },
 };
 
-/** Investment floor the "Maxed only" toggle enforces, or null when nothing is
+/** Reforge mode the "Maxed only" toggle gates on, or null when nothing is
  *  gated (toggle off, or reforge mode "disable" = pieces in their current
  *  state whatever the level). Non-null → the solve admits only pieces ALREADY
- *  at the mode's state or better, taken as-is (no projection):
- *    +10R6 → enhance ≥ 10 & ≥ 6 reforges · +10R9 → ≥ 10 & ≥ 9 (implies
- *    ascended) · +15R9 → ≥ 15 & ≥ 9. Exported for tests. */
-export function maxedFloorOf(onlyMaxed: boolean, mode: ReforgeMode): { ceiling: ReforgeCeiling; budget: number } | null {
-  return onlyMaxed && mode !== "disable" ? REFORGE_PLANS[mode] : null;
+ *  at their own ceiling in that mode or better (`meetsMaxedFloor`), taken
+ *  as-is (no projection). Exported for tests. */
+export function maxedFloorOf(onlyMaxed: boolean, mode: ReforgeMode): Exclude<ReforgeMode, "disable"> | null {
+  return onlyMaxed && mode !== "disable" ? mode : null;
 }
 
-/** Does the piece meet the "Maxed only" investment floor? Talisman is gated on
- *  enhance only (gems replace reforge there), and at most on its own ceiling:
- *  it has no Singularity, so it stops at `talismanMaxEnhance` (+10, the
- *  contract's `enhance.maxEnhanceLevel`) — a +15 floor would empty its pool and
- *  every +15R9 "Maxed only" solve would return 0 builds. EE never reaches the
- *  pool filter but is exempted for symmetry. Null floor = nothing gated. */
+/** Does the piece meet the "Maxed only" investment floor of `mode`? The floor
+ *  is the piece's own ceiling in that mode (`pieceReforgePlan`) — what the
+ *  projection would bring it to: a 6★ `unique` needs the mode's state
+ *  (+10R6 → ≥ +10 & ≥ 6 reforges · +10R9 → ≥ +10 & ≥ 9 · +15R9 → ≥ +15 & ≥ 9);
+ *  a piece that can't ascend needs +10 and its own budget (its star under 6★,
+ *  6 for a 6★), whatever the mode. A piece with no star (item absent from the
+ *  contract) has no known ceiling (budget 0 in `pieceReforgePlan`): it keeps
+ *  the mode's floor, an unknown piece is not "maxed" by default. Talisman is
+ *  gated on enhance only (gems replace reforge there), and at most on its own
+ *  ceiling: it has no Singularity, so it stops at `talismanMaxEnhance` (+10,
+ *  the contract's `enhance.maxEnhanceLevel`) — a +15 floor would empty its pool
+ *  and every +15R9 "Maxed only" solve would return 0 builds. EE never reaches
+ *  the pool filter; it is gated on the mode's enhance only, for symmetry. Null
+ *  mode = nothing gated. */
 export function meetsMaxedFloor(
   g: GearPiece,
   slot: string,
-  floor: { ceiling: ReforgeCeiling; budget: number } | null,
+  mode: Exclude<ReforgeMode, "disable"> | null,
   talismanMaxEnhance: number,
 ): boolean {
-  if (!floor) return true;
-  const enhanceFloor = slot === "ooparts"
-    ? Math.min(floor.ceiling.enhanceLevel, talismanMaxEnhance)
-    : floor.ceiling.enhanceLevel;
-  if (g.enhanceLevel < enhanceFloor) return false;
-  if (slot !== "ooparts" && slot !== "exclusive" && g.reforgeCount < floor.budget) return false;
-  return true;
+  if (!mode) return true;
+  const modeEnhance = REFORGE_PLANS[mode].ceiling.enhanceLevel;
+  if (slot === "ooparts") return g.enhanceLevel >= Math.min(modeEnhance, talismanMaxEnhance);
+  if (slot === "exclusive") return g.enhanceLevel >= modeEnhance;
+  const floor = g.star == null ? REFORGE_PLANS[mode] : pieceReforgePlan(g, mode);
+  return g.enhanceLevel >= floor.ceiling.enhanceLevel && g.reforgeCount >= floor.budget;
 }
 
 /** Can the piece ascend (Singularity)? Only a 6★ `unique` one — the game's
@@ -375,14 +381,16 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // rules below apply to reservations exactly like to real equipment. A claim
   // overrides the physical `equippedBy` (the claim is where the piece is going).
   const worklistClaims = req.worklistClaims ?? {};
-  // "Only maxed" = NO extrapolation: the solve only uses pieces ALREADY at the
-  // reforge mode's investment state, taken as-is (the projection below is
-  // skipped). The mode acts as the FLOOR ("or better" is fine — a +15R9 piece
-  // qualifies for a +10R6 solve and is scored on its real, higher rolls):
+  // "Only maxed" = NO extrapolation: the solve only uses pieces ALREADY at
+  // their own ceiling in the reforge mode, taken as-is (the projection below
+  // is skipped). The floor is each piece's ceiling (`meetsMaxedFloor` on
+  // `pieceReforgePlan`), "or better" is fine — a +15R9 piece qualifies for a
+  // +10R6 solve and is scored on its real, higher rolls:
   //   - off  → no gate (pieces in their current state, whatever the level);
-  //   - +10R6 → enhance ≥ 10 AND ≥ 6 reforges done;
-  //   - +10R9 → enhance ≥ 10 AND ≥ 9 reforges done (implies ascended);
-  //   - +15R9 → enhance ≥ 15 (implies ascended) AND ≥ 9 reforges done.
+  //   - a 6★ `unique` → the mode's state: +10R6 → enhance ≥ 10 AND ≥ 6
+  //     reforges; +10R9 → ≥ 10 AND ≥ 9; +15R9 → ≥ 15 AND ≥ 9;
+  //   - a piece that can't ascend → +10 AND its own budget (its star under
+  //     6★, 6 for a 6★), in every mode.
   // Talisman is gated on enhance only (gems replace reforge there), capped at
   // its own +10 ceiling; the hero's own EE never goes through `allow`. Replaces the old flat `enhance < 15`
   // cut, which was mode-blind (it excluded +10 endgame gear from +10 solves).
