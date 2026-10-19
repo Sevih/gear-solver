@@ -24,10 +24,11 @@ by hand (manual import).
   from a Web Worker, a CLI, or the desktop shell. (The combination solver itself lives
   in `apps/renderer/src/lib/solver/`, not in core.)
 - **apps/renderer** — Vite + React. Loads the JSON, drives the engine, renders results.
-  Screens: **Home** (account dashboard + gear-quality distribution + update center),
-  **Inventory** (table + per-piece detail, `screens/inventory/`), **Builds** (equipped/composed
-  roster + Optimize→), **Builder** (the solver — `screens/builder/`: one module per panel, the
-  solve state in the `useSolverSession` hook), **Worklist** (cross-hero queue of gear changes — the Builder's
+  Screens: **Home** (account dashboard + gear-quality distribution + update center,
+  `screens/home/`, its numbers computed by the pure `lib/homeStats.ts`), **Inventory** (table +
+  per-piece detail, `screens/inventory/`), **Builds** (equipped/composed roster + Optimize→),
+  **Builder** (the solver — `screens/builder/`: one module per panel, the solve state in the
+  `useSolverSession` hook), **Worklist** (cross-hero queue of gear changes — the Builder's
   "+ Worklist" pushes a build's per-slot diff here as a checklist, `equipPieces` applies it
   locally), plus a tabbed **Settings** modal (`design/settings/`, one pane per file). The gear
   detail panel (`design/GearDetail.tsx`) is shared between Inventory and the Builds hover tooltip.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, Inventory } from "@gear-solver/core";
-import { computeStats } from "../src/screens/HomeScreen.js";
+import { computeStats } from "../src/lib/homeStats.js";
 
 // The Home → Inventory drill sends `armorSet: se.id`, and the Inventory keeps
 // a piece only when `f.armorSets.has(p.armorSetId)` — so `id` must be the

@@ -10,7 +10,7 @@ import { createSnapshotFollower, type SnapshotFollower } from "./lib/snapshotFol
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
 import { LogView } from "./design/LogView.js";
 import { SettingsModal } from "./design/settings/SettingsModal.js";
-import { HomeScreen } from "./screens/HomeScreen.js";
+import { HomeScreen } from "./screens/home/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
 import { equippedByHero, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
