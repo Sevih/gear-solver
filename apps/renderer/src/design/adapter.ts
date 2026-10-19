@@ -8,6 +8,7 @@ import type { GameData, GearPiece, RolledStat } from "@gear-solver/core";
 import type { IconPiece } from "./EquipmentIcon.js";
 import { type SlotId, toDesignRarity, toDesignSlot, STAT } from "./tokens.js";
 import { maxReforgesOf } from "../lib/solver/engine.js";
+import { gearPieceQuality, type QualityScore } from "../lib/quality.js";
 
 /** Talisman / EE 5th gem slot unlocks once the piece's enhance level
  *  reaches this threshold (matches the in-game gating). */
@@ -146,6 +147,14 @@ export interface UiPiece {
    *  gear (regular subs render via `subs`). */
   gemSlots: UiGemSlot[] | null;
   reforge: { n: number; max: number };
+  /** Quality score (`lib/quality.ts`), computed once here so the Inventory
+   *  filters / availability pass and the detail panels read it instead of
+   *  re-scoring the piece on every keystroke or render. Null for talisman /
+   *  EE and un-rolled pieces. */
+  quality: QualityScore | null;
+  /** Lower-cased haystack for the Inventory search box (name, slot, rarity,
+   *  main labels, sub stat keys), built once instead of per keystroke. */
+  searchText: string;
   status: "equipped" | "free";
   locked: boolean;
   equippedBy: string | null;
@@ -270,6 +279,16 @@ export function toUiPiece(g: GearPiece, game?: GameData | null): UiPiece {
         })),
       }
     : null;
+  const name = g.name?.trim() || `#${g.itemId}`;
+  const subs: UiSubstat[] = g.subs.map((s) => {
+    const value = s.percent ? `${s.value}%` : `${s.value}`;
+    return {
+      stat: s.stat,
+      value,
+      lv: s.ticks ?? 1,
+      reforges: s.reforgeTicks ?? 0,
+    };
+  });
   return {
     id: g.uid,
     itemId: g.itemId,
@@ -278,23 +297,17 @@ export function toUiPiece(g: GearPiece, game?: GameData | null): UiPiece {
     armorSetId: g.armorSetId,
     rarity, stars, enhance, bt, singularity,
     classLimit: g.classLimit ? cls : null,
-    name: g.name?.trim() || `#${g.itemId}`,
+    name,
     main: realMain,
-    subs: g.subs.map((s) => {
-      const value = s.percent ? `${s.value}%` : `${s.value}`;
-      return {
-        stat: s.stat,
-        value,
-        lv: s.ticks ?? 1,
-        reforges: s.reforgeTicks ?? 0,
-      };
-    }),
+    subs,
     effects,
     passive,
     multiTierPassive,
     gemSlots,
     // Reforge max = the game's budget: star tier, 9 for a 6★ ascended.
     reforge: { n: g.reforgeCount, max: maxReforgesOf(g) },
+    quality: gearPieceQuality(g),
+    searchText: `${name} ${slot ?? ""} ${rarity} ${realMain.map((m) => m.label).join(" ")} ${subs.map((s) => s.stat).join(" ")}`.toLowerCase(),
     status: g.equippedBy ? "equipped" : "free",
     locked: g.locked,
     equippedBy: g.equippedBy,

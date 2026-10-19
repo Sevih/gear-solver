@@ -1,10 +1,11 @@
 /**
- * Gear "Quality" tiers — a single source of truth for the rolled-substat score
- * thresholds, shared between the Inventory tab's quality bar/filter and the
- * Builder's solve-pool quality filter. Keeping the thresholds here (rather than
- * duplicated in each screen) stops the two from silently drifting apart.
+ * Gear "Quality" — the single source of truth for the rolled-substat score
+ * (`qualityScore`) and its tier thresholds, shared between the Inventory tab's
+ * quality bar/filter, the detail panels and the Builder's solve-pool quality
+ * filter. Keeping the rule here (rather than duplicated in each screen) stops
+ * them from silently drifting apart.
  */
-import type { GearPiece } from "@gear-solver/core";
+import type { GearPiece, GearSlot } from "@gear-solver/core";
 
 export type QualityTier = "poor" | "decent" | "good" | "excellent" | "perfect";
 export const QUALITY_TIERS: QualityTier[] = ["poor", "decent", "good", "excellent", "perfect"];
@@ -34,13 +35,41 @@ export function qualityTierFromScore(current: number, max: number): QualityTier 
     : "poor";
 }
 
-/** Quality tier of a raw gear piece, or null for slots without rollable subs
- *  (Talisman / EE) — those carry gems / fixed stats, not a quality score, and
- *  are never quality-filtered. Mirrors the Inventory tab's `computeQuality`:
- *  base tick cap 14, +1 per spent reforge proc. */
+/** A piece's quality score: rolled ticks vs the cap for its CURRENT
+ *  investment, the rounded percentage and the resulting tier. */
+export interface QualityScore {
+  current: number;
+  max: number;
+  pct: number;
+  tier: QualityTier;
+}
+
+/** The one quality rule — sum of every substat tick vs the cap for the piece's
+ *  CURRENT investment (base 14 + 1 per spent reforge proc). Null for slots
+ *  without rollable subs (Talisman / EE — they carry gems / fixed stats, not a
+ *  quality score, and are never quality-filtered) and for un-rolled pieces (no
+ *  subs, or no star tier). */
+export function qualityScore(
+  slot: GearSlot | null,
+  star: number | null,
+  reforgeCount: number,
+  ticks: readonly number[],
+): QualityScore | null {
+  if (slot === "ooparts" || slot === "exclusive") return null;
+  if (ticks.length === 0 || (star ?? 0) <= 0) return null;
+  const current = ticks.reduce((sum, t) => sum + t, 0);
+  const max = 14 + reforgeCount;
+  const pct = Math.min(100, Math.round((current / max) * 100));
+  return { current, max, pct, tier: qualityTierFromScore(current, max) };
+}
+
+/** `qualityScore` of a raw gear piece. */
+export function gearPieceQuality(p: GearPiece): QualityScore | null {
+  return qualityScore(p.slot, p.star, p.reforgeCount, p.subs.map((s) => s.ticks ?? 0));
+}
+
+/** Quality tier of a raw gear piece, or null when it has no quality score
+ *  (see `qualityScore`). */
 export function gearPieceQualityTier(p: GearPiece): QualityTier | null {
-  if (p.slot === "ooparts" || p.slot === "exclusive") return null;
-  if (p.subs.length === 0 || (p.star ?? 0) <= 0) return null;
-  const current = p.subs.reduce((sum, s) => sum + (s.ticks ?? 0), 0);
-  return qualityTierFromScore(current, 14 + p.reforgeCount);
+  return gearPieceQuality(p)?.tier ?? null;
 }

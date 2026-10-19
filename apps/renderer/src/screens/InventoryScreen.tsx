@@ -14,7 +14,7 @@ import { toUiPiece, type UiPiece } from "../design/adapter.js";
 // Quality-tier UI tone + detail helpers live in design/GearDetail (shared with
 // the Builds tab's hover tooltip so both render the same inspect panel).
 import { QUALITY_TIERS, type QualityTier } from "../lib/quality.js";
-import { GearDetailBody, QUALITY_TONE, computeQuality } from "../design/GearDetail.js";
+import { GearDetailBody, QUALITY_TONE } from "../design/GearDetail.js";
 
 // Gear-rollable stat keys — everything in `STAT` minus the three set-only
 // stats (lifesteal / counter / enterAp) which never appear as a piece's
@@ -120,8 +120,7 @@ function matchesFilters(p: UiPiece, f: FilterState): boolean {
     // Talisman / EE return null (no rolled subs to score) — they're
     // excluded the moment a quality chip is active, since "Excellent" is
     // meaningless for gem-bearing slots.
-    const q = computeQuality(p);
-    if (!q || !f.quality.has(q.tier)) return false;
+    if (!p.quality || !f.quality.has(p.quality.tier)) return false;
   }
   if (f.mains.size > 0) {
     // OR semantics — a piece passes if ANY of its main-stat keys is in the
@@ -160,10 +159,7 @@ function matchesFilters(p: UiPiece, f: FilterState): boolean {
   // otherwise it filters the grid while `activeFilterCount` (which trims)
   // shows no active filter, an invisible mismatch.
   const q = f.query.trim().toLowerCase();
-  if (q) {
-    const hay = `${p.name} ${p.slot ?? ""} ${p.rarity} ${p.main.map((m) => m.label).join(" ")} ${p.subs.map((s) => s.stat).join(" ")}`.toLowerCase();
-    if (!hay.includes(q)) return false;
-  }
+  if (q && !p.searchText.includes(q)) return false;
   return true;
 }
 
@@ -1131,7 +1127,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // Filter-pill availability — which chips can possibly match in the current
   // scope, so the modal disables (or omits) chips that would zero out the grid.
   // Computed in ONE pass over `scopedForStats` (was 7 separate useMemos each
-  // re-walking the same list; `computeQuality` in particular ran a whole pass
+  // re-walking the same list; the quality one in particular ran a whole pass
   // on its own). Destructured below so every downstream consumer keeps its
   // individual `availableX` binding unchanged.
   const {
@@ -1160,8 +1156,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
       if (p.classLimit) classes.add(p.classLimit);
       stars.add(p.stars);
       rarities.add(p.rarity);
-      const q = computeQuality(p);
-      if (q) qualities.add(q.tier);
+      if (p.quality) qualities.add(p.quality.tier);
     }
     return {
       availableMains: mains, availableSubs: subs, availableArmorSets: armorSets,

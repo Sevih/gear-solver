@@ -8,6 +8,46 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚡ Inventory — qualité et texte de recherche précalculés, un seul calcul de qualité (2026-10-19)
+- ✅ **Pourquoi.** Items « Perf Inventory », « Optims mineures Inventory » (`[~]`, report « tant que le profilage ne
+  le réclame pas » levé le 18/10) et puce qualité de « Duplications » (`docs/todo.md`). `matchesFilters`
+  (`screens/InventoryScreen.tsx`) reconstruisait la chaîne de recherche et rappelait `computeQuality` pour chaque
+  pièce à chaque frappe, la passe de disponibilité des chips le rappelait encore par pièce, et la règle de qualité
+  existait en trois exemplaires : `computeQuality` de `design/GearDetail.tsx` (exporté), sa copie privée dans
+  `design/ResultGearDetail.tsx`, `gearPieceQualityTier` de `lib/quality.ts` (filtre de qualité du solveur, Home).
+- ✅ **Une règle.** `lib/quality.ts` gagne `qualityScore(slot, star, reforgeCount, ticks)` → `QualityScore`
+  (`current`, `max`, `pct`, `tier`) ou null (talisman/EE, pièce sans sous-stats ou sans étoile ; cap 14 + 1 par
+  reforge, paliers inchangés via `qualityTierFromScore`), et `gearPieceQuality(p)` qui l'applique à un `GearPiece`
+  (ticks `s.ticks ?? 0`). `gearPieceQualityTier` garde sa signature et lit `gearPieceQuality`. Les deux
+  `computeQuality` sont supprimés.
+- ✅ **Précalcul.** `UiPiece` (`design/adapter.ts`) gagne `quality: QualityScore | null` et `searchText` (nom, slot,
+  rareté, libellés des mains, clés des sous-stats, en minuscules — la composition de l'ancienne chaîne `hay`), remplis
+  une fois par `toUiPiece`. `matchesFilters` lit `p.quality` et `p.searchText`, la passe de disponibilité lit
+  `p.quality`, `GearDetailBody` et `ResultGearDetail` lisent `piece.quality`. Le tri de l'Inventory ne lit pas la
+  qualité (étoiles, enhance/reforge/tier, sous-stat) : rien à y changer. Toutes les `UiPiece` sortent de
+  `toUiPiece` (Inventory, Builds, Worklist, Builder, y compris les pièces projetées, adaptées après projection) : pas
+  de qualité périmée possible. Une seule nuance théorique : l'ancien chemin UI comptait un tick absent pour 1
+  (`lv = ticks ?? 1`), la règle unique pour 0 comme le solveur ; `parse.ts` pose `ticks` sur toute sous-stat, l'écart ne se
+  produit donc pas. Liste « À NE PAS toucher (Inventory) » respectée (virtualisation, `charsByUid`, auto-prune,
+  `memo` de `GearTile`, re-seed du draft intacts).
+- ✅ **Mesure.** Banc jetable (non commité) sous vitest, 1 000 pièces synthétiques (8 slots, 4 sous-stats), chips
+  de qualité Good/Excellent/Perfect actifs, sept frappes « c » → « critdmg » rejouées 400 fois : ancien
+  `matchesFilters` (copie verbatim) 144 à 149 µs par passe de `filtered`, nouveau 23 à 27 µs (≈ ×6), même nombre de
+  pièces retenues. Le coût passe dans `toUiPiece`, une fois par changement d'inventaire.
+- ✅ **Tests.** Nouveau `apps/renderer/test/quality.test.ts` (7) : règle (talisman/EE → null, sans sous-stats ou
+  sans étoile → null, paliers 50/70/85/100 %, cap relevé par les reforges), `gearPieceQualityTier` sur la même règle,
+  `toUiPiece` (qualité et `searchText`), et égalité des trois anciens chemins (copies verbatim gardées dans le test)
+  avec le nouveau sur chaque item de `data/derived/equipment.json` × 20 dispositions de ticks/reforges, plus une
+  pièce 6★ ascendée construite à la main (21/23, Excellent).
+- ✅ **Vérifications.** `npm run typecheck` : dernière ligne `> tsc --noEmit` (sortie 0) ; `npm test` : core 154,
+  desktop 131, renderer 508 verts (501 + 7), dernière ligne `Duration 1.75s (transform 2.32s, setup 0ms, import
+  4.29s, tests 1.99s, environment 4ms)` ; `npm run lint` : `✖ 28 problems (0 errors, 28 warnings)`, dernière ligne
+  ``0 errors and 1 warning potentially fixable with the `--fix` option.``, sortie 0, même total qu'avant le lot.
+- ⏳ **À contrôler par Sevih.** Inventory : recherche (nom, slot, stat), chips de qualité et leur disponibilité, tri,
+  panneau de détail (score et barre de qualité) ; carte de résultat du Builder (qualité). Laissé : `QUALITY_TONE`
+  existe encore en deux copies (`GearDetail.tsx`, `ResultGearDetail.tsx`), hors du périmètre (règle de calcul
+  seulement) ; la table des tests de `wiki/Engine-Reference.md` ne liste pas `quality.test.ts` (table partielle).
+
 ### 🐛 Builds, Settings, Home — stat-locks migrés et validés, Reset qui garde le tri, plus d'`alert`/`confirm`, une règle de workers (2026-10-19)
 - ✅ **Pourquoi.** Items « Stat-locks (debug) : `renameLegacyStatKeys` non appliqué », « Reset (Builds) », « `window.alert` /
   `confirm` bloquants », « Casts JSON non validés », « `useMemo(…, [])` comme lire une fois » et puces Builds

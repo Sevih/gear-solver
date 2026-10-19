@@ -63,10 +63,7 @@
       une route `/api/*` inconnue répond 200 avec `index.html`.
 
 ### 🟡 Audit projet (2026-09-07) — reste
-- [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer) · calcul de
-      qualité en 3 exemplaires (`computeQuality` de GearDetail et ResultGearDetail, `quality.ts`).
-- [ ] 🟡 **Perf Inventory** — `matchesFilters` reconstruit la chaîne `hay` et rappelle `computeQuality` par pièce à
-      chaque frappe (2×1000 recalculs) → précalculer dans `toUiPiece` (cf. item « Optims mineures Inventory »).
+- [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer).
 - [ ] 🟡 **Composants monolithiques** — BuilderScreen ~4600 lignes (~40 composants + reducer), InventoryScreen 1350,
       SettingsModal 1210 (5 panes + helpers réseau), HomeScreen `computeStats` 200 lignes. Découpage proposé :
       `builderFilters.ts`, `catalogs.ts`, `ResultsTable`, `BottomGearBand`, `BuilderToolbar` + panels, `RightSidebar`,
@@ -98,9 +95,6 @@
 - [~] 🟡 **`Advices` (tab Builds)** — **reste le lot secondaire** (main off-scaling vs `meta.dmgStat`, basse qualité,
       « 4pc dispo en inventaire ») : il faut passer l'inventaire complet à `computeAdvice` (`inventory.gear` +
       `meta.dmgStat` dans `AdviceInput`).
-- [~] ⚪ **Optims mineures Inventory (si profilage)** — **reste** : `computeQuality` encore recalculé dans
-      `matchesFilters` (chip quality actif) et le panneau de détail ; un précalcul partagé (`toUiPiece` / map par UID)
-      traverserait la frontière adapter↔quality, différé tant que le profilage ne le réclame pas.
 
 ### Persistence
 - [~] **Snapshot `data/` versioning** — stamp `version.json` livré. **Reste** : comparer le `hash` au démarrage à un

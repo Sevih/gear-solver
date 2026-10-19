@@ -17,7 +17,7 @@ import { GameText } from "./GameText.js";
 import { HoverHint } from "./HoverHint.js";
 import { SetCombatBadge } from "./SetCombatBadge.js";
 import { cx } from "./cx.js";
-import { QUALITY_COLOR, qualityTierFromScore, type QualityTier } from "../lib/quality.js";
+import { QUALITY_COLOR, type QualityTier } from "../lib/quality.js";
 
 /** Per-tier UI tone (text class + bar color + label). `bar` pulls from the
  *  shared `QUALITY_COLOR` so the Inventory filter and the quality bar agree. */
@@ -36,20 +36,6 @@ function statLong(key: string): string {
   if (!meta) return key.toUpperCase();
   if (key.endsWith("Pct")) return `${meta.longLabel}%`;
   return meta.longLabel;
-}
-
-/** "Quality" score — sum of every substat tick vs the cap for the piece's
- *  CURRENT investment (base 14 + 1 per spent reforge). Null for talisman/EE
- *  (gem-bearing, no rollable subs) and un-rolled pieces. Thresholds shared with
- *  the Builder's quality filter (lib/quality.ts). */
-export function computeQuality(piece: UiPiece): { current: number; max: number; pct: number; tier: QualityTier } | null {
-  if (piece.slot === "talisman" || piece.slot === "exclusive") return null;
-  if (piece.subs.length === 0 || piece.stars <= 0) return null;
-  const current = piece.subs.reduce((sum, s) => sum + s.lv, 0);
-  const max = 14 + piece.reforge.n;
-  const pct = Math.min(100, Math.round((current / max) * 100));
-  const tier = qualityTierFromScore(current, max);
-  return { current, max, pct, tier };
 }
 
 /** A single substat row: "LV {n} (base + reforges)  [icon]  label  value".
@@ -215,7 +201,7 @@ export function GearDetailBody({ piece, game, equippedChar = null }: GearDetailB
 
       {/* quality score */}
       {(() => {
-        const q = computeQuality(piece);
+        const q = piece.quality;
         if (!q) return null;
         const tone = QUALITY_TONE[q.tier];
         return (
