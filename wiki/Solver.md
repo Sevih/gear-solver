@@ -147,8 +147,9 @@ bounded (else full cartesian) → we keep the fullest-rolled pieces per slot.
 Required-set protection: for each `req-2pc`/`req-4pc` set not already represented
 in the budget slice, `keepTopN` re-adds **its single top-scoring member** outside
 the budget — identically for all three keys. Re-adding *all* members (the old
-behavior) blew the budget back up. The equipped-piece **pin** exists only in
-branch (b) (SOLVE CP without priority).
+behavior) blew the budget back up. The equipped-piece **pin** applies to every
+SOLVE CP, branch (a) with a priority as well as branch (b): the ranking differs,
+not the "never below the equipped CP" guarantee. SOLVE (Score) pins nothing.
 
 ### Phase 4 — Cartesian + set-prune
 Nested-loop enumeration: `weapon × helmet × armor × gloves × boots × accessory × ooparts`.
@@ -174,13 +175,20 @@ For each combo that passes phase 4:
    non-crit hit: CHC/CHD no longer inflate its ratings. In SOLVE CP with no rating-band
    filter other than Score, the 8 products are **deferred** to `finalizeBuilds` (top-N
    only) — the heap sorts by CP. CP itself stays a faithful in-game mirror (its formula uses raw crc).
-4. **Score**: `Σ priority × (final / STAT_NORMS) × 100`.
+4. **Score**: `Σ priority × (final / STAT_NORMS) × 100`, **unrounded** (it is the sort key; the
+   table rounds it for display only — rounded, two close builds used to tie).
 5. **Rating filter**: same as the stat filter, on ratings + score.
 6. **CP / upg**: CP is computed in SOLVE CP, OR in SOLVE as soon as a CP filter is set
    (the filter then rejects early). If an `upg` filter is set, it is also evaluated here
    (from the pre-resolved equipped loadout). Both filter **before** the push, so the
    heap contains only valid builds.
-7. **Push** into a fixed-size min-heap (`TopKHeap`, K=1000 by default) keyed by `score` or `cp` depending on the mode.
+7. **Push** into a fixed-size min-heap (`TopKHeap`, K=1000 by default) keyed by `score` or `cp` depending on the mode,
+   ties broken by `pieceUids` (`compareBuilds`, the same order as the merge: one result whatever the
+   split across workers). The heap also caps **talisman variants**: at most 3 builds per 6-gear
+   signature (`TALISMAN_VARIANTS_KEPT`); a build whose signature is full only replaces the worst of its
+   variants — otherwise a worker's top-K filled up with one gear × talismans and lost distinct
+   candidates before the merge. With **Allow broken sets** off, the worker also counts the armor
+   loadouts that rule alone rejected (`brokenSetsRejected`).
 
 ### Phase 6 — Finalize (worker side)
 - SOLVE CP: the top-K is already sorted on CP, returned as-is.
@@ -190,11 +198,18 @@ For each combo that passes phase 4:
   idempotent no-ops.
 
 ### Orchestrator side
-- Receives `{builds, permutations, searched}` from each worker.
-- Merges the top-Ks into a global buffer, final sort, **collapses talisman variants**
+- Receives `{builds, permutations, searched, brokenSetsRejected}` from each worker.
+- Merges the top-Ks into a global buffer, final sort (`compareBuilds`), **collapses talisman variants**
   (`collapseTalismanVariants`: at most 3 builds per 6-gear signature — gems are a global
   allocation, so same-gear talismans differ almost only by their main and used to drown the
-  top-N), slices the top-N (1000 by default), forwards to React.
+  top-N; each heap already applies the same cap, this pass covers a signature spread over several
+  workers when the talisman is the partition axis), slices the top-N (1000 by default), forwards to React.
+- A complete solve that is empty, with no combo reached (`permutations` 0) and loadouts rejected by
+  "Allow broken sets" off → `onResult` carries the cause `"brokenSets"` (`SolveEmptyCause`), shown by
+  the table (cf. § ResultsTable).
+- **A worker error** (`error` message or `onerror` crash): every worker is stopped and the builds of
+  the workers that already finished are **dropped** — they only cover their slices and would show as
+  the result of the whole search. `onError` only, no `onResult`: the table stays empty under the error.
 - Aggregates `permutations` + `searched` for the footer (sum of the per-worker counters).
 
 ---
@@ -366,7 +381,10 @@ the header (null → desc → asc → null). The **Columns** menu (show/hide col
 (`ColumnsMenu` controlled, `onContextMenu` on the header `<tr>`). Click on a row → the `BottomGearBand`
 shows the 8 pieces. `solving…` / error / **explicit empty state** (an `emptyReason`
 derived from `poolSizes` lists the slots that fell to 0 pieces after filters, the EE aside: a hero without one solves
-without it; a client "Filter" that keeps no build shows "No build passes the current filter.").
+without it; a client "Filter" that keeps no build shows "No build passes the current filter."; no slot empty
+but "Allow broken sets" off rejected every armor loadout (the orchestrator's `"brokenSets"` cause) → the table
+says so and suggests turning it back on or raising Top %). The selected build's "N slots change" header is
+re-read off the current inventory (`buildDiff`), not the solve-time `upg`: after Equip it drops to 0.
 
 ### BottomGearBand
 8 cards (compact mirror of the inventory) — one per slot. Each card shows name,

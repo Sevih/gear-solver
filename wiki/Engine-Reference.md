@@ -394,7 +394,7 @@ Rhona S3 ×1.67, K S2-burst 1 ×2.39, Primine S1 ×0.86 — exact.
 ### 2.4 Score (`ratings.ts::computeScore`)
 
 ```
-Score = round(Σ over priority[key] × (effective(finalStats[key]) / STAT_NORMS[key]) × 100)
+Score = Σ over priority[key] × (effective(finalStats[key]) / STAT_NORMS[key]) × 100
   where effective(v) = key === "critRate" ? min(v, 100) : v
 ```
 
@@ -403,6 +403,8 @@ Score = round(Σ over priority[key] × (effective(finalStats[key]) / STAT_NORMS[
 - Normalization makes stats of different magnitude (HP in thousands vs CHC in
   percents) comparable.
 - ×100 scaling to make the Scores readable (~50-500 typical).
+- **Unrounded**: it is the sort key (heap + merge, ties broken by `pieceUids`);
+  the table and the library round it for display only.
 - Negative Score possible (priority -1 on a high stat).
 - **CRC clamped at 100%**: overflow doesn't count in the score (consistent with
   the in-game cap and with the clamp in `computeCheapRatings`).
@@ -534,8 +536,9 @@ The budget applies to **every** branch; only the per-slot **ranking** differs (a
 `scoreOf` passed to `keepTopN`):
 1. **explicit priority** (Score or CP) → `priorityScoreOf`: `Σ priority × value /
    ROLL_NORMS` over the non-combat-only rolls.
-2. **CP, no priority** → CP proxy (`cpEval` of the piece in the current build) +
-   **pin** the equipped piece (the solve can never return a CP below the equipped one).
+2. **CP, no priority** → CP proxy (`cpEval` of the piece in the current build). In SOLVE CP,
+   with or without a priority (branches 1 and 2), **pin** the equipped piece (the solve can
+   never return a CP below the equipped one).
 3. **Score, no priority** → `magnitudeScoreOf` (raw roll magnitude): no objective,
    but the product still has to be bounded.
 
@@ -543,7 +546,7 @@ The budget applies to **every** branch; only the per-slot **ranking** differs (a
 represented in the budget slice, `keepTopN` re-adds its **single top-scoring member**
 outside the budget (one member per slot is enough to form the set; re-adding ALL
 members — the old behavior — blew the budget back to the full pre-prune pools).
-Pinned UIDs (the equipped piece — CP-without-priority branch only) are also always
+Pinned UIDs (the equipped piece — SOLVE CP only) are also always
 re-added. Without the set guard, a low-score member of a required set would be
 eliminated → `checkSetsFeasible` would silently kill every combo ("no builds"
 without a clue). The effective pool can thus slightly exceed the budget share —
@@ -734,7 +737,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidelity, empty maps), import merge (dedup by `id`, collision keeps the existing), replace (overwrite), bundle validation (kind/version/maps) |
 | `apps/renderer/test/solveChunk.test.ts` | 4 tests — end-to-end `solveChunk` (hand-built `SolveContext`): **mid-tree set prune** (req-4pc → 1 scored combo vs 16 brute-force; infeasible → 0), **solver↔Builds 0-diff**, **chunk partition equivalence** (union of N chunks = single-chunk run, no combo lost or duplicated) |
 | `apps/renderer/test/setPlans.test.ts`   | 26 tests — chip expansion (`setPicksToPlans`), `planSetIds`, `planSlots`, `planFeasible` (multi-cond sum), `setsFeasible` OR + leaf-validation at `remaining 0`, mono-plan req-4pc parity, **`armorSetWhitelist`** (full vs partial prune × broken on/off), **`allSetsComplete`** |
-| `apps/renderer/test/translateReco.test.ts` | 16 tests — reco→patch: mains (OR-union), effects (icons required, null skip+warn), talismans (`preferred`, unresolved skip+warn, whole family on the real `equipment.json`), sets (combo→plan 1:1, unresolved combo dropped entirely), substat priority (tiers→weights, bucket collision, unknown key) |
+| `apps/renderer/test/translateReco.test.ts` | 16 tests — reco→patch: mains (OR-union, key outside the registry skip+warn), effects (icons required, null skip+warn), talismans (`preferred`, unresolved skip+warn, whole family on the real `equipment.json`), sets (combo→plan 1:1, unresolved combo dropped entirely), substat priority (tiers→weights, bucket collision, unknown key) |
 | `apps/renderer/test/subValue.test.ts` | 5 tests — `flatVsPctTick`: verdict on both sides of the crossover, exact flat-equivalent, equality exactly at the crossover, %=0 tick guard |
 | `apps/renderer/test/dmgValue.test.ts` | 4 tests — `dmgTickGains`: descending sort, delta→gain monotonicity, CHC null if crit-cap, base 0 → empty |
 | `apps/renderer/test/buildAdvice.test.ts` | 16 tests — `computeAdvice` (Builds): no-gear silent, missing on a near-complete hero (≤2) vs silent WIP (early-return), sets (singleton / 3-of-4), wasted caps — crit tolerated ≤102 / PEN >100 (rounded threshold >0), empty gem slots Talisman/EE + reach-+5 tip, aggregated upgrade (unused reforges / 6★ not ascended / below enhance cap), singular/plural wording |
@@ -742,7 +745,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/heroPriority.test.ts` | 21 tests — per-hero priority store: `rankOrder` / `isLowerPriority` (unranked < ranked, uniqueness, strict), `reorderRank` / `moveRankBefore` (contiguous 1..N positional insert, drag, clamp, immutability), `fillUnrankedByOrder` (keeps manual ranks, fills unranked by CP, compacts gaps, ignores stale uids) |
 | `apps/renderer/test/dominance.test.ts` | 10 tests — `pruneDominatedForCp`: strict drop, ties/Pareto/groups kept, reforge projection, end-to-end top-CP equivalence via `solveChunk` |
 | `apps/renderer/test/statRegistry.test.ts` | 11 tests — stat registry (`STAT_AXES`): FinalStats coverage, `STAT_TO_PRIORITY` flat/%→axis bridge, design-token completeness, numeric parity snapshot, legacy-key migration |
-| `apps/renderer/test/worklistPlan.test.ts` | 20 tests — `planWorklist` transaction planning: free-before-use ordering, contention flags (one copy wanted twice), **same hero + same slot**: only the newest entry (`createdAt`) is assigned, the older one exposed as `superseded` (and the `equipAssignments` fold hands over the newer piece), cycles applicable atomically, applied/stale changes excluded, empty plan; `worklistClaims` (solver reservations): each unapplied change's target → claiming hero, already-applied changes skipped, newest entry wins a double-claim, empty map without inventory |
+| `apps/renderer/test/worklistPlan.test.ts` | 20 tests — `planWorklist` transaction planning: free-before-use ordering, contention flags (one copy wanted twice), **same hero + same slot**: only the newest entry (`createdAt`) is assigned, the older one exposed as `superseded` (and the `equipAssignments` fold hands over the newer piece), cycles applicable atomically (only the cycle's members; an entry depending on one is ordered after it), applied/stale changes excluded, empty plan; `worklistClaims` (solver reservations): each unapplied change's target → claiming hero, already-applied changes skipped, newest entry wins a double-claim, empty map without inventory |
 | `apps/renderer/test/deltaCp.test.ts` | 2 tests — `deltaCpLabel`: reforge `Off` → bare `ΔCP ±X`, no tooltip; active mode → `vs equipped (build at <mode>)` + tooltip |
 | `apps/renderer/test/talismanPreferred.test.ts` | 8 tests — `talismanEffectPicks` on the real contract (`precomputeContext`): owned preferred → pool narrowed to it (variants included; the advice's family: only a 5★ owned → it, no member → whole pool), not owned or dropped by another filter (class, "equipped" scope) → whole pool, unowned `required` → empty pool, `excluded`, keep current locked, absent field → whole pool |
 | `apps/renderer/test/heroTracker.test.ts` | 11 tests — `buildHeroTrackerExport` (outerpedia hero-tracker export): versioned envelope keyed by base hero id, level/affinity resolved from the XP curves (floors lv5 / aff 1), EE level taken from the owned EE item (best copy, non-EE gear ignored), fused hero under its base id + nested `core_fusion` block (omitted when unfused, tier 1 when the level is missing), `transcend_star` clamped to base rarity and out-of-range values clamped, unknown hero still exported |

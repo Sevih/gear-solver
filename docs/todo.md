@@ -30,13 +30,8 @@
       aujourd'hui) · `awakValue` : ATK prend `geas.atk` toutes sources, EFF/RES `geasStat` — unifier.
 
 ### 🔴 Revue 2026-10 — moteur et Builder
-- [ ] 🟡 **Mineurs moteur / Builder (revue)** — score arrondi utilisé comme clé de tri (ex aequo arbitraires) ·
-      variantes de talisman fusionnées après le top-K par worker (candidats perdus) · erreur d'un worker → résultats
-      partiels affichés sans avertissement · `allowBrokenSets=false` + Top% peut donner 0 build sans explication ·
-      SOLVE CP avec priorité ne fixe pas l'équipement actuel · clés `mainStat` des recos non validées
-      (`translateReco`, latent) · en-tête « N slots change » périmé après Equip · `plan.ts` marque cycliques les
-      entrées qui ne font que dépendre d'un cycle · `buildAdvice` propose « +5 pour un 5e emplacement de gemme » aux
-      talismans 4★/5★ qui n'en ont pas.
+- [~] 🟡 **Mineurs moteur / Builder (revue)** — reste : `buildAdvice` propose « +5 pour un 5e emplacement de gemme »
+      aux talismans 4★/5★ qui n'en ont pas.
 
 ### 🔴 Contrat solver (avec outerpedia)
 > Ordre pour tout changement de forme : outerpedia ajoute sans retirer et pose `schema` ; une version de gear-solver

@@ -260,7 +260,14 @@ export interface SolveResult {
   builds: SolveBuild[];
   permutations: number;
   searched: number;
+  /** See `SolveChunkResult.brokenSetsRejected`. */
+  brokenSetsRejected: number;
 }
+
+/** Why a completed solve came back empty when the per-slot pools don't say
+ *  it (no slot at 0): `"brokenSets"` = every armor loadout was rejected by
+ *  "Allow broken sets" off. */
+export type SolveEmptyCause = "brokenSets";
 
 export interface SolveError {
   type: "error";

@@ -603,6 +603,16 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     const floorScorers = Object.entries(filters.statFilters)
       .filter(([, b]) => b?.min != null)
       .map(([k]) => priorityScoreOf({ [k]: 1 }));
+    // SOLVE CP pins the currently-equipped piece of each slot so the current
+    // build is always reachable → the solver can never return a lower CP than
+    // the hero already has, even when the piece doesn't rank in the budget's
+    // top-K — with or without a priority (the ranking differs, not the
+    // guarantee).
+    const equipped = req.mode === "cp" ? inv.gear.filter((g) => g.equippedBy === heroUid) : [];
+    const pinOf = (slot: string): Set<string> | undefined => {
+      const cur = equipped.find((g) => g.slot === slot);
+      return cur ? new Set([cur.uid]) : undefined;
+    };
     if (hasPriority) {
       // Explicit substat priority (SOLVE or SOLVE CP) — rank each slot by the
       // per-roll priority score. The build score is largely additive over
@@ -610,7 +620,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       // builds; the budget just drops the long tail of weak combos.
       const scoreOf = priorityScoreOf(filters.priority);
       capSlots.forEach((slot, i) => {
-        pools[slot] = keepTopUnion(pools[slot], scoreOf, floorScorers, keeps[i]!, requiredSetIds);
+        pools[slot] = keepTopUnion(pools[slot], scoreOf, floorScorers, keeps[i]!, requiredSetIds, pinOf(slot));
       });
     } else if (req.mode === "cp") {
       // CP-weighted auto-prune — makes "max CP" tractable without a hand-tuned
@@ -632,7 +642,6 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       const cpEval = makeCpEvaluator({
         showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused,
       });
-      const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
       const ooEquipped = equipped.find((g) => g.slot === "ooparts") ?? null;
       capSlots.forEach((slot, i) => {
         const others = equipped.filter((g) => g.slot !== slot);
@@ -641,12 +650,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
           // CP evaluator's ooparts arg (its ooBp bonus); elsewhere the equipped
           // talisman stays fixed.
           cpEval(computeFinalStats(composed.noGearStats, composed.scaling, others.concat(p), game), slot === "ooparts" ? p : ooEquipped);
-        // Pin the currently-equipped piece so the current build is always
-        // reachable → the solver can never return a lower CP than the hero
-        // already has, even when the piece doesn't rank in the budget's top-K.
-        const cur = equipped.find((g) => g.slot === slot);
-        const pin = cur ? new Set([cur.uid]) : undefined;
-        pools[slot] = keepTopUnion(pools[slot], scoreOf, floorScorers, keeps[i]!, requiredSetIds, pin);
+        pools[slot] = keepTopUnion(pools[slot], scoreOf, floorScorers, keeps[i]!, requiredSetIds, pinOf(slot));
       });
     } else {
       // SOLVE (Score) with NO priority — the score is uniformly 0, so there's no
@@ -1296,36 +1300,127 @@ function heapKey(b: SolveBuild, mode: SolveMode): number {
   return mode === "cp" ? (b.cp ?? -Infinity) : b.score;
 }
 
-/** Fixed-capacity min-heap keyed by `heapKey`. push() drops the smallest
- *  element when full. The key is computed ONCE at push and cached alongside
- *  the build — each sift comparison is then a plain number read instead of a
- *  `heapKey` call (mode branch + null-coalesce) × log K per push. Exported so
- *  the regression tests can hit it directly without spinning the whole
- *  engine; the solver still uses it internally. */
+/** Element-wise order of two `pieceUids` lists — the ex-aequo tie-break. */
+function compareUids(x: readonly string[], y: readonly string[]): number {
+  const n = Math.min(x.length, y.length);
+  for (let i = 0; i < n; i++) {
+    if (x[i] !== y[i]) return x[i]! < y[i]! ? -1 : 1;
+  }
+  return x.length - y.length;
+}
+
+/** The ONE ranking order, shared by the per-worker heap and the orchestrator's
+ *  merge: the active objective (unrounded score / cp, a null cp last), then
+ *  `pieceUids` so ex-aequo builds come out in the same order on every run —
+ *  not in heap-arrival order, which varies with the worker split. Negative →
+ *  `a` ranks first (an `Array.sort` comparator). */
+export function compareBuilds(a: SolveBuild, b: SolveBuild, mode: SolveMode): number {
+  // `-Infinity - -Infinity` is NaN (falsy) → falls through to the tie-break.
+  return heapKey(b, mode) - heapKey(a, mode) || compareUids(a.pieceUids, b.pieceUids);
+}
+
+/** How many builds are kept per 6-gear signature (`variantSignature`) — at
+ *  each worker's top-K (`TopKHeap`) and again at the merge
+ *  (`collapseTalismanVariants`). 3 keeps the top talisman alternatives
+ *  comparable without letting one gear combo flood the result table. */
+export const TALISMAN_VARIANTS_KEPT = 3;
+
+/** A build's 6-gear signature: `pieceUids` minus the trailing talisman —
+ *  weapon..accessory + EE (fixed per hero anyway). */
+export function variantSignature(b: SolveBuild): string {
+  return b.pieceUids.slice(0, -1).join("|");
+}
+
+interface HeapEntry {
+  key: number;
+  b: SolveBuild;
+  /** Position in the heap array — kept in sync by `swap` so a variant can be
+   *  replaced in place. */
+  pos: number;
+  /** `variantSignature`, only when the heap collapses variants. */
+  sig: string | null;
+}
+
+/** Fixed-capacity min-heap keyed by `heapKey` (ties: `compareBuilds`). push()
+ *  drops the lowest-ranked element when full. The key is computed ONCE at push
+ *  and cached alongside the build — each sift comparison is then a plain
+ *  number read, the `pieceUids` tie-break only on an exact tie.
+ *
+ *  `variantsKept` > 0 also caps the builds per 6-gear signature: a build whose
+ *  signature already holds that many only replaces the worst of them. Without
+ *  it a worker's top-K could fill with talisman variants of one gear combo
+ *  (near-identical — gems are a global allocation) and drop distinct
+ *  candidates the merge-time collapse would have kept. The cap equals the
+ *  merge's, so the merged result is unchanged whenever nothing was lost.
+ *  Exported so the regression tests can hit it directly without spinning the
+ *  whole engine; the solver still uses it internally. */
 export class TopKHeap {
-  private a: Array<{ key: number; b: SolveBuild }> = [];
-  constructor(private k: number, private mode: SolveMode) {}
+  private a: HeapEntry[] = [];
+  private groups = new Map<string, HeapEntry[]>();
+  constructor(private k: number, private mode: SolveMode, private variantsKept = 0) {}
   push(b: SolveBuild): void {
     const key = heapKey(b, this.mode);
-    if (this.a.length < this.k) {
-      this.a.push({ key, b });
-      this.up(this.a.length - 1);
-    } else {
-      // Only displace the min if the new entry beats it.
-      if (key > this.a[0]!.key) {
-        this.a[0] = { key, b };
-        this.down(0);
+    const full = this.a.length >= this.k;
+    // Can't enter at all — the common case once full, decided before any
+    // signature string is built.
+    if (full && !this.beats(key, b, this.a[0]!)) return;
+    let sig: string | null = null;
+    if (this.variantsKept > 0) {
+      sig = variantSignature(b);
+      const group = this.groups.get(sig);
+      if (group && group.length >= this.variantsKept) {
+        // Signature at its cap: compete with its own worst variant only.
+        let worst = group[0]!;
+        for (const e of group) if (this.below(e, worst)) worst = e;
+        if (!this.beats(key, b, worst)) return;
+        worst.key = key;
+        worst.b = b;
+        this.down(worst.pos); // ranks higher now → sinks away from the root
+        return;
       }
+    }
+    const entry: HeapEntry = { key, b, pos: 0, sig };
+    if (!full) {
+      entry.pos = this.a.length;
+      this.a.push(entry);
+      this.up(entry.pos);
+    } else {
+      this.ungroup(this.a[0]!);
+      this.a[0] = entry;
+      this.down(0);
+    }
+    if (sig != null) {
+      const group = this.groups.get(sig);
+      if (group) group.push(entry); else this.groups.set(sig, [entry]);
     }
   }
   toSorted(): SolveBuild[] {
-    return this.a.slice().sort((x, y) => y.key - x.key).map((e) => e.b);
+    return this.a.map((e) => e.b).sort((x, y) => compareBuilds(x, y, this.mode));
+  }
+  /** `(key, b)` ranks above entry `e`. */
+  private beats(key: number, b: SolveBuild, e: HeapEntry): boolean {
+    return key > e.key || (key === e.key && compareUids(b.pieceUids, e.b.pieceUids) < 0);
+  }
+  /** Entry `x` ranks below entry `y` (the min-heap order). */
+  private below(x: HeapEntry, y: HeapEntry): boolean {
+    return x.key < y.key || (x.key === y.key && compareUids(x.b.pieceUids, y.b.pieceUids) > 0);
+  }
+  private ungroup(e: HeapEntry): void {
+    if (e.sig == null) return;
+    const group = this.groups.get(e.sig)!;
+    group.splice(group.indexOf(e), 1);
+    if (group.length === 0) this.groups.delete(e.sig);
+  }
+  private swap(i: number, j: number): void {
+    const x = this.a[i]!, y = this.a[j]!;
+    this.a[i] = y; y.pos = i;
+    this.a[j] = x; x.pos = j;
   }
   private up(i: number): void {
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (this.a[i]!.key < this.a[p]!.key) {
-        [this.a[i], this.a[p]] = [this.a[p]!, this.a[i]!];
+      if (this.below(this.a[i]!, this.a[p]!)) {
+        this.swap(i, p);
         i = p;
       } else break;
     }
@@ -1336,10 +1431,10 @@ export class TopKHeap {
       const l = 2 * i + 1;
       const r = 2 * i + 2;
       let m = i;
-      if (l < n && this.a[l]!.key < this.a[m]!.key) m = l;
-      if (r < n && this.a[r]!.key < this.a[m]!.key) m = r;
+      if (l < n && this.below(this.a[l]!, this.a[m]!)) m = l;
+      if (r < n && this.below(this.a[r]!, this.a[m]!)) m = r;
       if (m === i) break;
-      [this.a[i], this.a[m]] = [this.a[m]!, this.a[i]!];
+      this.swap(i, m);
       i = m;
     }
   }
@@ -1349,6 +1444,10 @@ export interface SolveChunkResult {
   builds: SolveBuild[];
   permutations: number;
   searched: number;
+  /** Complete armor loadouts that met the set plans but were rejected only by
+   *  "Allow broken sets" off (a set left incomplete). With `permutations` 0
+   *  it tells the Builder why the solve came back empty though no slot is. */
+  brokenSetsRejected: number;
 }
 
 /** Shared zero-ratings placeholder for the SOLVE-CP deferred-ratings path.
@@ -1397,7 +1496,7 @@ export async function solveChunk(
   // EE gem-slot count is constant per solve (same EE piece across every combo).
   const eeSlots = gemSlotsOf(ee);
   const { mode, filters, game } = req;
-  const heap = new TopKHeap(topK, mode);
+  const heap = new TopKHeap(topK, mode, TALISMAN_VARIANTS_KEPT);
   const tickEvery = options.tickEvery ?? 4096;
 
   // Crit-cap gem strategy: when the user prioritized critRate AND the pool holds
@@ -1503,10 +1602,14 @@ export async function solveChunk(
     // "No broken sets" is a leaf-only constraint: a singleton at mid-depth may
     // still pair up in a later armor slot, so we only reject the complete
     // 4-armor loadout (remainingSlots === 0) where the tally is final.
-    if (!allowBrokenSets && remainingSlots === 0 && !allSetsComplete(setCount)) return false;
+    if (!allowBrokenSets && remainingSlots === 0 && !allSetsComplete(setCount)) {
+      brokenSetsRejected++;
+      return false;
+    }
     return true;
   };
 
+  let brokenSetsRejected = 0;
   let permutations = 0;
   let searched = 0;
   // Tick heartbeat — incremented at every talisman leaf AND every boots-depth
@@ -1718,25 +1821,26 @@ export async function solveChunk(
 
   // Final tick so the orchestrator sees the last increments.
   options.onTick?.(permutations, searched);
-  return { builds: heap.toSorted(), permutations, searched };
+  return { builds: heap.toSorted(), permutations, searched, brokenSetsRejected };
 }
 
 /** Collapse talisman/gem near-duplicates in a SORTED build list: keep at most
- *  `k` builds per 6-gear signature (`pieceUids` minus the trailing talisman —
- *  weapon..accessory + EE, which is fixed per hero anyway). Without this, the
+ *  `k` builds per 6-gear signature (`variantSignature`). Without this, the
  *  top-N is routinely the same armor/weapon/accessory combo × dozens of
  *  near-identical talismans (gems are a global allocation, so talisman variants
  *  differ almost only by their main) — drowning genuinely different builds out
  *  of the result table. Keeping the best `k` per signature still shows the top
  *  talisman alternatives while freeing the tail for other gear combos. The list
  *  must already be sorted by the active objective (the kept ones are the best).
+ *  Each worker's heap already applies the same cap (`TopKHeap`); this pass
+ *  covers a signature split across workers (talisman-partitioned solve).
  *  Pure; exported for tests — the orchestrator applies it before the top-N slice. */
 export function collapseTalismanVariants(builds: SolveBuild[], k: number): SolveBuild[] {
   if (k <= 0 || builds.length === 0) return builds;
   const perSig = new Map<string, number>();
   const out: SolveBuild[] = [];
   for (const b of builds) {
-    const sig = b.pieceUids.slice(0, -1).join("|");
+    const sig = variantSignature(b);
     const n = perSig.get(sig) ?? 0;
     if (n >= k) continue;
     perSig.set(sig, n + 1);

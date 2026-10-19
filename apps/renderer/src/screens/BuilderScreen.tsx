@@ -35,7 +35,7 @@ import { computeFinalStats, type FinalStats } from "../lib/composeBuild.js";
 import { projectPieceForReforge, type ReforgeMode, type ReforgeTickWeights } from "../lib/solver/engine.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
 import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../lib/solver/orchestrator.js";
-import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveMode } from "../lib/solver/types.js";
+import type { EquippedScope, PoolSizes, SetPlan, SolveBuild, SolveEmptyCause, SolveMode } from "../lib/solver/types.js";
 import type { HeroPriority } from "../lib/storage/heroPriority.js";
 import { ARMOR_SLOTS, planSlots } from "../lib/solver/setPlans.js";
 import {
@@ -464,6 +464,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
    *  `gs.debug.solver` is on. Backs the footer's "Copy Debug Info" button. */
   const [lastDebugInfo, setLastDebugInfo] = useState<SolveDebugInfo | null>(null);
   const [solveError, setSolveError] = useState<string | null>(null);
+  /** Why the last completed solve came back empty when no slot pool is (see
+   *  `SolveEmptyCause`) — null otherwise. */
+  const [emptyCause, setEmptyCause] = useState<SolveEmptyCause | null>(null);
   /** Pre-solve pool sizes — `precomputeContext` run on the main thread (debounced)
    *  as filters/hero change, so the cartesian guard-rail appears BEFORE clicking
    *  SOLVE, not after the precompute at solve start. Null until first computed. */
@@ -546,8 +549,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     if (!orchestratorRef.current) {
       orchestratorRef.current = new SolverOrchestrator({
         onProgress: (p) => { progressStore.set({ permutations: p.permutations, searched: p.searched }); setLivePoolSizes(p.poolSizes ?? null); },
-        onResult:   (builds, durationMs, debugInfo, tickWeights) => { setSolveResults(builds); setResultsReforge({ ...solveReforgeRef.current, tickWeights }); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); setLastDebugInfo(debugInfo ?? null); },
-        onError:    (msg) => { setSolveError(msg); setSolving(false); },
+        onResult:   (builds, durationMs, debugInfo, tickWeights, cause) => { setSolveResults(builds); setResultsReforge({ ...solveReforgeRef.current, tickWeights }); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); setLastDebugInfo(debugInfo ?? null); setEmptyCause(cause); },
+        // A failed solve never shows builds: the orchestrator drops what the
+        // finished workers returned (a partial search), the table stays empty.
+        onError:    (msg) => { setSolveError(msg); setSolving(false); setSolveResults([]); setSelectedBuildIdx(null); },
       });
     }
     return orchestratorRef.current;
@@ -570,6 +575,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const orchestrator = getOrchestrator();
     setSolving(true);
     setSolveError(null);
+    setEmptyCause(null);
     setSolveResults([]);
     setSelectedBuildIdx(null);
     setDisplayFilter(null);
@@ -852,6 +858,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setSelectedBuildIdx(null);
     setDisplayFilter(null);
     setSolveError(null);
+    setEmptyCause(null);
     setLastSolveMs(null);
     setLastDebugInfo(null);
     setResultsReforge({ reforgeMode: "disable", priority: {} });
@@ -1090,6 +1097,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               solving={solving}
               error={solveError}
               emptyReason={emptyReason}
+              brokenSetsEmpty={!emptyReason && emptyCause === "brokenSets"}
               filteredOut={solveResults.length > 0 && displayedResults.length === 0}
               statFilters={filters.statFilters}
               rows={resultRows}
@@ -1111,7 +1119,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
                 </span>
                 {selectedBuild && (
                   <span className="flex items-center gap-2 text-[10px] tabular-nums text-white/45">
-                    <span>{selectedBuild.upg} slot{selectedBuild.upg === 1 ? "" : "s"} change</span>
+                    {/* Read off the live inventory (`buildDiff`), not the solve-time
+                        `upg`: after Equip the re-imported snapshot says 0. */}
+                    <span>{equipPlan.moving} slot{equipPlan.moving === 1 ? "" : "s"} change</span>
                     {deltaCp != null && deltaCpText && (
                       <span
                         className={cx("font-semibold", deltaCp > 0 ? "text-emerald-300" : deltaCp < 0 ? "text-rose-300" : "text-white/50")}
@@ -3330,7 +3340,7 @@ function ColumnsMenu({
 }
 
 function ResultsTable({
-  builds, selectedIdx, onSelect, solving, error, emptyReason, filteredOut, statFilters, rows, onRowsChange,
+  builds, selectedIdx, onSelect, solving, error, emptyReason, brokenSetsEmpty, filteredOut, statFilters, rows, onRowsChange,
   pieceByUid, armorSets, game, heatmap, dmgSkill,
 }: {
   builds: SolveBuild[];
@@ -3344,6 +3354,9 @@ function ResultsTable({
   /** Why the last solve returned nothing (e.g. a slot pool collapsed to 0
    *  after filters). Null → show the generic "pick a hero" hint instead. */
   emptyReason: string | null;
+  /** The last solve searched every slot but "Allow broken sets" off rejected
+   *  every armor loadout (`SolveEmptyCause`) — says so instead of the hint. */
+  brokenSetsEmpty: boolean;
   /** The last solve has builds but the post-solve client filter keeps none —
    *  says so instead of the "pick a hero" hint. */
   filteredOut: boolean;
@@ -3593,6 +3606,11 @@ function ResultsTable({
                     No builds — a slot has no pieces left after filtering.<br />
                     <span className="not-italic font-mono text-[10.5px]">{emptyReason}</span>
                   </span>
+                ) : brokenSetsEmpty ? (
+                  <span className="text-amber-300/80">
+                    No builds — no armor combination completes its sets with “Allow broken sets” off.<br />
+                    <span className="not-italic text-[10.5px]">Turn it on, or raise Top % so more set pieces stay in the pools.</span>
+                  </span>
                 ) : filteredOut ? (
                   <span className="text-white/65">No build passes the current filter.</span>
                 ) : (
@@ -3782,7 +3800,7 @@ const ResultRow = memo(function ResultRow({
       })}
       {showScore && (
         <td style={heatStyle(build.score, ranges.score)} className="px-1.5 py-1 text-right font-semibold text-amber-200">
-          {build.score}
+          {Math.round(build.score)}
         </td>
       )}
       {showUpg && (
@@ -3959,7 +3977,7 @@ function RightSidebar({
               <LibraryRow
                 key={b.id}
                 title={b.name}
-                subtitle={`${b.mode === "cp" ? "CP" : "Score"} ${b.mode === "cp" ? (b.build.cp ?? "—") : b.build.score} · ${formatTimeAgo(b.createdAt)}`}
+                subtitle={`${b.mode === "cp" ? "CP" : "Score"} ${b.mode === "cp" ? (b.build.cp ?? "—") : Math.round(b.build.score)} · ${formatTimeAgo(b.createdAt)}`}
                 onClick={() => onRestoreBuild(b)}
                 onDelete={() => onRemoveBuild(b.id)}
               />

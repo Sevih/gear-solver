@@ -12,12 +12,13 @@ import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import SolverWorker from "../../workers/solver.worker.ts?worker";
 import { debug, debugEnabled } from "../log.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
-import { collapseTalismanVariants, precomputeContext, type ReforgeTickWeights } from "./engine.js";
+import { collapseTalismanVariants, compareBuilds, precomputeContext, TALISMAN_VARIANTS_KEPT, type ReforgeTickWeights } from "./engine.js";
 import type {
   EquippedScope,
   EstimateRequestMsg,
   PoolSizes,
   SolveBuild,
+  SolveEmptyCause,
   SolveFilters,
   SolveMode,
   SolveRequest,
@@ -128,20 +129,22 @@ export interface OrchestratorCallbacks {
    *  actually waited — not just the worker search. `debug` is the per-solve
    *  diagnostic snapshot, present only when `gs.debug.solver` is on.
    *  `reforgeTickWeights` = the no-priority reforge weights the precompute
-   *  projected with (null when unused) — the gear band re-projects with them. */
-  onResult(builds: SolveBuild[], durationMs: number, debug: SolveDebugInfo | undefined, reforgeTickWeights: ReforgeTickWeights | null): void;
+   *  projected with (null when unused) — the gear band re-projects with them.
+   *  `emptyCause` explains an empty result the pool sizes can't (null
+   *  otherwise, and on a user cancel). */
+  onResult(
+    builds: SolveBuild[], durationMs: number, debug: SolveDebugInfo | undefined,
+    reforgeTickWeights: ReforgeTickWeights | null, emptyCause: SolveEmptyCause | null,
+  ): void;
+  /** The solve failed (precompute throw, worker crash or `error` message).
+   *  No `onResult` follows: the other workers' builds are dropped, never shown
+   *  as if they were the whole search. */
   onError(message: string): void;
 }
 
 /** Args for the pre-solve pool-size estimate — a solve minus the result-set
  *  knobs (no topK/topN: nothing is searched, only the precompute runs). */
 export type EstimateArgs = Omit<SolveArgs, "topK" | "topN">;
-
-/** How many builds are kept per 6-gear signature when collapsing talisman
- *  variants at merge time (see `collapseTalismanVariants`). 3 keeps the top
- *  talisman alternatives comparable without letting one gear combo flood the
- *  result table. */
-const TALISMAN_VARIANTS_KEPT = 3;
 
 /** Minimum interval between `onProgress` emissions. Workers each post ~every
  *  100ms, so a 30-worker pool pushed up to ~300 React state updates/s through
@@ -179,6 +182,8 @@ export class SolverOrchestrator {
    *  progress message and the final result both carry overlapping totals. */
   private stats: Array<{ permutations: number; searched: number }> = [];
   private buf: SolveBuild[] = [];
+  /** Σ of the finished workers' `brokenSetsRejected` (see `SolveEmptyCause`). */
+  private brokenSetsRejected = 0;
   private workersDone = 0;
   /** Number of workers actually dispatched this solve. Can be < the pool size
    *  when the partitioned pool has fewer items than workers — posting to more
@@ -253,13 +258,12 @@ export class SolverOrchestrator {
       // DOM-level crash (script error, OOM) — unlike the structured `error`
       // messages, an ErrorEvent carries no solveId, so gate on `active`: a
       // late crash from a superseded/idle run must not raise a banner over the
-      // current results. During an active solve, also cancel(): a dead worker
-      // never posts its `result`, so `workersDone` would never reach
+      // current results. During an active solve, also stop it (`fail`): a dead
+      // worker never posts its `result`, so `workersDone` would never reach
       // `activeChunks` and the UI would wait forever.
       w.onerror = (e: ErrorEvent) => {
         if (!this.active) return;
-        this.cb.onError(`worker ${idx}: ${e.message}`);
-        this.cancel();
+        this.fail(`worker ${idx}: ${e.message}`);
       };
       this.workers.push(w);
     }
@@ -294,6 +298,7 @@ export class SolverOrchestrator {
     this.mode = args.mode;
     this.topN = args.topN ?? 1000;
     this.buf = [];
+    this.brokenSetsRejected = 0;
     this.workersDone = 0;
     this.poolSizes = undefined;
     this.reforgeTickWeights = null;
@@ -414,6 +419,18 @@ export class SolverOrchestrator {
     this.flush();
   }
 
+  /** A failed solve: bail every worker and drop whatever the finished ones
+   *  merged. Unlike `cancel()` nothing is flushed — the builds of the workers
+   *  that did finish cover only their slices, and the table would show them
+   *  as the result of the whole search under the error banner. */
+  private fail(message: string): void {
+    for (const w of this.workers) w.postMessage({ type: "cancel" });
+    this.solveId++; // any future output from these workers is now stale
+    this.active = false;
+    this.buf = [];
+    this.cb.onError(message);
+  }
+
   /** Hard supersede (new solve clobbers an in-flight one). Drops the buf
    *  and stats so the next solve starts clean even if the cancelled
    *  workers' result messages arrive after we re-`solve()`. */
@@ -511,11 +528,11 @@ export class SolverOrchestrator {
     } else if (ev.type === "result") {
       this.stats[workerIdx] = { permutations: ev.permutations, searched: ev.searched };
       this.buf.push(...ev.builds);
+      this.brokenSetsRejected += ev.brokenSetsRejected;
       this.workersDone++;
       if (this.workersDone === this.activeChunks) this.flush();
     } else if (ev.type === "error") {
-      this.cb.onError(ev.message);
-      this.cancel();
+      this.fail(ev.message);
     }
   }
 
@@ -547,10 +564,10 @@ export class SolverOrchestrator {
     // the workers' last increments, and the footer's P/S should land on the
     // true final counts, not the last emitted snapshot.
     this.emitProgress();
-    const cmp = this.mode === "cp"
-      ? (a: SolveBuild, b: SolveBuild) => (b.cp ?? 0) - (a.cp ?? 0)
-      : (a: SolveBuild, b: SolveBuild) => b.score - a.score;
-    this.buf.sort(cmp);
+    // Same order as each worker's heap (unrounded objective, then pieceUids)
+    // — ex aequo builds land in one order whatever the worker split.
+    const mode = this.mode;
+    this.buf.sort((a, b) => compareBuilds(a, b, mode));
     const merged = this.buf.length;
     // Talisman-variant collapse BEFORE the top-N slice: the merged heap is
     // routinely one gear combo × dozens of near-identical talismans (gems are
@@ -558,6 +575,11 @@ export class SolverOrchestrator {
     // the best few per 6-gear signature so the table surfaces genuinely
     // different builds; the runner-up talismans stay visible at ranks 2-3.
     const out = collapseTalismanVariants(this.buf, TALISMAN_VARIANTS_KEPT).slice(0, this.topN);
+    // Every armor loadout fell to "Allow broken sets" off — only meaningful on
+    // a completed search (a user cancel flushes the finished workers only).
+    const complete = this.workersDone === this.activeChunks;
+    const emptyCause: SolveEmptyCause | null =
+      complete && out.length === 0 && this.totalPerm() === 0 && this.brokenSetsRejected > 0 ? "brokenSets" : null;
     const now = performance.now();
     const totalMs = Math.round(now - this.startedAt);
     if (this.debugInfo) {
@@ -572,7 +594,7 @@ export class SolverOrchestrator {
       this.debugInfo.perWorker = this.stats.map((s, i) => ({ w: i, perm: s.permutations, searched: s.searched }));
       debug("solver", "done", this.debugInfo);
     }
-    this.cb.onResult(out, totalMs, this.debugInfo ?? undefined, this.reforgeTickWeights);
+    this.cb.onResult(out, totalMs, this.debugInfo ?? undefined, this.reforgeTickWeights, emptyCause);
     this.active = false;
   }
 }

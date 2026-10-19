@@ -101,6 +101,23 @@ describe("planWorklist — transaction planning", () => {
     expect(plan.assignments).toHaveLength(2);
   });
 
+  it("an entry that only depends on a cycle is not cyclic, it is ordered after the cycle", () => {
+    // a ↔ b swap weapons (cycle). a also frees S (helmet), which c wants: c
+    // waits on the cycle without being part of it.
+    const list = [
+      entry("c", "h3", [change("helmet", "S")]),                               // h3 wants S (on h1)
+      entry("a", "h1", [change("weapon", "P", "Q"), change("helmet", "R", "S")]), // frees Q and S
+      entry("b", "h2", [change("weapon", "Q", "P")]),                          // frees P
+    ];
+    const plan = planWorklist(list, inv([
+      { uid: "P", owner: "h2" }, { uid: "Q", owner: "h1" }, { uid: "S", owner: "h1" }, { uid: "R" },
+    ]));
+    expect([...plan.cyclic].sort()).toEqual(["a", "b"]);
+    expect(plan.order).toEqual(["a", "b", "c"]);
+    expect(plan.position.get("c")).toBe(3);
+    expect(plan.applicable).toBe(true);
+  });
+
   it("excludes applied (already on hero) and stale (gone from inventory) changes", () => {
     const list = [
       entry("a", "h1", [

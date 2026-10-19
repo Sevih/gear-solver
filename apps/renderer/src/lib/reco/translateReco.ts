@@ -89,11 +89,17 @@ function tierWeight(tierIndex: number): number {
 }
 
 /** Collect the OR-union of main-stat keys across a slot's recommended pieces
- *  (alternatives) into a `{key: true}` map. Empty → omit the slot (any main). */
-function mainPicksForSlot(refs: RecoGearStat[] | undefined): Record<string, boolean> {
+ *  (alternatives) into a `{key: true}` map. Empty → omit the slot (any main).
+ *  A key outside the stat registry (`STAT_TO_PRIORITY` = every roll key) could
+ *  never match a piece's main — kept, it would narrow the slot to nothing or
+ *  to the other keys only — so it is skipped and warned. */
+function mainPicksForSlot(refs: RecoGearStat[] | undefined, slot: string, warnings: string[]): Record<string, boolean> {
   const out: Record<string, boolean> = {};
   for (const ref of refs ?? []) {
-    for (const key of ref.mainStat) out[key] = true;
+    for (const key of ref.mainStat) {
+      if (Object.hasOwn(STAT_TO_PRIORITY, key)) out[key] = true;
+      else warnings.push(`${slot}: "${ref.name}" — unknown main stat "${key}" — skipped.`);
+    }
   }
   return out;
 }
@@ -163,8 +169,8 @@ export function translateRecoBuild(
   };
 
   const mainPicks: Record<string, Record<string, boolean>> = {};
-  const weaponMains = mainPicksForSlot(build.Weapon);
-  const accessoryMains = mainPicksForSlot(build.Amulet);
+  const weaponMains = mainPicksForSlot(build.Weapon, "Weapon", warnings);
+  const accessoryMains = mainPicksForSlot(build.Amulet, "Amulet", warnings);
   if (Object.keys(weaponMains).length > 0) mainPicks.weapon = weaponMains;
   if (Object.keys(accessoryMains).length > 0) mainPicks.accessory = accessoryMains;
 

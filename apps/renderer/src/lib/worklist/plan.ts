@@ -18,7 +18,9 @@
  *    emit a free-before-use topological order.
  *  - **Cycles** — A needs a piece B frees AND B needs a piece A frees. No valid
  *    sequential human order exists; the atomic apply still resolves it (steal
- *    semantics), so we flag these "do together" rather than block.
+ *    semantics), so we flag these "do together" rather than block. Only the
+ *    entries of the cycle itself are flagged: one that merely waits on a cycle
+ *    (needs a piece a cyclic entry frees) is ordered after it.
  *
  * Pure + inventory-driven (same live-truth philosophy as the screen): re-run it
  * whenever the snapshot changes. With superseded changes dropped, no hero gets
@@ -39,8 +41,9 @@ export interface WorklistAssignment {
 }
 
 export interface WorklistPlan {
-  /** Entry ids in free-before-use order. Cyclic entries keep their original
-   *  relative order (no valid topological position). */
+  /** Entry ids in free-before-use order. The entries of one cycle sit
+   *  together in their original relative order (no valid order among them),
+   *  everything depending on the cycle after it. */
   order: string[];
   /** 1-based apply position per entry id — only populated when ordering is
    *  non-trivial (`hasDeps`); empty otherwise so the UI shows no noise. */
@@ -157,8 +160,8 @@ export function planWorklist(list: WorklistEntry[], inventory: Inventory | null)
     }
   }
 
-  // --- Kahn topological sort; leftovers are cyclic. Ties broken by the entry's
-  //     position in the original list (stable, predictable). ---
+  // --- Kahn topological sort. Ties broken by the entry's position in the
+  //     original list (stable, predictable). ---
   const rank = new Map(entries.map((e, i) => [e.id, i]));
   const ready = entries.filter((e) => (indeg.get(e.id) ?? 0) === 0).map((e) => e.id);
   const order: string[] = [];
@@ -173,8 +176,43 @@ export function planWorklist(list: WorklistEntry[], inventory: Inventory | null)
       if (indeg.get(m) === 0) ready.push(m);
     }
   }
+  // --- Leftovers: Kahn stops at a cycle AND at everything downstream of one.
+  //     Only the members of a strongly connected component are cyclic; the
+  //     components are then ordered among themselves (Kahn over the
+  //     condensation, ties by the earliest member's list position), so an
+  //     entry that only depends on a cycle comes right after it. ---
   const cyclic = new Set<string>();
-  for (const e of entries) if (!emitted.has(e.id)) { order.push(e.id); cyclic.add(e.id); }
+  const left = entries.filter((e) => !emitted.has(e.id)).map((e) => e.id);
+  if (left.length > 0) {
+    const comps = stronglyConnected(left, adj);
+    for (const comp of comps) {
+      comp.sort((x, y) => rank.get(x)! - rank.get(y)!);
+      if (comp.length > 1) for (const id of comp) cyclic.add(id); // no self-edge exists
+    }
+    const compOf = new Map<string, number>();
+    comps.forEach((comp, i) => { for (const id of comp) compOf.set(id, i); });
+    const compAdj = comps.map(() => new Set<number>());
+    const compIndeg = comps.map(() => 0);
+    for (const id of left) {
+      const from = compOf.get(id)!;
+      for (const m of adj.get(id) ?? []) {
+        const to = compOf.get(m);
+        if (to == null || to === from || compAdj[from]!.has(to)) continue;
+        compAdj[from]!.add(to);
+        compIndeg[to]!++;
+      }
+    }
+    const firstRank = (c: number): number => rank.get(comps[c]![0]!)!;
+    const readyComps = comps.map((_, i) => i).filter((i) => compIndeg[i] === 0);
+    while (readyComps.length > 0) {
+      readyComps.sort((x, y) => firstRank(x) - firstRank(y));
+      const c = readyComps.shift()!;
+      order.push(...comps[c]!);
+      for (const d of compAdj[c]!) {
+        if (--compIndeg[d]! === 0) readyComps.push(d);
+      }
+    }
+  }
 
   // 1-based positions, only when ordering carries information.
   const position = new Map<string, number>();
@@ -227,6 +265,47 @@ export function changeState(
   const superseded = !applied && !stale && (ctx.supersededSlots?.has(change.slot) ?? false);
   const conflict = !applied && !stale && !superseded && ctx.contended.has(change.toUid);
   return { applied, stale, conflict, superseded };
+}
+
+/** Tarjan's strongly connected components of the subgraph induced by `nodes`
+ *  (edges leaving it are ignored). Every node lands in exactly one component;
+ *  a node on no cycle is a component of one. */
+function stronglyConnected(nodes: string[], adj: Map<string, Set<string>>): string[][] {
+  const inGraph = new Set(nodes);
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  const out: string[][] = [];
+  let next = 0;
+  const visit = (v: string): void => {
+    index.set(v, next);
+    low.set(v, next);
+    next++;
+    stack.push(v);
+    onStack.add(v);
+    for (const w of adj.get(v) ?? []) {
+      if (!inGraph.has(w)) continue;
+      if (!index.has(w)) {
+        visit(w);
+        low.set(v, Math.min(low.get(v)!, low.get(w)!));
+      } else if (onStack.has(w)) {
+        low.set(v, Math.min(low.get(v)!, index.get(w)!));
+      }
+    }
+    if (low.get(v) === index.get(v)) {
+      const comp: string[] = [];
+      let w: string;
+      do {
+        w = stack.pop()!;
+        onStack.delete(w);
+        comp.push(w);
+      } while (w !== v);
+      out.push(comp);
+    }
+  };
+  for (const v of nodes) if (!index.has(v)) visit(v);
+  return out;
 }
 
 function mapSet<K, V>(m: Map<K, Set<V>>, k: K): Set<V> {

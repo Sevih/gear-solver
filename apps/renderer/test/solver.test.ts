@@ -22,7 +22,7 @@ import {
   computeSetBonuses, type FinalStatsBaseline, type GemOverride, type ScalingMap,
 } from "../src/lib/composeBuild.js";
 import type { StatScaling } from "@gear-solver/core";
-import { collapseTalismanVariants, maxedFloorOf, meetsMaxedFloor, pieceReforgePlan, projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
+import { collapseTalismanVariants, compareBuilds, maxedFloorOf, meetsMaxedFloor, pieceReforgePlan, projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
 import { toUiPiece } from "../src/design/adapter.js";
 import type { SolveBuild } from "../src/lib/solver/types.js";
 import { calcBattlePower, makeCpEvaluator } from "../src/lib/solver/cp.js";
@@ -715,6 +715,13 @@ describe("computeScore", () => {
       eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
     expect(computeScore(fs, {})).toBe(0);
   });
+
+  it("is not rounded — it is the sort key (two builds a fraction apart don't tie)", () => {
+    const fs = (atk: number) => ({ atk, def: 0, hp: 0, spd: 0, critRate: 0, critDmg: 0,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 });
+    expect(computeScore(fs(4010), { atk: 1 })).toBeCloseTo(100.25);
+    expect(computeScore(fs(4010), { atk: 1 })).toBeGreaterThan(computeScore(fs(4005), { atk: 1 }));
+  });
 });
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -1145,6 +1152,22 @@ describe("TopKHeap", () => {
     expect(heap.toSorted().map((b) => b.score)).toEqual([8, 5, 3]);
   });
 
+  it("ex aequo builds are ordered by pieceUids, whatever the push order", () => {
+    const tied = (uid: string) => ({ ...buildWithScore(100), pieceUids: [uid, "t"] });
+    const a = new TopKHeap(2, "score");
+    ["c", "a", "b"].forEach((u) => a.push(tied(u)));
+    const b = new TopKHeap(2, "score");
+    ["b", "c", "a"].forEach((u) => b.push(tied(u)));
+    expect(a.toSorted().map((x) => x.pieceUids[0])).toEqual(["a", "b"]);
+    expect(b.toSorted().map((x) => x.pieceUids[0])).toEqual(["a", "b"]);
+  });
+
+  it("compareBuilds — the merge order: objective first, pieceUids on a tie", () => {
+    const b = (s: number, uid: string) => ({ ...buildWithScore(s), pieceUids: [uid] });
+    const sorted = [b(100.2, "a"), b(100.4, "z"), b(100.2, "b")].sort((x, y) => compareBuilds(x, y, "score"));
+    expect(sorted.map((x) => x.pieceUids[0])).toEqual(["z", "a", "b"]);
+  });
+
   it("CP mode treats null cp as -Infinity (never wins a slot)", () => {
     const heap = new TopKHeap(2, "cp");
     heap.push({ ...buildWithScore(0, 100), cp: null });
@@ -1153,6 +1176,52 @@ describe("TopKHeap", () => {
     // The null-cp build should be excluded; only the two with real cp.
     const out = heap.toSorted();
     expect(out.map((b) => b.cp)).toEqual([50, 30]);
+  });
+});
+
+describe("TopKHeap — talisman variants capped per worker", () => {
+  /** Build with a given 6-gear signature + talisman uid (talisman is LAST). */
+  const bld = (gear: string, talisman: string, score: number): SolveBuild =>
+    ({ ...buildWithScore(score), pieceUids: [...gear.split(","), talisman] });
+
+  it("variants of one gear combo no longer crowd a distinct combo out of the top-K", () => {
+    const pushAll = (heap: TopKHeap) => {
+      heap.push(bld("w1,h,a,g,b,acc", "t1", 90));
+      heap.push(bld("w1,h,a,g,b,acc", "t2", 85));
+      heap.push(bld("w1,h,a,g,b,acc", "t3", 80));
+      heap.push(bld("w2,h,a,g,b,acc", "t1", 70));
+    };
+    // Without the cap the K=2 heap keeps two variants of w1; the merge-time
+    // collapse then folds them to one and w2 is gone.
+    const uncapped = new TopKHeap(2, "score");
+    pushAll(uncapped);
+    expect(collapseTalismanVariants(uncapped.toSorted(), 1).map((b) => b.score)).toEqual([90]);
+    // With the same cap at the heap, w2 survives the worker's cut.
+    const capped = new TopKHeap(2, "score", 1);
+    pushAll(capped);
+    expect(capped.toSorted().map((b) => b.score)).toEqual([90, 70]);
+  });
+
+  it("a better variant replaces the worst of its signature, not another combo", () => {
+    const heap = new TopKHeap(3, "score", 2);
+    heap.push(bld("w1,h,a,g,b,acc", "t1", 50));
+    heap.push(bld("w1,h,a,g,b,acc", "t2", 60));
+    heap.push(bld("w2,h,a,g,b,acc", "t1", 40));
+    heap.push(bld("w1,h,a,g,b,acc", "t3", 70)); // w1 full → evicts its 50, keeps w2's 40
+    heap.push(bld("w1,h,a,g,b,acc", "t4", 55)); // below w1's worst (60) → rejected
+    expect(heap.toSorted().map((b) => `${b.pieceUids[0]}:${b.score}`)).toEqual(["w1:70", "w1:60", "w2:40"]);
+  });
+
+  it("same result as the uncapped heap + merge collapse when nothing is lost", () => {
+    const builds = [
+      bld("w1,h,a,g,b,acc", "t1", 90), bld("w2,h,a,g,b,acc", "t1", 88), bld("w1,h,a,g,b,acc", "t2", 85),
+      bld("w3,h,a,g,b,acc", "t1", 80), bld("w1,h,a,g,b,acc", "t3", 75), bld("w1,h,a,g,b,acc", "t4", 70),
+      bld("w2,h,a,g,b,acc", "t2", 65),
+    ];
+    const uncapped = new TopKHeap(100, "score");
+    const capped = new TopKHeap(100, "score", 3);
+    for (const b of [...builds].reverse()) { uncapped.push(b); capped.push(b); }
+    expect(capped.toSorted()).toEqual(collapseTalismanVariants(uncapped.toSorted(), 3));
   });
 });
 

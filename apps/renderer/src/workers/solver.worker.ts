@@ -137,7 +137,7 @@ async function runSolve(req: SolveRequest, myGen: number): Promise<void> {
     let lastTick = perfNow();
     const tickIntervalMs = 100;
 
-    const { builds: rawBuilds, permutations, searched } = await solveChunk(
+    const { builds: rawBuilds, permutations, searched, brokenSetsRejected } = await solveChunk(
       solveCtx,
       req.chunkIndex,
       req.chunkCount,
@@ -163,7 +163,7 @@ async function runSolve(req: SolveRequest, myGen: number): Promise<void> {
     // mismatch if the cancel was a supersede, or merge it as the partial
     // top-N if it was a user cancel between solves).
     const finalBuilds = finalizeBuilds(solveCtx, rawBuilds, req.mode);
-    post({ type: "result", solveId: req.solveId, builds: finalBuilds, permutations, searched });
+    post({ type: "result", solveId: req.solveId, builds: finalBuilds, permutations, searched, brokenSetsRejected });
   } catch (err) {
     if (isStale()) return;
     post({ type: "error", solveId: req.solveId, message: err instanceof Error ? err.message : String(err) });

@@ -121,6 +121,28 @@ describe("solveChunk — mid-tree set pruning", () => {
   });
 });
 
+describe("solveChunk — \"Allow broken sets\" off", () => {
+  it("counts the armor loadouts it rejects, so an empty solve can say why", async () => {
+    // Four sets, one piece each per slot: nothing pairs up → every loadout is
+    // set-incomplete, no slot is empty.
+    const pools = abPools();
+    pools.helmet = [piece("helmet", "h_A", { armorSetId: "A" })];
+    pools.armor = [piece("armor", "a_B", { armorSetId: "B" })];
+    pools.gloves = [piece("gloves", "g_C", { armorSetId: "C" })];
+    pools.boots = [piece("boots", "b_D", { armorSetId: "D" })];
+    const ctx = { ...makeCtx(pools, [], "score"), allowBrokenSets: false };
+    const out = await solveChunk(ctx, 0, 1, 1000);
+    expect(out.permutations).toBe(0);
+    expect(out.builds).toHaveLength(0);
+    expect(out.brokenSetsRejected).toBe(1);
+
+    // A loadout that completes its sets passes; only the broken ones count.
+    const ok = await solveChunk({ ...makeCtx(abPools(), [], "score"), allowBrokenSets: false }, 0, 1, 1000);
+    expect(ok.builds.length).toBeGreaterThan(0);
+    expect(ok.brokenSetsRejected).toBe(16 - ok.permutations);
+  });
+});
+
 describe("solveChunk — chunk partition equivalence", () => {
   it("the union of N chunks equals the single-chunk run (no combo lost or duplicated)", async () => {
     // Weapon pool is ≥ 4× the chunk count, so the picker slices the OUTER

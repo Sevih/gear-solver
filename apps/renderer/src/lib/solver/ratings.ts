@@ -162,7 +162,9 @@ export { ROLL_NORMS, STAT_NORMS, STAT_TO_PRIORITY };
 /** Aggregate score driving the SOLVE-mode sort. Σ priority × (final / norm)
  *  scaled by 100 for readability (typical values land in 50–500). Negative
  *  priorities subtract — useful for "I want some of X but not too much".
- *  Builds with no stat in `priority` score 0. */
+ *  Builds with no stat in `priority` score 0. Unrounded: it is the sort key
+ *  (rounding made near-equal builds ex aequo, ranked by heap arrival order);
+ *  the UI rounds it for display. */
 export function computeScore(s: FinalStats, priority: Record<string, number>): number {
   let total = 0;
   for (const key in priority) {
@@ -179,5 +181,5 @@ export function computeScore(s: FinalStats, priority: Record<string, number>): n
     const norm = STAT_NORMS[key] ?? 100;
     total += (effective / norm) * w * 100;
   }
-  return Math.round(total);
+  return total;
 }

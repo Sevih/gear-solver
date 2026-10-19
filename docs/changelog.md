@@ -8,6 +8,77 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧹 Moteur et Builder — les mineurs de la revue : tri, variantes, erreurs, sets cassés, épinglage, recos, en-tête, cycles (2026-10-19)
+- ✅ **Pourquoi.** Item « Mineurs moteur / Builder (revue) » de `docs/todo.md` (revue du 09/10, revérifié dans le code
+  le 18/10). Huit points indépendants, traités dans l'ordre ; tous vérifiés réels avant correction (aucun n'était
+  déjà juste), le neuvième (`buildAdvice` et le 5e emplacement de gemme des talismans 4★/5★) reste hors lot.
+- ✅ **1. Score non arrondi comme clé de tri.** `computeScore` (`ratings.ts`) rendait `Math.round(total)` : deux
+  builds à quelques dixièmes tombaient ex aequo et sortaient dans l'ordre d'arrivée au tas, qui dépend du découpage
+  entre workers. Il rend le total brut ; la table (`ResultRow`) et la bibliothèque (sous-titre des builds sauvés)
+  l'arrondissent à l'affichage. Un ordre unique, `compareBuilds` (`engine.ts`) : objectif (score / CP, un CP nul en
+  dernier) puis `pieceUids` élément par élément ; lu par `TopKHeap` (comparaisons du tas et `toSorted`) et par le tri
+  final de l'orchestrateur (qui prenait `cp ?? 0` / `score` sans départage). Le filtre de bande `score` compare
+  désormais la valeur brute, comme les autres ratings. Les builds sauvés avant gardent leur score entier.
+- ✅ **2. Variantes de talisman réduites par worker.** `collapseTalismanVariants` ne jouait qu'à la fusion : le top-K
+  d'un worker pouvait se remplir d'un même jeu de six pièces × talismans et perdre des candidats distincts.
+  `TopKHeap` prend un plafond `variantsKept` (0 par défaut, `solveChunk` passe `TALISMAN_VARIANTS_KEPT` = 3, constante
+  déplacée de l'orchestrateur vers `engine.ts`, une seule valeur pour les deux passages) : un build dont la signature
+  (`variantSignature`, partagée avec le collapse) a déjà 3 entrées ne remplace que la pire d'entre elles (entrées
+  indexées par position dans le tas, remplacement en place). La signature n'est construite qu'une fois le build
+  admis face à la racine, donc rien de plus sur le rejet courant. Le collapse à la fusion reste pour une signature
+  répartie sur plusieurs workers (talisman pris comme axe de partition). Même résultat quand rien n'était perdu.
+- ✅ **3. Erreur d'un worker.** `onerror` et le message `error` appelaient `onError` puis `cancel()`, qui flushait :
+  `onResult` livrait les builds des workers déjà finis, affichés sous la bannière rouge comme s'ils couvraient toute
+  la recherche. Nouveau `fail()` privé (`orchestrator.ts`) : stoppe les workers, rend la suite périmée (`solveId`),
+  vide le tampon, `onError` seul. Le Builder vide aussi la table et la sélection dans `onError`. Le `cancel()` de
+  l'utilisateur garde son flush partiel.
+- ✅ **4. `allowBrokenSets=false` + Top% à 0 build.** Cause : l'élagage Top% protège un membre par set requis, pas les
+  sets « formables » qui permettent de compléter les emplacements libres ; aucune pièce gardée ne s'apparie et chaque
+  loadout armor tombe à la feuille boots, sans slot vide donc sans `emptyReason`. `solveChunk` compte ces rejets
+  (`brokenSetsRejected`, rejets dus à la seule règle des sets complets), le worker le poste, l'orchestrateur le somme
+  et, sur un solve complet vide sans aucune combinaison atteinte, passe la cause `"brokenSets"`
+  (`SolveEmptyCause`, `types.ts`) en 5e argument d'`onResult`. La table l'affiche à côté d'`emptyReason` (qui reste
+  prioritaire) : « No builds — no armor combination completes its sets with “Allow broken sets” off. Turn it on, or
+  raise Top % so more set pieces stay in the pools. » Le changement visuel est ce seul état vide.
+- ✅ **5. SOLVE CP avec priorité.** L'épinglage de la pièce équipée par slot ne jouait que dans la branche CP sans
+  priorité ; avec une priorité, la pièce actuelle pouvait sortir du budget et le solve rendre moins que le CP porté.
+  `pinOf(slot)` est hissé avant les branches et passé aux deux branches en SOLVE CP ; SOLVE (Score) n'épingle rien.
+- ✅ **6. Clés `mainStat` des recos.** `mainPicksForSlot` (`translateReco.ts`) écarte une clé absente du registre des
+  stats (`STAT_TO_PRIORITY`, toutes les clés de roll) et le signale dans `warnings`
+  (`Weapon: "…" — unknown main stat "…" — skipped.`) ; un slot dont aucune clé n'est connue reste ouvert au lieu
+  d'être réduit à rien.
+- ✅ **7. En-tête « N slots change ».** Il lisait `selectedBuild.upg`, figé au solve ; après Equip l'inventaire relu
+  dit 0 mais l'en-tête gardait l'ancien nombre. Il lit `equipPlan.moving` (`buildDiff` sur l'inventaire courant, la
+  règle d'Equip et du bandeau).
+- ✅ **8. Cycles de `plan.ts`.** Kahn s'arrête sur un cycle et sur tout ce qui en dépend ; tout le reste était marqué
+  cyclique. Les restes passent par Tarjan (`stronglyConnected`) : seuls les membres d'une composante de plus d'une
+  entrée sont `cyclic`, et les composantes s'ordonnent entre elles (Kahn sur le graphe condensé, départage par la
+  position de leur premier membre), donc une entrée qui attend un cycle vient juste après lui. Rien ne change pour
+  les entrées que Kahn émettait déjà.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (score non arrondi, départage et plafond de variantes au tas, cause
+  `"brokenSets"`, erreur sans résultats partiels, pin en SOLVE CP avec priorité, en-tête relu, état vide de la
+  table), `docs/reference.md` / `wiki/Engine-Reference.md` (formule du Score sans `round`, pin des branches 1 et 2,
+  lignes des tests worklist et translateReco).
+- ✅ **Tests** (un par point, chacun rouge sans son correctif) : `solver.test.ts` (score non arrondi ; ex aequo
+  ordonnés par `pieceUids` quel que soit l'ordre de push ; `compareBuilds` ; tas plafonné : une combinaison distincte
+  survit au top-K, une meilleure variante remplace la pire de sa signature, même résultat que tas libre + collapse
+  quand rien n'est perdu), `solveChunk.test.ts` (`brokenSetsRejected` sur quatre sets sans paire, et 16 − 8 sur A/B),
+  `orchestratorFailure.test.ts` nouveau (pool de faux workers, précalcul stubbé : `error` puis `onerror` sans
+  `onResult` ni résultat tardif, `cancel()` flushe encore, cause `"brokenSets"` posée ou non), `cpPin.test.ts` nouveau
+  (contrat réel, Top% 1 : la pièce portée survit en CP avec et sans priorité, pas en Score ; un plafond de stat
+  neutralise l'élagage de dominance, qui retire à bon droit une pièce dominée), `translateReco.test.ts` (clé inconnue
+  écartée et signalée, slot laissé ouvert), `buildDiff.test.ts` (0 slot changé sur l'inventaire relu après Equip),
+  `worklistPlan.test.ts` (cycle a↔b plus c qui attend a : `cyclic` = {a, b}, ordre a, b, c).
+  `npm run typecheck` : dernière ligne `> tsc --noEmit` (sans erreur) ; `npm test` : `Tests  530 passed (530)` côté
+  renderer (core 154, desktop 157) ; `npm run lint` : `0 errors and 1 warning potentially fixable with the --fix
+  option.` (28 avertissements, les mêmes qu'avant le lot).
+- ⏳ **Vu en passant, laissé.** La colonne `upg` de la table et l'`upg` de l'entrée « + Worklist » lisent encore
+  l'`upg` du solve, périmé après Equip comme l'était l'en-tête. La cause du point 4 (l'élagage Top% ne protège pas les
+  sets formables quand les sets cassés sont refusés) est expliquée à l'écran, pas corrigée. Les compteurs de tests de
+  `docs/reference.md` étaient déjà périmés, non recomptés.
+- ⏳ **À voir en jeu par Sevih.** Un solve « Allow broken sets » off à Top% bas qui rend 0 build affiche le nouveau
+  message ; après Equip, l'en-tête du build sélectionné tombe à « 0 slots change ».
+
 ### 💎 Gemmes en SOLVE CP allouées par apport de CP (M8), un seul allocateur (2026-10-19)
 - ✅ **Pourquoi.** M8 de `docs/todo.md` (revue 2026-10, chiffres « non relancés »). En SOLVE CP sans priorité, les
   gemmes étaient prises dans l'ordre des poids CP linéaires (`cpStatWeights` : un bump `ROLL_NORMS` par stat, l'ATK %

@@ -63,6 +63,15 @@ describe("diffBuildVsLoadout — one 'slot changed' rule for Equip, Worklist and
     expect(out.filter((d) => d.changed).length).toBe(engineUpg(uids, "hero", m));
   });
 
+  it("recounted on the re-imported inventory: after Equip the build changes 0 slots (Builder header)", () => {
+    // The header reads `changed` off the live inventory, not the solve-time
+    // `upg` (2 here) which stays on the build after Equip.
+    const before = [piece("weapon", "w-new", "other"), piece("helmet", "h-new"), piece("weapon", "w-old", "hero")];
+    expect(diffBuildVsLoadout(["w-new", "h-new"], "hero", byUid(before)).filter((d) => d.changed)).toHaveLength(2);
+    const after = [piece("weapon", "w-new", "hero"), piece("helmet", "h-new", "hero"), piece("weapon", "w-old")];
+    expect(diffBuildVsLoadout(["w-new", "h-new"], "hero", byUid(after)).filter((d) => d.changed)).toHaveLength(0);
+  });
+
   it("skips a uid missing from the inventory (saved build after the piece left)", () => {
     const w = piece("weapon", "w1", "hero");
     expect(diffBuildVsLoadout(["gone", "w1"], "hero", byUid([w])).map((d) => d.proposed.uid)).toEqual(["w1"]);

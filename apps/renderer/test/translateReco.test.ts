@@ -27,6 +27,19 @@ describe("translateRecoBuild — mains", () => {
     expect(patch.mainPicks.accessory).toEqual({ pen: true, critDmg: true, spd: true });
   });
 
+  it("skips and warns a main-stat key unknown to the stat registry", () => {
+    const build: StructuredRecoBuild = {
+      Weapon: [{ name: "W", itemId: 1, effectIcon: "wi", mainStat: ["atkPct", "atkPercent"] }],
+      Amulet: [{ name: "A", itemId: 2, effectIcon: "ai", mainStat: ["bogus"] }],
+    };
+    const { patch, warnings } = translateRecoBuild(build, resolve);
+    expect(patch.mainPicks.weapon).toEqual({ atkPct: true });
+    // Only unknown keys → the slot is left open (any main), not narrowed to nothing.
+    expect(patch.mainPicks.accessory).toBeUndefined();
+    expect(warnings).toContain('Weapon: "W" — unknown main stat "atkPercent" — skipped.');
+    expect(warnings).toContain('Amulet: "A" — unknown main stat "bogus" — skipped.');
+  });
+
   it("omits a slot with no main recommendation", () => {
     const { patch } = translateRecoBuild({ Weapon: [] }, resolve);
     expect(patch.mainPicks.weapon).toBeUndefined();
