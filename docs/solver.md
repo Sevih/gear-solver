@@ -404,7 +404,8 @@ enhance level, icône slot, main stat, subs (avec ticks). En plus :
   **autre héros** (l'appliquer la lui retire), 🟢 `equipped` si déjà sur le héros courant, `free` sinon.
 - **Diff par slot** : une carte dont la pièce **diffère du loadout équipé** (même définition que
   `upg`) porte un **liseré cyan** + une ligne `← <pièce remplacée>` (ou `+ new slot` si le slot
-  était vide). La pièce courante par slot vient de `currentLoadout` (Map slot→pièce équipée). Le
+  était vide). Pièce proposée, pièce portée et « slot changé » viennent d'une seule fonction,
+  `diffBuildVsLoadout` (`lib/buildDiff.ts`), que lisent aussi Equip et + Worklist. Le
   header de la band résume le tout : **`N slots change`** + **`ΔCP ±X`** (`build.cp − currentCp`,
   `currentCp` = `calcBattlePower` du loadout équipé, calculé dans `composition`). Le build est
   compté dans le mode de reforge des résultats, l'équipement tel qu'il est : hors `Off`, le libellé

@@ -382,7 +382,8 @@ enhance level, slot icon, main stat, subs (with ticks). In addition:
   (applying steals it), 🟢 `equipped` if already on the current hero, `free` otherwise.
 - **Per-slot diff**: a card whose piece **differs from the equipped loadout** (same definition as
   `upg`) gets a **cyan edge** + a `← <replaced piece>` line (or `+ new slot` if the slot was empty).
-  The band header sums it up: **`N slots change`** + **`ΔCP ±X`** (`build.cp − currentCp`,
+  Proposed piece, worn piece and "slot changed" come from one function, `diffBuildVsLoadout`
+  (`lib/buildDiff.ts`), which Equip and + Worklist read too. The band header sums it up: **`N slots change`** + **`ΔCP ±X`** (`build.cp − currentCp`,
   `currentCp` = `calcBattlePower` of the equipped loadout). The build is counted in the results'
   reforge mode, the equipped gear as it is: outside `Off` the label names the base
   (`ΔCP +X vs equipped (build at +10R6)`, one-sentence tooltip — `deltaCpLabel`, `lib/deltaCp.ts`),

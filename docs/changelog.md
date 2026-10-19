@@ -8,6 +8,62 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚡ Builder — filtres par héros lus une fois, progression isolée du rendu, diff build/équipement partagé (2026-10-19)
+- ✅ **Pourquoi.** Items « Perf render Builder », puce « slot changé » de « Duplications » et puces Builder de « Effets
+  de bord » (`docs/todo.md`). Pendant un solve, chaque tick de progression (~10/s, throttle de l'orchestrateur)
+  re-rendait tout l'écran : `useRef(loadHeroFilters())` relisait et re-parsait sessionStorage à chaque rendu,
+  `DmgPer1PctPanel` recalculait `dmgTickGains`, alors que seul le pied lit P / S. « Slot changé » était défini à trois
+  endroits (`equipPlan`, `addToWorklist`, `pieceBySlot` du bandeau) avec trois règles.
+- ✅ **Filtres par héros.** `const [initialHeroFilters] = useState(loadHeroFilters)` : une seule lecture au montage ;
+  `heroFiltersRef` part de cette valeur et l'init paresseuse du reducer la lit (plus la ref pendant le rendu). Le
+  changement de héros ne change pas (même `snapshotOnHeroSwitch`, même map mutée dans l'effet).
+- ✅ **Progression.** `solveProgress` disparaît de l'état de l'écran : P / S passent par un petit store
+  (`createSolveCountsStore`, `get`/`set`/`subscribe`, `set` sans effet si les compteurs n'ont pas bougé) que seul
+  `FilterFooter` lit par `useSyncExternalStore` ; `livePoolSizes` reste un état de l'écran (bannière `emptyReason`,
+  garde-fou `cartesianEstimate`) — l'orchestrateur renvoie le même objet à chaque tick, React n'y re-rend rien.
+  `resetSolveProgress` (stable, `useCallback`) remplace les quatre remises à zéro. `DmgPer1PctPanel` mémoïse ses gains
+  sur `comp` (calcul sorti dans `dmgPer1PctGains`, inchangé). **Mesure** (banc temporaire retiré avant le commit :
+  `BuilderScreen` monté sous happy-dom, orchestrateur simulé, 50 appels `onProgress` après un clic sur Solve, compteur
+  de rendus par composant) : avant 50 rendus de l'écran, 50 de `DmgPer1PctPanel`, 50 du pied ; après 2 rendus de
+  l'écran (arrivée des `poolSizes`), 1 du panneau, 51 du pied.
+- ✅ **`diffBuildVsLoadout` (`apps/renderer/src/lib/buildDiff.ts`, pure).** Pour chaque pièce du build : emplacement,
+  pièce proposée, pièce portée par le héros à cet emplacement, `changed` = la règle de `upg` du moteur
+  (`finalizeBuilds` : la pièce n'est pas équipée sur le héros aujourd'hui — `equippedBy` physique, pas les réservations
+  Worklist). L'écran la calcule une fois (`buildDiff`, mémoïsé) ; `equipPlan` (moving / steal), `addToWorklist`
+  (changements poussés, pièce remplacée) et le bandeau (pièce par emplacement, au lieu de son propre parcours de
+  `pieceUids`) la lisent ; `currentLoadout` disparaît. **Divergences relevées** : aucune sur un cas réel — une pièce
+  équipée sur le héros est forcément à son propre emplacement, donc `currentLoadout.get(slot)?.uid === uid` et
+  `equippedBy === héros` disent la même chose, et une pièce réservée par la Worklist n'entre dans aucune des règles
+  (toutes lisent l'`equippedBy` physique). Restent deux écarts théoriques avec le moteur : une pièce sans emplacement
+  (l'ancien `equipPlan` la comptait, `addToWorklist` non ; le moteur ne peut pas la placer dans un build) et un uid
+  absent de l'inventaire courant (build sauvegardé après la vente d'une pièce : `upg` le compte, la fonction l'ignore
+  comme l'ancien `equipPlan`, rien à équiper).
+- ✅ **Timers et effets.** « Added ✓ » de + Worklist et « Copied » de `CopyDebugButton` repassent à faux par un effet
+  sur leur état, nettoyé au démontage. `filtersRef` et `selectedUidRef` sont synchronisés dans un `useLayoutEffect` :
+  tous les effets de layout d'un commit passent avant ses effets passifs, donc l'effet de changement de héros lit
+  toujours les filtres du rendu qui a changé de héros (ceux du héros sortant) — rien à garder pendant le rendu.
+  `onClose` stables : `closeRecoPicker` (`useCallback`) pour `RecoBuildPicker`, `close` dans `EquipBuildButton` pour
+  `EquipConfirm` ; leurs écouteurs Échap ne se réabonnent plus à chaque rendu.
+- ✅ **Tests (`apps/renderer/test/buildDiff.test.ts`, 6).** Pièce déjà portée (inchangée, portée = elle-même), pièce
+  portée par un autre héros (changée, pièce remplacée nommée, `equippedBy` de l'autre), emplacement vide, talisman et
+  EE (clés `ooparts` / `exclusive`), nombre de `changed` égal au `upg` du moteur sur un build complet de 8, uid absent
+  ignoré.
+- ✅ **Docs suivies.** `docs/solver.md` / `wiki/Solver.md` (§ bandeau, « Diff par slot ») : pièce proposée, portée et
+  « slot changé » viennent de `diffBuildVsLoadout`, plus de `currentLoadout`.
+- ✅ **Vérifications.** `npm run typecheck` : dernière ligne `> tsc --noEmit` (sortie 0) ; `npm test` : core 154,
+  desktop 131, renderer 485 verts (479 + 6), dernière ligne `Duration 1.03s (transform 2.54s, setup 0ms, import
+  4.21s, tests 636ms, environment 4ms)` ; `npm run lint` : `✖ 20 problems (0 errors, 20 warnings)`, sortie 0 (24
+  avant). Sur `BuilderScreen.tsx`, 11 → 7 : les trois `react-hooks/refs` (ref lue par l'init du reducer, `filtersRef`
+  et `selectedUidRef` écrits pendant le rendu) et la directive `eslint-disable` inutilisée de l'effet d'estimation
+  (désormais utile, `getOrchestrator` y lit le store) disparaissent ; restent cinq `set-state-in-effect`, le
+  `react-hooks/refs` de `useClickOutside` et `incompatible-library` (TanStack Virtual).
+- ⏳ **Sevih contrôle** : solve (P / S qui défilent dans le pied, bannière et garde-fou), Equip, + Worklist (« Added ✓ »
+  puis retour), changement de héros pendant et après un solve (filtres du héros sortant gardés, entrant restaurés).
+- ⏳ **Hors périmètre, vu en passant.** `useClickOutside` écrit `cb.current` pendant le rendu (même motif, non listé) ;
+  dans `docs/solver.md` / `wiki/Solver.md`, le « liseré cyan + `← <pièce remplacée>` » du bandeau ne correspond plus
+  aux cartes façon Inventaire (`ResultItemDetail`, depuis `aec694e`) ; l'en-tête `N slots change` lit `build.upg`,
+  figé au solve (après un Equip et le ré-import, il garde l'ancien compte alors que les boutons passent à 0).
+
 ### 🎛️ Builder — filtres du solveur dans `lib`, `mergePreset` cohérent, `emptyReason` juste (2026-10-19)
 - ✅ **Pourquoi.** Items « Dépendance inversée `lib → screens` », « `mergePreset` peut rendre les filtres
   contradictoires » et « `emptyReason` accuse l'EE » de l'audit (`docs/todo.md`). `filterPresets.ts` et

@@ -68,16 +68,10 @@
 - [ ] ⚪ **Reset (Builds)** remet aussi le tri `byRank` à CP alors que la condition d'affichage ne le regarde pas ·
       clamp worker count à `hardwareConcurrency` côté Settings vs `WORKER_COUNT_CEILING` côté orchestrateur.
 - [ ] 🟡 **Duplications** — formule CalcFinalStat (`calcFinalStat` core vs `composeMultStat` renderer) · calcul de
-      qualité en 3 exemplaires (`computeQuality` de GearDetail et ResultGearDetail, `quality.ts`) · « slot changé »
-      défini 2× dans le Builder (`equipPlan`, `addToWorklist`) → une `diffBuildVsLoadout` partagée,
-      même invariant que `upg` moteur.
+      qualité en 3 exemplaires (`computeQuality` de GearDetail et ResultGearDetail, `quality.ts`).
 - [ ] 🟡 **Effets de bord dans des updaters `setState`** (persist localStorage dans App/Builds — exécutés 2× en
       StrictMode) · `setState` après `await` sans garde d'unmount (BuildsScreen stat-locks, WorklistScreen,
-      SettingsModal) · timers non nettoyés (`setWorklistAdded`, `CopyDebugButton`) · `filtersRef.current = filters`
-      pendant le rendu · effets réabonnés à chaque render (`RecoBuildPicker`/`EquipConfirm` avec `onClose` inline).
-- [ ] 🟡 **Perf render Builder** — `useRef(loadHeroFilters())` relit sessionStorage à chaque render (~10/s pendant un
-      solve) → `useState(() => …)` · `DmgPer1PctPanel` recalcule `dmgTickGains` à chaque tick de progression →
-      `useMemo(comp)` · isoler `solveProgress` dans le footer pour ne pas re-rendre tout l'arbre.
+      SettingsModal).
 - [ ] 🟡 **Perf render App** — badge Builds et `remainingChangeCount` recalculés sur tout `inv.gear` à chaque render
       (y compris chaque ligne de log de capture) → `useMemo` · `setLog((l) => [...l, line])` O(n²) · `equippedByHero`
       reconstruit 4× par changement d'inventaire (reconcile, claims, badge, WorklistScreen) → une map mémoïsée.

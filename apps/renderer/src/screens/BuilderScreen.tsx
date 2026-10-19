@@ -13,7 +13,7 @@
  *   └────────────────────────────────────────────────────┘
  *
  */
-import { Fragment, memo, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Character, GameData, GearPiece, Inventory, SetCombatEffect, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, effectiveCharacter, expToLevel, wornSetRows } from "@gear-solver/core";
@@ -50,6 +50,7 @@ import { loadHeroFilters, persistHeroFilters, cloneFilters, filtersForHero, snap
 import { usePersistedState } from "../hooks/usePersistedState.js";
 import { QUALITY_TIERS, QUALITY_LABEL, type QualityTier } from "../lib/quality.js";
 import { deltaCpLabel } from "../lib/deltaCp.js";
+import { diffBuildVsLoadout, type SlotDiff } from "../lib/buildDiff.js";
 import {
   addSavedBuild, loadSavedBuilds, persistSavedBuilds, removeSavedBuild,
   type SavedBuild, type SavedBuildsMap,
@@ -404,17 +405,25 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // filters so the hero-change effect can snapshot the OUTGOING hero without
   // depending on `filters` (which would re-fire it on every edit). `prevHeroRef`
   // tracks whose filters are currently loaded; `heroFiltersRef` is the map.
-  // The reducer starts on the initial hero's remembered set (lazy init).
-  const heroFiltersRef = useRef<HeroFiltersMap>(loadHeroFilters());
+  // The map is read from sessionStorage ONCE (lazy state init — a plain
+  // `useRef(loadHeroFilters())` re-parsed it on every render); the reducer
+  // starts on the initial hero's remembered set.
+  const [initialHeroFilters] = useState<HeroFiltersMap>(loadHeroFilters);
+  const heroFiltersRef = useRef<HeroFiltersMap>(initialHeroFilters);
   const [filters, dispatch] = useReducer(solverFiltersReducer, initialHeroUid ?? null,
-    (uid: string | null) => filtersForHero(heroFiltersRef.current, uid, INITIAL_FILTERS));
+    (uid: string | null) => filtersForHero(initialHeroFilters, uid, INITIAL_FILTERS));
   const filtersRef = useRef(filters);
-  filtersRef.current = filters;
   const prevHeroRef = useRef(selectedUid);
   // Live selection for async callbacks — their closure keeps the hero they
   // started on (see `getPreset`).
   const selectedUidRef = useRef(selectedUid);
-  selectedUidRef.current = selectedUid;
+  // Synced after the commit, not during render. Layout effects of a commit all
+  // run before its passive effects, so the hero-change effect below still reads
+  // the filters of the render that changed the hero (the OUTGOING hero's set).
+  useLayoutEffect(() => {
+    filtersRef.current = filters;
+    selectedUidRef.current = selectedUid;
+  });
   // Primary SOLVE mode (split button), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
   // RANKING differs: Score ranks by priority — or raw roll magnitude without
@@ -437,9 +446,14 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
    *  stored context on restore. Drives the bottom band's projection. */
   const [resultsReforge, setResultsReforge] = useState<ReforgeContext>({ reforgeMode: "disable", priority: {} });
   const [solving, setSolving] = useState(false);
-  const [solveProgress, setSolveProgress] = useState<{ permutations: number; searched: number; poolSizes: PoolSizes | null }>(
-    { permutations: 0, searched: 0, poolSizes: null },
-  );
+  // Live solve progress. The P / S counts tick ~10×/s during a solve, so they
+  // live in a store only the footer subscribes to (re-rendering the whole
+  // screen per tick was the cost); `poolSizes` lands once per solve (precompute)
+  // and feeds the empty-pool banner + cartesian guard-rail here, so it stays
+  // state (the orchestrator re-sends the same object each tick → no re-render).
+  const [progressStore] = useState(createSolveCountsStore);
+  const [livePoolSizes, setLivePoolSizes] = useState<PoolSizes | null>(null);
+  const resetSolveProgress = useCallback(() => { progressStore.set(ZERO_SOLVE_COUNTS); setLivePoolSizes(null); }, [progressStore]);
   const [solveResults, setSolveResults] = useState<SolveBuild[]>([]);
   /** Transient "Added ✓" confirmation on the Add-to-worklist button. */
   const [worklistAdded, setWorklistAdded] = useState(false);
@@ -521,9 +535,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       // flight, its onResult will never fire, which stranded the screen in
       // "solving…" with a no-op Cancel (the ref is null). Release the UI here.
       setSolving(false);
-      setSolveProgress({ permutations: 0, searched: 0, poolSizes: null });
+      resetSolveProgress();
     }
-  }, [workerCount]);
+  }, [workerCount, resetSolveProgress]);
 
   // Lazily create the orchestrator — shared by SOLVE and the debounced
   // pre-solve estimate (which runs on the orchestrator's dedicated estimate
@@ -531,7 +545,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const getOrchestrator = (): SolverOrchestrator => {
     if (!orchestratorRef.current) {
       orchestratorRef.current = new SolverOrchestrator({
-        onProgress: (p) => setSolveProgress({ permutations: p.permutations, searched: p.searched, poolSizes: p.poolSizes ?? null }),
+        onProgress: (p) => { progressStore.set({ permutations: p.permutations, searched: p.searched }); setLivePoolSizes(p.poolSizes ?? null); },
         onResult:   (builds, durationMs, debugInfo, tickWeights) => { setSolveResults(builds); setResultsReforge({ ...solveReforgeRef.current, tickWeights }); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); setLastDebugInfo(debugInfo ?? null); },
         onError:    (msg) => { setSolveError(msg); setSolving(false); },
       });
@@ -560,7 +574,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setSelectedBuildIdx(null);
     setDisplayFilter(null);
     setLastSolveMs(null);
-    setSolveProgress({ permutations: 0, searched: 0, poolSizes: null });
+    resetSolveProgress();
     setLastSolveMode(mode);
     // Snapshot the reforge context for this run (shallow-copy the priority so
     // a later filter edit can't mutate what `onResult` reads). Under "Only
@@ -622,25 +636,28 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
 
   const selectedBuild = selectedBuildIdx != null ? displayedResults[selectedBuildIdx] ?? null : null;
 
+  /** Selected build vs the hero's current loadout, per slot — the ONE "slot
+   *  changed" rule (the engine's `upg`: piece not on the hero today) read by
+   *  Equip, + Worklist and the bottom gear band. */
+  const buildDiff = useMemo(
+    () => (selectedBuild && selectedUid ? diffBuildVsLoadout(selectedBuild.pieceUids, selectedUid, pieceByUid) : []),
+    [selectedBuild, selectedUid, pieceByUid],
+  );
+
   // ── Equip build ──────────────────────────────────────────────────────────
   // Apply the selected build's pieces to the selected hero by rewriting the
   // captured snapshot (`equipPieces`), then let App re-import. We surface how
   // many pieces actually move: skip those already on this hero, and count the
   // ones that would be taken off another hero ("stolen") so the button can warn.
   const equipPlan = useMemo(() => {
-    if (!selectedBuild || !selectedUid) return { uids: [] as string[], moving: 0, steal: 0 };
-    const uids: string[] = [];
     let moving = 0, steal = 0;
-    for (const uid of selectedBuild.pieceUids) {
-      const p = uid ? pieceByUid.get(uid) : undefined;
-      if (!p) continue;
-      uids.push(uid);
-      if (p.equippedBy === selectedUid) continue; // already on this hero
+    for (const d of buildDiff) {
+      if (!d.changed) continue; // already on this hero
       moving++;
-      if (p.equippedBy) steal++; // currently on someone else
+      if (d.proposed.equippedBy) steal++; // currently on someone else
     }
-    return { uids, moving, steal };
-  }, [selectedBuild, selectedUid, pieceByUid]);
+    return { uids: buildDiff.map((d) => d.proposed.uid), moving, steal };
+  }, [buildDiff]);
 
   // Returns false on a network error or a 409 (Steam plugin live) so the
   // button can flag it; on success App re-imports the rewritten snapshot.
@@ -658,12 +675,12 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // runs → falls back to the generic "pick a hero" hint). The EE slot is
   // skipped: a hero without one reports `exclusive: 0` and solves without it.
   const emptyReason = useMemo(() => {
-    const ps = solveProgress.poolSizes;
+    const ps = livePoolSizes;
     if (!ps) return null;
     const dead = Object.keys(ps).filter((s) => s !== "exclusive" && (ps[s]?.hit ?? 0) === 0);
     if (dead.length === 0) return null;
     return dead.map((s) => `${SLOT_BY[s]?.label ?? s}: 0 pieces after filters`).join(" · ");
-  }, [solveProgress.poolSizes]);
+  }, [livePoolSizes]);
 
   // Guard-rail — rough size of the cartesian the solver walks (∏ of the
   // partitionable per-slot pools, post-prune; EE isn't partitioned). While
@@ -671,14 +688,14 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // pre-solve `estimatePools` so the warning shows BEFORE clicking SOLVE.
   // 0 if any slot is empty (the emptyReason banner covers that case).
   const cartesianEstimate = useMemo(() => {
-    const ps = solving ? solveProgress.poolSizes : (estimatePools ?? solveProgress.poolSizes);
+    const ps = solving ? livePoolSizes : (estimatePools ?? livePoolSizes);
     if (!ps) return 0;
     let n = 1;
     for (const s of ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "talisman"] as const) {
       n *= ps[s]?.hit ?? 0;
     }
     return n;
-  }, [solving, solveProgress.poolSizes, estimatePools]);
+  }, [solving, livePoolSizes, estimatePools]);
 
   // Saved-builds handlers — `selectedUid` gates everything; the UI hides /
   // disables the controls when no hero is picked so we don't have to thread
@@ -806,6 +823,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const [recoBusy, setRecoBusy] = useState(false);
   const [recoStatus, setRecoStatus] = useState<{ tone: "ok" | "warn" | "error"; text: string } | null>(null);
   const [recoPicker, setRecoPicker] = useState<StructuredCharacterReco | null>(null);
+  // Stable — the picker's Escape listener is keyed on `onClose`.
+  const closeRecoPicker = useCallback(() => setRecoPicker(null), []);
   // Clear stale reco feedback when the hero changes.
   useEffect(() => { setRecoStatus(null); setRecoPicker(null); }, [selectedUid]);
 
@@ -836,9 +855,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setLastSolveMs(null);
     setLastDebugInfo(null);
     setResultsReforge({ reforgeMode: "disable", priority: {} });
-    setSolveProgress({ permutations: 0, searched: 0, poolSizes: null });
+    resetSolveProgress();
     setLastSolveMode("score");
-  }, [selectedUid]);
+  }, [selectedUid, resetSolveProgress]);
 
   const applyRecoBuild = (name: string, build: StructuredRecoBuild) => {
     // Resolve each recommended item to its unique effect key (setId) via the
@@ -928,19 +947,6 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false, dmgSkill: dmgSkillInfo(meta.bestSkill) };
   }, [inventory, game, selected, userGeasLevels, userCodexLevel]);
 
-  /** Hero's currently-equipped piece per engine slot — the "before" side of the
-   *  gear-band diff. A build's card compares its piece's uid against this to show
-   *  WHICH piece it replaces (vs just flagging the slot as changed). */
-  const currentLoadout = useMemo(() => {
-    const m = new Map<string, GearPiece>();
-    if (selected && inventory) {
-      for (const g of inventory.gear) {
-        if (g.equippedBy === selected.uid && g.slot) m.set(g.slot, g);
-      }
-    }
-    return m;
-  }, [inventory, selected]);
-
   /** Battle-Power swing of the selected build vs the hero's current loadout —
    *  the headline number for "is this swap worth it?". Null until both a build
    *  is selected and the current-loadout CP composed. The build side is in the
@@ -958,21 +964,18 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     : null;
 
   // Queue the selected build's per-slot diff (changed slots only) onto the
-  // cross-hero worklist. Same "changed" definition as `upg` (piece not
-  // currently on the hero). No-op when nothing moves.
+  // cross-hero worklist — `buildDiff`, the same "changed" rule as Equip and
+  // `upg`. No-op when nothing moves.
   const addToWorklist = () => {
     if (!selectedBuild || !selectedUid || !selected || !onAddToWorklist) return;
     const nameOf = (x: GearPiece) => game?.equipment[String(x.itemId)]?.name ?? x.name ?? `Item ${x.itemId}`;
     const changes: WorklistChange[] = [];
-    for (const uid of selectedBuild.pieceUids) {
-      const p = uid ? pieceByUid.get(uid) : undefined;
-      if (!p?.slot) continue;
-      const current = currentLoadout.get(p.slot) ?? null;
-      if (current?.uid === uid) continue; // unchanged slot — not actionable
+    for (const { slot, proposed: p, worn: current, changed } of buildDiff) {
+      if (!changed) continue; // unchanged slot — not actionable
       const main = p.main.find((m) => !m.combatOnly) ?? null;
       changes.push({
-        slot: p.slot,
-        toUid: uid,
+        slot,
+        toUid: p.uid,
         toName: nameOf(p),
         toMain: main ? { stat: main.stat, value: main.value, percent: main.percent } : null,
         fromUid: current?.uid ?? null,
@@ -995,8 +998,13 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       createdAt: Date.now(),
     });
     setWorklistAdded(true);
-    setTimeout(() => setWorklistAdded(false), 1500);
   };
+  // "Added ✓" reverts after 1.5 s — the timer is cleared on unmount.
+  useEffect(() => {
+    if (!worklistAdded) return;
+    const t = window.setTimeout(() => setWorklistAdded(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [worklistAdded]);
 
   /** Selected hero's class (Striker / Mage / …). Null when no hero is picked
    *  yet — the weapon / accessory effect palettes fall back to "all classes"
@@ -1142,7 +1150,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <BottomGearBand build={selectedBuild} pieceByUid={pieceByUid} game={game} reforge={resultsReforge} charsByUid={charsByUid} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} />
+              <BottomGearBand build={selectedBuild} diff={buildDiff} game={game} reforge={resultsReforge} charsByUid={charsByUid} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} />
             </div>
           </div>
         </div>
@@ -1179,16 +1187,15 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         <RecoBuildPicker
           reco={recoPicker}
           onPick={applyRecoBuild}
-          onClose={() => setRecoPicker(null)}
+          onClose={closeRecoPicker}
         />
       )}
       {/* Fixed at the viewport bottom — escapes the flex layout via
        *  position:fixed, so the rest of the screen sees an extra
        *  `pb-9` reservation instead of laying out for it. */}
       <FilterFooter
-        permutations={solveProgress.permutations}
-        searched={solveProgress.searched}
-        poolSizes={solveProgress.poolSizes}
+        progress={progressStore}
+        poolSizes={livePoolSizes}
         resultCount={displayedResults.length}
         solving={solving}
         workerCount={resolvedWorkers}
@@ -2280,18 +2287,8 @@ const DMG_STAT_ICON: Record<string, { iconKey: string; label: string }> = {
   dmgUp: { iconKey: "dmgUp", label: "DMG UP%" },
 };
 
-/** Expected-damage gain from **+1%** of each relevant stat for the picked hero,
- *  computed at the **crit cap (100% CHC)** — the endgame theorycraft baseline you
- *  build toward (otherwise CHD is undervalued). Compares the hero's scaling
- *  stat(s) (ATK / DEF / HP per `dmgStat` + `dmgSec`) vs CHD vs DMG inc, ranked,
- *  best in cyan. A "1%" of a scaling stat = a 1% sub → `base × 1% × (1+buffRate)`
- *  added to the final; CHD / DMG-UP are additive (+1). Reuses the validated
- *  `computeCheapRatings` model (crit folded into the hit rate per the binary). */
-function DmgPer1PctPanel({ comp, width = "w-full" }: {
-  comp: SelectedComposition | null;
-  width?: string;
-}) {
-  if (!comp) return null;
+/** The panel's ranked gains — pure in `comp`, memoized by the panel. */
+function dmgPer1PctGains(comp: SelectedComposition): ReturnType<typeof dmgTickGains> {
   const { current, baseFlat, dmgStat, dmgSec, dmgAmp, noCrit } = comp;
   // Crit baseline: 100% (the crit cap you build toward, so CHD is valued at full
   // weight) — except for no-crit heroes, evaluated at 0% so CHD reads as dead.
@@ -2309,8 +2306,25 @@ function DmgPer1PctPanel({ comp, width = "w-full" }: {
   // CHD is dead for no-crit heroes — drop it (it would just read +0.00%).
   if (!noCrit) candidates.push({ key: "chd", label: "CHD", field: "critDmg", delta: 1 });
   candidates.push({ key: "dmgUp", label: "DMG UP%", field: "dmgUp", delta: 1 });
-  const gains = dmgTickGains(atCap, dmgStat, dmgSec, candidates);
-  if (gains.length === 0) return null;
+  return dmgTickGains(atCap, dmgStat, dmgSec, candidates);
+}
+
+/** Expected-damage gain from **+1%** of each relevant stat for the picked hero,
+ *  computed at the **crit cap (100% CHC)** — the endgame theorycraft baseline you
+ *  build toward (otherwise CHD is undervalued). Compares the hero's scaling
+ *  stat(s) (ATK / DEF / HP per `dmgStat` + `dmgSec`) vs CHD vs DMG inc, ranked,
+ *  best in cyan. A "1%" of a scaling stat = a 1% sub → `base × 1% × (1+buffRate)`
+ *  added to the final; CHD / DMG-UP are additive (+1). Reuses the validated
+ *  `computeCheapRatings` model (crit folded into the hit rate per the binary). */
+function DmgPer1PctPanel({ comp, width = "w-full" }: {
+  comp: SelectedComposition | null;
+  width?: string;
+}) {
+  // Memoized on `comp` (hero / account changes only) — the screen re-renders on
+  // every filter edit and selection.
+  const gains = useMemo(() => (comp ? dmgPer1PctGains(comp) : []), [comp]);
+  if (!comp || gains.length === 0) return null;
+  const { noCrit } = comp;
   // Highlight EVERY stat tied for the highest gain (same displayed +X.XX%), not
   // just the single top one — equal-weight stats are all colored. `gains` is
   // sorted, so the max is gains[0]; we compare on the displayed precision.
@@ -4017,16 +4031,45 @@ function formatTimeAgo(ts: number): string {
   return new Date(ts).toLocaleDateString();
 }
 
+/** P / S counts of the running solve. */
+interface SolveCounts { permutations: number; searched: number }
+const ZERO_SOLVE_COUNTS: SolveCounts = { permutations: 0, searched: 0 };
+interface SolveCountsStore {
+  get(): SolveCounts;
+  set(next: SolveCounts): void;
+  subscribe(listener: () => void): () => void;
+}
+/** Tiny external store for the live P / S counts — written by the
+ *  orchestrator's `onProgress`, read by `FilterFooter` through
+ *  `useSyncExternalStore`, so a progress tick re-renders the footer only. */
+function createSolveCountsStore(): SolveCountsStore {
+  let value = ZERO_SOLVE_COUNTS;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set: (next) => {
+      if (next.permutations === value.permutations && next.searched === value.searched) return;
+      value = next;
+      for (const l of listeners) l();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+  };
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
  * Filter / Search details footer — horizontal stat strip pinned at the
  * bottom of the screen. Same data the right-sidebar block used to carry,
  * just laid out left-to-right with `|` separators so it fits on one line.
  * ───────────────────────────────────────────────────────────────────────── */
 function FilterFooter({
-  permutations, searched, poolSizes, resultCount, solving, workerCount, durationMs, debugInfo,
+  progress, poolSizes, resultCount, solving, workerCount, durationMs, debugInfo,
 }: {
-  permutations: number;
-  searched: number;
+  /** Live P / S counts — subscribed here, not passed down, so a tick doesn't
+   *  re-render the Builder screen. */
+  progress: SolveCountsStore;
   poolSizes: PoolSizes | null;
   resultCount: number;
   solving: boolean;
@@ -4040,6 +4083,7 @@ function FilterFooter({
    *  is on; drives the "Copy Debug Info" button. */
   debugInfo: SolveDebugInfo | null;
 }) {
+  const { permutations, searched } = useSyncExternalStore(progress.subscribe, progress.get);
   // Slots rendered in the same order the inventory tab uses so the user's
   // eye-flow is identical across tabs.
   const slots: SlotId[] = ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "exclusive", "talisman"];
@@ -4094,9 +4138,16 @@ function FilterFooter({
  *  a slow solve is attributable without re-running. */
 function CopyDebugButton({ info }: { info: SolveDebugInfo }) {
   const [copied, setCopied] = useState(false);
+  // "Copied" reverts after 1.5 s — the timer is cleared on unmount (the button
+  // unmounts as soon as a new solve starts).
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [copied]);
   const copy = () => {
     const text = JSON.stringify(info, null, 2);
-    const done = () => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); };
+    const done = () => setCopied(true);
     const fallback = () => {
       // Clipboard API blocked (insecure context / no permission) — hidden
       // textarea + execCommand so the button still works in the Electron shell.
@@ -4156,6 +4207,8 @@ function EquipBuildButton({ disabled, moving, steal, heroName, onEquip }: {
   disabled: boolean; moving: number; steal: number; heroName: string | null; onEquip: () => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
+  // Stable — the popup's Escape listener is keyed on `onClose`.
+  const close = useCallback(() => setOpen(false), []);
   return (
     <>
       <button
@@ -4173,7 +4226,7 @@ function EquipBuildButton({ disabled, moving, steal, heroName, onEquip }: {
         Equip build{heroName ? ` → ${heroName}` : ""}
       </button>
       {open && (
-        <EquipConfirm moving={moving} steal={steal} heroName={heroName} onEquip={onEquip} onClose={() => setOpen(false)} />
+        <EquipConfirm moving={moving} steal={steal} heroName={heroName} onEquip={onEquip} onClose={close} />
       )}
     </>
   );
@@ -4238,10 +4291,12 @@ function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
  * Bottom gear band — one card per main slot for the selected result
  * ───────────────────────────────────────────────────────────────────────── */
 function BottomGearBand({
-  build, pieceByUid, game, reforge, charsByUid, excludedPieceUids, onToggleExclude,
+  build, diff, game, reforge, charsByUid, excludedPieceUids, onToggleExclude,
 }: {
   build: SolveBuild | null;
-  pieceByUid: Map<string, GearPiece>;
+  /** The build's per-slot diff vs the hero's loadout (`diffBuildVsLoadout`) —
+   *  the piece each card shows. */
+  diff: SlotDiff[];
   game: GameData | null;
   /** Reforge context the displayed build was solved with — when the mode is
    *  not "disable", each card re-runs the deterministic `projectPieceForReforge`
@@ -4255,18 +4310,15 @@ function BottomGearBand({
   excludedPieceUids?: Set<string>;
   onToggleExclude?: (uid: string) => void;
 }) {
-  // Map engine slot → display piece for the selected build. The result's
-  // `pieceUids` carries slot order (engine names); we re-key by GearSlot and,
-  // when a reforge mode is active, swap in the projected clone.
+  // Map engine slot → display piece for the selected build (the shared diff
+  // already resolved each uid to its piece and slot) and, when a reforge mode
+  // is active, swap in the projected clone.
   // `projectPieceForReforge` self-filters (returns the original for Talisman/EE,
   // "disable" mode, or when there's nothing left to project), so identity
   // inequality is a reliable "was projected" signal.
   const pieceBySlot = useMemo(() => {
     const map = new Map<string, { piece: GearPiece; equippedBy: string | null; addedTicks: number[] }>();
-    if (!build) return map;
-    for (const uid of build.pieceUids) {
-      const original = pieceByUid.get(uid);
-      if (!original?.slot) continue;
+    for (const { slot, proposed: original } of diff) {
       const piece = game ? projectPieceForReforge(original, game, reforge.reforgeMode, reforge.priority, reforge.tickWeights ?? undefined) : original;
       const reforged = piece !== original;
       // Per-sub reforge procs the projection added (delta of total ticks vs the
@@ -4276,10 +4328,10 @@ function BottomGearBand({
       const addedTicks = reforged && piece.subs.length === original.subs.length
         ? piece.subs.map((s, i) => (s.ticks ?? 0) - (original.subs[i]?.ticks ?? 0))
         : [];
-      map.set(original.slot, { piece, equippedBy: original.equippedBy, addedTicks });
+      map.set(slot, { piece, equippedBy: original.equippedBy, addedTicks });
     }
     return map;
-  }, [build, pieceByUid, game, reforge]);
+  }, [diff, game, reforge]);
 
   return (
     <div className="flex shrink-0 flex-wrap gap-2">
