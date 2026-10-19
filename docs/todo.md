@@ -30,9 +30,6 @@
       aujourd'hui) · `awakValue` : ATK prend `geas.atk` toutes sources, EFF/RES `geasStat` — unifier.
 
 ### 🔴 Revue 2026-10 — moteur et Builder
-- [ ] 🟠 **M8 — Allocation de gemmes en SOLVE CP non optimale** — le glouton prend des gemmes de réduction de dégâts
-      (34 643 CP contre un optimum à 35 044 sur Ame ; chiffres non relancés). `allocateGems` et `aggregateGemDelta`
-      font le même travail : n'en garder qu'un.
 - [ ] 🟡 **Mineurs moteur / Builder (revue)** — score arrondi utilisé comme clé de tri (ex aequo arbitraires) ·
       variantes de talisman fusionnées après le top-K par worker (candidats perdus) · erreur d'un worker → résultats
       partiels affichés sans avertissement · `allowBrokenSets=false` + Top% peut donner 0 build sans explication ·

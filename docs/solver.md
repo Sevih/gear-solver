@@ -315,8 +315,8 @@ car ils dépendent du loadout équipé / d'un calcul coûteux non disponible à 
 
 Quand priority est uniformément 0 : le pool est **quand même pruné** (phases
 3b/3c, même budget de combos). Côté gems : en SOLVE CP ils **sont réalloués**
-via les poids CP (`cpStatWeights` — cf. § Gems) ; seul SOLVE Score garde les
-gems actuellement socketés (pas de réallocation).
+par apport de CP marginal sur le build équipé (`allocateGemsByCp` — cf. § Gems) ;
+seul SOLVE Score garde les gems actuellement socketés (pas de réallocation).
 
 ### Main stats
 Trois lignes (Weapon / Accessory / Talisman). Chaque ligne montre les mains
@@ -420,9 +420,11 @@ Em-dash quand aucun build n'est sélectionné.
 
 **Pool** : multiset des `gemSlots[]` non-nuls des Talismans + EE **éligibles** de l'inventaire (les gems sont swappables in-game). L'éligibilité (`buildGemPool`) reflète la règle des pools de pièces : gear du héros courant toujours inclus ; gear équipé sur un autre héros gated par `equippedScope` (`none`/`lower`/`all`) ; héros exclus jamais comptés. Sans ce gate, le solver proposerait des gems qui exigent de déséquiper le Talisman/EE d'un héros hors périmètre.
 
-**Scoring** : pour chaque gem, `score = priority × (value / ROLL_NORMS)`. Normalisé pour la comparaison cross-stat. Triés desc. **En SOLVE CP sans priorité utilisateur**, la « priority » passée n'est pas vide mais les **poids CP** (`cpStatWeights` : ΔCP d'un bump ROLL_NORM de chaque stat, évalué au build courant). Sinon (rank par `value/norm` brut), l'allocateur préférait des gemmes dmg-reduce/flat (grosse magnitude, ~0 CP) aux gemmes atk/crit/pen → un solve CP pouvait rendre **moins** de CP que le build équipé. Une stat déjà à son cap CP (ex. CRC ~100 %) reçoit un poids ~0.
+**Scoring** : pour chaque gem, `score = priority × (value / ROLL_NORMS)`. Normalisé pour la comparaison cross-stat. Triés desc. **En SOLVE CP sans priorité utilisateur**, la « priority » passée n'est pas vide mais les **poids CP** (`cpStatWeights` : ΔCP d'un bump ROLL_NORM de chaque stat, évalué au build courant). Sinon (rank par `value/norm` brut), l'allocateur préférait des gemmes dmg-reduce/flat (grosse magnitude, ~0 CP) aux gemmes atk/crit/pen → un solve CP pouvait rendre **moins** de CP que le build équipé. Une stat déjà à son cap CP (ex. CRC ~100 %) reçoit un poids ~0. Ces poids sont linéaires (un bump par stat, l'ATK % pesé sur un bump d'ATK plat) : ils ordonnent le pool, mais l'allocation SOLVE CP elle-même passe par le CP marginal (ci-dessous).
 
-**Allocation (défaut, fast path)** : greedy, K = `talismanSlots + eeSlots` (4 ou 5 selon `enhanceLevel`). On prend les K premiers gems avec `score > 0`, puis, s'il reste des emplacements, les **gemmes de remplissage**. Pré-calculé **une fois par variant talismanSlots** (4 ou 5) dans `prepareContext` — pas de re-calcul dans la hot loop.
+**Allocation (défaut, fast path)** : greedy, K = `talismanSlots + eeSlots` (4 ou 5 selon `enhanceLevel`). On prend les K premiers gems avec `score > 0`, puis, s'il reste des emplacements, les **gemmes de remplissage**. Un seul allocateur, `allocateGems`, rend la répartition affichée **et** le delta composé. Pré-calculé **une fois par variant talismanSlots** (4 ou 5) dans `prepareContext` — pas de re-calcul dans la hot loop.
+
+**SOLVE CP sans priorité — par CP marginal** (`allocateGemsByCp`) : le CP n'est pas linéaire dans les stats (l'ATK compose, le CHC plafonne à 100 %), donc l'ordre des poids CP se trompait (cinq gemmes de réduction de dégâts, 34 643 CP, contre 3 ATK % + 2 réduction, 35 044, sur Ame). Les gemmes sont posées une à une : à chaque emplacement, celle qui monte le plus le CP du **build équipé** (la composition de référence de `cpStatWeights`) avec les gemmes déjà posées — réévalué après chaque gemme, plafonds crit compris. Candidates : celles de `pickOrder` (pas de priorité négative, pas de remplissage sous un `max`) ; les copies d'un même id ne sont pesées qu'une fois par étape ; à égalité, l'ordre de `pickOrder`. Une gemme sans apport de CP n'est posée qu'une fois les gemmes utiles épuisées, dans l'ordre de `pickOrder`. Coût : (emplacements × ids distincts) compositions, une fois par variant et par solve — pas par combo. Une priorité explicite en SOLVE CP garde l'allocation par priorité.
 
 **Remplissage par la stat utile du héros** : avec une priorité partielle (ex. `{ critDmg: 3 }`), les gemmes d'une stat sans priorité valent `score = 0` ; elles ne sont plus jetées mais complètent les emplacements libres — une gemme posée n'enlève rien à la fiche, un emplacement vide si. Seules les gemmes de score **exactement 0** remplissent (une stat à priorité négative n'est jamais posée, ni une stat qui porte un `max` dans `statFilters` : elle ferait sortir le build de la bande). Ordre : le gain relatif de `dmg` qu'apporte la gemme (`gemDmgGains`, modèle de `computeCheapRatings` avec `dmgStat` / `dmgSec` / `noCrit` — celui du panneau « DMG per 1 % »), **pesé une fois par solve sur le build équipé** ; à gain nul (stat hors du modèle, CHC au cap, CHC/CHD d'un héros `noCrit`), par magnitude brute `value / ROLL_NORMS`. Porté par `ScoredGem.fill`, posé par `scoreGemPool` et lu par les quatre allocateurs (`pickOrder` : les priorités dans leur ordre, puis les remplissages) — la répartition affichée et le delta composé ne divergent pas. Inchangé : SOLVE Score sans aucune priorité (fallback `null` ci-dessous) et le score du build (`computeScore` ne lit que la priorité) ; en SOLVE CP sans priorité, les gemmes à poids CP nul remplissent par la même règle.
 
@@ -437,12 +439,12 @@ Les deux allocateurs sont **mémoïsés par `(talismanSlots, preGemCrc)`** (`cap
 pré-gemme (compose `round1` moins une constante par variant) ne prend qu'une poignée de valeurs
 distinctes sur des millions de combos — le slow path ne re-parcourt donc plus le pool par combo.
 
-**Pré-agrégation** : la contribution gem est convertie en `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`. La compose ajoute juste ces deltas aux buckets après l'agrégation des pièces. Évite `resolveStat` × 10 gems × N combos.
+**Pré-agrégation** : la contribution gem est convertie en `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`, rendue par l'allocateur avec la répartition (`GemAllocation`). La compose ajoute juste ces deltas aux buckets après l'agrégation des pièces. Évite `resolveStat` × 10 gems × N combos.
 
 **Fallback `null`** : en **SOLVE Score sans priorité**, la priority est vide (aucun gem n'a
 un `score > 0`) → delta `null` → pas de `gemOverride` → la compose utilise les **gems
 actuellement socketés** (via `piece.subs`). Sans intention utilisateur on respecte l'état du
-joueur. (SOLVE CP n'y tombe plus : il utilise les poids CP ci-dessus.)
+joueur. (SOLVE CP n'y tombe plus : il alloue par CP marginal, ci-dessus.)
 
 ---
 
@@ -604,7 +606,7 @@ apps/renderer/src/
 │       ├── builderFilters.ts       ← SolverFilters + reducer du Builder + INITIAL_FILTERS + buildSolveFilters
 │       ├── orchestrator.ts         ← pool de Web Workers, fan-out/fan-in, top-N merge
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + simulateReforges
-│       ├── gems.ts                 ← buildGemPool + scoreGemPool + aggregateGemDelta + allocateGems
+│       ├── gems.ts                 ← buildGemPool + scoreGemPool + allocateGems + allocateGemsByCp
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + STAT_TO_PRIORITY
 │       └── cp.ts                   ← calcBattlePower (reverse-engineered)
 └── screens/

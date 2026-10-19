@@ -8,6 +8,49 @@
 
 ## Items de backlog clôturés (index)
 
+### 💎 Gemmes en SOLVE CP allouées par apport de CP (M8), un seul allocateur (2026-10-19)
+- ✅ **Pourquoi.** M8 de `docs/todo.md` (revue 2026-10, chiffres « non relancés »). En SOLVE CP sans priorité, les
+  gemmes étaient prises dans l'ordre des poids CP linéaires (`cpStatWeights` : un bump `ROLL_NORMS` par stat, l'ATK %
+  pesé sur un bump d'ATK plat), alors que le CP n'est pas linéaire (l'ATK compose, le CHC plafonne). Et
+  `allocateGems` / `aggregateGemDelta` refaisaient le même parcours de `pickOrder`, appelés l'un après l'autre par
+  variant dans `prepareContext`. Rejeu du script `t8` de la revue (Ame, 2000065, cinq copies de sept gemmes lv6),
+  après G2 : **avant** `greedy delta {"pct":{"dmgReduce":24}} CP 34643` contre `optimum {"atkPct":12,"dmgReduce":9.6}
+  CP 35044` ; même écart sur 2000001 (27 869 / 27 968) et 2000110 (31 641 / 31 735). L'écart n'avait pas bougé.
+- ✅ **Un seul allocateur.** `allocateGems` rend `{ alloc, delta }` (`GemAllocation`, ex-`CappedAllocation`) : c'est
+  `allocateGemsCapped` sans plafond (CHC courant à −∞), même parcours, même `null` sans gemme ni emplacement.
+  `aggregateGemDelta` est supprimé ; `engine.ts` fait un appel par nombre d'emplacements du talisman et range les deux
+  moitiés dans `gemAllocByTalismanSlots` / `gemDeltaByTalismanSlots`.
+- ✅ **Par CP marginal.** `allocateGemsByCp(scored, ts, ee, cpOf)` (`gems.ts`) : gemme par gemme, celle qui monte
+  le plus le CP de la composition de référence avec les gemmes déjà posées, réévalué à chaque pas (plafond CHC
+  compris, puisque c'est le vrai calcul du CP). Référence = celle qui notait déjà les gemmes : le build équipé du
+  héros (`equipped`, son évaluateur CP et son talisman, hissés dans `prepareContext` et partagés avec
+  `cpStatWeights`), composé avec le delta en cours. Candidates = `pickOrder` (pas de priorité négative, pas de
+  remplissage sous un `max`), chaque id pesé une fois par pas, égalité → ordre de `pickOrder` ; une gemme sans apport
+  de CP n'est posée qu'une fois les utiles épuisées, dans l'ordre de `pickOrder`. Branché seulement en SOLVE CP sans
+  priorité (là où l'ordre venait des poids CP) ; une priorité explicite garde l'allocation par priorité, comme le
+  disait déjà le code. Le coût reste par solve : (emplacements × ids distincts) compositions par variant.
+  `allocateGemsReachingCap` et l'anti-overshoot `allocateGemsCapped` (`CRC_OVERSHOOT_CEIL`) ne bougent pas.
+- ✅ **Après.** `t8` : `greedy delta {"pct":{"dmgReduce":9.6,"atkPct":12}} CP 35044` = l'optimum ; 2000001 → 27 968,
+  2000110 → 31 735, les deux à l'optimum aussi. Temps : `solveChunk.test.ts` / `cpPrune.test.ts` inchangés (solve CP
+  à 1 ms avant et après ; ils montent leur contexte à la main, sans `prepareContext`) ; `prepareContext` du cas `t8`
+  (moyenne sur 200) 0,06 → 0,10 ms.
+- ✅ **Tests.** `apps/renderer/test/gemFill.test.ts`, nouveau bloc « SOLVE CP without priority — gems by marginal
+  CP » sur le contrat réel de `data/derived` : le cas de `t8` (inventaire construit, Ame) → CP de l'allocation égal au
+  meilleur des 462 multiensembles de 5 gemmes énumérés, soit 3 ATK % + 2 réduction de dégâts (les 35 044 de la revue,
+  composés là au niveau 100 9★ ; la composition du moteur donne d'autres totaux, même optimum) ; CHC à 94 % avant
+  gemmes → `[CHC, CHC, DEF %, CHC, CHC]` (deux gemmes crit atteignent le plafond, la DEF % passe avant les crit
+  inutiles ; l'ancien ordre posait cinq crit et laissait la DEF %). Tests d'`allocateGems` / delta de `solver.test.ts`
+  et `gemFill.test.ts` passés sur la nouvelle forme. `npm run typecheck` → `> tsc --noEmit` ; `npm test` →
+  `Duration  1.78s (transform 2.50s, setup 0ms, import 4.34s, tests 2.05s, environment 4ms)` (512 tests renderer) ;
+  `npm run lint` → `0 errors and 1 warning potentially fixable with the --fix option.` (28 avertissements, les mêmes
+  qu'avant).
+- ✅ **Docs.** `docs/solver.md` § 5 et § priorité, `docs/reference.md` (pré-agrégation, fallback SOLVE CP),
+  arborescences, et leurs miroirs `wiki/Solver.md` / `wiki/Engine-Reference.md`. M8 sorti de `docs/todo.md`.
+- ⏳ **Laissé.** Le glouton n'est pas prouvé optimal en général (il l'est sur les trois héros de `t8`) ; l'anti-
+  overshoot par combo (`allocateGemsCapped`, combo au-delà de 102 % de CHC) repasse par l'ordre de `pickOrder`, donc
+  par les poids linéaires, comme demandé ; SOLVE CP avec priorité explicite inchangé. Côté Sevih : un SOLVE CP sans
+  priorité sur un vrai compte, pour voir les gemmes proposées.
+
 ### 🔄 Synchro des données — cache complet vérifié, octets non JSON refusés, échecs d'écriture rapportés, une sync à la fois (2026-10-19)
 - ✅ **Pourquoi.** Item « data-sync » de `docs/todo.md` (revue 2026-10), le reste laissé par le lot du mode CHECKOUT
   (`55798f5`, prérequis vérifié). Dans `apps/desktop/src/data-sync.ts` : `derivedReady` ne testait que

@@ -7,6 +7,9 @@
  * axis — there's no inter-gem synergy or marginal-diminishing-returns within
  * a single build. So the per-build optimal is "the K highest-scoring gems"
  * where K = open slot count (4 or 5 per piece, gated by enhanceLevel).
+ * SOLVE CP without a priority is the exception: CP is not linear in the
+ * stats (ATK compounds, CHC caps), so there the gems are picked one at a
+ * time by their marginal CP gain (`allocateGemsByCp`).
  *
  * The compose-time effect of a gem can still be non-linear (e.g. atkPct
  * gems compound through the ATK scaling formula, so two atk% gems on a
@@ -101,7 +104,7 @@ export interface ScoreGemOptions {
  *  must score comparably, not "24 > 10").
  *
  *  When NO priority is set anywhere, every score collapses to 0 —
- *  `aggregateGemDelta` then returns `null` and the solver falls back to the
+ *  `allocateGems` then returns a `null` delta and the solver falls back to the
  *  piece's own socketed gems (preserves "no intent" semantics for SOLVE mode).
  *
  *  With a priority, the zero-score gems (stats the priority leaves out) carry
@@ -171,35 +174,6 @@ export function gemSlotsOf(piece: GearPiece | null): number {
   return piece.enhanceLevel >= 5 ? 5 : 4;
 }
 
-/** Allocate the K best gems to (Talisman, EE) — first K in `pickOrder`
- *  (priority gems, then fillers), with the split decided by per-piece
- *  available slot counts. Talisman takes the first ones, then EE, both in
- *  pool-order. Returns the OptionID arrays the UI uses to display "which gems
- *  to socket where". */
-export function allocateGems(
-  scored: ScoredGem[],
-  talismanSlots: number,
-  eeSlots: number,
-): { talisman: number[]; ee: number[] } {
-  const talisman: number[] = [];
-  const ee: number[] = [];
-  for (const g of pickOrder(scored)) {
-    if (talisman.length < talismanSlots) {
-      talisman.push(g.id);
-    } else if (ee.length < eeSlots) {
-      ee.push(g.id);
-    } else {
-      break;
-    }
-  }
-  // Pad with 0s so the array length matches the in-game slot count exactly
-  // (downstream override iteration skips 0 entries anyway, but the shape
-  // is easier to reason about with fixed length).
-  while (talisman.length < talismanSlots) talisman.push(0);
-  while (ee.length < eeSlots) ee.push(0);
-  return { talisman, ee };
-}
-
 /** CHC% (crit rate) at/above which crit-rate gems are wasted — in-game CHC
  *  caps at 100%. Crit gems come in 3% steps, so we accept gems while CHC is
  *  still below 100 (the one that crosses 100 is kept, overshooting to ~102 at
@@ -213,17 +187,107 @@ const CRC_GEM_STAT = "critRate";
  *  trigger for the per-combo reallocation. */
 export const CRC_OVERSHOOT_CEIL = 102;
 
-export interface CappedAllocation {
+/** A gem allocation: the OptionIDs to socket per piece (for display) and the
+ *  bucketed delta they compose to (for `computeFinalStats`), derived from the
+ *  very same picked gems so they can't drift. */
+export interface GemAllocation {
   alloc: { talisman: number[]; ee: number[] };
   /** Bucketed delta for `computeFinalStats`, or null when no gem was picked. */
   delta: { flat: Record<string, number>; pct: Record<string, number> } | null;
 }
 
+/** Allocate the K best gems to (Talisman, EE) — first K in `pickOrder`
+ *  (priority gems, then fillers), with the split decided by per-piece
+ *  available slot counts. Talisman takes the first ones, then EE, both in
+ *  pool-order. Called once per `(talismanSlots, eeSlots)` variant in
+ *  `prepareContext` — typically 1-2 variants per solve. Returns the OptionID
+ *  arrays the UI uses to display "which gems to socket where" (padded with 0s
+ *  to the in-game slot count) and the pre-aggregated delta the composer merges
+ *  in O(stats) per combo instead of O(gems × resolveStat) — `null` when the
+ *  pool produces no gem worth picking (no positive score, no filler, no slot):
+ *  the caller then drops the gemOverride and falls back to the Talisman/EE
+ *  pieces' own subs. `allocateGemsCapped` without a cap (a −∞ running CHC
+ *  never reaches it). */
+export function allocateGems(
+  scored: ScoredGem[],
+  talismanSlots: number,
+  eeSlots: number,
+): GemAllocation {
+  return allocateGemsCapped(scored, talismanSlots, eeSlots, Number.NEGATIVE_INFINITY);
+}
+
+/**
+ * SOLVE CP allocation: the gems are picked one at a time by their marginal CP
+ * gain on a reference composition (`cpOf`, the CP of that build with a given
+ * gem delta), re-weighed after each gem placed — so a stat's diminishing or
+ * compounding CP (ATK scaling, the CHC cap) is seen, which the linear
+ * `score` of `pickOrder` misses (it took five DMG-reduce gems for 34 643 CP on
+ * Ame where 3 ATK% + 2 DMG-reduce give 35 044). Only the gems of `pickOrder`
+ * are candidates (no negative priority, no filler under a `max` bound); copies
+ * of one id are stat-equivalent, so each id is weighed once per step; a tie
+ * keeps the `pickOrder` one. Once no gem raises CP any more, the free slots
+ * take the rest in `pickOrder`. Talisman takes the first picks, then EE.
+ * Cost: (slots × distinct ids) composes, once per variant per solve.
+ */
+export function allocateGemsByCp(
+  scored: ScoredGem[],
+  talismanSlots: number,
+  eeSlots: number,
+  cpOf: (delta: { flat: Record<string, number>; pct: Record<string, number> }) => number,
+): GemAllocation {
+  const order = pickOrder(scored);
+  const total = talismanSlots + eeSlots;
+  const used = new Array<boolean>(order.length).fill(false);
+  const picked: ScoredGem[] = [];
+  let delta: { flat: Record<string, number>; pct: Record<string, number> } = { flat: {}, pct: {} };
+  let cp = cpOf(delta);
+  while (picked.length < total) {
+    let best = -1;
+    let bestCp = cp;
+    let bestDelta = delta;
+    const seen = new Set<number>();
+    for (let i = 0; i < order.length; i++) {
+      const g = order[i]!;
+      if (used[i] || seen.has(g.id)) continue;
+      seen.add(g.id);
+      const next = withGem(delta, g);
+      const c = cpOf(next);
+      if (c > bestCp) { best = i; bestCp = c; bestDelta = next; }
+    }
+    if (best < 0) break;
+    used[best] = true;
+    picked.push(order[best]!);
+    cp = bestCp;
+    delta = bestDelta;
+  }
+  // No gem left raises CP: fill the free slots in `pickOrder`.
+  for (let i = 0; i < order.length && picked.length < total; i++) {
+    if (used[i]) continue;
+    picked.push(order[i]!);
+    delta = withGem(delta, order[i]!);
+  }
+  const talisman = picked.slice(0, talismanSlots).map((g) => g.id);
+  const ee = picked.slice(talismanSlots).map((g) => g.id);
+  while (talisman.length < talismanSlots) talisman.push(0);
+  while (ee.length < eeSlots) ee.push(0);
+  return { alloc: { talisman, ee }, delta: picked.length > 0 ? delta : null };
+}
+
+/** `delta` plus one gem, as a new delta (only the touched bucket is copied). */
+function withGem(
+  delta: { flat: Record<string, number>; pct: Record<string, number> },
+  g: ScoredGem,
+): { flat: Record<string, number>; pct: Record<string, number> } {
+  const key = g.percent ? "pct" : "flat";
+  const bucket = { ...delta[key], [g.stat]: (delta[key][g.stat] ?? 0) + g.value };
+  return g.percent ? { flat: delta.flat, pct: bucket } : { flat: bucket, pct: delta.pct };
+}
+
 /**
  * Per-combo gem allocation that respects the CHC cap. Identical to the greedy
- * `allocateGems` + `aggregateGemDelta` pair, except a crit-rate gem is SKIPPED
- * once the running CHC (`preGemCrc` + crit gems accepted so far) has reached
- * `CRC_GEM_CAP` — its slot goes to the next-best non-crit gem instead.
+ * `allocateGems`, except a crit-rate gem is SKIPPED once the running CHC
+ * (`preGemCrc` + crit gems accepted so far) has reached `CRC_GEM_CAP` — its
+ * slot goes to the next-best non-crit gem instead.
  *
  * `preGemCrc` is the combo's CHC WITHOUT gems. Returns both the {talisman, ee}
  * id arrays (for display) and the bucketed delta (for compose), derived from
@@ -234,7 +298,7 @@ export function allocateGemsCapped(
   talismanSlots: number,
   eeSlots: number,
   preGemCrc: number,
-): CappedAllocation {
+): GemAllocation {
   const talisman: number[] = [];
   const ee: number[] = [];
   const flat: Record<string, number> = {};
@@ -282,7 +346,7 @@ export function allocateGemsReachingCap(
   talismanSlots: number,
   eeSlots: number,
   preGemCrc: number,
-): CappedAllocation {
+): GemAllocation {
   const talisman: number[] = [];
   const ee: number[] = [];
   const flat: Record<string, number> = {};
@@ -344,33 +408,4 @@ function bucketEquals(a: Record<string, number>, b: Record<string, number>): boo
   if (ka.length !== Object.keys(b).length) return false;
   for (const k of ka) if (a[k] !== b[k]) return false;
   return true;
-}
-
-/** Pre-aggregate a gem allocation into a `{flat, pct}` bucket delta the
- *  composer can merge in O(stats) per combo instead of O(gems × resolveStat).
- *  Called once per `(talismanSlots, eeSlots)` variant in `prepareContext`
- *  — typically 1-2 variants per solve.
- *
- *  Same walk as `allocateGems` (`pickOrder`), so the composed delta matches
- *  the displayed split. Returns `null` when the pool produces no gems worth
- *  picking (no positive score, no filler) — caller should drop the gemOverride
- *  entirely and fall back to the Talisman/EE pieces' own subs. */
-export function aggregateGemDelta(
-  scored: ScoredGem[],
-  talismanSlots: number,
-  eeSlots: number,
-): { flat: Record<string, number>; pct: Record<string, number> } | null {
-  const total = talismanSlots + eeSlots;
-  if (total <= 0) return null;
-  const flat: Record<string, number> = {};
-  const pct: Record<string, number> = {};
-  let picked = 0;
-  for (const g of pickOrder(scored)) {
-    if (picked >= total) break;
-    const bucket = g.percent ? pct : flat;
-    bucket[g.stat] = (bucket[g.stat] ?? 0) + g.value;
-    picked++;
-  }
-  if (picked === 0) return null;
-  return { flat, pct };
 }

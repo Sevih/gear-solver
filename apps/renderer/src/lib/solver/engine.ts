@@ -30,7 +30,7 @@ import {
 import { calcBattlePower, makeCpEvaluator } from "./cp.js";
 import { debug, debugEnabled } from "../log.js";
 import { isLowerPriority } from "../storage/heroPriority.js";
-import { aggregateGemDelta, allocateGems, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type CappedAllocation, type ScoredGem } from "./gems.js";
+import { allocateGems, allocateGemsByCp, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type GemAllocation, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import { dmgSkillFactor } from "../dmgSkill.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
@@ -741,9 +741,12 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // allocator grab high-magnitude dmg-reduce / flat gems that barely move CP,
   // so a CP solve could return LESS CP than the equipped build (its good gems
   // swapped for big-number low-CP ones). The CP weights are evaluated at the
-  // hero's current build, so the picked gems actually maximize CP. An explicit
-  // user priority still wins; SOLVE Score without a priority keeps the old
-  // fallback (scores collapse to 0 → socketed gems preserved).
+  // hero's current build, so the picked gems actually maximize CP. The CP
+  // weights are linear, though (one ROLL_NORM bump each, ATK% weighed on a flat
+  // ATK bump), so the allocation itself then goes by marginal CP on that same
+  // equipped build (`allocateGemsByCp`, see below). An explicit user priority
+  // still wins; SOLVE Score without a priority keeps the old fallback (scores
+  // collapse to 0 → socketed gems preserved).
   //
   // Gem pool eligibility mirrors `allow()` for pieces: gear on other heroes
   // honors the same equipped scope (own + free always in; "lower" only takes
@@ -761,15 +764,18 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     excludedHeroes: excludedSet,
     worklistClaims,
   });
-  const gemPriority = hasPriority
-    ? filters.priority
-    : req.mode === "cp"
-      ? cpStatWeights(
-          computeFinalStats(composed.noGearStats, composed.scaling, inv.gear.filter((g) => g.equippedBy === heroUid), game),
-          makeCpEvaluator({ showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused }),
-          inv.gear.find((g) => g.equippedBy === heroUid && g.slot === "ooparts") ?? null,
-        )
-      : filters.priority;
+  const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
+  // SOLVE CP without a priority: the reference composition the gems are weighed
+  // on (the equipped build, its CP evaluator and Talisman).
+  const cpRef = !hasPriority && req.mode === "cp"
+    ? {
+        cpEval: makeCpEvaluator({ showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused }),
+        talisman: equipped.find((g) => g.slot === "ooparts") ?? null,
+      }
+    : null;
+  const gemPriority = cpRef
+    ? cpStatWeights(computeFinalStats(composed.noGearStats, composed.scaling, equipped, game), cpRef.cpEval, cpRef.talisman)
+    : filters.priority;
   const dmgStat = meta.dmgStat ?? "atk";
   const noCrit = meta.noCrit ?? false;
   const scoredGems = scoreGemPool(gemPool, gemPriority, game, {
@@ -780,15 +786,22 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     noFill: new Set(Object.entries(filters.statFilters).filter(([, b]) => b?.max != null).map(([k]) => k)),
   });
   const eeSlotCount = gemSlotsOf(ee);
-  // Pre-aggregate gem contribution per talismanSlots variant — at most
-  // two variants (4 and 5) cover every talisman in the inventory.
-  // `null` entry signals "no positive-scoring gems for this variant" so
-  // the solver passes `undefined` to computeFinalStats (current subs path).
+  // Allocate the gems once per talismanSlots variant — at most two variants
+  // (4 and 5) cover every talisman in the inventory. One allocator call gives
+  // both the displayed split and the pre-aggregated delta. A `null` delta
+  // signals "no positive-scoring gems for this variant" so the solver passes
+  // `undefined` to computeFinalStats (current subs path). SOLVE CP without a
+  // priority picks them by marginal CP on the equipped build — once per solve,
+  // not per combo.
   const gemDeltaByTalismanSlots = new Map<number, GemOverride | null>();
   const gemAllocByTalismanSlots = new Map<number, { talisman: number[]; ee: number[] }>();
   for (const ts of [4, 5] as const) {
-    gemDeltaByTalismanSlots.set(ts, aggregateGemDelta(scoredGems, ts, eeSlotCount));
-    gemAllocByTalismanSlots.set(ts, allocateGems(scoredGems, ts, eeSlotCount));
+    const { alloc, delta } = cpRef
+      ? allocateGemsByCp(scoredGems, ts, eeSlotCount, (d) =>
+          cpRef.cpEval(computeFinalStats(composed.noGearStats, composed.scaling, equipped, game, d), cpRef.talisman))
+      : allocateGems(scoredGems, ts, eeSlotCount);
+    gemDeltaByTalismanSlots.set(ts, delta);
+    gemAllocByTalismanSlots.set(ts, alloc);
   }
 
   return {
@@ -1406,7 +1419,7 @@ export async function solveChunk(
   // compare exactly in a Map; the offset is far above any reachable CHC so
   // the 4/5-slot variants can't collide). The two allocators never share a
   // solve (`wantCritCap` is constant per run), so one cache serves both.
-  const capAllocCache = new Map<number, CappedAllocation>();
+  const capAllocCache = new Map<number, GemAllocation>();
 
   // Partition axis — outermost comfortably-large slot (falls back to the
   // largest pool); see `pickPartitionSlot` for the duplication-vs-balance

@@ -2,7 +2,7 @@
  * Solver regression tests — the load-bearing math the hot loop relies on.
  *
  * Why these specifically:
- *  - `aggregateGemDelta` + the `gemOverride` path in `aggregateGearBuckets`
+ *  - `allocateGems`' delta + the `gemOverride` path in `aggregateGearBuckets`
  *    is the perf-critical optimization that replaced per-combo
  *    `resolveStat × 10 gems × N combos`. A silent regression here would
  *    inflate stats vs in-game without crashing.
@@ -26,7 +26,7 @@ import { collapseTalismanVariants, maxedFloorOf, meetsMaxedFloor, pieceReforgePl
 import { toUiPiece } from "../src/design/adapter.js";
 import type { SolveBuild } from "../src/lib/solver/types.js";
 import { calcBattlePower, makeCpEvaluator } from "../src/lib/solver/cp.js";
-import { aggregateGemDelta, allocateGems, buildGemPool, gemSlotsOf, scoreGemPool } from "../src/lib/solver/gems.js";
+import { allocateGems, buildGemPool, gemSlotsOf, scoreGemPool } from "../src/lib/solver/gems.js";
 import { computeCheapRatings, computeScore, STAT_NORMS, STAT_TO_PRIORITY } from "../src/lib/solver/ratings.js";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -303,7 +303,7 @@ describe("allocateGems", () => {
       { id: 15049, stat: "critRate", value: 3, percent: true, score: 50 },
       { id: 15037, stat: "atkPct", value: 2.4, percent: true, score: 25 },
     ];
-    const out = allocateGems(scored, 2, 1);
+    const out = allocateGems(scored, 2, 1).alloc;
     expect(out.talisman).toEqual([15053, 15049]);
     expect(out.ee).toEqual([15037]);
   });
@@ -314,27 +314,27 @@ describe("allocateGems", () => {
       { id: 15049, stat: "critRate", value: 3, percent: true, score: 0 }, // stop here
       { id: 15037, stat: "atkPct", value: 2.4, percent: true, score: 25 },
     ];
-    const out = allocateGems(scored, 2, 2);
+    const out = allocateGems(scored, 2, 2).alloc;
     expect(out.talisman).toEqual([15053, 0]); // 1 picked, 1 padded
     expect(out.ee).toEqual([0, 0]);
   });
 
   it("pads with zeros to match slot count", () => {
-    const out = allocateGems([], 4, 5);
+    const out = allocateGems([], 4, 5).alloc;
     expect(out.talisman).toHaveLength(4);
     expect(out.ee).toHaveLength(5);
     expect(out.talisman.every((x) => x === 0)).toBe(true);
   });
 });
 
-describe("aggregateGemDelta", () => {
+describe("allocateGems — delta", () => {
   it("aggregates per-stat into {flat, pct} buckets", () => {
     const scored = [
       { id: 15053, stat: "dmgUp", value: 4, percent: true, score: 10 },
       { id: 15037, stat: "atkPct", value: 2.4, percent: true, score: 5 },
       { id: 15037, stat: "atkPct", value: 2.4, percent: true, score: 5 }, // 2 copies stack
     ];
-    const delta = aggregateGemDelta(scored, 2, 1);
+    const { delta } = allocateGems(scored, 2, 1);
     expect(delta).not.toBeNull();
     expect(delta!.pct.atkPct).toBeCloseTo(4.8);
     expect(delta!.pct.dmgUp).toBe(4);
@@ -345,14 +345,14 @@ describe("aggregateGemDelta", () => {
     const scored = [
       { id: 15001, stat: "atkPct", value: 0.3, percent: true, score: 0 },
     ];
-    expect(aggregateGemDelta(scored, 5, 5)).toBeNull();
+    expect(allocateGems(scored, 5, 5).delta).toBeNull();
   });
 
   it("respects slot total cap (talismanSlots + eeSlots)", () => {
     const scored = Array.from({ length: 10 }, (_, i) => ({
       id: 15053, stat: "dmgUp", value: 4, percent: true, score: 100 - i,
     }));
-    const delta = aggregateGemDelta(scored, 2, 1); // cap = 3
+    const { delta } = allocateGems(scored, 2, 1); // cap = 3
     expect(delta!.pct.dmgUp).toBe(12); // 3 × 4
   });
 
@@ -363,7 +363,7 @@ describe("aggregateGemDelta", () => {
     // (`cpStatWeights`, one entry per stat) as the gem priority.
     const pool = new Map([[15053, 1], [15037, 1]]);
     const scored = scoreGemPool(pool, { atk: 1, dmgUp: 1 }, game);
-    const delta = aggregateGemDelta(scored, 5, 5);
+    const { delta } = allocateGems(scored, 5, 5);
     expect(delta).not.toBeNull();
     expect(Object.keys(delta!.pct).length).toBeGreaterThan(0);
   });
@@ -397,7 +397,7 @@ describe("aggregateGearBuckets — gem override equivalence", () => {
 
     const noOverride = aggregateGearBuckets([tali], game);
 
-    // Build the equivalent override delta by hand (or via aggregateGemDelta).
+    // Build the equivalent override delta by hand (or via allocateGems).
     const override: GemOverride = {
       flat: {},
       pct: { atkPct: 2.4, critRate: 3, dmgUp: 4 },

@@ -307,8 +307,8 @@ because they depend on the equipped loadout / a costly computation not available
 - **(clear)** button: `dispatch({type: "clearPriority"})`.
 
 When priority is uniformly 0: the pool is **still pruned** (phases 3b/3c, same
-combo budget). Gems: in SOLVE CP they **are reallocated** using the CP weights
-(`cpStatWeights` — cf. § Gems); only SOLVE Score keeps the currently socketed
+combo budget). Gems: in SOLVE CP they **are reallocated** by marginal CP gain on
+the equipped build (`allocateGemsByCp` — cf. § Gems); only SOLVE Score keeps the currently socketed
 gems (no reallocation).
 
 ### Main stats
@@ -397,9 +397,11 @@ Em-dash when no build is selected.
 
 **Pool**: multiset of the non-null `gemSlots[]` of the **eligible** Talismans + EE in the inventory (gems are swappable in-game). Eligibility (`buildGemPool`) mirrors the piece-pool rule: the current hero's gear is always in; gear equipped on another hero is gated by `equippedScope` (`none`/`lower`/`all`); gear on an excluded hero is never counted. Without this gate, the solver would propose gems that require unequipping the Talisman/EE of an out-of-scope hero.
 
-**Scoring**: for each gem, `score = priority × (value / ROLL_NORMS)`. Normalized to allow cross-stat comparison. Sorted desc. **In SOLVE CP without a user priority**, the "priority" passed is not empty but the **CP weights** (`cpStatWeights`: ΔCP of a ROLL_NORM-sized bump of each stat, evaluated at the current build). Otherwise (raw `value/norm` ranking), the allocator preferred dmg-reduce/flat gems (big magnitude, ~0 CP) over atk/crit/pen gems → a CP solve could return **less** CP than the equipped build. A stat already at its CP cap (e.g. CRC ~100%) gets a ~0 weight.
+**Scoring**: for each gem, `score = priority × (value / ROLL_NORMS)`. Normalized to allow cross-stat comparison. Sorted desc. **In SOLVE CP without a user priority**, the "priority" passed is not empty but the **CP weights** (`cpStatWeights`: ΔCP of a ROLL_NORM-sized bump of each stat, evaluated at the current build). Otherwise (raw `value/norm` ranking), the allocator preferred dmg-reduce/flat gems (big magnitude, ~0 CP) over atk/crit/pen gems → a CP solve could return **less** CP than the equipped build. A stat already at its CP cap (e.g. CRC ~100%) gets a ~0 weight. These weights are linear (one bump per stat, ATK% weighed on a flat ATK bump): they order the pool, but the SOLVE CP allocation itself goes by marginal CP (below).
 
-**Allocation (default, fast path)**: greedy, K = `talismanSlots + eeSlots` (4 or 5 depending on `enhanceLevel`). We take the K first gems with `score > 0`, then, if slots are left, the **filler gems**. Pre-computed **once per talismanSlots variant** (4 or 5) in `prepareContext` — no re-computation in the hot loop.
+**Allocation (default, fast path)**: greedy, K = `talismanSlots + eeSlots` (4 or 5 depending on `enhanceLevel`). We take the K first gems with `score > 0`, then, if slots are left, the **filler gems**. A single allocator, `allocateGems`, returns the displayed split **and** the composed delta. Pre-computed **once per talismanSlots variant** (4 or 5) in `prepareContext` — no re-computation in the hot loop.
+
+**SOLVE CP without a priority — by marginal CP** (`allocateGemsByCp`): CP is not linear in the stats (ATK compounds, CHC caps at 100%), so the CP-weight order got it wrong (five DMG-reduce gems, 34,643 CP, vs 3 ATK% + 2 DMG-reduce, 35,044, on Ame). The gems are placed one at a time: each slot takes the gem that raises most the CP of the **equipped build** (the reference composition of `cpStatWeights`) with the gems already placed — re-weighed after each gem, crit cap included. Candidates: those of `pickOrder` (no negative priority, no filler under a `max`); copies of one id are weighed once per step; a tie keeps the `pickOrder` one. A gem that adds no CP is placed only once the useful gems are exhausted, in `pickOrder`. Cost: (slots × distinct ids) composes, once per variant per solve — not per combo. An explicit priority in SOLVE CP keeps the priority allocation.
 
 **Filling by the hero's useful stat**: with a partial priority (e.g. `{ critDmg: 3 }`), the gems of a stat without priority score `0`; they're no longer dropped but fill the free slots — a socketed gem takes nothing off the sheet, an empty slot does. Only gems scoring **exactly 0** fill (a negatively-prioritized stat is never socketed, nor a stat carrying a `max` in `statFilters`: it would push the build out of its band). Order: the relative `dmg` gain the gem brings (`gemDmgGains`, the `computeCheapRatings` model with `dmgStat` / `dmgSec` / `noCrit` — the one behind the "DMG per 1 %" panel), **weighed once per solve on the equipped build**; at zero gain (stat outside the model, CHC at the cap, CHC/CHD for a `noCrit` hero), by raw magnitude `value / ROLL_NORMS`. Carried by `ScoredGem.fill`, set by `scoreGemPool` and read by all four allocators (`pickOrder`: the priority gems in their order, then the fillers) — the displayed split and the composed delta can't diverge. Unchanged: SOLVE Score with no priority at all (`null` fallback below) and the build score (`computeScore` only reads the priority); in SOLVE CP without a priority, the gems with a zero CP weight fill by the same rule.
 
@@ -409,13 +411,13 @@ Em-dash when no build is selected.
 
 The combo's pre-gem CHC is recovered from `fs.crc − defaultCrcGem` (crit rate is purely additive). We only **recompose** if the cap-aware delta differs from the default greedy (`gemDeltaEquals`) — often identical when crit gems already rank high. The case without a crc priority (e.g. SOLVE CP fallback, or filler crit gems) keeps the old anti-overshoot (`allocateGemsCapped`, triggered only if `fs.crc > 102`).
 
-**Pre-aggregation**: the gem contribution is converted into `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`. The compose just adds these deltas to the buckets after the piece aggregation. Avoids `resolveStat` × 10 gems × N combos.
+**Pre-aggregation**: the gem contribution is converted into `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`, returned by the allocator along with the split (`GemAllocation`). The compose just adds these deltas to the buckets after the piece aggregation. Avoids `resolveStat` × 10 gems × N combos.
 
 **`null` fallback**: in **SOLVE Score without a priority**, the priority is empty
 (no gem has a `score > 0`) → the delta is `null` → no `gemOverride` → the compose
 uses the **gems currently socketed on the Talisman + EE** (via `piece.subs`).
 This is intentional: without user intent, we respect the player's state.
-(SOLVE CP no longer falls into this: it uses the CP weights above.)
+(SOLVE CP no longer falls into this: it allocates by marginal CP, above.)
 
 ---
 
@@ -548,7 +550,7 @@ apps/renderer/src/
 │       ├── orchestrator.ts         ← Web Worker pool, fan-out/fan-in, top-N merge
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + simulateReforges
 │       ├── setPlans.ts             ← setsFeasible + armorSetWhitelist + allSetsComplete (set OR-of-AND model)
-│       ├── gems.ts                 ← buildGemPool + scoreGemPool + aggregateGemDelta + allocateGems
+│       ├── gems.ts                 ← buildGemPool + scoreGemPool + allocateGems + allocateGemsByCp
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + STAT_TO_PRIORITY
 │       └── cp.ts                   ← calcBattlePower + makeCpEvaluator (reverse-engineered)
 └── screens/

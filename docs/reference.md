@@ -493,19 +493,22 @@ même parcours (`pickOrder`) dans les quatre allocateurs ; une gemme crit de
 remplissage suit le même saut au cap CHC. Pas de remplissage sans aucune
 priorité (fallback ci-dessous).
 
-**Pré-agrégation** : `aggregateGemDelta(scored, ts, ee)` retourne un
-`{flat, pct}` directement consommable par `aggregateGearBuckets`. Évite N×10
+**Pré-agrégation** : `allocateGems(scored, ts, ee)` retourne la répartition
+affichée et son `{flat, pct}`, directement consommable par `aggregateGearBuckets`. Évite N×10
 appels `resolveStat` dans le hot loop.
 
 **Fallback selon le mode** :
 - **SOLVE** + priority vide → tous les scores collapsent à 0 →
-  `aggregateGemDelta` retourne `null` → `computeFinalStats` sans override →
+  `allocateGems` retourne un delta `null` → `computeFinalStats` sans override →
   fallback sur les `subs` des pieces (= gems actuellement socketés).
   Préserve la stat in-game-équivalente quand le joueur n'a pas exprimé d'intention.
 - **SOLVE CP** + priority vide → l'engine passe à `scoreGemPool` le vecteur
   de poids CP `cpStatWeights(...)` (ΔCP pour un bump d'un ROLL_NORM de chaque
-  stat, évalué sur le build courant) en guise de priorité. Le greedy pick
-  alors les gems qui rapportent le plus de CP. Nécessaire parce que "max CP"
+  stat, évalué sur le build courant) en guise de priorité, qui ordonne le pool ;
+  l'allocation passe ensuite par `allocateGemsByCp` : gemme par gemme, celle
+  qui monte le plus le CP du build équipé avec les gemmes déjà posées
+  (réévalué à chaque pas, plafond CHC compris ; une gemme sans apport de CP
+  seulement une fois les utiles épuisées), une fois par variant et par solve. Nécessaire parce que "max CP"
   sous-entend "use the best gems available" — préserver les gems actuels désactiverait silencieusement
   l'optimisation gem pour le cas d'usage typique du mode CP.
 - **N'importe quel mode** + priority non-vide → `priority × value / norm`
@@ -809,7 +812,7 @@ apps/renderer/src/
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + simulateReforges + TopKHeap
 │       ├── setPlans.ts             ← setsFeasible + armorSetWhitelist + allSetsComplete (set OR-of-AND model)
 │       ├── builderFilters.ts       ← SolverFilters + reducer du Builder + INITIAL_FILTERS + buildSolveFilters
-│       ├── gems.ts                 ← buildGemPool + scoreGemPool + aggregateGemDelta + allocateGems + gemSlotsOf
+│       ├── gems.ts                 ← buildGemPool + scoreGemPool + allocateGems + allocateGemsByCp + gemSlotsOf
 │       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + ROLL_NORMS + STAT_TO_PRIORITY
 │       └── cp.ts                   ← calcBattlePower + makeCpEvaluator
 ├── workers/
