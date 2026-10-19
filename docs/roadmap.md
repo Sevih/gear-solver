@@ -43,7 +43,7 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   `GearDetailBody`) **réutilisé** par l'Inventaire (panneau plein) et l'onglet Builds
   (tooltip au survol, `RichTooltip`). Builder maintenu monté entre onglets (préserve les
   résultats + solve en tâche de fond). Settings refondu en modale à onglets
-  (`design/SettingsModal.tsx` : Setup / Solver / Data / Backup / Debug).
+  (`design/settings/SettingsModal.tsx` : Setup / Solver / Data / Backup / Debug).
 
 ## Next
 

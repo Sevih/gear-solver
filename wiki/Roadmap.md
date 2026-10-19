@@ -47,7 +47,7 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   `GearDetailBody`) **reused** by the Inventory (full panel) and the Builds tab
   (hover tooltip, `RichTooltip`). Builder kept mounted across tabs (preserves the
   results + background solve). Settings reworked into a tabbed modal
-  (`design/SettingsModal.tsx`: Setup / Solver / Data / Backup / Debug).
+  (`design/settings/SettingsModal.tsx`: Setup / Solver / Data / Backup / Debug).
 
 ## Next
 

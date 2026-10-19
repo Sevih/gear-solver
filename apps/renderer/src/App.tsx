@@ -9,7 +9,7 @@ import { describeDataSync, requestDataSync, type DataSyncResult } from "./lib/da
 import { createSnapshotFollower, type SnapshotFollower } from "./lib/snapshotFollower.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
 import { LogView } from "./design/LogView.js";
-import { SettingsModal } from "./design/SettingsModal.js";
+import { SettingsModal } from "./design/settings/SettingsModal.js";
 import { HomeScreen } from "./screens/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
