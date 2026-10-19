@@ -18,16 +18,16 @@ function mkPiece(p: Partial<GearPiece>): GearPiece {
 
 /** A fully main-equipped hero (so rule 1 doesn't early-return) plus whatever
  *  extra pieces a test wants in `rawPieces`. */
-function fullEntry(extra: GearPiece[] = [], stats: AdviceInput["stats"] = null, inventoryPieces: GearPiece[] = []): AdviceInput {
+function fullEntry(extra: GearPiece[] = [], stats: AdviceInput["stats"] = null, inventoryPieces: GearPiece[] = [], claimedBy?: AdviceInput["claimedBy"]): AdviceInput {
   const SLOTS: SlotId[] = ["weapon", "accessory", "helmet", "armor", "gloves", "boots"];
   const equipped = new Map<SlotId, unknown>(SLOTS.map((s) => [s, true]));
   // Default main pieces are fully maxed (reforge 6/6, ascended) → no upgrade noise.
   const base = SLOTS.map((s, i) => mkPiece({ uid: `m${i}`, slot: s as GearPiece["slot"] }));
-  return { equipped, rawPieces: [...base, ...extra], stats, inventoryPieces, dmgStat: "atk" };
+  return { equipped, rawPieces: [...base, ...extra], stats, inventoryPieces, heroUid: "h", claimedBy, dmgStat: "atk" };
 }
 
 /** The inventory-side fields for the hand-built entries (empty inventory). */
-const NO_INV = { inventoryPieces: [], dmgStat: "atk" } as const;
+const NO_INV = { inventoryPieces: [], heroUid: "h", dmgStat: "atk" } as const;
 
 describe("computeAdvice — rule 1 (missing / no gear)", () => {
   it("stays silent on a fully-unequipped hero", () => {
@@ -97,6 +97,19 @@ describe("computeAdvice — rules 2/3 (set composition)", () => {
     const wornBoots = mkPiece({ uid: "wb", slot: "boots", armorSetId: "7", equippedBy: "other" });
     const out = computeAdvice(fullEntry(threeSharp(), null, [wornBoots]), game);
     expect(out).toContainEqual({ tone: "tip", text: "Sharp: 3/4 — one more piece completes 4pc" });
+  });
+
+  it("a piece claimed by ANOTHER hero in the Worklist is not free", () => {
+    const freeBoots = mkPiece({ uid: "fb", slot: "boots", armorSetId: "7", equippedBy: null });
+    const out = computeAdvice(fullEntry(threeSharp(), null, [freeBoots], { fb: "other" }), game);
+    expect(out).toContainEqual({ tone: "tip", text: "Sharp: 3/4 — one more piece completes 4pc" });
+    expect(out.some((a) => a.text.includes("a free"))).toBe(false);
+  });
+
+  it("a piece claimed by this hero in the Worklist is still free", () => {
+    const freeBoots = mkPiece({ uid: "fb", slot: "boots", armorSetId: "7", equippedBy: null });
+    const out = computeAdvice(fullEntry(threeSharp(), null, [freeBoots], { fb: "h" }), game);
+    expect(out).toContainEqual({ tone: "tip", text: "Sharp: 3/4 — a free Boots of this set is in your inventory" });
   });
 
   it("keeps the plain text when the inventory has no piece of the set for the missing slot", () => {

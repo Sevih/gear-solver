@@ -46,9 +46,15 @@ describe("serveImg — disk cache revalidation", () => {
 
   it("stale + 304: serves the cache, sends If-None-Match, refreshes the mtime", async () => {
     const before = seed("cached", 8, '"abc"');
+    // The cached file is streamed (opened asynchronously) while the revalidation
+    // runs: hold R2's answer until the body is in, so the touch can't race it.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    fetchMock.mockImplementation(async () => { await gate; return new Response(null, { status: 304 }); });
     await withServer(handle, async (call) => {
       expect((await call(`/img/${REL}`)).body).toBe("cached");
     });
+    release();
     await settleImgRevalidations();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sentHeaders()).toEqual({ "If-None-Match": '"abc"' });
@@ -65,10 +71,15 @@ describe("serveImg — disk cache revalidation", () => {
 
   it("stale + 200: serves the old bytes now, rewrites the cache and its ETag atomically", async () => {
     seed("cached", 8, '"old"');
-    fetchMock.mockImplementation(async () => new Response("fresh", { status: 200, headers: { etag: '"new"' } }));
+    // The cached file is streamed (opened asynchronously) while the revalidation
+    // runs: an instant 200 could rename "fresh" over it first — hold R2 until the body is in.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    fetchMock.mockImplementation(async () => { await gate; return new Response("fresh", { status: 200, headers: { etag: '"new"' } }); });
     await withServer(handle, async (call) => {
       expect((await call(`/img/${REL}`)).body).toBe("cached");
     });
+    release();
     await settleImgRevalidations();
     expect(readFileSync(imgFile(), "utf-8")).toBe("fresh");
     expect(readFileSync(tagFile(), "utf-8")).toBe('"new"');

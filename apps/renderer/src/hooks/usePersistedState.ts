@@ -34,15 +34,14 @@ function useStorageState<T>(
   // Hold the codec in a ref so callers can inline `{serialize, deserialize}`
   // each render without triggering the persist effect on every render.
   const codecRef = useRef(codec);
-  codecRef.current = codec;
-  const storeRef = useRef<Storage | null>(null);
-  storeRef.current ??= pick();
+  useEffect(() => { codecRef.current = codec; });
+  const [store] = useState(pick);
 
   const [value, setValue] = useState<T>(() => {
     try {
-      const raw = storeRef.current!.getItem(key);
+      const raw = store.getItem(key);
       if (raw != null) {
-        const des = codecRef.current?.deserialize ?? (JSON.parse as (s: string) => T);
+        const des = codec?.deserialize ?? (JSON.parse as (s: string) => T);
         return des(raw);
       }
     } catch {
@@ -54,11 +53,11 @@ function useStorageState<T>(
   useEffect(() => {
     try {
       const ser = codecRef.current?.serialize ?? (JSON.stringify as (v: T) => string);
-      storeRef.current!.setItem(key, ser(value));
+      store.setItem(key, ser(value));
     } catch {
       // storage quota exceeded — silently skip persistence
     }
-  }, [key, value]);
+  }, [store, key, value]);
 
   return [value, setValue];
 }

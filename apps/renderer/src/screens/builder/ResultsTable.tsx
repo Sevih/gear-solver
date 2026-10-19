@@ -10,6 +10,7 @@ import { Pill } from "../../design/Chips.js";
 import { cx } from "../../design/cx.js";
 import type { DmgSkillInfo } from "../../lib/dmgSkill.js";
 import type { SolveBuild } from "../../lib/solver/types.js";
+import { diffBuildVsLoadout } from "../../lib/buildDiff.js";
 import type { MinMax } from "../../lib/solver/builderFilters.js";
 import { usePersistedState } from "../../hooks/usePersistedState.js";
 import { useClickOutside } from "./useClickOutside.js";
@@ -103,7 +104,7 @@ function ColumnsMenu({
 
 export function ResultsTable({
   builds, selectedIdx, onSelect, solving, error, emptyReason, brokenSetsEmpty, filteredOut, statFilters, rows, onRowsChange,
-  pieceByUid, armorSets, game, heatmap, dmgSkill,
+  pieceByUid, heroUid, armorSets, game, heatmap, dmgSkill,
 }: {
   builds: SolveBuild[];
   /** Picked hero's best-skill factor — names the winning skill in the
@@ -134,6 +135,9 @@ export function ResultsTable({
    *  only carries piece UIDs; set composition is derived from their armor
    *  set ids). */
   pieceByUid: Map<string, GearPiece>;
+  /** The hero the builds were solved for — the `upg` column is re-diffed
+   *  against their CURRENT loadout (`build.upg` is frozen at solve time). */
+  heroUid: string | null;
   /** Owned armor sets — used as the setId→{name,icon} lookup for the Set cell. */
   armorSets: ArmorSetEntry[];
   /** Game data — resolves a build's weapon/accessory pieces to their effect
@@ -238,11 +242,22 @@ export function ResultsTable({
     if (sortDir === "desc") { setSortDir("asc"); return; }
     setSortKey(null); // back to native order
   };
+  // Live `upg`: the engine's count is frozen at solve time, stale after an
+  // Equip + re-import — re-diff each build against the hero's loadout today.
+  const liveUpg = useMemo(() => {
+    const m = new Map<SolveBuild, number>();
+    if (heroUid) {
+      for (const b of builds) {
+        m.set(b, diffBuildVsLoadout(b.pieceUids, heroUid, pieceByUid).filter((d) => d.changed).length);
+      }
+    }
+    return m;
+  }, [builds, heroUid, pieceByUid]);
   const sortedBuilds = useMemo(() => {
     if (!sortKey) return builds;
     const get = (b: SolveBuild): number => {
       if (sortKey === "score") return b.score;
-      if (sortKey === "upg") return b.upg;
+      if (sortKey === "upg") return liveUpg.get(b) ?? b.upg;
       if (sortKey === "cp") return b.cp ?? -Infinity;
       const stat = (b.finalStats as unknown as Record<string, number>)[sortKey];
       if (typeof stat === "number") return stat;
@@ -252,7 +267,7 @@ export function ResultsTable({
     };
     const sign = sortDir === "desc" ? -1 : 1;
     return [...builds].sort((a, b) => sign * (get(a) - get(b)));
-  }, [builds, sortKey, sortDir]);
+  }, [builds, sortKey, sortDir, liveUpg]);
   // Map each build to its index in the original `builds` array — used as
   // both the row key and the click payload (selectedIdx points into the
   // ORIGINAL order so it survives a re-sort). Replaces a previous
@@ -390,6 +405,7 @@ export function ResultsTable({
                 <ResultRow
                   key={idx}
                   build={b}
+                  upg={liveUpg.get(b) ?? b.upg}
                   selected={b === selectedBuildRef}
                   ranges={ranges}
                   statCols={statCols}
@@ -496,9 +512,11 @@ interface EffectChip { icon: string | null; name: string }
  *  useState setter, `ranges` is memoized, `build` refs are stable. The click
  *  handler is bound to the stable `index` here rather than passed pre-closed. */
 const ResultRow = memo(function ResultRow({
-  build, selected, ranges, statCols, ratingCols, showScore, showUpg, showWpn, showAcc, effects, setTags, index, onSelect,
+  build, upg, selected, ranges, statCols, ratingCols, showScore, showUpg, showWpn, showAcc, effects, setTags, index, onSelect,
 }: {
   build: SolveBuild;
+  /** Slots that differ from the hero's current loadout (live, not `build.upg`). */
+  upg: number;
   selected?: boolean;
   ranges: ColumnRanges;
   /** Stat columns to render — stable (memoized) reference from ResultsTable
@@ -566,8 +584,8 @@ const ResultRow = memo(function ResultRow({
         </td>
       )}
       {showUpg && (
-        <td className="px-1.5 py-1 text-right text-white/70" title={`${build.upg} slot(s) differ from current loadout`}>
-          {build.upg}
+        <td className="px-1.5 py-1 text-right text-white/70" title={`${upg} slot(s) differ from current loadout`}>
+          {upg}
         </td>
       )}
       <td className="px-1.5 py-1 text-right text-white/70">

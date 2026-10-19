@@ -33,6 +33,11 @@ export interface AdviceInput {
   /** The WHOLE inventory (every hero's pieces plus the unequipped ones) — the
    *  3/4 rule looks for a free piece completing the 4pc. */
   inventoryPieces: readonly GearPiece[];
+  /** The hero this build belongs to (`Character.uid`). */
+  heroUid: string;
+  /** Unapplied Worklist reservations, pieceUid → claiming heroUid. A piece
+   *  claimed for ANOTHER hero is not free; absent = no reservation. */
+  claimedBy?: Readonly<Record<string, string>>;
   /** The hero's damage-scaling stat (`meta.dmgStat`, "atk" when absent). Not
    *  read by any rule yet: carried so an off-scaling rule needs no new
    *  plumbing. */
@@ -141,11 +146,14 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
         out.push({ tone: "warn", text: `${name}: 1 piece — no set bonus active` });
       } else if (n === 3 && has4pc) {
         // The slot the three set pieces leave to another piece, and a free
-        // (worn by nobody) piece of this set for it.
+        // (worn by nobody, not reserved by the Worklist for another hero —
+        // a reservation for THIS hero is the plan) piece of this set for it.
         const missingSlot = ARMOR_SET_SLOTS.find((s) =>
           !rawPieces.some((p) => p.slot === s && p.armorSetId === setId));
+        const claimer = (p: GearPiece) => entry.claimedBy?.[p.uid];
         const free = missingSlot != null && entry.inventoryPieces.some((p) =>
-          p.slot === missingSlot && p.armorSetId === setId && p.equippedBy == null);
+          p.slot === missingSlot && p.armorSetId === setId && p.equippedBy == null
+          && (claimer(p) == null || claimer(p) === entry.heroUid));
         out.push(free
           ? { tone: "tip", text: `${name}: 3/4 — a free ${ADVICE_SLOT_LABEL[missingSlot] ?? missingSlot} of this set is in your inventory` }
           : { tone: "tip", text: `${name}: 3/4 — one more piece completes 4pc` });

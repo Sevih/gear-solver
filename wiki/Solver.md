@@ -130,7 +130,9 @@ score(piece) = Σ_rolls priority[user_key] × (value / ROLL_NORMS[engine_key])
 high-magnitude flat rolls always crush % rolls at equal priority. The engine→user
 mapping (`STAT_TO_PRIORITY`) makes `atkPct` rolls and `atk` flats share the same
 priority bucket `atk`. *Combat-only* main options (conditional +15 singularity)
-are ignored (not on the targeted stat sheet).
+are ignored (not on the targeted stat sheet), and so is a % main on an axis with no
+% variant (Phantasm's −30 % SPD: no roll norm, `isPctRollWithoutNorm` in
+`statRegistry.ts`, instead of counting as −1.5 rolls like −30 flat SPD). Same rule in (c).
 
 **b) SOLVE CP without priority** — `cpEval`: each candidate is ranked by **the CP
 it yields dropped into the hero's current build** (other slots = the equipped
@@ -384,7 +386,8 @@ derived from `poolSizes` lists the slots that fell to 0 pieces after filters, th
 without it; a client "Filter" that keeps no build shows "No build passes the current filter."; no slot empty
 but "Allow broken sets" off rejected every armor loadout (the orchestrator's `"brokenSets"` cause) → the table
 says so and suggests turning it back on or raising Top %). The selected build's "N slots change" header is
-re-read off the current inventory (`buildDiff`), not the solve-time `upg`: after Equip it drops to 0.
+re-read off the current inventory (`buildDiff`), not the solve-time `upg`: after Equip it drops to 0. The
+`upg` column (cell and sort) and the "+ Worklist" entry's `upg` read the same live diff.
 
 ### BottomGearBand
 8 cards (compact mirror of the inventory) — one per slot. Each card shows name,

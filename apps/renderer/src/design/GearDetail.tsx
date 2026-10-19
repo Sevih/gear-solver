@@ -117,18 +117,20 @@ function GemPanel({ slots }: { slots: NonNullable<UiPiece["gemSlots"]> }) {
 /** One 2-pc / 4-pc effect row — label column always shown; value column is the
  *  curated in-game prose (em dash when the tier has no effect), then the
  *  "combat" pill when the tier carries combat effects (display only). */
-function SetEffectRow({ tag, desc, combat }: {
+function SetEffectRow({ tag, desc, combat, inTooltip = false }: {
   tag: "2-pc" | "4-pc";
   desc: string | null | undefined;
   combat?: SetCombatEffect[] | null;
+  /** The row sits in a hover popover: the pill writes its body inline. */
+  inTooltip?: boolean;
 }) {
   return (
     <div className="flex items-start gap-2 text-[11px]">
       <span className="w-12 shrink-0 font-mono text-white/70">{tag}</span>
       {desc
-        ? <span className="flex-1 text-white"><GameText text={desc} /><SetCombatBadge effects={combat} /></span>
+        ? <span className="flex-1 text-white"><GameText text={desc} /><SetCombatBadge effects={combat} expanded={inTooltip} /></span>
         : combat?.length
-          ? <span className="flex-1 text-white"><SetCombatBadge effects={combat} /></span>
+          ? <span className="flex-1 text-white"><SetCombatBadge effects={combat} expanded={inTooltip} /></span>
           : <span className="flex-1 text-white/70">—</span>}
     </div>
   );
@@ -140,9 +142,13 @@ export interface GearDetailBodyProps {
   /** Optional equipped-on character — shows a small portrait in the header.
    *  Omit on surfaces where the owner is already obvious (e.g. a build card). */
   equippedChar?: Character | null;
+  /** Rendered inside a hover popover (`RichTooltip`, `HoverCard`), which can't
+   *  host a hoverable nested tooltip — the set rows' "combat" pill expands
+   *  inline instead (`SetCombatBadge` `expanded`). */
+  inTooltip?: boolean;
 }
 
-export function GearDetailBody({ piece, game, equippedChar = null }: GearDetailBodyProps) {
+export function GearDetailBody({ piece, game, equippedChar = null, inTooltip = false }: GearDetailBodyProps) {
   const slot = piece.slot ? SLOTS.find((s) => s.id === piece.slot) : null;
   const rarity = RARITY[piece.rarity];
   // 2-pc / 4-pc bonuses live only on armor pieces (armorSetId); don't fall back
@@ -281,8 +287,8 @@ export function GearDetailBody({ piece, game, equippedChar = null }: GearDetailB
             <span className="font-mono text-[12px] font-semibold text-white">{setEntry.name ?? "Set"}</span>
           </div>
           <div className="space-y-1 rounded-md border border-white/6 bg-black/25 px-3 py-2">
-            <SetEffectRow tag="2-pc" desc={setEntry.level.p2_desc} combat={setEntry.level.combatEffects?.p2} />
-            <SetEffectRow tag="4-pc" desc={setEntry.level.p4_desc} combat={setEntry.level.combatEffects?.p4} />
+            <SetEffectRow tag="2-pc" desc={setEntry.level.p2_desc} combat={setEntry.level.combatEffects?.p2} inTooltip={inTooltip} />
+            <SetEffectRow tag="4-pc" desc={setEntry.level.p4_desc} combat={setEntry.level.combatEffects?.p4} inTooltip={inTooltip} />
           </div>
         </div>
       )}

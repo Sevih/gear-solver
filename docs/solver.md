@@ -130,7 +130,9 @@ score(piece) = Σ_rolls priority[user_key] × (value / ROLL_NORMS[engine_key])
 rolls flat à grosse magnitude écrasent les rolls % à priorité égale. Le mapping
 engine→user (`STAT_TO_PRIORITY`) fait partager à `atkPct` et `atk` flat la même
 bucket priority `atk`. Les main-options *combat-only* (+15 singularité conditionnels)
-sont ignorées (pas sur la feuille de stats visée).
+sont ignorées (pas sur la feuille de stats visée), comme un main en % sur un axe sans
+variante % (le −30 % SPD de Phantasm : pas de norme de roll, `isPctRollWithoutNorm` de
+`statRegistry.ts`, au lieu d'être compté −1,5 jet comme −30 SPD plats). Même règle en (c).
 
 **b) SOLVE CP sans priorité** — `cpEval` : chaque candidat classé par **le CP qu'il
 donne posé dans le build actuel du héros** (autres slots = pièces équipées), donc la
@@ -408,7 +410,8 @@ dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres, EE e
 un « Filter » client qui ne garde aucun build affiche « No build passes the current filter. » ; aucun slot vide
 mais « Allow broken sets » off a rejeté chaque loadout armor (cause `"brokenSets"` de l'orchestrateur) → la
 table le dit et propose de le rallumer ou de monter le Top %). L'en-tête « N slots change » du build sélectionné
-est relu sur l'inventaire courant (`buildDiff`), pas sur l'`upg` du solve : après Equip il tombe à 0.
+est relu sur l'inventaire courant (`buildDiff`), pas sur l'`upg` du solve : après Equip il tombe à 0. La colonne
+`upg` (cellule et tri) et l'`upg` de l'entrée « + Worklist » lisent le même diff vivant.
 
 ### BottomGearBand
 8 cartes (mirror compact de l'inventaire) — une par slot. Chaque carte montre nom,

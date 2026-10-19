@@ -508,6 +508,10 @@ interface ComposedEntry {
   presetName: string | null;
   /** `inventory.gear` (one shared array) — the advice's free-4pc lookup. */
   inventoryPieces: GearPiece[];
+  /** `char.uid` — the advice tells this hero's Worklist reservations apart. */
+  heroUid: string;
+  /** Unapplied Worklist reservations (pieceUid → heroUid), shared by every entry. */
+  claimedBy: Readonly<Record<string, string>>;
   /** `meta.dmgStat`, "atk" when absent — carried for the advice. */
   dmgStat: "atk" | "def" | "hp";
 }
@@ -515,7 +519,7 @@ interface ComposedEntry {
 // Per-card build advice (`computeAdvice` + `AdviceItem`) lives in
 // `lib/buildAdvice.ts` — pure + tested standalone. `ComposedEntry` structurally
 // satisfies its `AdviceInput` (equipped / rawPieces / stats / inventoryPieces /
-// dmgStat), so the call site
+// heroUid / claimedBy / dmgStat), so the call site
 // below passes the entry straight through.
 
 /** Build a sorted, comma-joined UID key for a set of gear pieces, EE pieces
@@ -662,7 +666,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
   // the debug toggle is off so the StatBlock renders plain values without
   // amber/rose tints or Δ badges.
   const locked = debug ? (lockEntry?.stats ?? null) : null;
-  const lockedKeys = locked ? Object.keys(locked) as SheetStatKey[] : [];
+  const lockedKeys = useMemo(() => locked ? Object.keys(locked) as SheetStatKey[] : [], [locked]);
   const hasAnyLock = lockedKeys.length > 0;
   const hasDrift = stats && hasAnyLock
     ? lockedKeys.some((k) => round1(stats[k] - (locked![k] ?? 0)) !== 0)
@@ -800,7 +804,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
             // Filled slots become inspectable on hover (main/subs/gems), the way
             // the Inventory tab lets you click a tile. Empty slots stay inert.
             return p
-              ? <RichTooltip key={id} placement="right" className="cursor-help" content={<GearDetailBody piece={p} game={game} />}>{mini}</RichTooltip>
+              ? <RichTooltip key={id} placement="right" className="cursor-help" content={<GearDetailBody piece={p} game={game} inTooltip />}>{mini}</RichTooltip>
               : <span key={id}>{mini}</span>;
           })}
         </div>
@@ -909,9 +913,12 @@ interface BuildsScreenProps {
   /** Jump to the Builder tab with this hero preselected — wired to each
    *  card's "Optimize →" button. */
   onOptimize: (heroUid: string) => void;
+  /** Unapplied Worklist reservations, pieceUid → claiming heroUid — the
+   *  advice doesn't call a piece promised to another hero "free". */
+  worklistClaims: Readonly<Record<string, string>>;
 }
 
-export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, onHeroPriorityChange, debug, onOptimize }: BuildsScreenProps) {
+export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, onHeroPriorityChange, debug, onOptimize, worklistClaims }: BuildsScreenProps) {
   // Set a hero's priority position (null clears) — positional model, contiguous
   // 1..N. Functional updates so the callbacks stay stable for the memoized cards.
   const setRank = useCallback((uid: string, pos: number | null) => {
@@ -1042,10 +1049,11 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
         scaling: composed?.scaling ?? null,
         rawPieces: raws, level, bp,
         meta, displayCharId, displayName, presetName,
-        inventoryPieces: inventory.gear, dmgStat: meta?.dmgStat ?? "atk",
+        inventoryPieces: inventory.gear, heroUid: c.uid, claimedBy: worklistClaims,
+        dmgStat: meta?.dmgStat ?? "atk",
       };
     });
-  }, [inventory, game, userGeasLevels, userCodexLevel]);
+  }, [inventory, game, userGeasLevels, userCodexLevel, worklistClaims]);
 
   // Lock state only affects the roster when a lock-based filter is active.
   // Gate it out of the memo deps when `locks === "all"` (or debug is off) so a

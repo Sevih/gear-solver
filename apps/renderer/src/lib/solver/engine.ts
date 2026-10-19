@@ -32,6 +32,7 @@ import { debug, debugEnabled } from "../log.js";
 import { isLowerPriority } from "../storage/heroPriority.js";
 import { allocateGems, allocateGemsByCp, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type GemAllocation, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
+import { isPctRollWithoutNorm } from "../statRegistry.js";
 import { dmgSkillFactor } from "../dmgSkill.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
 import { allSetsComplete, armorSetWhitelist, planSetIds, setsFeasible } from "./setPlans.js";
@@ -1014,7 +1015,8 @@ export function simulateReforges(
 /** Per-roll priority score for ONE piece: Σ over its rolls of
  *  `priority[userKey] × value / ROLL_NORMS[engineKey]`. Combat-only main options
  *  (conditional +15 singularity stats) are skipped — they're not on the sheet the
- *  score targets. ROLL_NORMS (per-roll magnitude, e.g. flat atk≈300, atkPct≈40,
+ *  score targets — and so is a % main on a flat-only axis (`isPctRollWithoutNorm`).
+ *  ROLL_NORMS (per-roll magnitude, e.g. flat atk≈300, atkPct≈40,
  *  crc≈20) NOT STAT_NORMS (endgame final magnitude): the two scales differ ~100×,
  *  so STAT_NORMS here would rank percent rolls 100× too low. Rolls carry engine
  *  keys (`atkPct`, `critRate`, …) while `priority` is user-keyed (`atk`, `crc`, …)
@@ -1028,7 +1030,7 @@ export function priorityScoreOf(priority: Record<string, number>): (p: GearPiece
       if (w) s += w * r.value / (ROLL_NORMS[r.stat] ?? 100);
     }
     for (const r of p.main) {
-      if (r.combatOnly) continue;
+      if (r.combatOnly || isPctRollWithoutNorm(r)) continue;
       const w = priority[STAT_TO_PRIORITY[r.stat] ?? r.stat] ?? 0;
       if (w) s += w * r.value / (ROLL_NORMS[r.stat] ?? 100);
     }
@@ -1037,14 +1039,15 @@ export function priorityScoreOf(priority: Record<string, number>): (p: GearPiece
 }
 
 /** Priority-agnostic ranking proxy: total normalized roll magnitude of a piece
- *  (Σ value / ROLL_NORMS over its non-combat rolls). Used ONLY to bound the
+ *  (Σ value / ROLL_NORMS over its non-combat rolls, minus the % mains on a
+ *  flat-only axis — `isPctRollWithoutNorm`). Used ONLY to bound the
  *  Score-mode-without-priority cartesian — there's no objective to optimize, so
  *  we keep the fullest-rolled pieces per slot rather than leaving the pool
  *  unbounded (which is the multi-hundred-million-combo hang). */
 export function magnitudeScoreOf(p: GearPiece): number {
   let s = 0;
   for (const r of p.subs) s += r.value / (ROLL_NORMS[r.stat] ?? 100);
-  for (const r of p.main) if (!r.combatOnly) s += r.value / (ROLL_NORMS[r.stat] ?? 100);
+  for (const r of p.main) if (!r.combatOnly && !isPctRollWithoutNorm(r)) s += r.value / (ROLL_NORMS[r.stat] ?? 100);
   return s;
 }
 

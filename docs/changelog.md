@@ -8,6 +8,95 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧹 Renderer — restes de G15 à G29 et F28 : lint 28 → 15, Builder réveillé par l'élagage, statut dans Settings, pièce réservée non « libre », `upg` vivant, pré-tri Score, pastille combat, test img-cache stabilisé (2026-10-19)
+- ✅ **Pourquoi.** Lot de clôture du renderer (G32), après G31 et G33 : sept restes notés par G15 à G29 et F28 dans
+  leurs entrées, rien de nouveau. Chaque point est un changement minimal ; un seul changement visuel (le pied de
+  Settings).
+- ✅ **(1) Lint sans changement de comportement — `npm run lint` : `✖ 28 problems (0 errors, 28 warnings)` avant,
+  `✖ 15 problems (0 errors, 15 warnings)` après** (attendu 16 : un de moins, voir `usePersistedState`). `App.tsx` :
+  directive `eslint-disable-next-line react-hooks/exhaustive-deps` inutile retirée (effet de `waitForStartupSync`) ;
+  `refreshRef.current = refreshInventory` passé dans un `useEffect` sans tableau (après le rendu, déclaré avant
+  l'effet `follower.init()` qui le lit) ; le suiveur créé par `useState(() => createSnapshotFollower({ … }))`
+  (initialisation paresseuse, lue sans `.current`, import du type `SnapshotFollower` devenu inutile retiré) ;
+  `builderMounted` passé en `useState(false)` mis à `true` par un effet sur `tab` (le Builder se monte un rendu plus
+  tard la toute première fois, même écran). `useClickOutside.ts` : `cb.current = onOutside` dans un `useEffect` sans
+  tableau. `usePersistedState.ts` : `codecRef.current = codec` dans un `useEffect` sans tableau (déclaré avant
+  l'effet de persistance qui le lit), `storeRef.current ??= pick()` → `const [store] = useState(pick)` (ajouté aux
+  dépendances de l'effet de persistance, identité stable) ; l'initialiseur de la valeur lisait `codecRef.current`
+  au rendu, ce que le compilateur signale une fois l'écriture sortie : il lit `codec` directement (même objet au
+  premier rendu, seul moment où l'initialiseur tourne). `SortHeader.tsx` : `Th` sorti du rendu en composant de
+  module (`sort`, `dir`, `onSort` en props, même JSX). `BuildsScreen.tsx` : `lockedKeys` en
+  `useMemo(…, [locked])`. **Ce qui ne tombe pas entièrement** : le correctif (b) du suiveur fait passer `App.tsx`
+  de 5 avertissements `react-hooks/refs` (l.234 et 4 × l.243) à UN (`App.tsx:235`, « Passing a ref to a function
+  may read its value during render » sur l'initialiseur de `useState`, qui reçoit la flèche
+  `(label) => refreshRef.current(label)`) ; une flèche locale dans l'initialiseur et un `useCallback` extérieur ont
+  été essayés, même avertissement : la forme du lot est gardée (net −4), aucune directive ajoutée. Le correctif (c)
+  ajoute, comme prévu, un `set-state-in-effect` (`App.tsx:94`). **Restent (15)** : `react-hooks/set-state-in-effect`
+  ×12 — `App.tsx:94`, `App.tsx:227`, `design/settings/SettingsModal.tsx:127` et `:132`, `screens/BuildsScreen.tsx:579`,
+  `screens/builder/BuilderScreen.tsx:139` et `:389`, `screens/builder/HeroSelect.tsx:35`,
+  `screens/builder/PromptDialog.tsx:19`, `screens/builder/useSolverSession.ts:243`,
+  `screens/inventory/FilterModal.tsx:185`, `screens/inventory/InventoryScreen.tsx:86` ; `react-hooks/refs` ×1 —
+  `App.tsx:235` ; `react-hooks/incompatible-library` ×2 — `screens/builder/ResultsTable.tsx:289`,
+  `screens/inventory/VirtualGearGrid.tsx:143` (chemins sous `apps/renderer/src/`).
+- ✅ **(2) Builder réveillé par l'élagage (G29).** `lib/storage/dataHash.ts` gagne
+  `onDataPruned(listener: (known: KnownRefs) => void): () => void`, calqué sur `onBackupImported` (`transfer.ts`) ;
+  `reconcileDataHash` notifie les abonnés en fin de course, après l'écriture des deux cartes, seulement quand
+  l'issue est `"pruned"` (`known` n'est posé que dans cette branche). `BuilderScreen.tsx` s'y abonne à côté de
+  l'abonnement à l'import : recharge `filterPresetsMap`, remplace `heroFiltersRef.current` par `loadHeroFilters()`
+  (déjà élaguée sur disque) et, si `pruneFilters(filtersRef.current, known)` rend un autre objet,
+  `dispatch({ type: "loadPreset", filters })` — filtres vivants élagués, résultats de solve intacts. Un changement de
+  héros ne réécrit plus les références mortes.
+- ✅ **(3) Statut visible dans Settings (G19).** `SettingsModal` gagne `status: string` (`App.tsx` passe
+  `status={status}`) ; le `<span>` gauche du pied affiche `status || FOOTER_NOTE[tab]`, même style. Les messages
+  d'Export / Import / Sync / Remove plugin / Wipe se lisent sans fermer la modale ; la barre de statut ne bouge pas.
+- ✅ **(4) Pièce réservée non « libre » (G28).** `AdviceInput` gagne `heroUid: string` et
+  `claimedBy?: Readonly<Record<string, string>>` ; la règle 3 ne compte libre qu'une pièce `equippedBy == null` ET
+  non réclamée ou réclamée par ce héros-ci (sa réservation est le plan). `App.tsx` passe
+  `worklistClaims={solverWorklistClaims}` à `<BuildsScreen>`, qui le met dans chaque `ComposedEntry`
+  (`heroUid: c.uid`, `claimedBy`) ; `worklistClaims` rejoint les dépendances du `useMemo` de composition (la carte
+  ne change qu'avec la Worklist ou l'inventaire). Fixtures `AdviceInput` de `gameRules.test.ts` et
+  `sheetMinors.test.ts` : `heroUid: "h"` ajouté (typecheck).
+- ✅ **(5) `upg` vivant (G25).** `ResultsTable` gagne `heroUid: string | null` (le Builder passe `selectedUid`) ; un
+  `useMemo` calcule `liveUpg: Map<SolveBuild, number>` (nombre de `changed` de `diffBuildVsLoadout` par build, une
+  passe, dépendances `builds`, `heroUid`, `pieceByUid`) ; la cellule (valeur et titre) et le tri `upg` lisent
+  `liveUpg.get(build) ?? build.upg`, passé à `ResultRow` en prop `upg` (primitive : le memo de ligne tient).
+  L'entrée Worklist prend `upg: changes.length`. Tête de `buildDiff.ts` mise à jour, et `docs/solver.md` /
+  `wiki/Solver.md` (en-tête « N slots change »).
+- ✅ **(6a) Pré-tri Score (G10).** `statRegistry.ts` exporte `PCT_ROLL_KEYS` (clés des variantes `kind: "pct"`) et
+  `isPctRollWithoutNorm(r)` = `percent` ET clé d'un axe du registre ET hors `PCT_ROLL_KEYS` (« a % roll on a
+  flat-only axis (Phantasm's −30 % SPD) has no roll norm; the pre-sort ignores it instead of scoring it as flat » ;
+  un roll hors registre garde son repli `?? 100`). `priorityScoreOf` et `magnitudeScoreOf` (`engine.ts`) sautent ces
+  mains en plus des `combatOnly`. Docs : `docs/solver.md` (3a), `docs/reference.md` (§ classement 1 et 3), miroirs
+  `wiki/Solver.md` et `wiki/Engine-Reference.md`.
+- ✅ **(6b) Pastille combat survolable (G9).** `GearDetailBody` (`design/GearDetail.tsx`) gagne `inTooltip?: boolean`,
+  transmis à `SetEffectRow` puis à `<SetCombatBadge expanded={inTooltip} />` ; `BuildsScreen.tsx` le passe à la
+  mini-pièce sous `RichTooltip`. Grep des autres `GearDetailBody` : seul `screens/inventory/ItemDetail.tsx` (panneau
+  cliquable) — inchangé ; `ResultGearDetailBody` est un autre composant, hors lot.
+- ✅ **(7) `img-cache-revalidate.test.ts` stabilisé.** « stale + 304 » et « stale + 200 » tiennent le `fetch` stubbé
+  derrière une barrière (modèle de « never runs two revalidations ») libérée après le retour de `call(…)`, puis
+  `settleImgRevalidations()` ; deux lignes de commentaire disent la course (flux ouvert après le renommage).
+  `img-cache.ts` inchangé. `npx vitest run apps/desktop/test/img-cache-revalidate.test.ts` joué 20 fois en boucle
+  shell : 20/20 verts.
+- ✅ **Tests.** `dataHash.test.ts` (+1) : `pruned` notifie avec `known` (cartes déjà élaguées sur disque quand
+  l'abonné tourne), `first` et `same` ne notifient pas, désabonnement. `buildAdvice.test.ts` (22 → 24) : réservée
+  pour un AUTRE héros → « one more piece completes 4pc », pas de « a free » ; réservée pour ce héros → toujours libre.
+  `buildDiff.test.ts` (+1) : `upg` vivant — une pièce équipée depuis le solve (inventaire relu) donne `changed` − 1.
+  `statRegistry.test.ts` (11 → 13) : `PCT_ROLL_KEYS` = exactement les variantes `pct` ; `magnitudeScoreOf` d'une
+  pièce dont le seul main est `{ stat: "spd", value: -30, percent: true, source: "uniquePassive" }` vaut 0 (le même
+  main plat vaut −1,5). Compteurs de `docs/reference.md` / `wiki/Engine-Reference.md` mis à jour pour ces deux
+  fichiers ; `wiki/Using-the-App.md` précise la pièce libre.
+- ✅ **Comportement** (relu sur les diffs React, pas d'app lancée) : hooks tous inconditionnels, ordre stable d'un
+  rendu à l'autre ; les écritures de ref déplacées en effet sont déclarées avant les effets qui les lisent ; aucun
+  texte changé hors (3). Builds (cartes, infobulle de mini-pièce : la pastille s'y déplie comme dans le panneau
+  Effects), Builder (solve, Equip, + Worklist, changement de héros), Inventory (tri de `SortHeader`, même JSX),
+  Settings (pied) : mêmes rendus hors (3) et (6b).
+- ✅ **Vérification.** `npm run typecheck` : sort à 0, dernière ligne `> tsc --noEmit` (renderer, sans erreur) ;
+  `npm test` : dernière ligne `Duration  1.81s (transform 2.50s, setup 0ms, import 4.60s, tests 2.32s, environment 5ms)`
+  (core 162, desktop 159, renderer `Tests  579 passed (579)`).
+- ⏳ **Sevih** : `docs/release-notes.md` [Unreleased] à remplir avant la release (G8 à G32) ; les 15 avertissements
+  restants (`set-state-in-effect`, `incompatible-library`, le `refs` du suiveur) demandent une réécriture qui change
+  l'ordre des rendus — hors lot.
+
 ### 🤖 CI — Dependabot npm et github-actions hebdomadaires, actions épinglées par SHA (2026-10-19)
 - ✅ **Pourquoi.** Lot de clôture de la CI (G33) : le dépôt n'avait ni `dependabot.yml` ni actions épinglées par
   SHA — un tag mobile `@v4` peut être déplacé sous la CI sans que rien ne change dans le dépôt, et aucune mise à jour

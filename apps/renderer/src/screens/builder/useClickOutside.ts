@@ -10,7 +10,7 @@ import { useEffect, useRef } from "react";
 export function useClickOutside<T extends HTMLElement>(active: boolean, onOutside: () => void) {
   const ref = useRef<T | null>(null);
   const cb = useRef(onOutside);
-  cb.current = onOutside;
+  useEffect(() => { cb.current = onOutside; });
   useEffect(() => {
     if (!active) return;
     const onDown = (e: MouseEvent) => {

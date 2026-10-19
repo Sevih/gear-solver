@@ -72,6 +72,18 @@ export const ROLL_NORMS: Record<string, number> = Object.fromEntries(
   STAT_AXES.flatMap((a) => a.variants.map((v) => [v.key, v.rollNorm])),
 );
 
+/** Engine roll keys of the PERCENT variants (`kind: "pct"`). Derived. */
+export const PCT_ROLL_KEYS: ReadonlySet<string> = new Set(
+  STAT_AXES.flatMap((a) => a.variants.filter((v) => v.kind === "pct").map((v) => v.key)),
+);
+
+/** A % roll on a flat-only axis (Phantasm's −30 % SPD) has no roll norm; the
+ *  pre-sort ignores it instead of scoring it as flat. Rolls outside the
+ *  registry keep their existing fallback norm. */
+export function isPctRollWithoutNorm(r: { stat: string; percent: boolean }): boolean {
+  return r.percent && r.stat in ROLL_NORMS && !PCT_ROLL_KEYS.has(r.stat);
+}
+
 /** Endgame final-stat normalization, keyed by canonical axis key. Used to
  *  score a composed final stat. Derived. */
 export const STAT_NORMS: Record<string, number> = Object.fromEntries(

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { GameData } from "@gear-solver/core";
 import { INITIAL_FILTERS, type SolverFilters } from "../src/lib/solver/builderFilters.js";
-import { DATA_HASH_KEY, knownRefs, pruneFilters, reconcileDataHash } from "../src/lib/storage/dataHash.js";
+import { DATA_HASH_KEY, knownRefs, onDataPruned, pruneFilters, reconcileDataHash, type KnownRefs } from "../src/lib/storage/dataHash.js";
 import { FILTER_PRESETS_KEY, loadFilterPresets } from "../src/lib/storage/filterPresets.js";
 import { HERO_FILTERS_KEY, loadHeroFilters } from "../src/lib/storage/heroFilters.js";
 
@@ -114,6 +114,26 @@ describe("reconcileDataHash", () => {
     expect(remembered.setPlans).toEqual([[{ setId: "1", count: 2 }]]);
     expect(remembered.excludedSets).toEqual(["2"]);
     expect(remembered.topPct).toBe(20);
+  });
+
+  it("pruned notifies the subscribers with `known` once both maps are written; first / same don't; unsubscribe", () => {
+    const calls: { known: KnownRefs; heroFilters: SolverFilters | undefined }[] = [];
+    const off = onDataPruned((known) => calls.push({ known, heroFilters: loadHeroFilters().h1 }));
+    seed(null);
+    expect(reconcileDataHash("h1", GAME)).toBe("first");
+    expect(reconcileDataHash("h1", GAME)).toBe("same");
+    expect(calls).toHaveLength(0);
+    seed("h1");
+    expect(reconcileDataHash("h2", GAME)).toBe("pruned");
+    expect(calls).toHaveLength(1);
+    expect([...calls[0]!.known.sets].sort()).toEqual([...KNOWN.sets].sort());
+    expect([...calls[0]!.known.effects].sort()).toEqual([...KNOWN.effects].sort());
+    // Already pruned on disk when the listener runs.
+    expect(calls[0]!.heroFilters!.excludedSets).toEqual(["2"]);
+    off();
+    seed("h1");
+    expect(reconcileDataHash("h2", GAME)).toBe("pruned");
+    expect(calls).toHaveLength(1);
   });
 
   it("data that knows no set prunes nothing and keeps the old hash", () => {

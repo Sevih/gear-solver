@@ -13,6 +13,25 @@ import { GEAR_STATS } from "./filters.js";
 export type FixedSortKey = "stars" | "enhance" | "bt";
 export type SortKey = FixedSortKey | `sub:${string}`;
 
+function Th({ k, label, sort, dir, onSort }: {
+  k: FixedSortKey; label: string;
+  sort: SortKey; dir: "asc" | "desc";
+  onSort: (k: FixedSortKey) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSort(k)}
+      className={cx(
+        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] transition-colors",
+        sort === k ? "text-cyan-200" : "text-white hover:text-cyan-100",
+      )}
+    >
+      {label}
+      {sort === k && <span className="text-[9px]">{dir === "desc" ? "▼" : "▲"}</span>}
+    </button>
+  );
+}
+
 export function SortHeader({
   sort, dir, total, onSort, onSubSort, availableSubs,
 }: {
@@ -28,25 +47,13 @@ export function SortHeader({
 }) {
   const isSubSort = sort.startsWith("sub:");
   const activeSubStat = isSubSort ? sort.slice(4) : "";
-  const Th = ({ k, label }: { k: FixedSortKey; label: string }) => (
-    <button
-      onClick={() => onSort(k)}
-      className={cx(
-        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] transition-colors",
-        sort === k ? "text-cyan-200" : "text-white hover:text-cyan-100",
-      )}
-    >
-      {label}
-      {sort === k && <span className="text-[9px]">{dir === "desc" ? "▼" : "▲"}</span>}
-    </button>
-  );
   return (
     <div className="flex items-center justify-between border-b border-white/6 px-1 pb-2">
       <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white">
         Sort by
-        <Th k="stars" label="★" />
-        <Th k="enhance" label="Enhance" />
-        <Th k="bt" label="Brk" />
+        <Th k="stars" label="★" sort={sort} dir={dir} onSort={onSort} />
+        <Th k="enhance" label="Enhance" sort={sort} dir={dir} onSort={onSort} />
+        <Th k="bt" label="Brk" sort={sort} dir={dir} onSort={onSort} />
         <span className={cx("ml-2 inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px]", isSubSort && "text-cyan-200")}>
           Sub
           <select

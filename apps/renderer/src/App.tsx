@@ -6,7 +6,7 @@ import { getSteamStatus, launchSteamGame, type SteamStatus } from "./steam.js";
 import { getGameVersion } from "./game-version.js";
 import { waitForStartupSync } from "./lib/startupSync.js";
 import { describeDataSync, requestDataSync, type DataSyncResult } from "./lib/dataSync.js";
-import { createSnapshotFollower, type SnapshotFollower } from "./lib/snapshotFollower.js";
+import { createSnapshotFollower } from "./lib/snapshotFollower.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
 import { LogView } from "./design/LogView.js";
 import { SettingsModal } from "./design/settings/SettingsModal.js";
@@ -90,8 +90,8 @@ export function App() {
   const [tab, setTab] = usePersistedState<Tab>("gs.tab", "Home");
   // Builder mounts on first visit and then stays mounted (hidden when inactive),
   // so its solver results — and a solve still running — survive tab switches.
-  const builderMounted = useRef(false);
-  builderMounted.current ||= tab === "Builder";
+  const [builderMounted, setBuilderMounted] = useState(false);
+  useEffect(() => { if (tab === "Builder") setBuilderMounted(true); }, [tab]);
   const [game, setGame] = useState<GameData | null>(null);
   const [inv, setInv] = useState<Inventory | null>(null);
   const [userGeas, setUserGeas] = useState<UserGeasLevels | null>(null);
@@ -231,16 +231,14 @@ export function App() {
   // last-seen user_item.json mtime, an init-before-ticks order, no overlapping
   // ticks) so launch imports exactly once — see lib/snapshotFollower.ts.
   const refreshRef = useRef(refreshInventory);
-  refreshRef.current = refreshInventory;
-  const followerRef = useRef<SnapshotFollower | null>(null);
-  followerRef.current ??= createSnapshotFollower({
+  useEffect(() => { refreshRef.current = refreshInventory; });
+  const [follower] = useState(() => createSnapshotFollower({
     getCaptureStatus,
     getSteamStatus,
     refresh: (label) => refreshRef.current(label),
     onCaptureStatus: setCapStatus,
     onSteamStatus: setSteam,
-  });
-  const follower = followerRef.current;
+  }));
 
   useEffect(() => { void follower.init(); }, [follower]);
   // The packaged app opens before its launch-time data sync finishes: once it
@@ -253,7 +251,6 @@ export function App() {
       else if (r.status === "unavailable" || r.status === "error") setStatus(`Game data: ${r.message}`);
     });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { void getSteamStatus().then(setSteam); }, []);
   useEffect(() => { void getGameVersion().then(setGameVersion); }, []);
@@ -368,6 +365,7 @@ export function App() {
         onAfterWipe={() => void refreshInventory("Wiped captured data")}
         onSyncData={syncGameData}
         onStatus={setStatus}
+        status={status}
         debugStatLocks={debugStatLocks}
         onToggleDebugStatLocks={() => setDebugStatLocks((v) => !v)}
         debugSolver={debugSolver}
@@ -437,12 +435,12 @@ export function App() {
               />
             </ScreenErrorBoundary>
           )}
-          {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} /></ScreenErrorBoundary>}
+          {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} worklistClaims={solverWorklistClaims} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a
               solve can finish in the background. The `h-full` wrapper keeps the
               definite-height chain BuilderScreen's internal scroll relies on. */}
-          {builderMounted.current && (
+          {builderMounted && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
                 <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} onToggleExclude={toggleExclude} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={(entry) => setWorklist((prev) => [entry, ...prev])} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />

@@ -72,6 +72,16 @@ describe("diffBuildVsLoadout — one 'slot changed' rule for Equip, Worklist and
     expect(diffBuildVsLoadout(["w-new", "h-new"], "hero", byUid(after)).filter((d) => d.changed)).toHaveLength(0);
   });
 
+  it("live upg (results table, Worklist entry): one piece equipped since the solve → changed − 1", () => {
+    // Solve-time upg = 3; then the helmet alone is equipped and the inventory re-read.
+    const uids = ["w-new", "h-new", "a-new"];
+    const before = [piece("weapon", "w-new"), piece("helmet", "h-new", "other"), piece("armor", "a-new")];
+    const solveUpg = engineUpg(uids, "hero", byUid(before));
+    expect(solveUpg).toBe(3);
+    const after = [piece("weapon", "w-new"), piece("helmet", "h-new", "hero"), piece("armor", "a-new")];
+    expect(diffBuildVsLoadout(uids, "hero", byUid(after)).filter((d) => d.changed)).toHaveLength(solveUpg - 1);
+  });
+
   it("skips a uid missing from the inventory (saved build after the piece left)", () => {
     const w = piece("weapon", "w1", "hero");
     expect(diffBuildVsLoadout(["gone", "w1"], "hero", byUid([w])).map((d) => d.proposed.uid)).toEqual(["w1"]);

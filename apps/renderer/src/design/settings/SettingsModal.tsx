@@ -44,6 +44,9 @@ interface Props {
   onSyncData: () => Promise<DataSyncResult>;
   /** Report an action's outcome on the App's status bar (no blocking dialogs). */
   onStatus: (message: string) => void;
+  /** The status bar's current message — the bar sits under this modal's
+   *  backdrop, so the footer echoes it in place of the tab note. */
+  status: string;
   /** Current state of the developer-only stat-lock toggle (Builds tab). */
   debugStatLocks: boolean;
   /** Flip the stat-lock debug toggle on/off. */
@@ -81,7 +84,7 @@ const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> =
 ];
 
 export function SettingsModal({
-  open, onClose, onReady, onResetOnboarding, onAfterWipe, onSyncData, onStatus,
+  open, onClose, onReady, onResetOnboarding, onAfterWipe, onSyncData, onStatus, status,
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
   solver, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy,
 }: Props) {
@@ -194,7 +197,7 @@ export function SettingsModal({
 
             {/* CONTEXTUAL FOOTER */}
             <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-white/8 bg-zinc-950/80 px-4 py-2.5">
-              <span className="text-[11px] text-zinc-400">{FOOTER_NOTE[tab]}</span>
+              <span className="text-[11px] text-zinc-400">{status || FOOTER_NOTE[tab]}</span>
               <div className="flex items-center gap-2.5">
                 <button
                   onClick={onClose}

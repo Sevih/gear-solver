@@ -94,6 +94,19 @@ export function pruneHeroFilters(map: HeroFiltersMap, known: KnownRefs): HeroFil
 
 export type DataHashOutcome = "first" | "same" | "pruned" | "skipped";
 
+/** Screens that hold the filters in memory (the Builder stays mounted, hidden,
+ *  with its presets, per-hero map and live filters) and re-persist them on
+ *  their next edit or hero switch. They must reload after a prune, or that next
+ *  write puts the dead references back. */
+const pruneListeners = new Set<(known: KnownRefs) => void>();
+
+/** Run `listener` after each prune has written localStorage / sessionStorage.
+ *  Returns the unsubscribe function (a ready-made `useEffect` cleanup). */
+export function onDataPruned(listener: (known: KnownRefs) => void): () => void {
+  pruneListeners.add(listener);
+  return () => { pruneListeners.delete(listener); };
+}
+
 /**
  * Startup / post-sync hook: first sight of a hash stores it, the same hash does
  * nothing, a new hash prunes the stored presets and per-hero filters, then
@@ -110,8 +123,9 @@ export function reconcileDataHash(hash: string, game: GameData): DataHashOutcome
   }
   if (stored === hash) return "same";
   let outcome: DataHashOutcome = "first";
+  let known: KnownRefs | null = null;
   if (stored != null) {
-    const known = knownRefs(game);
+    known = knownRefs(game);
     if (known.sets.size === 0 || known.effects.size === 0) return "skipped";
     const presets = loadFilterPresets();
     const prunedPresets = prunePresets(presets, known);
@@ -126,5 +140,6 @@ export function reconcileDataHash(hash: string, game: GameData): DataHashOutcome
   } catch {
     // Quota / locked-down context — the next load compares again.
   }
+  if (known) for (const listener of pruneListeners) listener(known);
   return outcome;
 }

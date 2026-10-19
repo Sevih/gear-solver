@@ -11,9 +11,11 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  FINAL_STAT_KEYS, ROLL_NORMS, STAT_AXES, STAT_NORMS, STAT_TO_PRIORITY,
+  FINAL_STAT_KEYS, PCT_ROLL_KEYS, ROLL_NORMS, STAT_AXES, STAT_NORMS, STAT_TO_PRIORITY,
   LEGACY_STAT_KEY_RENAME, renameLegacyStatKeys,
 } from "../src/lib/statRegistry.js";
+import { magnitudeScoreOf } from "../src/lib/solver/engine.js";
+import type { GearPiece } from "@gear-solver/core";
 import type { FinalStats } from "../src/lib/composeBuild.js";
 import { STAT } from "../src/design/tokens.js";
 
@@ -92,5 +94,25 @@ describe("legacy-key migration", () => {
   it("handles nullish input", () => {
     expect(renameLegacyStatKeys(undefined)).toEqual({});
     expect(renameLegacyStatKeys(null)).toEqual({});
+  });
+});
+
+describe("PCT_ROLL_KEYS — % mains on a flat-only axis (pre-sort)", () => {
+  it("is exactly the registry's pct variants", () => {
+    const pct = STAT_AXES.flatMap((a) => a.variants.filter((v) => v.kind === "pct").map((v) => v.key));
+    expect([...PCT_ROLL_KEYS].sort()).toEqual([...pct].sort());
+  });
+
+  it("magnitudeScoreOf ignores Phantasm's −30 % SPD main (was −1.5 rolls)", () => {
+    const piece = {
+      uid: "ph", itemId: 0, slot: "weapon", setId: null, armorSetId: null,
+      rarity: "unique", star: 6, name: null, classLimit: null,
+      breakthrough: 0, reforgeCount: 0, enhanceLevel: 15, singularityLevel: 0,
+      ascended: false, locked: false, equippedBy: null, subs: [],
+      main: [{ stat: "spd", value: -30, percent: true, source: "uniquePassive" }],
+    } as unknown as GearPiece;
+    expect(magnitudeScoreOf(piece)).toBe(0);
+    // A flat SPD main still counts against its roll norm.
+    expect(magnitudeScoreOf({ ...piece, main: [{ stat: "spd", value: -30, percent: false }] } as GearPiece)).toBe(-1.5);
   });
 });

@@ -7,7 +7,9 @@
  * proposed piece is not currently equipped on the hero — physical `equippedBy`,
  * not Worklist reservations (a piece the Worklist reserved for this hero still
  * has to be put on). So `changed` count === `build.upg` for a build solved
- * against the same inventory.
+ * against the same inventory — but `build.upg` is frozen at solve time, so the
+ * results table's `upg` column and the Worklist entry's `upg` read this live
+ * diff instead (an Equip + re-import changes the loadout under the results).
  */
 import type { GearPiece, GearSlot } from "@gear-solver/core";
 

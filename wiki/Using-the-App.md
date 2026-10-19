@@ -52,8 +52,8 @@ way the game does (validated to match the in-game character sheet).
 
 - **Advice** — each card auto-flags notable things: missing gear, a lone set piece (no bonus),
   3/4 of a set (one piece away from the 4-pc — and when a free piece of that set for the missing
-  slot sits in your inventory, it says so), **wasted caps** (crit rate or penetration over
-  100%), **empty gem slots** on the Talisman / EE, **upgrade headroom** (pieces with unused
+  slot sits in your inventory, not reserved in the Worklist for another hero, it says so),
+  **wasted caps** (crit rate or penetration over 100%), **empty gem slots** on the Talisman / EE, **upgrade headroom** (pieces with unused
   reforges, 6★ pieces not yet ascended) and **poor-quality** pieces (the Inventory's quality
   tier).
 - **Inspect a piece** — hover an equipped piece to see the same full detail panel as the

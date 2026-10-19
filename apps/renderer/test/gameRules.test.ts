@@ -50,6 +50,7 @@ describe("rule readers on a contract that differs from DEFAULT_RULES", () => {
       rawPieces: [...base, tali],
       stats: null,
       inventoryPieces: [],
+      heroUid: "h",
       dmgStat: "atk",
     }, game);
     expect(out).toContainEqual({ tone: "tip", text: "Talisman: reach +7 to unlock 2 more gem slots" });

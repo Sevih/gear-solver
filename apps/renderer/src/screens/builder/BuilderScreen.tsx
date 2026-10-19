@@ -42,6 +42,7 @@ import {
   type FilterPreset, type FilterPresetsMap,
 } from "../../lib/storage/filterPresets.js";
 import { onBackupImported } from "../../lib/storage/transfer.js";
+import { onDataPruned, pruneFilters } from "../../lib/storage/dataHash.js";
 import { migrateReforge, REFORGE_MODES } from "./reforge.js";
 import type { SelectedComposition } from "./composition.js";
 import { displayNameOf } from "./heroName.js";
@@ -176,6 +177,16 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   useEffect(() => onBackupImported(() => {
     setSavedBuildsMap(loadSavedBuilds());
     setFilterPresetsMap(loadFilterPresets());
+  }), []);
+  // A data patch pruned the stored filters behind this mounted screen: reload
+  // the presets and the per-hero map (already pruned on disk), and prune the
+  // live filters too — a hero switch would otherwise write the dead refs back.
+  // Solve results are left as they are.
+  useEffect(() => onDataPruned((known) => {
+    setFilterPresetsMap(loadFilterPresets());
+    heroFiltersRef.current = loadHeroFilters();
+    const pruned = pruneFilters(filtersRef.current, known);
+    if (pruned !== filtersRef.current) dispatch({ type: "loadPreset", filters: pruned });
   }), []);
 
   // In-app name prompt (replaces window.prompt which blocked the renderer
@@ -547,7 +558,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       charId: effectiveCharacter(selected, game?.characters).charId,
       mode: lastSolveMode,
       cp: selectedBuild.cp ?? null,
-      upg: selectedBuild.upg,
+      upg: changes.length,
       changes,
       createdAt: Date.now(),
     });
@@ -650,6 +661,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               rows={resultRows}
               onRowsChange={setResultRows}
               pieceByUid={pieceByUid}
+              heroUid={selectedUid}
               armorSets={armorSetCatalog}
               game={game}
               heatmap={heatmap}

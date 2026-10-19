@@ -86,6 +86,7 @@ describe("2. CHC bounded to [0, 100] on the sheet, the raw sum kept apart", () =
       rawPieces: SLOTS.map((s) => ({ ...piece(s, []), reforgeCount: 9, ascended: true })),
       stats: fs,
       inventoryPieces: [],
+      heroUid: "h",
       dmgStat: "atk",
     }, null);
     expect(out).toContainEqual({ tone: "warn", text: "Crit rate 112.5% — 10.5% wasted over the 102% cap" });
