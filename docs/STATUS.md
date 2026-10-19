@@ -55,8 +55,9 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      (ou bouton dans le détail) → liste durable `gs.solver.excludedPieces`, sautée par tous les solves.
    - **Onglet Builds** : carte par héros avec stats composées (`composeBuild` mirror
      in-game CalcFinalStat), comparaison vs locks régression (`data/stat-locks.json`). **Advices**
-     auto par carte (`lib/buildAdvice.ts`, pur + testé) : missing/sets, caps gaspillés (crc/pen
-     >100), slots de gem vides (Talisman/EE), reforges non utilisés + 6★ non ascensionné. Filtres
+     auto par carte (`lib/buildAdvice.ts`, pur + testé) : missing/sets (3/4 : pièce libre du set
+     en inventaire signalée), caps gaspillés (crc/pen >100), slots de gem vides (Talisman/EE),
+     reforges non utilisés + 6★ non ascensionné, pièces de qualité `poor`. Filtres
      roster session-scoped.
    - **Onglet Builder** : optimiseur de gear Fribbels-style. Voir [docs/solver.md](solver.md)
      pour le détail. Worker pool en renderer, partition embarrassingly parallel, gem

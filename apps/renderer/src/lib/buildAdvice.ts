@@ -11,6 +11,7 @@
 import type { GameData, GearPiece } from "@gear-solver/core";
 import { round1, type FinalStats } from "./composeBuild.js";
 import { maxReforgesOf } from "./solver/engine.js";
+import { gearPieceQualityTier } from "./quality.js";
 import { toDesignSlot, type SlotId } from "../design/tokens.js";
 
 /** One suggestion / observation about a build. `tone` drives the badge color
@@ -28,7 +29,18 @@ export interface AdviceInput {
   equipped: ReadonlyMap<SlotId, unknown>;
   rawPieces: GearPiece[];
   stats: FinalStats | null;
+  /** The WHOLE inventory (every hero's pieces plus the unequipped ones) — the
+   *  3/4 rule looks for a free piece completing the 4pc. */
+  inventoryPieces: readonly GearPiece[];
+  /** The hero's damage-scaling stat (`meta.dmgStat`, "atk" when absent). Not
+   *  read by any rule yet: carried so an off-scaling rule needs no new
+   *  plumbing. */
+  dmgStat: "atk" | "def" | "hp";
 }
+
+/** The four slots that carry an `armorSetId` — a 3/4 set's missing piece goes
+ *  in the one of these its three pieces don't fill. */
+const ARMOR_SET_SLOTS: ReadonlyArray<GearPiece["slot"]> = ["helmet", "armor", "gloves", "boots"];
 
 /** Slots whose presence is required before any advice is meaningful. EE and
  *  Talisman are intentionally excluded from THIS list — they're optional
@@ -68,7 +80,9 @@ const ADVICE_SLOT_LABEL: Record<string, string> = {
  *      advice would be noise.
  *   2. Lone set piece — a single piece of an armor set grants no bonus (no
  *      1pc tier exists in-game), so it's a wasted slot.
- *   3. 3/4 of a 4pc-capable set — the 4th piece completes the 4pc bonus.
+ *   3. 3/4 of a 4pc-capable set — the 4th piece completes the 4pc bonus; when
+ *      the inventory holds a free (unequipped) piece of that set in the armor
+ *      slot the three don't fill, the advice says so.
  *   4. Wasted stat caps — CRC / PEN overflow is dead weight (both hard-cap at
  *      100% in the damage model; the overflow could be reallocated). CRC keeps
  *      a +2% tolerance (warn past 102%) as an anti-crit-resist buffer; PEN
@@ -78,8 +92,10 @@ const ADVICE_SLOT_LABEL: Record<string, string> = {
  *   6. Upgrade headroom — main-gear pieces with unused reforges, 6★ pieces not
  *      yet ascended, and pieces below their enhance cap (+10, or +15 once
  *      ascended), each aggregated into one line to avoid card spam.
+ *   7. Low quality — equipped pieces whose quality tier (`lib/quality.ts`, the
+ *      Inventory tab's rule) is `poor`, listed in one line.
  *
- *  Rules 4-6 only run on a fully-main-equipped hero (rule 1 returns early
+ *  Rules 4-7 only run on a fully-main-equipped hero (rule 1 returns early
  *  otherwise) so they never fire on a half-built roster. Set tiers are read
  *  from `game.sets` (the T4 `level === 2` row, same derivation as the
  *  Builder's set catalog) — no assumed set sizes. */
@@ -123,7 +139,15 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
       if (n === 1) {
         out.push({ tone: "warn", text: `${name}: 1 piece — no set bonus active` });
       } else if (n === 3 && has4pc) {
-        out.push({ tone: "tip", text: `${name}: 3/4 — one more piece completes 4pc` });
+        // The slot the three set pieces leave to another piece, and a free
+        // (worn by nobody) piece of this set for it.
+        const missingSlot = ARMOR_SET_SLOTS.find((s) =>
+          !rawPieces.some((p) => p.slot === s && p.armorSetId === setId));
+        const free = missingSlot != null && entry.inventoryPieces.some((p) =>
+          p.slot === missingSlot && p.armorSetId === setId && p.equippedBy == null);
+        out.push(free
+          ? { tone: "tip", text: `${name}: 3/4 — a free ${ADVICE_SLOT_LABEL[missingSlot] ?? missingSlot} of this set is in your inventory` }
+          : { tone: "tip", text: `${name}: 3/4 — one more piece completes 4pc` });
       }
     }
   }
@@ -180,6 +204,13 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
   if (unascended6 > 0) out.push({ tone: "info", text: `${unascended6} 6★ piece${unascended6 > 1 ? "s" : ""} not yet ascended` });
   if (underEnhanced > 0) out.push({ tone: "info", text: `${underEnhanced} piece${underEnhanced > 1 ? "s" : ""} below max enhance` });
   if (unusedReforges > 0) out.push({ tone: "info", text: `${unusedReforges} piece${unusedReforges > 1 ? "s" : ""} with unused reforges` });
+
+  // Rule 7 — low-quality pieces, by the shared quality rule (Talisman / EE and
+  // un-rolled pieces have no tier and are skipped by it), in slot order.
+  const poor = ADVICE_REQUIRED_SLOTS
+    .filter((s) => rawPieces.some((p) => toDesignSlot(p.slot) === s && gearPieceQualityTier(p) === "poor"))
+    .map((s) => ADVICE_SLOT_LABEL[s] ?? s);
+  if (poor.length > 0) out.push({ tone: "info", text: `Poor quality: ${poor.join(", ")}` });
 
   return out;
 }

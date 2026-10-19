@@ -8,6 +8,37 @@
 
 ## Items de backlog clôturés (index)
 
+### 💡 Advices (Builds) — pièce libre pour le 4P, pièces de basse qualité (2026-10-19)
+- ✅ **Pourquoi.** Item « `Advices` (tab Builds) » de `docs/todo.md`, lot secondaire : `computeAdvice`
+  (`apps/renderer/src/lib/buildAdvice.ts`) ne voyait que les pièces portées, si bien que la règle 3/4 disait
+  « one more piece completes 4pc » sans savoir si une telle pièce existait, et aucune règle ne regardait la qualité.
+- ✅ **Entrée.** `AdviceInput` gagne `inventoryPieces` (toute la liste `inventory.gear`) et `dmgStat`
+  (`meta.dmgStat`, `"atk"` par défaut). `ComposedEntry` de `screens/BuildsScreen.tsx` porte les deux champs, posés
+  dans `composedRoster` (le même tableau `inventory.gear` pour toutes les entrées) : l'entrée reste passée telle
+  quelle, le `useMemo` de la carte garde `[entry, game]` comme dépendances et aucune prop de `BuildCard` ne
+  change, donc les cartes mémoïsées ne se re-rendent pas plus qu'avant (l'entrée ne change qu'avec l'inventaire).
+- ✅ **4P disponible (règle 3).** Pour un set à 3/4 avec 4P, l'emplacement d'armure manquant est celui des quatre
+  (`helmet`, `armor`, `gloves`, `boots`) que les trois pièces ne remplissent pas ; si l'inventaire a une pièce de
+  ce set dans cet emplacement avec `equippedBy == null`, le conseil devient « Sharp: 3/4 — a free Boots of this set
+  is in your inventory » ; une pièce portée par un autre héros ne compte pas, et sans pièce le texte actuel reste.
+- ✅ **Basse qualité (règle 7).** Les pièces portées dont `gearPieceQualityTier` (`lib/quality.ts`, la règle de
+  l'onglet Inventory) vaut `poor` sont listées dans une seule ligne `info` (« Poor quality: Weapon, Boots »), dans
+  l'ordre des emplacements ; Talisman, EE et pièces sans sous-stats n'ont pas de palier et sont ignorés.
+- ✅ **Docs.** `wiki/Using-the-App.md` (liste des conseils), `docs/STATUS.md`, et la ligne de
+  `buildAdvice.test.ts` dans `docs/reference.md` / `wiki/Engine-Reference.md` (22 tests). Les totaux de tests de
+  ces deux pages (« 300 tests ») étaient déjà faux avant ce lot ; je ne les ai pas touchés.
+- ✅ **Tests.** `apps/renderer/test/buildAdvice.test.ts` (17 → 22) : 3/4 avec pièce libre (et sans l'ancien
+  texte), 3/4 dont la seule pièce assortie est portée par un autre héros (texte actuel), 3/4 sans pièce du set pour
+  l'emplacement (pièce du set ailleurs, Boots d'un autre set : texte actuel), pièces `poor` listées en une ligne
+  dans l'ordre des emplacements, rien quand aucune pièce n'est `poor` ni pour un talisman. Les fixtures ont reçu
+  les deux nouveaux champs, et l'appel de `sheetMinors.test.ts` aussi (sinon le typecheck échoue). `npm run
+  typecheck` : `> tsc --noEmit` sans erreur ; `npm test` : `Tests  562 passed (562)` ; `npm run lint` :
+  `✖ 28 problems (0 errors, 28 warnings)`, autant qu'avant (aucun ne vient des fichiers du lot).
+- ⏳ **Règle main off-scaling vs `meta.dmgStat`** non faite : le principe du module l'exclut (pas de règle qui
+  demande de deviner l'intention, « off-stat main » cité en exemple). Décision à prendre ; `dmgStat` est déjà
+  passé, il ne restera que la règle à écrire.
+- ⏳ Contrôler les cartes Builds sur un vrai compte (nouvelles lignes « a free … » et « Poor quality »).
+
 ### 🧪 Tests — crit-cap de bout en bout dans `solveChunk`, flux de l'orchestrateur (2026-10-19)
 - ✅ **Pourquoi.** Items « Crit-cap slow path de bout en bout » et « Flux orchestrateur » de `docs/todo.md` (audit
   Builder du 03/07, revérifiés le 18/10) : aucun test ne passait par `wantCritCap` dans `solveChunk`, et

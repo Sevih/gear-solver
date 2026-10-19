@@ -65,9 +65,9 @@
       (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
 ### 🟡/⚪ UX-cohérence & nits
-- [~] 🟡 **`Advices` (tab Builds)** — **reste le lot secondaire** (main off-scaling vs `meta.dmgStat`, basse qualité,
-      « 4pc dispo en inventaire ») : il faut passer l'inventaire complet à `computeAdvice` (`inventory.gear` +
-      `meta.dmgStat` dans `AdviceInput`).
+- [~] 🟡 **`Advices` (tab Builds)** — 4pc dispo en inventaire et basse qualité livrés, `inventoryPieces` + `dmgStat`
+      passés dans `AdviceInput`. **Reste** : la règle main off-scaling vs `meta.dmgStat` — décision de Sevih (le
+      principe du module exclut ce qui demande de deviner l'intention).
 
 ### Persistence
 - [~] **Snapshot `data/` versioning** — stamp `version.json` livré. **Reste** : comparer le `hash` au démarrage à un

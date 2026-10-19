@@ -506,11 +506,16 @@ interface ComposedEntry {
    *  EE is excluded because the in-game preset editor lets you swap EE
    *  independently — same preset, different EE is still the same preset. */
   presetName: string | null;
+  /** `inventory.gear` (one shared array) — the advice's free-4pc lookup. */
+  inventoryPieces: GearPiece[];
+  /** `meta.dmgStat`, "atk" when absent — carried for the advice. */
+  dmgStat: "atk" | "def" | "hp";
 }
 
 // Per-card build advice (`computeAdvice` + `AdviceItem`) lives in
 // `lib/buildAdvice.ts` — pure + tested standalone. `ComposedEntry` structurally
-// satisfies its `AdviceInput` (equipped / rawPieces / stats), so the call site
+// satisfies its `AdviceInput` (equipped / rawPieces / stats / inventoryPieces /
+// dmgStat), so the call site
 // below passes the entry straight through.
 
 /** Build a sorted, comma-joined UID key for a set of gear pieces, EE pieces
@@ -1036,6 +1041,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
         scaling: composed?.scaling ?? null,
         rawPieces: raws, level, bp,
         meta, displayCharId, displayName, presetName,
+        inventoryPieces: inventory.gear, dmgStat: meta?.dmgStat ?? "atk",
       };
     });
   }, [inventory, game, userGeasLevels, userCodexLevel]);
