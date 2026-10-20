@@ -23,9 +23,9 @@
   },
   "_docClient": "Le client Steam que le wiki a lu : version applicative (`bundleVersion`), build Steam (`appmanifest`) et date du dump. Réécrit par `datagen/extract/dump-steam.ts` à chaque dump dont la version ou le build diffèrent (le bloc seul, à committer avec le patch) ; jamais quand la version est « inconnue » (UnityPy absent). Ne pas l'éditer à la main.",
   "client": {
-    "version": "1.4.18",
-    "buildId": "25744766",
-    "dumpedAt": "2026-10-06"
+    "version": "1.4.19",
+    "buildId": "26049499",
+    "dumpedAt": "2026-10-20"
   },
   "_docBepinex": "La version de BepInEx 5 (Mono, win_x64 même sous Proton) que outerplane-tweaks empaquette et que gear-solver installe. En changer est une DÉCISION, avec le sha256 relevé sur la release officielle (`asset` de https://github.com/BepInEx/BepInEx/releases) : les deux lecteurs refusent un zip dont l'empreinte diffère.",
   "bepinex": {
