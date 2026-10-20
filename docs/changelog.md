@@ -8,6 +8,68 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔄 CI — `data-sync.yml` : synchro quotidienne des tables depuis outerpedia en PR, typecheck et tests avant ouverture (2026-10-20)
+- ✅ **Pourquoi.** `npm run data:sync` était un geste manuel après chaque patch : tant qu'il n'était pas joué,
+  `data/derived/` et `apps/desktop/src/game-client.json` (ce qui part dans l'installeur) restaient en retard sur
+  outerpedia (le 20/10, un `chore(data)` à la main avant la release 1.11.1). L'app en mode REPO suivait déjà
+  seule (`data-sync.ts`) : rien n'y change, ni dans `data/sync.mjs` ni dans `scripts/release.mjs` (qui garde sa
+  propre synchro à l'étape 3).
+- ✅ **Quoi.** `.github/workflows/data-sync.yml` (nouveau) : `schedule` `cron: '0 9 * * *'` (09:00 UTC, les patchs
+  tombent le mardi matin UTC) + `workflow_dispatch` ; `permissions: contents: write, pull-requests: write` ;
+  `concurrency: data-sync` sans annulation (un run manuel attend le quotidien). Un job `ubuntu-latest`,
+  `ELECTRON_SKIP_BINARY_DOWNLOAD: "1"`, `shell: bash` explicite (donc `-eo pipefail` : un `sync.mjs` en échec fait
+  échouer son `| tee`). Étapes : checkout de gear-solver et checkout de `Sevih/outerpedia` (public, aucun secret,
+  `persist-credentials: false`) dans `path: outerpedia`, `fetch-depth: 1`, `sparse-checkout` limité à
+  `/data/generated/solver/` et `/data/curated/game-client.json` avec `sparse-checkout-cone-mode: false` (le mode
+  cône ne prend que des dossiers, vérifié dans l'`action.yml` de `actions/checkout` v4.4.0) ; setup-node 22 ;
+  `npm ci` ; `OUTERPEDIA_PATH="$GITHUB_WORKSPACE/outerpedia" node data/sync.mjs | tee` ; si
+  `git diff --quiet -- data/derived apps/desktop/src/game-client.json` → « up to date » au résumé, succès ; sinon
+  branche `data-sync/<resVersion>-<7 premiers caractères du hash>` lue dans `data/derived/version.json` ;
+  `npm run typecheck` puis `npm test` (ce dernier avec `OUTERPEDIA_PATH`, si bien que `game-client.test.ts` et
+  `contractShape.test.ts`, sautés par `ci.yml` faute de checkout, tournent aussi) — un échec laisse le run rouge et
+  n'ouvre rien ; enfin commit `chore(data): tables <resVersion> (<hash>) from outerpedia <sha court>` par
+  `github-actions[bot]`, `git add data/derived apps/desktop/src/game-client.json` seuls, push de la branche,
+  `gh pr create` (`GH_TOKEN: ${{ github.token }}`) titré `chore(data): tables <resVersion> from outerpedia`, corps =
+  sortie de `sync.mjs` + `git diff --stat` + la ligne `client` avant/après de `game-client.json` quand elle
+  change. Les `${{ … }}` passent par des `env:`, jamais dans le texte des scripts. Mêmes SHA que `ci.yml`
+  (`grep -n "uses:" .github/workflows/*.yml` : checkout `11d5960a…` partout, setup-node `49933ea5…`), forme
+  `@<sha> # v4.4.0` que suit `dependabot.yml`.
+- ✅ **PR déjà ouverte : le choix le plus simple à lire.** (1) Mêmes tables qu'une branche `data-sync/…` déjà
+  poussée (`git ls-remote --exit-code --heads origin <branche>`, PR encore ouverte ou fermée à la main) : résumé
+  « already proposed », succès, ni typecheck ni PR — pas de nouvelle PR identique chaque matin. (2) Tables
+  nouvelles : la nouvelle PR s'ouvre, PUIS chaque autre PR ouverte dont la tête commence par `data-sync/` est
+  fermée par `gh pr close --delete-branch` avec un commentaire « Superseded by … » : seule la plus récente reste
+  proposée, et rien n'est fermé si l'ouverture a échoué.
+- ✅ **Docs.** `data/README.md` (schéma et puce `sync.mjs`), `docs/architecture.md` (phrase `game-client.json` et
+  paragraphe Packaging) + `wiki/Architecture.md` (même paragraphe), `docs/STATUS.md` (puce `data/derived/`, aucune
+  phrase CI n'y figurait) disent que la synchro tourne aussi chaque jour par `data-sync.yml` en PR. Rien dans
+  `docs/release-notes.md` (rien pour le joueur). `docs/todo.md` non touché : aucun item n'y parle de la synchro
+  manuelle après un patch (grep `data:sync`, `sync`, `patch` : seul « Vérif sync repo en prod packagé », qui vise
+  la synchro de l'app).
+- ✅ **Vérifié.** `actionlint` absent : parse par `js-yaml` (dans `node_modules`) — clés `name, on, permissions,
+  concurrency, jobs`, `on` = `{"schedule":[{"cron":"0 9 * * *"}],"workflow_dispatch":null}`, 8 étapes. **Rejeu
+  local** dans une copie `cp -a` du dépôt (scratchpad sous `/tmp`, jamais ce checkout), `origin` repointé sur un
+  clone nu local, `outerpedia` = lien vers le vrai checkout, `gh` remplacé par un `echo` sur le `PATH` ; chaque bloc
+  `run:` extrait du YAML et joué par `bash --noprofile --norc -eo pipefail` avec `GITHUB_WORKSPACE`,
+  `GITHUB_OUTPUT`, `GITHUB_STEP_SUMMARY`, `RUNNER_TEMP`. (a) À jour (tables du 20/10) : `changed=false`, résumé
+  « Tables up to date with outerpedia `16369827`: nothing to propose. », sortie 0, aucun commit. (b) Diff : un
+  octet de `data/derived/sets.json` et `"version": "1.4.18"` dans `game-client.json` COMMITÉS dans la copie (un
+  octet non commité serait simplement réécrit par `sync.mjs`) → `changed=true`, `branch=data-sync/1.11.500-36a57d7`,
+  typecheck vert, `Tests  579 passed (579)` (aucun sauté avec `OUTERPEDIA_PATH`, contre `578 passed | 1 skipped`
+  sans), commit `de407cf github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+  chore(data): tables 1.11.500 (36a57d7fdbc9) from outerpedia 16369827` (2 fichiers), branche poussée sur le clone
+  nu, `[gh stub] gh pr create --base main --head data-sync/1.11.500-36a57d7 --title chore(data): tables 1.11.500
+  from outerpedia --body-file …`, corps avec la ligne `client` `{"version":"1.4.18",…}` → `{"version":"1.4.19",…}`.
+  (c) Même état rejoué : « Tables 1.11.500 (36a57d7fdbc9) already proposed on `data-sync/1.11.500-36a57d7`. »,
+  sortie 0. (d) Checkout vide : « no outerpedia checkout with data/generated/solver found … », étape en échec.
+  Dans ce dépôt : `npm run typecheck` → `> tsc --noEmit` (sortie 0) ; `npm test` → `Tests  162 passed (162)`,
+  `Tests  159 passed (159)`, `Tests  579 passed (579)`.
+- ⏳ Sevih : activer « Allow GitHub Actions to create and approve pull requests » (Settings › Actions › General ;
+  `can_approve_pull_request_reviews: false` aujourd'hui), sans quoi `gh pr create` échoue. Après le push, lancer une
+  fois `gh workflow run data-sync.yml` pour voir le cas « up to date ». La première vraie PR arrivera au prochain
+  patch ; comme elle vient de `GITHUB_TOKEN`, `ci.yml` ne s'y lance pas (le run a déjà joué typecheck et tests sur
+  Linux, pas sur Windows ni le lint).
+
 ### 🧹 Renderer — restes de G15 à G29 et F28 : lint 28 → 15, Builder réveillé par l'élagage, statut dans Settings, pièce réservée non « libre », `upg` vivant, pré-tri Score, pastille combat, test img-cache stabilisé (2026-10-19)
 - ✅ **Pourquoi.** Lot de clôture du renderer (G32), après G31 et G33 : sept restes notés par G15 à G29 et F28 dans
   leurs entrées, rien de nouveau. Chaque point est un changement minimal ; un seul changement visuel (le pied de

@@ -1,0 +1,138 @@
+name: Data sync
+
+# Daily mirror of outerpedia's solver tables into data/derived (plus the Steam
+# client reference apps/desktop/src/game-client.json), proposed as a PR: the
+# same `data/sync.mjs` as `npm run data:sync`, against a fresh checkout of the
+# public Sevih/outerpedia repo. OUTERPLANE patches land on Tuesday morning UTC
+# and outerpedia is pushed within the hour: 09:00 UTC picks them up the same day.
+# A PR opened with GITHUB_TOKEN does not trigger ci.yml, so this job runs
+# typecheck + tests itself before opening it: a failure leaves the run red and
+# opens nothing. Nothing is merged nor released from here.
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Never two runs at once (a manual run queues behind the daily one).
+concurrency:
+  group: data-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: sync tables from outerpedia
+    runs-on: ubuntu-latest
+    env:
+      # Neither the sync, typecheck nor the tests launch Electron: skip its ~100 MB download.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    defaults:
+      run:
+        # Explicit bash = `-eo pipefail`: a failing sync.mjs fails its `| tee`.
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Public repo, no secret. Only what data/sync.mjs reads; non-cone patterns
+      # because cone mode only takes directories and game-client.json is a file.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: Sevih/outerpedia
+          path: outerpedia
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: |
+            /data/generated/solver/
+            /data/curated/game-client.json
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: sync from outerpedia
+        id: sync
+        run: |
+          OUTERPEDIA_PATH="$GITHUB_WORKSPACE/outerpedia" node data/sync.mjs | tee "$RUNNER_TEMP/sync.log"
+          outerpedia_sha=$(git -C outerpedia rev-parse --short HEAD)
+          if git diff --quiet -- data/derived apps/desktop/src/game-client.json; then
+            echo "Tables up to date with outerpedia \`$outerpedia_sha\`: nothing to propose." >> "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          res=$(jq -r .resVersion data/derived/version.json)
+          hash=$(jq -r .hash data/derived/version.json)
+          branch="data-sync/$res-${hash:0:7}"
+          # Same tables as a branch already pushed (PR still open, or closed by hand):
+          # don't re-propose them every day.
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "Tables $res ($hash) already proposed on \`$branch\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "changed=true"
+            echo "res=$res"
+            echo "hash=$hash"
+            echo "branch=$branch"
+            echo "outerpedia_sha=$outerpedia_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      # The contract tests and the oracles run against the new tables.
+      - if: steps.sync.outputs.changed == 'true'
+        run: npm run typecheck
+
+      # With OUTERPEDIA_PATH set, the two tests that ci.yml skips for lack of a
+      # checkout (game-client.test.ts, contractShape.test.ts) run too.
+      - if: steps.sync.outputs.changed == 'true'
+        env:
+          OUTERPEDIA_PATH: ${{ github.workspace }}/outerpedia
+        run: npm test
+
+      - name: open the PR
+        if: steps.sync.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RES: ${{ steps.sync.outputs.res }}
+          HASH: ${{ steps.sync.outputs.hash }}
+          BRANCH: ${{ steps.sync.outputs.branch }}
+          OUTERPEDIA_SHA: ${{ steps.sync.outputs.outerpedia_sha }}
+        run: |
+          body="$RUNNER_TEMP/pr-body.md"
+          {
+            echo "Tables synced by \`data-sync.yml\` from Sevih/outerpedia@$OUTERPEDIA_SHA; typecheck and tests passed in the run."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/sync.log"
+            echo '```'
+            echo
+            echo '```'
+            git diff --stat -- data/derived apps/desktop/src/game-client.json
+            echo '```'
+            client_before=$(git show HEAD:apps/desktop/src/game-client.json | jq -c .client)
+            client_after=$(jq -c .client apps/desktop/src/game-client.json)
+            if [ "$client_before" != "$client_after" ]; then
+              echo
+              echo "\`game-client.json\` client: \`$client_before\` → \`$client_after\`"
+            fi
+          } > "$body"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add data/derived apps/desktop/src/game-client.json
+          git commit -m "chore(data): tables $RES ($HASH) from outerpedia $OUTERPEDIA_SHA"
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" --title "chore(data): tables $RES from outerpedia" --body-file "$body"
+          # Only the newest tables stay proposed: older data-sync PRs are closed, their branch deleted.
+          gh pr list --state open --json number,headRefName \
+            --jq ".[] | select(.headRefName | startswith(\"data-sync/\")) | select(.headRefName != \"$BRANCH\") | .number" |
+            while read -r pr; do
+              gh pr close "$pr" --delete-branch --comment "Superseded by tables $RES ($HASH), branch \`$BRANCH\`."
+            done
+          echo "Tables $RES ($HASH) proposed on \`$BRANCH\`." >> "$GITHUB_STEP_SUMMARY"

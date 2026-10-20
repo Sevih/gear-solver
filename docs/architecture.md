@@ -18,7 +18,8 @@ by hand (manual import).
   play — no root, no proxy, no certificate. See [tools/capture-steam/README.md](../tools/capture-steam/README.md).
   What the app knows of the Steam client (appid, exe, Steam roots, the pinned BepInEx release and its
   SHA-256) comes from outerpedia's `data/curated/game-client.json`, copied as
-  `apps/desktop/src/game-client.json`, bundled into each build and refreshed by `npm run data:sync`.
+  `apps/desktop/src/game-client.json`, bundled into each build and refreshed by `npm run data:sync`
+  (also run daily by `.github/workflows/data-sync.yml`, see below).
 - **packages/core** — pure TypeScript, no DOM, no Node APIs. The brain: wire types,
   parser (wire → domain model), stat resolution, character stat composition. Reusable
   from a Web Worker, a CLI, or the desktop shell. (The combination solver itself lives
@@ -49,6 +50,10 @@ by hand (manual import).
   cascading bundled sprites→checkout→disk cache→R2 bucket `img.outerpedia.com`, a cache entry
   older than 7 days served then revalidated in the background) so the
   app follows game patches **without a new build**.
+  Between releases, `.github/workflows/data-sync.yml` runs the same `data/sync.mjs` every day
+  against a fresh checkout of the public `Sevih/outerpedia` and, when `data/derived` or
+  `game-client.json` changed, runs typecheck and tests, then opens a PR (never merged
+  automatically) so the committed mirror doesn't lag behind a game patch.
   Packaging is live: `scripts/release.mjs` refreshes `data/derived`, runs typecheck, tests and
   lint against it (a failure stops before anything is published and reverts the version bump and
   the stamped journals), then builds and publishes the installer via

@@ -12,13 +12,18 @@ game tables and emits the 21 compact solver artifacts at `data/generated/solver/
 ```
 outerpedia datagen (solver generator)
   └─ <outerpedia>/data/generated/solver/*.json     20 ready-to-consume tables
-      ├─ data/sync.mjs   →  data/derived/*.json    committed mirror (this repo)
+      ├─ data/sync.mjs   →  data/derived/*.json    committed mirror (this repo),
+      │                                            also run daily by data-sync.yml (PR)
       └─ data-sync.ts    →  app runtime cache      packaged app, via GitHub CDN
 ```
 
 - **`sync.mjs`** — copies the artifacts from the local outerpedia checkout into
   `data/derived/` (`npm run data:sync`), re-serialized compact. Run after a game patch
-  (once outerpedia's `datagen:build` + `promote` ran).
+  (once outerpedia's `datagen:build` + `promote` ran). The `data-sync.yml` workflow also
+  runs it every day at 09:00 UTC against a fresh checkout of the public `Sevih/outerpedia`:
+  when `data/derived/` or `apps/desktop/src/game-client.json` changed, it runs typecheck and
+  tests, then opens a `data-sync/<resVersion>-<hash>` PR (never merged automatically).
+  The release (`scripts/release.mjs`) still runs its own sync.
 - **`data/derived/*.json`** — versioned and committed; consumed by `packages/core`
   via the `GameData` interface (`packages/core/src/gamedata.ts`). Ships in the
   installer as the first-launch seed; the packaged app then re-downloads the same
