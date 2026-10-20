@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.11.1] — 2026-10-20
+
 - **Game data 1.11.500 (patch of 2026-10-20, client 1.4.19).** Tamamo-no-Mae's rework is in:
   her 8th skill at level 2 now adds +100 % Effectiveness rate to the sheet, her best-skill
   damage (S3) goes up, and her Exclusive Equipment's tier-2 passive is the new one (Unbuffable
