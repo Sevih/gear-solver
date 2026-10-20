@@ -44,6 +44,14 @@
       (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
 ### 🟡/⚪ UX-cohérence & nits
+- [ ] 🟢 **Potentiel de reroll (Transistone) — patch du 2026-10-20.** Le jeu permet désormais de monter UNE
+      ligne de sous-stat jusqu'au niveau 4 par Transistone, si et seulement si la pièce n'a pas déjà de ligne 4
+      (les drops vont de 1/1/1/1 à 4/3/3/3, exceptions natives 4/4/3/3 inchangées). Rien n'est modélisé : la
+      projection du Builder (`projectPieceForReforge`) ne couvre que le main et les reforges, la qualité
+      (`lib/quality.ts`, plafond 14 = 4+4+3+3) ne compte que les ticks présents. À faire : un « potentiel »
+      de +1 à +3 ticks sur la ligne la plus utile d'une pièce sans ligne 4, dans la projection et dans la
+      qualité « atteignable ». **Décision** avant de coder : une seule ligne rerollable par pièce et une seule
+      fois ? règle pour toutes les étoiles ou seulement 6★ légendaires ?
 - [~] 🟡 **`Advices` (tab Builds)** — 4pc dispo en inventaire et basse qualité livrés, `inventoryPieces` + `dmgStat`
       passés dans `AdviceInput`. **Reste** : la règle main off-scaling vs `meta.dmgStat` — décision de Sevih (le
       principe du module exclut ce qui demande de deviner l'intention).
