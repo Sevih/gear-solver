@@ -8,6 +8,37 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧪 Contrat solver, M3 — le passif d'EE de Fatal (`ee-passives["2000078"]`) lu par un test, garde-fou de contrat (2026-10-21)
+- ✅ **Pourquoi.** `packages/core/src/parse.ts` (l.282-300) lit `game.eePassives?.[String(item.ItemID)]` pour un item
+  `exclusive`, saute une entrée tant que `enhanceLevel < levelThreshold` (`levelThreshold <= 1` = toujours active) et
+  pousse un main `fromBuff: true`, `source: "eePassive"` par `resolveOption(ep, 1)`. Cette lecture n'est juste que si
+  la clé du contrat est bien l'id d'item de l'EE : c'est le cas, les EE portent l'id de leur perso (`2000078` est à la
+  fois Fatal dans `characters.json` et son EE « Eclipse » dans `equipment.json`, `2000072` Edelweiss, `2000008` Rhona).
+  Rien ne gardait le contrat lui-même : un id de perso divergent de l'id d'EE côté outerpedia aurait éteint le passif
+  sans bruit.
+- ✅ **Quoi.** `packages/core/test/ee-passive.test.ts` (nouveau, 4 tests), sur le modèle de `unique-passive.test.ts`
+  (`readFileSync` de `data/derived/`, `options`, `equipment`, `enhance` et `eePassives` réels, helper `item(ItemID,
+  level)` qui fixe `Exp` au bas du niveau voulu sur la courbe de l'item, `enhance.expCurves["slot|grade|star"]`, et
+  vérifie que `parseGearPiece` relit bien ce niveau) : (1) Eclipse de Fatal à +0 → aucun main `eePassive` ;
+  (2) à +10 → `{ stat: "critDmg", value: 30, percent: true, fromBuff: true, source: "eePassive" }` (contrat
+  `[{ levelThreshold: 10, st: "ST_CRITICAL_DMG_RATE", ap: "OAT_ADD", v: 300 }]`, `ST_CRITICAL_DMG_RATE` en `OAT_ADD`
+  est un % : 300 ÷ 10 = 30) ; (3) entrée toujours active : l'EE d'Edelweiss `2000072`,
+  `[{ levelThreshold: 1, st: "ST_HP", ap: "OAT_RATE", v: 350 }]` → `hpPct` 35 % `fromBuff` à +0 comme à +10 ;
+  (4) garde-fou : chacune des 35 clés de `ee-passives.json` est un item `slot: "exclusive"` d'`equipment.json`, et
+  chaque entrée porte `st`/`ap` en chaînes, `v`/`levelThreshold` numériques — passe sur la donnée du jour (seuils
+  présents : 1 et 10), aucune clé à remonter à outerpedia. Aucun code de l'app touché.
+- ✅ **Recouvrement.** `parse.test.ts` avait déjà un bloc « EE level-gated passive — Fatal's Eclipse » sur la vraie
+  donnée (contrat égal, +9 sans main, +10 CHD 30 % par `parseInventory`) : laissé tel quel, hors périmètre ; le nouveau
+  fichier ajoute le +0, l'entrée `levelThreshold: 1` et le garde-fou de contrat. `docs/reference.md` : une ligne
+  `ee-passive.test.ts` au tableau des tests (§ 3.3) ; le total du paragraphe « Run » y était déjà en retard, non
+  repris. `docs/todo.md` non touché : `M3` n'y figure que dans la note « Dernier passage » (déjà sorti le 19/10),
+  aucun item `ee-passives`.
+- ✅ **Vérifié.** `npm run typecheck` : `tsc --noEmit` sans erreur sur les trois workspaces (renderer en dernier).
+  `npm test` : core `Tests  166 passed (166)` (11 fichiers), desktop `Tests  159 passed (159)`, renderer
+  `Tests  579 passed (579)` (dernière ligne).
+- ⏳ Rien pour Sevih côté app (pas de note de release, rien pour le joueur). Le point (a) de « Contrat solver — ce qui
+  reste » est retiré du `docs/TODO.md` d'outerpedia.
+
 ### 🔄 CI — `data-sync.yml` : synchro quotidienne des tables depuis outerpedia en PR, typecheck et tests avant ouverture (2026-10-20)
 - ✅ **Pourquoi.** `npm run data:sync` était un geste manuel après chaque patch : tant qu'il n'était pas joué,
   `data/derived/` et `apps/desktop/src/game-client.json` (ce qui part dans l'installeur) restaient en retard sur
