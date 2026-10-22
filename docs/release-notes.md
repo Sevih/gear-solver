@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.14.0] — 2026-10-22
+
 - **Gems you socket or remove in-game, and substat changes, now reach the app live too** — the
   Worklist's gem lines tick themselves whichever socket the game used, and a reforged piece shows
   its new substats without going back to the lobby. Update the capture plugin (0.3.0):
