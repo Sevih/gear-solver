@@ -75,7 +75,7 @@ export function BuilderToolbar({
   const statCount = Object.keys(filters.statFilters).length;
   const ratingCount = Object.keys(filters.ratingFilters).length;
   const priorityCount = Object.keys(filters.priority).length;
-  const mainCount = Object.values(filters.mainPicks)
+  const mainCount = [...Object.values(filters.mainPicks), ...Object.values(filters.mainExcludes)]
     .reduce((n, m) => n + Object.values(m).filter(Boolean).length, 0);
   const setCount = filters.setPlans.filter((p) => p.length > 0).length + filters.excludedSets.length;
   const effectCount = Object.keys(filters.weaponEffectPicks).length + Object.keys(filters.accessoryEffectPicks).length
@@ -165,7 +165,7 @@ export function BuilderToolbar({
           <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
         </PopoverButton>
         <PopoverButton label="Mains" count={mainCount} openKey={openKey} myKey="mains" onToggle={toggle} onClose={close}>
-          <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} dispatch={dispatch} />
+          <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} excludes={filters.mainExcludes} dispatch={dispatch} />
         </PopoverButton>
         <PopoverButton label="Sets" count={setCount} accent="violet" openKey={openKey} myKey="sets" onToggle={toggle} onClose={close}>
           <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />

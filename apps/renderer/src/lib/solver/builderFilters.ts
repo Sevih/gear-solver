@@ -64,6 +64,11 @@ export interface SolverFilters {
   topPct: number;
   /** Per-slot OR-list of acceptable main stats. Empty inner = any main allowed. */
   mainPicks: Record<string, Record<string, boolean>>;
+  /** Per-slot main stats ruled out — a piece carrying one never enters the
+   *  pool (e.g. ATK talismans when a teammate already brings one; talisman
+   *  mains are shared by the team and don't stack). A stat is never both
+   *  acceptable and excluded: each toggle clears the other. */
+  mainExcludes: Record<string, Record<string, boolean>>;
   /** Set requirements as an OR-list of AND-plans (a build matches if ANY plan
    *  holds). The editor keeps at least one (possibly empty) plan so there's
    *  always a tab to edit; empty plans are dropped before the engine sees them. */
@@ -115,6 +120,7 @@ export function buildSolveFilters(filters: SolverFilters): SolveFilters {
     priority: filters.priority,
     topPct: filters.topPct,
     mainPicks: filters.mainPicks,
+    mainExcludes: filters.mainExcludes ?? {},
     // Drop empty plans before the engine sees them — an empty plan has no conds,
     // so `every` is vacuously true and it would nullify the whole OR (everything
     // matches). The editor keeps an empty plan around only so a tab exists.
@@ -150,6 +156,7 @@ export const INITIAL_FILTERS: SolverFilters = {
   // combos, still a few seconds) for materially better recall; 100 = exhaustive.
   topPct: 60,
   mainPicks: {},
+  mainExcludes: {},
   setPlans: [[]],
   excludedSets: [],
   weaponEffectPicks: {},
@@ -169,6 +176,8 @@ export type SolverAction =
   | { type: "setPriority"; stat: string; value: number }
   | { type: "setTopPct"; value: number }
   | { type: "toggleMainPick"; slot: SlotId; stat: string }
+  /** Rule a main stat out of a slot (or clear its exclusion). */
+  | { type: "toggleMainExclude"; slot: SlotId; stat: string }
   /** Cycle a set's piece-count within one plan: off → 2pc → 4pc → off
    *  (skipping any step the inventory can't form). */
   | { type: "cycleSetInPlan"; planIdx: number; setId: string; reach: SetChipReach }
@@ -190,7 +199,8 @@ export type SolverAction =
    *  weapon+accessory mains, but
    *  keeps options, excluded heroes, stat/rating bands, topPct and any other
    *  slot's main picks. Excluded sets are kept too, minus any set the reco's
-   *  plans require (the reco's intent wins over a stale exclusion). */
+   *  plans require (the reco's intent wins over a stale exclusion). Main
+   *  exclusions are left as they are (the reco carries none). */
   | { type: "mergePreset"; patch: RecoFilterPatch }
   /** Reset the excluded-heroes list (action button on the multi-select). */
   | { type: "clearExcludedHeroes" };
@@ -239,7 +249,28 @@ export function solverFiltersReducer(state: SolverFilters, action: SolverAction)
       const next = { ...slotMap };
       if (next[action.stat]) delete next[action.stat];
       else next[action.stat] = true;
-      return { ...state, mainPicks: { ...state.mainPicks, [action.slot]: next } };
+      // Accepting a main clears its exclusion (never both).
+      const excludes = { ...(state.mainExcludes?.[action.slot] ?? {}) };
+      delete excludes[action.stat];
+      return {
+        ...state,
+        mainPicks: { ...state.mainPicks, [action.slot]: next },
+        mainExcludes: { ...state.mainExcludes, [action.slot]: excludes },
+      };
+    }
+    case "toggleMainExclude": {
+      const slotMap = state.mainExcludes?.[action.slot] ?? {};
+      const next = { ...slotMap };
+      if (next[action.stat]) delete next[action.stat];
+      else next[action.stat] = true;
+      // Excluding a main clears its acceptance (never both).
+      const picks = { ...(state.mainPicks[action.slot] ?? {}) };
+      delete picks[action.stat];
+      return {
+        ...state,
+        mainPicks: { ...state.mainPicks, [action.slot]: picks },
+        mainExcludes: { ...state.mainExcludes, [action.slot]: next },
+      };
     }
     case "cycleSetInPlan": {
       const plans = state.setPlans.length > 0 ? state.setPlans : [[]];

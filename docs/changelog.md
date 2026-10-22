@@ -8,6 +8,52 @@
 
 ## Items de backlog clôturés (index)
 
+### 🚫 Builder › Mains : exclure une main stat par slot, à côté des acceptables (2026-10-22)
+- ✅ **Pourquoi.** Le popover « Mains » n'était qu'une OR-liste d'acceptables par slot : pour écarter UNE main (ATK
+  sur le Talisman, dont les mains sont partagées dans l'équipe et ne se cumulent pas — deux talismans ATK ne servent
+  à rien), il fallait cocher toutes les autres, pénible et faux dès qu'une nouvelle pièce arrive.
+- ✅ **Modèle — `lib/solver/builderFilters.ts`.** Champ additif `mainExcludes: Record<slot, Record<statKey, boolean>>`
+  à côté de `mainPicks` (`INITIAL_FILTERS` à `{}`, passé tel quel par `buildSolveFilters`, optionnel dans le
+  `SolveFilters` de `types.ts` : absent = aucune exclusion). Action `toggleMainExclude { slot, stat }` ; exclusivité
+  dans les deux sens, `toggleMainPick` efface l'exclusion de la stat et `toggleMainExclude` son acceptation.
+  `mergePreset` (reco) ne touche pas aux exclusions, comme demandé : une exclusion l'emporte donc sur une main que le
+  reco accepte (le moteur teste l'exclusion d'abord). Sans migration : `cloneFilters` (`storage/heroFilters.ts`, qui
+  sert `filtersForHero`, le snapshot de changement de héros et le chargement d'un preset) et `fromSerialized`
+  (`storage/filterPresets.ts`, donc aussi un import de sauvegarde, `transfer.ts` ne faisant que fusionner les blobs
+  bruts) mettent `{}` quand le champ manque.
+- ✅ **Élagage — `storage/dataHash.ts`.** Le lot supposait que `pruneFilters` élaguait déjà `mainPicks` : ce n'était
+  pas le cas (sets et effets seulement). `pruneFilters` élague désormais les clés de main des DEUX champs hors du
+  vocabulaire du moteur, `MAIN_STAT_KEYS: Record<StatType, true>` (exhaustif vérifié par `tsc` : une stat ajoutée à
+  `StatType` sans y figurer casse la compilation, donc jamais de main légitime élaguée). Une clé morte en acceptable
+  vidait le slot en silence. Même objet rendu quand rien n'est mort.
+- ✅ **Moteur — `allow()` de `lib/solver/engine.ts`.** Une pièce dont l'une des mains d'option (même filtre que
+  l'existant : hors `combatOnly`, `source` option) est exclue pour son slot est rejetée avant le test des acceptables ;
+  le rejet est compté par slot (`mainExcludedDrops`) et remonte en `poolSizes[slot].mainExcluded` (weapon, accessory,
+  talisman ; champ optionnel de `PoolSizes`). Il n'existait pas de raison de pool vide par cause — l'`emptyReason` de
+  `BuilderScreen.tsx` disait « Talisman: 0 pieces after filters » pour tout filtre ; il y ajoute
+  « (N dropped: main stat excluded) » quand le slot vidé a perdu des pièces par exclusion.
+- ✅ **UI — `screens/builder/AccessoryMainStatsPanel.tsx`.** Chaque chip cycle off → allowed → excluded → off
+  (off → `toggleMainPick`, sinon `toggleMainExclude`) ; mêmes tons que les chips d'effets d'`IconChips.tsx` (cyan
+  acceptée, inchangée ; rose avec pastille ✕ en bas à droite pour l'exclue, le `%` restant en bas à gauche), `title`
+  qui dit l'état et le geste. Même mécanique sur les trois slots. Le hint du panneau explique les deux états et cite
+  le Talisman ; le compteur du bouton « Mains » (`BuilderToolbar.tsx`) compte acceptées + exclues. Aucun autre
+  changement visuel : une chip off ou acceptée rend comme avant.
+- ✅ **Docs.** `docs/solver.md` + `wiki/Solver.md` (phase 2 — la puce « `g.main[0].stat ∉ picks` » décrivait mal le code,
+  qui teste toutes les mains d'option, corrigée au passage ; § Main stats ; état vide), `wiki/Using-the-App.md`,
+  `docs/release-notes.md › [Unreleased]`, `docs/reference.md` (élagage au changement de `hash`, ligne du nouveau test).
+- ✅ **Tests.** `builderFilters.test.ts` (+6 : pose/retire, exclusivité dans les deux sens, autres stats et slots
+  intacts, reco qui garde les exclusions, `cloneFilters` qui copie et filtre stocké sans le champ → `{}`) ;
+  `mainExcludes.test.ts` (nouveau, 5, vrai contrat via `precomputeContext` : talisman ATK% exclu hors du pool, HP%
+  reste, champ absent → pool entier, exclusion + acceptables combinés, exclusion par slot, slot vidé →
+  `{ hit: 0, of: 2, mainExcluded: 2 }`) ; `dataHash.test.ts` (+2 : clé inconnue élaguée des picks et des exclusions,
+  filtre sans le champ intact ; « rien de mort → même objet » étendu aux mains) ; `filterPresets.test.ts` (+2 : preset
+  sans le champ → `{}`, exclusions relues telles quelles). `npm run typecheck` vert (dernière ligne « > tsc --noEmit »,
+  sans erreur) ; `npm test` « Tests 166 passed (166) » core, « Tests 179 passed (179) » desktop, « Tests 653 passed
+  (653) » renderer ; `npm run lint` « ✖ 14 problems (0 errors, 14 warnings) », inchangé.
+- ⏳ Sevih, sur le fixe après la release : Mains › Talisman › ATK en exclu (deux clics) → plus aucun build avec un
+  talisman ATK, le compteur du bouton monte ; un preset de filtres sauvegardé puis rechargé garde l'exclusion ; tout
+  exclure sur un slot → la bannière nomme « main stat excluded ».
+
 ### 🩹 CI Windows : shebang retiré de `fetch-binaries.mjs` (2026-10-22)
 - ✅ La CI de la release 1.13.0 (`f1120b0`) était rouge sur `windows-latest` seulement : `test/fetch-binaries.test.ts`
   importe `scripts/fetch-binaries.mjs` (G39) et le runner Windows échouait au chargement, « SyntaxError: Invalid or

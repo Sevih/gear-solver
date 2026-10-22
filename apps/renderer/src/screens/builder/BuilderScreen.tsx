@@ -281,12 +281,17 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // dead-end. Derived from the last solve's pool sizes (null until a solve
   // runs → falls back to the generic "pick a hero" hint). The EE slot is
   // skipped: a hero without one reports `exclusive: 0` and solves without it.
+  // A slot emptied (also) by an excluded main stat says so.
   const emptyReason = useMemo(() => {
     const ps = livePoolSizes;
     if (!ps) return null;
     const dead = Object.keys(ps).filter((s) => s !== "exclusive" && (ps[s]?.hit ?? 0) === 0);
     if (dead.length === 0) return null;
-    return dead.map((s) => `${SLOT_BY[s]?.label ?? s}: 0 pieces after filters`).join(" · ");
+    return dead.map((s) => {
+      const excluded = ps[s]?.mainExcluded ?? 0;
+      const cause = excluded > 0 ? ` (${excluded} dropped: main stat excluded)` : "";
+      return `${SLOT_BY[s]?.label ?? s}: 0 pieces after filters${cause}`;
+    }).join(" · ");
   }, [livePoolSizes]);
 
   // Guard-rail — rough size of the cartesian the solver walks (∏ of the

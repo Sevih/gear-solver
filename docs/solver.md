@@ -91,7 +91,8 @@ filtre les pièces de l'inventaire :
 - exclu si `g.equippedBy ∈ excludedHeroes` (idem via le propriétaire effectif)
 - exclu si sous le **plancher « Maxed only »** (`meetsMaxedFloor`) : le toggle = **zéro extrapolation** — le plafond de chaque pièce dans le mode reforge (`pieceReforgePlan`, celui de la projection) devient son plancher d'investissement (pièces **déjà** à leur plafond ou mieux, notées sur leurs vrais rolls, projection sautée). Off → aucun gate ; 6★ `unique` : +10R6 → enhance ≥ 10 & reforges ≥ 6 ; +10R9 → ≥ 10 & ≥ 9 ; +15R9 → ≥ 15 & ≥ 9 ; pièce qui ne s'élève pas (sous 6★, ou 6★ non `unique`) : +10 & son propre budget (son étoile, 6 pour une 6★) quel que soit le mode ; pièce sans étoile (absente du contrat) : plancher du mode. Talisman : plancher enhance seul (pas de reforge sur gemmes), borné à son plafond +10 (`enhance.maxEnhanceLevel` : pas de singularité, un plancher +15 vidait le pool)
 - exclu si `classLimit` ≠ classe du héros
-- exclu si **main pick** actif pour ce slot et `g.main[0].stat ∉ picks`
+- exclu si l'une de ses mains d'option (hors `combatOnly`) est une **main exclue** du slot (`mainExcludes`), avant le test des acceptables ; le nombre de pièces ainsi écartées remonte dans `poolSizes[slot].mainExcluded`
+- exclu si **main pick** actif pour ce slot et qu'aucune de ses mains d'option n'est dans les picks
 - exclu si **effect chip** (weapon/accessory) marqué `excluded` ; ou marqué `required` et le `setId` de la pièce (identité d'effet `UniqueOptionID`) ne match pas — la comparaison est **délibérément** sur `setId`, pas sur `effectIcon` (des effets distincts partagent une icône, ex. la famille Recklessness)
 - exclu si `armorSetId ∈ excludedSets`
 
@@ -340,8 +341,14 @@ seul SOLVE Score garde les gems actuellement socketés (pas de réallocation).
 
 ### Main stats
 Trois lignes (Weapon / Accessory / Talisman). Chaque ligne montre les mains
-réellement présents dans l'inventaire pour ce slot (chips icône). Click pour
-OR-allow. Pool exclu si aucune main de la pièce ne match.
+réellement présents dans l'inventaire pour ce slot (chips icône). Click cycle
+off → **allowed** (cyan, OR-allow : pièce exclue si aucune de ses mains ne match)
+→ **excluded** (rose, ✕ : une pièce qui porte cette main ne rentre jamais dans le
+pool, testée avant les acceptables) → off. Une main n'est jamais les deux à la fois
+(`toggleMainPick` / `toggleMainExclude` effacent l'autre état). Cas d'usage : le
+Talisman, dont les mains sont partagées dans l'équipe et ne se cumulent pas —
+exclure ATK quand un coéquipier en porte déjà un. Le compteur du bouton « Mains »
+compte acceptées + exclues ; le reco ne touche pas aux exclusions.
 
 Les autres slots (helmet/armor/gloves/boots) n'apparaissent pas : leur main est
 fixe en jeu.
@@ -410,6 +417,7 @@ sur l'en-tête (null → desc → asc → null). Menu **Columns** (show/hide col
 quel en-tête** (`ColumnsMenu` contrôlé, `onContextMenu` sur le `<tr>` d'en-tête). Click sur
 une ligne → la `BottomGearBand` affiche les 8 pièces. État `solving…` / erreur / **état vide explicite** (un `emptyReason`
 dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres, EE exceptée : un héros sans EE solve sans elle ;
+un slot vidé (aussi) par une main exclue le dit, « (N dropped: main stat excluded) » ;
 un « Filter » client qui ne garde aucun build affiche « No build passes the current filter. » ; aucun slot vide
 mais « Allow broken sets » off a rejeté chaque loadout armor (cause `"brokenSets"` de l'orchestrateur) → la
 table le dit et propose de le rallumer ou de monter le Top %). L'en-tête « N slots change » du build sélectionné

@@ -6,6 +6,7 @@ import {
   type SolverFilters,
 } from "../src/lib/solver/builderFilters.js";
 import type { RecoFilterPatch } from "../src/lib/reco/translateReco.js";
+import { cloneFilters } from "../src/lib/storage/heroFilters.js";
 
 const FULL_REACH: SetChipReach = { has2pc: true, has4pc: true, canForm2pc: true, canForm4pc: true };
 
@@ -105,5 +106,57 @@ describe("solverFiltersReducer — resetAll / loadPreset", () => {
     };
     const state: SolverFilters = { ...INITIAL_FILTERS, topPct: 90, excludedSets: ["Y"] };
     expect(solverFiltersReducer(state, { type: "loadPreset", filters: preset })).toBe(preset);
+  });
+});
+
+describe("solverFiltersReducer — main exclusions", () => {
+  const exclude = (s: SolverFilters, stat: string) =>
+    solverFiltersReducer(s, { type: "toggleMainExclude", slot: "talisman", stat });
+  const pick = (s: SolverFilters, stat: string) =>
+    solverFiltersReducer(s, { type: "toggleMainPick", slot: "talisman", stat });
+
+  it("toggleMainExclude sets then clears the exclusion", () => {
+    const s1 = exclude(INITIAL_FILTERS, "atkPct");
+    expect(s1.mainExcludes).toEqual({ talisman: { atkPct: true } });
+    expect(exclude(s1, "atkPct").mainExcludes).toEqual({ talisman: {} });
+  });
+
+  it("excluding an acceptable main clears its acceptance", () => {
+    const s1 = exclude(pick(INITIAL_FILTERS, "atkPct"), "atkPct");
+    expect(s1.mainPicks.talisman).toEqual({});
+    expect(s1.mainExcludes.talisman).toEqual({ atkPct: true });
+  });
+
+  it("accepting an excluded main clears its exclusion", () => {
+    const s1 = pick(exclude(INITIAL_FILTERS, "atkPct"), "atkPct");
+    expect(s1.mainPicks.talisman).toEqual({ atkPct: true });
+    expect(s1.mainExcludes.talisman).toEqual({});
+  });
+
+  it("other stats and slots are left alone", () => {
+    const state: SolverFilters = {
+      ...INITIAL_FILTERS,
+      mainPicks: { talisman: { hpPct: true }, weapon: { atkPct: true } },
+      mainExcludes: { accessory: { pen: true } },
+    };
+    const s1 = exclude(state, "atkPct");
+    expect(s1.mainPicks).toEqual({ talisman: { hpPct: true }, weapon: { atkPct: true } });
+    expect(s1.mainExcludes).toEqual({ accessory: { pen: true }, talisman: { atkPct: true } });
+  });
+
+  it("a reco overlay keeps the exclusions", () => {
+    const state: SolverFilters = { ...INITIAL_FILTERS, mainExcludes: { weapon: { atkPct: true } } };
+    const next = solverFiltersReducer(state, { type: "mergePreset", patch: patch({ mainPicks: { weapon: { critDmg: true } } }) });
+    expect(next.mainExcludes).toEqual({ weapon: { atkPct: true } });
+  });
+
+  it("cloneFilters copies the exclusions; a filter stored without the field gets {}", () => {
+    const state: SolverFilters = { ...INITIAL_FILTERS, mainExcludes: { talisman: { atkPct: true } } };
+    expect(cloneFilters(state).mainExcludes).toEqual({ talisman: { atkPct: true } });
+    const { mainExcludes: _omit, ...legacy } = INITIAL_FILTERS;
+    const restored = cloneFilters(legacy as SolverFilters);
+    expect(restored.mainExcludes).toEqual({});
+    // …and the reducer works on it.
+    expect(exclude(restored, "atkPct").mainExcludes).toEqual({ talisman: { atkPct: true } });
   });
 });

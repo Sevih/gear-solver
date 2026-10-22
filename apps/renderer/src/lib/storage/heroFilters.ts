@@ -55,9 +55,10 @@ export function persistHeroFilters(map: HeroFiltersMap): void {
 
 /** Defensive clone (top-level + the `excludedHeroes` Set) so a stored snapshot
  *  can't be mutated by a later reducer update, and a restore can't alias the
- *  map's Set into the live reducer state. */
+ *  map's Set into the live reducer state. `mainExcludes` came later — a
+ *  snapshot stored without it gets `{}`. */
 export function cloneFilters(f: SolverFilters): SolverFilters {
-  return { ...f, excludedHeroes: new Set(f.excludedHeroes) };
+  return { ...f, excludedHeroes: new Set(f.excludedHeroes), mainExcludes: f.mainExcludes ?? {} };
 }
 
 /** Starting filters for the Builder: the remembered set of the hero it opens on

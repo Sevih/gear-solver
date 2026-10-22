@@ -3,15 +3,15 @@
  * `hash` to the one seen last (`gs.data.hash`, localStorage) and, when the data
  * moved (a game patch synced in), prunes the stored filters of the references
  * the new data no longer knows: armor set ids in `setPlans` / `excludedSets`
- * and weapon / accessory / talisman effect keys (`EquipmentDef.setId`). A dead
- * required set or effect would otherwise turn a preset into a silent
- * "no builds".
+ * and weapon / accessory / talisman effect keys (`EquipmentDef.setId`), plus
+ * any main stat key outside the engine's vocabulary. A dead required set,
+ * effect or main would otherwise turn a preset into a silent "no builds".
  *
  * Nothing the user made is ever deleted: presets and per-hero filters keep
  * every other field, saved builds are left alone (their piece uids come from
  * the inventory, not from the data).
  */
-import type { GameData } from "@gear-solver/core";
+import type { GameData, StatType } from "@gear-solver/core";
 import type { SolverFilters } from "../solver/builderFilters.js";
 import { loadFilterPresets, persistFilterPresets, type FilterPresetsMap } from "./filterPresets.js";
 import { loadHeroFilters, persistHeroFilters, type HeroFiltersMap } from "./heroFilters.js";
@@ -32,9 +32,21 @@ export function knownRefs(game: GameData): KnownRefs {
   return { sets: new Set(Object.keys(game.sets)), effects };
 }
 
-/** `filters` without the set ids and effect keys `known` lacks. Returns the
- *  same object when nothing is dead. A plan emptied by the prune is dropped
- *  (an empty plan would match everything); the editor keeps at least one. */
+/** Every engine stat key (`StatType`), compile-checked exhaustive: the only
+ *  keys a main stat can carry. A main pick or exclusion on any other key
+ *  (renamed, or a hand-edited backup) matches no piece — as an acceptable it
+ *  would empty the slot's pool. */
+const MAIN_STAT_KEYS: Record<StatType, true> = {
+  atk: true, atkPct: true, hp: true, hpPct: true, def: true, defPct: true,
+  critRate: true, critDmg: true, spd: true, eff: true, effRes: true,
+  dmgUp: true, dmgReduce: true, pen: true, critDmgReduce: true,
+  hitAp: true, killAp: true, lifesteal: true, counter: true, enterAp: true, avoid: true,
+};
+
+/** `filters` without the set ids and effect keys `known` lacks, nor the main
+ *  stat keys the engine doesn't know. Returns the same object when nothing is
+ *  dead. A plan emptied by the prune is dropped (an empty plan would match
+ *  everything); the editor keeps at least one. */
 export function pruneFilters(filters: SolverFilters, known: KnownRefs): SolverFilters {
   let changed = false;
   const setPlans = filters.setPlans.flatMap((plan) => {
@@ -55,6 +67,21 @@ export function pruneFilters(filters: SolverFilters, known: KnownRefs): SolverFi
   const weaponEffectPicks = pruneEffects(filters.weaponEffectPicks);
   const accessoryEffectPicks = pruneEffects(filters.accessoryEffectPicks);
   const talismanEffectPicks = pruneEffects(filters.talismanEffectPicks);
+  const pruneMains = (bySlot: Record<string, Record<string, boolean>> | undefined): Record<string, Record<string, boolean>> => {
+    const out: Record<string, Record<string, boolean>> = {};
+    let dead = false;
+    for (const [slot, stats] of Object.entries(bySlot ?? {})) {
+      const entries = Object.entries(stats);
+      const kept = entries.filter(([k]) => Object.hasOwn(MAIN_STAT_KEYS, k));
+      if (kept.length !== entries.length) dead = true;
+      out[slot] = kept.length === entries.length ? stats : Object.fromEntries(kept);
+    }
+    if (!dead) return bySlot ?? {};
+    changed = true;
+    return out;
+  };
+  const mainPicks = pruneMains(filters.mainPicks);
+  const mainExcludes = pruneMains(filters.mainExcludes);
   if (!changed) return filters;
   return {
     ...filters,
@@ -63,6 +90,8 @@ export function pruneFilters(filters: SolverFilters, known: KnownRefs): SolverFi
     weaponEffectPicks,
     accessoryEffectPicks,
     talismanEffectPicks,
+    mainPicks,
+    mainExcludes,
   };
 }
 

@@ -76,7 +76,8 @@ lecture seule dans Settings → Data, précédé de `resVersion` (« game 1.11.4
 des tables chargées ; absent d'un cache ancien). Le `hash` ne couvre pas `resVersion` : à
 `hash` égal, la sync réécrit le seul `version.json` quand son corps diffère. Au changement de
 `hash`, `reconcileDataHash` (`lib/storage/dataHash.ts`) élague des presets et des filtres par héros les sets et
-effets que la donnée ne connaît plus (cf. [data-schema.md](data-schema.md#cycle-de-re-capture-après-patch-jeu)).
+effets que la donnée ne connaît plus, et les clés de main (acceptées `mainPicks` ou exclues `mainExcludes`) hors du
+vocabulaire `StatType` du moteur (cf. [data-schema.md](data-schema.md#cycle-de-re-capture-après-patch-jeu)).
 
 
 ### 1.3 Parse (`packages/core/src/parse.ts`)
@@ -802,6 +803,7 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/presetsGems.test.ts` | 12 tests — onglet Presets, réglage : `bestEeGemsFor` sur la table de gemmes réelle (jamais les gemmes du Talisman du preset, même libre, ni de l'EE d'un autre héros, ni du Talisman du héros ; gemme sertie gardée à sa place ; null sans priorité ou quand l'EE a déjà le meilleur ; score avec les gemmes proposées > tel que serti ; `eeGems` = gemmes serties compose comme l'EE), `alignToSockets` ; `presetWorklistFor` (pièces qui diffèrent puis lignes gemme de l'EE seules, pièce absente exclue, porteur sans rien à régler → rien, remplacement de l'entrée du héros) ; `presetPriorityOf` (session > build sauvegardée la plus récente > null, priorité sans poids ignorée) ; `gs.presetHeroes` dans la sauvegarde (aller-retour, l'entrée locale gagne, sauvegarde sans le champ) |
 | `apps/renderer/test/deltaCp.test.ts` | 2 tests — `deltaCpLabel` : reforge `Off` → `ΔCP ±X` nu sans infobulle ; mode actif → `vs equipped (build at <mode>)` + infobulle |
 | `apps/renderer/test/talismanPreferred.test.ts` | 8 tests — `talismanEffectPicks` sur le vrai contrat (`precomputeContext`) : préféré possédé → pool réduit à lui (variantes comprises ; famille du conseil : seul un 5★ possédé → lui, aucun membre → pool entier), non possédé ou écarté par un autre filtre (classe, portée « equipped ») → pool entier, `required` non possédé → pool vide, `excluded`, keep current verrouillé, champ absent → pool entier |
+| `apps/renderer/test/mainExcludes.test.ts` | 5 tests — `mainExcludes` sur le vrai contrat (`precomputeContext`) : talisman ATK% exclu → hors du pool, HP% reste, champ absent → pool entier, exclusion + acceptables combinés, exclusion par slot (celle de l'arme laisse les talismans), slot vidé → `poolSizes.talisman.mainExcluded` |
 | `apps/renderer/test/heroTracker.test.ts` | 11 tests — `buildHeroTrackerExport` (export hero-tracker outerpedia) : enveloppe versionnée clé = id héros de base, niveau/affinité résolus depuis les courbes XP (plancher lv5 / aff 1), niveau d'EE pris sur l'EE possédé (meilleure copie, gear non-EE ignoré), héros fusionné sous son id de base + bloc `core_fusion` (absent si non fusionné, tier 1 si niveau manquant), clamp `transcend_star` à la rareté de base et des valeurs hors domaine, héros inconnu de la game data exporté quand même |
 
 Run : `npm test --workspaces --if-present`. **Total : 300 tests** (core 22 : parse 11 + equip 11 · renderer 278 : solver 95, solveChunk 4, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, subValue 5, dmgValue 4, buildAdvice 16, cpPrune 23, heroPriority 21, dominance 10, statRegistry 11, worklistPlan 11, heroTracker 11).

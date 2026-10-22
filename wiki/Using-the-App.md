@@ -118,7 +118,10 @@ results, the bottom band shows the selected build's pieces.
 - **Top %** — a speed/quality dial. Lower = faster but may skip the absolute-best build; the
   hint warns you when it's set too low. (In **SOLVE CP** it always applies — each slot is
   ranked by a CP proxy. In **SOLVE** it only kicks in once you've set at least one priority.)
-- **Main stats** — for Weapon / Accessory / Talisman, click the main-stat icons you'll accept.
+- **Main stats** — for Weapon / Accessory / Talisman, click a main-stat icon to cycle
+  allowed → excluded → off. Allowed = the mains you'll accept; excluded = never use a piece
+  with that main — e.g. rule out ATK talismans when a teammate already brings one (talisman
+  mains are shared by the team and don't stack).
 - **Sets** — click an armor-set icon to cycle: require 2-pc → require 4-pc → exclude → off.
   Pair it with **Allow broken sets** in Options if you want to force a set *and* still let the
   remaining slots be anything.

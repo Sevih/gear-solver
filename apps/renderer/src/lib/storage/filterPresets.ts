@@ -88,6 +88,8 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
       talismanEffectPicks: sanitizeTalismanEffects(f.talismanEffectPicks),
       // Field added after some presets were saved — default to no quality gate.
       minQuality: f.minQuality ?? null,
+      // Main exclusions came later — a preset saved before has none.
+      mainExcludes: f.mainExcludes ?? {},
       // `topPct` (budget prune) was added later — absent → the UI default.
       topPct: f.topPct ?? 60,
       // `allowBrokenSets` was added later — a legacy preset's options lack it.

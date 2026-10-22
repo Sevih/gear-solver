@@ -91,7 +91,8 @@ filters the inventory pieces:
 - excluded if `g.equippedBy ∈ excludedHeroes` (likewise via the effective owner)
 - excluded if below the **"Maxed only" investment floor** (`meetsMaxedFloor`): the toggle = **zero extrapolation** — each piece's ceiling in the reforge mode (`pieceReforgePlan`, the projection's) becomes its floor (only pieces **already** at their ceiling or better, scored on their real rolls, projection skipped). Off → no gate; 6★ `unique`: +10R6 → enhance ≥ 10 & reforges ≥ 6; +10R9 → ≥ 10 & ≥ 9; +15R9 → ≥ 15 & ≥ 9; a piece that can't ascend (under 6★, or a non-`unique` 6★): +10 & its own budget (its star, 6 for a 6★) whatever the mode; a piece with no star (absent from the contract): the mode's floor. Talisman: enhance floor only (gems replace reforge), capped at its +10 ceiling (`enhance.maxEnhanceLevel`: no Singularity — a +15 floor emptied the pool)
 - excluded if `classLimit` ≠ the hero's class
-- excluded if **main pick** is active for this slot and `g.main[0].stat ∉ picks`
+- excluded if one of its option mains (not `combatOnly`) is an **excluded main** for the slot (`mainExcludes`), before the acceptables are checked; the number of pieces dropped this way is reported in `poolSizes[slot].mainExcluded`
+- excluded if **main pick** is active for this slot and none of its option mains is among the picks
 - excluded if **effect chip** (weapon/accessory) marked `excluded`; or marked `required` and the piece's `setId` (the `UniqueOptionID` effect identity) does not match — the comparison is **deliberately** on `setId`, not `effectIcon` (distinct effects can share an icon, e.g. the Recklessness family)
 - excluded if `armorSetId ∈ excludedSets`
 
@@ -331,8 +332,13 @@ gems (no reallocation).
 
 ### Main stats
 Three rows (Weapon / Accessory / Talisman). Each row shows the mains
-actually present in the inventory for that slot (icon chips). Click to
-OR-allow. The pool is excluded if none of the piece's mains match.
+actually present in the inventory for that slot (icon chips). Click cycles
+off → **allowed** (cyan, OR-allow: a piece is excluded if none of its mains match)
+→ **excluded** (rose, ✕: a piece carrying that main never enters the pool, checked
+before the acceptables) → off. A main is never both at once (`toggleMainPick` /
+`toggleMainExclude` clear the other state). Use case: the Talisman, whose mains are
+shared by the team and don't stack — rule out ATK when a teammate already brings one.
+The "Mains" button counter counts allowed + excluded; a reco never touches exclusions.
 
 The other slots (helmet/armor/gloves/boots) do not appear: their main is
 fixed in-game.
@@ -384,7 +390,7 @@ the header (null → desc → asc → null). The **Columns** menu (show/hide col
 (`ColumnsMenu` controlled, `onContextMenu` on the header `<tr>`). Click on a row → the `BottomGearBand`
 shows the 8 pieces. `solving…` / error / **explicit empty state** (an `emptyReason`
 derived from `poolSizes` lists the slots that fell to 0 pieces after filters, the EE aside: a hero without one solves
-without it; a client "Filter" that keeps no build shows "No build passes the current filter."; no slot empty
+without it; a slot emptied (also) by an excluded main says so, "(N dropped: main stat excluded)"; a client "Filter" that keeps no build shows "No build passes the current filter."; no slot empty
 but "Allow broken sets" off rejected every armor loadout (the orchestrator's `"brokenSets"` cause) → the table
 says so and suggests turning it back on or raising Top %). The selected build's "N slots change" header is
 re-read off the current inventory (`buildDiff`), not the solve-time `upg`: after Equip it drops to 0. The

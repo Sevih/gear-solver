@@ -67,3 +67,14 @@ describe("filter presets — talisman effect picks", () => {
     expect(loadOne(legacyPreset({}, { weaponEffectPicks: { "1001": "preferred" } })).weaponEffectPicks).toEqual({});
   });
 });
+
+describe("filter presets — main exclusions", () => {
+  it("a preset saved before the field loads with no exclusion", () => {
+    expect(loadOne(legacyPreset({})).mainExcludes).toEqual({});
+  });
+
+  it("saved exclusions come back as saved", () => {
+    const excludes = { talisman: { atkPct: true } };
+    expect(loadOne(legacyPreset({}, { mainExcludes: excludes })).mainExcludes).toEqual(excludes);
+  });
+});

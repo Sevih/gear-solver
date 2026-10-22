@@ -81,6 +81,10 @@ export interface SolveFilters {
   topPct: number;
   /** Per-slot OR-list of acceptable main stat engine keys. Empty inner = any. */
   mainPicks: Record<string, Record<string, boolean>>;
+  /** Per-slot main stat engine keys ruled out: a piece carrying one of them is
+   *  dropped before the acceptables are checked. Absent → none (payloads from
+   *  before the field). */
+  mainExcludes?: Record<string, Record<string, boolean>>;
   /** Set requirements as an OR-list of AND-plans: the build is valid iff AT
    *  LEAST ONE plan is fully satisfied. Empty = no set requirement. The UI /
    *  preset translator expands its authoring shortcuts (4pc-among-N, 2pc+2pc,
@@ -235,7 +239,10 @@ export interface SolveBuild {
 
 /** Per-slot pool stats for the footer. Sent once at the start of each solve
  *  (after pre-filter, before the cartesian loop). */
-export type PoolSizes = Record<string, { hit: number; of: number }>;
+/** Per-slot pool counts. `mainExcluded` = pieces that passed every earlier
+ *  gate but carried an excluded main stat — names the cause when a slot
+ *  comes back empty. */
+export type PoolSizes = Record<string, { hit: number; of: number; mainExcluded?: number }>;
 
 /** Streaming progress — workers send this every ~100ms. Counters are
  *  CUMULATIVE per worker (not deltas) so the orchestrator can drop stale

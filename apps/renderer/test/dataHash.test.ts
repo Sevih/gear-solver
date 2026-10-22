@@ -66,8 +66,27 @@ describe("pruneFilters", () => {
     expect(pruneFilters({ ...INITIAL_FILTERS, setPlans: [[{ setId: "9", count: 4 }]] }, KNOWN).setPlans).toEqual([[]]);
   });
 
+  it("drops main stat keys the engine doesn't know, from the picks and the exclusions", () => {
+    const f = pruneFilters({
+      ...INITIAL_FILTERS,
+      mainPicks: { weapon: { atkPct: true, atk_pct: true }, accessory: { pen: true } },
+      mainExcludes: { talisman: { atkPct: true, chc: true } },
+    }, KNOWN);
+    expect(f.mainPicks).toEqual({ weapon: { atkPct: true }, accessory: { pen: true } });
+    expect(f.mainExcludes).toEqual({ talisman: { atkPct: true } });
+  });
+
+  it("a filter stored without main exclusions is not touched for it", () => {
+    const { mainExcludes: _omit, ...legacy } = { ...INITIAL_FILTERS, mainPicks: { weapon: { atkPct: true } } };
+    const live = legacy as unknown as SolverFilters;
+    expect(pruneFilters(live, KNOWN)).toBe(live);
+  });
+
   it("nothing dead → the same object", () => {
-    const live = { ...INITIAL_FILTERS, setPlans: [[{ setId: "1", count: 4 }]], weaponEffectPicks: { "3001": "excluded" as const } };
+    const live = {
+      ...INITIAL_FILTERS, setPlans: [[{ setId: "1", count: 4 }]], weaponEffectPicks: { "3001": "excluded" as const },
+      mainPicks: { weapon: { atkPct: true } }, mainExcludes: { talisman: { atkPct: true } },
+    };
     expect(pruneFilters(live, KNOWN)).toBe(live);
   });
 });

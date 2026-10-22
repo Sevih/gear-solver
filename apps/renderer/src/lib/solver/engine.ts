@@ -426,6 +426,9 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // cut, which was mode-blind (it excluded +10 endgame gear from +10 solves).
   const reforgeMode = filters.options.reforgeMode ?? "disable";
   const maxedFloor = maxedFloorOf(filters.options.onlyMaxed, reforgeMode);
+  // Pieces `allow` rejected for an excluded main, per engine slot — reported
+  // in `poolSizes` so an emptied slot can name the cause.
+  const mainExcludedDrops: Record<string, number> = {};
   // Per-slot filter helper. Returns true if the piece is allowed in this slot.
   const allow = (g: GearPiece, slot: string): boolean => {
     if (g.slot !== slot) return false;
@@ -452,13 +455,21 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     }
     if (heroClass && g.classLimit && g.classLimit !== heroClass) return false;
     // Main stat picks (per design slot — only weapon/accessory/talisman in UI).
+    // An excluded main rejects the piece before the acceptables are checked.
     const dslot = engineToDesign(slot);
-    const mainPicks = filters.mainPicks[dslot];
-    if (mainPicks && Object.keys(mainPicks).length > 0) {
+    const mainPicks = filters.mainPicks[dslot] ?? {};
+    const mainExcludes = filters.mainExcludes?.[dslot] ?? {};
+    const hasPicks = Object.keys(mainPicks).length > 0;
+    const hasExcludes = Object.keys(mainExcludes).length > 0;
+    if (hasPicks || hasExcludes) {
       const stats = g.main
         .filter((m) => !m.combatOnly && (m.source ?? "option") === "option")
         .map((m) => m.stat);
-      if (!stats.some((s) => mainPicks[s])) return false;
+      if (hasExcludes && stats.some((s) => mainExcludes[s])) {
+        mainExcludedDrops[slot] = (mainExcludedDrops[slot] ?? 0) + 1;
+        return false;
+      }
+      if (hasPicks && !stats.some((s) => mainPicks[s])) return false;
     }
     // Effect picks — weapon / accessory / talisman. Keyed on `setId` (the unique
     // UniqueOptionID effect identity), NOT `effectIcon` — distinct effects can
@@ -764,6 +775,10 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     talisman:  { hit: pools.ooparts.length,   of: countAll("ooparts") },
     exclusive: { hit: ee ? 1 : 0,             of: countAll("exclusive") },
   };
+  // Only the variable-main slots can carry a main exclusion.
+  if (mainExcludedDrops.weapon) poolSizes.weapon!.mainExcluded = mainExcludedDrops.weapon;
+  if (mainExcludedDrops.accessory) poolSizes.accessory!.mainExcluded = mainExcludedDrops.accessory;
+  if (mainExcludedDrops.ooparts) poolSizes.talisman!.mainExcluded = mainExcludedDrops.ooparts;
 
   // Gem pool — full inventory union, scored once. Scoring depends on
   // `priority`; when uniformly zero, scores collapse to 0 and the

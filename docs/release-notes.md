@@ -12,7 +12,9 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Builder › Mains: a main stat can now be excluded per slot** — e.g. rule out ATK talismans
+  when a teammate already brings one. Click a main-stat icon to cycle allowed → excluded → off;
+  saved filter presets keep the exclusions.
 
 ## [1.13.0] — 2026-10-22
 
