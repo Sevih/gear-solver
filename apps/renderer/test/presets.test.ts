@@ -6,7 +6,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Character, GearPiece, Inventory, Preset, RolledStat, StatScaling } from "@gear-solver/core";
-import { presetRows, presetSignature } from "../src/lib/presets/presetRows.js";
+import { arrangePresets, presetClasses, presetRows, presetSignature, type PresetRow } from "../src/lib/presets/presetRows.js";
 import { bestKnownFor, effectivePriority, evaluatePresetFor, presetLoss, type HeroBase, type PresetEvalContext } from "../src/lib/presets/evaluate.js";
 import { computeFinalStats, type FinalStatsBaseline, type ScalingMap } from "../src/lib/composeBuild.js";
 import { computeScore } from "../src/lib/solver/ratings.js";
@@ -28,7 +28,7 @@ function piece(slot: GearPiece["slot"], uid: string, equippedBy: string | null, 
 }
 
 const hero = (uid: string): Character => ({ uid, charId: 1, name: uid } as unknown as Character);
-const preset = (num: number, itemUids: string[]): Preset => ({ num, name: `P${num}`, itemUids, favorite: false });
+const preset = (num: number, itemUids: string[]): Preset => ({ num, name: `P${num}`, itemUids, favorite: false, presetType: 0, sortOrder: 0 });
 
 /** Wire order: weapon, accessory, helmet, armor, gloves, boots, EE, talisman. */
 const wire = (w: string, ac: string, h: string, a: string, g: string, b: string, ee: string, t: string) => [w, ac, h, a, g, b, ee, t];
@@ -64,7 +64,7 @@ describe("presetRows", () => {
   const rows = presetRows(INVENTORY);
   const byNum = (n: number) => rows.find((r) => r.preset.num === n)!;
 
-  it("lists presets in number order, the EE slot never part of them", () => {
+  it("lists presets in number order when nothing else orders them, the EE slot never part of them", () => {
     expect(rows.map((r) => r.preset.num)).toEqual([1, 2, 3]);
     expect(byNum(1).pieces.map((p) => p.slot)).toEqual(["weapon", "accessory", "helmet", "armor", "gloves", "boots", "ooparts"]);
     expect(byNum(1).pieces.some((p) => p.uid === "eeX")).toBe(false);
@@ -99,6 +99,77 @@ describe("presetRows", () => {
   it("presetSignature skips the EE and empty slots, order-free", () => {
     const slots = new Map(GEAR.map((g) => [g.uid, g.slot]));
     expect(presetSignature(["h1", "eeA", "0", "w1"], slots)).toBe(presetSignature(["w1", "h1"], slots));
+  });
+});
+
+describe("presetRows — the in-game editor's order", () => {
+  const p = (num: number, favorite: boolean, sortOrder: number, presetType = 0): Preset => ({
+    ...preset(num, wire("0", "0", "0", "0", "0", "0", "0", "0")), favorite, sortOrder, presetType,
+  });
+  it("favorites first, then the player's order (higher first), then num; Master League after", () => {
+    const inv: Inventory = {
+      ...INVENTORY,
+      presets: [p(6, true, 9, 1), p(1, false, 0), p(4, false, 2), p(2, true, 0), p(3, false, 5), p(5, true, 1)],
+    };
+    expect(presetRows(inv).map((r) => r.preset.num)).toEqual([5, 2, 3, 4, 1, 6]);
+  });
+});
+
+describe("presetClasses", () => {
+  const restricted = (slot: GearPiece["slot"], uid: string, cls: string | null): GearPiece => ({ ...piece(slot, uid, null), classLimit: cls });
+  const gear = [
+    restricted("weapon", "wMage", "CCT_MAGE"), restricted("weapon", "wFree", null),
+    restricted("accessory", "acRanger", "CCT_RANGER"), restricted("accessory", "acFree", null),
+    restricted("helmet", "hX", null),
+  ];
+  const CLASS: Record<string, string> = { A: "CCT_ATTACKER", B: "CCT_PRIEST", C: "CCT_DEFENDER" };
+  const classOf = (uid: string) => CLASS[uid] ?? null;
+  const rowOf = (uids: string[], wearerUids: string[] = []): PresetRow => ({
+    ...presetRows({ gear, characters: [], presets: [preset(1, wire(uids[0] ?? "0", uids[1] ?? "0", uids[2] ?? "0", "0", "0", "0", "0", "0"))] })[0]!,
+    wearerUids,
+  });
+  const none = { referenceUid: null, associatedUids: [] };
+
+  it("a class-restricted weapon makes the preset that class's, whoever wears it", () => {
+    expect(presetClasses(rowOf(["wMage", "acFree", "hX"]), { referenceUid: "A", associatedUids: [] }, classOf)).toEqual(["CCT_MAGE"]);
+  });
+  it("a class-restricted accessory too", () => {
+    expect(presetClasses(rowOf(["wFree", "acRanger"]), none, classOf)).toEqual(["CCT_RANGER"]);
+  });
+  it("two pieces restricted to two classes keep both", () => {
+    expect(presetClasses(rowOf(["wMage", "acRanger"]), none, classOf)).toEqual(["CCT_MAGE", "CCT_RANGER"]);
+  });
+  it("no restricted piece: the reference hero, else the wearers, else the associated heroes", () => {
+    const row = rowOf(["wFree", "acFree", "hX"], ["B"]);
+    expect(presetClasses(row, { referenceUid: "A", associatedUids: ["C"] }, classOf)).toEqual(["CCT_ATTACKER"]);
+    expect(presetClasses(row, { referenceUid: null, associatedUids: ["C"] }, classOf)).toEqual(["CCT_PRIEST"]);
+    expect(presetClasses(rowOf(["wFree"]), { referenceUid: null, associatedUids: ["C", "A"] }, classOf)).toEqual(["CCT_DEFENDER", "CCT_ATTACKER"]);
+  });
+  it("nothing to tell: unknown", () => {
+    expect(presetClasses(rowOf(["wFree"]), none, classOf)).toEqual([]);
+    expect(presetClasses(rowOf([]), { referenceUid: "Z", associatedUids: [] }, classOf)).toEqual([]);
+  });
+});
+
+describe("arrangePresets", () => {
+  const ORDER = ["CCT_ATTACKER", "CCT_RANGER", "CCT_MAGE", "CCT_DEFENDER", "CCT_PRIEST"];
+  const card = (num: number, classes: string[], empty = false) => ({ row: { preset: preset(num, []), empty } as PresetRow, classes });
+  // Game order: 1 (mage), 2 (unknown), 3 (striker), 4 (empty, healer by its reference), 5 (mage + ranger).
+  const CARDS = [card(1, ["CCT_MAGE"]), card(2, []), card(3, ["CCT_ATTACKER"]), card(4, ["CCT_PRIEST"], true), card(5, ["CCT_MAGE", "CCT_RANGER"])];
+  const nums = (cards: ReturnType<typeof card>[]) => cards.map((c) => c.row.preset.num);
+
+  it("no filter, in-game sort: everything, untouched", () => {
+    expect(nums(arrangePresets(CARDS, new Set(), "game", ORDER))).toEqual([1, 2, 3, 4, 5]);
+  });
+  it("a filter keeps the cards with one of the classes, never an empty or unknown one", () => {
+    expect(nums(arrangePresets(CARDS, new Set(["CCT_MAGE"]), "game", ORDER))).toEqual([1, 5]);
+    expect(nums(arrangePresets(CARDS, new Set(["CCT_PRIEST", "CCT_RANGER"]), "game", ORDER))).toEqual([5]);
+  });
+  it("class sort: chip order, unknown last, the game's order within a class", () => {
+    expect(nums(arrangePresets(CARDS, new Set(), "class", ORDER))).toEqual([3, 5, 1, 4, 2]);
+  });
+  it("class sort with a filter: only the selected classes rank a card", () => {
+    expect(nums(arrangePresets(CARDS, new Set(["CCT_MAGE", "CCT_ATTACKER"]), "class", ORDER))).toEqual([3, 1, 5]);
   });
 });
 

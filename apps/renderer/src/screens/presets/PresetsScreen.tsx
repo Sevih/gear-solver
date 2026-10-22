@@ -7,7 +7,12 @@
  * compared to their best known outfit and flagged past the loss threshold
  * (Settings → Solver). Each hero's line proposes the gems of their own EE that
  * score best with the outfit (`lib/presets/eeGems.ts`) and scores with them;
- * "+ Worklist" queues the outfit and those gems as the hero's entry.
+ * "+ Worklist" queues the outfit and those gems as the hero's entry,
+ * "Optimize →" opens the Builder on the hero.
+ *
+ * Cards come in the in-game editor's order (`presetRows`); the class chips
+ * filter them and "Sort: Class" groups them by class (`presetClasses`,
+ * `arrangePresets`) — kept for the mount only, like the rest of the screen.
  *
  * Nothing is written to the game: the groups are local (`gs.presetHeroes`).
  * The priority is the Builder's of this session, else the one of the hero's
@@ -20,10 +25,14 @@ import { CharacterPortrait, SlotMini } from "../../design/EquipmentIcon.js";
 import { GearDetailBody } from "../../design/GearDetail.js";
 import { RichTooltip } from "../../design/RichTooltip.js";
 import { Pill } from "../../design/Chips.js";
+import { CyanButton } from "../../design/Shell.js";
 import { cx } from "../../design/cx.js";
 import { toUiPiece } from "../../design/adapter.js";
 import { toDesignSlot } from "../../design/tokens.js";
-import { PRESET_SLOTS, presetRows, type PresetPiece, type PresetRow } from "../../lib/presets/presetRows.js";
+import {
+  arrangePresets, PRESET_SLOTS, presetClasses, presetRows, type PresetPiece, type PresetRow, type PresetSort,
+} from "../../lib/presets/presetRows.js";
+import { CLASSES } from "../../lib/homeStats.js";
 import { bestKnownFor, evaluatePresetFor, heroBases, presetLoss, presetPriorityOf, type PresetEvalContext } from "../../lib/presets/evaluate.js";
 import { bestEeGemsFor } from "../../lib/presets/eeGems.js";
 import { presetWorklistFor } from "../../lib/presets/presetWorklist.js";
@@ -51,6 +60,8 @@ interface PresetsScreenProps {
   worklistHeroUids?: ReadonlySet<string>;
   /** Queue an entry (one per hero, App's `addToWorklist` — toast included). */
   onAddToWorklist?: (entry: WorklistEntry, note?: string) => void;
+  /** Open the Builder on a hero (App's `setBuilderHero` + tab switch). */
+  onOptimize?: (heroUid: string) => void;
 }
 
 /** Same rounding as the Builder's results table. */
@@ -67,7 +78,10 @@ interface HeroView {
   element: string | null;
 }
 
-export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, onAddToWorklist }: PresetsScreenProps) {
+const CLASS_ORDER = CLASSES.map((c) => c.id);
+const classLabel = (id: string): string | null => CLASSES.find((c) => c.id === id)?.label ?? null;
+
+export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, onAddToWorklist, onOptimize }: PresetsScreenProps) {
   // Read once per mount — the screen remounts on every tab switch, so an edit
   // made in the Builder (saved build, priority) is picked up on the way back.
   const [savedBuilds] = useState(loadSavedBuilds);
@@ -77,6 +91,8 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // A backup imported while the tab is open (Settings modal) — reload, or the
   // next edit would write the pre-import groups back.
   useEffect(() => onBackupImported(() => setPresetHeroes(loadPresetHeroes())), []);
+  const [classFilter, setClassFilter] = useState<ReadonlySet<string>>(() => new Set());
+  const [sort, setSort] = useState<PresetSort>("game");
 
   const rows = useMemo(() => (inventory ? presetRows(inventory) : []), [inventory]);
   const roster = useMemo(() => new Set(inventory?.characters.map((c) => c.uid) ?? []), [inventory]);
@@ -96,6 +112,16 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
     ));
     return { inventory, game, heroes: bases, savedBuilds };
   }, [inventory, game, userGeasLevels, userCodexLevel, heroFilters, savedBuilds]);
+  const cards = useMemo(() => rows.map((row) => {
+    const stored = presetHeroesFor(presetHeroes, row.preset.num, roster);
+    return { row, stored, classes: presetClasses(row, stored, (uid) => heroes.get(uid)?.cls ?? null) };
+  }), [rows, presetHeroes, roster, heroes]);
+  const shown = useMemo(() => arrangePresets(cards, classFilter, sort, CLASS_ORDER), [cards, classFilter, sort]);
+  const toggleClass = (id: string) => setClassFilter((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
 
   if (!inventory || !ctx) {
     return <Empty title="No capture yet" subtitle="Arm capture and import your account to see your equipment presets here." />;
@@ -112,22 +138,69 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
           A preset is one reference hero's outfit, worn as-is by its associated heroes (each keeps their own EE).
           Scores use each hero's Builder priority (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a {lossWarnPct} % loss.
         </span>
+        <div className="flex gap-1">
+          {CLASSES.map((cl) => {
+            const active = classFilter.has(cl.id);
+            return (
+              <button
+                key={cl.id}
+                type="button"
+                onClick={() => toggleClass(cl.id)}
+                title={cl.label}
+                aria-pressed={active}
+                className={cx(
+                  "inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors",
+                  active ? "border-cyan-400/40 bg-cyan-500/10" : "border-white/7 bg-black/25 opacity-55 hover:opacity-100",
+                )}
+              >
+                <ClassIcon label={cl.label} />
+              </button>
+            );
+          })}
+        </div>
+        <div className="inline-flex items-center gap-1.5">
+          <span className="font-mono uppercase tracking-wider text-zinc-400">Sort</span>
+          <div role="radiogroup" aria-label="Sort presets" className="inline-flex h-7 items-center rounded-md border border-white/7 bg-black/30 p-0.5">
+            {([["game", "In-game", "The order of the in-game preset editor — favorites first"], ["class", "Class", "Grouped by class, in the in-game order within a class"]] as const).map(([id, label, title]) => (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={sort === id}
+                onClick={() => setSort(id)}
+                title={title}
+                className={cx(
+                  "inline-flex h-6 items-center rounded px-2 text-[11px] transition-colors",
+                  sort === id ? "bg-cyan-500/15 text-cyan-300" : "text-zinc-400 hover:text-zinc-200",
+                )}
+              >{label}</button>
+            ))}
+          </div>
+        </div>
+        {classFilter.size > 0 && (
+          <button type="button" onClick={() => setClassFilter(new Set())} className="text-[11px] text-cyan-300 hover:text-cyan-200">Clear</button>
+        )}
         <div className="ml-auto">
-          <Pill tone="emerald">{rows.filter((r) => !r.empty).length} used · {rows.length} total</Pill>
+          <Pill tone="emerald">
+            {rows.filter((r) => !r.empty).length} used · {rows.length} total{shown.length < rows.length ? ` · ${shown.length} shown` : ""}
+          </Pill>
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-6 pb-6 pt-3">
-        {rows.map((row) => (
+        {shown.length === 0 && <span className="text-[11.5px] italic text-zinc-400">No preset of the selected classes.</span>}
+        {shown.map(({ row, stored, classes }) => (
           <PresetCard
             key={row.preset.num}
             row={row}
+            classes={classes}
             game={game}
             ctx={ctx}
             heroes={heroes}
             roster={inventory.characters}
-            stored={presetHeroesFor(presetHeroes, row.preset.num, roster)}
+            stored={stored}
             lossWarnPct={lossWarnPct}
             worklist={{ heroUids: worklistHeroUids, onAdd: onAddToWorklist }}
+            onOptimize={onOptimize}
             onSetReference={(uid) => setPresetHeroes((m) => setPresetReference(m, row.preset.num, uid))}
             onAddAssociated={(uid) => setPresetHeroes((m) => addPresetAssociated(m, row.preset.num, uid))}
             onRemoveAssociated={(uid) => setPresetHeroes((m) => removePresetAssociated(m, row.preset.num, uid))}
@@ -145,9 +218,11 @@ interface WorklistHook {
 }
 
 function PresetCard({
-  row, game, ctx, heroes, roster, stored, lossWarnPct, worklist, onSetReference, onAddAssociated, onRemoveAssociated,
+  row, classes, game, ctx, heroes, roster, stored, lossWarnPct, worklist, onOptimize, onSetReference, onAddAssociated, onRemoveAssociated,
 }: {
   row: PresetRow;
+  /** Raw `CCT_*` ids (`presetClasses`), empty when unknown. */
+  classes: readonly string[];
   game: GameData | null;
   ctx: PresetEvalContext;
   heroes: ReadonlyMap<string, HeroView>;
@@ -155,6 +230,7 @@ function PresetCard({
   stored: { referenceUid: string | null; associatedUids: string[] };
   lossWarnPct: number;
   worklist: WorklistHook;
+  onOptimize?: (heroUid: string) => void;
   onSetReference: (uid: string | null) => void;
   onAddAssociated: (uid: string) => void;
   onRemoveAssociated: (uid: string) => void;
@@ -169,7 +245,9 @@ function PresetCard({
   const sharedWith = [...new Map(pieces.flatMap((p) => p.sharedWith).map((r) => [r.num, r])).values()];
 
   return (
-    <section className="flex flex-col gap-2.5 rounded-xl border border-white/7 bg-bg-elev-2 px-3 py-2.5 backdrop-blur-sm">
+    // No backdrop-filter on the card: it would make it a stacking context, and
+    // the HeroSelect list (z-30) would then slide under the next card.
+    <section className="flex flex-col gap-2.5 rounded-xl border border-white/7 bg-bg-elev-2 px-3 py-2.5">
       <header className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -179,6 +257,10 @@ function PresetCard({
         >
           <span className={cx("inline-block text-[9px] text-zinc-400 transition-transform", open && "rotate-90")}>▸</span>
           <span className="font-mono text-[11px] tabular-nums text-zinc-400">#{preset.num}</span>
+          {classes.map((id) => {
+            const label = classLabel(id);
+            return label ? <ClassIcon key={id} label={label} /> : null;
+          })}
           <span className="font-display text-[13px] font-semibold text-white">{preset.name || "Unnamed preset"}</span>
           {preset.favorite && <span className="text-[12px] text-amber-300" title="Favorite in-game">★</span>}
         </button>
@@ -222,7 +304,7 @@ function PresetCard({
                 <button type="button" onClick={() => onSetReference(null)} className="text-[11px] text-cyan-300 hover:text-cyan-200">Clear</button>
               )}
             </div>
-            {referenceUid && <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} reference />}
+            {referenceUid && <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} reference />}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -234,7 +316,7 @@ function PresetCard({
               {associatedUids.length === 0 && <span className="text-[10.5px] italic text-zinc-400">Add the heroes who will share this outfit</span>}
             </div>
             {associatedUids.map((uid) => (
-              <HeroLine key={uid} uid={uid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onRemove={() => onRemoveAssociated(uid)} />
+              <HeroLine key={uid} uid={uid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} onRemove={() => onRemoveAssociated(uid)} />
             ))}
           </div>
         </>
@@ -290,9 +372,10 @@ function Badge({ tone, title, children }: { tone: "rose" | "amber"; title: strin
 
 /** One hero of the preset — the EE gems proposed for them, the preset's score
  *  (with those gems) and offensive ratings on them; for an associated hero,
- *  the loss against their best known outfit; "+ Worklist" for both. */
+ *  the loss against their best known outfit; "+ Worklist" and "Optimize →"
+ *  for both. */
 function HeroLine({
-  uid, row, ctx, heroes, lossWarnPct, worklist, reference = false, onRemove,
+  uid, row, ctx, heroes, lossWarnPct, worklist, onOptimize, reference = false, onRemove,
 }: {
   uid: string;
   row: PresetRow;
@@ -300,6 +383,7 @@ function HeroLine({
   heroes: ReadonlyMap<string, HeroView>;
   lossWarnPct: number;
   worklist: WorklistHook;
+  onOptimize?: (heroUid: string) => void;
   reference?: boolean;
   onRemove?: () => void;
 }) {
@@ -376,12 +460,15 @@ function HeroLine({
           className="ml-auto rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >+ Worklist</button>
       )}
+      {onOptimize && (
+        <CyanButton size="sm" className={cx(!worklist.onAdd && "ml-auto")} onClick={() => onOptimize(uid)}>Optimize →</CyanButton>
+      )}
       {onRemove && (
         <button
           type="button"
           onClick={onRemove}
           title={`Remove ${h.name} from this preset`}
-          className={cx("grid h-6 w-6 place-items-center rounded-md border border-white/7 bg-black/40 text-[11px] text-white hover:bg-black/60", !worklist.onAdd && "ml-auto")}
+          className={cx("grid h-6 w-6 place-items-center rounded-md border border-white/7 bg-black/40 text-[11px] text-white hover:bg-black/60", !worklist.onAdd && !onOptimize && "ml-auto")}
         >✕</button>
       )}
       {evalPreset && gemNames.length > 0 && (
@@ -390,6 +477,20 @@ function HeroLine({
         </span>
       )}
     </div>
+  );
+}
+
+/** Same class icon as the Builds tab's chips. */
+function ClassIcon({ label }: { label: string }) {
+  return (
+    <img
+      src={`/img/ui/class/IG_Turn_Class_${label}.webp`}
+      alt={label}
+      title={label}
+      className="h-4 w-4 object-contain"
+      loading="lazy"
+      draggable={false}
+    />
   );
 }
 

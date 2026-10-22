@@ -152,6 +152,11 @@ export interface Preset {
   itemUids: string[];
   /** Starred in the in-game preset list (`Favorites` ≠ 0 on the wire). */
   favorite: boolean;
+  /** `PRESET_TYPE` — 0 the regular list, 1 Master League. */
+  presetType: number;
+  /** The player's order in the in-game editor (`PresetOrderList`), higher
+   *  first; 0 when the preset has no entry there. See `comparePresets`. */
+  sortOrder: number;
 }
 
 export interface Inventory {

@@ -8,6 +8,63 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗂️ Onglet Presets : ordre du jeu, filtre et tri par classe, Optimize par héros, menu des héros au-dessus des cartes (2026-10-22)
+- ✅ **Ordre du jeu.** Retour du banc de Sevih sur la 1.14.0 : les cartes suivaient le `num` croissant, pas l'éditeur
+  du jeu. Lu dans le client décompilé : `CItemInventory.InitPresetList` donne à chaque preset `m_nSort` = le `SortOrder`
+  de la première entrée de `PresetOrderList` portant son `Num` (sans regarder le `PresetType`, 0 sinon), et
+  `CEquipPresetData.SortPreset` trie favoris d'abord, `m_nSort` décroissant, puis `Num` (le `m_nID == 0` en dernier est
+  l'emplacement « nouveau » de l'éditeur, pas une donnée). Core : `RawPresetOrder` (`raw.ts`, tous champs optionnels) à
+  la place de `unknown[]` ; `Preset` gagne `presetType` et `sortOrder` (0 par défaut, `parse.ts` › `presetSortOrders`
+  reproduit `GetOrderValue`) ; `comparePresets` exporté (type croissant — le client tient une liste par `PRESET_TYPE`,
+  les Master League passent donc après —, favoris, `sortOrder` décroissant, `num`) ; `presetRows` trie avec. Le `#num`
+  reste sur la carte. **La forme de `PresetOrderList` est déduite du client, aucune capture réelle sur le portable** :
+  fixtures écrites d'après `WSItemPresetOrderData` / `WSItemPresetSortData` ; si la liste manque ou a une autre forme,
+  tout `sortOrder` vaut 0 et l'ordre retombe sur favoris puis numéro. `docs/data-schema.md` / `wiki/Data-Schema.md`
+  disaient `PresetType` non lu : corrigés, avec la forme de `PresetOrderList`.
+- ✅ **Menu déroulant derrière la carte suivante.** Chaque `<section>` de `PresetCard` portait `backdrop-blur-sm` : un
+  `backdrop-filter` fait de la carte un contexte d'empilement, le `z-30` de la liste de `HeroSelect` y restait confiné
+  et la carte suivante, peinte après, passait dessus. Classe retirée (le fond `bg-bg-elev-2` reste), commentaire à la
+  place. Vérifié par lecture du DOM, pas de navigateur : entre la carte et la liste, ni `overflow`, ni `transform`, ni
+  `filter`, ni `z-index` (`div.w-56` puis le `div.relative` de `HeroSelect`) ; le conteneur défilant `overflow-y-auto`
+  ne crée pas de contexte d'empilement ; dans les cartes suivantes, les seuls éléments empilés sont les badges
+  « missing / shared » (`-translate-x-1/2`, sans `z-index`), les calques `z-10` des portraits (supprimés sous 40 px,
+  les portraits des presets font 28 et 32 px) et l'icône de slot vide `opacity-35`, tous sous `z-30`. Ni
+  `HeroSelect` ni le Builder ne bougent.
+- ✅ **Filtre et tri par classe.** Barre du haut, à droite du texte d'aide : les cinq chips de classe (multi-sélection,
+  mêmes icônes `IG_Turn_Class_*` et même style que Builds), « Sort: In-game · Class » et « Clear » quand un filtre est
+  actif. La liste est `CLASSES` de `lib/homeStats.ts`, désormais exportée (pas une troisième copie ; `CLASS_CHOICES`
+  de `BuildsScreen.tsx` reste locale, l'importer aurait tiré l'écran Builds, chargé à la demande, dans le paquet de
+  Presets) : les chips suivent donc l'ordre de l'accueil (Striker, Ranger, Mage, Defender, Healer), pas celui de
+  Builds. `presetClasses` (`lib/presets/presetRows.ts`) : classes des pièces présentes (`GearPiece.classLimit`, le
+  `CCT_*` brut que `parse.ts` tire de `EquipmentDef.classLimit` — même valeur que `EquipmentDef.class` en nom affiché,
+  sans passer par le `GameData`) ; deux pièces de deux classes gardent les deux — c'est un preset incohérent, il
+  apparaît sous les deux chips ; sans pièce restreinte, repli sur le héros de référence enregistré, puis les porteurs
+  (le porteur unique proposé comme référence y est donc couvert), puis les associés ; sinon inconnue.
+  `arrangePresets` : un filtre garde une carte dont une classe est cochée et masque les cartes vides et inconnues ;
+  « Class » trie par la première classe de la carte dans l'ordre des chips (cochées seules quand un filtre est actif),
+  inconnues à la fin, ordre du jeu dans une classe (tri stable). Icône de classe à côté du nom quand elle est connue ;
+  la pastille garde « N used · M total » et ajoute « · K shown » quand des cartes sont masquées ; une ligne « No preset
+  of the selected classes. » si plus rien ne reste. État en `useState`, perdu au changement d'onglet.
+- ✅ **Optimize →.** `PresetsScreen` reçoit `onOptimize` d'`App.tsx` (même callback que Builds :
+  `setBuilderHero(uid); setTab("Builder")`) ; chaque `HeroLine`, référence et associés, montre le `CyanButton
+  size="sm"` de Builds à côté de « + Worklist ». Il ouvre le Builder sur le héros, rien d'autre. Piste hors périmètre :
+  ouvrir le Builder avec le contexte du preset (exclure les pièces des autres presets, fixer celles du preset).
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (section Presets : ordre, filtre et tri, Optimize ; arbre des
+  fichiers), `docs/reference.md` / `wiki/Engine-Reference.md` (tables des tests, arbre), `wiki/Using-the-App.md`,
+  `docs/release-notes.md` › [Unreleased]. `wiki/FAQ.md` n'évoque pas l'ordre des presets : inchangé.
+- ✅ **Tests.** `packages/core/test/parse.test.ts` (+3 : `PresetOrderList` lu par `Num` avec un `Num` sans entrée → 0
+  et le `PresetType`, liste absente ou entrées sans champs → 0, `comparePresets`) ; `apps/renderer/test/presets.test.ts`
+  (+10 : ordre favoris / `sortOrder` / num / Master League, `presetClasses` arme restreinte, accessoire restreint,
+  deux classes, repli référence → porteurs → associés, inconnue, `arrangePresets` filtre, cartes vides et inconnues
+  masquées, tri par classe avec et sans filtre) ; les fixtures `Preset` de `presets.test.ts` et
+  `presetsGems.test.ts` prennent les deux champs. `npm run typecheck` : vert (dernière ligne `> tsc --noEmit`, sans
+  erreur) ; `npm test` : `Tests  169 passed (169)` (core), `Tests  196 passed (196)` (desktop),
+  `Tests  668 passed (668)` (renderer) ; `npm run lint` : `✖ 14 problems (0 errors, 14 warnings)`, inchangé.
+- ⏳ Sevih sur le fixe : l'ordre des cartes est celui de l'éditeur de presets du jeu (favoris en tête) — sinon,
+  regarder la forme réelle de `PresetOrderList` dans `user_item.json` ; le menu « Reference » / « Associated » d'une
+  carte s'affiche par-dessus la carte suivante ; les chips de classe filtrent, « Sort: Class » regroupe ;
+  « Optimize → » ouvre le Builder sur le héros.
+
 ### 🔧 Electron 42.4.1 → 44.9.3, installeur non publié pour le banc réel (2026-10-22)
 - ✅ **Pourquoi.** La 42 n'est plus supportée depuis la sortie de la 45.0.0 le 21/10/2026 (supportées : 43, 44, 45).
   La PR #36 de Dependabot visait la 44.9.0, déjà dépassée et sans banc : elle n'est pas reprise, Sevih la fermera

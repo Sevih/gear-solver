@@ -46,7 +46,7 @@ function piece(slot: GearPiece["slot"], uid: string, equippedBy: string | null, 
 }
 
 const hero = (uid: string): Character => ({ uid, charId: 1, name: uid } as unknown as Character);
-const preset = (num: number, itemUids: string[]): Preset => ({ num, name: `P${num}`, itemUids, favorite: false });
+const preset = (num: number, itemUids: string[]): Preset => ({ num, name: `P${num}`, itemUids, favorite: false, presetType: 0, sortOrder: 0 });
 const five = (id: number) => [id, id, id, id, id];
 
 // A wears preset 1 (w1, a1, Talisman t1 with DMG+ gems). B wears its own

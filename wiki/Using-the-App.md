@@ -68,9 +68,15 @@ way the game does (validated to match the in-game character sheet).
 
 ## Presets — your in-game equipment presets
 
-One card per equipment preset saved in-game: its number, name and ★ (favorite), its 7 pieces
-(the EE is never part of a preset — each hero keeps their own), and the heroes **currently
-wearing** it (gear identical to the preset, EE aside). Nothing is sent to the game.
+One card per equipment preset saved in-game, in the **same order as the game's preset editor**
+(favorites first): its number, name and ★ (favorite), its class icon, its 7 pieces (the EE is never
+part of a preset — each hero keeps their own), and the heroes **currently wearing** it (gear
+identical to the preset, EE aside). Nothing is sent to the game.
+
+- **Class filter and sort** — the class chips at the top show only the presets of the ticked
+  classes (**Clear** resets them); **Sort: Class** groups the cards by class instead of the
+  game's order. A preset's class comes from its class-restricted weapon or accessory, else from
+  its reference hero, its wearers or its associated heroes.
 
 - **Reference** — the hero the preset was built for (solve them in the Builder as usual). If a
   single hero wears the preset, they're proposed by default.
@@ -91,6 +97,7 @@ wearing** it (gear identical to the preset, EE aside). Nothing is sent to the ga
 - **+ Worklist** — on each hero's line: queues the preset's pieces that hero doesn't wear yet
   and the EE gems to socket as that hero's **Worklist** entry (replacing their previous one). A
   piece no longer in your inventory is left out, and the toast says so.
+- **Optimize →** — on each hero's line: opens the Builder on that hero, like on the Builds tab.
 - **Warnings** — a piece no longer in your inventory, or a piece that sits in **two** presets
   (two presets can't be worn in the same fight), is marked on the piece and in the card's banner.
   Empty presets are listed collapsed.

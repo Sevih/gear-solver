@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseInventory, isGear, projectMainToCeiling } from "../src/parse.js";
+import { parseInventory, isGear, projectMainToCeiling, comparePresets } from "../src/parse.js";
 import type { RawUserItem } from "../src/raw.js";
 import type { GameData } from "../src/gamedata.js";
 import eePassivesJson from "../../../data/derived/ee-passives.json";
@@ -292,5 +292,41 @@ describe("EE combat-only main — Accuracy vs <element> (ST_AVOID)", () => {
     expect(g.main).toEqual([
       { stat: "avoid", value: -30, percent: false, combatOnly: true, name: "Accuracy vs Earth", fromBuff: true, source: "option" },
     ]);
+  });
+});
+
+describe("presets — PresetOrderList (shape from the decompiled client, no capture yet)", () => {
+  const raw = (num: number, favorites = 0, presetType = 0): NonNullable<RawUserItem["PresetList"]> => [{
+    PresetType: presetType, Num: num, Name: btoa(`P${num}`), ItemUIDList: [0, 0, 0, 0, 0, 0, 0, 0], Favorites: favorites,
+  }];
+  const list = [...raw(1), ...raw(2), ...raw(3, 1), ...raw(4, 0, 1)];
+
+  it("reads each preset's SortOrder by Num; a Num without an entry is 0", () => {
+    const inv = parseInventory({
+      ItemList: [],
+      PresetList: list,
+      PresetOrderList: [
+        { PresetType: 0, SortOrder: [{ Num: 1, SortOrder: 3 }, { Num: 3, SortOrder: 1 }] },
+        { PresetType: 1, SortOrder: [{ Num: 4, SortOrder: 2 }] },
+      ],
+    });
+    expect(inv.presets.map((p) => [p.num, p.name, p.sortOrder, p.presetType, p.favorite])).toEqual([
+      [1, "P1", 3, 0, false], [2, "P2", 0, 0, false], [3, "P3", 1, 0, true], [4, "P4", 2, 1, false],
+    ]);
+  });
+
+  it("an absent list (or entries missing fields) reads as order 0", () => {
+    expect(parseInventory({ ItemList: [], PresetList: list }).presets.map((p) => p.sortOrder)).toEqual([0, 0, 0, 0]);
+    const loose = parseInventory({ ItemList: [], PresetList: list, PresetOrderList: [{}, { SortOrder: null }, { SortOrder: [{ Num: 2 }] }] });
+    expect(loose.presets.map((p) => p.sortOrder)).toEqual([0, 0, 0, 0]);
+  });
+
+  it("comparePresets: type, then favorites, then SortOrder descending, then Num", () => {
+    const inv = parseInventory({
+      ItemList: [],
+      PresetList: list,
+      PresetOrderList: [{ PresetType: 0, SortOrder: [{ Num: 1, SortOrder: 3 }, { Num: 4, SortOrder: 9 }] }],
+    });
+    expect([...inv.presets].sort(comparePresets).map((p) => p.num)).toEqual([3, 1, 2, 4]);
   });
 });

@@ -356,13 +356,42 @@ export function parseInventory(
     fusionCharId: Number(c.FusionCharID ?? 0) || 0,
     fusionLevel: Number(c.FusionLevel ?? 0) || 0,
   }));
+  const sortOrderOf = presetSortOrders(userItem.PresetOrderList);
   const presets: Preset[] = (userItem.PresetList ?? []).map((p) => ({
     num: p.Num,
     name: decodeBase64Utf8(p.Name),
     itemUids: p.ItemUIDList.map(String),
     favorite: (p.Favorites ?? 0) !== 0,
+    presetType: Number(p.PresetType ?? 0) || 0,
+    sortOrder: sortOrderOf(p.Num),
   }));
   return { gear, characters, presets };
+}
+
+/** `Num` → `SortOrder` from `PresetOrderList`, mirror of the client's
+ *  `CItemInventory.InitPresetList` / `GetOrderValue`: the first entry carrying
+ *  that `Num`, whatever its `PresetType` (the client doesn't check it either),
+ *  0 when none does or the list is absent. */
+function presetSortOrders(list: RawUserItem["PresetOrderList"]): (num: number) => number {
+  const byNum = new Map<number, number>();
+  for (const order of list ?? []) {
+    for (const e of order?.SortOrder ?? []) {
+      if (e?.Num == null || byNum.has(e.Num)) continue;
+      byNum.set(e.Num, Number(e.SortOrder ?? 0) || 0);
+    }
+  }
+  return (num) => byNum.get(num) ?? 0;
+}
+
+/** The in-game preset list order, mirror of the client's
+ *  `CEquipPresetData.SortPreset` (one list per `PRESET_TYPE`, so the regular
+ *  presets come before the Master League ones here): favorites first, then
+ *  `sortOrder` descending, then `num` ascending. */
+export function comparePresets(a: Preset, b: Preset): number {
+  return a.presetType - b.presetType
+    || Number(b.favorite) - Number(a.favorite)
+    || b.sortOrder - a.sortOrder
+    || a.num - b.num;
 }
 
 /** Decode a base64 string to UTF-8 using `atob` + `TextDecoder` — both are

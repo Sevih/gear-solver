@@ -16,7 +16,10 @@ const ELEMENTS: { id: string; label: string; color: string }[] = [
   { id: "CET_LIGHT", label: "Light", color: "#ffe066" },
   { id: "CET_DARK",  label: "Dark",  color: "#cc5de8" },
 ];
-const CLASSES: { id: string; label: string }[] = [
+/** The five classes, raw `CCT_*` id + in-game label (also the class icon's
+ *  file name, `/img/ui/class/IG_Turn_Class_<label>.webp`). The Presets tab's
+ *  class chips use this list too. */
+export const CLASSES: { id: string; label: string }[] = [
   { id: "CCT_ATTACKER", label: "Striker" },
   { id: "CCT_RANGER",   label: "Ranger" },
   { id: "CCT_MAGE",     label: "Mage" },

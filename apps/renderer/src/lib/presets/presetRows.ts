@@ -10,7 +10,7 @@
  *
  * Pure: no React, no storage — the screen feeds it the inventory.
  */
-import type { GearPiece, GearSlot, Inventory, Preset } from "@gear-solver/core";
+import { comparePresets, type GearPiece, type GearSlot, type Inventory, type Preset } from "@gear-solver/core";
 
 /** Wire order of `ItemUIDList` (see `RawPreset` in core's raw.ts). Used for
  *  the slot of a uid the inventory no longer holds. */
@@ -71,7 +71,8 @@ export interface PresetRow {
   empty: boolean;
 }
 
-/** One row per in-game preset, in the game's `num` order. */
+/** One row per in-game preset, in the order of the in-game preset editor
+ *  (`comparePresets`: favorites, then the player's order, then `num`). */
 export function presetRows(inventory: Inventory): PresetRow[] {
   const byUid = new Map<string, GearPiece>();
   const slotByUid = new Map<string, GearPiece["slot"]>();
@@ -95,7 +96,7 @@ export function presetRows(inventory: Inventory): PresetRow[] {
     else heroesBySig.set(sig, [c.uid]);
   }
 
-  const presets = [...inventory.presets].sort((a, b) => a.num - b.num);
+  const presets = [...inventory.presets].sort(comparePresets);
   // Non-EE slots of each preset, and which presets hold each uid.
   const slotsOf = presets.map((p) => presetSlots(p, byUid));
   const holders = new Map<string, PresetRef[]>();
@@ -144,4 +145,58 @@ function presetSlots(p: Preset, byUid: ReadonlyMap<string, GearPiece>): Array<{ 
   });
   const rank = (s: GearSlot | null) => (s ? PRESET_SLOTS.indexOf(s) : PRESET_SLOTS.length);
   return out.sort((a, b) => rank(a.slot) - rank(b.slot));
+}
+
+/** The heroes a preset is grouped with (`gs.presetHeroes`). */
+export interface PresetHeroRefs {
+  referenceUid: string | null;
+  associatedUids: readonly string[];
+}
+
+/** Classes (raw `CCT_*`) a preset is for. First from its pieces: a weapon or
+ *  accessory restricted to a class makes the preset that class's — two pieces
+ *  restricted to two classes keep both (an inconsistent preset). Without a
+ *  restricted piece, the class of the reference hero, else of the current
+ *  wearers, else of the associated heroes. Empty when nothing tells. */
+export function presetClasses(row: PresetRow, refs: PresetHeroRefs, classOf: (heroUid: string) => string | null): string[] {
+  const fromPieces = distinct(row.presentPieces.map((p) => p.classLimit));
+  if (fromPieces.length > 0) return fromPieces;
+  for (const uids of [refs.referenceUid ? [refs.referenceUid] : [], row.wearerUids, refs.associatedUids]) {
+    const classes = distinct(uids.map(classOf));
+    if (classes.length > 0) return classes;
+  }
+  return [];
+}
+
+function distinct(values: Array<string | null>): string[] {
+  return [...new Set(values.filter((v): v is string => !!v))];
+}
+
+export type PresetSort = "game" | "class";
+
+/** The cards the Presets tab shows, given its class filter and sort. `items`
+ *  come in the game's order. Filter: a card stays when one of its classes is
+ *  selected; an empty card or one of unknown class is hidden as soon as a
+ *  class is. Sort "class": by the first of the card's classes in `classOrder`
+ *  (only the selected ones count when filtering), unknown last, the game's
+ *  order within a class. */
+export function arrangePresets<T extends { row: PresetRow; classes: readonly string[] }>(
+  items: readonly T[],
+  selected: ReadonlySet<string>,
+  sort: PresetSort,
+  classOrder: readonly string[],
+): T[] {
+  const kept = selected.size === 0
+    ? [...items]
+    : items.filter((it) => !it.row.empty && it.classes.some((c) => selected.has(c)));
+  if (sort === "game") return kept;
+  const order = selected.size === 0 ? classOrder : classOrder.filter((c) => selected.has(c));
+  const rank = (classes: readonly string[]) => {
+    const ranks = classes.map((c) => order.indexOf(c)).filter((i) => i >= 0);
+    return ranks.length > 0 ? Math.min(...ranks) : order.length;
+  };
+  return kept
+    .map((it) => ({ it, r: rank(it.classes) }))
+    .sort((a, b) => a.r - b.r)
+    .map(({ it }) => it);
 }

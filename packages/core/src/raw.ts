@@ -52,10 +52,19 @@ export interface RawPreset {
   Favorites: number;
 }
 
+/** One entry of `PresetOrderList` in /user/item — the order the player gave
+ *  one preset type's list in the in-game editor (client `WSItemPresetOrderData`
+ *  holding `WSItemPresetSortData`). Shape read from the decompiled client, not
+ *  from a capture: every field is optional, a missing one reads as order 0. */
+export interface RawPresetOrder {
+  PresetType?: number;
+  SortOrder?: Array<{ Num?: number; SortOrder?: number }> | null;
+}
+
 export interface RawUserItem {
   ItemList: RawItem[];
   PresetList?: RawPreset[];
-  PresetOrderList?: unknown[];
+  PresetOrderList?: RawPresetOrder[] | null;
   ItemConvertOptionInfo?: unknown;
 }
 

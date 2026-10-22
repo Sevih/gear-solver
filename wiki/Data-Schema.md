@@ -79,8 +79,11 @@ from each item's `CharUID` (`parse.ts`: `equippedBy = CharUID === "0" ? null : C
 
 **Presets**: `PresetList` lives in **`/user/item`** (not `/user/character`) —
 an array of `{PresetType, Num, Name (base64), ItemUIDList[8], Favorites}` (full shape
-in `raw.ts` `RawPreset`; the parser today reads `Num` (→ `Preset.num`), `Name`,
-`ItemUIDList` and `Favorites` (≠ 0 → `Preset.favorite`, the Presets tab's ★) — only `PresetType` remains unread).
+in `raw.ts` `RawPreset`; the parser reads `Num` (→ `Preset.num`), `Name`, `ItemUIDList`, `Favorites`
+(≠ 0 → `Preset.favorite`, the Presets tab's ★) and `PresetType` (→ `Preset.presetType`, 1 = Master League)).
+`PresetOrderList`, next to it, carries the order the player gave in the game's editor:
+`[{ PresetType, SortOrder: [{ Num, SortOrder }] }]` (`RawPresetOrder`, shape read from the decompiled client,
+not seen in a capture yet) → `Preset.sortOrder` (0 without an entry), sorted by `comparePresets`.
 Order of the 8 slots: Weapon, Accessory, Helmet, Armor, Gloves, Boots, EE, Talisman.
 Names are base64-encoded UTF-8 (cf. `decodeBase64Utf8` in `parse.ts`).
 

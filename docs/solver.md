@@ -461,6 +461,20 @@ l'inventaire (slot repris de la position sur le fil) et pièce présente dans **
 <preset> » — deux presets peuvent jouer le même combat) sont marquées sur la tuile et dans un bandeau. Un
 preset vide est listé replié.
 
+**Ordre, filtre et tri par classe.** Les cartes suivent l'ordre de l'éditeur de presets du jeu :
+`comparePresets` (core, `parse.ts`) reproduit le `CEquipPresetData.SortPreset` du client — type croissant
+(les presets Master League après les autres), favoris d'abord, puis l'ordre du joueur
+(`Preset.sortOrder`, lu dans `PresetOrderList` par `Num`, 0 sans entrée) décroissant, puis `num`. Le
+`#num` reste affiché. La barre du haut porte les cinq chips de classe (`CLASSES` de `lib/homeStats.ts`,
+multi-sélection), un sélecteur « Sort: In-game · Class » et « Clear ». La classe d'un preset
+(`presetClasses`) vient de ses pièces (arme ou accessoire restreint à une classe, `GearPiece.classLimit` ;
+deux classes différentes sont gardées toutes deux), à défaut du héros de référence, des porteurs, puis des
+associés ; sinon elle est inconnue. Un filtre garde une carte dont l'une des classes est cochée et masque
+les cartes vides ou de classe inconnue ; « Class » trie par la première classe dans l'ordre des chips
+(cochées seulement quand un filtre est actif), inconnues à la fin, l'ordre du jeu dans une classe
+(`arrangePresets`). L'icône de classe s'affiche à côté du nom ; la pastille ajoute « · K shown » quand
+des cartes sont masquées. État du composant, perdu au changement d'onglet.
+
 Un preset = la tenue d'**un perso de référence**, portée telle quelle par des **persos associés** qui se
 règlent par les gemmes de leur propre EE. Les groupes se font à la main (sélecteur de héros ; un porteur
 actuel unique est proposé comme référence), stockés app-local dans `gs.presetHeroes`
@@ -492,7 +506,7 @@ parenthèses le score tel que serti quand il diffère.
 `gemAllocation = { talisman: [], ee }`), `mode: "preset"` (« Preset » sur la carte de la Worklist, sans
 CP) ; `upsertWorklistEntry` remplace l'entrée du héros, toast « Added to / Replaced in worklist — <Nom> ».
 Une pièce absente de l'inventaire est exclue, et le toast le dit. Bouton grisé quand il n'y a rien à
-changer.
+changer. **Optimize →**, à côté : ouvre le Builder sur le héros, comme une carte de Builds.
 
 **Priorité.** `presetPriorityOf` lit, dans l'ordre, la priorité du Builder de la session
 (`gs.solver.heroFilters`, sessionStorage : le Builder repart propre à chaque lancement), puis
@@ -691,7 +705,7 @@ apps/renderer/src/
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
 │   ├── presets/
-│   │   ├── presetRows.ts           ← presets du jeu : pièces, porteurs (presetSignature), pièces absentes / partagées
+│   │   ├── presetRows.ts           ← presets du jeu : pièces, porteurs (presetSignature), pièces absentes / partagées, classe, filtre / tri
 │   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetPriorityOf (onglet Presets)
 │   │   ├── eeGems.ts               ← bestEeGemsFor : gemmes d'EE par héros, pièces du preset fixées
 │   │   └── presetWorklist.ts       ← presetWorklistFor : l'entrée Worklist d'un héros du preset
@@ -715,7 +729,7 @@ apps/renderer/src/
     │   ├── ResultsTable.tsx        ← table virtualisée, tri, heatmap, menu des colonnes
     │   ├── BottomGearBand.tsx · RightSidebar.tsx · FilterFooter.tsx · StatsPanel.tsx · …
     │   └── catalogs.ts · statColumns.ts ← catalogues tirés de l'inventaire, tables stats/ratings
-    ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset, référence, associés, gemmes d'EE, perte, + Worklist
+    ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset (ordre du jeu, filtre / tri par classe), référence, associés, gemmes d'EE, perte, + Worklist, Optimize →
     └── BuildsScreen.tsx            ← roster équipé/composé + computeAdvice + Optimize →
 ```
 

@@ -430,6 +430,19 @@ pure and tested (`lib/presets/presetRows.ts` → `presetRows(inventory)`): a pie
 presets may play the same fight) are flagged on the tile and in a banner. An empty preset is listed
 collapsed.
 
+**Order, class filter and sort.** The cards follow the in-game preset editor's order: `comparePresets`
+(core, `parse.ts`) mirrors the client's `CEquipPresetData.SortPreset` — type ascending (Master League
+presets after the others), favorites first, then the player's order (`Preset.sortOrder`, read from
+`PresetOrderList` by `Num`, 0 without an entry) descending, then `num`. The `#num` stays on the card. The
+top bar carries the five class chips (`CLASSES` from `lib/homeStats.ts`, multi-select), a
+"Sort: In-game · Class" selector and "Clear". A preset's class (`presetClasses`) comes from its pieces (a
+weapon or accessory restricted to a class, `GearPiece.classLimit`; two different classes are both kept),
+else from the reference hero, the wearers, then the associated heroes; otherwise it is unknown. A filter
+keeps a card with one of its classes ticked and hides empty or unknown-class cards; "Class" sorts by the
+card's first class in chip order (only the ticked ones while filtering), unknown last, the game's order
+within a class (`arrangePresets`). The class icon shows next to the name; the pill adds "· K shown" when
+cards are hidden. Component state, lost on a tab switch.
+
 A preset = the outfit of **one reference hero**, worn as-is by **associated heroes** who tune themselves
 through their own EE gems. Groups are made by hand (hero picker; a unique current wearer is proposed as the
 reference), stored app-local in `gs.presetHeroes` (`lib/storage/presetHeroes.ts`, per preset number
@@ -458,7 +471,8 @@ and in brackets the score as socketed when it differs.
 rule) + the gem lines of their EE (`worklistChangesFor`, `gemAllocation = { talisman: [], ee }`),
 `mode: "preset"` ("Preset" on the Worklist card, no CP); `upsertWorklistEntry` replaces the hero's entry,
 toast "Added to / Replaced in worklist — <Name>". A piece missing from the inventory is left out, and the
-toast says so. The button is greyed out when there is nothing to change.
+toast says so. The button is greyed out when there is nothing to change. **Optimize →**, next to it: opens
+the Builder on the hero, like a Builds card.
 
 **Priority.** `presetPriorityOf` reads, in order, the Builder priority of the session
 (`gs.solver.heroFilters`, sessionStorage: the Builder starts clean at each launch), then `reforge.priority`
@@ -622,7 +636,7 @@ apps/renderer/src/
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
 │   ├── presets/
-│   │   ├── presetRows.ts           ← in-game presets: pieces, wearers (presetSignature), missing / shared pieces
+│   │   ├── presetRows.ts           ← in-game presets: pieces, wearers (presetSignature), missing / shared pieces, class, filter / sort
 │   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetPriorityOf (Presets tab)
 │   │   ├── eeGems.ts               ← bestEeGemsFor: EE gems per hero, the preset's pieces fixed
 │   │   └── presetWorklist.ts       ← presetWorklistFor: the Worklist entry of one hero of the preset
@@ -647,7 +661,7 @@ apps/renderer/src/
     │   ├── ResultsTable.tsx        ← virtualized table, sorting, heatmap, columns menu
     │   ├── BottomGearBand.tsx · RightSidebar.tsx · FilterFooter.tsx · StatsPanel.tsx · …
     │   └── catalogs.ts · statColumns.ts ← inventory-driven catalogs, stat/rating tables
-    ├── presets/PresetsScreen.tsx   ← Presets tab: cards per preset, reference, associated heroes, EE gems, loss, + Worklist
+    ├── presets/PresetsScreen.tsx   ← Presets tab: cards per preset (game order, class filter / sort), reference, associated heroes, EE gems, loss, + Worklist, Optimize →
     └── BuildsScreen.tsx            ← equipped/composed roster + computeAdvice + Optimize →
 ```
 

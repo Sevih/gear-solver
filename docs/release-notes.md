@@ -17,6 +17,8 @@
   fodder disappear, no lobby needed. Update the capture plugin (0.4.0): Settings › Setup ›
   **Update plugin** with the game closed.
 - Electron 44 (Chromium and Node.js runtime update); no visible change expected.
+- **Presets**: cards in the game's order, class filter and sort, Optimize → per hero, hero
+  dropdown no longer hidden by the next card.
 
 ## [1.14.0] — 2026-10-22
 
