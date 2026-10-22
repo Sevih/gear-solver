@@ -131,8 +131,10 @@ results, the bottom band shows the selected build's pieces.
   confirmation popup spells out how many pieces move (and how many would be taken off other
   heroes); on confirm it rewrites your captured snapshot and re-imports. Refused while the game
   runs with the capture plugin loaded (it edits the local snapshot, never the game itself).
-- **+ Worklist** — next to Equip build; queues the selected build's gear changes onto the
-  **Worklist** tab instead of applying them right away.
+- **+ Worklist** — next to Equip build; queues the selected build's gear changes (and the gems
+  to socket on its Talisman / EE) onto the **Worklist** tab instead of applying them right away.
+  One entry per hero: if the hero is already queued, the button reads **Replace in worklist**
+  and the new build replaces the old one.
 - Two helper panels per hero: **Sub tick value** (is a flat or % substat tick worth more for
   this hero?) and **Damage / +1%** (which stat gives the most damage per +1% — ATK/DEF/HP vs
   Crit Damage vs DMG increase).
@@ -156,19 +158,23 @@ In the right sidebar (**Library**):
 ## Worklist — queued gear changes
 
 A cross-hero to-do list of gear swaps, fed from the Builder's **+ Worklist** button. Each
-queued build becomes a card for its hero, with one checkable line per changed slot — the
-target piece's image, stats, and where it currently lives (which hero wears it, or Inventory).
+queued build becomes a card for its hero (one card per hero — a newer build replaces it), with
+one checkable line per changed slot — the target piece's image, stats, and where it currently
+lives (which hero wears it, or Inventory) — and one line per gem to socket on the Talisman / EE,
+under its piece (gem, stat, and the gem it replaces).
 
 - **Work through it in-game** — tick each line off as you equip it for real; on your next
-  capture, changes that are already done are pruned automatically.
+  capture (or as soon as the app sees the move, with the game open), changes that are done are
+  pruned automatically and a notice in the bottom-right corner says so.
 - **Apply locally** — per card, rewrites your captured snapshot with that hero's swaps (never
-  the game itself), so the rest of the app reflects them.
+  the game itself), so the rest of the app reflects them. Gems aren't socketed by the app:
+  socket them in-game. If it fails, the card says why (game open, no snapshot, write error).
 - **Apply all** — applies every queued change across all heroes in one go, in an order that
   frees a piece before the build that reuses it.
 - The list stays truthful on its own: lines flip to **applied** when the piece lands on the
-  hero, **contested** when two queued builds want the same single copy (resolve one before
-  Apply all), **superseded** when a newer queued build of the same hero targets the same slot
-  (only the newest one goes into Apply all), and **gone** when the piece vanished from your inventory.
+  hero (for a gem, once it sits in its socket), **contested** when two queued builds want the
+  same single copy (resolve one before Apply all), and **gone** when the piece vanished from
+  your inventory.
 
 ---
 

@@ -377,14 +377,16 @@ Trois sections **câblées** (localStorage, par héros) :
 Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
 - **Equip build** — applique les pièces au héros en réécrivant le snapshot capturé
   (`equipPieces`, popup de confirmation, jamais d'écriture vers le jeu).
-- **+ Worklist** — pousse le **diff par slot** (slots changés only) sur l'onglet **Worklist**
-  (`screens/WorklistScreen.tsx`, storage `lib/storage/worklist.ts`) : une file inter-héros où
-  chaque changement est une ligne cochable + un **Apply locally** (même `equipPieces`). États
-  *applied / stale / conflict / superseded* **dérivés live** de l'inventaire (rien n'est figé ;
-  *superseded* = une entrée plus récente du même héros vise le même slot : seule la plus récente
-  entre dans Apply all, `planWorklist`) ; **auto-prune à
-  chaque recapture** (`reconcileWorklist` retire les changements faits + entrées vidées). Désactivé
-  quand aucun slot ne change (`equipPlan.moving === 0`).
+- **+ Worklist** — pousse le **diff par slot** (slots changés only) **et les gemmes à sertir** sur le
+  Talisman / EE du build (`gemAllocation` vs `gemSlots` de la pièce du build, `lib/worklist/changes.ts`) sur
+  l'onglet **Worklist** (`screens/WorklistScreen.tsx`, storage `lib/storage/worklist.ts`) : une file
+  inter-héros, **une entrée par héros** (un nouveau build **remplace** l'entrée du héros,
+  `upsertWorklistEntry` ; le bouton dit alors « Replace in worklist »), où chaque changement est une ligne
+  cochable + un **Apply locally** (même `equipPieces` ; les gemmes ne sont pas serties par l'app, elles se
+  sertissent en jeu). États *applied / stale / conflict* **dérivés live** de l'inventaire (rien n'est figé ;
+  une ligne gemme est *applied* quand sa pièce est sur le héros avec la gemme dans le bon emplacement) ;
+  **auto-prune à chaque recapture** et à chaque déplacement suivi en jeu (`reconcileWorklist` retire les
+  changements faits + entrées vidées, un toast le dit). Désactivé quand rien ne change (ni pièce ni gemme).
 
 Equip / Unequip **vers le jeu** restent absents (nécessitent une API jeu inexistante).
 Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le héros).

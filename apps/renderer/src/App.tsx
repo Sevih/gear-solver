@@ -9,11 +9,12 @@ import { describeDataSync, requestDataSync, type DataSyncResult } from "./lib/da
 import { createSnapshotFollower } from "./lib/snapshotFollower.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
 import { LogView } from "./design/LogView.js";
+import { ToastStack, useToasts } from "./design/Toast.js";
 import { SettingsModal } from "./design/settings/SettingsModal.js";
 import { HomeScreen } from "./screens/home/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
-import { equippedByHero, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
+import { appliedNotice, equippedByHero, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, upsertWorklistEntry, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
 import { reconcileDataHash } from "./lib/storage/dataHash.js";
@@ -101,6 +102,8 @@ export function App() {
   // Builds is live in the (kept-mounted) Builder.
   const [heroPriority, setHeroPriority] = usePersistedState<HeroPriority>(HERO_PRIORITY_KEY, {});
   const [status, setStatus] = useState("");
+  // Floating notices for what changes out of sight (see design/Toast.tsx).
+  const { toasts, notify, dismiss: dismissToast } = useToasts();
   const [capStatus, setCapStatus] = useState<CaptureStatus | null>(null);
   // Steam capture plugin — last `/api/steam/status` poll. Null until the first
   // probe answers (the header shows "checking…" meanwhile). The plugin is the
@@ -165,6 +168,14 @@ export function App() {
   // Builder is live on the Worklist tab. Persisted to localStorage on each change.
   const [worklist, setWorklist] = useState<WorklistEntry[]>(() => loadWorklist());
   usePersistOnChange(worklist, persistWorklist);
+  // Heroes with a queued entry — the Builder's "+ Worklist" then replaces it.
+  const worklistHeroUids = useMemo(() => new Set(worklist.map((e) => e.heroUid)), [worklist]);
+  // One entry per hero: a new build replaces the hero's entry, ticks included.
+  const addToWorklist = useCallback((entry: WorklistEntry) => {
+    const replaced = worklistHeroUids.has(entry.heroUid);
+    setWorklist((prev) => upsertWorklistEntry(prev, entry));
+    notify(`${replaced ? "Replaced in" : "Added to"} worklist — ${entry.heroName}`);
+  }, [worklistHeroUids, notify]);
   // heroUid → equipped piece uids, built once per inventory and shared by the
   // worklist helpers, the tab badges and the Worklist screen.
   const equipped = useMemo(() => equippedByHero(inv), [inv]);
@@ -219,13 +230,28 @@ export function App() {
   }
 
   // Auto-prune the worklist whenever the inventory changes (recapture, reload,
-  // local apply, data sync): any queued change whose target piece is now on the
-  // hero is done for real → drop it (and any entry it empties). Source of truth
-  // is the fresh snapshot, not the manual "done" ticks.
+  // an in-game move followed live, local apply, data sync): any queued change
+  // whose target piece is now on the hero (gem in its socket, for a gem line)
+  // is done for real → drop it (and any entry it empties), and say so in one
+  // toast per import — unless the import follows the Worklist's own Apply,
+  // whose result the screen already shows. Source of truth is the fresh
+  // snapshot, not the manual "done" ticks.
   // An unchanged list keeps its ref, so nothing re-renders or gets written.
+  // The notice is computed outside the state updater (StrictMode runs those
+  // twice), from the latest list mirrored in `worklistRef`.
+  const worklistRef = useRef(worklist);
+  useEffect(() => { worklistRef.current = worklist; });
+  const quietReconcile = useRef(false);
   useEffect(() => {
-    setWorklist((prev) => reconcileWorklist(prev, inv, equipped).next);
-  }, [inv, equipped]);
+    const quiet = quietReconcile.current;
+    quietReconcile.current = false;
+    const base = worklistRef.current;
+    const r = reconcileWorklist(base, inv, equipped);
+    if (!r.changed) return;
+    setWorklist((prev) => (prev === base ? r.next : reconcileWorklist(prev, inv, equipped).next));
+    const notice = appliedNotice(r.applied);
+    if (notice && !quiet) notify(notice);
+  }, [inv, equipped, notify]);
 
   // Startup import + Steam snapshot following share one state machine (the
   // last-seen user_item.json mtime, an init-before-ticks order, no overlapping
@@ -431,7 +457,7 @@ export function App() {
                 equipped={equipped}
                 worklist={worklist}
                 onChange={setWorklist}
-                onAfterApply={() => void refreshInventory("Applied worklist change")}
+                onAfterApply={() => { quietReconcile.current = true; void refreshInventory("Applied worklist change"); }}
               />
             </ScreenErrorBoundary>
           )}
@@ -443,12 +469,14 @@ export function App() {
           {builderMounted && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} onToggleExclude={toggleExclude} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={(entry) => setWorklist((prev) => [entry, ...prev])} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
               </ScreenErrorBoundary>
             </div>
           )}
         </Suspense>
       </main>
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {!inv && (
         <div className="px-6 py-2 text-center text-[11px] text-zinc-400">

@@ -1,15 +1,17 @@
 /**
  * Worklist screen — the cross-hero "to-do" queue. Builds queued from the
- * Builder land here as per-hero cards; each changed slot is a checkable line.
- * Work through them in-game and tick each off, or "Apply locally" to rewrite the
- * captured snapshot so the rest of the app reflects the swap (we never write to
- * the game — that API doesn't exist).
+ * Builder land here as per-hero cards (one per hero — a new build replaces
+ * the card); each changed slot is a checkable line, and so is each gem to
+ * socket on the build's Talisman / EE. Work through them in-game and tick each
+ * off, or "Apply locally" to rewrite the captured snapshot so the rest of the
+ * app reflects the swap (we never write to the game — that API doesn't exist;
+ * gems aren't applied locally either, they are socketed in-game).
  *
  * All decision state is derived LIVE from the current inventory, so the list
  * self-heals as pieces move: a change whose target piece is already on the hero
- * reads as applied (green), a target wanted by two heroes flags a conflict,
- * a slot a newer build of the same hero also targets reads as superseded, and
- * a target that vanished from the inventory (post data-sync) reads as stale.
+ * (with the gem in its socket, for a gem line) reads as applied (green), a
+ * target wanted by two heroes flags a conflict, and a target that vanished
+ * from the inventory (post data-sync) reads as stale.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Character, GameData, GearPiece, Inventory } from "@gear-solver/core";
@@ -17,8 +19,8 @@ import { CharacterPortrait, EquipmentIcon, SlotIcon, StatIcon } from "../design/
 import { toUiPiece } from "../design/adapter.js";
 import { cx } from "../design/cx.js";
 import { SLOT_BY, toDesignSlot } from "../design/tokens.js";
-import { equipAssignments, equipPieces } from "../equip.js";
-import type { EquippedByHero, WorklistEntry } from "../lib/storage/worklist.js";
+import { EQUIP_FAILURE, equipAssignments, equipPieces } from "../equip.js";
+import { changeKey, gemSlotsByUid, type EquippedByHero, type GemSlotsByUid, type WorklistChange, type WorklistEntry, type WorklistGem } from "../lib/storage/worklist.js";
 import { changeState, planWorklist } from "../lib/worklist/plan.js";
 
 interface WorklistScreenProps {
@@ -64,6 +66,8 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
     if (inventory) for (const g of inventory.gear) m.set(g.uid, g);
     return m;
   }, [inventory]);
+  // Socketed gems per piece — the gem lines' "applied" oracle.
+  const gemSlots = useMemo(() => gemSlotsByUid(inventory), [inventory]);
   const charByUid = useMemo(() => {
     const m = new Map<string, Character>();
     if (inventory) for (const c of inventory.characters) m.set(c.uid, c);
@@ -76,7 +80,7 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
   // uid → display name, for the contention banner (drawn from the queued diffs).
   const nameOf = useMemo(() => {
     const m = new Map<string, string>();
-    for (const e of worklist) for (const c of e.changes) m.set(c.toUid, c.toName);
+    for (const e of worklist) for (const c of e.changes) if (c.kind !== "gem") m.set(c.toUid, c.toName);
     return m;
   }, [worklist]);
 
@@ -84,13 +88,13 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
     if (!game || plan.assignments.length === 0) return;
     setApplyingAll(true);
     setApplyAllError(null);
-    const ok = await equipAssignments(game, plan.assignments);
+    const outcome = await equipAssignments(game, plan.assignments);
     // The snapshot is rewritten even if the user left the tab meanwhile: the
     // App still re-imports, only this screen's own state is skipped.
-    if (ok) onAfterApply();
+    if (outcome === "ok") onAfterApply();
     if (!mounted.current) return;
     setApplyingAll(false);
-    if (!ok) setApplyAllError("Apply failed — close the game while the Steam plugin is live, then retry.");
+    if (outcome !== "ok") setApplyAllError(EQUIP_FAILURE[outcome]);
   };
 
   if (worklist.length === 0) {
@@ -162,7 +166,7 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
           equippedOnHero={equipped.get(entry.heroUid) ?? null}
           invUids={invUids}
           contended={plan.contended}
-          supersededSlots={plan.superseded.get(entry.id) ?? null}
+          gemSlots={gemSlots}
           pieceByUid={pieceByUid}
           charByUid={charByUid}
           step={plan.position.get(entry.id) ?? null}
@@ -177,7 +181,7 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
 }
 
 function WorklistCard({
-  entry, game, equippedOnHero, invUids, contended, supersededSlots, pieceByUid, charByUid, step, cyclic, worklist, onChange, onAfterApply,
+  entry, game, equippedOnHero, invUids, contended, gemSlots, pieceByUid, charByUid, step, cyclic, worklist, onChange, onAfterApply,
 }: {
   entry: WorklistEntry;
   game: GameData | null;
@@ -185,9 +189,8 @@ function WorklistCard({
   invUids: Set<string>;
   /** Pieces wanted by two distinct heroes — the plan's contention map. */
   contended: Map<string, string[]>;
-  /** Slots of this entry a newer build of the same hero overrides — the plan's
-   *  `superseded`; left out of Apply all. */
-  supersededSlots: Set<string> | null;
+  /** Socketed gems per piece — read by gem lines. */
+  gemSlots: GemSlotsByUid;
   /** Live inventory lookups — target piece (image + stats) and its current owner. */
   pieceByUid: Map<string, GearPiece>;
   charByUid: Map<string, Character>;
@@ -204,28 +207,33 @@ function WorklistCard({
   const [applyError, setApplyError] = useState<string | null>(null);
   const mounted = useMountedRef();
 
-  // Per-change live state — applied (target already on hero), stale (target
-  // gone from the inventory), or conflicting (wanted by another hero too, the
-  // plan's contention) — plus the live piece (image + stats) and its current owner.
-  const rows = entry.changes.map((c) => {
-    const { applied, stale, conflict, superseded } = changeState(c, { equippedOnHero, invUids, contended, supersededSlots });
+  // Per-change live state — applied (target already on hero, gem in its
+  // socket), stale (target gone from the inventory), or conflicting (wanted by
+  // another hero too, the plan's contention) — plus the live piece (image +
+  // stats) and its current owner.
+  const rows = orderLines(entry.changes).map((c) => {
+    const { applied, stale, conflict } = changeState(c, { equippedOnHero, invUids, contended, gemSlots });
     // Engine slot → player-facing design slot (ooparts → Talisman, shoes →
     // Boots) for the label + icon; the game never shows "ooparts".
     const ds = toDesignSlot(c.slot) ?? c.slot;
     const piece = pieceByUid.get(c.toUid) ?? null;
-    const ui = piece && game ? toUiPiece(piece, game) : null;
+    const ui = c.kind !== "gem" && piece && game ? toUiPiece(piece, game) : null;
     const owner = piece?.equippedBy ? (charByUid.get(piece.equippedBy) ?? null) : null;
-    return { c, applied, stale, conflict, superseded, ds, ui, hasPiece: !!piece, owner };
+    // A gem line sits under its piece's line when the entry moves that piece.
+    const nested = c.kind === "gem" && entry.changes.some((x) => x.kind !== "gem" && x.toUid === c.toUid);
+    return { c, applied, stale, conflict, ds, ui, hasPiece: !!piece, owner, nested };
   });
   const remaining = rows.filter((r) => !r.applied && !r.stale).length;
   const allApplied = rows.every((r) => r.applied || r.stale);
+  // Apply locally moves pieces only — gems are socketed in-game.
+  const pieceTodo = rows.some((r) => r.c.kind !== "gem" && !r.applied && !r.stale);
   const hasConflict = rows.some((r) => r.conflict && !r.applied);
   const hasStale = rows.some((r) => r.stale);
 
-  const toggleDone = (slot: string, done: boolean) => {
+  const toggleDone = (key: string, done: boolean) => {
     onChange(
       worklist.map((e) =>
-        e.id !== entry.id ? e : { ...e, changes: e.changes.map((c) => (c.slot === slot ? { ...c, done } : c)) },
+        e.id !== entry.id ? e : { ...e, changes: e.changes.map((c) => (changeKey(c) === key ? { ...c, done } : c)) },
       ),
     );
   };
@@ -235,15 +243,15 @@ function WorklistCard({
     if (!game) return;
     // Only equip targets that still exist; equipping a piece already on the hero
     // is a harmless no-op, so we don't filter those out.
-    const uids = rows.filter((r) => !r.stale).map((r) => r.c.toUid);
+    const uids = rows.filter((r) => r.c.kind !== "gem" && !r.stale).map((r) => r.c.toUid);
     if (uids.length === 0) return;
     setApplying(true);
     setApplyError(null);
-    const ok = (await equipPieces(game, uids, entry.heroUid)) === "ok";
-    if (ok) onAfterApply();
+    const outcome = await equipPieces(game, uids, entry.heroUid);
+    if (outcome === "ok") onAfterApply();
     if (!mounted.current) return;
     setApplying(false);
-    if (!ok) setApplyError("Apply failed — close the game while the Steam plugin is live, then retry.");
+    if (outcome !== "ok") setApplyError(EQUIP_FAILURE[outcome]);
   };
 
   return (
@@ -292,9 +300,20 @@ function WorklistCard({
       {/* Change lines — one per changed slot. Each shows the TARGET item's image,
        *  stats, and current owner, since the name alone can't identify a copy. */}
       <div className="flex flex-col divide-y divide-white/5">
-        {rows.map(({ c, applied, stale, conflict, superseded, ds, ui, hasPiece, owner }) => (
+        {rows.map(({ c, applied, stale, conflict, ds, ui, hasPiece, owner, nested }) => c.kind === "gem" ? (
+          <GemLine
+            key={changeKey(c)}
+            c={c}
+            game={game}
+            applied={applied}
+            stale={stale}
+            nested={nested}
+            slotLabel={SLOT_BY[ds]?.label ?? ds}
+            onToggle={(done) => toggleDone(changeKey(c), done)}
+          />
+        ) : (
           <label
-            key={c.slot}
+            key={changeKey(c)}
             className={cx(
               "flex cursor-pointer items-start gap-2.5 py-2",
               stale && "opacity-45",
@@ -304,7 +323,7 @@ function WorklistCard({
               type="checkbox"
               checked={applied || c.done}
               disabled={applied || stale}
-              onChange={(e) => toggleDone(c.slot, e.target.checked)}
+              onChange={(e) => toggleDone(changeKey(c), e.target.checked)}
               className="mt-1 h-3.5 w-3.5 shrink-0 accent-cyan-400"
             />
             {/* Item image (or slot-type fallback when the piece is gone). */}
@@ -328,9 +347,6 @@ function WorklistCard({
                   <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-white/40">gone</span>
                 ) : null}
               </div>
-              {superseded && (
-                <div className="mt-0.5 text-[10.5px] text-white/45">Superseded by a newer build — skipped by Apply all.</div>
-              )}
               {/* Stats — main(s) then substats (the deterministic identifier). */}
               {ui && (ui.main.length > 0 || ui.subs.length > 0) && (
                 <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 font-mono text-[10.5px] tabular-nums">
@@ -370,10 +386,10 @@ function WorklistCard({
         <button
           type="button"
           onClick={() => void applyLocally()}
-          disabled={applying || allApplied || !game}
+          disabled={applying || !pieceTodo || !game}
           className={cx(
             "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[11.5px] font-medium transition-colors",
-            applying || allApplied || !game
+            applying || !pieceTodo || !game
               ? "cursor-not-allowed border-white/6 bg-white/2 text-white/45"
               : "border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25",
           )}
@@ -391,5 +407,85 @@ function WorklistCard({
         {applyError && <span className="text-[11px] text-rose-300">{applyError}</span>}
       </div>
     </div>
+  );
+}
+
+/** Piece lines in their stored order, each followed by the gem lines of the
+ *  same piece (socket order); gem lines whose piece isn't moved by the entry
+ *  come last. */
+function orderLines(changes: readonly WorklistChange[]): WorklistChange[] {
+  const gems = changes.filter((c) => c.kind === "gem").sort((a, b) => a.gemIndex - b.gemIndex);
+  const out: WorklistChange[] = [];
+  for (const c of changes) {
+    if (c.kind === "gem") continue;
+    out.push(c, ...gems.filter((g) => g.toUid === c.toUid));
+  }
+  for (const g of gems) if (!out.includes(g)) out.push(g);
+  return out;
+}
+
+/** "+12%" — a gem's stat value, signed like the gem panels. */
+function gemValue(g: WorklistGem): string | null {
+  if (!g.stat) return null;
+  return `${g.stat.value < 0 ? "-" : "+"}${Math.abs(g.stat.value)}${g.stat.percent ? "%" : ""}`;
+}
+
+/** One gem to socket — under its piece's line (`nested`) or on its own, then
+ *  naming the piece. Never applied by the app: the user sockets it in-game and
+ *  the line clears itself once the snapshot shows it. */
+function GemLine({ c, game, applied, stale, nested, slotLabel, onToggle }: {
+  c: Extract<WorklistChange, { kind: "gem" }>;
+  game: GameData | null;
+  applied: boolean;
+  stale: boolean;
+  nested: boolean;
+  slotLabel: string;
+  onToggle: (done: boolean) => void;
+}) {
+  // Gem art, as the Talisman / EE gem panels draw it.
+  const def = game?.gems?.[String(c.toGem.id)] ?? null;
+  const value = gemValue(c.toGem);
+  return (
+    <label
+      title="Socket in-game — Apply locally / Apply all don't socket gems."
+      className={cx("flex cursor-pointer items-start gap-2.5 py-1.5", nested && "pl-6", stale && "opacity-45")}
+    >
+      <input
+        type="checkbox"
+        checked={applied || c.done}
+        disabled={applied || stale}
+        onChange={(e) => onToggle(e.target.checked)}
+        className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-cyan-400"
+      />
+      {def ? (
+        <img src={`/img/items/TI_GEM_${def.type}_${def.level}.webp`} alt="" className="h-5 w-5 shrink-0 object-contain" />
+      ) : (
+        <div className="h-5 w-5 shrink-0 rounded-sm border border-dashed border-white/10 bg-white/2" />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="shrink-0 text-[9.5px] uppercase tracking-wider text-white/45">
+            {nested ? `Gem ${c.gemIndex + 1}` : `${slotLabel} · gem ${c.gemIndex + 1}`}
+          </span>
+          <span className={cx("min-w-0 truncate text-[12px] font-medium", applied ? "text-emerald-300" : "text-white")}>{c.toGem.name}</span>
+          {value && (
+            <span className="flex shrink-0 items-center gap-0.5 font-mono text-[10.5px] tabular-nums text-white/75">
+              {c.toGem.stat && <StatIcon stat={c.toGem.stat.stat} size={11} className="shrink-0" />}{value}
+            </span>
+          )}
+          {applied ? (
+            <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-emerald-300">applied</span>
+          ) : stale ? (
+            <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-white/40">gone</span>
+          ) : (
+            <span className="ml-auto shrink-0 text-[9.5px] uppercase tracking-wider text-white/40">socket in-game</span>
+          )}
+        </div>
+        <div className="mt-0.5 text-[10.5px] text-white/35">
+          {!nested && <span className="text-white/55">on {c.toName} · </span>}
+          was {c.fromGem ? <span className="line-through">{c.fromGem.name}</span> : "empty"}
+        </div>
+      </div>
+    </label>
   );
 }

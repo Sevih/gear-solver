@@ -9,7 +9,8 @@
  * afterwards (e.g. `refreshInventory` in App.tsx) to pick the edit up.
  *
  * Wired to the Builder via "Equip build" (applies a solved build's pieces to
- * the selected hero in one atomic snapshot rewrite — see `equipPieces`).
+ * the selected hero in one atomic snapshot rewrite — see `equipPieces`) and to
+ * the Worklist's Apply locally / Apply all (`equipPieces`, `equipAssignments`).
  */
 import { equipItem, type GameData, type RawUserItem } from "@gear-solver/core";
 
@@ -30,6 +31,15 @@ async function fetchRawUserItem(): Promise<RawUserItem | null> {
  *  the game is open (409 — the plugin owns the snapshot then, and in-game moves
  *  reach it by themselves), or any other write failure. */
 export type EquipOutcome = "ok" | "no-snapshot" | "game-open" | "failed";
+
+/** Inline error per failed outcome, shared by the Builder's equip popup and the
+ *  Worklist's apply actions. The 409 one mirrors the server's refusal
+ *  (api-handler.ts): in-game moves already reach the app on their own. */
+export const EQUIP_FAILURE: Record<Exclude<EquipOutcome, "ok">, string> = {
+  "game-open": "The game is open: the app now follows in-game moves by itself — close it to apply a local-only edit.",
+  "no-snapshot": "Couldn't read the captured snapshot. Capture again (reach the lobby) or re-import it, then retry.",
+  failed: "Couldn't write the snapshot. Retry in a moment.",
+};
 
 /** Persist a rewritten snapshot. */
 async function writeUserItem(raw: RawUserItem): Promise<EquipOutcome> {
@@ -70,14 +80,15 @@ export async function equipPieces(game: GameData, itemUids: string[], charUid: s
  *  same-hero, same-slot changes so its batch is consistent) — so the caller is
  *  free to pass a dependency-ordered list for tidiness without depending on it
  *  for correctness.
- *  Returns true once persisted; the caller should re-import the inventory. */
+ *  Returns "ok" once persisted (the caller should re-import the inventory),
+ *  else why not — same outcomes as `equipPieces`. */
 export async function equipAssignments(
   game: GameData,
   moves: ReadonlyArray<{ uid: string; heroUid: string }>,
-): Promise<boolean> {
+): Promise<EquipOutcome> {
   const raw = await fetchRawUserItem();
-  if (!raw) return false;
+  if (!raw) return "no-snapshot";
   let next = raw;
   for (const m of moves) if (m.uid) next = equipItem(next, game, m.uid, m.heroUid);
-  return (await writeUserItem(next)) === "ok";
+  return writeUserItem(next);
 }

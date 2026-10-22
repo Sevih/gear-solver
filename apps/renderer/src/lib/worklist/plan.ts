@@ -3,11 +3,9 @@
  * ORDERED, validated transaction so the user (or one atomic snapshot rewrite)
  * can apply them all without stepping on themselves.
  *
- * Four things the flat list can't tell you on its own:
- *  - **Superseded** — two entries of the SAME hero target the same slot (the
- *    hero was re-optimized and queued again). Only the newest entry's change
- *    (`createdAt`, then list position — the list is newest-first) is applied;
- *    the older one is exposed as superseded, never silently folded in.
+ * Three things the flat list can't tell you on its own (the list holds one
+ * entry per hero — `upsertWorklistEntry` — so no hero gets two pieces for one
+ * slot):
  *  - **Contention** — a piece is a single physical copy, so if two entries
  *    (distinct heroes) both target the same uid, only one can win. Ordering
  *    can't fix this; the user must drop/retarget one. Surfaced, never silently
@@ -22,15 +20,18 @@
  *    entries of the cycle itself are flagged: one that merely waits on a cycle
  *    (needs a piece a cyclic entry frees) is ordered after it.
  *
+ * Gem lines are not part of the transaction: the app can't socket a gem (the
+ * snapshot doesn't model that write), so only piece lines are planned.
+ *
  * Pure + inventory-driven (same live-truth philosophy as the screen): re-run it
- * whenever the snapshot changes. With superseded changes dropped, no hero gets
- * two pieces for one slot and (absent contention) no piece goes to two heroes,
+ * whenever the snapshot changes. One entry per hero means no hero gets two
+ * pieces for one slot and (absent contention) no piece goes to two heroes,
  * so `equipItem`'s steal semantics make the atomic fold order-independent for
  * the FINAL state: `assignments` is correct in any order — `order` exists for
  * the human and for a tidy, dependency-respecting fold, not for correctness.
  */
 import type { Inventory } from "@gear-solver/core";
-import type { WorklistChange, WorklistEntry } from "../storage/worklist.js";
+import { isChangeApplied, type GemSlotsByUid, type WorklistChange, type WorklistEntry, type WorklistPieceChange } from "../storage/worklist.js";
 
 /** One piece→hero move to feed the atomic apply. */
 export interface WorklistAssignment {
@@ -56,15 +57,11 @@ export interface WorklistPlan {
   contended: Map<string, string[]>;
   /** Entry ids caught in a dependency cycle — apply atomically, no human order. */
   cyclic: Set<string>;
-  /** Entry id → slots whose actionable change is superseded by a newer entry
-   *  of the same hero on that slot. Left out of `assignments`, contention and
-   *  ordering. */
-  superseded: Map<string, Set<string>>;
   /** Flat moves to apply, ordered to match `order`. Excludes applied/stale
-   *  changes (target already on the hero, or gone from the inventory) and
-   *  superseded ones. */
+   *  changes (target already on the hero, or gone from the inventory) and gem
+   *  lines. */
   assignments: WorklistAssignment[];
-  /** Distinct heroes with at least one actionable, non-superseded change. */
+  /** Distinct heroes with at least one actionable piece change. */
   heroes: number;
   /** Safe to Apply-all — no contention (cycles are still applicable atomically). */
   applicable: boolean;
@@ -72,7 +69,7 @@ export interface WorklistPlan {
 
 const EMPTY: WorklistPlan = {
   order: [], position: new Map(), hasDeps: false, contended: new Map(),
-  cyclic: new Set(), superseded: new Map(), assignments: [], heroes: 0, applicable: false,
+  cyclic: new Set(), assignments: [], heroes: 0, applicable: false,
 };
 
 /** Build the transaction plan from the worklist + the current snapshot. */
@@ -87,36 +84,19 @@ export function planWorklist(list: WorklistEntry[], inventory: Inventory | null)
     if (g.equippedBy) ownerOf.set(g.uid, g.equippedBy);
   }
 
-  // Newest entry per (hero, slot) — the one whose change owns that slot. Read
-  // over every queued change, applied or stale included: the newest intent
-  // wins even when it needs no move (an older build must not undo it).
-  const recency = list
-    .map((e, i) => ({ e, i }))
-    .sort((x, y) => (y.e.createdAt ?? 0) - (x.e.createdAt ?? 0) || x.i - y.i);
-  const slotOwner = new Map<string, string>(); // `${heroUid}\0${slot}` → entryId
-  for (const { e } of recency) {
-    for (const c of e.changes) {
-      const k = `${e.heroUid}\0${c.slot}`;
-      if (!slotOwner.has(k)) slotOwner.set(k, e.id);
-    }
-  }
-
-  // Actionable changes per entry: target piece exists AND isn't already on the
-  // hero. (A change whose target is gone — stale — or already worn is a no-op.)
-  // An actionable change on a slot a newer entry of the same hero owns is
-  // superseded instead.
-  const liveByEntry = new Map<string, WorklistChange[]>();
-  const superseded = new Map<string, Set<string>>();
+  // Actionable changes per entry: a piece line whose target exists AND isn't
+  // already on the hero. (A change whose target is gone — stale — or already
+  // worn is a no-op; a gem line is never applied by the app.)
+  const liveByEntry = new Map<string, WorklistPieceChange[]>();
   for (const e of list) {
-    const live: WorklistChange[] = [];
+    const live: WorklistPieceChange[] = [];
     for (const c of e.changes) {
-      if (!invUids.has(c.toUid) || ownerOf.get(c.toUid) === e.heroUid) continue;
-      if (slotOwner.get(`${e.heroUid}\0${c.slot}`) !== e.id) mapSet(superseded, e.id).add(c.slot);
-      else live.push(c);
+      if (c.kind === "gem" || !invUids.has(c.toUid) || ownerOf.get(c.toUid) === e.heroUid) continue;
+      live.push(c);
     }
     if (live.length > 0) liveByEntry.set(e.id, live);
   }
-  if (liveByEntry.size === 0) return { ...EMPTY, superseded };
+  if (liveByEntry.size === 0) return EMPTY;
 
   const entries = list.filter((e) => liveByEntry.has(e.id));
   const byId = new Map(entries.map((e) => [e.id, e]));
@@ -228,43 +208,42 @@ export function planWorklist(list: WorklistEntry[], inventory: Inventory | null)
   }
 
   return {
-    order, position, hasDeps, contended, cyclic, superseded, assignments, heroes,
+    order, position, hasDeps, contended, cyclic, assignments, heroes,
     applicable: contended.size === 0,
   };
 }
 
 /** Live state of one queued change, as the Worklist card shows it. */
 export interface ChangeState {
-  /** Target piece already on the entry's hero. */
+  /** Target piece already on the entry's hero — for a gem line, with the gem
+   *  in its socket. */
   applied: boolean;
-  /** Target piece gone from the inventory (post data-sync / dismantle). */
+  /** Target piece (the gem-bearing one, for a gem line) gone from the
+   *  inventory (post data-sync / dismantle). */
   stale: boolean;
   /** Target wanted by another HERO too — the plan's contention, nothing
    *  looser: the same hero queuing one piece in two builds is not a conflict
-   *  (the header says "order doesn't matter" then, and it must agree). */
+   *  (the header says "order doesn't matter" then, and it must agree). Never
+   *  set on a gem line (it reserves nothing). */
   conflict: boolean;
-  /** A newer queued build of the same hero targets this slot — the plan's
-   *  `superseded`; left out of Apply all. */
-  superseded: boolean;
 }
 
-/** Per-change state for the card. `conflict` and `superseded` are read from
- *  the plan (`contended`, `superseded.get(entryId)`) so the card and the
- *  transaction header share one definition. */
+/** Per-change state for the card. `conflict` is read from the plan
+ *  (`contended`) so the card and the transaction header share one definition. */
 export function changeState(
   change: WorklistChange,
   ctx: {
     equippedOnHero: Set<string> | null;
     invUids: Set<string>;
     contended: Map<string, string[]>;
-    supersededSlots?: ReadonlySet<string> | null;
+    /** Socketed gems per piece — read by gem lines only. */
+    gemSlots?: GemSlotsByUid;
   },
 ): ChangeState {
-  const applied = ctx.equippedOnHero?.has(change.toUid) ?? false;
+  const applied = isChangeApplied(change, ctx.equippedOnHero, ctx.gemSlots ?? new Map());
   const stale = !ctx.invUids.has(change.toUid);
-  const superseded = !applied && !stale && (ctx.supersededSlots?.has(change.slot) ?? false);
-  const conflict = !applied && !stale && !superseded && ctx.contended.has(change.toUid);
-  return { applied, stale, conflict, superseded };
+  const conflict = change.kind !== "gem" && !applied && !stale && ctx.contended.has(change.toUid);
+  return { applied, stale, conflict };
 }
 
 /** Tarjan's strongly connected components of the subgraph induced by `nodes`

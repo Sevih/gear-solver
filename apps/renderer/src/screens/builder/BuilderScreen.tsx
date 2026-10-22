@@ -28,7 +28,8 @@ import {
 import { talismanFamilyKeys, translateRecoBuild, type StructuredCharacterReco, type StructuredRecoBuild } from "../../lib/reco/translateReco.js";
 import { fetchRecoForHero } from "../../lib/reco/fetchReco.js";
 import { equipPieces, type EquipOutcome } from "../../equip.js";
-import type { WorklistChange, WorklistEntry } from "../../lib/storage/worklist.js";
+import type { WorklistEntry } from "../../lib/storage/worklist.js";
+import { worklistChangesFor } from "../../lib/worklist/changes.js";
 import { loadHeroFilters, persistHeroFilters, cloneFilters, filtersForHero, snapshotOnHeroSwitch, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
 import { usePersistedState } from "../../hooks/usePersistedState.js";
 import { deltaCpLabel } from "../../lib/deltaCp.js";
@@ -80,6 +81,9 @@ interface BuilderScreenProps {
    *  the claiming hero, so the equipped scope + rank rules honor what earlier
    *  queued builds already reserved. */
   worklistClaims?: Record<string, string>;
+  /** Heroes that already have a Worklist entry (owned by App) — "+ Worklist"
+   *  then replaces it, and says so. */
+  worklistHeroUids?: ReadonlySet<string>;
   /** Toggle a piece in/out of the global exclusion set (App owns it) — wired to
    *  the results gear-card footer so a trash roll can be excluded from results. */
   onToggleExclude?: (uid: string) => void;
@@ -93,7 +97,8 @@ interface BuilderScreenProps {
    *  re-imports the inventory (App's `refreshInventory`). */
   onAfterEquip?: () => void;
   /** Queue the selected build's per-slot diff onto the cross-hero worklist
-   *  (App owns the list). Undefined disables the "Add to worklist" button. */
+   *  (App owns the list; it replaces the hero's entry if there is one).
+   *  Undefined disables the "Add to worklist" button. */
   onAddToWorklist?: (entry: WorklistEntry) => void;
   /** Solver-pool override (Settings → Solver): null = auto. Drives the footer
    *  read-out and forces a worker-pool rebuild when it changes. */
@@ -124,7 +129,7 @@ function formatCombos(n: number): string {
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, onToggleExclude, initialHeroUid, onInitialHeroConsumed, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
@@ -164,8 +169,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     filtersRef.current = filters;
     selectedUidRef.current = selectedUid;
   });
-  /** Transient "Added ✓" confirmation on the Add-to-worklist button. */
-  const [worklistAdded, setWorklistAdded] = useState(false);
+  /** Transient "Added ✓" / "Replaced ✓" confirmation on the Add-to-worklist
+   *  button. */
+  const [worklistAdded, setWorklistAdded] = useState<"added" | "replaced" | null>(null);
 
   // Persistence — loaded once on mount, mutated via the add/remove helpers
   // and re-persisted explicitly (vs hooking into a useEffect that fires
@@ -528,27 +534,17 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       )
     : null;
 
-  // Queue the selected build's per-slot diff (changed slots only) onto the
-  // cross-hero worklist — `buildDiff`, the same "changed" rule as Equip and
-  // `upg`. No-op when nothing moves.
+  // Queue the selected build's per-slot diff (changed slots only) plus the gems
+  // to socket on its Talisman / EE onto the cross-hero worklist — `buildDiff`,
+  // the same "changed" rule as Equip and `upg`. No-op when nothing changes.
+  const worklistChanges = useMemo(
+    () => (selectedBuild ? worklistChangesFor(buildDiff, selectedBuild.gemAllocation, game) : []),
+    [selectedBuild, buildDiff, game],
+  );
+  const worklistReplaces = selectedUid != null && (worklistHeroUids?.has(selectedUid) ?? false);
   const addToWorklist = () => {
     if (!selectedBuild || !selectedUid || !selected || !onAddToWorklist) return;
-    const nameOf = (x: GearPiece) => game?.equipment[String(x.itemId)]?.name ?? x.name ?? `Item ${x.itemId}`;
-    const changes: WorklistChange[] = [];
-    for (const { slot, proposed: p, worn: current, changed } of buildDiff) {
-      if (!changed) continue; // unchanged slot — not actionable
-      const main = p.main.find((m) => !m.combatOnly) ?? null;
-      changes.push({
-        slot,
-        toUid: p.uid,
-        toName: nameOf(p),
-        toMain: main ? { stat: main.stat, value: main.value, percent: main.percent } : null,
-        fromUid: current?.uid ?? null,
-        fromName: current ? nameOf(current) : null,
-        done: false,
-      });
-    }
-    if (changes.length === 0) return;
+    if (worklistChanges.length === 0) return;
     const meta = game?.characters[String(selected.charId)] ?? null;
     onAddToWorklist({
       id: crypto.randomUUID(),
@@ -558,16 +554,16 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       charId: effectiveCharacter(selected, game?.characters).charId,
       mode: lastSolveMode,
       cp: selectedBuild.cp ?? null,
-      upg: changes.length,
-      changes,
+      upg: equipPlan.moving,
+      changes: worklistChanges,
       createdAt: Date.now(),
     });
-    setWorklistAdded(true);
+    setWorklistAdded(worklistReplaces ? "replaced" : "added");
   };
   // "Added ✓" reverts after 1.5 s — the timer is cleared on unmount.
   useEffect(() => {
     if (!worklistAdded) return;
-    const t = window.setTimeout(() => setWorklistAdded(false), 1500);
+    const t = window.setTimeout(() => setWorklistAdded(null), 1500);
     return () => window.clearTimeout(t);
   }, [worklistAdded]);
 
@@ -696,18 +692,20 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
                 <button
                   type="button"
                   onClick={addToWorklist}
-                  disabled={!selectedBuild || equipPlan.moving === 0 || !onAddToWorklist}
-                  title="Queue these changes onto the Worklist tab to apply later (across heroes)."
+                  disabled={!selectedBuild || worklistChanges.length === 0 || !onAddToWorklist}
+                  title={worklistReplaces
+                    ? "Replace this hero's Worklist entry with these changes (one entry per hero)."
+                    : "Queue these changes onto the Worklist tab to apply later (across heroes)."}
                   className={cx(
                     "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[11.5px] font-medium transition-colors",
-                    !selectedBuild || equipPlan.moving === 0 || !onAddToWorklist
+                    !selectedBuild || worklistChanges.length === 0 || !onAddToWorklist
                       ? "cursor-not-allowed border-white/6 bg-white/2 text-white/45"
                       : worklistAdded
                         ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
                         : "border-white/8 bg-white/3 text-white hover:bg-white/6",
                   )}
                 >
-                  {worklistAdded ? "Added ✓" : "+ Worklist"}
+                  {worklistAdded === "replaced" ? "Replaced ✓" : worklistAdded ? "Added ✓" : worklistReplaces ? "Replace in worklist" : "+ Worklist"}
                 </button>
                 <EquipBuildButton
                   disabled={!selectedBuild || !selectedUid || !game || equipPlan.moving === 0}

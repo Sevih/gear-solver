@@ -132,47 +132,18 @@ describe("planWorklist — transaction planning", () => {
   });
 });
 
-describe("planWorklist — same hero, same slot: the newest build wins", () => {
+describe("planWorklist — one entry per hero, no superseded slot", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  // The review case: hero H wears W0; "old" (W1) then "new" (W2) were queued on
-  // the weapon, stored newest-first as App does.
-  const list = [
-    entry("new", "H", [change("weapon", "W2", "W0")], 2),
-    entry("old", "H", [change("weapon", "W1", "W0")], 1),
-  ];
+  // Hero H wears W0; its queued build swaps the weapon to W2.
+  const list = [entry("new", "H", [change("weapon", "W2", "W0")], 2)];
   const i = inv([{ uid: "W0", owner: "H" }, { uid: "W1" }, { uid: "W2" }]);
 
-  it("only the newest entry's change is assigned, the older one is marked superseded", () => {
+  it("the plan has no superseded field any more", () => {
     const plan = planWorklist(list, i);
+    expect(plan).not.toHaveProperty("superseded");
     expect(plan.assignments.map((m) => [m.entryId, m.uid])).toEqual([["new", "W2"]]);
-    expect(plan.superseded.get("old")).toEqual(new Set(["weapon"]));
-    expect(plan.superseded.has("new")).toBe(false);
-    expect(plan.applicable).toBe(true);
-    expect(plan.contended.size).toBe(0);
-    expect(plan.heroes).toBe(1);
-    expect(plan.order).toEqual(["new"]); // fully superseded entry leaves the plan
-  });
-
-  it("recency reads createdAt before the list order", () => {
-    // Same entries, list order reversed: createdAt still makes "new" win.
-    const plan = planWorklist([...list].reverse(), i);
-    expect(plan.assignments.map((m) => m.uid)).toEqual(["W2"]);
-    expect(plan.superseded.get("old")).toEqual(new Set(["weapon"]));
-  });
-
-  it("an older entry keeps the slots the newer one doesn't touch", () => {
-    const l = [
-      entry("new", "H", [change("weapon", "W2", "W0")], 2),
-      entry("old", "H", [change("weapon", "W1", "W0"), change("helmet", "H1")], 1),
-    ];
-    const plan = planWorklist(l, inv([{ uid: "W0", owner: "H" }, { uid: "W1" }, { uid: "W2" }, { uid: "H1" }]));
-    expect(plan.assignments.map((m) => [m.entryId, m.slot, m.uid])).toEqual([
-      ["new", "weapon", "W2"],
-      ["old", "helmet", "H1"],
-    ]);
-    expect(plan.superseded.get("old")).toEqual(new Set(["weapon"]));
-    expect(plan.heroes).toBe(1);
+    expect(planWorklist([], i)).not.toHaveProperty("superseded");
   });
 
   it("two heroes on one piece: contention unchanged", () => {
@@ -183,7 +154,6 @@ describe("planWorklist — same hero, same slot: the newest build wins", () => {
     const plan = planWorklist(l, inv([{ uid: "P" }]));
     expect(plan.applicable).toBe(false);
     expect(plan.contended.get("P")!.sort()).toEqual(["a", "b"]);
-    expect(plan.superseded.size).toBe(0);
   });
 
   it("equipAssignments over the plan's assignments gives W2 to the hero", async () => {
@@ -201,20 +171,9 @@ describe("planWorklist — same hero, same slot: the newest build wins", () => {
       written = JSON.parse(init!.body!) as RawUserItem;
       return new Response("{}");
     }));
-    expect(await equipAssignments(game, planWorklist(list, i).assignments)).toBe(true);
+    expect(await equipAssignments(game, planWorklist(list, i).assignments)).toBe("ok");
     const owner = (u: string) => written!.ItemList.find((it) => it.ItemUID === u)?.CharUID;
     expect([owner("W0"), owner("W1"), owner("W2")]).toEqual(["0", "0", "H"]);
-  });
-
-  it("the card reads the superseded slot, and never calls it a conflict", () => {
-    const plan = planWorklist(list, i);
-    const st = changeState(list[1]!.changes[0]!, {
-      equippedOnHero: new Set(["W0"]),
-      invUids: new Set(["W0", "W1", "W2"]),
-      contended: plan.contended,
-      supersededSlots: plan.superseded.get("old"),
-    });
-    expect(st).toEqual({ applied: false, stale: false, conflict: false, superseded: true });
   });
 });
 
@@ -318,6 +277,6 @@ describe("changeState — the card's conflict matches the plan's contention", ()
     ];
     const i = inv([{ uid: "P", owner: "h1" }]);
     const st = changeState(list[0]!.changes[0]!, { ...ctxFor(list, i), equippedOnHero: new Set(["P"]) });
-    expect(st).toEqual({ applied: true, stale: false, conflict: false, superseded: false });
+    expect(st).toEqual({ applied: true, stale: false, conflict: false });
   });
 });

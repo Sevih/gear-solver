@@ -8,6 +8,80 @@
 
 ## Items de backlog clôturés (index)
 
+### 📋 Worklist : une entrée par perso (remplacement), gemmes à sertir listées, échec d'Apply par cause, toast quand l'onglet change seul (2026-10-22)
+- ✅ **Pourquoi.** Retours de Sevih après G37 : deux « + Worklist » sur le même perso faisaient deux entrées (l'ancienne
+  seulement marquée `superseded` slot par slot) alors qu'un build est une tenue entière ; les gemmes du build
+  (`SolveBuild.gemAllocation`) n'apparaissaient pas, seules les pièces (`buildDiff`) ; l'échec d'Apply disait toujours
+  « close the game » quelle que soit la cause ; et l'onglet, qui se met à jour seul depuis G37, perdait des lignes sans
+  rien dire.
+- ✅ **Une entrée par perso.** `upsertWorklistEntry(list, entry)` (`lib/storage/worklist.ts`, pur) : la nouvelle entrée
+  en tête, celle du même `heroUid` retirée (coches comprises), les autres dans leur ordre ; `onAddToWorklist` d'`App.tsx`
+  passe par elle. `loadWorklist` garde la première entrée par perso d'une liste stockée avant le lot (la liste est
+  newest-first, comme l'aurait fait l'upsert), pour que le cas « deux entrées d'un perso » n'existe vraiment plus.
+  `superseded` retiré de `planWorklist` (le calcul `slotOwner` par `createdAt` et le champ du plan), de `ChangeState` /
+  `changeState` et de l'écran (ligne « Superseded by a newer build », prop `supersededSlots`). Le Builder reçoit
+  `worklistHeroUids` (le `Set` des `heroUid` présents, mémoïsé dans App) : le bouton dit « Replace in worklist » (et son
+  infobulle « one entry per hero ») quand le perso a déjà une entrée, et sa confirmation devient « Replaced ✓ »
+  (`worklistAdded` passe de booléen à `"added" | "replaced" | null`).
+- ✅ **Gemmes.** `WorklistChange` = `WorklistPieceChange | WorklistGemChange`, discriminées par `kind?: "gem"` (absent =
+  pièce, donc les entrées déjà stockées se lisent telles quelles) ; la ligne gemme porte `slot` = slot moteur de la
+  pièce porteuse (`ooparts` / `exclusive`, comme la ligne pièce, plutôt que les clés `talisman` / `ee` de
+  `gemAllocation`), `gemIndex`, `toUid` / `toName` de la pièce du build, `toGem` / `fromGem` (`WorklistGem { id, name,
+  stat }`, nom « Lv 3 Attack% » et stat résolus par `resolveOption` sur `game.gems`, comme `toUiPiece`). L'émission
+  sort du Builder dans `lib/worklist/changes.ts` (`worklistChangesFor(diff, gemAllocation, game)`, pur) : les pièces
+  comme avant, puis une ligne par emplacement où `gemAllocation[k][i]` ≠ `piece.gemSlots?.[i] ?? 0`, les 0 du build
+  ignorés. `upg` reste le nombre de pièces ; le bouton « + Worklist » s'active dès qu'il y a une ligne (un build qui ne
+  change qu'une gemme, `upg` 0, s'ajoute). « Appliqué » = pièce porteuse sur le perso ET `gemSlots[gemIndex] ===
+  toGem.id` (`isChangeApplied`, partagé par `reconcileWorklist`, `remainingChangeCount` donc le badge, et
+  `changeState`, qui reçoit `gemSlots`) ; `worklistClaims` et `planWorklist` ignorent les lignes gemme (rien à réserver,
+  rien à appliquer). Rendu (`GemLine` de `WorklistScreen.tsx`) : sous la ligne de sa pièce quand l'entrée la déplace
+  (`orderLines`), seule sinon avec « Talisman · gem n » et « on <pièce> » ; icône `TI_GEM_<type>_<level>` comme les
+  panneaux de gemmes, nom, stat, « was <ancienne> » / « was empty », statut « socket in-game » et l'infobulle de la ligne
+  « Socket in-game — Apply locally / Apply all don't socket gems. ». Apply locally ne prend que les pièces et se grise
+  quand il ne reste que des gemmes. Les coches passent par `changeKey` (`slot` ou `slot:gemN`), un slot portant
+  désormais plusieurs lignes.
+- ✅ **Échec par cause.** `equipAssignments` rend un `EquipOutcome` comme `equipPieces` ; le tableau `FAILURE`
+  d'`EquipBuildButton.tsx` sort dans `equip.ts` (`EQUIP_FAILURE`), lu par le popup du Builder, Apply all et Apply
+  locally.
+- ✅ **Toasts.** `design/Toast.tsx` : `createToastStore` (petit store externe, une minuterie par toast, 4 s,
+  `dismiss`, `dispose`), `useToasts` (`useSyncExternalStore`, `notify` stable), `ToastStack` (pile fixe en bas à droite,
+  au-dessus du pied fixe du Builder, clic = fermer) ; aucune dépendance, monté une fois dans `App.tsx`. Déclencheurs :
+  l'effet d'auto-élagage compte désormais ce que `reconcileWorklist` retire (`applied: { heroUid, heroName, applied }[]`)
+  et `appliedNotice` en fait UN toast par import (« Worklist: 3 changes applied — Ame, Rin ») ; il est calculé hors de
+  l'updater (StrictMode le joue deux fois) depuis `worklistRef`, l'updater ne refaisant le calcul que si la liste a
+  bougé entre-temps. Pas de toast après l'Apply de l'onglet lui-même (`quietReconcile`, posé par `onAfterApply`) ni
+  pour une coche ; « Added to worklist — <perso> » / « Replaced in worklist — <perso> » au « + Worklist ». « Equip
+  build » du Builder garde le toast quand il vide des lignes : l'onglet Worklist n'est pas à l'écran.
+- ✅ **Docs.** `docs/solver.md` (paragraphe « + Worklist »), `wiki/Using-the-App.md` (« + Worklist » et section
+  Worklist : une entrée par perso, gemmes, toast, échec par cause, plus de *superseded*), lignes de test de
+  `docs/reference.md` / `wiki/Engine-Reference.md` (`worklistPlan` sans `superseded`, nouvelle ligne `worklist.test.ts`).
+  `docs/todo.md` n'a pas d'item que ce lot clôt : inchangé.
+- ✅ **Tests.** `apps/renderer/test/worklist.test.ts` (25, nouveau) : `upsertWorklistEntry` remplace par `heroUid`,
+  garde l'ordre des autres et lâche les coches ; entrée stockée sans `kind` lue, comptée et planifiée comme une pièce ;
+  liste stockée à deux entrées d'un perso → la première ; `worklistChangesFor` : build où seule une gemme change (`upg`
+  0, une ligne), `fromGem`, 0 du build ignorés, pièces puis gemmes, rien → rien ; ligne gemme appliquée (pièce sur le
+  perso + bonne gemme), pas appliquée (autre gemme ; bonne gemme mais pièce ailleurs), `remainingChangeCount` les
+  compte, `worklistClaims` et `planWorklist` les ignorent, `reconcileWorklist` lâche la pièce puis la gemme et
+  `appliedNotice` ; issue `ok` / `game-open` (409) / `failed` (500) / `no-snapshot` (404) pour `equipAssignments` et
+  `equipPieces`, un texte distinct par cause ; toasts : apparition puis disparition à 4 s (timers factices), `dismiss` /
+  `dispose` sans minuterie restante, rendu de la pile (`renderToStaticMarkup`) et rien quand elle est vide.
+  `worklistPlan.test.ts` : le bloc « newest build wins » devient « plus de `superseded` » (et `equipAssignments` rend
+  `"ok"`). Le message par cause de l'écran est vérifié par `EQUIP_FAILURE` et les issues, pas par un rendu de l'écran
+  (pas de DOM dans les tests du renderer). `npm run typecheck` → `> tsc --noEmit` (dernière ligne, renderer), sortie
+  0 ; `npm test` → core « Tests 166 passed (166) », desktop « Tests 175 passed (175) », renderer « Tests 608 passed
+  (608) » ; `npm run lint` → « ✖ 14 problems (0 errors, 14 warnings) » : un de moins que les 15 attendus, le
+  `react-hooks/set-state-in-effect` de l'effet d'auto-élagage d'`App.tsx` (son `setWorklist` vient maintenant après un
+  retour anticipé), aucun `eslint-disable` ajouté.
+- ⏳ **Sevih, sur le fixe** : solve d'un perso déjà en Worklist → le bouton dit « Replace in worklist », un clic →
+  « Replaced ✓ », toast « Replaced in worklist — <perso> », une seule entrée dans l'onglet ; un build qui ne change
+  qu'une gemme du Talisman / de l'EE → « + Worklist » actif, une ligne gemme (icône, stat, « was … ») ; jeu ouvert,
+  déplacer en jeu une pièce de l'entrée → dans les 5 s la ligne part et un toast « Worklist: 1 change applied — <perso> »
+  s'affiche en bas à droite ; sertir la gemme en jeu → la ligne gemme part au retour au lobby (le journal G37 ne suit que
+  les déplacements de pièces). Apply locally jeu ouvert → le message « The game is open… » sur la carte.
+- ⏳ **Hors périmètre, repéré** : `docs/release-notes.md › [Unreleased]` n'a pas de puce pour ce lot (à écrire avec la
+  release) ; les totaux de tests de `docs/reference.md` / `wiki/Engine-Reference.md` (« Total : 300 tests ») étaient
+  déjà faux avant ce lot.
+
 ### 🔄 Le snapshot suit les déplacements de pièces faits en jeu (journal `item/equip` du plugin 0.2.0, plié par le desktop), sans repasser par le lobby (2026-10-22)
 - ✅ **Pourquoi.** Le jeu n'envoie `/user/item` qu'au lobby : une pièce déplacée dans l'écran du héros n'atteignait le
   snapshot qu'au retour au lobby, et l'Equip local était refusé (409) tant que le jeu tournait. Or chaque déplacement
