@@ -8,6 +8,43 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔧 Electron 42.4.1 → 44.9.3, installeur non publié pour le banc réel (2026-10-22)
+- ✅ **Pourquoi.** La 42 n'est plus supportée depuis la sortie de la 45.0.0 le 21/10/2026 (supportées : 43, 44, 45).
+  La PR #36 de Dependabot visait la 44.9.0, déjà dépassée et sans banc : elle n'est pas reprise, Sevih la fermera
+  après la release.
+- ✅ **Montée.** `apps/desktop/package.json` : `devDependencies.electron` `^44.9.3` et `build.electronVersion`
+  `"44.9.3"` (lu par electron-builder, les deux bougent ensemble). `npm install` à la racine : le diff de
+  `package-lock.json` ne touche que l'entrée `node_modules/electron` (version, `resolved`, `integrity`) et la plage du
+  workspace, plus la ligne `version` du workspace desktop que le lock portait encore en 1.10.0 et que npm a
+  resynchronisée sur la 1.14.0 du `package.json` (aucune dépendance). `electron-builder` 25.x, `vitest` et
+  `@types/node` ne bougent pas (PR #37 et #38 hors périmètre).
+- ✅ **Ruptures 43 et 44 : rien de touché.** `grep -rnE "toBitmap|showHiddenFiles|defaultPath|select-client-certificate|net\.request|isUnityRunning|clipboard|setLoginItemSettings|getLoginItemSettings|frame:|titleBarStyle|showOpenDialog|showSaveDialog|dialog\." apps/desktop/src apps/renderer/src`
+  → un seul `dialog.showErrorBox` (`apps/desktop/src/main.ts:154`) et le seul `navigator.clipboard` du renderer
+  (`FilterFooter.tsx`, `BuildsScreen.tsx`), plus deux commentaires ; le desktop n'importe d'`electron` que `app`,
+  `BrowserWindow` et `dialog`, fenêtre avec cadre (`sandbox: true`, `nodeIntegration: false`), aucun `nativeImage`.
+  Cible inchangée : `win` `nsis` x64.
+- ✅ **Rien d'autre n'épinglait la 42.** `grep -rnE "42\.4\.1|electron@42"` hors `node_modules`, `release/` et lock
+  → seulement les deux lignes de `apps/desktop/package.json` ; ni `docs/`, ni `wiki/`, ni le README, ni `.github/`
+  ne citent de version d'Electron. `docs/release-notes.md › [Unreleased]` : une ligne « Electron 44 ».
+- ✅ **Installeur non publié.** `npm run desktop:build` ; `npm run fetch-binaries -w @gear-solver/desktop` → « [ok]
+  capture-steam plugin 0.4.0 (16 896 bytes) » ; `npm run dist -w @gear-solver/desktop -- --win --publish never
+  '-c.artifactName=${productName} Setup ${version}-g45.${ext}'` → « packaging platform=win32 arch=x64
+  electron=44.9.3 », `apps/desktop/release/Outerpedia Gear Solver Setup 1.14.0-g45.exe`, copié dans
+  `~/Echanges-Claude/` (115 870 480 octets, contre 105 710 548 pour la 1.14.0). `latest.yml` et `builder-debug.yml`
+  de `release/` avaient bougé : remis comme après la release 1.14.0 (non suivis par git).
+- ✅ **Fumée sur le portable.** `node -e "console.log(require('electron/package.json').version)"` → `44.9.3` ;
+  `npx electron --version` depuis `apps/desktop` → `v44.9.3` (premier appel : « Downloading Electron binary... »,
+  la 44 télécharge le binaire au premier lancement). Piège : dans un terminal de VS Code, `ELECTRON_RUN_AS_NODE=1` est
+  hérité et la commande répond la version de Node (`v24.22.0`) ; lancer avec `env -u ELECTRON_RUN_AS_NODE`.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` sans erreur (les trois workspaces) ; `npm test` →
+  « Tests 166 passed (166) » (core), « Tests 196 passed (196) » (desktop), « Tests 658 passed (658) » (renderer) ;
+  `npm run lint` → « ✖ 14 problems (0 errors, 14 warnings) », inchangé.
+- ⏳ **Sevih, sur le fixe** : banc réel avec l'installeur `1.14.0-g45` par-dessus la 1.14.0 — lancement, Settings ›
+  Setup (plugin 0.4.0 live après « Update plugin » jeu fermé), capture au lobby, déplacement d'une pièce suivi en
+  direct, un enchant suivi, un solve, « Equip this build » jeu fermé ; puis, après la release 1.15.0, l'auto-update
+  depuis la 1.14.0. Si un point casse, c'est la montée qui est en cause (le code est celui de la 1.14.0 + G44).
+  Fermer la PR #36 après la release.
+
 ### ⬆️ Améliorations faites en jeu suivies en direct : enchant, reset, limite d'étoiles, smelting, fusion, craft, dissolution (plugin 0.4.0) (2026-10-22)
 - ✅ **Pourquoi.** Demande de Sevih après la 1.14.0 : une pièce améliorée en jeu restait à +0 dans l'app jusqu'au
   lobby, et le fodder mangé restait dans l'Inventaire — le plugin 0.3.0 ne journalisait que les déplacements, les

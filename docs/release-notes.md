@@ -16,6 +16,7 @@
   reach the app live**: the inventory shows the new +N within a few seconds and the pieces eaten as
   fodder disappear, no lobby needed. Update the capture plugin (0.4.0): Settings › Setup ›
   **Update plugin** with the game closed.
+- Electron 44 (Chromium and Node.js runtime update); no visible change expected.
 
 ## [1.14.0] — 2026-10-22
 

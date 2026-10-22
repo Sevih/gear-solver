@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.16.0",
-    "electron": "^42.4.1",
+    "electron": "^44.9.3",
     "electron-builder": "^25.1.8",
     "typescript": "^5.6.3",
     "vitest": "^4.1.8"
@@ -35,7 +35,7 @@
       "buildResources": "build"
     },
     "asar": true,
-    "electronVersion": "42.4.1",
+    "electronVersion": "44.9.3",
     "npmRebuild": false,
     "nodeGypRebuild": false,
     "buildDependenciesFromSource": false,
