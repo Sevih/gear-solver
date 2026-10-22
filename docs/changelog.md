@@ -8,6 +8,71 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧩 Onglet Presets (lecture) : presets du jeu, porteurs, perso de référence et associés, score et perte par associé (2026-10-22)
+- ✅ **Pourquoi.** Le jeu garde jusqu'à 30 presets d'équipement (7 pièces, l'EE n'en fait jamais partie) que l'app
+  parsait déjà (`Inventory.presets`) mais ne montrait qu'en creux (le nom du preset sur une carte Builds dont la tenue
+  correspond exactement). Modèle retenu : un preset = la tenue d'UN perso de référence, portée telle quelle par des
+  persos associés qui se règlent par les gemmes de leur propre EE ; pas d'objectif multi-persos, on ÉVALUE la tenue
+  pour chaque associé. Les groupes se font à la main (le rôle ne dit pas les besoins). Ce lot est la lecture ;
+  l'optimisation des gemmes d'EE par associé et les lignes Worklist viennent après (G41, au todo).
+- ✅ **Modèle — `apps/renderer/src/lib/presets/presetRows.ts`.** `presetRows(inventory)` : une ligne par preset (ordre
+  du `num`), ses pièces hors EE résolues sur l'inventaire dans l'ordre weapon → talisman (`PRESET_SLOTS`), une pièce
+  absente gardée et signalée (`missing`, son slot repris de la position sur le fil — Weapon, Accessory, Helmet, Armor,
+  Gloves, Boots, EE, Talisman), les porteurs actuels (héros dont l'équipement hors EE est exactement le preset, index
+  par signature) et les pièces présentes dans un AUTRE preset (`sharedWith`). `presetSignature` a déménagé ici depuis
+  `BuildsScreen.tsx`, qui l'importe ; elle ignore en plus les slots vides (uid `0` sur le fil), sans quoi un preset
+  incomplet ne correspondait jamais à personne — le nom de preset des cartes Builds suit la même règle.
+- ✅ **Évaluation — `lib/presets/evaluate.ts`.** `heroBases(…)` compose chaque héros une fois sans gear (mêmes entrées
+  que Builds et le Builder : `composeCharStats`, `dmgSkillInfo`, `dmgStat`/`dmgSec`/`noCrit`) avec sa priorité du
+  Builder (`filtersForHero(gs.solver.heroFilters, uid, INITIAL_FILTERS).priority`, `null` si aucun poids non nul).
+  `evaluatePresetFor(heroUid, presetPieces, ctx)` compose les pièces du preset + l'EE actuelle DU HÉROS (gemmes telles
+  que serties ; l'EE éventuelle du slot EE du preset est ignorée) par `computeFinalStats`, dans l'ordre de l'inventaire
+  (celui de Builds : un preset identique à la tenue donne exactement la même fiche), puis `computeCheapRatings` et
+  `computeScore`. `bestKnownFor` = la build sauvegardée la plus récente (`createdAt`), re-notée avec la priorité
+  COURANTE (pas le `score` ni la priorité de la sauvegarde), sinon la tenue actuelle ; `presetLoss` = `1 − preset /
+  best`, `null` sans score ou si `best ≤ 0`.
+- ✅ **Store — `lib/storage/presetHeroes.ts`.** `gs.presetHeroes` (localStorage, un blob, forme de `savedBuilds.ts`) : par
+  numéro de preset `{ referenceUid, associatedUids }`. `presetHeroesFor` écarte à la lecture un uid sorti du roster (il
+  reste stocké : un héros revenu d'une recapture retrouve sa place) ; un héros promu référence quitte les associés, pas
+  de doublon. Le seuil d'avertissement (`DEFAULT_PRESET_LOSS_WARN` = 15) vit dans ce module léger pour ne pas tirer
+  le moteur dans le bundle principal.
+- ✅ **Écran — `screens/presets/PresetsScreen.tsx`.** Onglet « Presets » entre Builds et Builder (`Tab`/`TABS` et
+  `TabCounts` de `design/Shell.tsx`, montage `lazy` sous `ScreenErrorBoundary` dans `App.tsx`). Une carte par preset :
+  numéro, nom, ★ (core lit maintenant `Favorites` → `Preset.favorite`, `parse.ts`/`types.ts`), les 7 tuiles
+  (`SlotMini` + `GearDetailBody` au survol, main stat et set sous la tuile), les porteurs (portraits), la ligne
+  Reference (`HeroSelect` du Builder ; un porteur unique est proposé par défaut, « current wearer ») et la liste
+  Associated (ajout par sélecteur, retrait par ✕). Pour chacun : Score, Dmg, DmgS ; pour un associé la perte en %
+  « vs saved build » / « vs current gear » ; au-delà du seuil la ligne passe en orange avec « <Nom> loses 23 % vs their
+  saved build » ; sans priorité « no priority set for <Nom> — set one in the Builder », pas de score. Pièces absentes
+  (liseré rose, badge `missing`) et partagées (liseré ambre, badge `shared`, infobulle « Shared with #n … ») marquées
+  sur la tuile et dans un bandeau de la carte ; un preset vide est listé replié. Aucune écriture vers le jeu, pas de
+  Worklist. Settings → Solver : une ligne « Preset loss warning » (5–50 %, pas de 5, `gs.solver.presetLossWarn`,
+  remise à 15 par « Reset solver settings »).
+- ✅ **Docs.** `docs/solver.md` + `wiki/Solver.md` (section « Onglet Presets (lecture) », carte des fichiers),
+  `wiki/Using-the-App.md` (six onglets, section Presets, ligne Settings → Solver) et `wiki/Home.md`,
+  `docs/architecture.md` + `wiki/Architecture.md` (liste des écrans), `docs/reference.md` + `wiki/Engine-Reference.md`
+  (carte des modules, ligne de test), `docs/data-schema.md` + `wiki/Data-Schema.md` (`Favorites` lu),
+  `docs/release-notes.md › [Unreleased]` (puce joueur), `docs/todo.md` (item G41).
+- ✅ **Tests.** `apps/renderer/test/presets.test.ts` (18 tests, héros factices sans compose) : `presetRows` — porteur
+  exact malgré une autre EE dans le slot EE du preset, une pièce de différence → pas porteur, EE jamais dans le
+  preset, pièce absente (slot `helmet` repris du fil), pièce partagée flaggée des deux côtés, preset vide ;
+  `presetSignature` ; `evaluatePresetFor` — pièces du preset + l'EE du héros (pas celle du preset), −200 ATK d'une arme
+  à ATK connu par rapport à sa tenue, `loss` à 0 quand preset = meilleure tenue, `null` sans priorité ; `bestKnownFor`
+  — build sauvegardée la plus récente > tenue actuelle, score recalculé avec la priorité courante (≠ le score stocké) ;
+  store — aller-retour, uid hors roster ignoré, un rôle par héros, stockage illisible. `npm run typecheck` : dernière
+  ligne `> tsc --noEmit` (renderer, sortie 0) ; `npm test` : `Tests  626 passed (626)` (renderer ; core 166, desktop
+  179) ; `npm run lint` : `✖ 14 problems (0 errors, 14 warnings)`, inchangé ; `vite build` du renderer passe
+  (`PresetsScreen` en chunk à part, 12 kB).
+- ⏳ **Limite connue — priorité de session.** La priorité par héros vient de `gs.solver.heroFilters`, en sessionStorage :
+  après un relancement, un héros n'a de score qu'une fois revisité dans le Builder, et le héros ouvert dans le Builder
+  n'y est écrit qu'au changement de héros. À trancher par Sevih si gênant (repli sur la priorité de la dernière build
+  sauvegardée, ou mémoriser les filtres par héros en localStorage) — non fait ici, le lot fixait la source.
+- ⏳ **Hors périmètre, repéré.** `gs.presetHeroes` n'est ni dans l'export/import de sauvegarde (`lib/storage/transfer.ts`)
+  ni élagué au changement de données (`dataHash.ts`).
+- ⏳ **Sevih, sur le fixe (après la release).** L'onglet liste ses presets avec les bons porteurs et le bon ★ (le slot vide
+  est supposé valoir `0` sur le fil, aucune capture réelle sur le portable pour le confirmer) ; mettre Ame en associée
+  d'un preset de DLuna (avec une priorité réglée dans le Builder pendant la session) → ligne orange avec la perte.
+
 ### 📦 Release : la DLL du plugin est recompilée et vérifiée contre `Plugin.Version` à chaque release, `dotnet` sous Linux (2026-10-22)
 - ✅ **Pourquoi.** `scripts/release.mjs` (étape 5) ne lançait que `npm run desktop:build` : electron-builder embarquait
   la DLL qui traînait dans `apps/desktop/resources/capture-steam/` (dossier ignoré par git). `fetch-binaries.mjs` savait

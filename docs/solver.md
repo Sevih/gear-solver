@@ -440,6 +440,34 @@ enhance level, icône slot, main stat, subs (avec ticks). En plus :
 
 Em-dash quand aucun build n'est sélectionné.
 
+### Onglet Presets (lecture)
+Onglet entre Builds et Builder (`screens/presets/PresetsScreen.tsx`), une carte par preset d'équipement du
+jeu (`Inventory.presets`, jusqu'à 30) : numéro, nom, favori ★, les 7 pièces (weapon, accessory, helmet,
+armor, gloves, boots, talisman — l'EE n'en fait **jamais** partie, le slot EE de `ItemUIDList` est ignoré)
+avec la tuile et le détail au survol de l'inventaire, et les **porteurs actuels** : héros dont l'équipement
+hors EE est exactement le preset (`presetSignature`, la même règle que le nom de preset des cartes Builds).
+Le modèle est pur et testé (`lib/presets/presetRows.ts` → `presetRows(inventory)`) : pièce absente de
+l'inventaire (slot repris de la position sur le fil) et pièce présente dans **deux** presets (« shared with
+<preset> » — deux presets peuvent jouer le même combat) sont marquées sur la tuile et dans un bandeau. Un
+preset vide est listé replié.
+
+Un preset = la tenue d'**un perso de référence**, portée telle quelle par des **persos associés** qui se
+règlent par les gemmes de leur propre EE. Les groupes se font à la main (sélecteur de héros ; un porteur
+actuel unique est proposé comme référence), stockés app-local dans `gs.presetHeroes`
+(`lib/storage/presetHeroes.ts`, par numéro de preset `{ referenceUid, associatedUids }`, un uid sorti du
+roster ignoré à la lecture). Pour la référence et chaque associé, `evaluatePresetFor`
+(`lib/presets/evaluate.ts`) compose le héros avec les pièces du preset + **son** EE actuelle (gemmes telles
+que serties) par `computeFinalStats`, puis `computeCheapRatings` (facteurs de skill du héros) et
+`computeScore` avec sa priorité du Builder (`gs.solver.heroFilters`) ; la carte montre Score, Dmg et DmgS.
+Un associé est comparé à sa **meilleure tenue connue** (`bestKnownFor` : sa build sauvegardée la plus
+récente, re-notée avec la priorité **courante**, sinon son équipement actuel) : `loss = 1 − score(preset) /
+score(best)`, affichée en % « vs saved build » / « vs current gear » ; au-delà du seuil (15 % par défaut,
+Settings → Solver, `gs.solver.presetLossWarn`) la ligne passe en orange avec « <Nom> loses 23 % vs their
+saved build ». Sans priorité : « no priority set for <Nom> — set one in the Builder », pas de score. La
+priorité par héros est mémorisée **pour la session** : après un relancement, un héros n'a de score qu'une
+fois revisité dans le Builder (et le héros ouvert dans le Builder n'est mémorisé qu'au changement de héros).
+Rien n'est écrit vers le jeu ni mis en Worklist ; l'optimisation des gemmes d'EE par associé viendra ensuite.
+
 ---
 
 ## 5. Gems — sous-solver greedy
@@ -624,8 +652,12 @@ apps/renderer/src/
 │   └── solver.worker.ts          ← thin adapter IPC ↔ engine
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
+│   ├── presets/
+│   │   ├── presetRows.ts           ← presets du jeu : pièces, porteurs (presetSignature), pièces absentes / partagées
+│   │   └── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases (onglet Presets)
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← bookmark de builds par héros (localStorage)
+│   │   ├── presetHeroes.ts         ← référence + associés par preset (localStorage)
 │   │   └── filterPresets.ts        ← snapshots de filtres par héros (localStorage)
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
@@ -643,6 +675,7 @@ apps/renderer/src/
     │   ├── ResultsTable.tsx        ← table virtualisée, tri, heatmap, menu des colonnes
     │   ├── BottomGearBand.tsx · RightSidebar.tsx · FilterFooter.tsx · StatsPanel.tsx · …
     │   └── catalogs.ts · statColumns.ts ← catalogues tirés de l'inventaire, tables stats/ratings
+    ├── presets/PresetsScreen.tsx   ← onglet Presets (lecture) : cartes par preset, référence, associés, perte
     └── BuildsScreen.tsx            ← roster équipé/composé + computeAdvice + Optimize →
 ```
 

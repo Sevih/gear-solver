@@ -1,11 +1,12 @@
 /**
- * Settings → Solver — worker-pool size, result count, per-worker depth and
- * the results heatmap.
+ * Settings → Solver — worker-pool size, result count, per-worker depth, the
+ * results heatmap and the Presets tab's loss warning.
  */
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { cx } from "../cx.js";
 import { availableCores, clampWorkerCount, resolveWorkerCount } from "../../lib/solver/orchestrator.js";
 import { SectionStrip, Divider, SegButton, Stepper, Switch } from "./SettingsControls.js";
+import { DEFAULT_PRESET_LOSS_WARN } from "../../lib/storage/presetHeroes.js";
 
 /** Solver tuning settings — owned by App (persisted), edited here. */
 export interface SolverSettings {
@@ -21,6 +22,9 @@ export interface SolverSettings {
   /** Results-table column heatmap on/off. */
   heatmap: boolean;
   setHeatmap: Dispatch<SetStateAction<boolean>>;
+  /** Presets tab: loss (percent) past which an associated hero is flagged. */
+  presetLossWarn: number;
+  setPresetLossWarn: Dispatch<SetStateAction<number>>;
 }
 
 export function SolverPane({
@@ -101,6 +105,23 @@ export function SolverPane({
         <Switch checked={solver.heatmap} onToggle={() => solver.setHeatmap((v) => !v)} />
       </div>
 
+      <Divider />
+
+      {/* Presets loss warning */}
+      <div className="flex items-start justify-between gap-4.5">
+        <div className="flex max-w-82.5 flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-white">Preset loss warning</span>
+          <span className="text-[11.5px] leading-snug text-zinc-400">
+            Presets tab: an associated hero losing more than this share of their own build's score is flagged. Range 5–50 %.
+          </span>
+        </div>
+        <Stepper
+          value={solver.presetLossWarn}
+          onDec={() => solver.setPresetLossWarn((v) => Math.max(5, v - 5))}
+          onInc={() => solver.setPresetLossWarn((v) => Math.min(50, v + 5))}
+        />
+      </div>
+
       {/* Advanced disclosure → per-worker depth (topK) */}
       <div className="flex flex-col gap-3 border-t border-white/6 pt-3">
         <button
@@ -140,6 +161,7 @@ export function SolverPane({
             solver.setTopN(1000);
             solver.setTopK(1000);
             solver.setHeatmap(true);
+            solver.setPresetLossWarn(DEFAULT_PRESET_LOSS_WARN);
             setManualBuf(autoEffective);
           }}
           className="text-[11px] text-zinc-400 underline underline-offset-2 hover:text-zinc-300"

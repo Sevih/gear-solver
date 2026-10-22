@@ -79,8 +79,8 @@ from each item's `CharUID` (`parse.ts`: `equippedBy = CharUID === "0" ? null : C
 
 **Presets**: `PresetList` lives in **`/user/item`** (not `/user/character`) —
 an array of `{PresetType, Num, Name (base64), ItemUIDList[8], Favorites}` (full shape
-in `raw.ts` `RawPreset`; the parser today reads `Num` (→ `Preset.num`), `Name` and
-`ItemUIDList` — only `PresetType` and `Favorites` remain unread).
+in `raw.ts` `RawPreset`; the parser today reads `Num` (→ `Preset.num`), `Name`,
+`ItemUIDList` and `Favorites` (≠ 0 → `Preset.favorite`, the Presets tab's ★) — only `PresetType` remains unread).
 Order of the 8 slots: Weapon, Accessory, Helmet, Armor, Gloves, Boots, EE, Talisman.
 Names are base64-encoded UTF-8 (cf. `decodeBase64Utf8` in `parse.ts`).
 

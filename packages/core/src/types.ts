@@ -150,6 +150,8 @@ export interface Preset {
   num: number;
   name: string;
   itemUids: string[];
+  /** Starred in the in-game preset list (`Favorites` ≠ 0 on the wire). */
+  favorite: boolean;
 }
 
 export interface Inventory {

@@ -360,6 +360,7 @@ export function parseInventory(
     num: p.Num,
     name: decodeBase64Utf8(p.Name),
     itemUids: p.ItemUIDList.map(String),
+    favorite: (p.Favorites ?? 0) !== 0,
   }));
   return { gear, characters, presets };
 }

@@ -48,6 +48,9 @@
       de +1 à +3 ticks sur la ligne la plus utile d'une pièce sans ligne 4, dans la projection et dans la
       qualité « atteignable ». **Décision** avant de coder : une seule ligne rerollable par pièce et une seule
       fois ? règle pour toutes les étoiles ou seulement 6★ légendaires ?
+- [ ] 🟢 **Presets — G41 : gemmes d'EE par associé, lignes Worklist** — l'onglet Presets (G40) note le preset sur
+      chaque associé et chiffre sa perte ; reste à optimiser les gemmes de l'EE de chaque associé pour la tenue du
+      preset (un bouton de solve par associé possible) et à en pousser les lignes dans la Worklist.
 - [~] 🟡 **`Advices` (tab Builds)** — 4pc dispo en inventaire et basse qualité livrés, `inventoryPieces` + `dmgStat`
       passés dans `AdviceInput`. **Reste** : la règle main off-scaling vs `meta.dmgStat` — décision de Sevih (le
       principe du module exclut ce qui demande de deviner l'intention).

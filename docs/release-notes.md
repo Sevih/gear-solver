@@ -20,6 +20,9 @@
 - **Worklist: one entry per hero** — queuing a new build replaces the hero's previous one; the
   gems to socket on the Talisman / EE are listed too; a toast tells you when lines clear
   themselves as you move gear in-game.
+- **Presets tab**: your in-game equipment presets, who wears them, a reference hero and the
+  heroes you plan to share the set with — with a warning when one of them loses too much
+  versus their own build (threshold in Settings › Solver).
 
 ## [1.12.0] — 2026-10-22
 

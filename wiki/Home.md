@@ -47,7 +47,7 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
 | Page | What's in it |
 |------|--------------|
 | [Getting Started](Getting-Started) | Prerequisites, first-launch wizard, importing your account (capture) |
-| [Using the App](Using-the-App) | The five tabs (Home / Inventory / Builds / Builder / Worklist), optimizing a hero, settings, updates |
+| [Using the App](Using-the-App) | The six tabs (Home / Inventory / Builds / Presets / Builder / Worklist), optimizing a hero, settings, updates |
 | [FAQ & Troubleshooting](FAQ) | Capture issues, post-patch fixes, Builder tips, backups |
 
 **🔧 Internals (dev)**

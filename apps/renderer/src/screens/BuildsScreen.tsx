@@ -15,6 +15,7 @@ import { GearDetailBody } from "../design/GearDetail.js";
 import { Pill } from "../design/Chips.js";
 import { TOKENS, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toUiPiece } from "../design/adapter.js";
+import { presetSignature } from "../lib/presets/presetRows.js";
 
 /** In-game equipment layout for the build card: weapon row pairs with EE +
  *  armor pieces, second row gathers accessory/talisman + the body extremities. */
@@ -521,18 +522,6 @@ interface ComposedEntry {
 // satisfies its `AdviceInput` (equipped / rawPieces / stats / inventoryPieces /
 // heroUid / claimedBy / dmgStat), so the call site
 // below passes the entry straight through.
-
-/** Build a sorted, comma-joined UID key for a set of gear pieces, EE pieces
- *  excluded. Same routine on both sides (preset vs hero) guarantees the
- *  comparison is order-independent and EE-agnostic. */
-function presetSignature(uids: Iterable<string>, slotByUid: Map<string, GearPiece["slot"]>): string {
-  const out: string[] = [];
-  for (const u of uids) {
-    if (slotByUid.get(u) === "exclusive") continue;
-    out.push(u);
-  }
-  return out.sort().join(",");
-}
 
 interface BuildCardProps {
   entry: ComposedEntry;

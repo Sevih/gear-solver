@@ -108,8 +108,8 @@ export function CaptureControls({ steam, onReload, busy = false }: CaptureContro
   );
 }
 
-export type Tab = "Home" | "Inventory" | "Builds" | "Builder" | "Worklist";
-const TABS: Tab[] = ["Home", "Inventory", "Builds", "Builder", "Worklist"];
+export type Tab = "Home" | "Inventory" | "Builds" | "Presets" | "Builder" | "Worklist";
+const TABS: Tab[] = ["Home", "Inventory", "Builds", "Presets", "Builder", "Worklist"];
 
 /** Per-tab activity counts. Renders next to the tab label as a mini pill so
  *  the page-level "Inventory · 1450 pieces" header can disappear without
@@ -119,6 +119,7 @@ export interface TabCounts {
   Home: number | null;
   Inventory: number | null;
   Builds: number | null;
+  Presets: number | null;
   Builder: number | null;
   /** Pending (not-yet-applied) gear changes queued in the worklist. */
   Worklist: number | null;

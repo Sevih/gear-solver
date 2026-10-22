@@ -14,6 +14,7 @@ import { SettingsModal } from "./design/settings/SettingsModal.js";
 import { HomeScreen } from "./screens/home/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
+import { DEFAULT_PRESET_LOSS_WARN } from "./lib/storage/presetHeroes.js";
 import { appliedNotice, equippedByHero, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, upsertWorklistEntry, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
@@ -29,6 +30,7 @@ import { createOnboardingGate } from "./lib/onboarding.js";
 const InventoryScreen = lazy(() => import("./screens/inventory/InventoryScreen.js").then((m) => ({ default: m.InventoryScreen })));
 const BuildsScreen = lazy(() => import("./screens/BuildsScreen.js").then((m) => ({ default: m.BuildsScreen })));
 const BuilderScreen = lazy(() => import("./screens/builder/BuilderScreen.js").then((m) => ({ default: m.BuilderScreen })));
+const PresetsScreen = lazy(() => import("./screens/presets/PresetsScreen.js").then((m) => ({ default: m.PresetsScreen })));
 const WorklistScreen = lazy(() => import("./screens/WorklistScreen.js").then((m) => ({ default: m.WorklistScreen })));
 
 /** Per-screen error boundary — a throw in a `useMemo`/render (e.g. a bad
@@ -159,6 +161,8 @@ export function App() {
   const [solverTopN, setSolverTopN] = usePersistedState<number>("gs.solver.topN", 1000);
   const [solverTopK, setSolverTopK] = usePersistedState<number>("gs.solver.topK", 1000);
   const [heatmap, setHeatmap] = usePersistedState<boolean>("gs.builder.heatmap", true);
+  // Presets tab: loss (percent) past which an associated hero's line turns orange.
+  const [presetLossWarn, setPresetLossWarn] = usePersistedState<number>("gs.solver.presetLossWarn", DEFAULT_PRESET_LOSS_WARN);
   // Hero to preselect when the Builder tab opens — set by the Builds tab's
   // "Optimize →" button, consumed (and cleared) by BuilderScreen on mount so
   // a later normal visit to the Builder doesn't re-preselect a stale hero.
@@ -358,6 +362,7 @@ export function App() {
           // Builds = number of distinct equipped characters — the keys of
           // the memoized `equipped` map.
           Builds: inv ? equipped.size : null,
+          Presets: null,
           Builder: null,
           Worklist: worklistRemaining || null,
         }}
@@ -401,6 +406,7 @@ export function App() {
           topN: solverTopN, setTopN: setSolverTopN,
           topK: solverTopK, setTopK: setSolverTopK,
           heatmap, setHeatmap,
+          presetLossWarn, setPresetLossWarn,
         }}
       />
 
@@ -461,6 +467,7 @@ export function App() {
               />
             </ScreenErrorBoundary>
           )}
+          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} /></ScreenErrorBoundary>}
           {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} worklistClaims={solverWorklistClaims} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a

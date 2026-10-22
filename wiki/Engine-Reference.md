@@ -794,6 +794,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/statRegistry.test.ts` | 13 tests — stat registry (`STAT_AXES`): `PCT_ROLL_KEYS` = the `pct` variants, `magnitudeScoreOf` ignores a % main on a flat-only axis (Phantasm), FinalStats coverage, `STAT_TO_PRIORITY` flat/%→axis bridge, design-token completeness, numeric parity snapshot, legacy-key migration |
 | `apps/renderer/test/worklist.test.ts` | 25 tests — `upsertWorklistEntry` (replaces by `heroUid`, keeps the others' order, ticks included), `loadWorklist` (an entry stored without `kind` reads as a piece line, two entries of one hero → the first), gem lines (`worklistChangesFor`: a build changing only a gem, `fromGem`, zeros ignored, pieces then gems; applied = piece on the hero + right gem, `remainingChangeCount`, `worklistClaims` and `planWorklist` ignore them, `reconcileWorklist` + `appliedNotice`), apply outcome per cause (`equipAssignments` / `equipPieces`, `EQUIP_FAILURE`), toasts (fake-timer store, stack render) |
 | `apps/renderer/test/worklistPlan.test.ts` | 20 tests — `planWorklist` transaction planning: free-before-use ordering, contention flags (one copy wanted twice), no `superseded` any more (one entry per hero), the `equipAssignments` fold returns `"ok"` and hands the piece over, cycles applicable atomically (only the cycle's members; an entry depending on one is ordered after it), applied/stale changes excluded, empty plan; `worklistClaims` (solver reservations): each unapplied change's target → claiming hero, already-applied changes skipped, newest entry wins a double-claim, empty map without inventory |
+| `apps/renderer/test/presets.test.ts` | 18 tests — Presets tab: `presetRows` (number order, EE never in the preset, exact wearer despite another EE / one piece off → not a wearer, missing piece with its wire slot, shared piece flagged on both sides, empty preset), `presetSignature`; `evaluatePresetFor` (the preset's pieces + the hero's EE, not the preset's: −200 ATK from a known weapon), `loss` 0 when the preset is the best outfit, null without a priority; `bestKnownFor` (most recent saved build over the current gear, re-scored with the current priority); `gs.presetHeroes` store (round-trip, uid outside the roster ignored, one role per hero, unreadable storage) |
 | `apps/renderer/test/deltaCp.test.ts` | 2 tests — `deltaCpLabel`: reforge `Off` → bare `ΔCP ±X`, no tooltip; active mode → `vs equipped (build at <mode>)` + tooltip |
 | `apps/renderer/test/talismanPreferred.test.ts` | 8 tests — `talismanEffectPicks` on the real contract (`precomputeContext`): owned preferred → pool narrowed to it (variants included; the advice's family: only a 5★ owned → it, no member → whole pool), not owned or dropped by another filter (class, "equipped" scope) → whole pool, unowned `required` → empty pool, `excluded`, keep current locked, absent field → whole pool |
 | `apps/renderer/test/heroTracker.test.ts` | 11 tests — `buildHeroTrackerExport` (outerpedia hero-tracker export): versioned envelope keyed by base hero id, level/affinity resolved from the XP curves (floors lv5 / aff 1), EE level taken from the owned EE item (best copy, non-EE gear ignored), fused hero under its base id + nested `core_fusion` block (omitted when unfused, tier 1 when the level is missing), `transcend_star` clamped to base rarity and out-of-range values clamped, unknown hero still exported |
@@ -855,8 +856,12 @@ matches if baseForRate ≈ 100).
 apps/renderer/src/
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
+│   ├── presets/
+│   │   ├── presetRows.ts           ← in-game presets: pieces, wearers, missing / shared pieces
+│   │   └── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss (a preset scored on one hero)
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← localStorage per-hero saved builds
+│   │   ├── presetHeroes.ts         ← localStorage reference + associated heroes per preset
 │   │   └── filterPresets.ts        ← localStorage per-hero filter snapshots
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
@@ -872,6 +877,7 @@ apps/renderer/src/
 └── screens/
     ├── inventory/                  ← InventoryScreen.tsx (gear table) + filters.ts, FilterModal, VirtualGearGrid, ItemDetail…
     ├── BuildsScreen.tsx            ← per-hero current build cards (uses calcBattlePower)
+    ├── presets/PresetsScreen.tsx   ← Presets tab (read-only): a preset scored on its reference and associated heroes
     └── builder/                    ← BuilderScreen.tsx (useReducer(SolverFilters) + layout) + useSolverSession.ts
                                       (orchestrator wiring) + one module per panel, ResultsTable, RightSidebar (Library)…
 

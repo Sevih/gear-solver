@@ -3,7 +3,7 @@
 How to drive gear-solver day to day. New here? Start with [Getting Started](Getting-Started)
 to import your account first.
 
-The window has five tabs — **Home**, **Inventory**, **Builds**, **Builder**, **Worklist** —
+The window has six tabs — **Home**, **Inventory**, **Builds**, **Presets**, **Builder**, **Worklist** —
 plus a **Settings** modal (gear icon, top-right) and the capture controls in the header.
 
 ---
@@ -63,6 +63,28 @@ way the game does (validated to match the in-game character sheet).
   **priority rank**. (A lock-state pill also appears if you enable the stat-lock tooling in
   **Settings → Debug**.)
 - **Notes** — jot a per-hero note (kept across relaunches).
+
+---
+
+## Presets — your in-game equipment presets
+
+One card per equipment preset saved in-game: its number, name and ★ (favorite), its 7 pieces
+(the EE is never part of a preset — each hero keeps their own), and the heroes **currently
+wearing** it (gear identical to the preset, EE aside). Read-only: nothing is sent to the game.
+
+- **Reference** — the hero the preset was built for (solve them in the Builder as usual). If a
+  single hero wears the preset, they're proposed by default.
+- **Associated** — the heroes you plan to share the outfit with (add with the picker, remove
+  with ✕). They wear it as-is and adjust through their own EE gems.
+- **Scores** — for the reference and each associated hero: the preset's **Score** (with that
+  hero's Builder priority), **Dmg** and **DmgS**. An associated hero also shows how much they
+  lose versus their own best known build — their latest **saved build**, or their current gear
+  without one. Past the threshold (15 % by default, **Settings → Solver**) the line turns orange:
+  "Ame loses 23 % vs their saved build". A hero with no priority set gets no score: open them in
+  the Builder and set one (priorities are remembered for the session).
+- **Warnings** — a piece no longer in your inventory, or a piece that sits in **two** presets
+  (two presets can't be worn in the same fight), is marked on the piece and in the card's banner.
+  Empty presets are listed collapsed.
 
 ---
 
@@ -187,7 +209,7 @@ A tabbed modal:
   your game build next to the client outerpedia last read, with a warning line when they differ
   (informational: capture still works).
 - **Solver** — worker count (Auto = use your CPU; or pin a number), how many results to return,
-  results heatmap on/off.
+  results heatmap on/off, and the Presets tab's loss warning (15 % by default).
 - **Data** — **Sync game data** (refresh the game tables after a patch), reset the onboarding
   wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
   (game version of the tables, hash and date — so you can see which snapshot is loaded).
