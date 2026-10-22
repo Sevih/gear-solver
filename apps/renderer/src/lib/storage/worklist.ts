@@ -60,7 +60,8 @@ export interface WorklistGemChange {
   kind: "gem";
   /** Engine slot of the gem-bearing piece (ooparts/exclusive). */
   slot: string;
-  /** Socket position on the piece, 0-4. */
+  /** Socket position on the piece, 0-4 — display only ("socket 3"): the game
+   *  sockets a gem into the first free slot, so the line is judged by count. */
   gemIndex: number;
   /** The gem-bearing piece — the build's pick for `slot`. */
   toUid: string;
@@ -68,6 +69,11 @@ export interface WorklistGemChange {
   toGem: WorklistGem;
   /** Gem socketed there on that piece at capture time — null when empty. */
   fromGem: WorklistGem | null;
+  /** Copies of `toGem.id` the piece must hold for this line to be applied —
+   *  the copies the build keeps on it (sockets no line touches) plus this
+   *  line's rank among the piece's lines for that id. Absent on lines stored
+   *  before it: the entry's own lines are counted instead. */
+  toCount?: number;
   done: boolean;
 }
 
@@ -174,14 +180,26 @@ export function gemSlotsByUid(inventory: Inventory | null): GemSlotsByUid {
 }
 
 /** A line is applied once its piece is on the hero — and, for a gem line, once
- *  that piece holds the gem in that socket. */
+ *  that piece holds at least `toCount` copies of the gem, in any socket (the
+ *  game fills the first free one). A line stored without `toCount` needs its
+ *  rank among `lines` (the entry's changes) for the same piece and gem: two
+ *  lines for one id with one copy socketed → only the first is applied. */
 export function isChangeApplied(
   c: WorklistChange,
   onHero: ReadonlySet<string> | null | undefined,
   gems: GemSlotsByUid,
+  lines: readonly WorklistChange[] = [c],
 ): boolean {
   if (!(onHero?.has(c.toUid) ?? false)) return false;
-  return c.kind !== "gem" || gems.get(c.toUid)?.[c.gemIndex] === c.toGem.id;
+  if (c.kind !== "gem") return true;
+  const held = (gems.get(c.toUid) ?? []).filter((id) => id === c.toGem.id).length;
+  if (c.toCount != null) return held >= c.toCount;
+  let rank = 0;
+  for (const l of lines) {
+    if (l.kind === "gem" && l.toUid === c.toUid && l.toGem.id === c.toGem.id) rank++;
+    if (l === c) break;
+  }
+  return held >= Math.max(rank, 1);
 }
 
 /** Lines dropped by one `reconcileWorklist` pass, per hero — what the app
@@ -222,7 +240,7 @@ export function reconcileWorklist(
   const next: WorklistEntry[] = [];
   for (const e of list) {
     const onHero = equipped.get(e.heroUid);
-    const kept = e.changes.filter((c) => !isChangeApplied(c, onHero, gems));
+    const kept = e.changes.filter((c) => !isChangeApplied(c, onHero, gems, e.changes));
     if (kept.length !== e.changes.length) {
       applied.push({ heroUid: e.heroUid, heroName: e.heroName, applied: e.changes.length - kept.length });
     }
@@ -259,7 +277,7 @@ export function worklistClaims(
 }
 
 /** Total changes still NOT applied (target piece not yet on the hero, gem not
- *  yet in its socket) across the whole worklist — the Worklist tab's badge
+ *  yet socketed) across the whole worklist — the Worklist tab's badge
  *  count. Null when no inventory is loaded (can't tell what's applied yet). */
 export function remainingChangeCount(
   list: WorklistEntry[],
@@ -271,7 +289,7 @@ export function remainingChangeCount(
   let n = 0;
   for (const e of list) {
     const onHero = equipped.get(e.heroUid);
-    for (const c of e.changes) if (!isChangeApplied(c, onHero, gems)) n++;
+    for (const c of e.changes) if (!isChangeApplied(c, onHero, gems, e.changes)) n++;
   }
   return n;
 }

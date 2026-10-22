@@ -2,7 +2,8 @@
  * Worklist lines of a build — what "+ Worklist" queues for the selected build:
  * one line per changed slot (`buildDiff`, the same "changed" rule as Equip and
  * `upg`), then one line per gem the build wants in a socket of its Talisman /
- * EE that differs from what that piece holds today.
+ * EE that differs from what that piece holds today, with the copies of that
+ * gem the piece must end up holding (`toCount`).
  *
  * The gem side reads `SolveBuild.gemAllocation` (OptionIDs in socket order,
  * 0 = empty) against the build piece's own `gemSlots`. A 0 in the allocation is
@@ -55,9 +56,23 @@ export function worklistChangesFor(
     const key = slot === "ooparts" || slot === "exclusive" ? GEM_ALLOCATION_KEY[slot] : null;
     const wanted = key ? gemAllocation?.[key] : undefined;
     if (!wanted) continue;
+    const socketedAt = (i: number) => p.gemSlots?.[i] ?? 0;
+    const lineAt = (i: number) => !!wanted[i] && wanted[i] !== socketedAt(i);
+    // `need` starts at the copies of each gem the build keeps on the piece
+    // (sockets no line touches) and grows by one per line for that gem: a
+    // line is applied once the piece holds that many (`toCount`), wherever
+    // the game put them.
+    const need = new Map<number, number>();
+    const sockets = Math.max(wanted.length, p.gemSlots?.length ?? 0);
+    for (let i = 0; i < sockets; i++) {
+      const s = socketedAt(i);
+      if (s && !lineAt(i)) need.set(s, (need.get(s) ?? 0) + 1);
+    }
     wanted.forEach((id, gemIndex) => {
-      const socketed = p.gemSlots?.[gemIndex] ?? 0;
-      if (!id || id === socketed) return;
+      const socketed = socketedAt(gemIndex);
+      if (!lineAt(gemIndex)) return;
+      const toCount = (need.get(id) ?? 0) + 1;
+      need.set(id, toCount);
       changes.push({
         kind: "gem",
         slot,
@@ -66,6 +81,7 @@ export function worklistChangesFor(
         toName: pieceName(p, game),
         toGem: worklistGem(id, game),
         fromGem: socketed ? worklistGem(socketed, game) : null,
+        toCount,
         done: false,
       });
     });

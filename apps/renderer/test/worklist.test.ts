@@ -185,6 +185,58 @@ describe("gem lines — applied, counted, never claimed", () => {
   });
 });
 
+describe("gem lines — judged by count on the piece, not by socket", () => {
+  const ATK = 15001;
+  const DEF = 15002;
+  const queue = (gems: number[], wanted: number[]) => {
+    const t = piece("T", "ooparts", 1, { owner: "h1", gems });
+    return worklistChangesFor([{ slot: "ooparts", proposed: t, worn: t, changed: false }], { talisman: wanted, ee: [] }, GAME) as WorklistGemChange[];
+  };
+  const remaining = (changes: WorklistChange[], gems: number[]) =>
+    remainingChangeCount([entry("a", "h1", changes)], inv([{ uid: "T", owner: "h1", gems }]));
+
+  it("toCount = copies the build keeps on the piece + the line's rank for that gem", () => {
+    const changes = queue([ATK, 15004, 0, 0, 0], [ATK, ATK, DEF, ATK, 0]);
+    expect(changes.map((c) => [c.gemIndex, c.toGem.id, c.toCount])).toEqual([[1, ATK, 2], [2, DEF, 1], [3, ATK, 3]]);
+  });
+
+  it("applied with the gem at the line's socket or at another one", () => {
+    const changes = queue([0, 0, 0, 0, 0], [0, DEF, 0, 0, 0]);
+    expect(remaining(changes, [0, DEF, 0, 0, 0])).toBe(0);
+    expect(remaining(changes, [DEF, 0, 0, 0, 0])).toBe(0);
+    expect(remaining(changes, [ATK, 0, 0, 0, 0])).toBe(1);
+  });
+
+  it("a copy the build keeps doesn't tick the line asking for a second one", () => {
+    // [Atk%, empty] → [Atk%, Atk%]: one line, applied only with two Atk% in.
+    const changes = queue([ATK, 0, 0, 0, 0], [ATK, ATK, 0, 0, 0]);
+    expect(changes.map((c) => c.toCount)).toEqual([2]);
+    expect(remaining(changes, [ATK, 0, 0, 0, 0])).toBe(1);
+    expect(remaining(changes, [ATK, 0, ATK, 0, 0])).toBe(0);
+  });
+
+  it("two lines for one gem: the first is applied and pruned, the second waits for its copy", () => {
+    const list = [entry("a", "h1", queue([0, 0, 0, 0, 0], [ATK, ATK, 0, 0, 0]))];
+    const one = reconcileWorklist(list, inv([{ uid: "T", owner: "h1", gems: [0, 0, ATK, 0, 0] }]));
+    expect(one.next[0]!.changes.map(changeKey)).toEqual(["ooparts:gem1"]);
+    // Next pass on the same inventory: the remaining line stays.
+    const again = reconcileWorklist(one.next, inv([{ uid: "T", owner: "h1", gems: [0, 0, ATK, 0, 0] }]));
+    expect(again.changed).toBe(false);
+    expect(reconcileWorklist(one.next, inv([{ uid: "T", owner: "h1", gems: [ATK, 0, ATK, 0, 0] }])).next).toEqual([]);
+  });
+
+  it("a line stored without toCount ranks itself among the entry's lines", () => {
+    const changes = [gemChange("T", 0, ATK), gemChange("T", 1, ATK), gemChange("T", 2, DEF)];
+    const i = inv([{ uid: "T", owner: "h1", gems: [0, 0, 0, ATK, 0] }]);
+    const st = (c: WorklistChange) => changeState(c, {
+      equippedOnHero: new Set(["T"]), invUids: new Set(["T"]), contended: new Map(), gemSlots: gemSlotsByUid(i), lines: changes,
+    }).applied;
+    expect(changes.map(st)).toEqual([true, false, false]);
+    expect(remainingChangeCount([entry("a", "h1", changes)], i)).toBe(2);
+    expect(remaining(changes, [0, 0, 0, 0, 0])).toBe(3);
+  });
+});
+
 describe("appliedNotice — one toast per import", () => {
   it("sums the lines across heroes, names each hero once", () => {
     expect(appliedNotice([

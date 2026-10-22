@@ -110,6 +110,104 @@ describe("foldEquipEvents", () => {
   });
 });
 
+describe("foldEquipEvents — whole items (gems, substats)", () => {
+  const EE = "6200000001"; // EE on A, one gem socketed
+  const GEM = "6200000002"; // stack of that gem in the inventory
+  const subs = (...ids: number[]) => ids.map((OptionID) => ({ OptionID, Level: 0, BaseLevel: 0 }));
+  const base = () => ({
+    ItemList: [
+      ...snapshot().ItemList,
+      { ItemUID: EE, CharUID: HERO_A, ItemID: 9, IsLock: 1, InvenType: 0, SubOptionList: subs(15001, 0, 0, 0, 0) },
+      { ItemUID: GEM, CharUID: "0", ItemID: 22030, Quantity: 3, IsLock: 0, InvenType: 0, SubOptionList: subs(0, 0, 0, 0, 0) },
+    ],
+    PresetList: [{ Num: 1 }],
+  });
+  // `WSItemData` as the wire spells it (cf. other responses carrying it):
+  // ItemUID a string, CharUID 0 a number, IsLock a number; no InvenType here.
+  const wire = (ItemUID: string, CharUID: string | number, ItemID: number, sub: number[], extra: Record<string, unknown> = {}) =>
+    ({ ItemUID, CharUID, ItemID, Exp: 0, BreakLimitLevel: 0, Quantity: 1, SmeltingCount: 0, IsLock: 0, OptionList: [0, 0], SubOptionList: subs(...sub), SelectSubOptionNum: 99, SingularityStep: 0, SingularityLevel: 0, SingularityOptionID: 0, ...extra });
+  const byUid = (raw: { ItemList: Array<{ ItemUID: string }> }, id: string) =>
+    raw.ItemList.find((it) => it.ItemUID === id) as Record<string, unknown> | undefined;
+  const gemIds = (raw: { ItemList: Array<{ ItemUID: string }> }, id: string) =>
+    (byUid(raw, id)!.SubOptionList as Array<{ OptionID: number }>).map((s) => s.OptionID);
+
+  const insert = (seq: number): EquipEvent =>
+    ({ seq, path: "/item/gemInsert", res: { Item: wire(EE, HERO_A, 9, [15001, 15002, 0, 0, 0], { IsLock: 1 }) } });
+  const remove = (seq: number): EquipEvent => ({
+    seq,
+    path: "/item/gemRemove",
+    res: { Item: wire(EE, HERO_A, 9, [15001, 0, 0, 0, 0], { IsLock: true }), ItemGem: wire("6200000003", 0, 22031, [0, 0, 0, 0, 0]), Asset_0: 70205983 },
+  });
+
+  it("gemInsert: the piece's gems change, its owner and snapshot-only fields stay", () => {
+    const { next, applied, skipped } = foldEquipEvents(base(), [insert(1)]);
+    expect(gemIds(next, EE)).toEqual([15001, 15002, 0, 0, 0]);
+    expect(byUid(next, EE)).toMatchObject({ CharUID: HERO_A, IsLock: 1, InvenType: 0 });
+    // The consumed gem stack isn't in the response: left as is.
+    expect(byUid(next, GEM)!.Quantity).toBe(3);
+    expect([applied, skipped]).toEqual([1, 0]);
+  });
+
+  it("gemRemove: the piece loses the gem, the gem item joins the inventory at the end", () => {
+    const { next, applied } = foldEquipEvents(foldEquipEvents(base(), [insert(1)]).next, [remove(2)]);
+    expect(gemIds(next, EE)).toEqual([15001, 0, 0, 0, 0]);
+    expect(byUid(next, EE)).toMatchObject({ IsLock: 1, CharUID: HERO_A });
+    expect(next.ItemList.at(-1)).toMatchObject({ ItemUID: "6200000003", CharUID: "0", ItemID: 22031 });
+    expect(next.ItemList).toHaveLength(base().ItemList.length + 1);
+    expect(applied).toBe(2);
+  });
+
+  it("subOptionChange: the substats are replaced", () => {
+    const piece = wire(W2, HERO_A, 2, [160001, 160004, 160007, 160010, 0]);
+    const { next, applied } = foldEquipEvents(base(), [{ seq: 1, path: "/item/subOptionChange", res: { ItemData: piece } }]);
+    expect(byUid(next, W2)!.SubOptionList).toEqual(piece.SubOptionList);
+    expect(byUid(next, W2)!.CharUID).toBe(HERO_A);
+    expect(applied).toBe(1);
+  });
+
+  it("gemChangeOption: the piece and the gem item are both upserted", () => {
+    const res = { Item: wire(EE, HERO_A, 9, [15004, 0, 0, 0, 0]), ItemGem: wire(GEM, "0", 22030, [0, 0, 0, 0, 0], { Quantity: 2 }), Asset_0: 1 };
+    const { next, applied } = foldEquipEvents(base(), [{ seq: 1, path: "/item/gemChangeOption", res }]);
+    expect(gemIds(next, EE)).toEqual([15004, 0, 0, 0, 0]);
+    expect(byUid(next, GEM)!.Quantity).toBe(2);
+    expect(applied).toBe(2);
+  });
+
+  it("mixes with equip moves in journal order", () => {
+    const events = [
+      equip(1, { CharUID: HERO_B, ToEquipUID: W2 }), // W2: A → B
+      { seq: 2, path: "/item/subOptionChange", res: { ItemData: wire(W2, HERO_B, 2, [160002, 0, 0, 0, 0]) } },
+      insert(3),
+      equip(4, { CharUID: HERO_A, ToInvenUID: EE }), // EE off A, keeps its new gem
+    ];
+    const { next } = foldEquipEvents(base(), events);
+    expect(byUid(next, W2)).toMatchObject({ CharUID: HERO_B });
+    expect((byUid(next, W2)!.SubOptionList as unknown[])[0]).toEqual({ OptionID: 160002, Level: 0, BaseLevel: 0 });
+    expect(byUid(next, EE)!.CharUID).toBe("0");
+    expect(gemIds(next, EE)).toEqual([15001, 15002, 0, 0, 0]);
+  });
+
+  it("is idempotent: the last state of a uid wins, a replay changes nothing", () => {
+    const events = [insert(1), remove(2), insert(3)];
+    const once = foldEquipEvents(base(), events);
+    expect(gemIds(once.next, EE)).toEqual([15001, 15002, 0, 0, 0]);
+    const twice = foldEquipEvents(once.next, events);
+    expect(twice.next).toEqual(once.next);
+    expect(twice.applied).toBe(0);
+  });
+
+  it("an uid absent from the snapshot is added; a response without a usable item is skipped", () => {
+    const fresh = wire("6299999999", HERO_B, 9, [15003, 0, 0, 0, 0]);
+    const { next, applied, skipped } = foldEquipEvents(base(), [
+      { seq: 1, path: "/item/gemInsert", res: { Item: fresh } },
+      { seq: 2, path: "/item/gemInsert", res: {} },
+      { seq: 3, path: "/item/subOptionChange", res: { ItemData: { ItemUID: 2 ** 60, CharUID: 0 } } },
+    ]);
+    expect(next.ItemList.at(-1)).toMatchObject({ ItemUID: "6299999999", CharUID: HERO_B });
+    expect([applied, skipped]).toEqual([1, 2]);
+  });
+});
+
 describe("parseEquipJournal", () => {
   it("reads complete lines only and drops malformed ones", () => {
     const text = [

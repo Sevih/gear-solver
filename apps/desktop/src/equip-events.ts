@@ -1,18 +1,28 @@
 /**
- * In-game gear moves → captured snapshot. The game only sends `/user/item`
+ * In-game gear changes → captured snapshot. The game only sends `/user/item`
  * (the full inventory) at the lobby; a piece moved in the hero screen comes
- * back as an `item/equip` or `item/equipAll` response instead. The Steam
- * plugin appends those to `equip-events.ndjson` (one line per response,
- * `{ seq, at, path, res }`) and truncates the file whenever a fresh
- * `/user/item` lands. This module folds the journal into `user_item.json` so
- * the renderer's follower re-imports on the mtime change, as after a lobby.
+ * back as an `item/equip` or `item/equipAll` response instead, and a gem
+ * socketed / removed / rerolled or a substat change (reforge, Transistone) as
+ * `item/gemInsert`, `item/gemRemove`, `item/gemChangeOption` or
+ * `item/subOptionChange`. The Steam plugin appends those to
+ * `equip-events.ndjson` (one line per response, `{ seq, at, path, res }`) and
+ * truncates the file whenever a fresh `/user/item` lands. This module folds the
+ * journal into `user_item.json` so the renderer's follower re-imports on the
+ * mtime change, as after a lobby.
  *
- * The fold only rewrites `RawItem.CharUID` by uid — no game data needed: the
- * responses already say which piece leaves and which one joins
- * (CWebRES_ItemEquip / CWebRES_ItemEquipAll in the game client). Each event
- * sets absolute owners, so replaying the whole journal onto a snapshot that
- * already holds part of it lands on the same state: the follower replays it
- * all whenever something changed instead of tracking a partial offset.
+ * No game data needed: the equip responses say which piece leaves and which
+ * one joins (CWebRES_ItemEquip / CWebRES_ItemEquipAll in the game client) and
+ * only rewrite `RawItem.CharUID`; the four others carry the whole updated item
+ * (`WSItemData`, the same fields as `RawItem`), which replaces the entry of the
+ * same uid — or joins the end of `ItemList` when absent (the gem item
+ * `gemRemove` puts back into the inventory). Each event sets absolute state,
+ * so replaying the whole journal onto a snapshot that already holds part of it
+ * lands on the same state: the follower replays it all whenever something
+ * changed instead of tracking a partial offset.
+ *
+ * Not modelled: the gem stack `gemInsert` consumes. The client decrements it
+ * from its own request (`ItemUIDGem`), the response doesn't say — so the gem
+ * pool may count one gem too many until the next lobby.
  *
  * Electron-free (Vite's dev middleware loads it through api-handler.ts).
  */
@@ -36,10 +46,25 @@ export interface EquipEvent {
   res: unknown;
 }
 
+/** One `ItemList` entry as the fold sees it: the uids it keys on, every other
+ *  field carried over. */
+type FoldableItem = { ItemUID: string; CharUID: string } & Record<string, unknown>;
+
 /** The slice of `RawUserItem` the fold touches; other keys are carried over. */
 interface FoldableUserItem {
-  ItemList: Array<{ ItemUID: string; CharUID: string }>;
+  ItemList: FoldableItem[];
 }
+
+/** Responses that carry whole updated items (`WSItemData`), and where:
+ *  CWebRES_ItemGemInsert / GemRemove / GemChangeOption (`Item` = the piece,
+ *  `ItemGem` = the gem item) and CWebRES_ItemSubOptionChange (`ItemData`). */
+const ITEM_UPSERTS: ReadonlySet<string> = new Set([
+  "/item/gemInsert",
+  "/item/gemRemove",
+  "/item/gemChangeOption",
+  "/item/subOptionChange",
+]);
+const UPSERT_FIELDS = ["Item", "ItemGem", "ItemData"] as const;
 
 /** A game uid (`long`) as the snapshot spells it. The server sends them as
  *  JSON strings (`"6124885095"`); a number is accepted only while exact
@@ -90,33 +115,75 @@ function movesOf(e: EquipEvent): Array<[item: unknown, owner: unknown]> {
   return [];
 }
 
-/** Apply `events` to a snapshot's `ItemList`, by uid. Returns a NEW object
- *  (other keys shallow-copied), how many pieces actually changed owner, and how
- *  many uids were skipped — absent from the inventory (a piece obtained after
- *  this snapshot: not invented) or unreadable. Never throws on event data. */
+/** A `WSItemData` as the snapshot spells it: uids as strings (the wire sends
+ *  `CharUID` 0 as a number), `IsLock` as a number (a bool on the client side),
+ *  every other field as is. Null when a uid is unusable; a missing `CharUID`
+ *  stays missing (the snapshot's owner is kept). */
+function itemOf(v: unknown): ({ ItemUID: string } & Record<string, unknown>) | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const r = v as Record<string, unknown>;
+  const ItemUID = uid(r.ItemUID);
+  if (ItemUID === null || ItemUID === UNEQUIPPED) return null;
+  const out: Record<string, unknown> = { ...r, ItemUID };
+  if (r.CharUID !== undefined) {
+    const CharUID = uid(r.CharUID);
+    if (CharUID === null) return null;
+    out.CharUID = CharUID;
+  }
+  if (typeof r.IsLock === "boolean") out.IsLock = r.IsLock ? 1 : 0;
+  return out as { ItemUID: string } & Record<string, unknown>;
+}
+
+/** The whole items one event carries — empty for the equip family. */
+function upsertsOf(e: EquipEvent): unknown[] {
+  if (!ITEM_UPSERTS.has(e.path)) return [];
+  const r = e.res as Record<string, unknown> | null;
+  if (!r || typeof r !== "object") return [];
+  return UPSERT_FIELDS.map((k) => r[k]).filter((v) => v != null);
+}
+
+/** Apply `events` to a snapshot's `ItemList`, by uid, in journal order (the
+ *  game's). Returns a NEW object (other keys shallow-copied), how many items
+ *  actually changed (owner, gems, substats…) or joined, and how many were
+ *  skipped — a move whose uid is absent from the inventory (a piece obtained
+ *  after this snapshot: not invented), an unreadable uid, or an upsert
+ *  response with no usable item. Never throws on event data. */
 export function foldEquipEvents<T extends FoldableUserItem>(
   raw: T, events: readonly EquipEvent[],
 ): { next: T; applied: number; skipped: number } {
-  const owner = new Map(raw.ItemList.map((it) => [it.ItemUID, it.CharUID]));
-  const changed = new Set<string>();
+  const items = new Map(raw.ItemList.map((it) => [it.ItemUID, it]));
+  const touched = new Set<string>();
   let skipped = 0;
   for (const e of events) {
     for (const [itemRaw, ownerRaw] of movesOf(e)) {
       const item = uid(itemRaw);
       if (item === UNEQUIPPED) continue; // "no piece" slot of the response
       const to = uid(ownerRaw);
-      if (item === null || to === null || !owner.has(item)) { skipped++; continue; }
-      owner.set(item, to);
-      changed.add(item);
+      const it = item === null ? undefined : items.get(item);
+      if (!it || to === null) { skipped++; continue; }
+      if (it.CharUID !== to) items.set(item!, { ...it, CharUID: to });
+      touched.add(item!);
+    }
+    if (!ITEM_UPSERTS.has(e.path)) continue;
+    const upserts = upsertsOf(e).map(itemOf);
+    if (!upserts.some((it) => it !== null)) { skipped++; continue; }
+    for (const it of upserts) {
+      if (!it) { skipped++; continue; }
+      // Fields the response lacks (InvenType…) stay as the snapshot had them.
+      items.set(it.ItemUID, { CharUID: UNEQUIPPED, ...items.get(it.ItemUID), ...it });
+      touched.add(it.ItemUID);
     }
   }
+  const before = new Map(raw.ItemList.map((it) => [it.ItemUID, it]));
   let applied = 0;
-  const ItemList = raw.ItemList.map((it) => {
-    const to = owner.get(it.ItemUID)!;
-    if (!changed.has(it.ItemUID) || to === it.CharUID) return it;
-    applied++;
-    return { ...it, CharUID: to };
-  });
+  const ItemList: FoldableItem[] = [];
+  for (const [id, it] of items) {
+    const was = before.get(id);
+    if (!was || (touched.has(id) && JSON.stringify(it) !== JSON.stringify(was))) {
+      applied++;
+      ItemList.push(it);
+    } else ItemList.push(was);
+  }
   return { next: { ...raw, ItemList }, applied, skipped };
 }
 
@@ -127,7 +194,7 @@ interface JournalMark { first: number; last: number; mtime: number | null }
 const NO_MARK: JournalMark = { first: 0, last: 0, mtime: null };
 
 /** Keeps `user_item.json` in step with the plugin's journal. `sync()` is cheap
- *  when nothing moved (one stat + one small read); it replays the whole journal
+ *  when nothing changed (one stat + one small read); it replays the whole journal
  *  when it holds a new line, when it was truncated/restarted (its first `seq`
  *  changed — a new `/user/item`, or a new game session), or when the snapshot
  *  was replaced underneath (a lobby `/user/item`). `noteSnapshotWritten()` is
@@ -154,8 +221,8 @@ export function createEquipJournalFollower(captureOut: string) {
   const same = (a: JournalMark, b: JournalMark) => a.first === b.first && a.last === b.last && a.mtime === b.mtime;
 
   return {
-    /** Fold pending in-game moves into the snapshot. Returns how many pieces
-     *  changed owner (0 when nothing was written). */
+    /** Fold pending in-game changes into the snapshot. Returns how many
+     *  items changed (0 when nothing was written). */
     sync(): number {
       if (!existsSync(journal)) return 0;
       const prev = load();
@@ -183,7 +250,7 @@ export function createEquipJournalFollower(captureOut: string) {
       const { next, applied, skipped } = foldEquipEvents(raw, events);
       if (applied > 0) writeAtomic(snapshot, JSON.stringify(next));
       save({ ...now, mtime: mtimeOf(snapshot) });
-      dlog("capture", `equip journal #${now.first}-#${now.last}: ${applied} piece(s) moved, ${skipped} skipped`);
+      dlog("capture", `equip journal #${now.first}-#${now.last}: ${applied} item(s) changed, ${skipped} skipped`);
       return applied;
     },
     /** The app just rewrote `user_item.json` itself: take its mtime as the new

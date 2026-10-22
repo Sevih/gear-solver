@@ -207,7 +207,7 @@ under its piece (gem, stat, and the gem it replaces).
 - **Apply all** — applies every queued change across all heroes in one go, in an order that
   frees a piece before the build that reuses it.
 - The list stays truthful on its own: lines flip to **applied** when the piece lands on the
-  hero (for a gem, once it sits in its socket), **contested** when two queued builds want the
+  hero (for a gem, once the piece holds it — in any socket), **contested** when two queued builds want the
   same single copy (resolve one before Apply all), and **gone** when the piece vanished from
   your inventory.
 

@@ -89,9 +89,9 @@ Locally, yes: the Builder's **Equip build** button applies the selected build to
 snapshot (after a confirmation popup), and the **Worklist** tab has **Apply locally** /
 **Apply all** for queued changes. What it *can't* do is push changes into the actual game —
 there's no game API for that, so these only edit the local snapshot (and only while the game is
-closed). With the game open you don't need them: equip the pieces in-game and the app follows
-each move on its own within a few seconds (no need to go back to the lobby), so the Worklist
-lines tick themselves as **applied**.
+closed). With the game open you don't need them: equip the pieces and socket the gems in-game and the
+app follows each change on its own within a few seconds (no need to go back to the lobby), so
+the Worklist lines tick themselves as **applied**.
 
 ---
 

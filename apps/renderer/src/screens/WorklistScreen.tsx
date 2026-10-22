@@ -9,7 +9,7 @@
  *
  * All decision state is derived LIVE from the current inventory, so the list
  * self-heals as pieces move: a change whose target piece is already on the hero
- * (with the gem in its socket, for a gem line) reads as applied (green), a
+ * (with the gem socketed on it, for a gem line) reads as applied (green), a
  * target wanted by two heroes flags a conflict, and a target that vanished
  * from the inventory (post data-sync) reads as stale.
  */
@@ -207,12 +207,12 @@ function WorklistCard({
   const [applyError, setApplyError] = useState<string | null>(null);
   const mounted = useMountedRef();
 
-  // Per-change live state — applied (target already on hero, gem in its
-  // socket), stale (target gone from the inventory), or conflicting (wanted by
-  // another hero too, the plan's contention) — plus the live piece (image +
+  // Per-change live state — applied (target already on hero, gem socketed),
+  // stale (target gone from the inventory), or conflicting (wanted by another
+  // hero too, the plan's contention) — plus the live piece (image +
   // stats) and its current owner.
   const rows = orderLines(entry.changes).map((c) => {
-    const { applied, stale, conflict } = changeState(c, { equippedOnHero, invUids, contended, gemSlots });
+    const { applied, stale, conflict } = changeState(c, { equippedOnHero, invUids, contended, gemSlots, lines: entry.changes });
     // Engine slot → player-facing design slot (ooparts → Talisman, shoes →
     // Boots) for the label + icon; the game never shows "ooparts".
     const ds = toDesignSlot(c.slot) ?? c.slot;

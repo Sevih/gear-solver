@@ -28,13 +28,19 @@ once the game has decrypted them:
   `CWebManager.Log2InternalWeb` (clear JSON + path), shape-based `DecryptMsg` fallback.
 - Output: `<capture folder>/{user_item,user_character,…}.json` (`.cache/capture-out` in dev,
   `<userData>/capture-out` packaged). The manual import reads the same files.
-- Gear moved in-game (plugin 0.2.0): the game only re-sends `/user/item` at the lobby, but every
-  move answers `/item/equip` or `/item/equipAll`; the plugin appends those to
-  `equip-events.ndjson` (one `{ seq, at, path, res }` line per response, emptied on every
-  `/user/item`), and the app folds them into `user_item.json` on every `GET /api/capture/status`
-  (polled every 5 s) — `foldEquipEvents` in
+- Changes made in-game (plugin 0.2.0 for gear moves, 0.3.0 for gems and substats): the game only
+  re-sends `/user/item` at the lobby, but every move answers `/item/equip` or `/item/equipAll`, and
+  socketing, removing or rerolling a gem or changing substats (reforge, Transistone) answers
+  `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption` or `/item/subOptionChange`; the
+  plugin appends those to `equip-events.ndjson` (one `{ seq, at, path, res }` line per response,
+  emptied on every `/user/item`), and the app folds them into `user_item.json` on every
+  `GET /api/capture/status` (polled every 5 s) — `foldEquipEvents` in
   [equip-events.ts](https://github.com/Sevih/gear-solver/blob/main/apps/desktop/src/equip-events.ts),
-  by uid only; what it already folded is noted in `.equip-events.applied`.
+  by uid: moves rewrite `CharUID`, the four others carry the whole item (`WSItemData`, the fields of
+  `RawItem`), which replaces the entry of the same uid or joins the end of the list (the gem item
+  `gemRemove` puts back into the inventory). The gem stack `gemInsert` consumes isn't in its
+  response: it stays as is until the next lobby. What the app already folded is noted in
+  `.equip-events.applied`.
 
 Files: [Plugin.cs](https://github.com/Sevih/gear-solver/blob/main/tools/capture-steam/src/Plugin.cs),
 [steam-capture.ts](https://github.com/Sevih/gear-solver/blob/main/apps/desktop/src/steam-capture.ts) (app-side install + status).
@@ -792,7 +798,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/sheetMinors.test.ts` | 14 tests — sheet minors (2026-10 review): Speed set on base + evo + awakening (Claire 133, Faenan 137, Delta 146), bounded CHC and `critRateUncapped` (Regina `crc`, advice, `solveChunk` crit-cap reallocation), float32 CP (three sheets ±1 in double), `fromBuff` flats in `buffFlat` (ATK, OAT_ADD EFF, dominance), `composeMultStat` = `calcFinalStat` exactly (heroes × codex × values) |
 | `apps/renderer/test/dominance.test.ts` | 10 tests — `pruneDominatedForCp`: strict drop, ties/Pareto/groups kept, reforge projection, end-to-end top-CP equivalence via `solveChunk` |
 | `apps/renderer/test/statRegistry.test.ts` | 13 tests — stat registry (`STAT_AXES`): `PCT_ROLL_KEYS` = the `pct` variants, `magnitudeScoreOf` ignores a % main on a flat-only axis (Phantasm), FinalStats coverage, `STAT_TO_PRIORITY` flat/%→axis bridge, design-token completeness, numeric parity snapshot, legacy-key migration |
-| `apps/renderer/test/worklist.test.ts` | 25 tests — `upsertWorklistEntry` (replaces by `heroUid`, keeps the others' order, ticks included), `loadWorklist` (an entry stored without `kind` reads as a piece line, two entries of one hero → the first), gem lines (`worklistChangesFor`: a build changing only a gem, `fromGem`, zeros ignored, pieces then gems; applied = piece on the hero + right gem, `remainingChangeCount`, `worklistClaims` and `planWorklist` ignore them, `reconcileWorklist` + `appliedNotice`), apply outcome per cause (`equipAssignments` / `equipPieces`, `EQUIP_FAILURE`), toasts (fake-timer store, stack render) |
+| `apps/renderer/test/worklist.test.ts` | 30 tests — `upsertWorklistEntry` (replaces by `heroUid`, keeps the others' order, ticks included), `loadWorklist` (an entry stored without `kind` reads as a piece line, two entries of one hero → the first), gem lines (`worklistChangesFor`: a build changing only a gem, `fromGem`, zeros ignored, pieces then gems, `toCount` = copies kept + rank; applied = piece on the hero + enough copies of the gem, in any socket — a copy already kept doesn't tick the line for a second one, two lines for one id where the second waits for its copy once the first is pruned, rank-in-entry fallback without `toCount`; `remainingChangeCount`, `worklistClaims` and `planWorklist` ignore them, `reconcileWorklist` + `appliedNotice`), apply outcome per cause (`equipAssignments` / `equipPieces`, `EQUIP_FAILURE`), toasts (fake-timer store, stack render) |
 | `apps/renderer/test/worklistPlan.test.ts` | 20 tests — `planWorklist` transaction planning: free-before-use ordering, contention flags (one copy wanted twice), no `superseded` any more (one entry per hero), the `equipAssignments` fold returns `"ok"` and hands the piece over, cycles applicable atomically (only the cycle's members; an entry depending on one is ordered after it), applied/stale changes excluded, empty plan; `worklistClaims` (solver reservations): each unapplied change's target → claiming hero, already-applied changes skipped, newest entry wins a double-claim, empty map without inventory |
 | `apps/renderer/test/presets.test.ts` | 18 tests — Presets tab: `presetRows` (number order, EE never in the preset, exact wearer despite another EE / one piece off → not a wearer, missing piece with its wire slot, shared piece flagged on both sides, empty preset), `presetSignature`; `evaluatePresetFor` (the preset's pieces + the hero's EE, not the preset's: −200 ATK from a known weapon), `loss` 0 when the preset is the best outfit, null without a priority; `bestKnownFor` (most recent saved build over the current gear, re-scored with the current priority); `gs.presetHeroes` store (round-trip, uid outside the roster ignored, one role per hero, unreadable storage) |
 | `apps/renderer/test/presetsGems.test.ts` | 12 tests — Presets tab, tuning: `bestEeGemsFor` on the real gem table (never the gems of the preset's Talisman, even free, nor another hero's EE, nor the hero's own Talisman; a socketed gem kept in place; null without a priority or when the EE already holds the best; score with the proposed gems > as socketed; `eeGems` = the socketed gems composes like the EE), `alignToSockets`; `presetWorklistFor` (the differing pieces then the EE gem lines alone, missing piece left out, a wearer with nothing to tune → nothing, the hero's entry replaced); `presetPriorityOf` (session > most recent saved build > null, a weightless priority skipped); `gs.presetHeroes` in the backup (round-trip, the local entry wins, a backup without the field) |

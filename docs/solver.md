@@ -391,7 +391,9 @@ Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
   `upsertWorklistEntry` ; le bouton dit alors « Replace in worklist »), où chaque changement est une ligne
   cochable + un **Apply locally** (même `equipPieces` ; les gemmes ne sont pas serties par l'app, elles se
   sertissent en jeu). États *applied / stale / conflict* **dérivés live** de l'inventaire (rien n'est figé ;
-  une ligne gemme est *applied* quand sa pièce est sur le héros avec la gemme dans le bon emplacement) ;
+  une ligne gemme est *applied* quand sa pièce est sur le héros et porte assez d'exemplaires de la gemme,
+  quel que soit l'emplacement — `toCount`, posé à la mise en Worklist : exemplaires gardés par la build + rang
+  de la ligne parmi celles de cet id, le jeu sertissant dans le premier emplacement libre) ;
   **auto-prune à chaque recapture** et à chaque déplacement suivi en jeu (`reconcileWorklist` retire les
   changements faits + entrées vidées, un toast le dit). Désactivé quand rien ne change (ni pièce ni gemme).
 

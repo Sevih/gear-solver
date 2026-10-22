@@ -8,6 +8,58 @@
 
 ## Items de backlog clôturés (index)
 
+### 💎 Gemmes serties / retirées et sous-stats changées suivies en direct (plugin 0.3.0), ligne gemme de la Worklist appliquée quel que soit l'emplacement (2026-10-22)
+- ✅ **Pourquoi.** Test de Sevih sur le fixe (1.13.0) : la gemme d'EE que la Worklist demandait, sertie en jeu, ne
+  cochait pas la ligne. Deux causes : le plugin 0.2.0 ne journalisait que `item/equip*`, et `isChangeApplied` exigeait
+  la gemme À L'INDEX de la ligne alors que `item/gemInsert` ne porte pas d'emplacement (le jeu remplit le premier libre).
+- ✅ **Plugin — `tools/capture-steam/src/Plugin.cs`.** `Journal` gagne `/item/gemInsert`, `/item/gemRemove`,
+  `/item/gemChangeOption`, `/item/subOptionChange` (même ligne NDJSON `{ seq, at, path, res }`, même troncature à chaque
+  `/user/item`) ; `Plugin.Version` et `<Version>` du `.csproj` en 0.3.0. `npm run capture-steam:build` → « La génération
+  a réussi. 0 Avertissement(s) 0 Erreur(s) » ; `npm run fetch-binaries -w @gear-solver/desktop` → « [ok] capture-steam
+  plugin 0.3.0 (16 384 bytes) ».
+- ✅ **Desktop — `apps/desktop/src/equip-events.ts`.** `movesOf` reste pour `item/equip*` ; nouvelle famille « item
+  upsert » (`ITEM_UPSERTS`) : chaque `WSItemData` de la réponse (`Item`, `ItemGem`, `ItemData`, lus dans
+  `CWebRES_ItemGemInsert` / `GemRemove` / `GemChangeOption` / `SubOptionChange`) remplace l'entrée de même `ItemUID`
+  de `ItemList`, ou s'ajoute à la fin (la gemme recréée par `gemRemove`). Normalisation (`itemOf`) : uids en strings
+  (le fil envoie `CharUID` 0 en nombre), `IsLock` en nombre (bool côté client ; le fil l'envoie déjà en nombre dans
+  les autres réponses à `WSItemData` capturées, `item_craftConsume` et `aether_reward` d'une archive Syncthing — pas de
+  vraie capture `item_gemInsert` sous la main), `SubOptionList` tel quel ; la fusion `{ ...entrée, ...item }` garde les
+  champs que la réponse n'a pas (`InvenType`), et un `CharUID` absent garde le porteur du snapshot. Une réponse sans
+  item utilisable est `skipped`. Le pli suit l'ordre du journal en mêlant déplacements et upserts (une `Map` par uid),
+  `applied` = items réellement changés ou ajoutés (comparaison JSON), donc le rejeu complet reste idempotent. **Non
+  modélisé** (dit dans l'en-tête) : la pile de gemmes que consomme `gemInsert` — le client la décrémente d'après sa
+  REQUÊTE (`ItemUIDGem`), la réponse ne la porte pas ; le pool de gemmes peut compter une gemme de trop jusqu'au lobby.
+  Tests (`apps/desktop/test/equip-events.test.ts`, 7 nouveaux) : insert (sous-stats changées, `CharUID`/`IsLock`/
+  `InvenType` gardés, pile intacte), remove (pièce + gemme ajoutée en fin, `IsLock: true` → 1), changeOption (pièce +
+  gemme), subOptionChange, mélange avec des `item/equip` dans l'ordre, idempotence (le dernier état d'un uid gagne),
+  upsert d'un uid absent + réponse vide et uid hors 2^53 skipped.
+- ✅ **Renderer — jugement par compte (décision de Sevih).** La règle du lot (compter les lignes de l'entrée par id)
+  cochait trop tôt dans deux cas : un exemplaire déjà serti que la build garde (EE [Atk%, vide] → [Atk%, Atk%] : une
+  ligne, cochée dès la mise en Worklist) et deux lignes d'un id dont la première, cochée, est retirée par
+  `reconcileWorklist` (la seconde, rejugée seule, tombait à la passe suivante). Chaque ligne gemme porte donc
+  `toCount` (`WorklistGemChange`, optionnel), posé par `worklistChangesFor` (`lib/worklist/changes.ts`, que le chemin
+  Presets `presetWorklistFor` emprunte aussi) : exemplaires de l'id gardés par la build sur la pièce (emplacements
+  qu'aucune ligne ne touche) + rang de la ligne parmi celles de cet id. `isChangeApplied` (`lib/storage/worklist.ts`) :
+  pièce sur le héros ET nombre de `toGem.id` dans `gemSlots` ≥ `toCount` ; une ligne stockée sans `toCount` se range
+  parmi les lignes de l'entrée (4e paramètre `lines`, passé par `reconcileWorklist`, `remainingChangeCount` et
+  `changeState` via `ctx.lines`, que `WorklistScreen.tsx` remplit avec `entry.changes`). `gemIndex` ne sert plus qu'à
+  l'affichage. Tests (`apps/renderer/test/worklist.test.ts`, 5 nouveaux) : `toCount` calculé, gemme au bon index / à un
+  autre / absente, le cas [Atk%, vide] → [Atk%, Atk%], les deux lignes d'un id à travers deux passes de
+  `reconcileWorklist`, le repli sans `toCount` (seule la première des deux lignes appliquée).
+- ✅ **Docs.** `tools/capture-steam/README.md` (chemins journalisés, pile non modélisée), `docs/reference.md` §1.1 +
+  `wiki/Engine-Reference.md` (et la ligne de `worklist.test.ts`, 30 tests), `wiki/Capture-Pipeline.md`,
+  `docs/solver.md` (règle *applied* des lignes gemme), `wiki/Using-the-App.md`, `wiki/FAQ.md`, `docs/release-notes.md ›
+  [Unreleased]`.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` sans erreur ; `npm test` → « Tests 658 passed (658) » ;
+  `npm run lint` → « ✖ 14 problems (0 errors, 14 warnings) », inchangé.
+- ⏳ **Sevih, sur le fixe (après la release)** : Settings › Setup › Update plugin jeu fermé (« plugin 0.3.0 live »),
+  puis sertir une gemme demandée par la Worklist → la ligne se coche dans les 5 s, la retirer → la ligne revient ;
+  reforger une pièce → ses sous-stats changent dans l'Inventaire sans lobby. Et m'envoyer
+  `capture-out/equip-events.ndjson` après un sertissage (ou un `_unknown/item_gemInsert.json` d'un plugin 0.2.0) pour
+  confirmer sur le fil la forme de `IsLock` et `CharUID` déduite des autres réponses.
+- ⏳ Hors périmètre, vu en passant : la pile de gemmes consommée par `gemInsert` pourrait se modéliser si le plugin
+  journalisait aussi la requête (`ItemUIDGem`) — à décider.
+
 ### 🚫 Builder › Mains : exclure une main stat par slot, à côté des acceptables (2026-10-22)
 - ✅ **Pourquoi.** Le popover « Mains » n'était qu'une OR-liste d'acceptables par slot : pour écarter UNE main (ATK
   sur le Talisman, dont les mains sont partagées dans l'équipe et ne se cumulent pas — deux talismans ATK ne servent

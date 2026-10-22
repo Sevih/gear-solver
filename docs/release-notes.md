@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+- **Gems you socket or remove in-game, and substat changes, now reach the app live too** — the
+  Worklist's gem lines tick themselves whichever socket the game used, and a reforged piece shows
+  its new substats without going back to the lobby. Update the capture plugin (0.3.0):
+  Settings › Setup › **Update plugin** with the game closed.
 - **Builder › Mains: a main stat can now be excluded per slot** — e.g. rule out ATK talismans
   when a teammate already brings one. Click a main-stat icon to cycle allowed → excluded → off;
   saved filter presets keep the exclusions.

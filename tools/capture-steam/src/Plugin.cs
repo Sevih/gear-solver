@@ -35,8 +35,9 @@ namespace GearSolverCapture
     ///
     /// Output mirrors tools/capture/addon.py: <c>user_item.json</c>,
     /// <c>user_character.json</c>, … plus a <c>.captured</c> sentinel once the
-    /// inventory landed, an <c>equip-events.ndjson</c> journal of the gear moves
-    /// made in-game since the last <c>/user/item</c>, unknown endpoints under
+    /// inventory landed, an <c>equip-events.ndjson</c> journal of the gear moves,
+    /// gem and substat changes made in-game since the last <c>/user/item</c>,
+    /// unknown endpoints under
     /// <c>_unknown/</c>, and a <c>.steam-plugin.json</c> heartbeat the desktop
     /// app reads to show "plugin live".
     /// </summary>
@@ -45,7 +46,7 @@ namespace GearSolverCapture
     {
         public const string Id = "outerpedia.gearsolver.capture";
         public const string Name = "Gear Solver Capture";
-        public const string Version = "0.2.0";
+        public const string Version = "0.3.0";
 
         internal static ManualLogSource Log;
 
@@ -174,16 +175,21 @@ namespace GearSolverCapture
             { "/gift/info", "user_gift" },
         };
 
-        /// <summary>Gear moves made in-game. The game only sends <c>/user/item</c>
-        /// at the lobby; these two responses say which piece left or joined which
-        /// hero, so they're appended to <c>equip-events.ndjson</c> (one line per
-        /// response) and the desktop app folds them into <c>user_item.json</c>.
-        /// Truncated whenever a full <c>/user/item</c> lands (the snapshot is the
-        /// truth again).</summary>
+        /// <summary>Gear changes made in-game. The game only sends <c>/user/item</c>
+        /// at the lobby; the equip responses say which piece left or joined which
+        /// hero, the gem / substat ones carry the whole updated item (and the gem
+        /// item, for a removal or a reroll). They're appended to
+        /// <c>equip-events.ndjson</c> (one line per response) and the desktop app
+        /// folds them into <c>user_item.json</c>. Truncated whenever a full
+        /// <c>/user/item</c> lands (the snapshot is the truth again).</summary>
         private static readonly HashSet<string> Journal = new HashSet<string>(StringComparer.Ordinal)
         {
             "/item/equip",
             "/item/equipAll",
+            "/item/gemInsert",
+            "/item/gemRemove",
+            "/item/gemChangeOption",
+            "/item/subOptionChange",
         };
         private const string JournalFile = "equip-events.ndjson";
 

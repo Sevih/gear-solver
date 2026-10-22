@@ -39,7 +39,13 @@ through the same primary hook as `/item/equip` (one piece: `CharUID`, `ToEquipUI
 `UnEquipCharUID`) or `/item/equipAll` (`CharUID`, `ToEquipList`, `ToInvenList`, `UnEquipList`).
 Since 0.2.0 the plugin appends those two to a journal, `equip-events.ndjson`, and the app folds it
 into `user_item.json` on its 5 s status poll (`apps/desktop/src/equip-events.ts`): the inventory
-follows the moves live, no lobby needed. A new `/user/item` truncates the journal before its
+follows the moves live, no lobby needed. Since 0.3.0 the journal also takes the gem and substat
+changes, which carry the whole updated item (`WSItemData`, the fields of a `/user/item` entry):
+`/item/gemInsert` (`Item`, the piece), `/item/gemRemove` (`Item` + `ItemGem`, the gem item put back
+into the inventory), `/item/gemChangeOption` (`Item` + `ItemGem`) and `/item/subOptionChange`
+(`ItemData`, reforge / Transistone); the app replaces the entry of the same uid, or adds it. The gem
+stack `gemInsert` consumes isn't in its response (the client decrements it from its own request), so
+it stays as is until the next lobby. A new `/user/item` truncates the journal before its
 snapshot is written (the snapshot is the truth again). The shape fallback has no path, so it
 can't journal: with only the fallback active, moves still wait for the lobby. The hooks only enqueue; disk writes happen on one background writer
 thread (a 5 MB inventory would otherwise hitch a frame), in arrival order (two close
@@ -52,10 +58,10 @@ half file.
 |------|--------|-------|
 | `user_item.json`, `user_character.json`, `user_asset.json`, `user_info.json`, `user_lobby.json`, `user_etc.json`, `item_customInfo.json`, `user_archive.json`, `user_gift.json` | `/user/item`, `/user/character`, … `/archive/info`, `/gift/info` | Rewritten on every fetch (lobby load, screen open). |
 | `.captured` | after `/user/item` | Sentinel the app's status endpoint reports. |
-| `equip-events.ndjson` | `/item/equip`, `/item/equipAll` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start. Emptied whenever `/user/item` lands. |
+| `equip-events.ndjson` | `/item/equip`, `/item/equipAll`, `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption`, `/item/subOptionChange` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start. Emptied whenever `/user/item` lands. |
 | `.equip-events.applied` | written by the **app** | What the app already folded (`first`/`last` seq + the snapshot mtime it left), so a restart doesn't rewrite the snapshot for nothing. |
 | `.steam-plugin.json` | plugin start + every capture | Heartbeat: `{version, pid, startedAt, pathHook, captures, lastPath, lastCaptureAt, outDir}`. The app matches `pid` against the running `OUTERPLANE.exe` to show **Live**. |
-| `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | `KeepUnknown` config (not for the two journaled paths); `/account/*` and `/server/*` are ignored. |
+| `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | `KeepUnknown` config (not for the journaled paths); `/account/*` and `/server/*` are ignored. |
 
 ## Install (what the app does on "Install plugin")
 

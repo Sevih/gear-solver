@@ -216,7 +216,7 @@ export function planWorklist(list: WorklistEntry[], inventory: Inventory | null)
 /** Live state of one queued change, as the Worklist card shows it. */
 export interface ChangeState {
   /** Target piece already on the entry's hero — for a gem line, with the gem
-   *  in its socket. */
+   *  socketed on it. */
   applied: boolean;
   /** Target piece (the gem-bearing one, for a gem line) gone from the
    *  inventory (post data-sync / dismantle). */
@@ -238,9 +238,11 @@ export function changeState(
     contended: Map<string, string[]>;
     /** Socketed gems per piece — read by gem lines only. */
     gemSlots?: GemSlotsByUid;
+    /** The entry's changes — ranks a gem line stored without `toCount`. */
+    lines?: readonly WorklistChange[];
   },
 ): ChangeState {
-  const applied = isChangeApplied(change, ctx.equippedOnHero, ctx.gemSlots ?? new Map());
+  const applied = isChangeApplied(change, ctx.equippedOnHero, ctx.gemSlots ?? new Map(), ctx.lines);
   const stale = !ctx.invUids.has(change.toUid);
   const conflict = change.kind !== "gem" && !applied && !stale && ctx.contended.has(change.toUid);
   return { applied, stale, conflict };
