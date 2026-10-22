@@ -12,14 +12,17 @@
  * Pipeline (each step quits on failure — re-run safe once you fixed the
  * blocker: a failure before the step-6 upload succeeds reverts the version
  * bump and both journal stamps):
- *   1. Pre-checks (clean git tree, GH_TOKEN set, gh CLI present)
+ *   1. Pre-checks (clean git tree, GH_TOKEN set, gh CLI present, .NET SDK
+ *      `dotnet` on the PATH)
  *   2. Bump apps/desktop/package.json (this version drives the tag + the
  *      installer filename + the electron-updater compare) and stamp
  *      docs/release-notes.md + docs/changelog.md
  *   3. Regenerate data/derived/* (passives, gems, multi-tier, EE labels…)
  *   4. Checks: typecheck, tests, lint (after the data refresh, so the tests
  *      run against the tables the installer will ship)
- *   5. Build web + desktop TS
+ *   5. Rebuild the capture plugin DLL (fetch-binaries: dotnet build, version
+ *      checked against Plugin.Version, staged in resources/capture-steam/ for
+ *      extraResources), then build web + desktop TS
  *   6. electron-builder --publish always → uploads installer + latest.yml
  *      to a DRAFT release on GitHub (provider config in apps/desktop pkg)
  *   7. git add + commit "chore: release vX.Y.Z" + tag + push (--follow-tags)
@@ -264,6 +267,16 @@ ok("GH_TOKEN present");
 try { runSilent("gh --version"); ok("gh CLI present"); }
 catch { skip("gh CLI not found — auto-undraft step will be skipped (install at https://cli.github.com)"); }
 
+// Step 5 rebuilds the bundled capture plugin: without the SDK the installer
+// would ship whatever DLL is lying in the (git-ignored) resources folder.
+try { ok(`dotnet ${runSilent("dotnet --version")} present`); }
+catch {
+  die(
+    "dotnet not found on the PATH — the capture plugin can't be rebuilt",
+    "Install the .NET SDK (8+) and make sure `dotnet --version` works; the game must be installed too (the plugin compiles against it).",
+  );
+}
+
 const gitStatus = runSilent("git status --porcelain");
 if (gitStatus && !FORCE) {
   die(
@@ -347,7 +360,10 @@ try {
   run("npm run lint");
 
   // ── BUILD ────────────────────────────────────────────────────────────
-  step(5, "Build web + desktop TS");
+  // Plugin first: a missing game or a version mismatch fails in seconds, before
+  // the longer web build.
+  step(5, "Rebuild capture plugin + build web + desktop TS");
+  run("npm run fetch-binaries -w @gear-solver/desktop");
   run("npm run desktop:build");
 
   // ── PUBLISH (electron-builder) ───────────────────────────────────────

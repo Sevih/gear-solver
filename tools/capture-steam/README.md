@@ -93,6 +93,9 @@ already be in the game for the build (the app installs it; or unzip the release 
 Packaging: `apps/desktop/scripts/fetch-binaries.mjs` builds the plugin and stages it under
 `apps/desktop/resources/capture-steam/`, which electron-builder ships as
 `<resources>/capture-steam/GearSolverCapture.dll`. BepInEx itself is **not** bundled.
+`npm run release` runs it before every build (`dotnet` on Windows and Linux alike) and stops
+unless `Plugin.Version` (`src/Plugin.cs`), `<Version>` in the `.csproj` and the built DLL agree —
+bump both together.
 
 ## Validation
 

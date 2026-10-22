@@ -8,6 +8,43 @@
 
 ## Items de backlog clôturés (index)
 
+### 📦 Release : la DLL du plugin est recompilée et vérifiée contre `Plugin.Version` à chaque release, `dotnet` sous Linux (2026-10-22)
+- ✅ **Pourquoi.** `scripts/release.mjs` (étape 5) ne lançait que `npm run desktop:build` : electron-builder embarquait
+  la DLL qui traînait dans `apps/desktop/resources/capture-steam/` (dossier ignoré par git). `fetch-binaries.mjs` savait
+  la reconstruire mais appelait `dotnet.exe` en dur et personne ne l'appelait. La 1.12.0, publiée depuis le portable
+  (Linux) le 22/10, est ainsi partie avec la DLL du 05/09 (0.1.0, 14 848 octets) ; la prochaine doit porter la 0.2.0 de
+  G37 (journal `equip-events.ndjson`), sans quoi l'app suit les déplacements en jeu mais le plugin installé ne
+  journalise rien.
+- ✅ **`apps/desktop/scripts/fetch-binaries.mjs`.** `dotnet.exe` sous win32, `dotnet` ailleurs (`windowsHide` gardé).
+  Après la copie, `assertPluginVersion({ pluginCs, csproj, dllBytes })` (exportée, pure) lit `public const string
+  Version = "…"` de `src/Plugin.cs` et `<Version>` du `.csproj`, exige leur égalité ET la présence de la chaîne dans la
+  DLL posée, sinon jette avec les trois valeurs (« Plugin.Version=…, .csproj <Version>=…, DLL does not contain … »). La
+  DLL réelle porte « 0.2.0 » dans les deux encodages : en UTF-8 dans les attributs d'assembly (qui viennent du seul
+  `.csproj`) et en UTF-16LE dans le blob `Constant` de `Plugin.Version` ; la recherche se fait en UTF-16LE, la seule qui
+  attrape un `Plugin.cs` en retard. Ligne de sortie : `[ok] capture-steam plugin 0.2.0 (16 384 bytes) -> …`. L'appel de
+  `provisionSteamPlugin` / `provisionWindowsIcon` ne tourne plus que si le fichier est lancé comme script (le test
+  importe la fonction sans compiler) ; types dans `fetch-binaries.d.mts`, sur le modèle de `before-pack.d.mts`.
+- ✅ **`scripts/release.mjs`.** Le pré-contrôle (étape 1) lance `dotnet --version` et s'arrête net sans SDK (« dotnet not
+  found on the PATH — the capture plugin can't be rebuilt », avec l'indice SDK 8+ et jeu installé). L'étape 5 lance
+  `npm run fetch-binaries -w @gear-solver/desktop` AVANT `desktop:build` : un jeu absent ou une version discordante
+  échoue en quelques secondes, avant le build web plus long, et toujours avant toute publication (le `catch` rend le
+  bump et les journaux). L'en-tête du script (pipeline, étapes 1 et 5) le dit. `fetch-binaries` régénère aussi
+  `build/icon.ico` (ignoré par git, idempotent), sans effet sur le commit de release.
+- ✅ **Docs.** `docs/architecture.md` et `wiki/Architecture.md` (DLL recompilée à chaque release, refusée si sa version
+  diffère de `Plugin.Version`), `tools/capture-steam/README.md` (paragraphe Packaging : appelé par `npm run release`,
+  `dotnet` sous Windows comme sous Linux, monter les deux versions ensemble). `docs/release-notes.md › [Unreleased]` :
+  la puce joueur de G38 (Worklist : une entrée par perso, gemmes listées, toast) à côté de celle de G37.
+- ✅ **Tests.** `apps/desktop/test/fetch-binaries.test.ts` (4 tests, sans dotnet) : accord des trois → la version ;
+  `Plugin.cs` ≠ `.csproj` → erreur avec les trois valeurs ; DLL qui ne porte pas la version (autre version, ou seulement
+  sa copie UTF-8) → erreur ; `Plugin.Version` introuvable → erreur. Contrôle sur la vraie DLL : `assertPluginVersion`
+  avec 0.1.0 la refuse (« DLL does not contain 0.1.0 »), avec les vrais `Plugin.cs` / `.csproj` rend 0.2.0. `npm run
+  fetch-binaries -w @gear-solver/desktop` sur le portable : `[ok] capture-steam plugin 0.2.0 (16 384 bytes) -> …/apps/
+  desktop/resources/capture-steam`. `npm run typecheck` : sortie 0 (dernière ligne `tsc --noEmit` du renderer, sans
+  erreur) ; `npm test` : `Tests  608 passed (608)` (core ; desktop 21 fichiers, renderer 166 tests, tous verts) ;
+  `npm run lint` : `✖ 14 problems (0 errors, 14 warnings)`, inchangé.
+- ⏳ **Sevih.** La release 1.13.0 elle-même (elle embarquera la 0.2.0 recompilée) ; le pré-contrôle exige désormais
+  `dotnet` dans le PATH sur le poste qui la lance. Hors périmètre, laissé : l'auto-update du plugin dans le jeu.
+
 ### 📋 Worklist : une entrée par perso (remplacement), gemmes à sertir listées, échec d'Apply par cause, toast quand l'onglet change seul (2026-10-22)
 - ✅ **Pourquoi.** Retours de Sevih après G37 : deux « + Worklist » sur le même perso faisaient deux entrées (l'ancienne
   seulement marquée `superseded` slot par slot) alors qu'un build est une tenue entière ; les gemmes du build

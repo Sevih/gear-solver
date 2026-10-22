@@ -17,6 +17,9 @@
   shows it on its new hero and the matching Worklist line turns **applied**. Needs the updated
   capture plugin: Settings › Setup › **Update plugin** with the game closed (it then shows
   "plugin 0.2.0 live" while the game runs).
+- **Worklist: one entry per hero** — queuing a new build replaces the hero's previous one; the
+  gems to socket on the Talisman / EE are listed too; a toast tells you when lines clear
+  themselves as you move gear in-game.
 
 ## [1.12.0] — 2026-10-22
 

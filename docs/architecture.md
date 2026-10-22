@@ -59,7 +59,8 @@ by hand (manual import).
   the stamped journals), then builds and publishes the installer via
   electron-builder (`--publish always`, `extraResources` for `data/`), and packaged builds
   auto-update in production (`updater.ts` / `setupAutoUpdate`). The installer bundles the
-  plugin DLL (`resources/capture-steam`, built by `scripts/fetch-binaries.mjs`); BepInEx itself is
+  plugin DLL (`resources/capture-steam`, rebuilt at every release by `scripts/fetch-binaries.mjs`,
+  which refuses a DLL whose version differs from `Plugin.Version`); BepInEx itself is
   downloaded, checksum-verified, when the plugin is installed. At launch `legacy-cleanup.ts`
   deletes what the former emulator source left in `<userData>` (`capture-ca/` with its private
   key, `bin/mitmproxy/`, `manual-device.json`, the pipeline's files in `capture-out/`).
