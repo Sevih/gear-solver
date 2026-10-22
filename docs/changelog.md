@@ -8,6 +8,13 @@
 
 ## Items de backlog clôturés (index)
 
+### 🩹 CI Windows : shebang retiré de `fetch-binaries.mjs` (2026-10-22)
+- ✅ La CI de la release 1.13.0 (`f1120b0`) était rouge sur `windows-latest` seulement : `test/fetch-binaries.test.ts`
+  importe `scripts/fetch-binaries.mjs` (G39) et le runner Windows échouait au chargement, « SyntaxError: Invalid or
+  unexpected token » — la ligne `#!/usr/bin/env node` en tête du script, retirée par la transformation sur Linux, pas sur
+  Windows. Le script est toujours lancé par `node scripts/fetch-binaries.mjs` (`npm run fetch-binaries`, `release.mjs`
+  étape 5) : la ligne est retirée, rien d'autre ne change. `npm test` desktop « Tests 179 passed (179) », lint inchangé.
+
 ### 💎 Presets (suite) : gemmes d'EE par associé, « + Worklist » par perso du preset, priorité reprise de la build sauvegardée, groupes dans la sauvegarde (2026-10-22)
 - ✅ **Pourquoi.** L'onglet Presets (G40) notait la tenue sur chaque perso avec son EE telle que sertie, ne poussait rien
   vers la Worklist, perdait les scores au relancement (priorité de session seulement) et `gs.presetHeroes` manquait à

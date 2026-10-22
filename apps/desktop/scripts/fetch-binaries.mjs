@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * One-shot provisioner for the build-time binaries of the packaged Electron
  * app. Run before `npm run pack` / `npm run dist`.
