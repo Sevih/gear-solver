@@ -10,7 +10,7 @@ export function BackupPane({ importInputRef, onStatus }: { importInputRef: { cur
       <SectionStrip title="Backup" />
       <DataAction
         label="Export builds & presets"
-        description="Download your saved builds and filter presets as a JSON file (backup / move to another device). Captured gear is not included — re-capture it there."
+        description="Download your saved builds, filter presets and the heroes of your in-game presets (Presets tab) as a JSON file (backup / move to another device). Captured gear is not included — re-capture it there."
         actionLabel="Export"
         onClick={() => exportBackupFile(onStatus)}
       />
@@ -35,7 +35,7 @@ export function BackupPane({ importInputRef, onStatus }: { importInputRef: { cur
  * Side-effect helpers — outcomes go to the App's status bar
  * ───────────────────────────────────────────────────────────────────────── */
 
-/** Snapshot saved builds + filter presets and trigger a browser download.
+/** Snapshot saved builds + filter presets + preset heroes and trigger a browser download.
  *  Filename carries the date so multiple backups don't collide. */
 function exportBackupFile(onStatus: (message: string) => void): void {
   try {
@@ -64,11 +64,12 @@ async function importBackupFile(file: File | null, onStatus: (message: string) =
   if (!file) return;
   try {
     const parsed = JSON.parse(await file.text()) as unknown;
-    const { builds, presets } = applyBackup(parsed);
-    if (builds === 0 && presets === 0) {
+    const { builds, presets, presetGroups } = applyBackup(parsed);
+    if (builds === 0 && presets === 0 && presetGroups === 0) {
       onStatus("Nothing new to import — every build and preset in this file is already present.");
     } else {
-      onStatus(`Imported ${builds} build${builds === 1 ? "" : "s"} and ${presets} preset${presets === 1 ? "" : "s"}.`);
+      const groups = presetGroups > 0 ? `, heroes of ${presetGroups} in-game preset${presetGroups === 1 ? "" : "s"}` : "";
+      onStatus(`Imported ${builds} build${builds === 1 ? "" : "s"} and ${presets} preset${presets === 1 ? "" : "s"}${groups}.`);
     }
   } catch (err) {
     onStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`);

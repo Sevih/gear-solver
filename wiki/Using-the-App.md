@@ -70,18 +70,27 @@ way the game does (validated to match the in-game character sheet).
 
 One card per equipment preset saved in-game: its number, name and ★ (favorite), its 7 pieces
 (the EE is never part of a preset — each hero keeps their own), and the heroes **currently
-wearing** it (gear identical to the preset, EE aside). Read-only: nothing is sent to the game.
+wearing** it (gear identical to the preset, EE aside). Nothing is sent to the game.
 
 - **Reference** — the hero the preset was built for (solve them in the Builder as usual). If a
   single hero wears the preset, they're proposed by default.
 - **Associated** — the heroes you plan to share the outfit with (add with the picker, remove
   with ✕). They wear it as-is and adjust through their own EE gems.
+- **EE gems** — the Talisman and its gems are part of the preset, but each hero keeps their own
+  EE: the line lists the **EE gems** that score best for that hero with this outfit (picked from
+  their EE and from Talismans / EEs nobody wears — never from the preset's pieces or another
+  hero's gear). A gem already in the right socket stays there.
 - **Scores** — for the reference and each associated hero: the preset's **Score** (with that
-  hero's Builder priority), **Dmg** and **DmgS**. An associated hero also shows how much they
-  lose versus their own best known build — their latest **saved build**, or their current gear
-  without one. Past the threshold (15 % by default, **Settings → Solver**) the line turns orange:
-  "Ame loses 23 % vs their saved build". A hero with no priority set gets no score: open them in
-  the Builder and set one (priorities are remembered for the session).
+  hero's priority and the EE gems proposed for them — the score with the gems as socketed today
+  is shown in brackets when it differs), **Dmg** and **DmgS**. An associated hero also shows how
+  much they lose versus their own best known build — their latest **saved build**, or their
+  current gear without one. Past the threshold (15 % by default, **Settings → Solver**) the line
+  turns orange: "Ame loses 23 % vs their saved build". The priority is the one set in the Builder
+  this session, else the one the hero's latest saved build was solved with ("priority from saved
+  build"); a hero with neither gets no score — open them in the Builder and set one.
+- **+ Worklist** — on each hero's line: queues the preset's pieces that hero doesn't wear yet
+  and the EE gems to socket as that hero's **Worklist** entry (replacing their previous one). A
+  piece no longer in your inventory is left out, and the toast says so.
 - **Warnings** — a piece no longer in your inventory, or a piece that sits in **two** presets
   (two presets can't be worn in the same fight), is marked on the piece and in the card's banner.
   Empty presets are listed collapsed.
@@ -179,7 +188,8 @@ In the right sidebar (**Library**):
 
 ## Worklist — queued gear changes
 
-A cross-hero to-do list of gear swaps, fed from the Builder's **+ Worklist** button. Each
+A cross-hero to-do list of gear swaps, fed from the Builder's **+ Worklist** button (and the
+Presets tab's, labeled **Preset** on the card). Each
 queued build becomes a card for its hero (one card per hero — a newer build replaces it), with
 one checkable line per changed slot — the target piece's image, stats, and where it currently
 lives (which hero wears it, or Inventory) — and one line per gem to socket on the Talisman / EE,
@@ -213,8 +223,9 @@ A tabbed modal:
 - **Data** — **Sync game data** (refresh the game tables after a patch), reset the onboarding
   wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
   (game version of the tables, hash and date — so you can see which snapshot is loaded).
-- **Backup** — **Export / Import** your saved builds + filter presets as a JSON file (move them
-  to another PC; captured gear isn't included — re-capture it there).
+- **Backup** — **Export / Import** your saved builds, filter presets and the heroes of your
+  in-game presets (Presets tab) as a JSON file (move them to another PC; captured gear isn't
+  included — re-capture it there).
 - **Debug** — developer toggles (safe to ignore).
 
 ---

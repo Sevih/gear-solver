@@ -5,11 +5,13 @@
  * it (who wear it as-is, tuned by their own EE). For each of them the preset is
  * scored on that hero (`lib/presets/evaluate.ts`); an associated hero is
  * compared to their best known outfit and flagged past the loss threshold
- * (Settings → Solver).
+ * (Settings → Solver). Each hero's line proposes the gems of their own EE that
+ * score best with the outfit (`lib/presets/eeGems.ts`) and scores with them;
+ * "+ Worklist" queues the outfit and those gems as the hero's entry.
  *
- * Nothing is written to the game and nothing is queued: the groups are local
- * (`gs.presetHeroes`), the optimisation (EE gems per hero, Worklist lines)
- * comes later.
+ * Nothing is written to the game: the groups are local (`gs.presetHeroes`).
+ * The priority is the Builder's of this session, else the one of the hero's
+ * most recent saved build (`presetPriorityOf`).
  */
 import { useEffect, useMemo, useState } from "react";
 import type { Character, GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
@@ -22,7 +24,12 @@ import { cx } from "../../design/cx.js";
 import { toUiPiece } from "../../design/adapter.js";
 import { toDesignSlot } from "../../design/tokens.js";
 import { PRESET_SLOTS, presetRows, type PresetPiece, type PresetRow } from "../../lib/presets/presetRows.js";
-import { bestKnownFor, evaluatePresetFor, heroBases, presetLoss, type PresetEvalContext } from "../../lib/presets/evaluate.js";
+import { bestKnownFor, evaluatePresetFor, heroBases, presetLoss, presetPriorityOf, type PresetEvalContext } from "../../lib/presets/evaluate.js";
+import { bestEeGemsFor } from "../../lib/presets/eeGems.js";
+import { presetWorklistFor } from "../../lib/presets/presetWorklist.js";
+import { worklistGem } from "../../lib/worklist/changes.js";
+import type { WorklistEntry } from "../../lib/storage/worklist.js";
+import { onBackupImported } from "../../lib/storage/transfer.js";
 import {
   addPresetAssociated, loadPresetHeroes, persistPresetHeroes, presetHeroesFor, removePresetAssociated, setPresetReference,
   type PresetHeroesMap,
@@ -40,6 +47,10 @@ interface PresetsScreenProps {
   userCodexLevel: number | null;
   /** Loss (percent) past which an associated hero's line turns orange. */
   lossWarnPct: number;
+  /** Heroes with a queued worklist entry — "+ Worklist" then replaces it. */
+  worklistHeroUids?: ReadonlySet<string>;
+  /** Queue an entry (one per hero, App's `addToWorklist` — toast included). */
+  onAddToWorklist?: (entry: WorklistEntry, note?: string) => void;
 }
 
 /** Same rounding as the Builder's results table. */
@@ -56,13 +67,16 @@ interface HeroView {
   element: string | null;
 }
 
-export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct }: PresetsScreenProps) {
+export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, onAddToWorklist }: PresetsScreenProps) {
   // Read once per mount — the screen remounts on every tab switch, so an edit
   // made in the Builder (saved build, priority) is picked up on the way back.
   const [savedBuilds] = useState(loadSavedBuilds);
   const [heroFilters] = useState(loadHeroFilters);
   const [presetHeroes, setPresetHeroes] = useState<PresetHeroesMap>(loadPresetHeroes);
   useEffect(() => { persistPresetHeroes(presetHeroes); }, [presetHeroes]);
+  // A backup imported while the tab is open (Settings modal) — reload, or the
+  // next edit would write the pre-import groups back.
+  useEffect(() => onBackupImported(() => setPresetHeroes(loadPresetHeroes())), []);
 
   const rows = useMemo(() => (inventory ? presetRows(inventory) : []), [inventory]);
   const roster = useMemo(() => new Set(inventory?.characters.map((c) => c.uid) ?? []), [inventory]);
@@ -76,8 +90,10 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
   }, [inventory, game]);
   const ctx = useMemo<PresetEvalContext | null>(() => {
     if (!inventory) return null;
-    const bases = heroBases(inventory, game, userGeasLevels, userCodexLevel,
-      (uid) => (heroFilters[uid] ? filtersForHero(heroFilters, uid, INITIAL_FILTERS).priority : null));
+    const bases = heroBases(inventory, game, userGeasLevels, userCodexLevel, presetPriorityOf(
+      (uid) => (heroFilters[uid] ? filtersForHero(heroFilters, uid, INITIAL_FILTERS).priority : null),
+      savedBuilds,
+    ));
     return { inventory, game, heroes: bases, savedBuilds };
   }, [inventory, game, userGeasLevels, userCodexLevel, heroFilters, savedBuilds]);
 
@@ -94,7 +110,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
         <span className="font-mono uppercase tracking-wider text-zinc-400">Presets</span>
         <span className="text-zinc-400">
           A preset is one reference hero's outfit, worn as-is by its associated heroes (each keeps their own EE).
-          Scores use each hero's Builder priority; a line turns orange past a {lossWarnPct} % loss.
+          Scores use each hero's Builder priority (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a {lossWarnPct} % loss.
         </span>
         <div className="ml-auto">
           <Pill tone="emerald">{rows.filter((r) => !r.empty).length} used · {rows.length} total</Pill>
@@ -111,6 +127,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
             roster={inventory.characters}
             stored={presetHeroesFor(presetHeroes, row.preset.num, roster)}
             lossWarnPct={lossWarnPct}
+            worklist={{ heroUids: worklistHeroUids, onAdd: onAddToWorklist }}
             onSetReference={(uid) => setPresetHeroes((m) => setPresetReference(m, row.preset.num, uid))}
             onAddAssociated={(uid) => setPresetHeroes((m) => addPresetAssociated(m, row.preset.num, uid))}
             onRemoveAssociated={(uid) => setPresetHeroes((m) => removePresetAssociated(m, row.preset.num, uid))}
@@ -121,8 +138,14 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
   );
 }
 
+/** What a hero line needs to queue its entry. */
+interface WorklistHook {
+  heroUids?: ReadonlySet<string>;
+  onAdd?: (entry: WorklistEntry, note?: string) => void;
+}
+
 function PresetCard({
-  row, game, ctx, heroes, roster, stored, lossWarnPct, onSetReference, onAddAssociated, onRemoveAssociated,
+  row, game, ctx, heroes, roster, stored, lossWarnPct, worklist, onSetReference, onAddAssociated, onRemoveAssociated,
 }: {
   row: PresetRow;
   game: GameData | null;
@@ -131,6 +154,7 @@ function PresetCard({
   roster: Character[];
   stored: { referenceUid: string | null; associatedUids: string[] };
   lossWarnPct: number;
+  worklist: WorklistHook;
   onSetReference: (uid: string | null) => void;
   onAddAssociated: (uid: string) => void;
   onRemoveAssociated: (uid: string) => void;
@@ -198,7 +222,7 @@ function PresetCard({
                 <button type="button" onClick={() => onSetReference(null)} className="text-[11px] text-cyan-300 hover:text-cyan-200">Clear</button>
               )}
             </div>
-            {referenceUid && <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} reference />}
+            {referenceUid && <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} reference />}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -210,7 +234,7 @@ function PresetCard({
               {associatedUids.length === 0 && <span className="text-[10.5px] italic text-zinc-400">Add the heroes who will share this outfit</span>}
             </div>
             {associatedUids.map((uid) => (
-              <HeroLine key={uid} uid={uid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} onRemove={() => onRemoveAssociated(uid)} />
+              <HeroLine key={uid} uid={uid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onRemove={() => onRemoveAssociated(uid)} />
             ))}
           </div>
         </>
@@ -264,23 +288,46 @@ function Badge({ tone, title, children }: { tone: "rose" | "amber"; title: strin
   );
 }
 
-/** One hero of the preset — the preset's score and offensive ratings on them;
- *  for an associated hero, the loss against their best known outfit. */
+/** One hero of the preset — the EE gems proposed for them, the preset's score
+ *  (with those gems) and offensive ratings on them; for an associated hero,
+ *  the loss against their best known outfit; "+ Worklist" for both. */
 function HeroLine({
-  uid, row, ctx, heroes, lossWarnPct, reference = false, onRemove,
+  uid, row, ctx, heroes, lossWarnPct, worklist, reference = false, onRemove,
 }: {
   uid: string;
   row: PresetRow;
   ctx: PresetEvalContext;
   heroes: ReadonlyMap<string, HeroView>;
   lossWarnPct: number;
+  worklist: WorklistHook;
   reference?: boolean;
   onRemove?: () => void;
 }) {
   const h = heroes.get(uid);
-  const evalPreset = useMemo(() => evaluatePresetFor(uid, row.presentPieces, ctx), [uid, row, ctx]);
+  const eeGems = useMemo(() => bestEeGemsFor(uid, row.presentPieces, ctx), [uid, row, ctx]);
+  const evalPreset = useMemo(() => evaluatePresetFor(uid, row.presentPieces, ctx, eeGems?.ee), [uid, row, ctx, eeGems]);
+  const asSocketed = useMemo(() => (eeGems ? evaluatePresetFor(uid, row.presentPieces, ctx) : null), [uid, row, ctx, eeGems]);
   const best = useMemo(() => (reference ? null : bestKnownFor(uid, ctx)), [uid, ctx, reference]);
+  const queued = useMemo(() => presetWorklistFor(uid, row, eeGems, ctx.inventory, ctx.game), [uid, row, eeGems, ctx]);
   if (!h) return null;
+  const fromSaved = ctx.heroes.get(uid)?.prioritySource === "saved";
+  const gemNames = eeGems?.ee.filter((id) => id).map((id) => worklistGem(id, ctx.game).name) ?? [];
+  const socketedScore = asSocketed?.score != null && fmtNum(asSocketed.score) !== fmtNum(evalPreset?.score) ? fmtNum(asSocketed.score) : null;
+  const replaces = worklist.heroUids?.has(uid) ?? false;
+  const addToWorklist = () => {
+    if (!worklist.onAdd || queued.changes.length === 0) return;
+    worklist.onAdd({
+      id: crypto.randomUUID(),
+      heroUid: uid,
+      heroName: h.name,
+      charId: h.displayCharId,
+      mode: "preset",
+      cp: null,
+      upg: queued.upg,
+      changes: queued.changes,
+      createdAt: Date.now(),
+    }, queued.missing > 0 ? `${queued.missing} preset piece${queued.missing === 1 ? "" : "s"} not in your inventory, left out` : undefined);
+  };
   const loss = best ? presetLoss(evalPreset?.score ?? null, best.score) : null;
   const lossPct = loss != null ? Math.round(loss * 100) : null;
   const warn = lossPct != null && lossPct > lossWarnPct;
@@ -299,6 +346,7 @@ function HeroLine({
       ) : (
         <>
           <Metric label="Score" value={evalPreset.score == null ? "—" : fmtNum(evalPreset.score)} />
+          {socketedScore && <span className="font-mono text-[10.5px] tabular-nums text-zinc-400" title="Score with the EE gems as socketed today">({socketedScore} as socketed)</span>}
           <Metric label="Dmg" value={fmtNum(evalPreset.ratings.dmg)} />
           <Metric label="DmgS" value={fmtNum(evalPreset.ratings.dmgs)} />
           {evalPreset.score == null ? (
@@ -314,15 +362,32 @@ function HeroLine({
               </span>
             )
           )}
+          {fromSaved && <span className="text-[10.5px] italic text-zinc-400" title="Not opened in the Builder this session — scored with the priority their most recent saved build was solved with">priority from saved build</span>}
         </>
+      )}
+      {worklist.onAdd && (
+        <button
+          type="button"
+          onClick={addToWorklist}
+          disabled={queued.changes.length === 0}
+          title={queued.changes.length === 0
+            ? `${h.name} already wears this preset with these EE gems`
+            : replaces ? `Replace ${h.name}'s worklist entry with this preset` : `Queue this preset and the EE gems for ${h.name}`}
+          className="ml-auto rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >+ Worklist</button>
       )}
       {onRemove && (
         <button
           type="button"
           onClick={onRemove}
           title={`Remove ${h.name} from this preset`}
-          className="ml-auto grid h-6 w-6 place-items-center rounded-md border border-white/7 bg-black/40 text-[11px] text-white hover:bg-black/60"
+          className={cx("grid h-6 w-6 place-items-center rounded-md border border-white/7 bg-black/40 text-[11px] text-white hover:bg-black/60", !worklist.onAdd && "ml-auto")}
         >✕</button>
+      )}
+      {evalPreset && gemNames.length > 0 && (
+        <span className="basis-full pl-10 text-[11px] text-zinc-300" title="The gems of their own EE that score best with this outfit — the Talisman's stay as they are (part of the preset)">
+          <span className="text-[9px] uppercase tracking-wider text-zinc-400">EE gems:</span> {gemNames.join(", ")}
+        </span>
       )}
     </div>
   );

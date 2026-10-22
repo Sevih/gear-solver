@@ -277,7 +277,7 @@ function WorklistCard({
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-[13.5px] font-semibold text-white">{entry.heroName}</div>
           <div className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-white/50">
-            <span className="uppercase tracking-wider">{entry.mode === "cp" ? "CP" : "Score"}</span>
+            <span className="uppercase tracking-wider">{entry.mode === "cp" ? "CP" : entry.mode === "preset" ? "Preset" : "Score"}</span>
             <span>·</span>
             <span>{allApplied ? "all applied" : `${remaining} of ${entry.changes.length} to do`}</span>
             {entry.cp != null && <><span>·</span><span>CP {entry.cp.toLocaleString()}</span></>}

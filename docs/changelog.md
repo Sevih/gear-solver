@@ -8,6 +8,74 @@
 
 ## Items de backlog clôturés (index)
 
+### 💎 Presets (suite) : gemmes d'EE par associé, « + Worklist » par perso du preset, priorité reprise de la build sauvegardée, groupes dans la sauvegarde (2026-10-22)
+- ✅ **Pourquoi.** L'onglet Presets (G40) notait la tenue sur chaque perso avec son EE telle que sertie, ne poussait rien
+  vers la Worklist, perdait les scores au relancement (priorité de session seulement) et `gs.presetHeroes` manquait à
+  l'export/import. Modèle inchangé : les associés portent la tenue telle quelle, le Talisman (et ses gemmes) est DANS
+  le preset, donc partagé ; chaque perso ne règle que les gemmes de SON EE.
+- ✅ **Gemmes d'EE — `apps/renderer/src/lib/presets/eeGems.ts` (nouveau, pur).** `bestEeGemsFor(heroUid, presetPieces,
+  ctx)` enchaîne le moteur, pièces fixées : `buildGemPool` sur un inventaire restreint à l'EE du perso et aux
+  Talismans / EE que personne ne porte, hors pièces du preset — `buildGemPool` seul aurait proposé les gemmes du
+  Talisman du preset quand il est libre ou porté par le perso, et celles du Talisman propre du perso (il part quand
+  le preset arrive) ; `scoreGemPool` avec la priorité du perso (remplissage par `gemDmgGains` sur la tenue preset +
+  EE) ; `allocateGemsCapped(scored, 0, gemSlotsOf(EE), CHC sans les gemmes d'EE)` — l'allocateur à plafond CHC du
+  moteur plutôt que `allocateGems` nu, `computeScore` plafonnant CHC à 100. `alignToSockets` garde à sa place une
+  gemme déjà sertie (le moins de lignes de Worklist) et laisse sa gemme à un emplacement que le choix laisse vide (le
+  jeu ne retire rien seul, la Worklist non plus). Rend `{ ee }` ou `null` : pas de priorité, pas d'EE ni
+  d'emplacement, pool vide, choix identique aux gemmes serties, ou score qui ne monte pas (garde-fou : l'ordre
+  linéaire du score des gemmes n'est pas celui de `computeScore` composé, d'où la comparaison réelle).
+- ✅ **Évaluation — `lib/presets/evaluate.ts`.** `evaluatePresetFor(…, eeGems?)` compose l'EE avec ces gemmes par le
+  `gemOverride` du composeur : `eeGemOverride` y remet les subs du Talisman (le composeur saute les subs des DEUX
+  pièces à gemmes sous override) et ajoute les gemmes résolues (`resolveStat`, mêmes seaux que le delta
+  d'`allocateGems`). `eeOf` factorise l'EE du perso. `HeroBase.prioritySource` (`"session" | "saved"`) ;
+  `heroBases` prend un `priorityOf` qui rend `{ priority, source }` ; `presetPriorityOf(sessionPriority,
+  savedBuilds)` lit la session (`gs.solver.heroFilters`), puis `reforge.priority` de la build sauvegardée la plus
+  récente (même `latestSavedBuild` que `bestKnownFor`), puis `null` — une priorité sans poids passe à la source
+  suivante. `heroFilters.ts` et la convention de session du Builder ne bougent pas. Une persistance des filtres par
+  héros en localStorage serait un autre lot, si Sevih la préfère.
+- ✅ **Worklist — `lib/presets/presetWorklist.ts` (nouveau, pur).** `presetWorklistFor(heroUid, row, eeGems, inventory,
+  game)` = `worklistChangesFor(diffBuildVsLoadout(pièces présentes du preset + l'EE du perso, …), { talisman: [], ee
+  })` : l'EE, portée, ne fait jamais de ligne de pièce, seulement ses lignes de gemmes ; pièce absente de
+  l'inventaire exclue et comptée (`missing`). `WorklistEntry.mode` passe à `WorklistMode = SolveMode | "preset"`
+  (`lib/storage/worklist.ts`, `SolveMode` intact pour les builds et le solveur) et la carte de `WorklistScreen.tsx`
+  affiche « Preset ». `App.tsx` : `addToWorklist(entry, note?)` (la note termine le toast « Added to / Replaced in
+  worklist — <Nom> (n preset pieces not in your inventory, left out) »), passé à l'onglet Presets avec
+  `worklistHeroUids`.
+- ✅ **Écran — `screens/presets/PresetsScreen.tsx`.** Sur la ligne de la référence et de chaque associé (même règle
+  pour la référence) : « EE gems: <noms `worklistGem`> » sous la ligne, Score et perte AVEC ces gemmes, « (<score> as
+  socketed) » quand l'arrondi diffère, « priority from saved build » quand la priorité vient de la sauvegarde, bouton
+  « + Worklist » (`upsertWorklistEntry` via `App`, grisé quand il n'y a rien à changer, infobulle « Replace … » quand
+  le perso a déjà une entrée). Sans priorité : pas de proposition, ligne comme avant. L'écran se recharge après un
+  import de sauvegarde (`onBackupImported`), sinon la modification suivante réécrivait les groupes d'avant.
+- ✅ **Sauvegarde — `lib/storage/transfer.ts`.** `BackupBundle.presetHeroes` (optionnel : une sauvegarde d'avant
+  s'importe sans), lu par `buildBackup`, fusionné par `applyBackup` par numéro de preset — un preset qui a déjà des
+  héros ici (référence ou associé) garde les siens, comme les builds ; `ImportResult.presetGroups`, dit par le
+  message d'import (`design/settings/BackupPane.tsx`, description de l'export mise à jour). **Élagage :** non branché
+  — `knownRefs` (`dataHash.ts`) ne porte que des ids de sets et d'effets, ce store ne contient que des numéros de
+  preset et des uids de compte, rien à élaguer.
+- ✅ **Docs.** `docs/solver.md` + `wiki/Solver.md` (section « Onglet Presets » : gemmes d'EE, + Worklist, priorité ;
+  carte des fichiers), `wiki/Using-the-App.md` (Presets, Worklist, Backup), `docs/architecture.md` +
+  `wiki/Architecture.md`, `docs/reference.md` + `wiki/Engine-Reference.md` (carte des modules, ligne de test),
+  `docs/release-notes.md › [Unreleased]` (puce Presets complétée), `docs/todo.md` (item G41 retiré).
+- ✅ **Tests.** `apps/renderer/test/presetsGems.test.ts` (12 tests, table de gemmes réelle de `data/derived/`) :
+  `bestEeGemsFor` ne propose jamais les gemmes du Talisman du preset (porté, puis libre), de l'EE d'un autre perso ni
+  du Talisman du perso, garde à leur place les gemmes serties qui restent, `null` sans priorité et quand l'EE a déjà
+  le meilleur de l'offre, score avec les gemmes proposées > tel que serti, `eeGems` = gemmes serties compose comme
+  l'EE ; `alignToSockets` ; `presetWorklistFor` — pièces qui diffèrent puis lignes gemme de l'EE seules (aucune sur
+  le Talisman), pièce absente exclue, porteur sans rien à régler → rien, remplacement de l'entrée existante ;
+  `presetPriorityOf` — session > build sauvegardée la plus récente > `null` ; sauvegarde — aller-retour avec fusion
+  (l'entrée locale gagne, une locale vide est remplacée), sauvegarde sans le champ. `npm run typecheck` : dernière
+  ligne `> tsc --noEmit` (renderer, sortie 0) ; `npm test` : `Tests  638 passed (638)` (renderer ; core 166, desktop
+  179) ; `npm run lint` : `✖ 14 problems (0 errors, 14 warnings)`, inchangé ; `vite build` du renderer passe
+  (`PresetsScreen` 16,7 kB).
+- ⏳ **Hors périmètre, repéré.** Le pool de gemmes ne tient pas compte des réservations de la Worklist
+  (`worklistClaims`) : une gemme d'un Talisman libre déjà promis à un autre perso par une entrée peut être reproposée.
+  Les bornes `max` des filtres du perso (`noFill` du moteur) ne sont pas lues (la priorité seule arrive à l'onglet).
+- ⏳ **Sevih, sur le fixe (après la release).** Associer Ame à un preset de DLuna → « EE gems: … » et la perte
+  recalculée avec ces gemmes (le score tel que serti entre parenthèses) ; « + Worklist » sur Ame → une entrée
+  « Preset » avec les pièces et les gemmes d'EE ; relancer l'app → les scores restent (« priority from saved build »
+  pour un perso qui a une build sauvegardée et n'a pas été rouvert dans le Builder).
+
 ### 🧩 Onglet Presets (lecture) : presets du jeu, porteurs, perso de référence et associés, score et perte par associé (2026-10-22)
 - ✅ **Pourquoi.** Le jeu garde jusqu'à 30 presets d'équipement (7 pièces, l'EE n'en fait jamais partie) que l'app
   parsait déjà (`Inventory.presets`) mais ne montrait qu'en creux (le nom du preset sur une carte Builds dont la tenue

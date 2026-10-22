@@ -1,6 +1,7 @@
 /**
- * Backup transfer — export / import of the user's saved builds + filter
- * presets as a single JSON file (device migration, sharing, manual backup).
+ * Backup transfer — export / import of the user's saved builds, filter
+ * presets and preset heroes (the Presets tab's reference / associated heroes)
+ * as a single JSON file (device migration, sharing, manual backup).
  *
  * Operates at the on-disk JSON level, NOT the in-memory level: the presets
  * blob already serializes its `Set` fields to arrays on disk (see
@@ -11,6 +12,7 @@
  */
 import { SAVED_BUILDS_KEY } from "./savedBuilds.js";
 import { FILTER_PRESETS_KEY } from "./filterPresets.js";
+import { PRESET_HEROES_KEY } from "./presetHeroes.js";
 
 const BACKUP_KIND = "gear-solver-backup";
 const BACKUP_VERSION = 1 as const;
@@ -31,25 +33,30 @@ export interface BackupBundle {
   savedBuilds: ListMap;
   /** Serialized `gs.solver.filterPresets` blob — Set fields already arrays. */
   filterPresets: ListMap;
+  /** Serialized `gs.presetHeroes` blob (preset number → its heroes). Absent
+   *  from a backup made before it was exported — read as none. */
+  presetHeroes?: Record<string, unknown>;
 }
 
 export interface ImportResult {
   builds: number;
   presets: number;
+  /** In-game presets whose heroes were imported. */
+  presetGroups: number;
 }
 
-function readRaw(key: string): ListMap {
+function readRaw<T extends object = ListMap>(key: string): T {
   try {
     const raw = localStorage.getItem(key);
-    if (!raw) return {};
+    if (!raw) return {} as T;
     const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object" ? (parsed as ListMap) : {};
+    return parsed && typeof parsed === "object" ? (parsed as T) : ({} as T);
   } catch {
-    return {};
+    return {} as T;
   }
 }
 
-/** Snapshot both blobs into a self-describing bundle. `exportedAt` is passed
+/** Snapshot the blobs into a self-describing bundle. `exportedAt` is passed
  *  in so this stays free of `Date.now()` (testable / SSR-safe). */
 export function buildBackup(exportedAt: number): BackupBundle {
   return {
@@ -58,6 +65,7 @@ export function buildBackup(exportedAt: number): BackupBundle {
     exportedAt,
     savedBuilds: readRaw(SAVED_BUILDS_KEY),
     filterPresets: readRaw(FILTER_PRESETS_KEY),
+    presetHeroes: readRaw<Record<string, unknown>>(PRESET_HEROES_KEY),
   };
 }
 
@@ -78,6 +86,27 @@ function mergeListMap(current: ListMap, incoming: ListMap): { merged: ListMap; a
   return { merged, added };
 }
 
+/** Merge the incoming preset heroes, keyed by preset number: a preset that
+ *  already has heroes here (a reference or an associated hero) keeps them —
+ *  same rule as the builds, the local entry wins. Returns the merged blob and
+ *  how many presets were taken from the backup. */
+function mergePresetHeroes(current: Record<string, unknown>, incoming: Record<string, unknown>): { merged: Record<string, unknown>; added: number } {
+  const merged: Record<string, unknown> = { ...current };
+  let added = 0;
+  for (const [num, entry] of Object.entries(incoming)) {
+    if (!holdsHeroes(entry) || holdsHeroes(merged[num])) continue;
+    merged[num] = entry;
+    added++;
+  }
+  return { merged, added };
+}
+
+function holdsHeroes(entry: unknown): boolean {
+  if (!entry || typeof entry !== "object") return false;
+  const e = entry as { referenceUid?: unknown; associatedUids?: unknown };
+  return typeof e.referenceUid === "string" || (Array.isArray(e.associatedUids) && e.associatedUids.length > 0);
+}
+
 /** Type-guard a parsed JSON value as a BackupBundle (kind + version + the two
  *  maps). Throws a user-facing Error on mismatch so the UI can alert it. */
 function assertBundle(value: unknown): asserts value is BackupBundle {
@@ -87,6 +116,7 @@ function assertBundle(value: unknown): asserts value is BackupBundle {
   if (b.version !== BACKUP_VERSION) throw new Error(`Unsupported backup version (${String(b.version)}).`);
   if (!b.savedBuilds || typeof b.savedBuilds !== "object") throw new Error("Missing savedBuilds.");
   if (!b.filterPresets || typeof b.filterPresets !== "object") throw new Error("Missing filterPresets.");
+  if (b.presetHeroes != null && typeof b.presetHeroes !== "object") throw new Error("Malformed presetHeroes.");
 }
 
 /** Screens that hold the maps in memory (the Builder stays mounted, hidden,
@@ -112,8 +142,10 @@ export function applyBackup(value: unknown): ImportResult {
   assertBundle(value);
   const builds = mergeListMap(readRaw(SAVED_BUILDS_KEY), value.savedBuilds);
   const presets = mergeListMap(readRaw(FILTER_PRESETS_KEY), value.filterPresets);
+  const groups = mergePresetHeroes(readRaw<Record<string, unknown>>(PRESET_HEROES_KEY), value.presetHeroes ?? {});
   localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(builds.merged));
   localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets.merged));
+  if (groups.added > 0) localStorage.setItem(PRESET_HEROES_KEY, JSON.stringify(groups.merged));
   for (const listener of importListeners) listener();
-  return { builds: builds.added, presets: presets.added };
+  return { builds: builds.added, presets: presets.added, presetGroups: groups.added };
 }

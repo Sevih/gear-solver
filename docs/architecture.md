@@ -28,8 +28,9 @@ by hand (manual import).
   Screens: **Home** (account dashboard + gear-quality distribution + update center,
   `screens/home/`, its numbers computed by the pure `lib/homeStats.ts`), **Inventory** (table +
   per-piece detail, `screens/inventory/`), **Builds** (equipped/composed roster + Optimize→),
-  **Presets** (the in-game equipment presets, read-only — wearers, a reference hero and its
-  associated heroes, the preset scored on each, `screens/presets/` over the pure `lib/presets/`),
+  **Presets** (the in-game equipment presets — wearers, a reference hero and its associated
+  heroes, the preset scored on each with the EE gems proposed for them, "+ Worklist" per hero;
+  nothing written to the game, `screens/presets/` over the pure `lib/presets/`),
   **Builder** (the solver — `screens/builder/`: one module per panel, the solve state in the
   `useSolverSession` hook), **Worklist** (cross-hero queue of gear changes — the Builder's
   "+ Worklist" pushes a build's per-slot diff here as a checklist, `equipPieces` applies it

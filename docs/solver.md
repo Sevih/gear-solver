@@ -440,7 +440,7 @@ enhance level, icône slot, main stat, subs (avec ticks). En plus :
 
 Em-dash quand aucun build n'est sélectionné.
 
-### Onglet Presets (lecture)
+### Onglet Presets
 Onglet entre Builds et Builder (`screens/presets/PresetsScreen.tsx`), une carte par preset d'équipement du
 jeu (`Inventory.presets`, jusqu'à 30) : numéro, nom, favori ★, les 7 pièces (weapon, accessory, helmet,
 armor, gloves, boots, talisman — l'EE n'en fait **jamais** partie, le slot EE de `ItemUIDList` est ignoré)
@@ -455,18 +455,46 @@ Un preset = la tenue d'**un perso de référence**, portée telle quelle par des
 règlent par les gemmes de leur propre EE. Les groupes se font à la main (sélecteur de héros ; un porteur
 actuel unique est proposé comme référence), stockés app-local dans `gs.presetHeroes`
 (`lib/storage/presetHeroes.ts`, par numéro de preset `{ referenceUid, associatedUids }`, un uid sorti du
-roster ignoré à la lecture). Pour la référence et chaque associé, `evaluatePresetFor`
-(`lib/presets/evaluate.ts`) compose le héros avec les pièces du preset + **son** EE actuelle (gemmes telles
-que serties) par `computeFinalStats`, puis `computeCheapRatings` (facteurs de skill du héros) et
-`computeScore` avec sa priorité du Builder (`gs.solver.heroFilters`) ; la carte montre Score, Dmg et DmgS.
+roster ignoré à la lecture ; le blob entre dans l'export / import de sauvegarde, un preset qui a déjà des
+héros ici gardant les siens). Pour la référence et chaque associé, `evaluatePresetFor`
+(`lib/presets/evaluate.ts`) compose le héros avec les pièces du preset + **son** EE actuelle par
+`computeFinalStats`, puis `computeCheapRatings` (facteurs de skill du héros) et `computeScore` avec sa
+priorité ; la carte montre Score, Dmg et DmgS.
+
+**Gemmes d'EE par héros.** Le Talisman et ses gemmes font partie du preset (partagés, jamais réglés par
+héros) ; ce que chaque héros règle, ce sont les gemmes de **son** EE. `bestEeGemsFor`
+(`lib/presets/eeGems.ts`) les choisit comme le moteur, pièces fixées : `buildGemPool` restreint aux gemmes
+de l'EE du héros et à celles des Talismans / EE que personne ne porte (jamais celles des pièces du preset,
+même libres, ni d'une pièce portée par un autre héros, ni du Talisman du héros, qui part quand le preset
+arrive), `scoreGemPool` avec la priorité du héros (remplissage par gain de `dmg` sur la tenue,
+`gemDmgGains`), `allocateGemsCapped` sur les seuls emplacements de l'EE (`gemSlotsOf`, CHC sans les gemmes
+d'EE pour le plafond). Une gemme déjà sertie garde son emplacement (`alignToSockets`, le moins de lignes de
+Worklist) et un emplacement laissé vide garde sa gemme (le jeu n'en retire pas seul). Pas de proposition
+(null) sans priorité, sans EE ou sans gemme, ou quand le choix ne note pas plus haut que les gemmes telles
+que serties. `evaluatePresetFor(…, eeGems)` compose alors l'EE avec ces gemmes par le `gemOverride` du
+composeur (`eeGemOverride` : il saute les subs des deux pièces à gemmes, celles du Talisman y sont
+replacées) ; la ligne dit « EE gems: <liste> », le score et la perte **avec** ces gemmes, et entre
+parenthèses le score tel que serti quand il diffère.
+
+**+ Worklist**, sur la ligne de la référence et de chaque associé : l'entrée du héros
+(`presetWorklistFor`, `lib/presets/presetWorklist.ts`) = les pièces du preset qu'il ne porte pas
+(`diffBuildVsLoadout`, la règle du Builder) + les lignes de gemmes de son EE (`worklistChangesFor`,
+`gemAllocation = { talisman: [], ee }`), `mode: "preset"` (« Preset » sur la carte de la Worklist, sans
+CP) ; `upsertWorklistEntry` remplace l'entrée du héros, toast « Added to / Replaced in worklist — <Nom> ».
+Une pièce absente de l'inventaire est exclue, et le toast le dit. Bouton grisé quand il n'y a rien à
+changer.
+
+**Priorité.** `presetPriorityOf` lit, dans l'ordre, la priorité du Builder de la session
+(`gs.solver.heroFilters`, sessionStorage : le Builder repart propre à chaque lancement), puis
+`reforge.priority` de la build sauvegardée la plus récente du héros, puis rien ; une priorité sans poids
+passe à la source suivante. La ligne dit « priority from saved build » dans le second cas. Un héros sans
+build sauvegardée ni passage dans le Builder depuis le lancement n'a pas de score.
 Un associé est comparé à sa **meilleure tenue connue** (`bestKnownFor` : sa build sauvegardée la plus
 récente, re-notée avec la priorité **courante**, sinon son équipement actuel) : `loss = 1 − score(preset) /
 score(best)`, affichée en % « vs saved build » / « vs current gear » ; au-delà du seuil (15 % par défaut,
 Settings → Solver, `gs.solver.presetLossWarn`) la ligne passe en orange avec « <Nom> loses 23 % vs their
-saved build ». Sans priorité : « no priority set for <Nom> — set one in the Builder », pas de score. La
-priorité par héros est mémorisée **pour la session** : après un relancement, un héros n'a de score qu'une
-fois revisité dans le Builder (et le héros ouvert dans le Builder n'est mémorisé qu'au changement de héros).
-Rien n'est écrit vers le jeu ni mis en Worklist ; l'optimisation des gemmes d'EE par associé viendra ensuite.
+saved build ». Sans priorité : « no priority set for <Nom> — set one in the Builder », pas de score. Rien
+n'est écrit vers le jeu.
 
 ---
 
@@ -654,7 +682,9 @@ apps/renderer/src/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
 │   ├── presets/
 │   │   ├── presetRows.ts           ← presets du jeu : pièces, porteurs (presetSignature), pièces absentes / partagées
-│   │   └── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases (onglet Presets)
+│   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetPriorityOf (onglet Presets)
+│   │   ├── eeGems.ts               ← bestEeGemsFor : gemmes d'EE par héros, pièces du preset fixées
+│   │   └── presetWorklist.ts       ← presetWorklistFor : l'entrée Worklist d'un héros du preset
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← bookmark de builds par héros (localStorage)
 │   │   ├── presetHeroes.ts         ← référence + associés par preset (localStorage)
@@ -675,7 +705,7 @@ apps/renderer/src/
     │   ├── ResultsTable.tsx        ← table virtualisée, tri, heatmap, menu des colonnes
     │   ├── BottomGearBand.tsx · RightSidebar.tsx · FilterFooter.tsx · StatsPanel.tsx · …
     │   └── catalogs.ts · statColumns.ts ← catalogues tirés de l'inventaire, tables stats/ratings
-    ├── presets/PresetsScreen.tsx   ← onglet Presets (lecture) : cartes par preset, référence, associés, perte
+    ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset, référence, associés, gemmes d'EE, perte, + Worklist
     └── BuildsScreen.tsx            ← roster équipé/composé + computeAdvice + Optimize →
 ```
 

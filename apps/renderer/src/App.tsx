@@ -175,10 +175,11 @@ export function App() {
   // Heroes with a queued entry — the Builder's "+ Worklist" then replaces it.
   const worklistHeroUids = useMemo(() => new Set(worklist.map((e) => e.heroUid)), [worklist]);
   // One entry per hero: a new build replaces the hero's entry, ticks included.
-  const addToWorklist = useCallback((entry: WorklistEntry) => {
+  // `note` tails the toast (the Presets tab names the pieces it left out).
+  const addToWorklist = useCallback((entry: WorklistEntry, note?: string) => {
     const replaced = worklistHeroUids.has(entry.heroUid);
     setWorklist((prev) => upsertWorklistEntry(prev, entry));
-    notify(`${replaced ? "Replaced in" : "Added to"} worklist — ${entry.heroName}`);
+    notify(`${replaced ? "Replaced in" : "Added to"} worklist — ${entry.heroName}${note ? ` (${note})` : ""}`);
   }, [worklistHeroUids, notify]);
   // heroUid → equipped piece uids, built once per inventory and shared by the
   // worklist helpers, the tab badges and the Worklist screen.
@@ -467,7 +468,7 @@ export function App() {
               />
             </ScreenErrorBoundary>
           )}
-          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} /></ScreenErrorBoundary>}
+          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} worklistHeroUids={worklistHeroUids} onAddToWorklist={addToWorklist} /></ScreenErrorBoundary>}
           {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} worklistClaims={solverWorklistClaims} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a

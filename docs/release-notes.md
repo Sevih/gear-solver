@@ -22,7 +22,9 @@
   themselves as you move gear in-game.
 - **Presets tab**: your in-game equipment presets, who wears them, a reference hero and the
   heroes you plan to share the set with — with a warning when one of them loses too much
-  versus their own build (threshold in Settings › Solver).
+  versus their own build (threshold in Settings › Solver). It suggests the EE gems for each
+  associated hero and queues the outfit to the Worklist; scores survive a relaunch (the
+  priority of the hero's latest saved build is used), and the groups are part of the backup.
 
 ## [1.12.0] — 2026-10-22
 

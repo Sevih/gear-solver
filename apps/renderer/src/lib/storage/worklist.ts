@@ -79,6 +79,8 @@ export function changeKey(c: WorklistChange): string {
   return c.kind === "gem" ? `${c.slot}:gem${c.gemIndex}` : c.slot;
 }
 
+export type WorklistMode = SolveMode | "preset";
+
 /** A queued build's diff — one per hero: a new "Add to worklist" for the same
  *  hero replaces it (`upsertWorklistEntry`). */
 export interface WorklistEntry {
@@ -89,8 +91,9 @@ export interface WorklistEntry {
    *  leaves the roster). */
   heroName: string;
   charId: number;
-  /** Solve mode the build came from — labels the card. */
-  mode: SolveMode;
+  /** Solve mode the build came from — labels the card. "preset" = queued from
+   *  the Presets tab (an in-game preset's outfit, no solve). */
+  mode: WorklistMode;
   /** Build CP + slot-change count (pieces only), snapshotted for the header. */
   cp: number | null;
   upg: number;
