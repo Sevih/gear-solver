@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -100,6 +100,31 @@ describe("/api/capture/status — mtimes of every imported snapshot", () => {
         userItemMtime: 1_000_000,
         mtimes: { user_item: 1_000_000, user_character: 2_000_000, user_gift: 3_000_000, user_archive: null },
       });
+    });
+  });
+
+  it("folds the plugin's equip journal into user_item.json first, once", async () => {
+    const cfg = devConfig();
+    const out = cfg.captureOut;
+    const file = join(out, "user_item.json");
+    writeFileSync(file, JSON.stringify({ ItemList: [{ ItemUID: "6124885095", CharUID: "0" }, { ItemUID: "6036468941", CharUID: "6012124257" }] }));
+    utimesSync(file, 1_000, 1_000);
+    writeFileSync(join(out, "equip-events.ndjson"), JSON.stringify({
+      seq: 1, at: "2026-10-22T08:00:00.0000000Z", path: "/item/equip",
+      res: { CharUID: "6012124257", ToEquipUID: "6124885095", ToInvenUID: "6036468941", UnEquipCharUID: "0" },
+    }) + "\n");
+    const handle = createApiHandler(cfg);
+    await withServer((req, res) => { handle(req, res); }, async (call) => {
+      const first = JSON.parse((await call("/api/capture/status")).body) as { userItemMtime: number };
+      expect(first.userItemMtime).not.toBe(1_000_000);
+      expect(statSync(file).mtimeMs).toBe(first.userItemMtime);
+      expect((JSON.parse(readFileSync(file, "utf-8")) as { ItemList: unknown[] }).ItemList).toEqual([
+        { ItemUID: "6124885095", CharUID: "6012124257" },
+        { ItemUID: "6036468941", CharUID: "0" },
+      ]);
+      // No new event: nothing rewritten.
+      const second = JSON.parse((await call("/api/capture/status")).body) as { userItemMtime: number };
+      expect(second.userItemMtime).toBe(first.userItemMtime);
     });
   });
 });

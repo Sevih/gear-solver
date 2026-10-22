@@ -10,6 +10,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace GearSolverCapture
 {
@@ -34,16 +35,17 @@ namespace GearSolverCapture
     ///
     /// Output mirrors tools/capture/addon.py: <c>user_item.json</c>,
     /// <c>user_character.json</c>, … plus a <c>.captured</c> sentinel once the
-    /// inventory landed, unknown endpoints under <c>_unknown/</c>, and a
-    /// <c>.steam-plugin.json</c> heartbeat the desktop app reads to show
-    /// "plugin live".
+    /// inventory landed, an <c>equip-events.ndjson</c> journal of the gear moves
+    /// made in-game since the last <c>/user/item</c>, unknown endpoints under
+    /// <c>_unknown/</c>, and a <c>.steam-plugin.json</c> heartbeat the desktop
+    /// app reads to show "plugin live".
     /// </summary>
     [BepInPlugin(Id, Name, Version)]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string Id = "outerpedia.gearsolver.capture";
         public const string Name = "Gear Solver Capture";
-        public const string Version = "0.1.0";
+        public const string Version = "0.2.0";
 
         internal static ManualLogSource Log;
 
@@ -172,6 +174,19 @@ namespace GearSolverCapture
             { "/gift/info", "user_gift" },
         };
 
+        /// <summary>Gear moves made in-game. The game only sends <c>/user/item</c>
+        /// at the lobby; these two responses say which piece left or joined which
+        /// hero, so they're appended to <c>equip-events.ndjson</c> (one line per
+        /// response) and the desktop app folds them into <c>user_item.json</c>.
+        /// Truncated whenever a full <c>/user/item</c> lands (the snapshot is the
+        /// truth again).</summary>
+        private static readonly HashSet<string> Journal = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "/item/equip",
+            "/item/equipAll",
+        };
+        private const string JournalFile = "equip-events.ndjson";
+
         /// <summary>Login / heartbeat noise never worth keeping.</summary>
         private static readonly string[] IgnorePrefixes = { "/account/", "/server/" };
 
@@ -184,6 +199,9 @@ namespace GearSolverCapture
         private static int _captures;
         private static string _lastPath;
         private static string _lastAt;
+        /// <summary>Journal line number, monotone for the life of the game
+        /// process (writer thread only).</summary>
+        private static long _seq;
 
         public static string ResolveOutDir(string configured)
         {
@@ -222,6 +240,24 @@ namespace GearSolverCapture
             if (path[0] != '/') path = "/" + path;
             var q = path.IndexOf('?');
             if (q >= 0) path = path.Substring(0, q);
+
+            if (Journal.Contains(path))
+            {
+                var jp = path;
+                Writes.Add(() =>
+                {
+                    try
+                    {
+                        NoteSeen(jp);
+                        AppendJournal(jp, json);
+                    }
+                    catch (Exception e)
+                    {
+                        Plugin.Log.LogError($"journal {jp}: {e.Message}");
+                    }
+                });
+                return;
+            }
 
             string name;
             if (!Want.TryGetValue(path, out name))
@@ -279,6 +315,8 @@ namespace GearSolverCapture
         private static void WriteKnown(string name, string json, string path)
         {
             var file = Path.Combine(_dir, name + ".json");
+            // A full inventory supersedes every move journaled before it.
+            if (name == "user_item") TruncateJournal();
             AtomicWrite(file, json);
             if (name == "user_item") File.WriteAllText(Path.Combine(_dir, ".captured"), DateTime.UtcNow.ToString("o"));
             _captures++;
@@ -286,6 +324,32 @@ namespace GearSolverCapture
             _lastAt = DateTime.UtcNow.ToString("o");
             WriteHeartbeat();
             Plugin.Log.LogInfo($"{path} → {name}.json ({json.Length:N0} chars)");
+        }
+
+        /// <summary>One NDJSON line: <c>{"seq":n,"at":ISO,"path":…,"res":&lt;response&gt;}</c>.
+        /// The response is embedded as is (it's already JSON); re-serialized only
+        /// if it spans several lines, which would break the one-line framing.</summary>
+        private static void AppendJournal(string path, string json)
+        {
+            if (json.IndexOf('\n') >= 0 || json.IndexOf('\r') >= 0) json = JToken.Parse(json).ToString(Formatting.None);
+            var sb = new StringBuilder(json.Length + 96);
+            sb.Append("{\"seq\":").Append(++_seq)
+              .Append(",\"at\":\"").Append(DateTime.UtcNow.ToString("o"))
+              .Append("\",\"path\":").Append(JsonConvert.ToString(path))
+              .Append(",\"res\":").Append(json)
+              .Append("}\n");
+            File.AppendAllText(Path.Combine(_dir, JournalFile), sb.ToString(), new UTF8Encoding(false));
+            _captures++;
+            _lastPath = path;
+            _lastAt = DateTime.UtcNow.ToString("o");
+            WriteHeartbeat();
+            Plugin.Log.LogInfo($"{path} → {JournalFile} #{_seq}");
+        }
+
+        private static void TruncateJournal()
+        {
+            var file = Path.Combine(_dir, JournalFile);
+            if (File.Exists(file)) File.WriteAllText(file, "");
         }
 
         private static void WriteUnknown(string path, string json)

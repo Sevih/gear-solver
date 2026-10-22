@@ -26,6 +26,12 @@ au moment où le jeu les a déchiffrées :
   `CWebManager.Log2InternalWeb` (JSON clair + path), fallback `DecryptMsg` par forme.
 - Sortie : `<dossier de capture>/{user_item,user_character,…}.json` (`.cache/capture-out` en dev,
   `<userData>/capture-out` packagé). L'import manuel lit les mêmes fichiers.
+- Déplacements de pièces faits en jeu (plugin 0.2.0) : le jeu ne renvoie `/user/item` qu'au lobby,
+  mais chaque déplacement répond `/item/equip` ou `/item/equipAll` ; le plugin les ajoute à
+  `equip-events.ndjson` (une ligne `{ seq, at, path, res }` par réponse, vidé à chaque `/user/item`),
+  et l'app les plie dans `user_item.json` à chaque `GET /api/capture/status` (sondé toutes les 5 s)
+  — `foldEquipEvents` d'[equip-events.ts](../apps/desktop/src/equip-events.ts), par uid seulement ;
+  ce qu'elle a déjà plié est noté dans `.equip-events.applied`.
 
 Fichiers : [Plugin.cs](../tools/capture-steam/src/Plugin.cs),
 [steam-capture.ts](../apps/desktop/src/steam-capture.ts) (install + statut côté app).
@@ -182,7 +188,8 @@ d'une pièce est `RawItem.CharUID` (`"0"` = libre, même convention qu'au parse)
 
 Persistance : le **renderer** applique le transform (il a core + la game data chargée), puis POST
 le snapshot complet à `POST /api/captured/user-item` (writer bête : valide `{ ItemList[] }` +
-`writeFileSync` du `user_item.json` capturé, refus 409 si le plugin Steam est actif dans le jeu). Client :
+`writeFileSync` du `user_item.json` capturé, refus 409 si le plugin Steam est actif dans le jeu : l'app
+suit alors seule les déplacements faits en jeu, cf. §1.1). Client :
 [apps/renderer/src/equip.ts](../apps/renderer/src/equip.ts) (`equipPieces` pour l'« Equip build » du
 Builder et l'Apply locally de la Worklist, `equipAssignments` pour son Apply all).
 

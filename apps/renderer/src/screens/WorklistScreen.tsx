@@ -239,7 +239,7 @@ function WorklistCard({
     if (uids.length === 0) return;
     setApplying(true);
     setApplyError(null);
-    const ok = await equipPieces(game, uids, entry.heroUid);
+    const ok = (await equipPieces(game, uids, entry.heroUid)) === "ok";
     if (ok) onAfterApply();
     if (!mounted.current) return;
     setApplying(false);

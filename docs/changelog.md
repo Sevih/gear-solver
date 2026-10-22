@@ -8,6 +8,92 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔄 Le snapshot suit les déplacements de pièces faits en jeu (journal `item/equip` du plugin 0.2.0, plié par le desktop), sans repasser par le lobby (2026-10-22)
+- ✅ **Pourquoi.** Le jeu n'envoie `/user/item` qu'au lobby : une pièce déplacée dans l'écran du héros n'atteignait le
+  snapshot qu'au retour au lobby, et l'Equip local était refusé (409) tant que le jeu tournait. Or chaque déplacement
+  répond `/item/equip` (`CWebRES_ItemEquip` : `CharUID`, `UnEquipCharUID`, `ToEquipUID`, `ToInvenUID`) ou
+  `/item/equipAll` (`CWebRES_ItemEquipAll` : `CharUID`, `ToEquipList`, `ToInvenList`, `UnEquipList` de
+  `{ CharUID, ItemUID }`), que le hook `Log2InternalWeb` voyait déjà mais rangeait dans `_unknown/`.
+- ✅ **Plugin** (`tools/capture-steam/src/Plugin.cs`, `Version` et `<Version>` du `.csproj` 0.1.0 → 0.2.0). Table
+  `Journal` (`/item/equip`, `/item/equipAll`) à côté de `Want`, testée avant elle dans `Capture` (donc `KeepUnknown` ne
+  s'applique plus à ces deux chemins) : `AppendJournal`, sur le thread d'écriture unique, ajoute à
+  `equip-events.ndjson` une ligne `{"seq":n,"at":ISO UTC,"path":…,"res":<réponse telle quelle>}` (`seq` monotone
+  depuis le démarrage du jeu ; la réponse n'est re-sérialisée via `JToken` que si elle contenait un retour à la ligne),
+  puis heartbeat et log comme une capture. `WriteKnown("user_item")` tronque le journal AVANT d'écrire le snapshot
+  (`TruncateJournal`), y compris par le fallback de forme ; ce fallback n'a pas de chemin, il ne journalise donc pas
+  (sans hook primaire, les déplacements attendent toujours le lobby — dit dans le README). `npm run
+  capture-steam:build` : « La génération a réussi. 0 Avertissement(s) 0 Erreur(s) », `dist/GearSolverCapture.dll` =
+  16 384 octets (la chaîne `0.2.0` et `equip-events.ndjson` y sont).
+- ✅ **Desktop** (`apps/desktop/src/equip-events.ts`, nouveau). `foldEquipEvents(raw, events) → { next, applied,
+  skipped }`, pur : par uid seulement (`item/equip` : `ToInvenUID` ≠ 0 → `"0"`, puis `ToEquipUID` ≠ 0 →
+  `String(CharUID)`, le vol à un autre perso est couvert puisque la pièce volée EST `ToEquipUID` ; `item/equipAll` :
+  `UnEquipList[].ItemUID` puis `ToInvenList[]` → `"0"`, puis `ToEquipList[]` → `CharUID`, l'ordre de
+  `CItemInventory.UpdateEquipItems`) ; `applied` = pièces dont le propriétaire a réellement changé, `skipped` = uid
+  absent du snapshot (pièce obtenue après lui, jamais inventée) ou illisible, jamais une erreur ; autres clés
+  copiées, entrée intacte. **Uids** : vérifiés sur la vraie capture (`user_item` du 07/09, 1 279 entrées, uids en
+  strings, max 6 134 942 991 ≪ 2^53 ; les vraies réponses `item_equip`/`item_equipAll` de `_unknown/` portent aussi
+  des strings, ex. `"ToEquipUID":"6124885095"`) : le JSON du jeu est déjà en texte, `JSON.parse` ne perd rien ; un
+  nombre n'est accepté que s'il est un entier sûr (sinon `skipped`), et le snapshot fait un aller-retour
+  `JSON.parse`/`stringify` octet pour octet. `parseEquipJournal` ne lit que les lignes complètes (le plugin peut être
+  en plein append) et écarte les lignes illisibles. `createEquipJournalFollower(captureOut)` : `sync()` branché en tête
+  de `captureStatus` dans `createApiHandler` (le tic de 5 s du renderer, prod comme middleware Vite), erreurs en
+  `dwarn` ; `dlog("capture", …)` donne la plage de `seq`, le compte plié et le compte sauté.
+- ✅ **Règle de troncature — écart assumé avec la lettre du lot.** « premier `seq` du fichier ≤ dernier appliqué →
+  repartir de zéro » est vrai à CHAQUE tic dans une session normale (fichier `1..n`, dernier appliqué `k ≥ 1`), et une
+  troncature au lobby continue la numérotation (`n+1…`) sans jamais repasser sous `k` ; à l'inverse un redémarrage du
+  jeu repart à `seq` 1 et serait ignoré. Ce qui rend le problème simple : chaque événement pose des propriétaires
+  ABSOLUS, donc rejouer TOUT le journal sur un snapshot qui en contient déjà une partie donne le même état (testé).
+  Le suiveur note donc dans `.equip-events.applied` (et en mémoire) `{ first, last, mtime }` — premier et dernier `seq`
+  du journal plié et mtime du `user_item.json` qu'il a laissé — et rejoue tout le journal dès que l'un des trois
+  change : nouvelle ligne, journal tronqué ou nouvelle session (premier `seq` différent), snapshot remplacé dessous
+  (un `/user/item`, même si le tic a raté le journal vide). Journal vide → repère remis à zéro, rien d'écrit. Le
+  journal est lu AVANT le snapshot (le plugin tronque avant de réécrire). `writeAtomic` seulement si `applied > 0`,
+  donc un second GET sans nouvel événement n'écrit rien. Le `POST /api/captured/user-item` (jeu fermé) appelle
+  `noteSnapshotWritten()` après écriture, pour que l'édition locale ne soit pas recouverte par un rejeu du vieux
+  journal.
+- ✅ **409 et popup.** Le refus du POST quand le plugin est live dit maintenant « The game is open: the app now
+  follows in-game moves by itself; close it to apply a local-only edit » (le 409 du wipe garde le sien).
+  `apps/renderer/src/equip.ts` : `EquipOutcome = "ok" | "no-snapshot" | "game-open" | "failed"`, `writeUserItem`
+  distingue le 409, `equipPieces` rend la raison ; `equipAssignments` reste booléen (`=== "ok"`). `BuilderScreen.tsx`
+  relaie l'issue, `EquipBuildButton.tsx` affiche un texte par raison (`FAILURE` : le 409 reprend le message serveur,
+  `no-snapshot` = « Couldn't read the captured snapshot. Capture again (reach the lobby) or re-import it, then retry. »).
+  `WorklistScreen.tsx` : seulement `=== "ok"` sur l'appel à `equipPieces`.
+- ✅ **Worklist vérifiée, non touchée.** « applied » se dérive bien de l'inventaire courant (`changeState` →
+  `equippedOnHero`, cf. en-tête de `lib/storage/worklist.ts` : `done` n'est que la coche manuelle cosmétique) : la
+  mtime de `user_item.json` bouge, `snapshotFollower` réimporte, la ligne passe « applied » d'elle-même.
+- ✅ **Docs.** `tools/capture-steam/README.md` (paragraphe journal sous les hooks, deux lignes `equip-events.ndjson` /
+  `.equip-events.applied` dans Output, `KeepUnknown` hors chemins journalisés), `docs/reference.md` §1.1 + §1.7 et
+  leur miroir `wiki/Engine-Reference.md`, `wiki/Capture-Pipeline.md` (table Output), `wiki/FAQ.md` (« only edit the
+  local snapshot » : jeu fermé ; jeu ouvert, l'app suit seule), `docs/release-notes.md › [Unreleased]` (puce joueur ;
+  le chemin réel est Settings › Setup › **Update plugin**, il n'y a pas d'onglet « Steam »), `docs/todo.md` (item
+  Equip / Unequip).
+- ✅ **Tests.** `apps/desktop/test/equip-events.test.ts` (15) : pose simple, échange, retrait, vol (`UnEquipCharUID`),
+  `equipAll` aux trois listes, uid inconnu → `skipped`, id numérique sûr/non sûr, idempotence, clés gardées et entrée
+  intacte, lignes déchirées/illisibles ; suiveur : plie une fois puis reste inerte, survit à un redémarrage de l'app,
+  troncature → repart de zéro, nouvelle session à `seq` 1, pas de rejeu sur l'écriture de l'app.
+  `api-handler.test.ts` : un `GET /api/capture/status` avec un journal réécrit `user_item.json` (mtime rendue = mtime
+  du fichier, contenu plié), un second GET ne bouge rien ; `server-writeback.test.ts` : le 409 porte le nouveau
+  message. `npm run typecheck` → `> tsc --noEmit` (dernière ligne, renderer), sortie 0 ; `npm test` → core « Tests
+  166 passed (166) », desktop « Tests 175 passed (175) », renderer « Tests 586 passed (586) » ; `npm run lint` →
+  « ✖ 15 problems (0 errors, 15 warnings) », inchangé.
+- ✅ **Installeur sans publication.** `npm run build` (core + renderer), plus `npm run build -w @gear-solver/desktop`
+  (le `build` racine ne compile pas le desktop) et la DLL 0.2.0 recopiée à la main dans
+  `apps/desktop/resources/capture-steam/` (ce que fait `fetch-binaries.mjs`, qui appelle `dotnet.exe` et ne tourne pas
+  sous Linux ; la DLL qui y dormait datait du 05/09, 14 848 octets). `npm run dist -w @gear-solver/desktop` seul
+  viserait Linux : lancé avec `-- --win --publish never '-c.artifactName=${productName} Setup ${version}-g37.${ext}'`
+  pour ne pas écraser l'exe 1.12.0 publié → `apps/desktop/release/Outerpedia Gear Solver Setup 1.12.0-g37.exe`,
+  105 698 097 octets (`win-unpacked` contient la DLL de 16 384 octets et `dist/equip-events.js`) ; `latest.yml` et
+  `builder-debug.yml` remis comme après la release 1.12.0. Non copié ailleurs.
+- ⏳ **Sevih, sur le fixe** : installer `Outerpedia Gear Solver Setup 1.12.0-g37.exe` par-dessus la 1.12.0 ; jeu
+  fermé, Settings › Setup › **Update plugin** (le statut doit lire « plugin 0.2.0 live » une fois le jeu lancé) ;
+  lancer le jeu, atteindre le lobby, déplacer une pièce : dans les 5 s l'app la montre sur le nouveau perso et la
+  ligne Worklist correspondante passe « applied » ; `equip-events.ndjson` grandit à chaque déplacement et se vide au
+  retour au lobby. À essayer aussi : un « équiper tout » (`equipAll`) et un vol de pièce à un autre perso.
+- ⏳ **Hors périmètre, repéré** : le message d'échec de la Worklist (« Apply failed — close the game while the Steam
+  plugin is live, then retry. ») ne dit pas encore que le jeu ouvert suffit ; `fetch-binaries.mjs` n'a pas de chemin
+  Linux (`dotnet.exe` en dur) ; la release suivante devra passer le plugin dans le même mouvement (sinon l'app suit
+  mais le plugin 0.1.0 installé ne journalise rien).
+
 ### ⚔️ Colonnes par tour (DmgS / McdS) sur la rotation par cooldowns du contrat, le meilleur hit reste pour Dmg / Mcd (2026-10-22)
 - ✅ **Pourquoi.** `dmgs`/`mcds` = dégât × SPD, « par tour », multipliaient le hit du MEILLEUR skill comme si le perso
   le relançait à chaque tour ; les tables synchronisées au commit `60963bb` (hash `1f7fe7bd57b6`, format 2) portent

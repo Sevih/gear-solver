@@ -12,7 +12,11 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **The app now follows the gear you move in-game, live — no need to go back to the lobby.**
+  Equip, swap or take off a piece in the hero screen and, within a few seconds, the inventory
+  shows it on its new hero and the matching Worklist line turns **applied**. Needs the updated
+  capture plugin: Settings › Setup › **Update plugin** with the game closed (it then shows
+  "plugin 0.2.0 live" while the game runs).
 
 ## [1.12.0] — 2026-10-22
 

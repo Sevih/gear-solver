@@ -53,8 +53,9 @@
       principe du module exclut ce qui demande de deviner l'intention).
 
 ### Persistence
-- [~] **Equip / Unequip** — Builder « Equip build » et Worklist livrés. **Reste (optionnel)** : un déclencheur côté
-      **Builds** (unequip / assignation par slot).
+- [~] **Equip / Unequip** — Builder « Equip build » et Worklist livrés ; les déplacements faits en jeu suivis en direct
+      (journal `item/equip` du plugin 0.2.0, G37). **Reste** : valider G37 en jeu sur le fixe ; (optionnel) un
+      déclencheur côté **Builds** (unequip / assignation par slot).
 
 ### Externe — vérifs sur la version installée
 - [~] 🟢 **Capture no-root** — livrée par la source Steam (plugin BepInEx, validé en jeu le 2026-09-05). **Reste** :

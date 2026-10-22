@@ -32,7 +32,16 @@ Two Harmony **postfixes**, both read-only (`src/Plugin.cs`):
 Both targets are resolved **by name at runtime** (`AccessTools.TypeByName`, no reference to
 `Assembly-CSharp.dll`), so a game update that renames them logs an error instead of crashing
 the plugin. Every hook body is wrapped in try/catch: a plugin bug can never bubble into the
-game's network callback. The hooks only enqueue; disk writes happen on one background writer
+game's network callback.
+
+Gear moved **in-game** never re-sends `/user/item` (only the lobby does), but each move comes back
+through the same primary hook as `/item/equip` (one piece: `CharUID`, `ToEquipUID`, `ToInvenUID`,
+`UnEquipCharUID`) or `/item/equipAll` (`CharUID`, `ToEquipList`, `ToInvenList`, `UnEquipList`).
+Since 0.2.0 the plugin appends those two to a journal, `equip-events.ndjson`, and the app folds it
+into `user_item.json` on its 5 s status poll (`apps/desktop/src/equip-events.ts`): the inventory
+follows the moves live, no lobby needed. A new `/user/item` truncates the journal before its
+snapshot is written (the snapshot is the truth again). The shape fallback has no path, so it
+can't journal: with only the fallback active, moves still wait for the lobby. The hooks only enqueue; disk writes happen on one background writer
 thread (a 5 MB inventory would otherwise hitch a frame), in arrival order (two close
 `/user/item` responses can't swap), atomically (`.tmp` + replace) so the app never reads a
 half file.
@@ -43,8 +52,10 @@ half file.
 |------|--------|-------|
 | `user_item.json`, `user_character.json`, `user_asset.json`, `user_info.json`, `user_lobby.json`, `user_etc.json`, `item_customInfo.json`, `user_archive.json`, `user_gift.json` | `/user/item`, `/user/character`, … `/archive/info`, `/gift/info` | Rewritten on every fetch (lobby load, screen open). |
 | `.captured` | after `/user/item` | Sentinel the app's status endpoint reports. |
+| `equip-events.ndjson` | `/item/equip`, `/item/equipAll` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start. Emptied whenever `/user/item` lands. |
+| `.equip-events.applied` | written by the **app** | What the app already folded (`first`/`last` seq + the snapshot mtime it left), so a restart doesn't rewrite the snapshot for nothing. |
 | `.steam-plugin.json` | plugin start + every capture | Heartbeat: `{version, pid, startedAt, pathHook, captures, lastPath, lastCaptureAt, outDir}`. The app matches `pid` against the running `OUTERPLANE.exe` to show **Live**. |
-| `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | `KeepUnknown` config; `/account/*` and `/server/*` are ignored. |
+| `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | `KeepUnknown` config (not for the two journaled paths); `/account/*` and `/server/*` are ignored. |
 
 ## Install (what the app does on "Install plugin")
 

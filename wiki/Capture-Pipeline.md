@@ -44,6 +44,8 @@ or geas level gained without a new inventory is picked up too).
 |------|--------|-------|
 | `user_item.json`, `user_character.json`, `user_asset.json`, `user_info.json`, `user_lobby.json`, `user_etc.json`, `item_customInfo.json`, `user_archive.json`, `user_gift.json` | `/user/item`, `/user/character`, … `/archive/info`, `/gift/info` | Rewritten on every fetch (lobby load, screen open). |
 | `.captured` | after `/user/item` | Sentinel the app's status endpoint reports. |
+| `equip-events.ndjson` | `/item/equip`, `/item/equipAll` | Gear moved in-game, one line per move (plugin 0.2.0+); the app folds it into `user_item.json` within 5 s, no lobby needed. Emptied on every `/user/item`. |
+| `.equip-events.applied` | written by the app | What the app already folded from the journal. |
 | `.steam-plugin.json` | plugin start + every capture | Heartbeat the app reads to show **Live**. |
 | `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | Discovery of new game endpoints. |
 

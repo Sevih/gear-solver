@@ -32,13 +32,13 @@ async function setup() {
 beforeEach(() => { steam.live = false; });
 
 describe("POST /api/captured/user-item vs the Steam source", () => {
-  it("is refused while the Steam plugin is live (the next lobby would overwrite it)", async () => {
+  it("is refused while the Steam plugin is live (the next lobby would overwrite it), and says in-game moves are followed", async () => {
     const { handle, file } = await setup();
     steam.live = true;
     await withServer(handle, async (call) => {
       const r = await call("/api/captured/user-item", { method: "POST", body: EDITED });
       expect(r.status).toBe(409);
-      expect(JSON.parse(r.body).error).toMatch(/steam/i);
+      expect(JSON.parse(r.body).error).toBe("The game is open: the app now follows in-game moves by itself; close it to apply a local-only edit");
     });
     expect(readFileSync(file, "utf-8")).toBe(ORIGINAL);
   });

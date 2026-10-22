@@ -35,6 +35,7 @@ import { syncGameData } from "./data-sync.js";
 import { getStartupSyncState } from "./startup.js";
 import { serveImg, type ImgCacheOptions } from "./img-cache.js";
 import { resolveInside } from "./safe-path.js";
+import { createEquipJournalFollower } from "./equip-events.js";
 
 export interface ApiConfig {
   /** Captured account JSON + the Steam plugin heartbeat. */
@@ -205,12 +206,17 @@ const IMPORTED_SNAPSHOTS = ["user_item", "user_character", "user_gift", "user_ar
  *  renderer's own files), so the caller can fall through. */
 export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: ServerResponse) => boolean {
   const { captureOut } = cfg;
+  const equipJournal = createEquipJournalFollower(captureOut);
 
   /** GET /api/capture/status — whether a snapshot exists, and the mtime of
    *  every file the renderer's import reads (the Steam follower re-imports
    *  when any of them changes: a hero or geas level can land without a new
-   *  inventory). `userItemMtime` stays for the Home "last capture" line. */
+   *  inventory). `userItemMtime` stays for the Home "last capture" line.
+   *  The renderer polls it every 5 s, so it first folds the gear moves the
+   *  plugin journaled in-game into `user_item.json` (equip-events.ts): the
+   *  mtime moves and the follower re-imports, no lobby needed. */
   function captureStatus(res: ServerResponse): void {
+    try { equipJournal.sync(); } catch (err) { dwarn("capture", "equip journal fold failed:", (err as Error).message); }
     const sentinel = join(captureOut, ".captured");
     const mtimes: Record<string, number | null> = {};
     for (const name of IMPORTED_SNAPSHOTS) {
@@ -391,7 +397,8 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
     // server just validates + writes it (it has no game data to resolve slots).
     // Refused while the Steam plugin is loaded in a running game, so its next
     // /user/item snapshot (it rewrites user_item.json at the next lobby) can't
-    // clobber the edit.
+    // clobber the edit — moves made in-game reach the snapshot through the
+    // equip journal instead.
     if (url === "/api/captured/user-item" && req.method === "POST") {
       res.setHeader("Content-Type", "application/json");
       // The plugin probe is async (tasklist): start it now, decide once the body is in.
@@ -400,13 +407,14 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       readBody(req, res, 32_000_000, (body) => void live.then((isLive) => {
         if (isLive) {
           res.statusCode = 409;
-          res.end(JSON.stringify({ error: "Steam capture plugin live — close the game first" }));
+          res.end(JSON.stringify({ error: "The game is open: the app now follows in-game moves by itself; close it to apply a local-only edit" }));
           return;
         }
         try {
           const parsed = JSON.parse(body) as { ItemList?: unknown };
           if (!Array.isArray(parsed.ItemList)) throw new Error("missing ItemList[]");
           writeAtomic(join(captureOut, "user_item.json"), body);
+          equipJournal.noteSnapshotWritten();
           dlog("capture", `user_item.json rewritten (${parsed.ItemList.length} items)`);
           res.statusCode = 204;
           res.end();

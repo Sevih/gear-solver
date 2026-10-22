@@ -27,7 +27,7 @@ import {
 } from "../../lib/solver/builderFilters.js";
 import { talismanFamilyKeys, translateRecoBuild, type StructuredCharacterReco, type StructuredRecoBuild } from "../../lib/reco/translateReco.js";
 import { fetchRecoForHero } from "../../lib/reco/fetchReco.js";
-import { equipPieces } from "../../equip.js";
+import { equipPieces, type EquipOutcome } from "../../equip.js";
 import type { WorklistChange, WorklistEntry } from "../../lib/storage/worklist.js";
 import { loadHeroFilters, persistHeroFilters, cloneFilters, filtersForHero, snapshotOnHeroSwitch, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
 import { usePersistedState } from "../../hooks/usePersistedState.js";
@@ -260,13 +260,13 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     return { uids: buildDiff.map((d) => d.proposed.uid), moving, steal };
   }, [buildDiff]);
 
-  // Returns false on a network error or a 409 (Steam plugin live) so the
-  // button can flag it; on success App re-imports the rewritten snapshot.
-  async function equipSelectedBuild(): Promise<boolean> {
-    if (!game || !selectedUid || equipPlan.uids.length === 0) return false;
-    const ok = await equipPieces(game, equipPlan.uids, selectedUid);
-    if (ok) onAfterEquip?.();
-    return ok;
+  // Returns why it failed (unreadable snapshot, 409 while the game is open, …)
+  // so the button can say it; on success App re-imports the rewritten snapshot.
+  async function equipSelectedBuild(): Promise<EquipOutcome> {
+    if (!game || !selectedUid || equipPlan.uids.length === 0) return "failed";
+    const outcome = await equipPieces(game, equipPlan.uids, selectedUid);
+    if (outcome === "ok") onAfterEquip?.();
+    return outcome;
   }
 
   // When a solve yields no builds, an empty per-slot pool is almost always

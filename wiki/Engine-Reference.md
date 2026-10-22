@@ -28,6 +28,13 @@ once the game has decrypted them:
   `CWebManager.Log2InternalWeb` (clear JSON + path), shape-based `DecryptMsg` fallback.
 - Output: `<capture folder>/{user_item,user_character,…}.json` (`.cache/capture-out` in dev,
   `<userData>/capture-out` packaged). The manual import reads the same files.
+- Gear moved in-game (plugin 0.2.0): the game only re-sends `/user/item` at the lobby, but every
+  move answers `/item/equip` or `/item/equipAll`; the plugin appends those to
+  `equip-events.ndjson` (one `{ seq, at, path, res }` line per response, emptied on every
+  `/user/item`), and the app folds them into `user_item.json` on every `GET /api/capture/status`
+  (polled every 5 s) — `foldEquipEvents` in
+  [equip-events.ts](https://github.com/Sevih/gear-solver/blob/main/apps/desktop/src/equip-events.ts),
+  by uid only; what it already folded is noted in `.equip-events.applied`.
 
 Files: [Plugin.cs](https://github.com/Sevih/gear-solver/blob/main/tools/capture-steam/src/Plugin.cs),
 [steam-capture.ts](https://github.com/Sevih/gear-solver/blob/main/apps/desktop/src/steam-capture.ts) (app-side install + status).
@@ -188,7 +195,8 @@ A piece's owner is `RawItem.CharUID` (`"0"` = free, same convention as the parse
 Persistence: the **renderer** runs the transform (it already holds core + the loaded game data
 for the slot lookup), then POSTs the full rewritten snapshot to `POST /api/captured/user-item`
 (a dumb writer: validates `{ ItemList[] }` + `writeFileSync`s the captured `user_item.json`, refuses
-with 409 while the Steam plugin is live in a running game). Client: `apps/renderer/src/equip.ts`
+with 409 while the Steam plugin is live in a running game: the app then follows in-game moves by
+itself, see §1.1). Client: `apps/renderer/src/equip.ts`
 (`equipPieces` for the Builder's "Equip build" and the Worklist's Apply locally, `equipAssignments`
 for its Apply all).
 

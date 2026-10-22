@@ -26,18 +26,22 @@ async function fetchRawUserItem(): Promise<RawUserItem | null> {
   }
 }
 
-/** Persist a rewritten snapshot. Returns false on a network error or a server
- *  refusal (e.g. 409 while the Steam plugin is live in a running game). */
-async function writeUserItem(raw: RawUserItem): Promise<boolean> {
+/** How an equip ended: written, no readable snapshot to edit, refused because
+ *  the game is open (409 — the plugin owns the snapshot then, and in-game moves
+ *  reach it by themselves), or any other write failure. */
+export type EquipOutcome = "ok" | "no-snapshot" | "game-open" | "failed";
+
+/** Persist a rewritten snapshot. */
+async function writeUserItem(raw: RawUserItem): Promise<EquipOutcome> {
   try {
     const r = await fetch("/api/captured/user-item", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(raw),
     });
-    return r.ok;
+    return r.ok ? "ok" : r.status === 409 ? "game-open" : "failed";
   } catch {
-    return false;
+    return "failed";
   }
 }
 
@@ -46,10 +50,11 @@ async function writeUserItem(raw: RawUserItem): Promise<boolean> {
  *  Used by the Builder's "Equip build" to apply a whole solved build. Pieces
  *  currently on another hero are moved (stolen); same-slot duplicates within the
  *  list resolve in order. Empty/unknown uids are skipped (no-op clones).
- *  Returns true once persisted; the caller should re-import the inventory. */
-export async function equipPieces(game: GameData, itemUids: string[], charUid: string): Promise<boolean> {
+ *  Returns "ok" once persisted (the caller should re-import the inventory),
+ *  else why not. */
+export async function equipPieces(game: GameData, itemUids: string[], charUid: string): Promise<EquipOutcome> {
   const raw = await fetchRawUserItem();
-  if (!raw) return false;
+  if (!raw) return "no-snapshot";
   let next = raw;
   for (const uid of itemUids) if (uid) next = equipItem(next, game, uid, charUid);
   return writeUserItem(next);
@@ -74,5 +79,5 @@ export async function equipAssignments(
   if (!raw) return false;
   let next = raw;
   for (const m of moves) if (m.uid) next = equipItem(next, game, m.uid, m.heroUid);
-  return writeUserItem(next);
+  return (await writeUserItem(next)) === "ok";
 }
