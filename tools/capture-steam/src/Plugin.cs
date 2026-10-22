@@ -36,7 +36,7 @@ namespace GearSolverCapture
     /// Output mirrors tools/capture/addon.py: <c>user_item.json</c>,
     /// <c>user_character.json</c>, … plus a <c>.captured</c> sentinel once the
     /// inventory landed, an <c>equip-events.ndjson</c> journal of the gear moves,
-    /// gem and substat changes made in-game since the last <c>/user/item</c>,
+    /// gem, substat and upgrade changes made in-game since the last <c>/user/item</c>,
     /// unknown endpoints under
     /// <c>_unknown/</c>, and a <c>.steam-plugin.json</c> heartbeat the desktop
     /// app reads to show "plugin live".
@@ -46,7 +46,7 @@ namespace GearSolverCapture
     {
         public const string Id = "outerpedia.gearsolver.capture";
         public const string Name = "Gear Solver Capture";
-        public const string Version = "0.3.0";
+        public const string Version = "0.4.0";
 
         internal static ManualLogSource Log;
 
@@ -178,7 +178,9 @@ namespace GearSolverCapture
         /// <summary>Gear changes made in-game. The game only sends <c>/user/item</c>
         /// at the lobby; the equip responses say which piece left or joined which
         /// hero, the gem / substat ones carry the whole updated item (and the gem
-        /// item, for a removal or a reroll). They're appended to
+        /// item, for a removal or a reroll), the upgrade ones (enhance, reset,
+        /// limit break, smelting, merge, craft, dissolve) the improved or created
+        /// items and the new count of the stacks they consume. They're appended to
         /// <c>equip-events.ndjson</c> (one line per response) and the desktop app
         /// folds them into <c>user_item.json</c>. Truncated whenever a full
         /// <c>/user/item</c> lands (the snapshot is the truth again).</summary>
@@ -190,6 +192,14 @@ namespace GearSolverCapture
             "/item/gemRemove",
             "/item/gemChangeOption",
             "/item/subOptionChange",
+            "/item/enchant",
+            "/item/enchantReset",
+            "/item/breakLimit",
+            "/item/smelting",
+            "/item/smeltingReset",
+            "/item/merge",
+            "/item/craft",
+            "/item/dissolve",
         };
         private const string JournalFile = "equip-events.ndjson";
 

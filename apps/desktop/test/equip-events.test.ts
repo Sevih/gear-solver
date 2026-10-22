@@ -110,10 +110,17 @@ describe("foldEquipEvents", () => {
   });
 });
 
+const subs = (...ids: number[]) => ids.map((OptionID) => ({ OptionID, Level: 0, BaseLevel: 0 }));
+// `WSItemData` as the wire spells it (cf. other responses carrying it):
+// ItemUID a string, CharUID 0 a number, IsLock a number; no InvenType here.
+const wire = (ItemUID: string, CharUID: string | number, ItemID: number, sub: number[], extra: Record<string, unknown> = {}) =>
+  ({ ItemUID, CharUID, ItemID, Exp: 0, BreakLimitLevel: 0, Quantity: 1, SmeltingCount: 0, IsLock: 0, OptionList: [0, 0], SubOptionList: subs(...sub), SelectSubOptionNum: 99, SingularityStep: 0, SingularityLevel: 0, SingularityOptionID: 0, ...extra });
+const byUid = (raw: { ItemList: Array<{ ItemUID: string }> }, id: string) =>
+  raw.ItemList.find((it) => it.ItemUID === id) as Record<string, unknown> | undefined;
+
 describe("foldEquipEvents — whole items (gems, substats)", () => {
   const EE = "6200000001"; // EE on A, one gem socketed
   const GEM = "6200000002"; // stack of that gem in the inventory
-  const subs = (...ids: number[]) => ids.map((OptionID) => ({ OptionID, Level: 0, BaseLevel: 0 }));
   const base = () => ({
     ItemList: [
       ...snapshot().ItemList,
@@ -122,12 +129,6 @@ describe("foldEquipEvents — whole items (gems, substats)", () => {
     ],
     PresetList: [{ Num: 1 }],
   });
-  // `WSItemData` as the wire spells it (cf. other responses carrying it):
-  // ItemUID a string, CharUID 0 a number, IsLock a number; no InvenType here.
-  const wire = (ItemUID: string, CharUID: string | number, ItemID: number, sub: number[], extra: Record<string, unknown> = {}) =>
-    ({ ItemUID, CharUID, ItemID, Exp: 0, BreakLimitLevel: 0, Quantity: 1, SmeltingCount: 0, IsLock: 0, OptionList: [0, 0], SubOptionList: subs(...sub), SelectSubOptionNum: 99, SingularityStep: 0, SingularityLevel: 0, SingularityOptionID: 0, ...extra });
-  const byUid = (raw: { ItemList: Array<{ ItemUID: string }> }, id: string) =>
-    raw.ItemList.find((it) => it.ItemUID === id) as Record<string, unknown> | undefined;
   const gemIds = (raw: { ItemList: Array<{ ItemUID: string }> }, id: string) =>
     (byUid(raw, id)!.SubOptionList as Array<{ OptionID: number }>).map((s) => s.OptionID);
 
@@ -205,6 +206,146 @@ describe("foldEquipEvents — whole items (gems, substats)", () => {
     ]);
     expect(next.ItemList.at(-1)).toMatchObject({ ItemUID: "6299999999", CharUID: HERO_B });
     expect([applied, skipped]).toEqual([1, 2]);
+  });
+});
+
+describe("foldEquipEvents — upgrades (enchant, limit break, smelting, merge, craft, dissolve)", () => {
+  const FODDER = "6300000001"; // free 1★ weapon, eaten by the enhance
+  const STONE = "6300000002"; // enhance material stack
+  const RESET = "6300000003"; // reset ticket stack
+  const PIECE = "6300000004"; // smelting / limit-break material stack
+  const base = () => ({
+    ItemList: [
+      ...snapshot().ItemList,
+      { ItemUID: FODDER, CharUID: "0", ItemID: 5, Quantity: 1, InvenType: 0 },
+      { ItemUID: STONE, CharUID: "0", ItemID: 30001, Quantity: 40, InvenType: 0 },
+      { ItemUID: RESET, CharUID: "0", ItemID: 30002, Quantity: 2, InvenType: 0 },
+      { ItemUID: PIECE, CharUID: "0", ItemID: 30003, Quantity: 7, InvenType: 0 },
+    ],
+    PresetList: [{ Num: 1 }],
+  });
+  // WSItemSimpleData / WSItemNormalData: uid + new stack count (+ ItemID).
+  const simple = (ItemUID: string, Quantity: number, ItemID = 0) => ({ ItemUID, Quantity, ItemID });
+  const uids = (raw: { ItemList: Array<{ ItemUID: string }> }) => raw.ItemList.map((it) => it.ItemUID);
+  const enchant = (seq: number, exp: number, owner = HERO_A): EquipEvent => ({
+    seq,
+    path: "/item/enchant",
+    res: { Item: wire(W2, owner, 2, [160001, 0, 0, 0, 0], { Exp: exp }), ItemList: [simple(FODDER, 0, 5), simple(STONE, 37, 30001)], Asset_0: 1 },
+  });
+
+  it("enchant: the piece is replaced, consumed materials removed or decremented", () => {
+    const { next, applied, skipped } = foldEquipEvents(base(), [enchant(1, 1200)]);
+    expect(byUid(next, W2)).toMatchObject({ Exp: 1200, CharUID: HERO_A });
+    expect(byUid(next, FODDER)).toBeUndefined();
+    expect(byUid(next, STONE)).toMatchObject({ Quantity: 37, InvenType: 0, ItemID: 30001 });
+    expect(next.ItemList).toHaveLength(base().ItemList.length - 1);
+    expect([applied, skipped]).toEqual([3, 0]);
+  });
+
+  it("enchantReset: the piece back to +0, the ticket decremented, the materials given back", () => {
+    const res = {
+      ResetItemData: wire(W2, HERO_A, 2, [160001, 0, 0, 0, 0], { Exp: 0 }),
+      UseItemData: wire(RESET, 0, 30002, [0, 0, 0, 0, 0], { Quantity: 1 }),
+      GetItemList: [simple(STONE, 43, 30001)],
+      Asset_0: 1,
+    };
+    const { next, applied } = foldEquipEvents(foldEquipEvents(base(), [enchant(1, 1200)]).next, [{ seq: 2, path: "/item/enchantReset", res }]);
+    expect(byUid(next, W2)!.Exp).toBe(0);
+    // UseItemData only sets the count (CItemInventory.UpdateItem): the
+    // snapshot's other fields stay.
+    expect(byUid(next, RESET)).toEqual({ ItemUID: RESET, CharUID: "0", ItemID: 30002, Quantity: 1, InvenType: 0 });
+    expect(byUid(next, STONE)!.Quantity).toBe(43);
+    expect(applied).toBe(3);
+  });
+
+  it("breakLimit: the piece is replaced, the pieces it creates join the inventory", () => {
+    const res = { Item: wire(W1, 0, 1, [0, 0, 0, 0, 0], { BreakLimitLevel: 1 }), ItemList: [wire("6300000099", 0, 30004, [0, 0, 0, 0, 0], { Quantity: 3 })], Asset_0: 1 };
+    const { next, applied } = foldEquipEvents(base(), [{ seq: 1, path: "/item/breakLimit", res }]);
+    expect(byUid(next, W1)).toMatchObject({ BreakLimitLevel: 1, CharUID: "0" });
+    expect(next.ItemList.at(-1)).toMatchObject({ ItemUID: "6300000099", Quantity: 3, CharUID: "0" });
+    expect(applied).toBe(2);
+  });
+
+  it("smelting and its reset: the piece's substats and count change, the source stack is decremented", () => {
+    const smelt = { Item: wire(H1, HERO_B, 3, [160004, 0, 0, 0, 0], { SmeltingCount: 1 }), srcItem: { ItemUID: PIECE, Quantity: 6 }, Asset_0: 1 };
+    const reset = { Item: wire(H1, HERO_B, 3, [160001, 0, 0, 0, 0], { SmeltingCount: 0 }), srcItem: { ItemUID: PIECE, Quantity: 5 }, Asset_0: 1 };
+    const one = foldEquipEvents(base(), [{ seq: 1, path: "/item/smelting", res: smelt }]);
+    expect(byUid(one.next, H1)).toMatchObject({ SmeltingCount: 1, CharUID: HERO_B });
+    expect(byUid(one.next, PIECE)!.Quantity).toBe(6);
+    expect(one.applied).toBe(2);
+    const two = foldEquipEvents(one.next, [{ seq: 2, path: "/item/smeltingReset", res: reset }]);
+    expect(byUid(two.next, H1)!.SmeltingCount).toBe(0);
+    expect(byUid(two.next, PIECE)!.Quantity).toBe(5);
+  });
+
+  it("merge: the new item joins, the source stack is decremented (0 = gone)", () => {
+    const res = { getItem: wire("6300000098", 0, 30005, [0, 0, 0, 0, 0]), useItem: wire(PIECE, 0, 30003, [0, 0, 0, 0, 0], { Quantity: 0 }), Asset_0: 1 };
+    const { next, applied } = foldEquipEvents(base(), [{ seq: 1, path: "/item/merge", res }]);
+    expect(byUid(next, PIECE)).toBeUndefined();
+    expect(next.ItemList.at(-1)).toMatchObject({ ItemUID: "6300000098", ItemID: 30005 });
+    expect(applied).toBe(2);
+  });
+
+  it("craft: the crafted pieces join, the materials and the additional item are decremented", () => {
+    const res = {
+      AdditionItem: wire(RESET, 0, 30002, [0, 0, 0, 0, 0], { Quantity: 1 }),
+      MaterialItemList: [wire(STONE, 0, 30001, [0, 0, 0, 0, 0], { Quantity: 10 }), wire(PIECE, 0, 30003, [0, 0, 0, 0, 0], { Quantity: 0 })],
+      CraftItemList: [wire("6300000097", 0, 7, [160001, 160002, 0, 0, 0]), wire("6300000096", 0, 7, [160003, 0, 0, 0, 0])],
+      Asset_0: 1,
+    };
+    const { next, applied, skipped } = foldEquipEvents(base(), [{ seq: 1, path: "/item/craft", res }]);
+    expect(uids(next).slice(-2)).toEqual(["6300000097", "6300000096"]);
+    expect(byUid(next, RESET)!.Quantity).toBe(1);
+    expect(byUid(next, STONE)!.Quantity).toBe(10);
+    expect(byUid(next, PIECE)).toBeUndefined();
+    expect([applied, skipped]).toEqual([5, 0]);
+  });
+
+  it("dissolve: pieces listed at 0 leave the inventory, even off a hero", () => {
+    const res = { ItemList: [simple(H2, 0, 4), simple(H1, 0, 3)], RewardList: [], Asset_0: 1 };
+    const { next, applied } = foldEquipEvents(base(), [{ seq: 1, path: "/item/dissolve", res }]);
+    expect(uids(next)).not.toContain(H2);
+    expect(uids(next)).not.toContain(H1);
+    expect(applied).toBe(2);
+  });
+
+  it("a simple entry whose uid the snapshot lacks is skipped; a response with nothing usable too", () => {
+    const { next, applied, skipped } = foldEquipEvents(base(), [
+      { seq: 1, path: "/item/enchant", res: { Item: wire(W2, HERO_A, 2, [160001, 0, 0, 0, 0], { Exp: 5 }), ItemList: [simple("6399999999", 3), { ItemUID: STONE, Quantity: -1 }] } },
+      { seq: 2, path: "/item/dissolve", res: { ItemList: [] } },
+      { seq: 3, path: "/item/smelting", res: { srcItem: { ItemUID: PIECE } } },
+    ]);
+    expect(uids(next)).toEqual(uids(base()));
+    expect(byUid(next, STONE)!.Quantity).toBe(40);
+    expect([applied, skipped]).toEqual([1, 4]);
+  });
+
+  it("mixes with equip moves and gem changes in journal order", () => {
+    const events: EquipEvent[] = [
+      equip(1, { CharUID: HERO_B, ToEquipUID: W2 }), // W2: A → B
+      enchant(2, 900, HERO_B),
+      equip(3, { CharUID: HERO_A, ToEquipUID: FODDER }), // consumed already: skipped
+      { seq: 4, path: "/item/gemInsert", res: { Item: wire(W2, HERO_B, 2, [160001, 15002, 0, 0, 0], { Exp: 900 }) } },
+    ];
+    const { next, skipped } = foldEquipEvents(base(), events);
+    expect(byUid(next, W2)).toMatchObject({ CharUID: HERO_B, Exp: 900 });
+    expect((byUid(next, W2)!.SubOptionList as Array<{ OptionID: number }>)[1]!.OptionID).toBe(15002);
+    expect(byUid(next, FODDER)).toBeUndefined();
+    expect(skipped).toBe(1);
+  });
+
+  it("is idempotent, and an entry removed then upserted again comes back", () => {
+    const events: EquipEvent[] = [
+      enchant(1, 1200),
+      { seq: 2, path: "/item/merge", res: { getItem: wire(FODDER, 0, 5, [0, 0, 0, 0, 0], { Quantity: 1 }), useItem: simple(PIECE, 2) } },
+    ];
+    const once = foldEquipEvents(base(), events);
+    expect(byUid(once.next, FODDER)).toMatchObject({ ItemID: 5, Quantity: 1, CharUID: "0" });
+    expect(byUid(once.next, STONE)!.Quantity).toBe(37);
+    expect(byUid(once.next, PIECE)!.Quantity).toBe(2);
+    const twice = foldEquipEvents(once.next, events);
+    expect(twice.next).toEqual(once.next);
+    expect(twice.applied).toBe(0);
   });
 });
 

@@ -45,7 +45,22 @@ changes, which carry the whole updated item (`WSItemData`, the fields of a `/use
 into the inventory), `/item/gemChangeOption` (`Item` + `ItemGem`) and `/item/subOptionChange`
 (`ItemData`, reforge / Transistone); the app replaces the entry of the same uid, or adds it. The gem
 stack `gemInsert` consumes isn't in its response (the client decrements it from its own request), so
-it stays as is until the next lobby. A new `/user/item` truncates the journal before its
+it stays as is until the next lobby. Since 0.4.0 the upgrades follow too. Their responses carry
+whole items (upserted as above) and "simple" entries: an uid plus the stack's new `Quantity`, which the
+app writes, removing the entry at 0, as the client's `CItemInventory.UpdateItem` does:
+
+| Path | Whole items | Simple entries (uid + new count) |
+|------|-------------|----------------------------------|
+| `/item/enchant` | `Item` (the enhanced piece) | `ItemList` (the fodder and materials consumed) |
+| `/item/enchantReset` | `ResetItemData` (the piece back to +0) | `UseItemData` (the reset item), `GetItemList` (the materials given back) |
+| `/item/breakLimit` | `Item`, `ItemList` (the items it creates) | — |
+| `/item/smelting`, `/item/smeltingReset` | `Item` | `srcItem` (the source stack) |
+| `/item/merge` | `getItem` (created) | `useItem` (the source stack) |
+| `/item/craft` | `CraftItemList` (created) | `AdditionItem`, `MaterialItemList` |
+| `/item/dissolve` | — | `ItemList` (the client removes the dissolved pieces from its own request; a piece the response doesn't list at 0 stays until the lobby) |
+
+`/item/sell`, `/item/lock` and the Custom Gear responses (`/item/customUpdate*`) aren't journaled:
+the first two don't carry the item, the last is out of the solver's scope. A new `/user/item` truncates the journal before its
 snapshot is written (the snapshot is the truth again). The shape fallback has no path, so it
 can't journal: with only the fallback active, moves still wait for the lobby. The hooks only enqueue; disk writes happen on one background writer
 thread (a 5 MB inventory would otherwise hitch a frame), in arrival order (two close
@@ -58,7 +73,7 @@ half file.
 |------|--------|-------|
 | `user_item.json`, `user_character.json`, `user_asset.json`, `user_info.json`, `user_lobby.json`, `user_etc.json`, `item_customInfo.json`, `user_archive.json`, `user_gift.json` | `/user/item`, `/user/character`, … `/archive/info`, `/gift/info` | Rewritten on every fetch (lobby load, screen open). |
 | `.captured` | after `/user/item` | Sentinel the app's status endpoint reports. |
-| `equip-events.ndjson` | `/item/equip`, `/item/equipAll`, `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption`, `/item/subOptionChange` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start. Emptied whenever `/user/item` lands. |
+| `equip-events.ndjson` | `/item/equip`, `/item/equipAll`, `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption`, `/item/subOptionChange`, `/item/enchant`, `/item/enchantReset`, `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`, `/item/craft`, `/item/dissolve` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start. Emptied whenever `/user/item` lands. |
 | `.equip-events.applied` | written by the **app** | What the app already folded (`first`/`last` seq + the snapshot mtime it left), so a restart doesn't rewrite the snapshot for nothing. |
 | `.steam-plugin.json` | plugin start + every capture | Heartbeat: `{version, pid, startedAt, pathHook, captures, lastPath, lastCaptureAt, outDir}`. The app matches `pid` against the running `OUTERPLANE.exe` to show **Live**. |
 | `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | `KeepUnknown` config (not for the journaled paths); `/account/*` and `/server/*` are ignored. |

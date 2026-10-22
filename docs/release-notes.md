@@ -12,7 +12,10 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Upgrades you do in-game — enhance, limit break, smelting, reset, merge, craft, dissolve — now
+  reach the app live**: the inventory shows the new +N within a few seconds and the pieces eaten as
+  fodder disappear, no lobby needed. Update the capture plugin (0.4.0): Settings › Setup ›
+  **Update plugin** with the game closed.
 
 ## [1.14.0] — 2026-10-22
 

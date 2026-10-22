@@ -8,6 +8,64 @@
 
 ## Items de backlog clôturés (index)
 
+### ⬆️ Améliorations faites en jeu suivies en direct : enchant, reset, limite d'étoiles, smelting, fusion, craft, dissolution (plugin 0.4.0) (2026-10-22)
+- ✅ **Pourquoi.** Demande de Sevih après la 1.14.0 : une pièce améliorée en jeu restait à +0 dans l'app jusqu'au
+  lobby, et le fodder mangé restait dans l'Inventaire — le plugin 0.3.0 ne journalisait que les déplacements, les
+  gemmes et les sous-stats.
+- ✅ **Lecture du client** (`CWebRES_Item*.cs`, `CItemInventory.cs`). Deux formes : le `WSItemData` entier (déjà
+  plié par G42) et l'entrée « simple » uid + `Quantity` (`WSItemSimpleData`, et `WSItemNormalData` qui n'y ajoute
+  que `ItemID`). `UpdateSimpleData` et `UpdateItem(WSItemData)` ne lisent que l'uid et la quantité, et à 0 appellent
+  `RemoveItem` (porteur déséquipé, preset nettoyé) ; à quantité positive sur un uid inconnu, ils ne créent rien —
+  d'où le `skipped`. Répartition : `enchant` `Item` entier + `ItemList` simples (fodder et matériaux consommés) ;
+  `enchantReset` `ResetItemData` entier (`UpdateEquipItem`) + `UseItemData` et `GetItemList` simples ; `breakLimit`
+  `Item` + `ItemList` entiers (`CreateItems`) ; `smelting` / `smeltingReset` `Item` entier + `srcItem` simple ; `merge`
+  `getItem` entier (`CreateItem`) + `useItem` simple (`UpdateItem`) ; `craft` `CraftItemList` entiers +
+  `AdditionItem` et `MaterialItemList` simples (`UpdateItem(s)`, bien que typés `WSItemData`). **Dissolution** : le
+  client n'applique PAS le `ItemList` de la réponse — `CUIItemClear`, `CUIItemSmelting` et `CUICraftingResult` retirent
+  les uids de leur propre REQUÊTE (`RemoveItem` / `RemoveItemUIDs`) ; le plugin ne voyant que les réponses,
+  `item/dissolve` est plié d'après son `ItemList` en entrées simples (0 = retirée, quantité positive = compteur
+  réécrit) : sans risque quel que soit son contenu, mais une pièce que le serveur n'y liste pas à 0 reste jusqu'au
+  lobby (dit dans l'en-tête et les docs, à confirmer sur le fil). Hors périmètre, dit dans le README du plugin :
+  `item/sell` et `item/lock` (la réponse ne porte pas l'item), Custom Gear (`item/customUpdate*`), récompenses et
+  monnaies.
+- ✅ **Plugin — `tools/capture-steam/src/Plugin.cs`.** `Journal` gagne `/item/enchant`, `/item/enchantReset`,
+  `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`, `/item/craft`, `/item/dissolve` ;
+  `Plugin.Version` et `<Version>` du `.csproj` en 0.4.0. `npm run fetch-binaries -w @gear-solver/desktop` (sur le
+  portable Fedora, `dotnet` présent) → « La génération a réussi. 0 Avertissement(s) 0 Erreur(s) » puis « [ok]
+  capture-steam plugin 0.4.0 (16 896 bytes) ».
+- ✅ **Desktop — `apps/desktop/src/equip-events.ts`.** `ITEM_UPSERTS` + `UPSERT_FIELDS` remplacés par `ITEM_FIELDS`,
+  une `Map` chemin → `{ upsert: string[]; simple: string[] }` (un champ porte une entrée ou une liste) ; les quatre
+  chemins de G42 y passent avec leurs seuls champs réels (`gemInsert` `Item`, `gemRemove` / `gemChangeOption` `Item` +
+  `ItemGem`, `subOptionChange` `ItemData`), comportement identique. `entriesOf` aplatit les champs, `simpleOf` lit uid
+  + `Quantity` (entier ≥ 0, sinon inutilisable). Pli : upserts comme avant, puis simples — `Quantity` réécrite, 0 →
+  entrée retirée de la `Map` (une pièce portée qui disparaît libère son slot d'elle-même), uid absent → `skipped` ;
+  une réponse sans aucune entrée utilisable compte un `skipped`. `applied` compte aussi les entrées retirées. Le rejeu
+  complet reste idempotent : chaque entrée pose un état absolu, un retrait rejoué sur un snapshot déjà plié est un
+  `skipped` sans effet, un retrait suivi d'un upsert du même uid remet l'entrée. Tests
+  (`apps/desktop/test/equip-events.test.ts`, 10 nouveaux, helpers `subs` / `wire` / `byUid` remontés au niveau du
+  module) : enchant (pièce remplacée, fodder retiré, pierres décomptées), enchantReset (pièce à +0, ticket décompté
+  sans toucher ses autres champs, matériaux rendus), breakLimit (pièce + créée en fin), smelting puis smeltingReset,
+  merge (créée + source à 0 retirée), craft (deux créées, matériaux et item additionnel), dissolve (retraits, dont une
+  pièce portée), simples inconnus / quantité négative / réponses vides skipped, mélange avec des `item/equip` et un
+  `gemInsert` (un déplacement vers le fodder déjà mangé est skipped), idempotence avec retrait puis réapparition.
+- ✅ **Renderer : rien à changer.** `snapshotFollower.ts` ré-importe tout sur la mtime de `user_item.json` ; le +N
+  vient de `Exp` (`levelFromExp`, `packages/core/src/parse.ts`), réécrit par l'upsert. Vu en passant : la Worklist
+  garde `toName` / `toMain` figés à la mise en file (affichage seul, la valeur de main d'une ligne talisman ne suit pas
+  l'enchant) ; une pièce en file ou dans un preset mangée en jeu ressort « absente » (`presetRows` la compte dans
+  `missingCount`) et le `PresetList` du snapshot garde son uid jusqu'au lobby (le client l'en retire,
+  `DeletePresetEquipUID`).
+- ✅ **Docs.** `tools/capture-steam/README.md` (table par chemin entiers / simples, chemins exclus, table Output),
+  `docs/reference.md` §1.1 + `wiki/Engine-Reference.md`, `wiki/Capture-Pipeline.md` (table Output), `wiki/FAQ.md`,
+  `docs/release-notes.md › [Unreleased]`.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` sans erreur (les trois workspaces) ; `npm test` →
+  « Tests 166 passed (166) » (core), « Tests 196 passed (196) » (desktop), « Tests 658 passed (658) » (renderer) ;
+  `npm run lint` → « ✖ 14 problems (0 errors, 14 warnings) », inchangé.
+- ⏳ **Sevih, sur le fixe (après la release)** : Settings › Setup › Update plugin jeu fermé (« plugin 0.4.0 live »),
+  puis améliorer une pièce de +0 à +3 → l'Inventaire la montre à +3 dans les 5 s et la pièce fodder disparaît ; un
+  smelting → sous-stats et compteur à jour ; dissoudre une pièce → elle disparaît (sinon m'envoyer
+  `capture-out/equip-events.ndjson` : le `ItemList` de `item/dissolve` ne liste pas les pièces à 0 et il faudra
+  journaliser la requête).
+
 ### 💎 Gemmes serties / retirées et sous-stats changées suivies en direct (plugin 0.3.0), ligne gemme de la Worklist appliquée quel que soit l'emplacement (2026-10-22)
 - ✅ **Pourquoi.** Test de Sevih sur le fixe (1.13.0) : la gemme d'EE que la Worklist demandait, sertie en jeu, ne
   cochait pas la ligne. Deux causes : le plugin 0.2.0 ne journalisait que `item/equip*`, et `isChangeApplied` exigeait

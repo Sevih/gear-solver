@@ -27,17 +27,25 @@ au moment où le jeu les a déchiffrées :
 - Sortie : `<dossier de capture>/{user_item,user_character,…}.json` (`.cache/capture-out` en dev,
   `<userData>/capture-out` packagé). L'import manuel lit les mêmes fichiers.
 - Changements faits en jeu (plugin 0.2.0 pour les déplacements, 0.3.0 pour les gemmes et les
-  sous-stats) : le jeu ne renvoie `/user/item` qu'au lobby, mais chaque déplacement répond
-  `/item/equip` ou `/item/equipAll`, et un sertissage, un retrait, un reroll de gemme ou un
-  changement de sous-stats (reforge, Transistone) `/item/gemInsert`, `/item/gemRemove`,
-  `/item/gemChangeOption` ou `/item/subOptionChange` ; le plugin les ajoute à
+  sous-stats, 0.4.0 pour les améliorations) : le jeu ne renvoie `/user/item` qu'au lobby, mais chaque
+  déplacement répond `/item/equip` ou `/item/equipAll`, un sertissage, un retrait, un reroll de gemme
+  ou un changement de sous-stats (reforge, Transistone) `/item/gemInsert`, `/item/gemRemove`,
+  `/item/gemChangeOption` ou `/item/subOptionChange`, et une amélioration `/item/enchant`,
+  `/item/enchantReset`, `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`,
+  `/item/craft` ou `/item/dissolve` ; le plugin les ajoute à
   `equip-events.ndjson` (une ligne `{ seq, at, path, res }` par réponse, vidé à chaque `/user/item`),
   et l'app les plie dans `user_item.json` à chaque `GET /api/capture/status` (sondé toutes les 5 s)
   — `foldEquipEvents` d'[equip-events.ts](../apps/desktop/src/equip-events.ts), par uid : les
-  déplacements réécrivent `CharUID`, les quatre autres portent l'item entier (`WSItemData`, les
-  champs de `RawItem`) qui remplace l'entrée de même uid ou s'ajoute en fin de liste (la gemme
-  rendue à l'inventaire par `gemRemove`). La pile de gemmes que consomme `gemInsert` n'est pas dans
-  sa réponse : elle reste telle quelle jusqu'au lobby suivant. Ce que l'app a déjà plié est noté
+  déplacements réécrivent `CharUID` ; les autres portent, selon la table `ITEM_FIELDS` (par chemin),
+  des items entiers (`WSItemData`, les champs de `RawItem`) qui remplacent l'entrée de même uid ou
+  s'ajoutent en fin de liste (la gemme rendue à l'inventaire par `gemRemove`, les pièces créées par
+  `breakLimit` ou `craft`), et des entrées « simples » (uid + nouvelle `Quantity` : matériaux
+  consommés ou rendus) qui ne réécrivent que `Quantity`, l'entrée étant retirée à 0 comme le fait
+  `CItemInventory.UpdateItem` dans le client (la pièce mangée par un enchant n'existe plus). La pile
+  de gemmes que consomme `gemInsert` n'est pas dans sa réponse : elle reste telle quelle jusqu'au
+  lobby suivant ; de même, le client retire les pièces dissoutes d'après sa propre requête, et
+  `item/dissolve` n'est plié que d'après le `ItemList` de sa réponse. `item/sell`, `item/lock` (la
+  réponse ne porte pas l'item) et le Custom Gear ne sont pas suivis. Ce que l'app a déjà plié est noté
   dans `.equip-events.applied`.
 
 Fichiers : [Plugin.cs](../tools/capture-steam/src/Plugin.cs),

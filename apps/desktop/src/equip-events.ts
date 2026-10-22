@@ -1,10 +1,12 @@
 /**
  * In-game gear changes → captured snapshot. The game only sends `/user/item`
  * (the full inventory) at the lobby; a piece moved in the hero screen comes
- * back as an `item/equip` or `item/equipAll` response instead, and a gem
+ * back as an `item/equip` or `item/equipAll` response instead, a gem
  * socketed / removed / rerolled or a substat change (reforge, Transistone) as
  * `item/gemInsert`, `item/gemRemove`, `item/gemChangeOption` or
- * `item/subOptionChange`. The Steam plugin appends those to
+ * `item/subOptionChange`, and an upgrade as `item/enchant`, `item/enchantReset`,
+ * `item/breakLimit`, `item/smelting`, `item/smeltingReset`, `item/merge`,
+ * `item/craft` or `item/dissolve`. The Steam plugin appends those to
  * `equip-events.ndjson` (one line per response, `{ seq, at, path, res }`) and
  * truncates the file whenever a fresh `/user/item` lands. This module folds the
  * journal into `user_item.json` so the renderer's follower re-imports on the
@@ -12,17 +14,24 @@
  *
  * No game data needed: the equip responses say which piece leaves and which
  * one joins (CWebRES_ItemEquip / CWebRES_ItemEquipAll in the game client) and
- * only rewrite `RawItem.CharUID`; the four others carry the whole updated item
- * (`WSItemData`, the same fields as `RawItem`), which replaces the entry of the
- * same uid — or joins the end of `ItemList` when absent (the gem item
- * `gemRemove` puts back into the inventory). Each event sets absolute state,
- * so replaying the whole journal onto a snapshot that already holds part of it
+ * only rewrite `RawItem.CharUID`; the others carry items in two shapes (see
+ * `ITEM_FIELDS`). A whole updated item (`WSItemData`, the same fields as
+ * `RawItem`) replaces the entry of the same uid — or joins the end of
+ * `ItemList` when absent (the gem item `gemRemove` puts back, the pieces
+ * `breakLimit` / `craft` create). A "simple" one (uid + `Quantity`: a material
+ * stack consumed or given back) only sets that entry's `Quantity`, and 0
+ * removes the entry, as `CItemInventory.UpdateItem` does in the client (a piece
+ * eaten as fodder no longer exists). Each event sets absolute state, so
+ * replaying the whole journal onto a snapshot that already holds part of it
  * lands on the same state: the follower replays it all whenever something
  * changed instead of tracking a partial offset.
  *
  * Not modelled: the gem stack `gemInsert` consumes. The client decrements it
  * from its own request (`ItemUIDGem`), the response doesn't say — so the gem
- * pool may count one gem too many until the next lobby.
+ * pool may count one gem too many until the next lobby. Likewise the client
+ * removes the pieces `item/dissolve` dissolves from its own request uid list
+ * and ignores the response's `ItemList`: it is folded as simple entries (0 =
+ * removed), so a piece the server doesn't list there stays until the lobby.
  *
  * Electron-free (Vite's dev middleware loads it through api-handler.ts).
  */
@@ -55,16 +64,28 @@ interface FoldableUserItem {
   ItemList: FoldableItem[];
 }
 
-/** Responses that carry whole updated items (`WSItemData`), and where:
- *  CWebRES_ItemGemInsert / GemRemove / GemChangeOption (`Item` = the piece,
- *  `ItemGem` = the gem item) and CWebRES_ItemSubOptionChange (`ItemData`). */
-const ITEM_UPSERTS: ReadonlySet<string> = new Set([
-  "/item/gemInsert",
-  "/item/gemRemove",
-  "/item/gemChangeOption",
-  "/item/subOptionChange",
+/** Responses that carry items, by path, and in which fields (one entry or a
+ *  list of them). `upsert`: whole updated items (`WSItemData`) — the piece and
+ *  the gem item of the gem responses, the improved piece, the pieces created.
+ *  `simple`: only the uid and the stack's new `Quantity` count — the
+ *  `WSItemSimpleData` / `WSItemNormalData` lists, and the `WSItemData` the
+ *  client hands to `CItemInventory.UpdateItem`, which reads nothing else (the
+ *  reset item, the merge source, the craft materials). After the CWebRES_Item*
+ *  classes and their `OnApply`; no response puts one uid in both. */
+const ITEM_FIELDS: ReadonlyMap<string, { upsert: readonly string[]; simple: readonly string[] }> = new Map([
+  ["/item/gemInsert", { upsert: ["Item"], simple: [] }],
+  ["/item/gemRemove", { upsert: ["Item", "ItemGem"], simple: [] }],
+  ["/item/gemChangeOption", { upsert: ["Item", "ItemGem"], simple: [] }],
+  ["/item/subOptionChange", { upsert: ["ItemData"], simple: [] }],
+  ["/item/enchant", { upsert: ["Item"], simple: ["ItemList"] }],
+  ["/item/enchantReset", { upsert: ["ResetItemData"], simple: ["UseItemData", "GetItemList"] }],
+  ["/item/breakLimit", { upsert: ["Item", "ItemList"], simple: [] }],
+  ["/item/smelting", { upsert: ["Item"], simple: ["srcItem"] }],
+  ["/item/smeltingReset", { upsert: ["Item"], simple: ["srcItem"] }],
+  ["/item/merge", { upsert: ["getItem"], simple: ["useItem"] }],
+  ["/item/craft", { upsert: ["CraftItemList"], simple: ["AdditionItem", "MaterialItemList"] }],
+  ["/item/dissolve", { upsert: [], simple: ["ItemList"] }],
 ]);
-const UPSERT_FIELDS = ["Item", "ItemGem", "ItemData"] as const;
 
 /** A game uid (`long`) as the snapshot spells it. The server sends them as
  *  JSON strings (`"6124885095"`); a number is accepted only while exact
@@ -134,20 +155,34 @@ function itemOf(v: unknown): ({ ItemUID: string } & Record<string, unknown>) | n
   return out as { ItemUID: string } & Record<string, unknown>;
 }
 
-/** The whole items one event carries — empty for the equip family. */
-function upsertsOf(e: EquipEvent): unknown[] {
-  if (!ITEM_UPSERTS.has(e.path)) return [];
+/** A simple entry (`WSItemSimpleData` and kin): its uid and the stack's new
+ *  `Quantity` (0 = gone). Null when either is unusable. */
+function simpleOf(v: unknown): { ItemUID: string; Quantity: number } | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const r = v as Record<string, unknown>;
+  const ItemUID = uid(r.ItemUID);
+  const Quantity = r.Quantity;
+  if (ItemUID === null || ItemUID === UNEQUIPPED) return null;
+  if (typeof Quantity !== "number" || !Number.isSafeInteger(Quantity) || Quantity < 0) return null;
+  return { ItemUID, Quantity };
+}
+
+/** The raw entries of one event's `upsert` or `simple` fields — empty for the
+ *  equip family. */
+function entriesOf(e: EquipEvent, kind: "upsert" | "simple"): unknown[] {
+  const fields = ITEM_FIELDS.get(e.path);
   const r = e.res as Record<string, unknown> | null;
-  if (!r || typeof r !== "object") return [];
-  return UPSERT_FIELDS.map((k) => r[k]).filter((v) => v != null);
+  if (!fields || !r || typeof r !== "object") return [];
+  return fields[kind].flatMap((k) => (Array.isArray(r[k]) ? (r[k] as unknown[]) : r[k] != null ? [r[k]] : []));
 }
 
 /** Apply `events` to a snapshot's `ItemList`, by uid, in journal order (the
  *  game's). Returns a NEW object (other keys shallow-copied), how many items
- *  actually changed (owner, gems, substats…) or joined, and how many were
- *  skipped — a move whose uid is absent from the inventory (a piece obtained
- *  after this snapshot: not invented), an unreadable uid, or an upsert
- *  response with no usable item. Never throws on event data. */
+ *  actually changed (owner, gems, substats, level, quantity…), joined or left,
+ *  and how many were skipped — a move or a simple entry whose uid is absent
+ *  from the inventory (a piece obtained after this snapshot: not invented), an
+ *  unreadable uid, or an item response with no usable entry. Never throws on
+ *  event data. */
 export function foldEquipEvents<T extends FoldableUserItem>(
   raw: T, events: readonly EquipEvent[],
 ): { next: T; applied: number; skipped: number } {
@@ -164,18 +199,27 @@ export function foldEquipEvents<T extends FoldableUserItem>(
       if (it.CharUID !== to) items.set(item!, { ...it, CharUID: to });
       touched.add(item!);
     }
-    if (!ITEM_UPSERTS.has(e.path)) continue;
-    const upserts = upsertsOf(e).map(itemOf);
-    if (!upserts.some((it) => it !== null)) { skipped++; continue; }
+    if (!ITEM_FIELDS.has(e.path)) continue;
+    const upserts = entriesOf(e, "upsert").map(itemOf);
+    const simples = entriesOf(e, "simple").map(simpleOf);
+    if (!upserts.some((it) => it !== null) && !simples.some((s) => s !== null)) { skipped++; continue; }
     for (const it of upserts) {
       if (!it) { skipped++; continue; }
       // Fields the response lacks (InvenType…) stay as the snapshot had them.
       items.set(it.ItemUID, { CharUID: UNEQUIPPED, ...items.get(it.ItemUID), ...it });
       touched.add(it.ItemUID);
     }
+    for (const s of simples) {
+      const it = s ? items.get(s.ItemUID) : undefined;
+      if (!s || !it) { skipped++; continue; } // a stack this snapshot lacks: not invented
+      if (s.Quantity === 0) items.delete(s.ItemUID);
+      else if (it.Quantity !== s.Quantity) items.set(s.ItemUID, { ...it, Quantity: s.Quantity });
+      touched.add(s.ItemUID);
+    }
   }
   const before = new Map(raw.ItemList.map((it) => [it.ItemUID, it]));
   let applied = 0;
+  for (const id of before.keys()) if (!items.has(id)) applied++; // consumed, dissolved
   const ItemList: FoldableItem[] = [];
   for (const [id, it] of items) {
     const was = before.get(id);

@@ -28,18 +28,27 @@ once the game has decrypted them:
   `CWebManager.Log2InternalWeb` (clear JSON + path), shape-based `DecryptMsg` fallback.
 - Output: `<capture folder>/{user_item,user_character,…}.json` (`.cache/capture-out` in dev,
   `<userData>/capture-out` packaged). The manual import reads the same files.
-- Changes made in-game (plugin 0.2.0 for gear moves, 0.3.0 for gems and substats): the game only
-  re-sends `/user/item` at the lobby, but every move answers `/item/equip` or `/item/equipAll`, and
-  socketing, removing or rerolling a gem or changing substats (reforge, Transistone) answers
-  `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption` or `/item/subOptionChange`; the
+- Changes made in-game (plugin 0.2.0 for gear moves, 0.3.0 for gems and substats, 0.4.0 for
+  upgrades): the game only re-sends `/user/item` at the lobby, but every move answers `/item/equip`
+  or `/item/equipAll`, socketing, removing or rerolling a gem or changing substats (reforge,
+  Transistone) answers `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption` or
+  `/item/subOptionChange`, and an upgrade answers `/item/enchant`, `/item/enchantReset`,
+  `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`, `/item/craft` or
+  `/item/dissolve`; the
   plugin appends those to `equip-events.ndjson` (one `{ seq, at, path, res }` line per response,
   emptied on every `/user/item`), and the app folds them into `user_item.json` on every
   `GET /api/capture/status` (polled every 5 s) — `foldEquipEvents` in
   [equip-events.ts](https://github.com/Sevih/gear-solver/blob/main/apps/desktop/src/equip-events.ts),
-  by uid: moves rewrite `CharUID`, the four others carry the whole item (`WSItemData`, the fields of
-  `RawItem`), which replaces the entry of the same uid or joins the end of the list (the gem item
-  `gemRemove` puts back into the inventory). The gem stack `gemInsert` consumes isn't in its
-  response: it stays as is until the next lobby. What the app already folded is noted in
+  by uid: moves rewrite `CharUID`; the others carry, per the `ITEM_FIELDS` table (by path), whole
+  items (`WSItemData`, the fields of `RawItem`), which replace the entry of the same uid or join the
+  end of the list (the gem item `gemRemove` puts back into the inventory, the pieces `breakLimit` or
+  `craft` create), and "simple" entries (uid + new `Quantity`: materials consumed or given back),
+  which only rewrite `Quantity`, the entry being removed at 0 as the client's
+  `CItemInventory.UpdateItem` does (the piece an enhance eats no longer exists). The gem stack
+  `gemInsert` consumes isn't in its response: it stays as is until the next lobby; likewise the
+  client removes dissolved pieces from its own request, and `item/dissolve` is folded from its
+  response's `ItemList` only. `item/sell`, `item/lock` (the response doesn't carry the item) and
+  Custom Gear aren't followed. What the app already folded is noted in
   `.equip-events.applied`.
 
 Files: [Plugin.cs](https://github.com/Sevih/gear-solver/blob/main/tools/capture-steam/src/Plugin.cs),

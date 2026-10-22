@@ -91,7 +91,9 @@ snapshot (after a confirmation popup), and the **Worklist** tab has **Apply loca
 there's no game API for that, so these only edit the local snapshot (and only while the game is
 closed). With the game open you don't need them: equip the pieces and socket the gems in-game and the
 app follows each change on its own within a few seconds (no need to go back to the lobby), so
-the Worklist lines tick themselves as **applied**.
+the Worklist lines tick themselves as **applied**. Upgrades you do in-game (enhance, limit break,
+smelting, reset, merge, craft, dissolve) reach the app the same way (capture plugin 0.4.0+): the
+inventory shows the new +N and the fodder pieces disappear.
 
 ---
 
