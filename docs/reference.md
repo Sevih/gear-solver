@@ -117,7 +117,8 @@ héros **sans** son gear. Couvre les couches :
    au palier de fusion capturé (`fusionLevel`) dans `corePassiveByFusion` ;
    palier inconnu (absent ou 0) → le plus haut, comme les niveaux de skill ;
    cache sans ce champ → l'ancien `corePassive` (un bloc au max, vitesse cuite
-   en plat). Sa vitesse en taux (`spdPct`, Snow / Lisha fusionnées +4,3 %)
+   en plat), repli des seuls caches d'avant le 22/10/2026 (le format 2 du
+   contrat ne l'émet plus). Sa vitesse en taux (`spdPct`, Snow / Lisha fusionnées +4,3 %)
    multiplie la vitesse totale, en dernier : `trunc(total × (1000 + taux‰) / 1000)`.
 8. **Limit Break** modifier (CharacterMaxLevelTemplet, amplifie l'interp lv>100).
 

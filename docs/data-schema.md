@@ -165,10 +165,13 @@ erreur sans toucher `data/derived/`. outerpedia ne monte `schema` que pour un ch
 qu'une ancienne version lirait mal, dans cet ordre : (a) le nouveau champ arrive à côté de
 l'ancien, `schema` inchangé ; (b) une release de gear-solver lit le nouveau champ et monte
 `SUPPORTED_SOLVER_SCHEMA` à `schema + 1` (constante et jumeau ensemble) ; (c) outerpedia
-retire l'ancien champ et monte `schema`.
+retire l'ancien champ et monte `schema`. Format 2, émis par outerpedia depuis le 22/10/2026
+(B67) : `characters.json` perd `ingredients.corePassive`, `corePassiveByFusion` seul (lu
+depuis la 1.11.0, qui accepte `schema` 2).
 
 **Passif de cœur par palier (`characters.json`).** Les `ingredients` de chaque fusionné
-portent `corePassiveByFusion` (B56 d'outerpedia, `schema` resté à 1) :
+portent `corePassiveByFusion` (B56 d'outerpedia, ajouté en `schema` 1, seul encodage du
+noyau depuis le format 2) :
 `{ "1": …, "5": … }`, les cinq clés toujours présentes, chaque bloc un `StatBlock` plus
 `spdPct` (la vitesse `OAT_RATE` en points de % bruts, 4,3 = +4,3 % ; `spd` n'y porte que
 du plat), à zéro quand le palier n'a pas de buff de fiche. `composeCharStats` prend la clé
@@ -177,7 +180,8 @@ applique `spdPct` en taux sur la vitesse totale (cf.
 [reference.md §1.4](reference.md#14-compose-no-gear-packagescoresrccompose-statsts)).
 Typé optionnel dans `CharacterIngredients` : un cache d'avant ne l'a pas, le compositeur
 retombe alors sur l'ancien `corePassive` (un seul bloc au niveau max, vitesse cuite en
-plat), que le format 2 du contrat retire.
+plat). Le format 2, émis depuis le 22/10/2026, ne porte plus `corePassive` : ce repli ne
+sert plus qu'aux caches synchronisés avant cette date.
 
 **Paliers de set (`sets.json`).** Chaque entrée `levels[]` porte, à côté de `p2` / `p4` /
 `p2_desc` / `p4_desc`, deux champs ajoutés par outerpedia (C20, `schema` resté à 1) :

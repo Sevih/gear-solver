@@ -122,7 +122,8 @@ Files: [parse.ts](../packages/core/src/parse.ts),
    at the captured fusion tier (`fusionLevel`) in `corePassiveByFusion`;
    unknown tier (missing or 0) → the highest, like the skill levels; cache
    without that field → the legacy `corePassive` (one block at max, speed
-   pre-baked as flat). Its speed rate (`spdPct`, fused Snow / Lisha +4.3%)
+   pre-baked as flat), a fallback for caches synced before 22/10/2026 only
+   (contract format 2 no longer emits it). Its speed rate (`spdPct`, fused Snow / Lisha +4.3%)
    multiplies the total speed, last: `trunc(total × (1000 + rate‰) / 1000)`.
 8. **Limit Break** modifier (CharacterMaxLevelTemplet, amplifies the interp lv>100).
 
