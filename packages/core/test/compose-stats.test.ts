@@ -759,9 +759,15 @@ describe("Core Fusion passive at the captured fusion tier (corePassiveByFusion)"
 describe("Core Fusion — fallback on a cache without corePassiveByFusion (legacy corePassive)", () => {
   // Values pinned from the composer before corePassiveByFusion existed: the
   // single max-level block whatever the tier, SPD rate pre-baked as flat.
+  // The repo data has no `corePassive` since contract format 2 (22/10/2026),
+  // so the legacy cache is rebuilt by hand from the hero's fusion-5 block:
+  // `spdPct` dropped, the SPD the old encoding baked as flat put back (Snow
+  // 4.3 % → 6). These tests only cover the fallback for old caches.
+  const LEGACY_SPD: Record<string, number> = { "2700003": 6, "2700056": 0 };
   const legacy = (id: string): CharacterIngredients => {
-    const { corePassiveByFusion: _byFusion, ...rest } = characters[id]!.ingredients!;
-    return rest;
+    const { corePassiveByFusion: byFusion, corePassive: _gone, ...rest } = characters[id]!.ingredients!;
+    const { spdPct: _rate, ...block } = byFusion!["5"]!;
+    return { ...rest, corePassive: { ...block, spd: LEGACY_SPD[id]! } };
   };
   const compose = (id: string, level: number, step: number, fusionLevel?: number) =>
     composeCharStats(legacy(id), codexCurve, {

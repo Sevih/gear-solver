@@ -337,6 +337,7 @@ penPct   = min(PEN, 100) / 100             ← PPR caps at 100% (§1.2)
 effDef   = TARGET_DEF × (1 − penPct)
 penMult  = (TARGET_DEF + 1000) / (effDef + 1000)            ← mitigation ratio
 skillFactor = bestSkill.factor / 1000      ← the hero's best skill (S1/S2/S3 at max level, bursts included); 1 when missing
+turnFactor  = rotation.factorPerTurn / 1000 ← average factor per turn of the cooldown rotation; skillFactor when missing
 ```
 
 **Defensive side** (`ehp`) — `dmgRed` is a **defender** stat (`rate -=
@@ -359,9 +360,9 @@ for any `TARGET_DEF`.
 | `ehp`  | `HP × (1 + DEF/1000) / dmgTaken`       | Effective HP — mit DEF + dmgRed defender |
 | `ehps` | `EHP × SPD`                            | Tanky-and-fast                          |
 | `dmg`  | `ATK × drFactor × penMult × skillFactor` | Expected hit of the BEST skill vs DEF=2000 |
-| `dmgs` | `dmg × SPD`                            | DPS (not a rotation — cooldowns ignored) |
+| `dmgs` | `ATK × drFactor × penMult × turnFactor × SPD` | DPS over the cooldown rotation (S3/S2/S1) |
 | `mcd`  | `ATK × mcdFactor × penMult × skillFactor` | Max crit of the best skill (assume 100% CHC) |
-| `mcds` | `mcd × SPD`                            | Max DPS                                 |
+| `mcds` | `ATK × mcdFactor × penMult × turnFactor × SPD` | Max DPS over the cooldown rotation |
 | `dmgh` | `HP × drFactor × penMult`              | Damage HP-scaling (Aer S3, Caren, …) — NO skillFactor (100 % reference) |
 
 Conventions:
@@ -407,9 +408,22 @@ field) → ×1.00 **and** a tooltip + amber "×1" badge in the column header
 a badge in the Dmg/DmgS headers and in the tooltips (`ratingTitle`), marked "approximate"
 when its hit chain is unresolved (`unresolvedHits`). **Assumed, not modeled**: DoTs (a hero
 whose real "biggest hit" is a DoT — Gnosis Beth — is under-estimated by a direct-hit
-factor), buffs and chains; cooldown-weighted rotation DPS is a TODO. Validated against
+factor), buffs and chains. Validated against
 outerpedia's damage calculator (`buildSkillReport`, same stats, DEF 2000, 0 % crit):
 Rhona S3 ×1.67, K S2-burst 1 ×2.39, Primine S1 ×0.86 — exact.
+
+**Cooldown rotation (`turnFactor`, 2026-10-22)** — the PER-TURN columns `dmgs` and `mcds`
+(damage × SPD) no longer take the best hit but `rotation.factorPerTurn / 1000`
+(`characters.json`, emitted by outerpedia next to `bestSkill`): the average factor per turn
+when the hero casts the strongest ready skill every turn (S3 > S2 > S1, the game's
+`Cool`/`StartCool` cooldowns, no bursts, AP or DoTs), over a `cycle`-turn cycle. The
+PER-HIT columns `dmg` and `mcd` keep `skillFactor`. Applied at the same place as
+`skillFactor` (`computeCheapRatings(…, skillFactor, turnFactor)`, `turnFactor` defaults to
+`skillFactor`); a per-hero constant, a single-hero ranking does not move. Fallback: a
+snapshot without `rotation` → the best-skill factor (`turnSkillFactor`, `lib/dmgSkill.ts`),
+flagged in the tooltip. The DmgS/McdS tooltip gives the sequence ("S3 ×1, S2 ×2, S1 ×1 over
+4 turns") and "approx" when `rotation.approx`; the header badge stays the winning skill.
+E.g. Tamamo-no-Mae: ×1.735 per turn vs ×2.004 for her best hit (S2).
 
 ### 2.4 Score (`ratings.ts::computeScore`)
 

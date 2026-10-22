@@ -28,10 +28,6 @@
 > qui lit le nouveau champ est publiée ; ensuite seulement on retire l'ancien.
 
 ### 🟢 Ratings offensifs — après la colonne « meilleur skill » (2026-09-05)
-- [ ] 🟢 **DPS de rotation pondéré par les cooldowns** — `dmgs` = hit du meilleur skill × SPD, pas une rotation. La
-      donnée damage d'outerpedia porte déjà `levels[].cool` / `startCool` par skill : un facteur « moyen par tour »
-      (S1 filler + S2/S3 quand dispo) est calculable côté générateur. À faire dans le pipeline (nouveau champ),
-      jamais en parsant localement.
 - [ ] ⚪ **DoT dans le meilleur hit** — assumé non modélisé (Gnosis Beth sous-estimée) ; ne traiter que si le moteur
       damage expose un facteur DoT par skill comparable au hit direct.
 

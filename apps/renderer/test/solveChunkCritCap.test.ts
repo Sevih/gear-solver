@@ -95,7 +95,7 @@ function makeCtx(scoredGems: ScoredGem[]): SolveContext {
     poolSizes: {}, scoredGems,
     gemDeltaByTalismanSlots: new Map([...defaults].map(([n, a]) => [n, a.delta])),
     gemAllocByTalismanSlots: new Map([...defaults].map(([n, a]) => [n, a.alloc])),
-    skills: SKILLS, starMeta: STAR_META, dmgStat: "atk", noCrit: false, skillFactor: 1,
+    skills: SKILLS, starMeta: STAR_META, dmgStat: "atk", noCrit: false, skillFactor: 1, turnFactor: 1,
     setPlans: [], excludedSets: new Set(), allowBrokenSets: true,
     excludedWeaponEffects: new Set(), excludedAccessoryEffects: new Set(), reforgeTickWeights: null,
   };

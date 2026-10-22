@@ -413,14 +413,27 @@ export interface CharacterDef {
    *  factor in ‰ of the damage stat (1670 = ×1.67 — SkillLevelTemplet
    *  DamageFactor × the per-clip hit total of the strongest state, per
    *  outerpedia's damage engine). Multi-hit skills are the SUM of their hits.
-   *  The solver's offensive ratings (`dmg`/`dmgs`/`mcd`/`mcds`) multiply
-   *  their 100%-factor base by it — a per-hero constant, so single-hero
+   *  The solver's per-hit ratings (`dmg`/`mcd`) multiply their 100%-factor
+   *  base by it (the per-turn `dmgs`/`mcds` use `rotation`, falling back to
+   *  it) — a per-hero constant, so single-hero
    *  ranking never moves; it makes the numbers comparable across heroes.
    *  `unresolvedHits`: the winner's hit chain is unknown in the data, the
    *  factor is the skill's full value (approximation). Omitted when the
    *  generator has no offensive skill data for the hero → the app falls back
    *  to ×1.00 and says so. DoTs are not modeled. */
   bestSkill?: { slot: "S1" | "S2" | "S3"; burst?: 1 | 2 | 3; factor: number; unresolvedHits?: true };
+  /** The hero's cooldown ROTATION: the hero casts, every turn, the strongest
+   *  skill that is ready (S3 > S2 > S1, game cooldowns `Cool` / `StartCool`);
+   *  `factorPerTurn` is the average skill factor per turn over the repeating
+   *  `cycle` (in turns), in ‰ of the damage stat like `bestSkill.factor`;
+   *  `uses` counts each skill's casts in one cycle. Bursts, AP and DoTs are
+   *  not modeled. `approx`: a cast's hit chain is unresolved in the data (its
+   *  factor is the skill's full value). Emitted by outerpedia's solver
+   *  generator next to `bestSkill`. The per-TURN ratings (`dmgs`/`mcds`) use
+   *  it; the per-HIT ones (`dmg`/`mcd`) keep `bestSkill`. Optional: absent in
+   *  a cache synced before the field existed → the app falls back to
+   *  `bestSkill`, never an error. */
+  rotation?: { factorPerTurn: number; cycle: number; uses: { S1: number; S2: number; S3: number }; approx?: true };
   /** Null only if calc-stats couldn't find a row (defensive fallback). */
   ingredients: CharacterIngredients | null;
 }

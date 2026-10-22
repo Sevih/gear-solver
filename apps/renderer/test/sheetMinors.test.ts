@@ -115,7 +115,7 @@ describe("2. CHC bounded to [0, 100] on the sheet, the raw sum kept apart", () =
         .map((s) => [s, [{ ...piece(s, []), uid: s }]])) as SolveContext["pools"],
       gemDeltaByTalismanSlots: new Map([[5, defaultDelta]]),
       gemAllocByTalismanSlots: new Map([[5, { talisman: [1, 2, 3, 4, 9], ee: [] }]]),
-      skills, starMeta: { showUIStar: 6, starPlus: 0, fused: false }, dmgStat: "atk", noCrit: false, skillFactor: 1,
+      skills, starMeta: { showUIStar: 6, starPlus: 0, fused: false }, dmgStat: "atk", noCrit: false, skillFactor: 1, turnFactor: 1,
       setPlans: [], excludedSets: new Set(), allowBrokenSets: true,
       excludedWeaponEffects: new Set(), excludedAccessoryEffects: new Set(), reforgeTickWeights: null,
     };

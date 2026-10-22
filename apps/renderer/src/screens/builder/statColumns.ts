@@ -42,22 +42,34 @@ export const SOLVER_RATINGS: ReadonlyArray<{ key: string; label: string; formula
   { key: "ehp",  label: "Ehp",  formula: "HP × (1 + DEF/1000) / max(0.3, 1 − dmgRed/100)", desc: "Effective HP — combines the in-game DEF mitigation 1000/(DEF+1000) with the build's own dmgRed (defender-side reduction)." },
   { key: "ehps", label: "EhpS", formula: "EHP × SPD",                       desc: "EHP × Speed — tanky-and-fast." },
   { key: "dmg",  label: "Dmg",  formula: "DmgStat × E[DR] × penMult(2000) × skillFactor", desc: "Expected damage of the hero's STRONGEST skill hit (S1/S2/S3 at max level, burst states included; multi-hit = sum of hits) vs DEF=2000 — scales off the hero's damage stat (ATK by default; DEF/HP for off-ATK heroes), weighting crit (1 + pCrit×(CHD/100−1)), attacker's dmgUp, and PEN, then × the skill's total factor. No buffs / chains; DoT kits are under-estimated. dmgRed doesn't reduce a build's own offensive output (defender stat)." },
-  { key: "dmgs", label: "DmgS", formula: "Dmg × SPD",                       desc: "DPS — Dmg (best skill) × speed. Not a rotation: cooldowns are ignored." },
+  { key: "dmgs", label: "DmgS", formula: "DmgStat × E[DR] × penMult(2000) × turnFactor × SPD", desc: "DPS — damage per turn × speed: same hit model as Dmg, × the average skill factor per turn (S3/S2/S1 rotation by cooldowns — the strongest ready skill every turn; no bursts, AP or DoTs) instead of the best hit." },
   { key: "mcd",  label: "Mcd",  formula: "DmgStat × (CHD/100 + dmgMod) × penMult(2000) × skillFactor", desc: "Max crit damage of the best skill vs DEF=2000 — assumes 100% CHC (raid-buff scenario).", hideInTable: true },
-  { key: "mcds", label: "McdS", formula: "Mcd × SPD",                       desc: "Max DPS — Mcd × speed.",            hideInTable: true },
+  { key: "mcds", label: "McdS", formula: "DmgStat × (CHD/100 + dmgMod) × penMult(2000) × turnFactor × SPD", desc: "Max DPS — the Mcd hit × the average skill factor per turn (S3/S2/S1 rotation by cooldowns) × speed.", hideInTable: true },
   { key: "dmgh", label: "DmgH", formula: "HP × E[DR] × penMult(2000)",      desc: "Expected damage for HP-scaling kits vs DEF=2000 — fixed HP reference column at a 100% skill factor (the Dmg column already scales off the hero's actual stat and best skill).", hideInTable: true },
 ];
 
-/** Ratings scaled by the hero's best-skill factor — their tooltips name the
+/** Ratings scaled by the hero's skill factor — their tooltips name the
  *  winning skill (or the ×1.00 fallback) via `ratingTitle`. */
 export const SKILL_SCALED_RATINGS = new Set(["dmg", "dmgs", "mcd", "mcds"]);
 
+/** The per-TURN ones among them — scaled by the cooldown rotation's average
+ *  factor per turn (`dmgSkill.turn`), not the best hit. */
+const TURN_SCALED_RATINGS = new Set(["dmgs", "mcds"]);
+
 /** Tooltip for a rating column / filter row: formula (optional) + semantics,
  *  plus — for the skill-scaled ratings — which S1/S2/S3 won for the picked
- *  hero and its factor, or an explicit warning when the data is missing. */
+ *  hero and its factor (per-hit columns) or its cooldown rotation (per-turn
+ *  columns), or an explicit warning when the data is missing. */
 export function ratingTitle(r: { key: string; formula: string; desc: string }, dmgSkill: DmgSkillInfo | null, withFormula = true): string {
   const base = withFormula ? `${r.formula} — ${r.desc}` : r.desc;
   if (!SKILL_SCALED_RATINGS.has(r.key)) return base;
+  if (TURN_SCALED_RATINGS.has(r.key)) {
+    if (!dmgSkill) return `${base} Skill factor: the picked hero's average factor per turn (S3/S2/S1 rotation by cooldowns).`;
+    const t = dmgSkill.turn;
+    if (!t.missing) return `${base} × average factor per turn (S3/S2/S1 rotation by cooldowns): ${t.label} ×${t.factor.toFixed(2)}${t.approx ? " (approx — a hit chain is unresolved in the data)" : ""}.`;
+    if (dmgSkill.missing) return `${base} ⚠ No skill data for this hero — skill factor assumed ×1.00 (a 100% skill).`;
+    return `${base} ⚠ No rotation in this data snapshot — best skill used instead: ${t.label} ×${t.factor.toFixed(2)}${t.approx ? " (hit chain unresolved in the data — approximate)" : ""}.`;
+  }
   if (!dmgSkill) return `${base} Skill factor: the picked hero's best skill (S1/S2/S3 at max level).`;
   if (dmgSkill.missing) return `${base} ⚠ No skill data for this hero — skill factor assumed ×1.00 (a 100% skill).`;
   return `${base} Best skill: ${dmgSkill.label} ×${dmgSkill.factor.toFixed(2)}${dmgSkill.approx ? " (hit chain unresolved in the data — approximate)" : ""}.`;

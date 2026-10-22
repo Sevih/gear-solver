@@ -15,8 +15,11 @@
  *   E[DR]   = 1000 + pCrit × (CHD×10 − 1000) + DMGBoost − DMGReduce  (clamped ≥ 300)
  *   penMult = (TARGET_DEF + 1000) / (TARGET_DEF × (1 − PEN/100) + 1000)
  *   skillFactor = the hero's best-skill total factor (‰/1000, `bestSkill` in
- *                 characters.json; 1 = a 100 % skill). Constant per hero: it
- *                 scales `dmg`/`dmgs`/`mcd`/`mcds` without moving ranking.
+ *                 characters.json; 1 = a 100 % skill) — the per-hit `dmg`/`mcd`.
+ *   turnFactor  = the hero's average factor per turn over its cooldown
+ *                 rotation (‰/1000, `rotation` in characters.json) — the
+ *                 per-turn `dmgs`/`mcds`. Both constant per hero: they never
+ *                 move ranking.
  *
  * The previous formula `ATK × CHC × CHD` had no physical meaning — it
  * implicitly assumed non-crits did zero damage, ranking a CHD=300 / CHC=0
@@ -37,12 +40,13 @@ export interface CheapRatings {
    *  level — `skillFactor`) vs a `TARGET_DEF` enemy. Includes crit weighting (pCrit × CHD term), `dmgUp − dmgRed`, and the
    *  penetration multiplier against TARGET_DEF=2000. */
   dmg: number;
-  /** DPS — Dmg × SPD. */
+  /** DPS — Dmg × SPD, at the rotation's average factor per turn
+   *  (`turnFactor`) instead of the best hit. */
   dmgs: number;
   /** Max crit damage — assumes 100% CHC. Useful for setups with raid buffs
    *  that push CHC to 100% (the typical "crit cap" comparison). */
   mcd: number;
-  /** Max DPS — Mcd × SPD. */
+  /** Max DPS — Mcd × SPD, at the rotation's factor per turn (`turnFactor`). */
   mcds: number;
   /** Expected damage per HP-scaling hit (Aer's S3, Caren's heal-as-damage,
    *  etc.) vs a `TARGET_DEF` enemy. Same crit/PEN math as `dmg`, just HP
@@ -86,9 +90,12 @@ const DR_FLOOR = 0.3;
  *  `skillFactor` is the hero's best-skill total factor as a multiplier
  *  (`bestSkill.factor / 1000` — see `lib/dmgSkill.ts`, which also owns the
  *  ×1.00 fallback when the data is missing). It multiplies the damage base
- *  AFTER `dmgStat`/`dmgSec`/`noCrit` are applied, on `dmg`/`dmgs`/`mcd`/`mcds`
- *  only — `dmgh` stays the 100 %-factor HP reference. A per-hero constant:
- *  the relative order of builds is identical for any positive value. */
+ *  AFTER `dmgStat`/`dmgSec`/`noCrit` are applied, on the per-hit `dmg`/`mcd`.
+ *  `turnFactor` is the rotation's average factor per turn (`turnSkillFactor`,
+ *  same file — falls back to the best skill), applied at the same place on
+ *  the per-turn `dmgs`/`mcds`; it defaults to `skillFactor`. `dmgh` stays the
+ *  100 %-factor HP reference. Per-hero constants: the relative order of
+ *  builds is identical for any positive values. */
 export function computeCheapRatings(
   s: FinalStats,
   dmgStat: "atk" | "def" | "hp" = "atk",
@@ -98,6 +105,7 @@ export function computeCheapRatings(
   dmgSec?: ReadonlyArray<{ stat: "atk" | "def" | "hp" | "spd" | "eff" | "crc"; ratio: number }>,
   noCrit = false,
   skillFactor = 1,
+  turnFactor = skillFactor,
 ): CheapRatings {
   const hps = s.hp * s.spd;
   // EHP — combines DEF mitigation with the defender's DMGReduceRate
@@ -139,13 +147,16 @@ export function computeCheapRatings(
       dmgBase += (stat === "def" ? s.def : stat === "hp" ? s.hp : stat === "spd" ? s.spd : stat === "eff" ? s.eff : stat === "crc" ? s.critRate : s.atk) * ratio;
     }
   }
-  // Best-skill factor LAST: a per-hero constant on top of the build-trait
-  // product (base × crit/dmgUp rate × PEN) — the number becomes "the hero's
-  // strongest hit", the ranking stays exactly the 100 %-factor one.
-  const dmg = dmgBase * drFactor * penMult * skillFactor;
-  const dmgs = dmg * s.spd;
-  const mcd = dmgBase * mcdFactor * penMult * skillFactor;
-  const mcds = mcd * s.spd;
+  // Skill factors LAST: per-hero constants on top of the build-trait product
+  // (base × crit/dmgUp rate × PEN) — the per-hit columns become "the hero's
+  // strongest hit", the per-turn ones its cooldown rotation; the ranking stays
+  // exactly the 100 %-factor one.
+  const dmgRaw = dmgBase * drFactor * penMult;
+  const mcdRaw = dmgBase * mcdFactor * penMult;
+  const dmg = dmgRaw * skillFactor;
+  const dmgs = dmgRaw * turnFactor * s.spd;
+  const mcd = mcdRaw * skillFactor;
+  const mcds = mcdRaw * turnFactor * s.spd;
   const dmgh = s.hp * drFactor * penMult;
   return { hps, ehp, ehps, dmg, dmgs, mcd, mcds, dmgh };
 }

@@ -509,7 +509,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const dmgStat = meta.dmgStat ?? "atk";
     const amp = (k: "atk" | "def" | "hp") => 1 + (composed.scaling[k]?.buffPct ?? 0) / 100;
     const dmgAmp = { atk: amp("atk"), def: amp("def"), hp: amp("hp") };
-    return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false, dmgSkill: dmgSkillInfo(meta.bestSkill) };
+    return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false, dmgSkill: dmgSkillInfo(meta.bestSkill, meta.rotation) };
   }, [inventory, game, selected, userGeasLevels, userCodexLevel]);
 
   /** Battle-Power swing of the selected build vs the hero's current loadout —

@@ -118,6 +118,18 @@ Typed optional in `CharacterIngredients`: an older cache lacks it and the compos
 falls back to the legacy `corePassive` (a single block at max level, speed pre-baked as
 flat), which contract format 2 drops.
 
+**Skill factors (`characters.json`).** `bestSkill` `{ slot, burst?, factor,
+unresolvedHits? }`: the strongest skill hit (S1/S2/S3 at max level, bursts included),
+`factor` in ‰ of the damage stat; it scales the per-hit ratings `dmg`/`mcd`. Next to it,
+`rotation` `{ factorPerTurn, cycle, uses: { S1, S2, S3 }, approx? }` (added by outerpedia,
+additive, `schema` unchanged): the per-turn average, in ‰, of the factor played when the
+hero casts the strongest ready skill every turn (S3 > S2 > S1, the game's
+`Cool`/`StartCool` cooldowns, no bursts, AP or DoTs), over a `cycle`-turn cycle in which
+each skill is cast `uses[S]` times; `approx` when a hit chain is unresolved. It scales the
+per-turn ratings `dmgs`/`mcds` (cf. [Engine Reference §2.3](Engine-Reference#23-cheap-ratings-ratingstscomputecheapratings)). Typed
+optional in `CharacterDef`: an older cache lacks it and the app then falls back to
+`bestSkill`.
+
 **Set levels (`sets.json`).** Each `levels[]` entry carries, next to `p2` / `p4` /
 `p2_desc` / `p4_desc`, two fields added by outerpedia (`schema` still 1):
 `breakLimitCounts` (`number[]`, the breakthroughs that give a piece this level; today

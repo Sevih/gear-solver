@@ -33,7 +33,7 @@ import { isLowerPriority } from "../storage/heroPriority.js";
 import { allocateGems, allocateGemsByCp, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type GemAllocation, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import { isPctRollWithoutNorm } from "../statRegistry.js";
-import { dmgSkillFactor } from "../dmgSkill.js";
+import { dmgSkillFactor, turnSkillFactor } from "../dmgSkill.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
 import { allSetsComplete, armorSetWhitelist, planSetIds, setsFeasible } from "./setPlans.js";
 import { gearPieceQualityTier, QUALITY_TIERS, type QualityTier } from "../quality.js";
@@ -273,9 +273,13 @@ export interface PrecomputedSolveContext {
    *  score with `pCrit = 0` so CHC/CHD gear isn't rewarded for them. */
   noCrit: boolean;
   /** Best-skill total factor (`bestSkill.factor / 1000`, ×1 when the hero has
-   *  no skill data — `dmgSkillFactor`). Scales `dmg`/`dmgs`/`mcd`/`mcds`;
+   *  no skill data — `dmgSkillFactor`). Scales the per-hit `dmg`/`mcd`;
    *  constant per solve, so it never changes the ranking. */
   skillFactor: number;
+  /** Rotation factor per turn (`rotation.factorPerTurn / 1000`, best skill
+   *  when the snapshot has no rotation — `turnSkillFactor`). Scales the
+   *  per-turn `dmgs`/`mcds`; constant per solve, never changes the ranking. */
+  turnFactor: number;
   /** Set requirements as an OR-list of AND-plans. Used for branch-and-prune
    *  in the armor cartesian (feasible = at least one plan still reachable). */
   setPlans: SetPlan[];
@@ -853,6 +857,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     dmgSec: meta.dmgSec,
     noCrit,
     skillFactor: dmgSkillFactor(meta.bestSkill),
+    turnFactor: turnSkillFactor(meta.rotation, meta.bestSkill),
     setPlans,
     excludedSets,
     allowBrokenSets,
@@ -1529,7 +1534,7 @@ export async function solveChunk(
   options: SolveChunkOptions = {},
 ): Promise<SolveChunkResult> {
   const { req, pools, baseline, scaling, ee, gemDeltaByTalismanSlots, gemAllocByTalismanSlots,
-          scoredGems, setPlans, allowBrokenSets, skills, starMeta, dmgStat, dmgSec, noCrit, skillFactor } = ctx;
+          scoredGems, setPlans, allowBrokenSets, skills, starMeta, dmgStat, dmgSec, noCrit, skillFactor, turnFactor } = ctx;
   const { mode, filters, game } = req;
   const rules = gameRulesOf(game);
   // EE gem-slot count is constant per solve (same EE piece across every combo).
@@ -1799,7 +1804,7 @@ export async function solveChunk(
                 // real ratings for the top-N only. `passesRatingSpecs` only ever
                 // reads `score` here when deferred (the defer flag guarantees no
                 // rating-keyed spec), so the zero placeholder is never inspected.
-                const ratings = deferRatings ? PLACEHOLDER_RATINGS : computeCheapRatings(fs, dmgStat, dmgSec, noCrit, skillFactor);
+                const ratings = deferRatings ? PLACEHOLDER_RATINGS : computeCheapRatings(fs, dmgStat, dmgSec, noCrit, skillFactor, turnFactor);
                 const score = computeScore(fs, filters.priority);
 
                 if (!passesRatingSpecs(ratings, score, ratingFilterSpecs)) continue;
@@ -1899,7 +1904,7 @@ export function collapseTalismanVariants(builds: SolveBuild[], k: number): Solve
  *    re-check is likewise a no-op (the recall hazard of an a-posteriori CP/upg
  *    filter is handled by enforcing both in `solveChunk`, not here). */
 export function finalizeBuilds(ctx: SolveContext, builds: SolveBuild[], mode: SolveMode): SolveBuild[] {
-  const { req, ee, skills, starMeta, dmgStat, dmgSec, noCrit, skillFactor } = ctx;
+  const { req, ee, skills, starMeta, dmgStat, dmgSec, noCrit, skillFactor, turnFactor } = ctx;
   const byUid = new Map<string, GearPiece>();
   for (const g of req.inventory.gear) byUid.set(g.uid, g);
   // SOLVE CP deferred the cheap ratings (heap orders by CP, ratings only feed
@@ -1940,7 +1945,7 @@ export function finalizeBuilds(ctx: SolveContext, builds: SolveBuild[], mode: So
       if (!equippedUids.has(b.pieceUids[i]!)) upg++;
     }
     if (upgFilter && !inMinMax(upg, upgFilter)) continue;
-    const ratings = ratingsDeferred ? computeCheapRatings(b.finalStats, dmgStat, dmgSec, noCrit, skillFactor) : b.ratings;
+    const ratings = ratingsDeferred ? computeCheapRatings(b.finalStats, dmgStat, dmgSec, noCrit, skillFactor, turnFactor) : b.ratings;
     out.push({ ...b, cp, upg, ratings });
   }
   return out;

@@ -663,6 +663,33 @@ describe("computeCheapRatings", () => {
     );
   });
 
+  it("dmg / mcd follow skillFactor (best hit), dmgs / mcds follow turnFactor (rotation)", () => {
+    // CHC 50 %, CHD 200 % → drFactor 1.5, mcdFactor 2.0; PEN 0 → penMult 1.
+    const fs = { atk: 1000, def: 0, hp: 0, spd: 100, critRate: 50, critDmg: 200,
+      eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen: 0, critDmgReduce: 0 };
+    const r = computeCheapRatings(fs, "atk", undefined, false, 2, 1.5);
+    expect(r.dmg).toBeCloseTo(3000);           // 1000 × 1.5 × 2
+    expect(r.mcd).toBeCloseTo(4000);           // 1000 × 2.0 × 2
+    expect(r.dmgs).toBeCloseTo(225000);        // 1000 × 1.5 × 1.5 × 100
+    expect(r.mcds).toBeCloseTo(300000);        // 1000 × 2.0 × 1.5 × 100
+    expect(r.dmgh).toBe(computeCheapRatings(fs).dmgh); // 100 %-factor reference, untouched
+    // turnFactor defaults to skillFactor (callers that pass only one factor).
+    expect(computeCheapRatings(fs, "atk", undefined, false, 2).dmgs).toBeCloseTo(300000);
+  });
+
+  it("the order of a hero's builds is identical for any positive skill / turn factor", () => {
+    const mk = (atk: number, spd: number, critRate: number, critDmg: number, pen: number) =>
+      ({ atk, def: 0, hp: 0, spd, critRate, critDmg, eff: 0, effRes: 0, dmgUp: 0, dmgReduce: 0, pen, critDmgReduce: 0 });
+    const builds = [mk(3000, 150, 100, 250, 0), mk(3600, 120, 60, 200, 30), mk(2800, 190, 80, 180, 10), mk(3300, 140, 30, 300, 50)];
+    const order = (sf: number, tf: number, key: "dmg" | "dmgs" | "mcd" | "mcds") =>
+      builds.map((b, i) => [i, computeCheapRatings(b, "atk", undefined, false, sf, tf)[key]] as const)
+        .sort((a, b) => b[1] - a[1]).map(([i]) => i);
+    for (const key of ["dmg", "dmgs", "mcd", "mcds"] as const) {
+      const ref = order(1, 1, key);
+      for (const [sf, tf] of [[0.86, 2.5], [2.004, 1.735], [3, 0.5]] as const) expect(order(sf, tf, key), `${key} ${sf}/${tf}`).toEqual(ref);
+    }
+  });
+
   it("dmgh applies the same crit + PEN math as dmg, but scaled on HP", () => {
     // HP-scaling skills (Aer S3, Caren heal-as-damage) still hit DEF and
     // benefit from PEN; only the source stat changes.

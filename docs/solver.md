@@ -169,9 +169,10 @@ Pour chaque combo qui passe phase 4 :
    - `gemDelta` est pré-agrégé (cf. § Gems).
 2. **Stat filter** : si une `FinalStats[key]` est hors `[min, max]` user, `continue`.
 3. **Cheap ratings** : 8 produits simples (HpS, Ehp, EhpS, Dmg, DmgS, Mcd, McdS, DmgH).
-   Dmg/DmgS/Mcd/McdS sont multipliés par le **facteur du meilleur skill** du héros
-   (`meta.bestSkill` → `ctx.skillFactor`, ×1 si absent) — constante par solve, le
-   classement ne change pas (cf. reference.md § 2.3).
+   Dmg/Mcd sont multipliés par le **facteur du meilleur skill** du héros
+   (`meta.bestSkill` → `ctx.skillFactor`, ×1 si absent), DmgS/McdS par le **facteur moyen
+   par tour de sa rotation** (`meta.rotation` → `ctx.turnFactor`, meilleur skill si absente)
+   — constantes par solve, le classement ne change pas (cf. reference.md § 2.3).
    Pour un héros **`noCrit`** (`meta.noCrit`, propagé dans le contexte), `computeCheapRatings`
    reçoit `noCrit=true` → `pCrit=0` (le terme CHD disparaît) et `mcd` retombe sur le hit
    non-crit : la CHC/CHD ne gonfle plus ses ratings. CP reste inchangé (miroir in-game fidèle).

@@ -8,6 +8,59 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚔️ Colonnes par tour (DmgS / McdS) sur la rotation par cooldowns du contrat, le meilleur hit reste pour Dmg / Mcd (2026-10-22)
+- ✅ **Pourquoi.** `dmgs`/`mcds` = dégât × SPD, « par tour », multipliaient le hit du MEILLEUR skill comme si le perso
+  le relançait à chaque tour ; les tables synchronisées au commit `60963bb` (hash `1f7fe7bd57b6`, format 2) portent
+  sur les 129 persos le champ additif `rotation: { factorPerTurn (‰), cycle, uses: { S1, S2, S3 }, approx? }` à côté
+  de `bestSkill` : la moyenne par tour du facteur joué quand le perso lance à chaque tour le skill prêt le plus fort
+  (S3 > S2 > S1, cooldowns `Cool`/`StartCool` du jeu, sans burst, AP ni DoT ; 4 persos `approx`).
+- ✅ **Quoi.** `CharacterDef.rotation?` typé dans `packages/core/src/gamedata.ts` (docblock : origine, sens, optionnel
+  → repli sur `bestSkill`, jamais une erreur ; celui de `bestSkill` dit maintenant qu'il ne fait plus que `dmg`/`mcd`).
+  `apps/renderer/src/lib/dmgSkill.ts` : `dmgSkillFactor(best)` inchangé (per-hit) ; nouvelle
+  `turnSkillFactor(rotation, best)` = `factorPerTurn / 1000`, repli `dmgSkillFactor(best)` sans rotation (ou
+  `factorPerTurn <= 0`) ; `dmgSkillInfo(best, rotation?)` gagne `turn: { factor, label, missing, approx }`, label
+  « S3 ×1, S2 ×2, S1 ×1 over 4 turns » (skills à 0 lancer omis), `missing` = repli sur le meilleur skill (label et
+  `approx` du meilleur skill alors). `ratings.ts` : `computeCheapRatings(…, skillFactor, turnFactor = skillFactor)`,
+  `turnFactor` appliqué au même endroit que `skillFactor` (après base × taux crit/dmgUp × PEN) sur `dmgs`/`mcds`,
+  `skillFactor` reste sur `dmg`/`mcd`, `dmgh` intouché. `engine.ts` : `SolveContext.turnFactor`
+  (`turnSkillFactor(meta.rotation, meta.bestSkill)`), passé aux deux appels de `computeCheapRatings` (chunk et
+  `finalizeBuilds`) ; les workers reçoivent le contexte tel quel, aucun autre appelant dans `apps/renderer/src`.
+  `BuilderScreen.tsx` passe `meta.rotation` à `dmgSkillInfo`.
+- ✅ **UI.** Seules les infobulles changent : `statColumns.ts`, DmgS/McdS (formule `… × turnFactor × SPD`, desc
+  « average skill factor per turn (S3/S2/S1 rotation by cooldowns) ») et `ratingTitle` qui ajoute « × average factor
+  per turn (S3/S2/S1 rotation by cooldowns): S3 ×1, S2 ×2, S1 ×1 over 4 turns ×1.74 » plus « approx » quand
+  `rotation.approx`, ou « ⚠ No rotation in this data snapshot — best skill used instead » sur un vieux cache ;
+  Dmg/Mcd gardent « Best skill: … ». Le badge d'en-tête (le skill gagnant, `ResultsTable.tsx`) est inchangé, y compris
+  sur DmgS.
+- ✅ **Classement mono-perso inchangé** : les deux facteurs sont des constantes par perso, l'ordre des builds d'un
+  solve ne bouge pas (test dédié) ; seuls les nombres DmgS/McdS affichés et la comparaison entre persos changent.
+- ✅ **Vraie donnée.** Tamamo-no-Mae (`2000080`) : `turnSkillFactor` = 1,735 (S1 ×1, S2 ×2, S3 ×1 sur 4 tours) <
+  `dmgSkillFactor` = 2,004 (S2) ; sa variante Kitsune of Eternity (`2000086`) : 1,843 < 2,490 (S3).
+- ✅ **Tests legacy réparés** (`packages/core/test/compose-stats.test.ts`, describe « Core Fusion — fallback on a cache
+  without corePassiveByFusion (legacy corePassive) ») : rouges depuis `60963bb` (ils retiraient `corePassiveByFusion`
+  de la vraie donnée et attendaient un `corePassive` que le format 2 ne porte plus). Le cache legacy se construit
+  désormais à la main depuis le bloc `corePassiveByFusion["5"]` du perso, sans `spdPct`, avec la vitesse cuite en plat
+  de l'ancien encodage (Snow `spd` 6, Notia 0 — son `effRate` 50 donne EFF 255 à tout palier) ; valeurs épinglées
+  inchangées (Snow 139 / 142 / 145 / 148 / 155 / 163, Notia EFF 255 à la fusion 1). Commentaire : la donnée n'a plus
+  `corePassive` depuis le format 2 (22/10/2026), ces tests ne couvrent que le repli des vieux caches. Compositeur et
+  donnée intouchés.
+- ✅ **Tests.** `apps/renderer/test/dmgSkill.test.ts` : facteur par tour avec rotation, repli sans (`undefined`,
+  `null`, `factorPerTurn` 0, ni l'un ni l'autre → 1), `approx`, label, infobulles DmgS/McdS vs Dmg/Mcd, vraie donnée
+  (toutes les entrées ont une rotation, Tamamo 1,735 < 2,004). `apps/renderer/test/solver.test.ts` (describe
+  `computeCheapRatings`, pas de `ratings.test.ts` dans le dépôt) : `dmgs`/`mcds` suivent `turnFactor`, `dmg`/`mcd`
+  `skillFactor`, `turnFactor` par défaut = `skillFactor`, ordre de 4 builds identique pour toute paire de facteurs
+  positifs. Les littéraux `SolveContext` de `dominance`, `sheetMinors`, `solveChunk` et `solveChunkCritCap` gagnent
+  `turnFactor: 1`. `npm run typecheck` : sortie 0 (dernière ligne `tsc --noEmit`) ; `npm test` : core
+  `Tests 166 passed (166)`, desktop `Tests 159 passed (159)`, renderer `Tests 586 passed (586)` ; `npm run lint` :
+  `✖ 15 problems (0 errors, 15 warnings)`, inchangé.
+- ✅ **Docs.** `docs/data-schema.md` + `wiki/Data-Schema.md` (paragraphe « Facteurs de skill » : `bestSkill` et
+  `rotation`), `docs/reference.md` + `wiki/Engine-Reference.md` §2.3 (`turnFactor` dans le bloc de formules, lignes
+  `dmgs`/`mcds` du tableau, paragraphe « Rotation par cooldowns », le « TODO » retiré), `docs/solver.md` +
+  `wiki/Solver.md` (étape 3), `docs/release-notes.md › [Unreleased]` (puce joueur), `docs/todo.md` (item « DPS de
+  rotation pondéré par les cooldowns » retiré).
+- ⏳ **Laissé.** Bursts, AP et DoT dans la rotation (l'item « DoT dans le meilleur hit » reste au todo) ; le badge
+  d'en-tête de DmgS montre toujours le skill gagnant (changement visuel non demandé) ; la release.
+
 ### 🧪 Contrat solver, M3 — le passif d'EE de Fatal (`ee-passives["2000078"]`) lu par un test, garde-fou de contrat (2026-10-21)
 - ✅ **Pourquoi.** `packages/core/src/parse.ts` (l.282-300) lit `game.eePassives?.[String(item.ItemID)]` pour un item
   `exclusive`, saute une entrée tant que `enhanceLevel < levelThreshold` (`levelThreshold <= 1` = toujours active) et

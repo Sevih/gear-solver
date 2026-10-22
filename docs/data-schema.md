@@ -183,6 +183,17 @@ retombe alors sur l'ancien `corePassive` (un seul bloc au niveau max, vitesse cu
 plat). Le format 2, émis depuis le 22/10/2026, ne porte plus `corePassive` : ce repli ne
 sert plus qu'aux caches synchronisés avant cette date.
 
+**Facteurs de skill (`characters.json`).** `bestSkill` `{ slot, burst?, factor,
+unresolvedHits? }` : le hit du skill le plus fort (S1/S2/S3 niveau max, bursts inclus),
+`factor` en ‰ de la stat de dégât ; il multiplie les ratings par hit `dmg`/`mcd`. À côté,
+`rotation` `{ factorPerTurn, cycle, uses: { S1, S2, S3 }, approx? }` (C28 d'outerpedia,
+additif, `schema` inchangé) : la moyenne par tour, en ‰, du facteur joué quand le perso
+lance à chaque tour le skill prêt le plus fort (S3 > S2 > S1, cooldowns `Cool`/`StartCool`
+du jeu, sans burst, AP ni DoT), sur un cycle de `cycle` tours où chaque skill est lancé
+`uses[S]` fois ; `approx` quand une chaîne de hits est irrésolue. Il multiplie les ratings
+par tour `dmgs`/`mcds` (cf. [reference.md §2.3](reference.md#23-cheap-ratings-ratingstscomputecheapratings)). Typé optionnel dans
+`CharacterDef` : un cache d'avant ne l'a pas, l'app retombe alors sur `bestSkill`.
+
 **Paliers de set (`sets.json`).** Chaque entrée `levels[]` porte, à côté de `p2` / `p4` /
 `p2_desc` / `p4_desc`, deux champs ajoutés par outerpedia (C20, `schema` resté à 1) :
 `breakLimitCounts` (`number[]`, les breakthroughs qui donnent ce niveau à une pièce ;

@@ -12,7 +12,11 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Per-turn damage columns (DmgS / McdS) now use the hero's cooldown rotation**: the
+  average skill factor per turn when the hero casts its strongest ready skill every turn
+  (S3, then S2, then S1), instead of repeating its best hit. Dmg and Mcd still show the best
+  hit. The column tooltip gives the rotation (e.g. "S3 ×1, S2 ×2, S1 ×1 over 4 turns"); a
+  single hero's build ranking does not change.
 
 ## [1.11.1] — 2026-10-20
 

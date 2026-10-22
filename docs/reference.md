@@ -334,6 +334,7 @@ penPct   = min(PEN, 100) / 100             ← PPR cappe à 100% (§1.2)
 effDef   = TARGET_DEF × (1 − penPct)
 penMult  = (TARGET_DEF + 1000) / (effDef + 1000)            ← ratio mitigation
 skillFactor = bestSkill.factor / 1000      ← meilleur skill du perso (S1/S2/S3 niveau max, bursts inclus) ; 1 si donnée absente
+turnFactor  = rotation.factorPerTurn / 1000 ← facteur moyen par tour de la rotation par cooldowns ; skillFactor si absente
 ```
 
 **Côté défensif** (`ehp`) — `dmgRed` est une stat **defender** (`rate -=
@@ -356,9 +357,9 @@ ranke pareil pour n'importe quel `TARGET_DEF`.
 | `ehp`  | `HP × (1 + DEF/1000) / dmgTaken`       | Effective HP — mit DEF + dmgRed defender |
 | `ehps` | `EHP × SPD`                            | Tanky-and-fast                          |
 | `dmg`  | `ATK × drFactor × penMult × skillFactor` | Hit attendu du MEILLEUR skill vs DEF=2000 |
-| `dmgs` | `dmg × SPD`                            | DPS (pas une rotation — cooldowns ignorés) |
+| `dmgs` | `ATK × drFactor × penMult × turnFactor × SPD` | DPS sur la rotation par cooldowns (S3/S2/S1) |
 | `mcd`  | `ATK × mcdFactor × penMult × skillFactor` | Max crit du meilleur skill (assume 100% CHC) |
-| `mcds` | `mcd × SPD`                            | Max DPS                                 |
+| `mcds` | `ATK × mcdFactor × penMult × turnFactor × SPD` | Max DPS sur la rotation par cooldowns |
 | `dmgh` | `HP × drFactor × penMult`              | Damage HP-scaling (Aer S3, Caren, …) — SANS skillFactor (référence 100 %) |
 
 Conventions :
@@ -406,9 +407,23 @@ l'en-tête de colonne (`lib/dmgSkill.ts`) — jamais un 0 silencieux. Le gagnant
 (`ratingTitle`), avec la mention « approximate » si sa chaîne de hits est irrésolue
 (`unresolvedHits`). **Assumé, non modélisé** : les DoT (un perso dont le vrai « meilleur
 hit » est un DoT — Gnosis Beth — est sous-estimé par un facteur de hit direct), les buffs
-et chaînes ; le DPS de rotation pondéré par les cooldowns est un TODO. Validé contre le
+et chaînes. Validé contre le
 damage calculator d'outerpedia (`buildSkillReport`, mêmes stats, DEF 2000, crit 0 %) :
 Rhona S3 ×1,67, K S2-burst 1 ×2,39, Primine S1 ×0,86 — exacts.
+
+**Rotation par cooldowns (`turnFactor`, 2026-10-22)** — les colonnes PAR TOUR `dmgs` et
+`mcds` (dégât × SPD) ne prennent plus le meilleur hit mais `rotation.factorPerTurn / 1000`
+(`characters.json`, émis par outerpedia à côté de `bestSkill`) : le facteur moyen par tour
+quand le perso lance à chaque tour le skill prêt le plus fort (S3 > S2 > S1, cooldowns
+`Cool`/`StartCool` du jeu, sans burst, AP ni DoT), sur un cycle de `cycle` tours. Les
+colonnes PAR HIT `dmg` et `mcd` gardent `skillFactor`. Appliqué au même endroit que
+`skillFactor` (`computeCheapRatings(…, skillFactor, turnFactor)`, `turnFactor` vaut
+`skillFactor` par défaut) ; constante par perso, le classement mono-perso ne bouge pas.
+Repli : snapshot sans `rotation` → le facteur du meilleur skill (`turnSkillFactor`,
+`lib/dmgSkill.ts`), signalé dans l'infobulle. L'infobulle DmgS/McdS donne la séquence
+(« S3 ×1, S2 ×2, S1 ×1 over 4 turns ») et « approx » quand `rotation.approx` ; le badge
+d'en-tête reste le skill gagnant. Ex. Tamamo-no-Mae : ×1,735 par tour contre ×2,004 pour
+son meilleur hit (S2).
 
 ### 2.4 Score (`ratings.ts::computeScore`)
 
