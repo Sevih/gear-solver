@@ -24,6 +24,9 @@
 - **Presets and Worklist use the whole window**; preset pieces laid out as in-game, with the
   reference hero's EE; a hero whose crit rate or penetration overshoots 100 % on a preset is flagged.
 - **Builder: crit rate past 100 % shows its raw value (+N)** in the results and the stats panel.
+- **Builder**: CP before / after at the top of « Current → Projected »; the « Upg » column is now
+  **Swaps** (slots that change vs the current loadout, not upgrades to do); right-click a value in the
+  results to set it as a **Min ≥ / Max ≤** threshold and solve again.
 
 ## [1.14.0] — 2026-10-22
 
