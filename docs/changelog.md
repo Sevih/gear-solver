@@ -8,6 +8,39 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎚️ Builder : CP avant / après dans « Current → Projected », colonne « Swaps », seuils par clic droit sur le tableau (2026-10-23)
+- ✅ **CP avant / après.** `StatsPanel` reçoit `cp: { current, projected }` et ouvre le panneau par une ligne « CP » au
+  même format que les stats (courant ▸ projeté, delta signé, vert / rose / neutre selon le delta) ; `StatsPanelRow`
+  prend désormais une icône, une unité et les deux valeurs, la ligne CP occupe la moitié gauche de sa rangée (une
+  cellule `col-span-4` la complète) pour que les paires de stats gardent leur grille. Pas d'icône CP dans `STAT` :
+  libellé texte au style du repli de `StatIcon`. `BuilderScreen` passe `composition?.currentCp` et
+  `selectedBuild?.cp` ; le badge `deltaCpText` au-dessus de la bande d'équipement reste.
+- ✅ **« Upg » → « Swaps ».** Le nombre compte des slots qui changent, pas des améliorations : en-tête `swaps`,
+  tooltip « Slots that change vs the hero's current loadout — not upgrades to do », tooltip de cellule (« N slot(s)
+  change vs the current loadout »), entrée du menu des colonnes, ligne et hint du panneau Rating filters. Clés
+  inchangées (`ratingFilters.upg`, `colPrefs["upg"]`, `WorklistEntry.upg`, `build.upg`) ; aucun libellé « upg »
+  visible dans la Worklist. Docs : `docs/solver.md` / `wiki/Solver.md` (ResultsTable), `wiki/Using-the-App.md`,
+  `wiki/FAQ.md` (la question « What's the "Upg" column? »), titre 2.11 de `docs/reference.md` /
+  `wiki/Engine-Reference.md`.
+- ✅ **Seuils par clic droit.** Clic droit sur une cellule de stat, de rating ou de CP → `CellMenu` à la position du
+  clic (fixe, ramené dans la fenêtre) : « Min ≥ v », « Max ≤ v » (v = `roundDisplay`, la valeur imprimée, avec
+  l'unité), « Cancel » ; Échap et clic dehors (`useClickOutside`) ferment. `ResultsTable` reçoit `onThreshold(kind,
+  key, bound, value)` ; l'ouvreur passé aux lignes est stable (`useCallback`) pour ne pas casser le memo de
+  `ResultRow`. Pas de menu sur score, swaps, effets, ★ ; le clic droit ne sélectionne pas la ligne. `BuilderScreen`
+  dispatche `setStatFilter` (stat) ou `setRatingFilter` (rating, CP compris), l'autre borne gardée, et relance
+  `startSolve(lastSolveMode)` : `startSolve` lit `filters` dans sa fermeture, périmée dans le handler, donc le mode
+  est mis dans un ref et un effet sur `filters` lance le solve au rendu qui porte la nouvelle borne (un ref plutôt
+  qu'un état : un `setState` dans l'effet ajoutait un avertissement `set-state-in-effect`). Les panneaux de filtres
+  lisent `filters` et montrent la borne ; une colonne de stat bornée est déjà forcée visible. `builderFilters.ts`
+  non touché. Pas de test de rendu : ni `@testing-library` ni jsdom, la logique ajoutée est du câblage de composant.
+- ✅ **Vérifié.** `npm run typecheck` : `tsc --noEmit` sans erreur (exit 0) ; `npm test` : « Tests  686 passed (686) »
+  (dernier workspace) ; `npm run lint` : « ✖ 13 problems (0 errors, 13 warnings) », inchangé.
+- ⏳ **Remarque.** La borne est la valeur affichée, arrondie : un « Min ≥ 85.3% » posé sur une ligne à 85.26 l'exclut
+  (idem un entier ≥ 100 arrondi vers le haut). Conforme à la demande ; à revoir si ça gêne au banc.
+- ⏳ **Sevih sur le fixe** : la ligne CP en tête de « Current → Projected » avec le delta ; la colonne s'appelle
+  « Swaps » ; clic droit sur une valeur → « Min ≥ » / « Max ≤ » pose le seuil, le panneau de filtres le montre et le
+  solve repart.
+
 ### 🎯 Presets : « Optimize preset → » — mêmes effets d'arme / accessoire / talisman requis, sous-stats prioritaires depuis la tenue et la reco (2026-10-23)
 - ✅ **Le patch.** Demande de Sevih après G46 : « Optimize → » sur la ligne de référence ouvrait le Builder sur le héros
   sans rien d'autre. `lib/presets/optimize.ts` (nouveau, pur) : `presetOptimizePatch({ pieces, reco, game,

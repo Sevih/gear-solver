@@ -21,6 +21,7 @@ import { SLOT_BY } from "../../design/tokens.js";
 import { dmgSkillInfo } from "../../lib/dmgSkill.js";
 import { computeFinalStats } from "../../lib/composeBuild.js";
 import { calcBattlePower } from "../../lib/solver/cp.js";
+import type { SolveMode } from "../../lib/solver/types.js";
 import type { HeroPriority } from "../../lib/storage/heroPriority.js";
 import {
   INITIAL_FILTERS, solverFiltersReducer,
@@ -229,6 +230,25 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setSelectedBuildIdx, displayFilter, setDisplayFilter, lastSolveMode, setLastSolveMode, startSolve, cancelSolve,
     displayedResults, resolvedWorkers, applyClientFilter,
   } = useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, workerCount, topN, topK });
+
+  /** Right-click on a result cell → "Min ≥ / Max ≤ <value>": set that bound
+   *  (the other one stays) and re-solve in the last solve's mode. The solve
+   *  fires from the effect below, on the render that carries the new band —
+   *  `startSolve` reads `filters` from its closure, stale in this handler. */
+  const thresholdResolveRef = useRef<SolveMode | null>(null);
+  const setThresholdAndResolve = useCallback((kind: "stat" | "rating", key: string, bound: "min" | "max", value: number) => {
+    thresholdResolveRef.current = lastSolveMode;
+    dispatch(kind === "stat"
+      ? { type: "setStatFilter", stat: key, bound, value }
+      : { type: "setRatingFilter", rating: key, bound, value });
+  }, [lastSolveMode]);
+  useEffect(() => {
+    const mode = thresholdResolveRef.current;
+    if (!mode) return;
+    thresholdResolveRef.current = null;
+    startSolve(mode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
   /** Whether any stat/rating band is set — gates the Filter button (nothing to
    *  apply otherwise). */
@@ -696,6 +716,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               game={game}
               heatmap={heatmap}
               dmgSkill={composition?.dmgSkill ?? null}
+              onThreshold={setThresholdAndResolve}
             />
           </div>
           {/* Gear band takes the remaining height and scrolls if the window is
@@ -763,6 +784,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           <StatsPanel
             stats={composition?.current ?? null}
             projected={selectedBuild?.finalStats ?? null}
+            cp={{ current: composition?.currentCp ?? null, projected: selectedBuild?.cp ?? null }}
             width="w-full"
           />
           <BuildEffectsPanel build={selectedBuild} pieceByUid={pieceByUid} game={game} />

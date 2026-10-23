@@ -169,9 +169,10 @@ results, the bottom band shows the selected build's pieces.
 ### 4. Read the results
 
 - The **table** lists ranked builds with a red→green **heatmap** per column: sets, the main
-  stats, derived ratings, **Score**, and **Upg** (how many slots differ from what's currently
-  equipped). Click a column header to sort; **right-click** a header (or the Columns button) to
-  show/hide columns.
+  stats, derived ratings, **Score**, and **Swaps** (how many slots change vs what's currently
+  equipped — not upgrades to do). Click a column header to sort; **right-click** a header (or the
+  Columns button) to show/hide columns. **Right-click a value** (a stat, a rating or CP) →
+  **Min ≥** / **Max ≤** that value: the bound lands in the filter panels and the solve re-runs.
 - **Click a row** → the **bottom gear band** shows the 8 pieces of that build, including the
   **recommended gem allocation** (with a "swap" badge if it differs from what's socketed) and,
   if a Reforge mode is on, the **projected** max-roll stats.

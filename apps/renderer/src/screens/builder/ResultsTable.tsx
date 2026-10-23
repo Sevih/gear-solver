@@ -2,7 +2,7 @@
  * Builder results table — virtualized, sortable result rows with the column
  * heatmap and the columns menu.
  */
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { GameData, GearPiece } from "@gear-solver/core";
 import { StatIcon } from "../../design/EquipmentIcon.js";
@@ -21,7 +21,7 @@ import type { ArmorSetEntry } from "./catalogs.js";
  * Middle area — results table + right sidebar
  * ───────────────────────────────────────────────────────────────────────── */
 /** Header dropdown to show/hide result columns. Stats default to the first 8
- *  visible, ratings + Score + Upg default on; a column targeted by an active
+ *  visible, ratings + Score + Swaps default on; a column targeted by an active
  *  stat filter is force-shown (locked) so you can't hide what you're filtering
  *  on. Preferences persist via the parent's `colPrefs`. */
 function ColumnsMenu({
@@ -52,7 +52,7 @@ function ColumnsMenu({
     }),
     ...TABLE_RATINGS.map((r) => ({ key: r.key, label: r.label, iconKey: null, def: true, forced: false })),
     { key: "score", label: "Score", iconKey: null, def: true, forced: false },
-    { key: "upg", label: "Upg", iconKey: null, def: true, forced: false },
+    { key: "upg", label: "Swaps", iconKey: null, def: true, forced: false },
   ];
   return (
     <div ref={ref} className="relative">
@@ -102,9 +102,54 @@ function ColumnsMenu({
   );
 }
 
+/** Which result cell a right-click opened the threshold menu on — the bound
+ *  goes to `setStatFilter` (stat) or `setRatingFilter` (rating, CP included). */
+interface CellMenuTarget {
+  x: number;
+  y: number;
+  kind: "stat" | "rating";
+  key: string;
+  /** The value as the cell prints it (`roundDisplay`) — the bound set. */
+  value: number;
+  unit: string;
+}
+type OpenCellMenu = (e: MouseEvent, kind: "stat" | "rating", key: string, value: number, unit: string) => void;
+
+/** Right-click menu on a result cell: "Min ≥ v" / "Max ≤ v" set that bound
+ *  on the column (the other bound stays) and re-solve. Closes on Cancel,
+ *  Escape or an outside click. Fixed at the click point, kept on screen. */
+function CellMenu({
+  target, onPick, onClose,
+}: {
+  target: CellMenuTarget;
+  onPick: (bound: "min" | "max") => void;
+  onClose: () => void;
+}) {
+  const ref = useClickOutside<HTMLDivElement>(true, onClose);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const shown = `${target.value}${target.unit}`;
+  const item = "block w-full rounded px-2 py-0.5 text-left hover:bg-white/8";
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      style={{ left: Math.min(target.x, window.innerWidth - 136), top: Math.min(target.y, window.innerHeight - 84) }}
+      className="fixed z-40 w-32 rounded-lg border border-white/10 bg-bg-elev-1 p-1 font-mono text-[11px] tabular-nums text-white/85 shadow-2xl shadow-black/70"
+    >
+      <button type="button" role="menuitem" className={item} onClick={() => onPick("min")}>Min ≥ {shown}</button>
+      <button type="button" role="menuitem" className={item} onClick={() => onPick("max")}>Max ≤ {shown}</button>
+      <button type="button" role="menuitem" className={cx(item, "text-white/55")} onClick={onClose}>Cancel</button>
+    </div>
+  );
+}
+
 export function ResultsTable({
   builds, selectedIdx, onSelect, solving, error, emptyReason, brokenSetsEmpty, filteredOut, statFilters, rows, onRowsChange,
-  pieceByUid, heroUid, armorSets, game, heatmap, dmgSkill,
+  pieceByUid, heroUid, armorSets, game, heatmap, dmgSkill, onThreshold,
 }: {
   builds: SolveBuild[];
   /** Picked hero's best-skill factor — names the winning skill in the
@@ -145,6 +190,9 @@ export function ResultsTable({
   game: GameData | null;
   /** Results-table column heatmap on/off (Settings → Solver). */
   heatmap: boolean;
+  /** Right-click on a stat / rating / CP cell → set that value as the
+   *  column's min or max bound and re-solve. Absent → no cell menu. */
+  onThreshold?: (kind: "stat" | "rating", key: string, bound: "min" | "max", value: number) => void;
 }) {
   // setId → display meta, for the per-build Set tags.
   const armorSetById = useMemo(() => {
@@ -201,13 +249,21 @@ export function ResultsTable({
     return m;
   }, [builds, pieceByUid, armorSetById]);
   // Column visibility — persisted per-key overrides (key → shown). Stats
-  // default to the first 8 visible; ratings + Score + Upg default visible. A
+  // default to the first 8 visible; ratings + Score + Swaps default visible. A
   // stat with an active filter band is force-shown regardless so you never
   // filter on a hidden column. The "Columns" menu in the header toggles these.
   const [colPrefs, setColPrefs] = usePersistedState<Record<string, boolean>>("gs.builder.cols", {});
   // Columns menu open state lifted here so a right-click on any column header
   // opens the same menu the toolbar "columns" button does.
   const [colsMenuOpen, setColsMenuOpen] = useState(false);
+  // Threshold menu of a right-clicked cell. The opener is stable so it
+  // doesn't defeat the row memo.
+  const [cellMenu, setCellMenu] = useState<CellMenuTarget | null>(null);
+  const openCellMenu = useCallback<OpenCellMenu>((e, kind, key, value, unit) => {
+    e.preventDefault();
+    setCellMenu({ x: e.clientX, y: e.clientY, kind, key, value: roundDisplay(value), unit });
+  }, []);
+  const closeCellMenu = useCallback(() => setCellMenu(null), []);
   const statCols = useMemo(
     () => SOLVER_STATS.filter((s, i) => {
       const b = statFilters[s.key];
@@ -367,8 +423,8 @@ export function ResultsTable({
                 </SortHeader>
               )}
               {showUpg && (
-                <SortHeader colKey="upg" title="Number of slots that differ from the hero's current loadout" sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
-                  upg
+                <SortHeader colKey="upg" title="Slots that change vs the hero's current loadout — not upgrades to do" sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
+                  swaps
                 </SortHeader>
               )}
               <th className="px-1.5 py-1 text-right text-[9.5px] uppercase tracking-wider">actions</th>
@@ -376,7 +432,7 @@ export function ResultsTable({
           </thead>
           <tbody>
             {builds.length === 0 && !solving && !error && (
-              // colSpan = 1 sets + statCols + N ratings + score + upg + actions.
+              // colSpan = 1 sets + statCols + N ratings + score + swaps + actions.
               <tr><td colSpan={colSpan} className="px-3 py-12 text-center text-[11px] italic">
                 {emptyReason ? (
                   <span className="text-amber-300/80">
@@ -418,6 +474,7 @@ export function ResultsTable({
                   setTags={setTagsByBuild.get(b)}
                   index={idx}
                   onSelect={onSelect}
+                  onCellMenu={onThreshold ? openCellMenu : undefined}
                 />
               );
             })}
@@ -425,6 +482,16 @@ export function ResultsTable({
           </tbody>
         </table>
       </div>
+      {cellMenu && onThreshold && (
+        <CellMenu
+          target={cellMenu}
+          onClose={closeCellMenu}
+          onPick={(bound) => {
+            setCellMenu(null);
+            onThreshold(cellMenu.kind, cellMenu.key, bound, cellMenu.value);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -512,10 +579,10 @@ interface EffectChip { icon: string | null; name: string }
  *  useState setter, `ranges` is memoized, `build` refs are stable. The click
  *  handler is bound to the stable `index` here rather than passed pre-closed. */
 const ResultRow = memo(function ResultRow({
-  build, upg, selected, ranges, statCols, ratingCols, showScore, showUpg, showWpn, showAcc, effects, setTags, index, onSelect,
+  build, upg, selected, ranges, statCols, ratingCols, showScore, showUpg, showWpn, showAcc, effects, setTags, index, onSelect, onCellMenu,
 }: {
   build: SolveBuild;
-  /** Slots that differ from the hero's current loadout (live, not `build.upg`). */
+  /** Swaps — slots that differ from the hero's current loadout (live, not `build.upg`). */
   upg: number;
   selected?: boolean;
   ranges: ColumnRanges;
@@ -536,6 +603,9 @@ const ResultRow = memo(function ResultRow({
   setTags: SetTag[] | undefined;
   index: number;
   onSelect: (i: number) => void;
+  /** Right-click on a stat / rating / CP cell → threshold menu (stable ref
+   *  from ResultsTable). Undefined → the cells keep no context menu. */
+  onCellMenu?: OpenCellMenu;
 }) {
   return (
     <tr
@@ -565,7 +635,12 @@ const ResultRow = memo(function ResultRow({
       {statCols.map((s) => {
         const v = (build.finalStats as unknown as Record<string, number>)[s.key];
         return (
-          <td key={s.key} style={heatStyle(v, ranges.stat[s.key])} className="px-1.5 py-1 text-right text-white">
+          <td
+            key={s.key}
+            style={heatStyle(v, ranges.stat[s.key])}
+            className="px-1.5 py-1 text-right text-white"
+            onContextMenu={onCellMenu && v != null ? (e) => onCellMenu(e, "stat", s.key, v, s.unit) : undefined}
+          >
             {fmt(v, s.unit)}
           </td>
         );
@@ -573,7 +648,12 @@ const ResultRow = memo(function ResultRow({
       {ratingCols.map((r) => {
         const v = r.key === "cp" ? build.cp : (build.ratings as unknown as Record<string, number>)[r.key];
         return (
-          <td key={r.key} style={heatStyle(v, ranges.rating[r.key])} className="px-1.5 py-1 text-right text-white">
+          <td
+            key={r.key}
+            style={heatStyle(v, ranges.rating[r.key])}
+            className="px-1.5 py-1 text-right text-white"
+            onContextMenu={onCellMenu && v != null ? (e) => onCellMenu(e, "rating", r.key, v, "") : undefined}
+          >
             {fmt(v, "")}
           </td>
         );
@@ -584,7 +664,7 @@ const ResultRow = memo(function ResultRow({
         </td>
       )}
       {showUpg && (
-        <td className="px-1.5 py-1 text-right text-white/70" title={`${upg} slot(s) differ from current loadout`}>
+        <td className="px-1.5 py-1 text-right text-white/70" title={`${upg} slot(s) change vs the current loadout`}>
           {upg}
         </td>
       )}

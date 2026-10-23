@@ -76,9 +76,9 @@ had already fully finished are kept, which is typically none. Then tighten **Top
 or raise the worker count in **Settings → Solver** (Auto already uses most of your CPU), and
 re-solve.
 
-**What's the "Upg" column?**
-How many gear slots a build changes vs what the hero currently wears. Low Upg = a small upgrade
-you can equip with few swaps; high Upg = a bigger reshuffle.
+**What's the "Swaps" column?**
+How many gear slots a build changes vs what the hero currently wears — not upgrades to do. Low
+Swaps = a small change you can equip in a few moves; high Swaps = a bigger reshuffle.
 
 **SOLVE vs SOLVE CP — which do I use?**
 - Use **SOLVE** when you know the stats you want (set priorities, optionally stat filters).

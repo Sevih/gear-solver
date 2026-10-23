@@ -665,7 +665,7 @@ free slots must complete a set → the whitelist = required sets ∪ *formable s
 depth, `remaining===0`) rejects singleton / set-less builds (valid shapes: one 4pc OR two
 2pc). **Keep current** locked slots are exempt. Pure helpers tested in isolation.
 
-### 2.11 Combat Power + Upg filters (applied in-loop when set)
+### 2.11 Combat Power + Swaps (`upg`) filters (applied in-loop when set)
 
 CP is expensive (~20× a cheap rating) and `upg` depends on the hero's current
 loadout, so neither can be a `FilterSpec` compiled into the hot loop. BUT when a

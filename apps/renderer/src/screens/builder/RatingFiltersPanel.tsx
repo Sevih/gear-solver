@@ -15,7 +15,7 @@ export function RatingFiltersPanel({ filters, dispatch, dmgSkill }: { filters: R
   return (
     <Panel
       title="Rating filters"
-      hint="Same as Stat filters but on calculated ratings (DPS, EHP, …). Score and Upg are derived in the solver."
+      hint="Same as Stat filters but on calculated ratings (DPS, EHP, …). Score and Swaps are derived in the solver."
       width="w-56"
     >
       <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-1 gap-y-0.5">
@@ -30,7 +30,7 @@ export function RatingFiltersPanel({ filters, dispatch, dmgSkill }: { filters: R
           />
         ))}
         <RatingFilterRow ratingKey="score" label="Score" title="Priority-weighted score: Σ stat / norm × priority (CHC and PEN capped at 100%)." filters={filters} dispatch={dispatch} />
-        <RatingFilterRow ratingKey="upg" label="Upg" title="Number of slots whose piece differs from the current build." filters={filters} dispatch={dispatch} />
+        <RatingFilterRow ratingKey="upg" label="Swaps" title="Slots that change vs the hero's current loadout — not upgrades to do." filters={filters} dispatch={dispatch} />
       </div>
     </Panel>
   );

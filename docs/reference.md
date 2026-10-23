@@ -676,7 +676,7 @@ dans ≥2 slots armor, `computeFormableSets`), et un check leaf `allSetsComplete
 (profondeur boots, `remaining===0`) rejette les builds à singleton/pièce set-less (formes valides :
 un 4pc OU deux 2pc). Slots **Keep current** verrouillés exemptés. Helpers purs testés isolément.
 
-### 2.11 Combat Power + Upg filters (appliqués in-loop quand posés)
+### 2.11 Combat Power + Swaps (`upg`) filters (appliqués in-loop quand posés)
 
 CP est cher (~20× cheap rating) et `upg` dépend du current loadout du héros,
 donc aucun des deux ne peut être un `FilterSpec` compilé du hot loop. MAIS

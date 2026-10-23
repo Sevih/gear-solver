@@ -384,18 +384,22 @@ The **Optimize →** button lives on the Builds tab side (opens the Builder on t
 
 ### ResultsTable
 Red-green heatmap per column (min/max relative to the current result set). Columns:
-sets, 8 main stats, ratings (`TABLE_RATINGS`), **Score**, **Upg**, actions
-(`Upg` = number of slots differing from the current loadout, sortable + filterable). Sort by clicking
+sets, 8 main stats, ratings (`TABLE_RATINGS`), **Score**, **Swaps**, actions
+(`Swaps`, key `upg` = number of slots that change vs the current loadout — not upgrades to do;
+sortable + filterable). Sort by clicking
 the header (null → desc → asc → null). The **Columns** menu (show/hide columns, persisted
 `gs.builder.cols`) opens from the toolbar button **or by right-clicking any column header**
-(`ColumnsMenu` controlled, `onContextMenu` on the header `<tr>`). Click on a row → the `BottomGearBand`
+(`ColumnsMenu` controlled, `onContextMenu` on the header `<tr>`). **Right-click a stat, rating
+or CP cell** → a "Min ≥ v" / "Max ≤ v" menu (v as displayed): sets that bound (`setStatFilter` /
+`setRatingFilter`, the other bound kept), which the filter panels show, and re-solves in the last solve's
+mode (`CellMenu`, `onThreshold`). No menu on score, swaps, effects. Click on a row → the `BottomGearBand`
 shows the 8 pieces. `solving…` / error / **explicit empty state** (an `emptyReason`
 derived from `poolSizes` lists the slots that fell to 0 pieces after filters, the EE aside: a hero without one solves
 without it; a slot emptied (also) by an excluded main says so, "(N dropped: main stat excluded)"; a client "Filter" that keeps no build shows "No build passes the current filter."; no slot empty
 but "Allow broken sets" off rejected every armor loadout (the orchestrator's `"brokenSets"` cause) → the table
 says so and suggests turning it back on or raising Top %). The selected build's "N slots change" header is
 re-read off the current inventory (`buildDiff`), not the solve-time `upg`: after Equip it drops to 0. The
-`upg` column (cell and sort) and the "+ Worklist" entry's `upg` read the same live diff.
+Swaps column (cell and sort) and the "+ Worklist" entry's `upg` read the same live diff.
 
 ### BottomGearBand
 8 cards (compact mirror of the inventory) — one per slot. Each card shows name,

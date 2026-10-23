@@ -413,19 +413,23 @@ Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le hé
 
 ### ResultsTable
 Heatmap rouge-vert par colonne (min/max relatifs au result set actuel). Colonnes :
-sets, 8 stats principales, ratings (`TABLE_RATINGS`), **Score**, **Upg**, actions
-(`Upg` = nb de slots différant du loadout actuel, triable + filtrable). Tri par clic
+sets, 8 stats principales, ratings (`TABLE_RATINGS`), **Score**, **Swaps**, actions
+(`Swaps`, clé `upg` = nb de slots qui changent par rapport au loadout actuel — pas des améliorations à faire ;
+triable + filtrable). Tri par clic
 sur l'en-tête (null → desc → asc → null). Menu **Columns** (show/hide colonnes, persisté
 `gs.builder.cols`) ouvrable par le bouton de la toolbar **ou par clic-droit sur n'importe
-quel en-tête** (`ColumnsMenu` contrôlé, `onContextMenu` sur le `<tr>` d'en-tête). Click sur
-une ligne → la `BottomGearBand` affiche les 8 pièces. État `solving…` / erreur / **état vide explicite** (un `emptyReason`
+quel en-tête** (`ColumnsMenu` contrôlé, `onContextMenu` sur le `<tr>` d'en-tête). **Clic-droit
+sur une cellule** de stat, de rating ou de CP → menu « Min ≥ v » / « Max ≤ v » (v telle qu'affichée) :
+pose la borne (`setStatFilter` / `setRatingFilter`, l'autre borne gardée), que les panneaux de filtres
+montrent, et relance le solve dans le mode du dernier solve (`CellMenu`, `onThreshold`). Pas de menu sur
+score, swaps, effets. Click sur une ligne → la `BottomGearBand` affiche les 8 pièces. État `solving…` / erreur / **état vide explicite** (un `emptyReason`
 dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres, EE exceptée : un héros sans EE solve sans elle ;
 un slot vidé (aussi) par une main exclue le dit, « (N dropped: main stat excluded) » ;
 un « Filter » client qui ne garde aucun build affiche « No build passes the current filter. » ; aucun slot vide
 mais « Allow broken sets » off a rejeté chaque loadout armor (cause `"brokenSets"` de l'orchestrateur) → la
 table le dit et propose de le rallumer ou de monter le Top %). L'en-tête « N slots change » du build sélectionné
 est relu sur l'inventaire courant (`buildDiff`), pas sur l'`upg` du solve : après Equip il tombe à 0. La colonne
-`upg` (cellule et tri) et l'`upg` de l'entrée « + Worklist » lisent le même diff vivant.
+Swaps (cellule et tri) et l'`upg` de l'entrée « + Worklist » lisent le même diff vivant.
 
 ### BottomGearBand
 8 cartes (mirror compact de l'inventaire) — une par slot. Chaque carte montre nom,
