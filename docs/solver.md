@@ -398,7 +398,8 @@ Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
   changements faits + entrées vidées, un toast le dit). Désactivé quand rien ne change (ni pièce ni gemme).
 
 Equip / Unequip **vers le jeu** restent absents (nécessitent une API jeu inexistante).
-Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le héros).
+Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le héros) ; **Optimize preset →**
+(onglet Presets) y ajoute un patch de filtres (`initialPatch`, voir l'onglet Presets).
 
 ### FilterFooter (fixed en bas)
 - Chips par slot avec **hit/total (%)** — alimentés par `poolSizes` du premier progress event de chaque worker.
@@ -506,7 +507,24 @@ parenthèses le score tel que serti quand il diffère.
 `gemAllocation = { talisman: [], ee }`), `mode: "preset"` (« Preset » sur la carte de la Worklist, sans
 CP) ; `upsertWorklistEntry` remplace l'entrée du héros, toast « Added to / Replaced in worklist — <Nom> ».
 Une pièce absente de l'inventaire est exclue, et le toast le dit. Bouton grisé quand il n'y a rien à
-changer. **Optimize →**, à côté : ouvre le Builder sur le héros, comme une carte de Builds.
+changer. **Optimize →**, à côté, sur la ligne d'un associé : ouvre le Builder sur le héros, comme une
+carte de Builds.
+
+**Optimize preset →**, sur la ligne de la référence : ouvre le Builder sur le héros avec un patch de filtres
+(`presetOptimizePatch`, `lib/presets/optimize.ts`, pur) superposé à ses filtres mémorisés par
+`mergePreset` (bornes et options gardées). Effets : le `setId` de l'arme, de l'accessoire et du talisman
+de la tenue, en `required` (le talisman élargi à sa famille par `talismanFamilyKeys`, chaque clé
+`required` — les mêmes effets, pas « preferred ») ; pièce absente de la tenue ou sans `setId` → slot
+ouvert, une note. Sous-stats : au plus 5 clés de priorité, poids = max(reco, tenue) — la reco
+(`fetchRecoForHero`, première build, `SubstatPrio` en 3/2/1 comme « Get preset »), la tenue par le nombre
+de pièces (talisman et EE à part) qui portent la clé en sous-stat (4+ → 3, 3 → 2, 2 → 1) ; ordre poids,
+puis présence dans la reco, puis nombre de pièces ; les autres clés hors du patch. Mains : celles de la
+reco pour l'arme et l'accessoire. Sets : aucun plan (`setPlans: []` → un plan vide, sets ouverts ; « Get
+preset » reste là pour la reco complète). Sans reco (404, erreur, hors ligne) : la tenue seule. Le
+Builder reçoit le patch avec `initialHeroUid` (`initialPatch`) et le fusionne après avoir chargé les
+filtres du héros — jamais sur ceux du héros sortant ; la ligne de statut dit « Optimizing preset #<num>
+<name> — same weapon / accessory / talisman effects required, N priority substats from the outfit +
+outerpedia's "<build>" reco. » (ou « from the outfit », suivi des notes).
 
 **Priorité.** `presetPriorityOf` lit, dans l'ordre, la priorité du Builder de la session
 (`gs.solver.heroFilters`, sessionStorage : le Builder repart propre à chaque lancement), puis
@@ -708,7 +726,8 @@ apps/renderer/src/
 │   │   ├── presetRows.ts           ← presets du jeu : pièces, porteurs (presetSignature), pièces absentes / partagées, classe, filtre / tri
 │   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetPriorityOf (onglet Presets)
 │   │   ├── eeGems.ts               ← bestEeGemsFor : gemmes d'EE par héros, pièces du preset fixées
-│   │   └── presetWorklist.ts       ← presetWorklistFor : l'entrée Worklist d'un héros du preset
+│   │   ├── presetWorklist.ts       ← presetWorklistFor : l'entrée Worklist d'un héros du preset
+│   │   └── optimize.ts             ← presetOptimizePatch + presetOptimizeNote : « Optimize preset → » (effets requis, sous-stats prioritaires)
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← bookmark de builds par héros (localStorage)
 │   │   ├── presetHeroes.ts         ← référence + associés par preset (localStorage)
@@ -729,7 +748,7 @@ apps/renderer/src/
     │   ├── ResultsTable.tsx        ← table virtualisée, tri, heatmap, menu des colonnes
     │   ├── BottomGearBand.tsx · RightSidebar.tsx · FilterFooter.tsx · StatsPanel.tsx · …
     │   └── catalogs.ts · statColumns.ts ← catalogues tirés de l'inventaire, tables stats/ratings
-    ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset (ordre du jeu, filtre / tri par classe), référence, associés, gemmes d'EE, perte, + Worklist, Optimize →
+    ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset (ordre du jeu, filtre / tri par classe), référence, associés, gemmes d'EE, perte, + Worklist, Optimize → / Optimize preset →
     └── BuildsScreen.tsx            ← roster équipé/composé + computeAdvice + Optimize →
 ```
 

@@ -8,6 +8,59 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎯 Presets : « Optimize preset → » — mêmes effets d'arme / accessoire / talisman requis, sous-stats prioritaires depuis la tenue et la reco (2026-10-23)
+- ✅ **Le patch.** Demande de Sevih après G46 : « Optimize → » sur la ligne de référence ouvrait le Builder sur le héros
+  sans rien d'autre. `lib/presets/optimize.ts` (nouveau, pur) : `presetOptimizePatch({ pieces, reco, game,
+  talismanFamily })` → `{ patch: RecoFilterPatch, build, notes }`. Effets : le `setId` de l'arme et de l'accessoire de la
+  tenue (`game.equipment[String(itemId)]?.setId`, la clé du moteur) et la famille du talisman (`talismanFamilyKeys`),
+  toutes en `required` — les mêmes effets, pas « preferred » ; un slot sans pièce dans la tenue (vide ou plus dans
+  l'inventaire) ou une pièce sans `setId` reste ouvert, avec une note. Sous-stats : pour chaque clé de priorité (les
+  variantes plate et % comptent une fois par pièce, via `STAT_TO_PRIORITY`), le nombre de pièces de la tenue, talisman
+  et EE à part, qui la portent (4+ → 3, 3 → 2, 2 → 1, sinon 0) ; la reco, la première build (`Object.keys(builds)[0]`,
+  son nom dans les notes quand il y en a plusieurs), traduite par `translateRecoBuild` (`SubstatPrio` en 3/2/1) ; poids
+  = max des deux, ordre poids puis présence dans la reco puis nombre de pièces, coupe à 5 clés, les autres absentes du
+  patch (jamais -1). Mains : celles de la reco pour l'arme et l'accessoire, rien de la tenue. Sans reco (404, erreur,
+  hors ligne) : la tenue seule, note « No outerpedia reco: substats from the outfit only. ». `presetOptimizeNote` écrit
+  la ligne de statut : « Optimizing preset #<num> <name> — same weapon / accessory / talisman effects required, N
+  priority substats from the outfit + outerpedia's "<build>" reco. » (ou « from the outfit. »), suivie des notes.
+- ✅ **Sets : ouverts, réducteur inchangé.** Le patch porte `setPlans: []` et `mergePreset` en fait `[[]]` : les plans
+  mémorisés du héros sont remplacés par un plan vide. Choisi tel quel, sans cas « absent = inchangé » : le lot dit « le
+  preset garde ses sets ouverts », et les plans mémorisés viennent souvent d'un « Get preset » précédent, la reco
+  complète que ce bouton n'applique pas. `excludedSets`, bornes, options et `topPct` restent ceux du héros ; la
+  priorité est remplacée par celle du patch (comme « Get preset »).
+- ✅ **Type.** `RecoFilterPatch.talismanEffectPicks` passe de `"preferred"` à `"required" | "preferred"` (pas
+  `ChipState` comme suggéré : son `"off"` ne s'assigne pas au `TalismanEffectConstraint` du moteur et cassait le
+  typecheck de `talismanPreferred.test.ts`) ; `translateRecoBuild` produit toujours `"preferred"`.
+- ✅ **Plomberie.** `PresetsScreen` reçoit `onOptimizePreset(heroUid, patch, note)` ; sur la ligne de RÉFÉRENCE seulement
+  (et avec les données du jeu), le bouton devient « Optimize preset → », « Fetching… » et désactivé pendant
+  `fetchRecoForHero` (le `currentUid` est un ref qui vaut l'uid de la ligne tant qu'elle est montée : une réponse
+  arrivée après un changement de référence ou un démontage est jetée) ; les lignes associées gardent « Optimize → ».
+  `App.tsx` : `builderPatch` à côté de `builderHero`, passé en `initialPatch`, vidé avec lui par
+  `onInitialHeroConsumed` (et remis à null par un « Optimize → » simple). **Écart au lot sur l'endroit de la fusion** :
+  l'effet de `initialHeroUid` ne peut pas fusionner quand le héros change — il tourne sur les filtres du héros SORTANT,
+  que l'effet de changement de héros mémoriserait puis écraserait par ceux du héros entrant. Donc : héros déjà chargé
+  (montage du Builder, ou même héros) → fusion et note dans l'effet de `initialHeroUid` ; sinon le patch attend dans
+  `pendingPatchRef`, l'effet de changement de héros le fusionne juste après `loadPreset` / `resetAll` (le patch se
+  superpose aux filtres mémorisés du héros entrant, voulu), et l'effet de remise à zéro du statut reco affiche la note
+  au lieu de vider. Ce dernier ne tourne plus tant que le héros ne change pas (montage, re-run de StrictMode), sans quoi
+  il effaçait la note fusionnée au montage ; l'effet de `initialHeroUid` a été déplacé sous les états reco qu'il
+  utilise (même ordre relatif aux autres effets).
+- ✅ **Tests.** `apps/renderer/test/presetOptimize.test.ts` (9) : effets des trois pièces et talisman élargi, pièce
+  manquante / sans effet, poids de la tenue seule (talisman et EE ignorés, atk + atkPct comptés une fois), fusion avec
+  la reco (max, ordre, coupe à 5, nom de la build et « first of 2 »), tenue vide, mains de la reco seulement et
+  `setPlans` vide, passage par `mergePreset` (bornes gardées, `setPlans` → `[[]]`, talisman `required`),
+  `presetOptimizeNote` avec et sans reco. Pas de test du réducteur : non touché. `npm run typecheck` : `> tsc --noEmit`
+  sans erreur ; `npm test` : « Tests  677 passed (677) » ; `npm run lint` : « ✖ 13 problems (0 errors, 13 warnings) »
+  — un de moins qu'avant, l'effet de remise à zéro du statut reco revenant tôt n'est plus signalé.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (onglet Presets, renvoi depuis le Builder, arbre),
+  `wiki/Using-the-App.md`, `docs/reference.md` / `wiki/Engine-Reference.md` (arbre, tests), `docs/release-notes.md` ›
+  [Unreleased]. Rien dans `docs/todo.md` sur ce point.
+- ⏳ **Sevih sur le fixe** : « Optimize preset → » sur la ligne de référence d'un preset → le Builder s'ouvre sur le
+  héros, les chips d'effet de l'arme, de l'accessoire et du talisman de la tenue sont « required », 4-5 sous-stats ont
+  une priorité, la ligne de statut dit d'où elles viennent ; sans réseau, la variante « from the outfit » et sa note.
+  À essayer aussi Builder déjà ouvert sur un autre héros, puis sur le même héros (les deux chemins de la fusion).
+  Hors périmètre, non fait : exclure les pièces des autres presets, figer celles du preset, choisir la build de la reco.
+
 ### 🗂️ Onglet Presets : ordre du jeu, filtre et tri par classe, Optimize par héros, menu des héros au-dessus des cartes (2026-10-22)
 - ✅ **Ordre du jeu.** Retour du banc de Sevih sur la 1.14.0 : les cartes suivaient le `num` croissant, pas l'éditeur
   du jeu. Lu dans le client décompilé : `CItemInventory.InitPresetList` donne à chaque preset `m_nSort` = le `SortOrder`

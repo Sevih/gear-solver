@@ -97,7 +97,14 @@ identical to the preset, EE aside). Nothing is sent to the game.
 - **+ Worklist** — on each hero's line: queues the preset's pieces that hero doesn't wear yet
   and the EE gems to socket as that hero's **Worklist** entry (replacing their previous one). A
   piece no longer in your inventory is left out, and the toast says so.
-- **Optimize →** — on each hero's line: opens the Builder on that hero, like on the Builds tab.
+- **Optimize preset →** — on the reference hero's line: opens the Builder on that hero with the
+  outfit's weapon, accessory and talisman effects **required**, and up to five priority substats
+  taken from what the outfit already rolls and from Outerpedia's recommendation for the hero
+  (its weapon and accessory main stats too). Sets are left open, and your stat bands and options
+  stay as they were. The Builder's status line says where the substats come from; offline, or
+  without a recommendation, they come from the outfit alone.
+- **Optimize →** — on an associated hero's line: opens the Builder on that hero, like on the
+  Builds tab.
 - **Warnings** — a piece no longer in your inventory, or a piece that sits in **two** presets
   (two presets can't be worn in the same fight), is marked on the piece and in the card's banner.
   Empty presets are listed collapsed.

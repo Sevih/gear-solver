@@ -66,8 +66,10 @@ export interface RecoFilterPatch {
   mainPicks: Record<string, Record<string, boolean>>;
   weaponEffectPicks: Record<string, "required">;
   accessoryEffectPicks: Record<string, "required">;
-  /** Advised talismans: narrow the pool to them only if the hero can use one. */
-  talismanEffectPicks: Record<string, "preferred">;
+  /** Advised talismans: narrow the pool to them only if the hero can use one
+   *  ("preferred" — all a reco ever sets). A preset's own talisman is
+   *  "required" (`lib/presets/optimize.ts`). */
+  talismanEffectPicks: Record<string, "required" | "preferred">;
   setPlans: SetPlan[];
   priority: Record<string, number>;
 }

@@ -372,7 +372,8 @@ Three **wired** sections (localStorage, per hero):
 - **Restore** — re-pushes a saved build into the table + bottom band.
 
 Equip / Unequip **to the game** remain absent (they require a non-existent game API).
-The **Optimize →** button lives on the Builds tab side (opens the Builder on the hero).
+The **Optimize →** button lives on the Builds tab side (opens the Builder on the hero); **Optimize preset →**
+(Presets tab) adds a filter patch to it (`initialPatch`, see the Presets tab).
 
 ### FilterFooter (pinned at the bottom)
 - Per-slot chips with **hit/total (%)** — fed by the `poolSizes` of the first progress event of each worker.
@@ -471,8 +472,23 @@ and in brackets the score as socketed when it differs.
 rule) + the gem lines of their EE (`worklistChangesFor`, `gemAllocation = { talisman: [], ee }`),
 `mode: "preset"` ("Preset" on the Worklist card, no CP); `upsertWorklistEntry` replaces the hero's entry,
 toast "Added to / Replaced in worklist — <Name>". A piece missing from the inventory is left out, and the
-toast says so. The button is greyed out when there is nothing to change. **Optimize →**, next to it: opens
-the Builder on the hero, like a Builds card.
+toast says so. The button is greyed out when there is nothing to change. **Optimize →**, next to it on an
+associated hero's line: opens the Builder on the hero, like a Builds card.
+
+**Optimize preset →**, on the reference's line: opens the Builder on the hero with a filter patch
+(`presetOptimizePatch`, `lib/presets/optimize.ts`, pure) overlaid on their remembered filters by
+`mergePreset` (bands and options kept). Effects: the `setId` of the outfit's weapon, accessory and
+talisman, `required` (the talisman widened to its family by `talismanFamilyKeys`, every key `required` —
+the same effects, not "preferred"); a piece missing from the outfit or without a `setId` → slot left open,
+a note. Substats: at most 5 priority keys, weight = max(reco, outfit) — the reco (`fetchRecoForHero`,
+first build, `SubstatPrio` as 3/2/1 like "Get preset"), the outfit by the number of pieces (talisman and EE
+aside) rolling the key as a substat (4+ → 3, 3 → 2, 2 → 1); ordered by weight, then presence in the reco,
+then piece count; other keys left out of the patch. Mains: the reco's for the weapon and accessory. Sets: no
+plan (`setPlans: []` → one empty plan, sets open; "Get preset" remains the way to the full reco). Without
+a reco (404, error, offline): the outfit alone. The Builder receives the patch with `initialHeroUid`
+(`initialPatch`) and merges it once the hero's filters are loaded — never onto the outgoing hero's; the
+status line says "Optimizing preset #<num> <name> — same weapon / accessory / talisman effects required, N
+priority substats from the outfit + outerpedia's "<build>" reco." (or "from the outfit", then the notes).
 
 **Priority.** `presetPriorityOf` reads, in order, the Builder priority of the session
 (`gs.solver.heroFilters`, sessionStorage: the Builder starts clean at each launch), then `reforge.priority`
@@ -639,7 +655,8 @@ apps/renderer/src/
 │   │   ├── presetRows.ts           ← in-game presets: pieces, wearers (presetSignature), missing / shared pieces, class, filter / sort
 │   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetPriorityOf (Presets tab)
 │   │   ├── eeGems.ts               ← bestEeGemsFor: EE gems per hero, the preset's pieces fixed
-│   │   └── presetWorklist.ts       ← presetWorklistFor: the Worklist entry of one hero of the preset
+│   │   ├── presetWorklist.ts       ← presetWorklistFor: the Worklist entry of one hero of the preset
+│   │   └── optimize.ts             ← presetOptimizePatch + presetOptimizeNote: "Optimize preset →" (effects required, priority substats)
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← per-hero build bookmarks (localStorage)
 │   │   ├── presetHeroes.ts         ← reference + associated heroes per preset (localStorage)
@@ -661,7 +678,7 @@ apps/renderer/src/
     │   ├── ResultsTable.tsx        ← virtualized table, sorting, heatmap, columns menu
     │   ├── BottomGearBand.tsx · RightSidebar.tsx · FilterFooter.tsx · StatsPanel.tsx · …
     │   └── catalogs.ts · statColumns.ts ← inventory-driven catalogs, stat/rating tables
-    ├── presets/PresetsScreen.tsx   ← Presets tab: cards per preset (game order, class filter / sort), reference, associated heroes, EE gems, loss, + Worklist, Optimize →
+    ├── presets/PresetsScreen.tsx   ← Presets tab: cards per preset (game order, class filter / sort), reference, associated heroes, EE gems, loss, + Worklist, Optimize → / Optimize preset →
     └── BuildsScreen.tsx            ← equipped/composed roster + computeAdvice + Optimize →
 ```
 

@@ -19,6 +19,8 @@
 - Electron 44 (Chromium and Node.js runtime update); no visible change expected.
 - **Presets**: cards in the game's order, class filter and sort, Optimize → per hero, hero
   dropdown no longer hidden by the next card.
+- **Presets: Optimize preset →** opens the Builder with the preset's weapon / accessory / talisman
+  effects required and up to five priority substats from the outfit and outerpedia's reco.
 
 ## [1.14.0] — 2026-10-22
 

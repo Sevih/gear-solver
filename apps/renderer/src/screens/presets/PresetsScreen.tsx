@@ -8,7 +8,9 @@
  * (Settings → Solver). Each hero's line proposes the gems of their own EE that
  * score best with the outfit (`lib/presets/eeGems.ts`) and scores with them;
  * "+ Worklist" queues the outfit and those gems as the hero's entry,
- * "Optimize →" opens the Builder on the hero.
+ * "Optimize →" opens the Builder on the hero — on the reference hero's line,
+ * "Optimize preset →" also sends the outfit's effects (required) and priority
+ * substats from the outfit and outerpedia's reco (`lib/presets/optimize.ts`).
  *
  * Cards come in the in-game editor's order (`presetRows`); the class chips
  * filter them and "Sort: Class" groups them by class (`presetClasses`,
@@ -18,7 +20,7 @@
  * The priority is the Builder's of this session, else the one of the hero's
  * most recent saved build (`presetPriorityOf`).
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Character, GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { effectiveCharacter } from "@gear-solver/core";
 import { CharacterPortrait, SlotMini } from "../../design/EquipmentIcon.js";
@@ -36,6 +38,9 @@ import { CLASSES } from "../../lib/homeStats.js";
 import { bestKnownFor, evaluatePresetFor, heroBases, presetLoss, presetPriorityOf, type PresetEvalContext } from "../../lib/presets/evaluate.js";
 import { bestEeGemsFor } from "../../lib/presets/eeGems.js";
 import { presetWorklistFor } from "../../lib/presets/presetWorklist.js";
+import { presetOptimizeNote, presetOptimizePatch } from "../../lib/presets/optimize.js";
+import { fetchRecoForHero } from "../../lib/reco/fetchReco.js";
+import { talismanFamilyKeys, type RecoFilterPatch } from "../../lib/reco/translateReco.js";
 import { worklistGem } from "../../lib/worklist/changes.js";
 import type { WorklistEntry } from "../../lib/storage/worklist.js";
 import { onBackupImported } from "../../lib/storage/transfer.js";
@@ -62,6 +67,9 @@ interface PresetsScreenProps {
   onAddToWorklist?: (entry: WorklistEntry, note?: string) => void;
   /** Open the Builder on a hero (App's `setBuilderHero` + tab switch). */
   onOptimize?: (heroUid: string) => void;
+  /** Open the Builder on a preset's reference hero with filters overlaid and
+   *  the status line to show ("Optimize preset →"). */
+  onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string) => void;
 }
 
 /** Same rounding as the Builder's results table. */
@@ -81,7 +89,7 @@ interface HeroView {
 const CLASS_ORDER = CLASSES.map((c) => c.id);
 const classLabel = (id: string): string | null => CLASSES.find((c) => c.id === id)?.label ?? null;
 
-export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, onAddToWorklist, onOptimize }: PresetsScreenProps) {
+export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
   // Read once per mount — the screen remounts on every tab switch, so an edit
   // made in the Builder (saved build, priority) is picked up on the way back.
   const [savedBuilds] = useState(loadSavedBuilds);
@@ -201,6 +209,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
             lossWarnPct={lossWarnPct}
             worklist={{ heroUids: worklistHeroUids, onAdd: onAddToWorklist }}
             onOptimize={onOptimize}
+            onOptimizePreset={onOptimizePreset}
             onSetReference={(uid) => setPresetHeroes((m) => setPresetReference(m, row.preset.num, uid))}
             onAddAssociated={(uid) => setPresetHeroes((m) => addPresetAssociated(m, row.preset.num, uid))}
             onRemoveAssociated={(uid) => setPresetHeroes((m) => removePresetAssociated(m, row.preset.num, uid))}
@@ -218,7 +227,7 @@ interface WorklistHook {
 }
 
 function PresetCard({
-  row, classes, game, ctx, heroes, roster, stored, lossWarnPct, worklist, onOptimize, onSetReference, onAddAssociated, onRemoveAssociated,
+  row, classes, game, ctx, heroes, roster, stored, lossWarnPct, worklist, onOptimize, onOptimizePreset, onSetReference, onAddAssociated, onRemoveAssociated,
 }: {
   row: PresetRow;
   /** Raw `CCT_*` ids (`presetClasses`), empty when unknown. */
@@ -231,6 +240,7 @@ function PresetCard({
   lossWarnPct: number;
   worklist: WorklistHook;
   onOptimize?: (heroUid: string) => void;
+  onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string) => void;
   onSetReference: (uid: string | null) => void;
   onAddAssociated: (uid: string) => void;
   onRemoveAssociated: (uid: string) => void;
@@ -304,7 +314,7 @@ function PresetCard({
                 <button type="button" onClick={() => onSetReference(null)} className="text-[11px] text-cyan-300 hover:text-cyan-200">Clear</button>
               )}
             </div>
-            {referenceUid && <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} reference />}
+            {referenceUid && <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} onOptimizePreset={onOptimizePreset} reference />}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -372,10 +382,10 @@ function Badge({ tone, title, children }: { tone: "rose" | "amber"; title: strin
 
 /** One hero of the preset — the EE gems proposed for them, the preset's score
  *  (with those gems) and offensive ratings on them; for an associated hero,
- *  the loss against their best known outfit; "+ Worklist" and "Optimize →"
- *  for both. */
+ *  the loss against their best known outfit; "+ Worklist" for both, then
+ *  "Optimize preset →" for the reference hero, "Optimize →" for the others. */
 function HeroLine({
-  uid, row, ctx, heroes, lossWarnPct, worklist, onOptimize, reference = false, onRemove,
+  uid, row, ctx, heroes, lossWarnPct, worklist, onOptimize, onOptimizePreset, reference = false, onRemove,
 }: {
   uid: string;
   row: PresetRow;
@@ -384,6 +394,7 @@ function HeroLine({
   lossWarnPct: number;
   worklist: WorklistHook;
   onOptimize?: (heroUid: string) => void;
+  onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string) => void;
   reference?: boolean;
   onRemove?: () => void;
 }) {
@@ -393,7 +404,31 @@ function HeroLine({
   const asSocketed = useMemo(() => (eeGems ? evaluatePresetFor(uid, row.presentPieces, ctx) : null), [uid, row, ctx, eeGems]);
   const best = useMemo(() => (reference ? null : bestKnownFor(uid, ctx)), [uid, ctx, reference]);
   const queued = useMemo(() => presetWorklistFor(uid, row, eeGems, ctx.inventory, ctx.game), [uid, row, eeGems, ctx]);
+  // The line's hero while it is mounted — a reco answering after the
+  // reference changed or the card went away is dropped.
+  const liveUid = useRef<string | null>(uid);
+  useEffect(() => {
+    liveUid.current = uid;
+    return () => { liveUid.current = null; };
+  }, [uid]);
+  const [optimizing, setOptimizing] = useState(false);
   if (!h) return null;
+  const canOptimizePreset = reference && !!onOptimizePreset && !!ctx.game;
+  const optimizePreset = async () => {
+    const game = ctx.game;
+    if (!onOptimizePreset || !game) return;
+    setOptimizing(true);
+    const r = await fetchRecoForHero(uid, h.char.charId, () => liveUid.current);
+    setOptimizing(false);
+    if (r === null) return;
+    const result = presetOptimizePatch({
+      pieces: row.presentPieces,
+      reco: r.status === "ok" ? r.reco : null,
+      game,
+      talismanFamily: talismanFamilyKeys(game.equipment),
+    });
+    onOptimizePreset(uid, result.patch, presetOptimizeNote(row.preset, result));
+  };
   const fromSaved = ctx.heroes.get(uid)?.prioritySource === "saved";
   const gemNames = eeGems?.ee.filter((id) => id).map((id) => worklistGem(id, ctx.game).name) ?? [];
   const socketedScore = asSocketed?.score != null && fmtNum(asSocketed.score) !== fmtNum(evalPreset?.score) ? fmtNum(asSocketed.score) : null;
@@ -460,7 +495,11 @@ function HeroLine({
           className="ml-auto rounded-md border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
         >+ Worklist</button>
       )}
-      {onOptimize && (
+      {canOptimizePreset ? (
+        <CyanButton size="sm" className={cx(!worklist.onAdd && "ml-auto")} disabled={optimizing} onClick={() => void optimizePreset()}>
+          {optimizing ? "Fetching…" : "Optimize preset →"}
+        </CyanButton>
+      ) : onOptimize && (
         <CyanButton size="sm" className={cx(!worklist.onAdd && "ml-auto")} onClick={() => onOptimize(uid)}>Optimize →</CyanButton>
       )}
       {onRemove && (
@@ -468,7 +507,7 @@ function HeroLine({
           type="button"
           onClick={onRemove}
           title={`Remove ${h.name} from this preset`}
-          className={cx("grid h-6 w-6 place-items-center rounded-md border border-white/7 bg-black/40 text-[11px] text-white hover:bg-black/60", !worklist.onAdd && !onOptimize && "ml-auto")}
+          className={cx("grid h-6 w-6 place-items-center rounded-md border border-white/7 bg-black/40 text-[11px] text-white hover:bg-black/60", !worklist.onAdd && !onOptimize && !canOptimizePreset && "ml-auto")}
         >✕</button>
       )}
       {evalPreset && gemNames.length > 0 && (

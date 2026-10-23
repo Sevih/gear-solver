@@ -25,7 +25,7 @@ import type { HeroPriority } from "../../lib/storage/heroPriority.js";
 import {
   INITIAL_FILTERS, solverFiltersReducer,
 } from "../../lib/solver/builderFilters.js";
-import { talismanFamilyKeys, translateRecoBuild, type StructuredCharacterReco, type StructuredRecoBuild } from "../../lib/reco/translateReco.js";
+import { talismanFamilyKeys, translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../../lib/reco/translateReco.js";
 import { fetchRecoForHero } from "../../lib/reco/fetchReco.js";
 import { equipPieces, type EquipOutcome } from "../../equip.js";
 import type { WorklistEntry } from "../../lib/storage/worklist.js";
@@ -93,6 +93,10 @@ interface BuilderScreenProps {
   /** Called once on mount after consuming `initialHeroUid`, so the parent can
    *  clear it (a later plain visit to the Builder shouldn't re-preselect). */
   onInitialHeroConsumed?: () => void;
+  /** Filters to overlay on `initialHeroUid`'s remembered ones, with the status
+   *  line saying where they come from — set by the Presets tab's
+   *  "Optimize preset →", read with `initialHeroUid` (and cleared with it). */
+  initialPatch?: { patch: RecoFilterPatch; note: string } | null;
   /** Called after "Equip build" rewrote the captured snapshot, so the parent
    *  re-imports the inventory (App's `refreshInventory`). */
   onAfterEquip?: () => void;
@@ -129,23 +133,12 @@ function formatCombos(n: number): string {
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
   // Persisted so the user's preferred split survives reloads.
   const [resultRows, setResultRows] = usePersistedState<number>("gs.builder.resultRows", 12);
-  // Adopt a preselect from the parent (Builds → Optimize) whenever it arrives,
-  // then let the parent clear it. Keyed on `initialHeroUid` (not mount-only) so
-  // it works on later clicks too — the Builder now stays mounted across tabs,
-  // so a fresh Optimize is a prop change rather than a remount.
-  useEffect(() => {
-    if (initialHeroUid) {
-      setSelectedUid(initialHeroUid);
-      onInitialHeroConsumed?.();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialHeroUid]);
   // Per-hero filter memory (session-scoped). `filtersRef` mirrors the live
   // filters so the hero-change effect can snapshot the OUTGOING hero without
   // depending on `filters` (which would re-fire it on every edit). `prevHeroRef`
@@ -396,8 +389,41 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const [recoPicker, setRecoPicker] = useState<StructuredCharacterReco | null>(null);
   // Stable — the picker's Escape listener is keyed on `onClose`.
   const closeRecoPicker = useCallback(() => setRecoPicker(null), []);
-  // Clear stale reco feedback when the hero changes.
-  useEffect(() => { setRecoStatus(null); setRecoPicker(null); }, [selectedUid]);
+  // Adopt a preselect from the parent (Builds → Optimize) whenever it arrives,
+  // then let the parent clear it. Keyed on `initialHeroUid` (not mount-only) so
+  // it works on later clicks too — the Builder now stays mounted across tabs,
+  // so a fresh Optimize is a prop change rather than a remount.
+  // An `initialPatch` ("Optimize preset →") goes over the hero's remembered
+  // filters (bands and options kept): merged here when that hero's are the
+  // ones loaded, else left in `pendingPatchRef` for the hero-switch effect to
+  // merge once it has loaded them — never onto the outgoing hero's.
+  const pendingPatchRef = useRef<{ uid: string; patch: RecoFilterPatch; note: string } | null>(null);
+  useEffect(() => {
+    if (initialHeroUid) {
+      const pending = initialPatch ? { uid: initialHeroUid, ...initialPatch } : null;
+      if (pending && selectedUidRef.current === initialHeroUid) {
+        dispatch({ type: "mergePreset", patch: pending.patch });
+        setRecoStatus({ tone: "ok", text: pending.note });
+        setRecoPicker(null);
+        pendingPatchRef.current = null;
+      } else pendingPatchRef.current = pending;
+      setSelectedUid(initialHeroUid);
+      onInitialHeroConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialHeroUid]);
+  // Clear stale reco feedback when the hero changes — or say where the filters
+  // of a pending "Optimize preset →" come from (merged by the effect below).
+  // Skipped while the hero is unchanged (mount, StrictMode's re-run), which
+  // would wipe a patch's note merged on mount.
+  const recoHeroRef = useRef(selectedUid);
+  useEffect(() => {
+    if (recoHeroRef.current === selectedUid) return;
+    recoHeroRef.current = selectedUid;
+    const pending = pendingPatchRef.current;
+    setRecoStatus(pending && pending.uid === selectedUid ? { tone: "ok", text: pending.note } : null);
+    setRecoPicker(null);
+  }, [selectedUid]);
 
   // Switching heroes: RESULTS are a clean slate (per-hero, stale otherwise), but
   // FILTERS are remembered per hero (session-scoped) — snapshot the outgoing
@@ -417,6 +443,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     }
     const saved = selectedUid ? heroFiltersRef.current[selectedUid] : undefined;
     dispatch(saved ? { type: "loadPreset", filters: cloneFilters(saved) } : { type: "resetAll" });
+    const pending = pendingPatchRef.current;
+    if (pending && pending.uid === selectedUid) dispatch({ type: "mergePreset", patch: pending.patch });
+    pendingPatchRef.current = null;
     prevHeroRef.current = selectedUid;
     setSolving(false);
     setSolveResults([]);

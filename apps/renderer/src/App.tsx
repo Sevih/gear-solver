@@ -20,6 +20,7 @@ import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
 import { reconcileDataHash } from "./lib/storage/dataHash.js";
 import { createOnboardingGate } from "./lib/onboarding.js";
+import type { RecoFilterPatch } from "./lib/reco/translateReco.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
 // bundle drops to just the shell + the first screen the user opens.
@@ -167,6 +168,9 @@ export function App() {
   // "Optimize →" button, consumed (and cleared) by BuilderScreen on mount so
   // a later normal visit to the Builder doesn't re-preselect a stale hero.
   const [builderHero, setBuilderHero] = useState<string | null>(null);
+  // Filters the Presets tab's "Optimize preset →" sends along with the hero,
+  // cleared with it.
+  const [builderPatch, setBuilderPatch] = useState<{ patch: RecoFilterPatch; note: string } | null>(null);
   // Cross-hero gear-change queue — built from the Builder ("Add to worklist"),
   // worked through on the Worklist tab. Owned here so an add in the (kept-mounted)
   // Builder is live on the Worklist tab. Persisted to localStorage on each change.
@@ -468,7 +472,7 @@ export function App() {
               />
             </ScreenErrorBoundary>
           )}
-          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} worklistHeroUids={worklistHeroUids} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} /></ScreenErrorBoundary>}
+          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} worklistHeroUids={worklistHeroUids} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Builder"); }} onOptimizePreset={(uid, patch, note) => { setBuilderHero(uid); setBuilderPatch({ patch, note }); setTab("Builder"); }} /></ScreenErrorBoundary>}
           {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} worklistClaims={solverWorklistClaims} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a
@@ -477,7 +481,7 @@ export function App() {
           {builderMounted && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} onInitialHeroConsumed={() => setBuilderHero(null)} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
               </ScreenErrorBoundary>
             </div>
           )}
