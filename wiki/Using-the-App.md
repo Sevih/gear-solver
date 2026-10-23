@@ -69,9 +69,12 @@ way the game does (validated to match the in-game character sheet).
 ## Presets — your in-game equipment presets
 
 One card per equipment preset saved in-game, in the **same order as the game's preset editor**
-(favorites first): its number, name and ★ (favorite), its class icon, its 7 pieces (the EE is never
-part of a preset — each hero keeps their own), and the heroes **currently wearing** it (gear
-identical to the preset, EE aside). Nothing is sent to the game.
+(favorites first): its number, name and ★ (favorite), its class icon, its 7 pieces laid out like
+the game's equipment screen — Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots — and
+the heroes **currently wearing** it (gear identical to the preset, EE aside). The EE is never part
+of a preset — each hero keeps their own: its cell shows the reference hero's EE, dimmed. On a wide
+window an open card shows the pieces on the left and the heroes on the right. Nothing is sent to
+the game.
 
 - **Class filter and sort** — the class chips at the top show only the presets of the ticked
   classes (**Clear** resets them); **Sort: Class** groups the cards by class instead of the
@@ -94,6 +97,10 @@ identical to the preset, EE aside). Nothing is sent to the game.
   turns orange: "Ame loses 23 % vs their saved build". The priority is the one set in the Builder
   this session, else the one the hero's latest saved build was solved with ("priority from saved
   build"); a hero with neither gets no score — open them in the Builder and set one.
+- **Overcap** — when the outfit pushes a hero's **crit rate** past 102 % or their **penetration**
+  past 100 %, the line shows a badge, the same as on the Builds tab: "Crit rate 142% — 40% wasted
+  over the 102% cap". From 10 points wasted the line turns orange; below, the badge alone. The
+  badge's tooltip says when the proposed EE gems add to it.
 - **+ Worklist** — on each hero's line: queues the preset's pieces that hero doesn't wear yet
   and the EE gems to socket as that hero's **Worklist** entry (replacing their previous one). A
   piece no longer in your inventory is left out, and the toast says so.
@@ -211,7 +218,8 @@ Presets tab's, labeled **Preset** on the card). Each
 queued build becomes a card for its hero (one card per hero — a newer build replaces it), with
 one checkable line per changed slot — the target piece's image, stats, and where it currently
 lives (which hero wears it, or Inventory) — and one line per gem to socket on the Talisman / EE,
-under its piece (gem, stat, and the gem it replaces).
+under its piece (gem, stat, and the gem it replaces). The tab uses the whole window: on a wide
+one the cards sit two per row.
 
 - **Work through it in-game** — tick each line off as you equip it for real; on your next
   capture (or as soon as the app sees the move, with the game open), changes that are done are

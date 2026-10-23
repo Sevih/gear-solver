@@ -9,7 +9,8 @@
  * the solver's `maxReforgesOf` rather than re-deriving it.
  */
 import { DEFAULT_RULES, gameRulesOf, type GameData, type GearPiece } from "@gear-solver/core";
-import { round1, type FinalStats } from "./composeBuild.js";
+import type { FinalStats } from "./composeBuild.js";
+import { overcapOf, overcapText } from "./overcap.js";
 import { maxReforgesOf } from "./solver/engine.js";
 import { gemSlotsOf } from "./solver/gems.js";
 import { gearPieceQualityTier } from "./quality.js";
@@ -161,20 +162,10 @@ export function computeAdvice(entry: AdviceInput, game: GameData | null): Advice
     }
   }
 
-  // Rule 4 — wasted stat caps. CRC and PEN both hard-cap at 100% in the damage
-  // model; any overflow is dead weight that could be reallocated. Crit rate
-  // keeps a +2% tolerance (warn only past 102%): players intentionally overcap
-  // a couple points as a buffer against enemy crit-resist, so 100-102% isn't
-  // truly wasted. PEN has no such buffer (cap 100%). Rounded waste must be > 0
-  // so a float a hair over the cap doesn't print a "0% wasted" line.
+  // Rule 4 — wasted stat caps, the rule shared with the Presets tab
+  // (`overcapOf`: crit tolerated up to 102% on its raw sum, PEN capped at 100%).
   if (entry.stats) {
-    const capWaste = (label: string, v: number, cap: number) => {
-      const waste = round1(v - cap);
-      if (waste > 0) out.push({ tone: "warn", text: `${label} ${round1(v)}% — ${waste}% wasted over the ${cap}% cap` });
-    };
-    // The sheet's CHC is bounded at 100: the waste reads the raw sum.
-    capWaste("Crit rate", entry.stats.critRateUncapped ?? entry.stats.critRate, 102);
-    capWaste("Penetration", entry.stats.pen, 100);
+    for (const o of overcapOf(entry.stats)) out.push({ tone: "warn", text: overcapText(o) });
   }
 
   // The contract's rules (gem slots, reforge budget) — DEFAULT_RULES without

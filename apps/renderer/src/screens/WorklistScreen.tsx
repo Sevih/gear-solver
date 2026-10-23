@@ -113,7 +113,7 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
   const contendedNames = [...plan.contended.keys()].map((uid) => nameOf.get(uid) ?? uid);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-3 px-6 py-5">
+    <div className="flex flex-col gap-3 px-6 py-5">
       {/* Transaction header — apply the whole queue across heroes in one go. */}
       {plan.assignments.length > 0 && (
         <div className="flex flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-1 px-4 py-3">
@@ -158,24 +158,27 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
         </div>
       )}
 
-      {worklist.map((entry) => (
-        <WorklistCard
-          key={entry.id}
-          entry={entry}
-          game={game}
-          equippedOnHero={equipped.get(entry.heroUid) ?? null}
-          invUids={invUids}
-          contended={plan.contended}
-          gemSlots={gemSlots}
-          pieceByUid={pieceByUid}
-          charByUid={charByUid}
-          step={plan.position.get(entry.id) ?? null}
-          cyclic={plan.cyclic.has(entry.id)}
-          onChange={onChange}
-          worklist={worklist}
-          onAfterApply={onAfterApply}
-        />
-      ))}
+      {/* Two columns on a wide window, each card at its own height. */}
+      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
+        {worklist.map((entry) => (
+          <WorklistCard
+            key={entry.id}
+            entry={entry}
+            game={game}
+            equippedOnHero={equipped.get(entry.heroUid) ?? null}
+            invUids={invUids}
+            contended={plan.contended}
+            gemSlots={gemSlots}
+            pieceByUid={pieceByUid}
+            charByUid={charByUid}
+            step={plan.position.get(entry.id) ?? null}
+            cyclic={plan.cyclic.has(entry.id)}
+            onChange={onChange}
+            worklist={worklist}
+            onAfterApply={onAfterApply}
+          />
+        ))}
+      </div>
     </div>
   );
 }

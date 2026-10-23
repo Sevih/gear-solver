@@ -435,6 +435,17 @@ pure and tested (`lib/presets/presetRows.ts` → `presetRows(inventory)`): a pie
 presets may play the same fight) are flagged on the tile and in a banner. An empty preset is listed
 collapsed.
 
+**Layout.** The pieces follow the 4 × 2 grid of the game's equipment screen (the screen's `GAME_GRID`):
+Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots; `PRESET_SLOTS` keeps its 7 slots (signature,
+worklist, tests), only the display grid changes, and a piece of unknown slot follows the grid. The EE cell
+shows the EE the card's reference hero wears today (`referenceUid`, or the proposed unique wearer, `eeOf`),
+dimmed, tooltip "EE isn't part of a preset — each hero keeps their own"; without a reference (or an EE), an
+empty dashed cell. Past 1280 px (`xl`), an open card goes two-column: the grid on the left (fixed width), the
+Reference / Associated lines on the right; below that, stacked. A hero line's metrics have a minimum width
+(aligned from one line to the next) and spread over the room available. The Worklist tab has no maximum
+width anymore: the transaction header full width, then the cards on a two-column grid past 1280 px, each at
+its own height.
+
 **Order, class filter and sort.** The cards follow the in-game preset editor's order: `comparePresets`
 (core, `parse.ts`) mirrors the client's `CEquipPresetData.SortPreset` — type ascending (Master League
 presets after the others), favorites first, then the player's order (`Preset.sortOrder`, read from
@@ -504,6 +515,17 @@ their most recent saved build, re-scored with the **current** priority, else the
 threshold (15 % by default, Settings → Solver, `gs.solver.presetLossWarn`) the line turns orange with
 "<Name> loses 23 % vs their saved build". Without a priority: "no priority set for <Name> — set one in the
 Builder", no score. Nothing is written to the game.
+
+**Overcap.** The sheet bounds `critRate` at 100 (`computeFinalStats`) and keeps the raw sum in
+`critRateUncapped`; `pen` isn't bounded. The wasted-cap rule lives in `lib/overcap.ts` (pure, shared with
+`buildAdvice`'s rule 4): `overcapOf(finalStats)` → `{ key, label, value, cap, waste }` per axis over its cap —
+crit read on `critRateUncapped ?? critRate` against 102 (a buffer against crit resistance), penetration
+against 100, `waste = round1(value − cap)` kept when > 0; `overcapText` writes "Crit rate 142% — 40% wasted
+over the 102% cap". `presetOvercap(evalPreset, asSocketed)` (`lib/presets/evaluate.ts`) applies it to the
+displayed evaluation (proposed EE gems), on the reference as on the associated heroes: one badge per axis,
+orange with the line in the warning tone (the loss's) from `OVERCAP_WARN_PTS = 10` points wasted (a
+constant, not a setting), amber alone below; when the overflow is larger than with the gems as socketed, the
+badge's tooltip says it comes from the proposed EE gems.
 
 ---
 
@@ -655,9 +677,10 @@ apps/renderer/src/
 │   └── solver.worker.ts          ← thin adapter IPC ↔ engine
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
+│   ├── overcap.ts                 ← overcapOf + overcapText (wasted CRC 102 / PEN 100 caps, Builds and Presets)
 │   ├── presets/
 │   │   ├── presetRows.ts           ← in-game presets: pieces, wearers (presetSignature), missing / shared pieces, class, filter / sort
-│   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetPriorityOf (Presets tab)
+│   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetPriorityOf + presetOvercap (Presets tab)
 │   │   ├── eeGems.ts               ← bestEeGemsFor: EE gems per hero, the preset's pieces fixed
 │   │   ├── presetWorklist.ts       ← presetWorklistFor: the Worklist entry of one hero of the preset
 │   │   └── optimize.ts             ← presetOptimizePatch + presetOptimizeNote: "Optimize preset →" (effects required, priority substats)
@@ -682,7 +705,7 @@ apps/renderer/src/
     │   ├── ResultsTable.tsx        ← virtualized table, sorting, heatmap, columns menu
     │   ├── BottomGearBand.tsx · RightSidebar.tsx · FilterFooter.tsx · StatsPanel.tsx · …
     │   └── catalogs.ts · statColumns.ts ← inventory-driven catalogs, stat/rating tables
-    ├── presets/PresetsScreen.tsx   ← Presets tab: cards per preset (game order, class filter / sort), reference, associated heroes, EE gems, loss, + Worklist, Optimize → / Optimize preset →
+    ├── presets/PresetsScreen.tsx   ← Presets tab: cards per preset (game order, class filter / sort), in-game grid, reference, associated heroes, EE gems, loss, overcap, + Worklist, Optimize → / Optimize preset →
     └── BuildsScreen.tsx            ← equipped/composed roster + computeAdvice + Optimize →
 ```
 

@@ -17,6 +17,7 @@ import { composeCharStats, effectiveCharacter, expToLevel, gameRulesOf, resolveS
 import { computeFinalStats, type FinalStats, type FinalStatsBaseline, type GemOverride, type ScalingMap } from "../composeBuild.js";
 import { computeCheapRatings, computeScore, type CheapRatings } from "../solver/ratings.js";
 import { dmgSkillInfo } from "../dmgSkill.js";
+import { overcapOf, type Overcap } from "../overcap.js";
 import type { SavedBuild, SavedBuildsMap } from "../storage/savedBuilds.js";
 
 /** What the evaluation needs of one hero, composed once per screen render. */
@@ -144,6 +145,33 @@ export function bestKnownFor(heroUid: string, ctx: PresetEvalContext): BestKnown
 export function presetLoss(presetScore: number | null, bestScore: number | null): number | null {
   if (presetScore == null || bestScore == null || !(bestScore > 0)) return null;
   return 1 - presetScore / bestScore;
+}
+
+/** Waste (points over the cap) from which an overcapped hero's line turns to
+ *  the warning tone; below it, the badge alone. A model constant, not a
+ *  setting. */
+export const OVERCAP_WARN_PTS = 10;
+
+export interface PresetOvercap extends Overcap {
+  /** Waste of `OVERCAP_WARN_PTS` or more: the line takes the warning tone. */
+  warn: boolean;
+  /** The proposed EE gems add to the overflow — over by less, or not at all,
+   *  with the gems as socketed. */
+  fromGems: boolean;
+}
+
+/** The capped stats a hero overshoots on a preset (`overcapOf`, the Builds
+ *  tab's rule) — `shown` is the evaluation the line displays (with the
+ *  proposed EE gems), `socketed` the one with the gems as socketed today
+ *  (null when no gem is proposed). */
+export function presetOvercap(shown: PresetEval | null, socketed: PresetEval | null): PresetOvercap[] {
+  if (!shown) return [];
+  const before = socketed ? overcapOf(socketed.finalStats) : null;
+  return overcapOf(shown.finalStats).map((o) => ({
+    ...o,
+    warn: o.waste >= OVERCAP_WARN_PTS,
+    fromGems: before != null && o.waste > (before.find((b) => b.key === o.key)?.waste ?? 0),
+  }));
 }
 
 /** Compose every roster hero once (no gear) — same inputs as the Builds tab

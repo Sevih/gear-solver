@@ -466,6 +466,17 @@ l'inventaire (slot repris de la position sur le fil) et pièce présente dans **
 <preset> » — deux presets peuvent jouer le même combat) sont marquées sur la tuile et dans un bandeau. Un
 preset vide est listé replié.
 
+**Disposition.** Les pièces suivent la grille 4 × 2 de l'écran d'équipement du jeu (`GAME_GRID` de l'écran) :
+Arme, EE, Tête, Torse / Accessoire, Talisman, Gants, Bottes ; `PRESET_SLOTS` garde ses 7 slots (signature,
+worklist, tests), seule la grille d'affichage change, et une pièce de slot inconnu suit la grille. La case EE
+montre l'EE que porte aujourd'hui le héros de référence de la carte (`referenceUid`, ou le porteur unique
+proposé, `eeOf`), atténuée, tooltip « EE isn't part of a preset — each hero keeps their own » ; sans
+référence (ou sans EE), une case vide en pointillé. Au-delà de 1280 px (`xl`), une carte ouverte passe en
+deux colonnes : la grille à gauche (largeur fixe), les lignes Reference / Associated à droite ; en dessous,
+empilées. Les métriques d'une ligne de héros ont une largeur minimale (alignées d'une ligne à l'autre) et
+s'étalent sur la place disponible. L'onglet Worklist n'a plus de largeur maximale : en-tête de transaction
+pleine largeur, puis les cartes en grille à deux colonnes au-delà de 1280 px, chacune à sa hauteur.
+
 **Ordre, filtre et tri par classe.** Les cartes suivent l'ordre de l'éditeur de presets du jeu :
 `comparePresets` (core, `parse.ts`) reproduit le `CEquipPresetData.SortPreset` du client — type croissant
 (les presets Master League après les autres), favoris d'abord, puis l'ordre du joueur
@@ -541,6 +552,18 @@ score(best)`, affichée en % « vs saved build » / « vs current gear » ; au-d
 Settings → Solver, `gs.solver.presetLossWarn`) la ligne passe en orange avec « <Nom> loses 23 % vs their
 saved build ». Sans priorité : « no priority set for <Nom> — set one in the Builder », pas de score. Rien
 n'est écrit vers le jeu.
+
+**Overcap.** La feuille borne `critRate` à 100 (`computeFinalStats`) et garde la somme brute dans
+`critRateUncapped` ; `pen` n'est pas borné. La règle des caps gaspillés vit dans `lib/overcap.ts` (pure,
+partagée avec la règle 4 de `buildAdvice`) : `overcapOf(finalStats)` → `{ key, label, value, cap, waste }`
+par axe en dépassement — crit lu sur `critRateUncapped ?? critRate` contre 102 (tolérance contre la
+résistance aux critiques), pénétration contre 100, `waste = round1(value − cap)` gardé si > 0 ;
+`overcapText` écrit « Crit rate 142% — 40% wasted over the 102% cap ». `presetOvercap(evalPreset,
+asSocketed)` (`lib/presets/evaluate.ts`) l'applique à l'évaluation affichée (gemmes d'EE proposées), sur la
+référence comme sur les associés : un badge par axe, orange avec la ligne au ton d'avertissement (le même
+que la perte) dès `OVERCAP_WARN_PTS = 10` points gaspillés (constante, pas un réglage), ambre seul en
+dessous ; quand le dépassement est plus fort qu'avec les gemmes telles que serties, le tooltip du badge dit
+qu'il vient des gemmes d'EE proposées.
 
 ---
 
@@ -726,9 +749,10 @@ apps/renderer/src/
 │   └── solver.worker.ts          ← thin adapter IPC ↔ engine
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
+│   ├── overcap.ts                 ← overcapOf + overcapText (caps CRC 102 / PEN 100 gaspillés, Builds et Presets)
 │   ├── presets/
 │   │   ├── presetRows.ts           ← presets du jeu : pièces, porteurs (presetSignature), pièces absentes / partagées, classe, filtre / tri
-│   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetPriorityOf (onglet Presets)
+│   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetPriorityOf + presetOvercap (onglet Presets)
 │   │   ├── eeGems.ts               ← bestEeGemsFor : gemmes d'EE par héros, pièces du preset fixées
 │   │   ├── presetWorklist.ts       ← presetWorklistFor : l'entrée Worklist d'un héros du preset
 │   │   └── optimize.ts             ← presetOptimizePatch + presetOptimizeNote : « Optimize preset → » (effets requis, sous-stats prioritaires)
@@ -752,7 +776,7 @@ apps/renderer/src/
     │   ├── ResultsTable.tsx        ← table virtualisée, tri, heatmap, menu des colonnes
     │   ├── BottomGearBand.tsx · RightSidebar.tsx · FilterFooter.tsx · StatsPanel.tsx · …
     │   └── catalogs.ts · statColumns.ts ← catalogues tirés de l'inventaire, tables stats/ratings
-    ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset (ordre du jeu, filtre / tri par classe), référence, associés, gemmes d'EE, perte, + Worklist, Optimize → / Optimize preset →
+    ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset (ordre du jeu, filtre / tri par classe), grille du jeu, référence, associés, gemmes d'EE, perte, overcap, + Worklist, Optimize → / Optimize preset →
     └── BuildsScreen.tsx            ← roster équipé/composé + computeAdvice + Optimize →
 ```
 

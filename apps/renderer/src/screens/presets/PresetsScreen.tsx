@@ -5,12 +5,17 @@
  * it (who wear it as-is, tuned by their own EE). For each of them the preset is
  * scored on that hero (`lib/presets/evaluate.ts`); an associated hero is
  * compared to their best known outfit and flagged past the loss threshold
- * (Settings → Solver). Each hero's line proposes the gems of their own EE that
+ * (Settings → Solver), and any hero overshooting the crit rate / penetration
+ * cap (`presetOvercap`) is flagged. Each hero's line proposes the gems of their own EE that
  * score best with the outfit (`lib/presets/eeGems.ts`) and scores with them;
  * "+ Worklist" queues the outfit and those gems as the hero's entry,
  * "Optimize →" opens the Builder on the hero — on the reference hero's line,
  * "Optimize preset →" also sends the outfit's effects (required) and priority
  * substats from the outfit and outerpedia's reco (`lib/presets/optimize.ts`).
+ *
+ * The pieces are laid out like the game's equipment screen (`GAME_GRID`), the
+ * EE cell showing the reference hero's own EE, dimmed. On a wide window an
+ * open card puts the pieces left of the hero lines.
  *
  * Cards come in the in-game editor's order (`presetRows`); the class chips
  * filter them and "Sort: Class" groups them by class (`presetClasses`,
@@ -21,7 +26,7 @@
  * most recent saved build (`presetPriorityOf`).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Character, GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
+import type { Character, GameData, GearPiece, GearSlot, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { effectiveCharacter } from "@gear-solver/core";
 import { CharacterPortrait, SlotMini } from "../../design/EquipmentIcon.js";
 import { GearDetailBody } from "../../design/GearDetail.js";
@@ -32,10 +37,13 @@ import { cx } from "../../design/cx.js";
 import { toUiPiece } from "../../design/adapter.js";
 import { toDesignSlot } from "../../design/tokens.js";
 import {
-  arrangePresets, PRESET_SLOTS, presetClasses, presetRows, type PresetPiece, type PresetRow, type PresetSort,
+  arrangePresets, presetClasses, presetRows, type PresetPiece, type PresetRow, type PresetSort,
 } from "../../lib/presets/presetRows.js";
 import { CLASSES } from "../../lib/homeStats.js";
-import { bestKnownFor, evaluatePresetFor, heroBases, presetLoss, presetPriorityOf, type PresetEvalContext } from "../../lib/presets/evaluate.js";
+import {
+  bestKnownFor, eeOf, evaluatePresetFor, heroBases, presetLoss, presetOvercap, presetPriorityOf, type PresetEvalContext,
+} from "../../lib/presets/evaluate.js";
+import { overcapText } from "../../lib/overcap.js";
 import { bestEeGemsFor } from "../../lib/presets/eeGems.js";
 import { presetWorklistFor } from "../../lib/presets/presetWorklist.js";
 import { presetOptimizeNote, presetOptimizePatch } from "../../lib/presets/optimize.js";
@@ -277,7 +285,7 @@ function PresetCard({
         {row.empty && <span className="text-[11px] italic text-zinc-400">Empty preset</span>}
         {wearerUids.length > 0 && (
           <div className="flex items-center gap-1">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-400">Worn by</span>
+            <span className="text-[11px] uppercase tracking-wider text-zinc-400">Worn by</span>
             {wearerUids.map((uid) => {
               const h = heroes.get(uid);
               return h ? <CharacterPortrait key={uid} charId={h.displayCharId} name={h.name} cls={h.cls} element={h.element} size={28} /> : null;
@@ -301,33 +309,37 @@ function PresetCard({
             </div>
           )}
 
-          <PresetPieces pieces={pieces} game={game} />
+          <div className="flex flex-col gap-2.5 xl:flex-row xl:items-start xl:gap-4">
+            <PresetPieces pieces={pieces} game={game} ee={referenceUid ? eeOf(referenceUid, ctx) : null} />
 
-          <div className="flex flex-col gap-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="w-20 text-[10px] uppercase tracking-wider text-zinc-400">Reference</span>
-              <div className="w-56">
-                <HeroSelect heroes={roster} game={game} value={referenceUid} onChange={onSetReference} />
+            <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="w-20 text-[11px] uppercase tracking-wider text-zinc-400">Reference</span>
+                  <div className="w-56">
+                    <HeroSelect heroes={roster} game={game} value={referenceUid} onChange={onSetReference} />
+                  </div>
+                  {suggested && <span className="text-[11.5px] italic text-zinc-400">current wearer</span>}
+                  {stored.referenceUid && (
+                    <button type="button" onClick={() => onSetReference(null)} className="text-[11px] text-cyan-300 hover:text-cyan-200">Clear</button>
+                  )}
+                </div>
+                {referenceUid && <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} onOptimizePreset={onOptimizePreset} reference />}
               </div>
-              {suggested && <span className="text-[10.5px] italic text-zinc-400">current wearer</span>}
-              {stored.referenceUid && (
-                <button type="button" onClick={() => onSetReference(null)} className="text-[11px] text-cyan-300 hover:text-cyan-200">Clear</button>
-              )}
-            </div>
-            {referenceUid && <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} onOptimizePreset={onOptimizePreset} reference />}
-          </div>
 
-          <div className="flex flex-col gap-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="w-20 text-[10px] uppercase tracking-wider text-zinc-400">Associated</span>
-              <div className="w-56">
-                <HeroSelect heroes={candidates} game={game} value={null} onChange={(uid) => { if (uid) onAddAssociated(uid); }} />
+              <div className="flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="w-20 text-[11px] uppercase tracking-wider text-zinc-400">Associated</span>
+                  <div className="w-56">
+                    <HeroSelect heroes={candidates} game={game} value={null} onChange={(uid) => { if (uid) onAddAssociated(uid); }} />
+                  </div>
+                  {associatedUids.length === 0 && <span className="text-[11.5px] italic text-zinc-400">Add the heroes who will share this outfit</span>}
+                </div>
+                {associatedUids.map((uid) => (
+                  <HeroLine key={uid} uid={uid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} onRemove={() => onRemoveAssociated(uid)} />
+                ))}
               </div>
-              {associatedUids.length === 0 && <span className="text-[10.5px] italic text-zinc-400">Add the heroes who will share this outfit</span>}
             </div>
-            {associatedUids.map((uid) => (
-              <HeroLine key={uid} uid={uid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} onRemove={() => onRemoveAssociated(uid)} />
-            ))}
           </div>
         </>
       )}
@@ -335,35 +347,67 @@ function PresetCard({
   );
 }
 
-/** The 7 preset slots, the existing tile + hover detail per piece, flagged
- *  when missing from the inventory or shared with another preset. */
-function PresetPieces({ pieces, game }: { pieces: PresetPiece[]; game: GameData | null }) {
+/** The game's equipment screen, row by row: Weapon, EE, Helmet, Armor /
+ *  Accessory, Talisman, Gloves, Boots. The EE isn't part of the preset
+ *  (`PRESET_SLOTS`): its cell shows the reference hero's own. */
+const GAME_GRID: readonly GearSlot[] = [
+  "weapon", "exclusive", "helmet", "armor",
+  "accessory", "ooparts", "gloves", "boots",
+];
+
+const EE_NOTE = "EE isn't part of a preset — each hero keeps their own";
+
+/** The preset's pieces on the game's 4 × 2 grid, the existing tile + hover
+ *  detail per piece, flagged when missing from the inventory or shared with
+ *  another preset; `ee` (the reference hero's) dimmed in the EE cell. Pieces
+ *  of unknown slot follow the grid. */
+function PresetPieces({ pieces, game, ee }: { pieces: PresetPiece[]; game: GameData | null; ee: GearPiece | null }) {
   const bySlot = new Map(pieces.filter((p) => p.slot).map((p) => [p.slot!, p]));
   const unknown = pieces.filter((p) => !p.slot);
-  const cells: Array<{ key: string; slot: string; p: PresetPiece | null }> = [
-    ...PRESET_SLOTS.map((s) => ({ key: s, slot: toDesignSlot(s) ?? s, p: bySlot.get(s) ?? null })),
-    ...unknown.map((p) => ({ key: p.uid, slot: "weapon", p })),
-  ];
+  const cell = (key: string, slot: string, p: PresetPiece | null) => {
+    const ui = p?.piece ? toUiPiece(p.piece, game) : null;
+    const set = p?.piece?.armorSetId ? game?.sets[p.piece.armorSetId]?.name ?? null : null;
+    const tile = <SlotMini slot={slot} piece={ui?.iconPiece ?? null} size={55} />;
+    return (
+      <div key={key} className="flex w-16 flex-col items-center gap-0.5">
+        <div className={cx("relative rounded-lg", p?.missing && "ring-1 ring-rose-400/60", p && p.sharedWith.length > 0 && "ring-1 ring-amber-400/60")}>
+          {ui ? <RichTooltip placement="right" className="cursor-help" content={<GearDetailBody piece={ui} game={game} inTooltip />}>{tile}</RichTooltip> : tile}
+          {p?.missing && <Badge tone="rose" title="This piece is no longer in your inventory">missing</Badge>}
+          {p && !p.missing && p.sharedWith.length > 0 && (
+            <Badge tone="amber" title={`Shared with ${p.sharedWith.map((r) => `#${r.num} ${r.name}`).join(", ")}`}>shared</Badge>
+          )}
+        </div>
+        {ui?.main[0] && <span className="max-w-16 truncate text-[11px] text-white/80" title={ui.main.map((m) => m.label).join(" · ")}>{ui.main[0].label}</span>}
+        {set && <span className="max-w-16 truncate text-[9.5px] text-zinc-400" title={set}>{set}</span>}
+      </div>
+    );
+  };
+  const eeCell = () => {
+    const ui = ee ? toUiPiece(ee, game) : null;
+    const tile = <SlotMini slot="exclusive" piece={ui?.iconPiece ?? null} size={55} />;
+    return (
+      <div key="exclusive" className="flex w-16 flex-col items-center gap-0.5 opacity-60">
+        {ui ? (
+          <RichTooltip
+            placement="right"
+            className="cursor-help"
+            content={<div className="flex flex-col gap-1.5"><span className="text-[11px] italic text-zinc-300">{EE_NOTE}</span><GearDetailBody piece={ui} game={game} inTooltip /></div>}
+          >{tile}</RichTooltip>
+        ) : <div title={EE_NOTE}>{tile}</div>}
+        {ui?.main[0] && <span className="max-w-16 truncate text-[11px] text-white/80" title={ui.main.map((m) => m.label).join(" · ")}>{ui.main[0].label}</span>}
+      </div>
+    );
+  };
   return (
-    <div className="flex flex-wrap gap-2">
-      {cells.map(({ key, slot, p }) => {
-        const ui = p?.piece ? toUiPiece(p.piece, game) : null;
-        const set = p?.piece?.armorSetId ? game?.sets[p.piece.armorSetId]?.name ?? null : null;
-        const tile = <SlotMini slot={slot} piece={ui?.iconPiece ?? null} size={55} />;
-        return (
-          <div key={key} className="flex w-16 flex-col items-center gap-0.5">
-            <div className={cx("relative rounded-lg", p?.missing && "ring-1 ring-rose-400/60", p && p.sharedWith.length > 0 && "ring-1 ring-amber-400/60")}>
-              {ui ? <RichTooltip placement="right" className="cursor-help" content={<GearDetailBody piece={ui} game={game} inTooltip />}>{tile}</RichTooltip> : tile}
-              {p?.missing && <Badge tone="rose" title="This piece is no longer in your inventory">missing</Badge>}
-              {p && !p.missing && p.sharedWith.length > 0 && (
-                <Badge tone="amber" title={`Shared with ${p.sharedWith.map((r) => `#${r.num} ${r.name}`).join(", ")}`}>shared</Badge>
-              )}
-            </div>
-            {ui?.main[0] && <span className="max-w-16 truncate text-[10px] text-white/80" title={ui.main.map((m) => m.label).join(" · ")}>{ui.main[0].label}</span>}
-            {set && <span className="max-w-16 truncate text-[9.5px] text-zinc-400" title={set}>{set}</span>}
-          </div>
-        );
-      })}
+    <div className="flex shrink-0 flex-col gap-2">
+      <div className="grid w-max grid-cols-4 gap-2">
+        {GAME_GRID.map((s) => (s === "exclusive" ? eeCell() : cell(s, toDesignSlot(s) ?? s, bySlot.get(s) ?? null)))}
+      </div>
+      {unknown.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {unknown.map((p) => cell(p.uid, "weapon", p))}
+        </div>
+      )}
     </div>
   );
 }
@@ -382,7 +426,8 @@ function Badge({ tone, title, children }: { tone: "rose" | "amber"; title: strin
 
 /** One hero of the preset — the EE gems proposed for them, the preset's score
  *  (with those gems) and offensive ratings on them; for an associated hero,
- *  the loss against their best known outfit; "+ Worklist" for both, then
+ *  the loss against their best known outfit; a badge per capped stat the
+ *  outfit overshoots (orange line from `OVERCAP_WARN_PTS` of waste); "+ Worklist" for both, then
  *  "Optimize preset →" for the reference hero, "Optimize →" for the others. */
 function HeroLine({
   uid, row, ctx, heroes, lossWarnPct, worklist, onOptimize, onOptimizePreset, reference = false, onRemove,
@@ -403,6 +448,7 @@ function HeroLine({
   const evalPreset = useMemo(() => evaluatePresetFor(uid, row.presentPieces, ctx, eeGems?.ee), [uid, row, ctx, eeGems]);
   const asSocketed = useMemo(() => (eeGems ? evaluatePresetFor(uid, row.presentPieces, ctx) : null), [uid, row, ctx, eeGems]);
   const best = useMemo(() => (reference ? null : bestKnownFor(uid, ctx)), [uid, ctx, reference]);
+  const overcap = useMemo(() => presetOvercap(evalPreset, asSocketed), [evalPreset, asSocketed]);
   const queued = useMemo(() => presetWorklistFor(uid, row, eeGems, ctx.inventory, ctx.game), [uid, row, eeGems, ctx]);
   // The line's hero while it is mounted — a reco answering after the
   // reference changed or the card went away is dropped.
@@ -454,7 +500,7 @@ function HeroLine({
   return (
     <div className={cx(
       "flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border px-2 py-1.5",
-      warn ? "border-orange-400/50 bg-orange-500/10" : "border-white/6 bg-black/20",
+      warn || overcap.some((o) => o.warn) ? "border-orange-400/50 bg-orange-500/10" : "border-white/6 bg-black/20",
     )}>
       <div className="flex w-56 items-center gap-2">
         <CharacterPortrait charId={h.displayCharId} name={h.name} cls={h.cls} element={h.element} size={32} />
@@ -463,9 +509,9 @@ function HeroLine({
       {!evalPreset ? (
         <span className="text-[11px] italic text-zinc-400">Stats unavailable for this hero (missing game data).</span>
       ) : (
-        <>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-6 gap-y-1">
           <Metric label="Score" value={evalPreset.score == null ? "—" : fmtNum(evalPreset.score)} />
-          {socketedScore && <span className="font-mono text-[10.5px] tabular-nums text-zinc-400" title="Score with the EE gems as socketed today">({socketedScore} as socketed)</span>}
+          {socketedScore && <span className="font-mono text-[11.5px] tabular-nums text-zinc-400" title="Score with the EE gems as socketed today">({socketedScore} as socketed)</span>}
           <Metric label="Dmg" value={fmtNum(evalPreset.ratings.dmg)} />
           <Metric label="DmgS" value={fmtNum(evalPreset.ratings.dmgs)} />
           {evalPreset.score == null ? (
@@ -481,8 +527,18 @@ function HeroLine({
               </span>
             )
           )}
-          {fromSaved && <span className="text-[10.5px] italic text-zinc-400" title="Not opened in the Builder this session — scored with the priority their most recent saved build was solved with">priority from saved build</span>}
-        </>
+          {fromSaved && <span className="text-[11.5px] italic text-zinc-400" title="Not opened in the Builder this session — scored with the priority their most recent saved build was solved with">priority from saved build</span>}
+          {overcap.map((o) => (
+            <span
+              key={o.key}
+              title={`${o.fromGems ? "Further over the cap with the proposed EE gems than as socketed. " : ""}Overflow past the cap is dead weight — it could go to another stat.`}
+              className={cx(
+                "rounded-md border px-1.5 py-0.5 text-[11px]",
+                o.warn ? "border-orange-400/50 bg-orange-500/15 text-orange-200" : "border-amber-400/40 bg-amber-500/10 text-amber-200",
+              )}
+            >{overcapText(o)}</span>
+          ))}
+        </div>
       )}
       {worklist.onAdd && (
         <button
@@ -533,9 +589,10 @@ function ClassIcon({ label }: { label: string }) {
   );
 }
 
+/** Fixed minimum width so the metrics line up from one hero line to the next. */
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <span className="flex items-baseline gap-1 font-mono text-[11.5px] tabular-nums">
+    <span className="flex min-w-24 items-baseline gap-1 font-mono text-[11.5px] tabular-nums">
       <span className="text-[9px] uppercase tracking-wider text-zinc-400">{label}</span>
       <span className="text-white">{value}</span>
     </span>

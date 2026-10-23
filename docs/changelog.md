@@ -8,6 +8,48 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧭 Presets et Worklist : pleine largeur, grille des pièces comme en jeu avec l'EE du héros de référence, avertissement d'overcap (2026-10-23)
+- ✅ **Overcap, règle partagée.** Trois retours du banc de Sevih (23/10) ; le troisième : Regina associée à « Striker 1 »
+  (référence D.Lambda) dépassait de loin 100 % de taux critique sans aucun signe sur sa ligne. La règle 4 de
+  `buildAdvice.ts` (« wasted stat caps ») est extraite dans `lib/overcap.ts` (nouveau, pur) : `overcapOf(finalStats)` →
+  `{ key, label, value, cap, waste }` par axe en dépassement — crit lu sur `critRateUncapped ?? critRate` (la feuille
+  borne `critRate` à 100, `composeBuild.ts`) contre 102, pénétration contre 100, `waste = round1(value − cap)` gardé
+  s'il est positif — et `overcapText` (« Crit rate 142% — 40% wasted over the 102% cap », le texte de Builds à l'identique) ;
+  `computeAdvice` les appelle, ses tests inchangés restent verts. Module à côté de `buildAdvice.ts` plutôt que dans
+  `lib/presets/` : c'est la règle de Builds, Presets la consomme.
+- ✅ **Overcap sur les lignes de héros.** `lib/presets/evaluate.ts` : `OVERCAP_WARN_PTS = 10` (exporté, pas un
+  réglage) et `presetOvercap(shown, socketed)` → les dépassements de l'évaluation affichée (`evalPreset`, avec les
+  gemmes d'EE proposées), chacun avec `warn` (waste ≥ 10) et `fromGems` (dépassement plus fort qu'avec les gemmes
+  telles que serties, `asSocketed` ; faux quand aucune gemme n'est proposée). `HeroLine`, référence comprise : un badge
+  par axe, orange quand `warn` et la ligne passe au ton d'avertissement de la perte (`warn || overcap.some(o => o.warn)`),
+  ambre seul en dessous ; le tooltip du badge dit « Further over the cap with the proposed EE gems than as socketed. »
+  quand `fromGems`, puis que le surplus est perdu.
+- ✅ **Grille du jeu.** `PresetPieces` : grille 4 × 2 (`GAME_GRID` dans l'écran) Arme, EE, Tête, Torse / Accessoire,
+  Talisman, Gants, Bottes ; les pièces de slot inconnu suivent sur une rangée à part ; `PRESET_SLOTS` intact (signature,
+  worklist, tests). La case EE montre `eeOf(referenceUid)` (référence choisie ou porteur unique proposé), `opacity-60`,
+  RichTooltip « EE isn't part of a preset — each hero keeps their own » au-dessus du détail de la pièce ; sans
+  référence ou sans EE, la tuile vide en pointillé de `SlotMini` avec la même phrase en `title`.
+- ✅ **Largeur.** Worklist : plus de `mx-auto max-w-3xl`, en-tête de transaction pleine largeur, cartes dans une grille
+  `grid-cols-1 items-start xl:grid-cols-2` (chacune à sa hauteur). Presets : sous le bandeau d'avertissements, une
+  carte ouverte est `xl:flex-row` — la grille (largeur fixe, `shrink-0`) à gauche, Reference / Associated en
+  `flex-1` à droite ; empilée en dessous de 1280 px. Lignes de héros : métriques, perte, badges dans un bloc `flex-1`
+  (`gap-x-6`), `Metric` en `min-w-24` pour s'aligner d'une ligne à l'autre ; textes à 10 / 10,5 px passés à 11 / 11,5
+  (Worn by, Reference, Associated, current wearer, Add the heroes…, as socketed, priority from saved build, stat
+  principale sous les tuiles). Rien d'autre ne bouge.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (§ Presets : « Disposition » / « Layout », « Overcap », carte des
+  fichiers), `wiki/Using-the-App.md` (Presets : grille, EE, Overcap ; Worklist : pleine largeur),
+  `docs/reference.md` / `wiki/Engine-Reference.md` (ligne `presetsOvercap.test.ts`, carte des modules),
+  `docs/release-notes.md › [Unreleased]`.
+- ✅ **Tests.** `test/presetsOvercap.test.ts` (9) : sous les caps → rien ; 102 de crit pile et 100 de PEN → rien ; crit
+  brut 142 avec `critRate` 100 → waste 40 et le texte de Builds ; repli sur `critRate` sans somme brute ; PEN 120 → 20 ;
+  deux axes, crit d'abord ; `presetOvercap` : ton d'avertissement à `OVERCAP_WARN_PTS` pile et pas à 9,9, sans
+  évaluation → rien, `fromGems` (plus fort / nouveau avec les gemmes proposées → vrai ; identique ou sans proposition →
+  faux). `npm run typecheck` : « > tsc --noEmit » (code 0) ; `npm test` : « Tests 686 passed (686) » (renderer ; core
+  169, desktop 196) ; `npm run lint` : « ✖ 13 problems (0 errors, 13 warnings) », inchangé.
+- ⏳ Sevih sur le fixe (fenêtre large) : Worklist et Presets remplissent la fenêtre, deux colonnes ; la grille d'un preset
+  est Arme | EE | Tête | Torse / Accessoire | Talisman | Gants | Bottes avec l'EE du héros de référence atténuée ;
+  Regina sur « Striker 1 » porte un badge « Crit rate …% — …% wasted over the 102% cap » et sa ligne est orange.
+
 ### 🎚️ Builder : CP avant / après dans « Current → Projected », colonne « Swaps », seuils par clic droit sur le tableau (2026-10-23)
 - ✅ **CP avant / après.** `StatsPanel` reçoit `cp: { current, projected }` et ouvre le panneau par une ligne « CP » au
   même format que les stats (courant ▸ projeté, delta signé, vert / rose / neutre selon le delta) ; `StatsPanelRow`
