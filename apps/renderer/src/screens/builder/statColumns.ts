@@ -147,12 +147,13 @@ export function statIconKeyFor(key: string): string {
  *  tooltip (so a hover explains the stat instead of just repeating the icon).
  *  Definitions are condensed from the game's `TextSystem` (`SYS_DESC_*` /
  *  `SYS_STAT_DESC_*` keys) — the same source the in-game stat info panel uses. */
-const STAT_TOOLTIP: Record<string, { full: string; desc: string }> = {
+const STAT_TOOLTIP: Record<string, { full: string; desc: string; note?: string }> = {
   atk:        { full: "Attack",                desc: "The higher your Attack, the more damage you deal to enemies." },
   def:        { full: "Defense",               desc: "The higher your Defense, the less damage you take from enemies." },
   hp:         { full: "Health",                desc: "You're defeated once your Health falls to zero." },
   spd:        { full: "Speed",                 desc: "The higher your Speed, the more often you can act." },
-  critRate:   { full: "Crit Chance",           desc: "Chance for an attack to land a critical hit (dealing Crit Damage)." },
+  critRate:   { full: "Crit Chance",           desc: "Chance for an attack to land a critical hit (dealing Crit Damage).",
+                note: "Past 100% (the in-game cap) a cell shows 100% with the raw overflow in amber (+N); shading and sorting read the raw sum." },
   critDmg:    { full: "Crit Damage",           desc: "Increases damage dealt on critical hits." },
   critDmgReduce: { full: "Crit Damage Reduction", desc: "Reduces crit damage taken when hit (caps at 70% combined with Damage Reduction)." },
   pen:        { full: "Penetration",           desc: "Ignores a portion of the target's Defense when attacking." },
@@ -162,9 +163,11 @@ const STAT_TOOLTIP: Record<string, { full: string; desc: string }> = {
   effRes:     { full: "Resilience",            desc: "The higher it is, the higher your chance to resist debuffs." },
 };
 
-/** Column-header tooltip text: "Full Name — definition", falling back to the
- *  abbreviation when a stat has no curated entry. */
+/** Column-header tooltip text: "Full Name — definition" (plus how the column
+ *  reads, when it differs from the sheet), falling back to the abbreviation
+ *  when a stat has no curated entry. */
 export function statHeaderTooltip(key: string, label: string): string {
   const t = STAT_TOOLTIP[key];
-  return t ? `${t.full} — ${t.desc}` : label;
+  if (!t) return label;
+  return t.note ? `${t.full} — ${t.desc} ${t.note}` : `${t.full} — ${t.desc}`;
 }

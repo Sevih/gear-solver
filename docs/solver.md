@@ -243,7 +243,10 @@ Snapshot des `FinalStats` du build actuellement équipé sur le héros (col gauc
 vs le build sélectionné dans la table (col droite, em-dash tant qu'aucune ligne
 n'est cliquée). Lecture pure, jamais éditable. La colonne projetée porte un **Δ
 numérique signé** par axe (`proj − current`, arrondi) en plus du tint vert/rouge —
-le « de combien », pas juste le sens.
+le « de combien », pas juste le sens. La ligne crit lit la somme brute (`critRawOf` =
+`critRateUncapped ?? critRate`, `screens/builder/critCell.ts`) pour le Δ et le tint, et au-delà
+de la borne de 100 affiche « 100% ⁺42 » (exposant ambre, `critCellParts`) de chaque côté, avec
+en tooltip la valeur brute et le gaspillage (`critCellTitle`, voir **Overcap** plus bas).
 
 ### Sub tick value & Damage / +1% (encadrés d'aide par héros)
 Deux panneaux d'info en lecture seule (col droite, sous Stats), recalculés au
@@ -412,7 +415,7 @@ Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le hé
 - **⚙ N workers** : taille du pool de recherche résolu.
 
 ### ResultsTable
-Heatmap rouge-vert par colonne (min/max relatifs au result set actuel). Colonnes :
+Heatmap rouge-vert par colonne (min/max relatifs au result set actuel, `computeColumnRanges`). Colonnes :
 sets, 8 stats principales, ratings (`TABLE_RATINGS`), **Score**, **Swaps**, actions
 (`Swaps`, clé `upg` = nb de slots qui changent par rapport au loadout actuel — pas des améliorations à faire ;
 triable + filtrable). Tri par clic
@@ -422,7 +425,11 @@ quel en-tête** (`ColumnsMenu` contrôlé, `onContextMenu` sur le `<tr>` d'en-t�
 sur une cellule** de stat, de rating ou de CP → menu « Min ≥ v » / « Max ≤ v » (v telle qu'affichée) :
 pose la borne (`setStatFilter` / `setRatingFilter`, l'autre borne gardée), que les panneaux de filtres
 montrent, et relance le solve dans le mode du dernier solve (`CellMenu`, `onThreshold`). Pas de menu sur
-score, swaps, effets. Click sur une ligne → la `BottomGearBand` affiche les 8 pièces. État `solving…` / erreur / **état vide explicite** (un `emptyReason`
+score, swaps, effets. **Crit au-delà de 100** : la cellule CHC affiche la valeur de la fiche (« 100% ») suivie
+d'un exposant ambre « +42 » (`critCellParts` : `critRateUncapped − critRate`, `round1`), tooltip « Crit rate
+142% raw — capped at 100% in-game, 40% wasted over the 102% tolerance » (règle `overcapOf` ; entre 100 et 102,
+« within the 2% buffer ») ; la heatmap et le tri de la colonne lisent la somme brute (`critRawOf`), ce que dit
+le tooltip d'en-tête (`statHeaderTooltip`) ; le menu de seuil garde la valeur de la fiche. Click sur une ligne → la `BottomGearBand` affiche les 8 pièces. État `solving…` / erreur / **état vide explicite** (un `emptyReason`
 dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres, EE exceptée : un héros sans EE solve sans elle ;
 un slot vidé (aussi) par une main exclue le dit, « (N dropped: main stat excluded) » ;
 un « Filter » client qui ne garde aucun build affiche « No build passes the current filter. » ; aucun slot vide
@@ -555,7 +562,7 @@ n'est écrit vers le jeu.
 
 **Overcap.** La feuille borne `critRate` à 100 (`computeFinalStats`) et garde la somme brute dans
 `critRateUncapped` ; `pen` n'est pas borné. La règle des caps gaspillés vit dans `lib/overcap.ts` (pure,
-partagée avec la règle 4 de `buildAdvice`) : `overcapOf(finalStats)` → `{ key, label, value, cap, waste }`
+partagée avec la règle 4 de `buildAdvice` et le tooltip crit du Builder, `critCellTitle`) : `overcapOf(finalStats)` → `{ key, label, value, cap, waste }`
 par axe en dépassement — crit lu sur `critRateUncapped ?? critRate` contre 102 (tolérance contre la
 résistance aux critiques), pénétration contre 100, `waste = round1(value − cap)` gardé si > 0 ;
 `overcapText` écrit « Crit rate 142% — 40% wasted over the 102% cap ». `presetOvercap(evalPreset,

@@ -8,6 +8,43 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎯 Builder : taux critique brut au-delà de 100 visible dans les résultats et dans « Current → Projected » (2026-10-23)
+- ✅ **Pourquoi.** Retour de Sevih du 23/10 : la feuille borne `critRate` à 100 comme le client (`composeBuild.ts`) et
+  garde la somme brute dans `critRateUncapped`, que le Builder n'affichait nulle part — deux builds à 100 de crit dans le
+  tableau pouvaient cacher 101 et 142 de crit brut. Le moteur et l'onglet Builds (règle 4, `lib/overcap.ts` de G49) la
+  lisaient déjà ; le tableau et le panneau la montrent maintenant.
+- ✅ **Formatage, module pur.** `screens/builder/critCell.ts` (nouveau) : `critRawOf(fs)` (`critRateUncapped ??
+  critRate`), `critCellParts(fs)` → `{ shown, over }` (`shown` = la CHC de la feuille, `over` = `round1(brut − critRate)`,
+  0 quand il n'y a pas de dépassement) et `critCellTitle(fs)` → « Crit rate 142% raw — capped at 100% in-game, 40% wasted
+  over the 102% tolerance », ou « …, within the 2% buffer » entre 100 et 102, `undefined` sans dépassement. Le gaspillage
+  vient de `overcapOf` (pas recopié) ; la tolérance est exportée de `lib/overcap.ts` en `CRIT_TOLERANCE = 102` (le
+  littéral 102 de `overcapOf` la lit) pour que la phrase du tampon ne refasse pas le calcul. Les « % » sont collés comme
+  dans `overcapText`, à l'anglaise.
+- ✅ **Tableau (`ResultsTable.tsx`).** La cellule CHC garde `fmt` (« 100% ») et ajoute un `<sup>` ambre « +42 »
+  (`text-[8px] leading-none`, la hauteur fixe de ligne ne bouge pas) avec le tooltip ci-dessus ; la heatmap de la
+  cellule et `computeColumnRanges` (désormais exporté, avec `ColumnRanges`) lisent `critRawOf`, le tri aussi
+  (`sortKey === "critRate"`). Le menu de seuil du clic droit (G48) garde la valeur de la feuille : les filtres de stats
+  bornent la CHC de la feuille. L'en-tête le dit : `STAT_TOOLTIP` (`statColumns.ts`) prend un `note` facultatif,
+  `statHeaderTooltip` l'ajoute (seul `critRate` en a un ; seul l'en-tête du tableau appelle la fonction).
+- ✅ **Panneau « Current → Projected » (`StatsPanel.tsx`).** La ligne crit passe les valeurs brutes à `StatsPanelRow`
+  (delta et teinte vert / rose calculés dessus) et, de chaque côté, un `CappedSide` `{ shown, over, title }` : le petit
+  `CappedValue` affiche « 100% » + exposant ambre « +42 » quand `over > 0`, la valeur de la feuille sinon ; tooltip
+  `critCellTitle` sur la valeur. Les autres lignes et la ligne CP de G48 sont inchangées.
+- ✅ **Bande et cartes de pièces : rien.** `BottomGearBand` n'affiche que les stats de chaque pièce (main, subs,
+  gemmes), aucun total de crit borné ; `DmgPer1PctPanel` ne montre pas de valeur de crit. Pas de changement.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (§ Stats, § ResultsTable, renvoi dans « Overcap »),
+  `wiki/Using-the-App.md` (lecture des résultats), `docs/reference.md` / `wiki/Engine-Reference.md` (ligne
+  `critCell.test.ts`, carte des modules pour `overcap.ts`), `docs/release-notes.md › [Unreleased]` (« Builder: crit
+  rate past 100 % shows its raw value (+N) in the results and the stats panel »).
+- ✅ **Tests.** `test/critCell.test.ts` (7) : 142 brut → `{ shown: 100, over: 42 }` ; 100 pile et 85,5 → `over` 0 ;
+  arrondi à 0,1 (100,36 → 0,4) et repli sur `critRate` sans somme brute ; tooltip à 142 (40 gaspillés) et à 101,5 (dans
+  le tampon), aucun sous 100 ; `computeColumnRanges` sur trois builds (142 / 100 / 80 brut) → plage crit `{ 80, 142 }`.
+  `npm run typecheck` : « > tsc --noEmit » (code 0) ; `npm test` : « Tests 693 passed (693) » (renderer ; core 169,
+  desktop 196) ; `npm run lint` : « ✖ 13 problems (0 errors, 13 warnings) », inchangé.
+- ⏳ Sevih sur le fixe : une build à crit brut > 100 montre « 100% ⁺N » en ambre dans la colonne crit et dans
+  « Current → Projected » (des deux côtés si la tenue actuelle dépasse aussi), tooltip avec la valeur brute et le
+  gaspillage ; la colonne crit se trie et se colore sur la valeur brute.
+
 ### 🧭 Presets et Worklist : pleine largeur, grille des pièces comme en jeu avec l'EE du héros de référence, avertissement d'overcap (2026-10-23)
 - ✅ **Overcap, règle partagée.** Trois retours du banc de Sevih (23/10) ; le troisième : Regina associée à « Striker 1 »
   (référence D.Lambda) dépassait de loin 100 % de taux critique sans aucun signe sur sa ligne. La règle 4 de

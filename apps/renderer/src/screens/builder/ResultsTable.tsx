@@ -16,6 +16,7 @@ import { usePersistedState } from "../../hooks/usePersistedState.js";
 import { useClickOutside } from "./useClickOutside.js";
 import { SOLVER_STATS, SKILL_SCALED_RATINGS, ratingTitle, TABLE_RATINGS, statHeaderTooltip } from "./statColumns.js";
 import type { ArmorSetEntry } from "./catalogs.js";
+import { critCellParts, critCellTitle, critRawOf } from "./critCell.js";
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Middle area — results table + right sidebar
@@ -315,6 +316,7 @@ export function ResultsTable({
       if (sortKey === "score") return b.score;
       if (sortKey === "upg") return liveUpg.get(b) ?? b.upg;
       if (sortKey === "cp") return b.cp ?? -Infinity;
+      if (sortKey === "critRate") return critRawOf(b.finalStats);
       const stat = (b.finalStats as unknown as Record<string, number>)[sortKey];
       if (typeof stat === "number") return stat;
       const rating = (b.ratings as unknown as Record<string, number>)[sortKey];
@@ -526,8 +528,10 @@ function SortHeader({
 }
 
 /** Per-column min/max for the heatmap shading. Pre-computed once per
- *  result set so each cell render is just a (v − min) / (max − min) lerp. */
-interface ColumnRanges {
+ *  result set so each cell render is just a (v − min) / (max − min) lerp.
+ *  Crit reads its raw sum (`critRawOf`): two builds the sheet bounds at 100
+ *  still shade apart by their overflow. */
+export interface ColumnRanges {
   stat: Record<string, { min: number; max: number }>;
   rating: Record<string, { min: number; max: number }>;
   score: { min: number; max: number };
@@ -536,13 +540,13 @@ interface ColumnRanges {
  *  `heatStyle` bail (no tint) on every cell. */
 const EMPTY_RANGES: ColumnRanges = { stat: {}, rating: {}, score: { min: Infinity, max: -Infinity } };
 
-function computeColumnRanges(builds: SolveBuild[], statCols: ReadonlyArray<typeof SOLVER_STATS[number]>): ColumnRanges {
+export function computeColumnRanges(builds: SolveBuild[], statCols: ReadonlyArray<typeof SOLVER_STATS[number]>): ColumnRanges {
   const stat: ColumnRanges["stat"] = {};
   const rating: ColumnRanges["rating"] = {};
   let scoreMin = Infinity, scoreMax = -Infinity;
   for (const b of builds) {
     for (const s of statCols) {
-      const v = (b.finalStats as unknown as Record<string, number>)[s.key];
+      const v = s.key === "critRate" ? critRawOf(b.finalStats) : (b.finalStats as unknown as Record<string, number>)[s.key];
       if (typeof v !== "number") continue;
       const cur = stat[s.key] ?? { min: Infinity, max: -Infinity };
       if (v < cur.min) cur.min = v;
@@ -634,14 +638,19 @@ const ResultRow = memo(function ResultRow({
       {showAcc && <EffectCell chip={effects?.accessory ?? null} />}
       {statCols.map((s) => {
         const v = (build.finalStats as unknown as Record<string, number>)[s.key];
+        // Crit past the sheet's 100 bound: "100%" + the raw overflow in amber,
+        // shaded on the raw sum. The threshold menu keeps the sheet's value.
+        const crit = s.key === "critRate" ? critCellParts(build.finalStats) : null;
         return (
           <td
             key={s.key}
-            style={heatStyle(v, ranges.stat[s.key])}
+            style={heatStyle(crit ? critRawOf(build.finalStats) : v, ranges.stat[s.key])}
             className="px-1.5 py-1 text-right text-white"
+            title={crit ? critCellTitle(build.finalStats) : undefined}
             onContextMenu={onCellMenu && v != null ? (e) => onCellMenu(e, "stat", s.key, v, s.unit) : undefined}
           >
             {fmt(v, s.unit)}
+            {crit && crit.over > 0 && <sup className="ml-px text-[8px] leading-none text-amber-300">+{crit.over}</sup>}
           </td>
         );
       })}

@@ -11,6 +11,9 @@
  */
 import { round1, type FinalStats } from "./composeBuild.js";
 
+/** Crit rate is only "over" past this raw sum — the +2% buffer above. */
+export const CRIT_TOLERANCE = 102;
+
 export interface Overcap {
   key: "critRate" | "pen";
   label: string;
@@ -29,7 +32,7 @@ export function overcapOf(stats: Pick<FinalStats, "critRate" | "critRateUncapped
     const waste = round1(v - cap);
     if (waste > 0) out.push({ key, label, value: round1(v), cap, waste });
   };
-  check("critRate", "Crit rate", stats.critRateUncapped ?? stats.critRate, 102);
+  check("critRate", "Crit rate", stats.critRateUncapped ?? stats.critRate, CRIT_TOLERANCE);
   check("pen", "Penetration", stats.pen, 100);
   return out;
 }

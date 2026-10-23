@@ -23,6 +23,7 @@
   effects required and up to five priority substats from the outfit and outerpedia's reco.
 - **Presets and Worklist use the whole window**; preset pieces laid out as in-game, with the
   reference hero's EE; a hero whose crit rate or penetration overshoots 100 % on a preset is flagged.
+- **Builder: crit rate past 100 % shows its raw value (+N)** in the results and the stats panel.
 
 ## [1.14.0] — 2026-10-22
 

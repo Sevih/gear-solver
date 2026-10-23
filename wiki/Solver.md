@@ -234,7 +234,10 @@ Picker (searchable combobox) + portrait + 4 action buttons.
 ### Stats
 Snapshot of the `FinalStats` of the build currently equipped on the hero (left column)
 vs the build selected in the table (right column, em-dash as long as no row
-is clicked). Read-only, never editable.
+is clicked). Read-only, never editable. The crit row reads the raw sum (`critRawOf` =
+`critRateUncapped ?? critRate`, `screens/builder/critCell.ts`) for its delta and tint, and past the 100
+bound shows "100% ⁺42" (amber exponent, `critCellParts`) on either side, the tooltip giving the raw value
+and the waste (`critCellTitle`, see **Overcap** below).
 
 ### Sub tick value & Damage / +1% (per-hero help boxes)
 Two read-only info panels (right column, under Stats), recomputed on
@@ -383,7 +386,7 @@ The **Optimize →** button lives on the Builds tab side (opens the Builder on t
 - `solving…` indicator (cyan, animated) during a run.
 
 ### ResultsTable
-Red-green heatmap per column (min/max relative to the current result set). Columns:
+Red-green heatmap per column (min/max relative to the current result set, `computeColumnRanges`). Columns:
 sets, 8 main stats, ratings (`TABLE_RATINGS`), **Score**, **Swaps**, actions
 (`Swaps`, key `upg` = number of slots that change vs the current loadout — not upgrades to do;
 sortable + filterable). Sort by clicking
@@ -392,7 +395,12 @@ the header (null → desc → asc → null). The **Columns** menu (show/hide col
 (`ColumnsMenu` controlled, `onContextMenu` on the header `<tr>`). **Right-click a stat, rating
 or CP cell** → a "Min ≥ v" / "Max ≤ v" menu (v as displayed): sets that bound (`setStatFilter` /
 `setRatingFilter`, the other bound kept), which the filter panels show, and re-solves in the last solve's
-mode (`CellMenu`, `onThreshold`). No menu on score, swaps, effects. Click on a row → the `BottomGearBand`
+mode (`CellMenu`, `onThreshold`). No menu on score, swaps, effects. **Crit past 100**: the CHC cell shows the sheet's value
+("100%") followed by an amber "+42" exponent (`critCellParts`: `critRateUncapped − critRate`, `round1`),
+tooltip "Crit rate 142% raw — capped at 100% in-game, 40% wasted over the 102% tolerance" (the `overcapOf`
+rule; between 100 and 102, "within the 2% buffer"); the column's heatmap and sort read the raw sum
+(`critRawOf`), as the header tooltip says (`statHeaderTooltip`); the threshold menu keeps the sheet's
+value. Click on a row → the `BottomGearBand`
 shows the 8 pieces. `solving…` / error / **explicit empty state** (an `emptyReason`
 derived from `poolSizes` lists the slots that fell to 0 pieces after filters, the EE aside: a hero without one solves
 without it; a slot emptied (also) by an excluded main says so, "(N dropped: main stat excluded)"; a client "Filter" that keeps no build shows "No build passes the current filter."; no slot empty
@@ -518,7 +526,7 @@ Builder", no score. Nothing is written to the game.
 
 **Overcap.** The sheet bounds `critRate` at 100 (`computeFinalStats`) and keeps the raw sum in
 `critRateUncapped`; `pen` isn't bounded. The wasted-cap rule lives in `lib/overcap.ts` (pure, shared with
-`buildAdvice`'s rule 4): `overcapOf(finalStats)` → `{ key, label, value, cap, waste }` per axis over its cap —
+`buildAdvice`'s rule 4 and the Builder's crit tooltip, `critCellTitle`): `overcapOf(finalStats)` → `{ key, label, value, cap, waste }` per axis over its cap —
 crit read on `critRateUncapped ?? critRate` against 102 (a buffer against crit resistance), penetration
 against 100, `waste = round1(value − cap)` kept when > 0; `overcapText` writes "Crit rate 142% — 40% wasted
 over the 102% cap". `presetOvercap(evalPreset, asSocketed)` (`lib/presets/evaluate.ts`) applies it to the
