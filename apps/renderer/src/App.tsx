@@ -158,10 +158,11 @@ export function App() {
   const [workerCount, setWorkerCount] = usePersistedState<number | null>("gs.solver.workerCount", null);
   // topN = ranked builds returned to the table; topK = per-worker heap depth
   // before merge (advanced — too low drops good builds). Heatmap = results-table
-  // column shading.
+  // column shading; compactCards = shorter gear cards under the results.
   const [solverTopN, setSolverTopN] = usePersistedState<number>("gs.solver.topN", 1000);
   const [solverTopK, setSolverTopK] = usePersistedState<number>("gs.solver.topK", 1000);
   const [heatmap, setHeatmap] = usePersistedState<boolean>("gs.builder.heatmap", true);
+  const [compactCards, setCompactCards] = usePersistedState<boolean>("gs.builder.compactCards", false);
   // Presets tab: loss (percent) past which an associated hero's line turns orange.
   const [presetLossWarn, setPresetLossWarn] = usePersistedState<number>("gs.solver.presetLossWarn", DEFAULT_PRESET_LOSS_WARN);
   // Hero to preselect when the Builder tab opens — set by the Builds tab's
@@ -411,6 +412,7 @@ export function App() {
           topN: solverTopN, setTopN: setSolverTopN,
           topK: solverTopK, setTopK: setSolverTopK,
           heatmap, setHeatmap,
+          compactCards, setCompactCards,
           presetLossWarn, setPresetLossWarn,
         }}
       />
@@ -481,7 +483,7 @@ export function App() {
           {builderMounted && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} />
               </ScreenErrorBoundary>
             </div>
           )}

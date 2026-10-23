@@ -6,7 +6,8 @@
  *             installed / plugin live. Doubles as the first-launch wizard;
  *             self-dismisses once the checks pass.
  *  - Solver — worker-pool size, result count (topN), per-worker depth (topK,
- *             advanced), results heatmap. Edits persisted settings owned by App.
+ *             advanced), results heatmap, compact result cards. Edits
+ *             persisted settings owned by App.
  *  - Data   — Sync game data · Reset onboarding · Wipe captured (destructive).
  *  - Backup — Export / Import builds & presets (JSON).
  *  - Debug  — developer toggles (stat-lock tooling, solver fan-out logging).

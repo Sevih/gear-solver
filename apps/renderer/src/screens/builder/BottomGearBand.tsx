@@ -15,7 +15,7 @@ import type { ReforgeContext } from "./reforge.js";
  * Bottom gear band — one card per main slot for the selected result
  * ───────────────────────────────────────────────────────────────────────── */
 export function BottomGearBand({
-  build, diff, game, reforge, charsByUid, excludedPieceUids, onToggleExclude,
+  build, diff, game, reforge, charsByUid, excludedPieceUids, onToggleExclude, compact = false,
 }: {
   build: SolveBuild | null;
   /** The build's per-slot diff vs the hero's loadout (`diffBuildVsLoadout`) —
@@ -33,6 +33,8 @@ export function BottomGearBand({
    *  footer so a trash roll can be excluded right from the results. */
   excludedPieceUids?: Set<string>;
   onToggleExclude?: (uid: string) => void;
+  /** Compact cards (Settings › Solver › Compact result cards). */
+  compact?: boolean;
 }) {
   // Map engine slot → display piece for the selected build (the shared diff
   // already resolved each uid to its piece and slot) and, when a reforge mode
@@ -60,10 +62,13 @@ export function BottomGearBand({
   // All 8 pieces (EE and Talisman are full citizens of the solver scope: their
   // mains contribute via the IOT_BUFF channel) on the game's equipment screen
   // grid, 4 × 2, once four w-80 cards fit beside the Builder's w-72 column:
-  // 4 × 320 + 3 × 8 gaps + 288 + 8 gap + 16 padding = 1616 px. Narrower, the
-  // same order wraps.
+  // 4 × 320 + 3 × 8 gaps + 288 + 8 gap + 16 padding = 1616 px. Compact cards
+  // are w-64: 4 × 256 + 3 × 8 + 288 + 8 + 16 = 1360 px. Narrower, the same
+  // order wraps.
   return (
-    <div className="flex shrink-0 flex-wrap gap-2 min-[1616px]:grid min-[1616px]:grid-cols-[repeat(4,max-content)]">
+    <div className={compact
+      ? "flex shrink-0 flex-wrap gap-2 min-[1360px]:grid min-[1360px]:grid-cols-[repeat(4,max-content)]"
+      : "flex shrink-0 flex-wrap gap-2 min-[1616px]:grid min-[1616px]:grid-cols-[repeat(4,max-content)]"}>
       {GAME_GEAR_GRID.map((slot) => {
         // The diff is keyed by engine slot ("ooparts" for the talisman).
         const engineSlot = toEngineSlot(slot);
@@ -91,7 +96,7 @@ export function BottomGearBand({
         const pieceForCard = piece && recommendedGems && recommendedGems.some((id) => id > 0)
           ? { ...piece, gemSlots: recommendedGems }
           : piece;
-        return <GearCard key={slot} slot={slot} piece={pieceForCard} game={game} equippedChar={equippedChar} excluded={excluded} onToggleExclude={onToggleExclude} addedTicks={entry?.addedTicks} />;
+        return <GearCard key={slot} slot={slot} piece={pieceForCard} game={game} equippedChar={equippedChar} excluded={excluded} onToggleExclude={onToggleExclude} addedTicks={entry?.addedTicks} compact={compact} />;
       })}
     </div>
   );
@@ -102,7 +107,7 @@ export function BottomGearBand({
  *  portrait, exclude footer, empty state) so the results look pixel-identical to
  *  the Inventory tab's left card. The piece (already reforge-projected upstream
  *  in `BottomGearBand`) goes through the same `toUiPiece` adapter. */
-function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedTicks }: {
+function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedTicks, compact }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
@@ -114,6 +119,8 @@ function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedT
   onToggleExclude?: (uid: string) => void;
   /** Per-sub reforge procs the projection added — tick markers on the subs. */
   addedTicks?: number[];
+  /** Compact card (Settings › Solver › Compact result cards). */
+  compact?: boolean;
 }) {
   // Adapt the (reforge-projected) engine piece through the same adapter the
   // Inventory tab uses, then render the duplicated inspect panel verbatim.
@@ -126,6 +133,7 @@ function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedT
       excluded={excluded}
       onToggleExclude={onToggleExclude}
       addedTicks={addedTicks}
+      compact={compact}
     />
   );
 }

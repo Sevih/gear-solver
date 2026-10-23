@@ -114,6 +114,8 @@ interface BuilderScreenProps {
   topK?: number;
   /** Results-table column heatmap on/off (Settings → Solver, default on). */
   heatmap?: boolean;
+  /** Compact gear cards under the results (Settings → Solver, default off). */
+  compactCards?: boolean;
 }
 
 /** Cartesian size (∏ per-slot pools) above which the Builder warns the solve
@@ -134,7 +136,7 @@ function formatCombos(n: number): string {
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true, compactCards = false }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
@@ -772,7 +774,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <BottomGearBand build={selectedBuild} diff={buildDiff} game={game} reforge={resultsReforge} charsByUid={charsByUid} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} />
+              <BottomGearBand build={selectedBuild} diff={buildDiff} game={game} reforge={resultsReforge} charsByUid={charsByUid} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} compact={compactCards} />
             </div>
           </div>
         </div>

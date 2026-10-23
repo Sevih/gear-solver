@@ -415,6 +415,12 @@ Swaps column (cell and sort) and the "+ Worklist" entry's `upg` read the same li
 Talisman | Gloves | Boots from a 1616 px window (four `w-80` cards beside the `w-72` column), otherwise the
 same order wraps. Each card shows name,
 enhance level, slot icon, main stat, subs (with ticks). In addition:
+- **Compact mode** (Settings › Solver › Compact result cards, `gs.builder.compactCards`, off by default):
+  `w-64` cards — the grid then starts at 1360 px (4 × 256 + 3 × 8 + 288 + 8 + 16) —, header =
+  `compactName` (« EE », the set name for armor, the item name otherwise, no « - [Singularity] » but the
+  gradient stays), mains and subs as icon + value (sub level in a small badge, base + reforges in the
+  `title`), one-line truncated effects (full text in the `title`). Gems unchanged; Inventory and tooltips
+  (`GearDetailBody`) untouched.
 - **Talisman / EE**: the gem allocation recommended by the build (stat + value,
   **swap** badge if it differs from the socketed gems).
 - **Projected stats**: if the Reforge mode ≠ Off, the displayed main + subs are the projection

@@ -186,7 +186,9 @@ results, the bottom band shows the selected build's pieces.
 - **Click a row** → the **bottom gear band** shows the 8 pieces of that build, laid out like the
   game's equipment screen (Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots), including the
   **recommended gem allocation** (with a "swap" badge if it differs from what's socketed) and,
-  if a Reforge mode is on, the **projected** max-roll stats.
+  if a Reforge mode is on, the **projected** max-roll stats. **Settings › Solver › Compact result
+  cards** shortens them: set names instead of item names (« EE » for the exclusive), icon + value
+  stats, one-line effects (full text on hover).
 - **Equip build** — above the gear band, applies the selected build's pieces to the hero. A
   confirmation popup spells out how many pieces move (and how many would be taken off other
   heroes); on confirm it rewrites your captured snapshot and re-imports. Refused while the game
@@ -249,7 +251,8 @@ A tabbed modal:
   your game build next to the client outerpedia last read, with a warning line when they differ
   (informational: capture still works).
 - **Solver** — worker count (Auto = use your CPU; or pin a number), how many results to return,
-  results heatmap on/off, and the Presets tab's loss warning (15 % by default).
+  results heatmap on/off, compact result cards (shorter gear cards under the Builder's results;
+  Inventory and tooltips unchanged), and the Presets tab's loss warning (15 % by default).
 - **Data** — **Sync game data** (refresh the game tables after a patch), reset the onboarding
   wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
   (game version of the tables, hash and date — so you can see which snapshot is loaded).

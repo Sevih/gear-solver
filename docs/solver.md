@@ -444,6 +444,12 @@ Swaps (cellule et tri) et l'`upg` de l'entrée « + Worklist » lisent le même 
 Talisman | Gants | Bottes dès 1616 px de fenêtre (quatre cartes `w-80` à côté de la colonne `w-72`), sinon
 le même ordre passe à la ligne. Chaque carte montre nom,
 enhance level, icône slot, main stat, subs (avec ticks). En plus :
+- **Mode compact** (Settings › Solver › Compact result cards, `gs.builder.compactCards`, éteint par défaut) :
+  cartes `w-64` — la grille démarre alors à 1360 px (4 × 256 + 3 × 8 + 288 + 8 + 16) —, en-tête =
+  `compactName` (« EE », le nom du set pour une armure, le nom de la pièce sinon, sans « - [Singularity] »
+  mais avec le dégradé), mains et subs en icône + valeur (niveau du sub en petit badge, base + reforges en
+  `title`), effets sur une ligne tronquée (texte complet en `title`). Gemmes inchangées ; l'Inventaire et
+  les tooltips (`GearDetailBody`) ne bougent pas.
 - **Talisman / EE** : l'allocation de gemmes recommandée par le build (stat + valeur,
   badge **swap** si elle diffère des gemmes socketées).
 - **Stats projetées** : si le mode Reforge ≠ Off, main + subs affichés sont la projection

@@ -8,6 +8,48 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗜️ Builder : mode compact des cartes de la build sélectionnée, réglage Settings › Solver (2026-10-23)
+- ✅ **Pourquoi.** Demande de Sevih du 23/10 : comparer les huit cartes de la bande d'un coup, sans ce qui n'apporte rien
+  (noms d'objets longs, libellés de stats que l'icône dit déjà, effets sur plusieurs lignes).
+- ✅ **Écart avec l'énoncé.** Le lot visait `GearDetailBody` (`design/GearDetail.tsx`), mais la bande ne le rend pas :
+  `GearCard` → `ResultItemDetail` → `ResultGearDetailBody`, le fork de `design/ResultGearDetail.tsx`, qui avait déjà
+  l'icône à 56 px, ni ligne rareté / classe, ni effets de set 2-pc / 4-pc, ni effet unique (ils vivent dans le panneau
+  Effects de la build), une qualité sur une ligne (« 14/20 Good ») et pas de main pour l'EE. Le mode compact est donc
+  posé sur le fork ; `GearDetailBody`, l'Inventaire et les tooltips (Builds, Presets) ne sont pas touchés. Les points
+  sans objet sur le fork (ligne rareté / classe, icône 80 → 56, effets de set, effet unique, effets de combat) n'ont rien
+  à retirer ; je n'ai rien ajouté pour les faire apparaître. Qualité : la ligne existante « 14/20 Good » est gardée telle
+  quelle (le « Quality 78 % · Good » de l'énoncé serait plus long), le texte d'aide de l'Inventaire passe en `title`.
+- ✅ **Réglage.** `App.tsx` : `usePersistedState("gs.builder.compactCards", false)`, passé à `SettingsModal` (champs
+  `compactCards` / `setCompactCards` de `SolverSettings`) et à `BuilderScreen` (`compactCards`) → `BottomGearBand`
+  (`compact`) → `GearCard` → `ResultItemDetail` → `ResultGearDetailBody`, tous à `false` par défaut.
+  `design/settings/SolverPane.tsx` : Switch « Compact result cards » sous le heatmap, avec le hint demandé.
+- ✅ **Carte compacte.** En-tête : `compactName(piece, game)` (exportée, pure) — « EE » pour l'exclusive, le nom du set
+  (`game.sets[armorSetId].name`) pour casque / armure / gants / bottes, à défaut le nom de la pièce, le nom tel quel
+  sinon ; plus de « - [Singularity] » en seconde ligne, le dégradé vertical reste (il lit `piece.singularity`), le nom
+  complet avec le suffixe en `title`. Mains : icône + valeur, le libellé en `title`. Sous-stats : badge du niveau (fond
+  ambre à 6), à côté le marqueur cyan `+N` des ticks ajoutés par la projection quand il y en a, icône, valeur ; le
+  libellé et « LV n (base + reforges [+ extrapolés]) » en `title`. Effets du talisman (multi-tiers) et effet Singularity :
+  une ligne `truncate` chacun, les sauts de ligne du texte du jeu remplacés par des espaces (sinon le `<br>` de
+  `GameText` casse la ligne), couleurs gardées, texte brut complet en `title`. Gemmes inchangées. Carte `w-64` au lieu
+  de `w-80` (état vide compris, pour garder la grille alignée), corps en `space-y-2` au lieu de `space-y-3` ; portrait du
+  porteur, pied « exclude » et état vide conservés.
+- ✅ **Grille de la bande.** `BottomGearBand` : en compact le seuil de la grille 4 × 2 passe de 1616 à 1360 px —
+  4 × 256 (`w-64`) + 3 × 8 (gaps) + 288 (colonne `w-72`) + 8 (gap) + 16 (`p-2`) = 1360 ; les deux jeux de classes sont
+  écrits en entier (Tailwind ne voit pas un seuil calculé).
+- ✅ **Test.** `apps/renderer/test/compactName.test.ts` : EE, armure avec set (les quatre slots), armure à set inconnu ou
+  sans `game`, arme / accessoire / talisman, suffixe Singularity absent et `singularity` (le dégradé) intact. Le rendu
+  n'a pas de test (pas de testing-library dans le dépôt).
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (section BottomGearBand : mode compact et seuil),
+  `wiki/Using-the-App.md` (Settings › Solver, bande des cartes), `docs/release-notes.md › [Unreleased]`, commentaire
+  d'en-tête de `SettingsModal.tsx`.
+- ✅ **Vérifs.** `npm run typecheck` : `tsc --noEmit` sans erreur ; `npm test` : `Tests  701 passed (701)` (renderer, dernier workspace ; core et desktop 169 et 196) ;
+  `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)`, inchangé.
+- ✅ **Propositions (hors diff).** La ligne qualité pourrait tomber à « 14/20 » seule (le palier se lit à la couleur) ;
+  les effets du talisman pourraient ne garder que le palier actif.
+- ⏳ **Sevih sur le fixe** : Settings › Solver › Compact result cards → les huit cartes se raccourcissent (noms de set,
+  « EE », stats icône + valeur, effets sur une ligne, plus de « - [Singularity] » mais le dégradé reste, grille 4 × 2 dès
+  1360 px) ; l'Inventaire et les tooltips ne bougent pas ; le réglage survit au redémarrage.
+
 ### 🧩 Builder : cartes de la build sélectionnée dans l'ordre de l'écran d'équipement du jeu, ordre partagé avec Builds et Presets (2026-10-23)
 - ✅ **Pourquoi.** Retour de Sevih du 23/10 : la bande du bas du Builder alignait ses huit cartes en `flex-wrap`, au gré de
   la largeur, alors que Builds et Presets les posent en grille 4 × 2 comme l'écran d'équipement du jeu ; et l'ordre du jeu

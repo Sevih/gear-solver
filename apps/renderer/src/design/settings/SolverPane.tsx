@@ -1,6 +1,6 @@
 /**
  * Settings → Solver — worker-pool size, result count, per-worker depth, the
- * results heatmap and the Presets tab's loss warning.
+ * results heatmap, compact result cards and the Presets tab's loss warning.
  */
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { cx } from "../cx.js";
@@ -22,6 +22,9 @@ export interface SolverSettings {
   /** Results-table column heatmap on/off. */
   heatmap: boolean;
   setHeatmap: Dispatch<SetStateAction<boolean>>;
+  /** Builder: compact gear cards under the results. */
+  compactCards: boolean;
+  setCompactCards: Dispatch<SetStateAction<boolean>>;
   /** Presets tab: loss (percent) past which an associated hero is flagged. */
   presetLossWarn: number;
   setPresetLossWarn: Dispatch<SetStateAction<number>>;
@@ -103,6 +106,17 @@ export function SolverPane({
           <span className="text-[11.5px] leading-snug text-zinc-400">Emerald→rose column shading on the results table.</span>
         </div>
         <Switch checked={solver.heatmap} onToggle={() => solver.setHeatmap((v) => !v)} />
+      </div>
+
+      <Divider />
+
+      {/* Compact result cards */}
+      <div className="flex items-center justify-between gap-4.5">
+        <div className="flex max-w-90 flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-white">Compact result cards</span>
+          <span className="text-[11.5px] leading-snug text-zinc-400">Shorter gear cards under the results: set names instead of item names, icon + value stats, one-line effects. Inventory and tooltips unchanged.</span>
+        </div>
+        <Switch checked={solver.compactCards} onToggle={() => solver.setCompactCards((v) => !v)} />
       </div>
 
       <Divider />
