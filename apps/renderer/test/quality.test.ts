@@ -111,7 +111,7 @@ describe("the three former quality paths agree with the merged one", () => {
       }
     }
     expect(scored).toBeGreaterThan(1000);
-  });
+  }, 30_000); // 5 s is too short on the Windows CI runner (the whole table, ~5 s there)
 
   it("on a hand-built 6★ ascended piece with reforge ticks", () => {
     const g: GearPiece = {
