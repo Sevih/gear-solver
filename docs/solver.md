@@ -439,7 +439,10 @@ est relu sur l'inventaire courant (`buildDiff`), pas sur l'`upg` du solve : apr�
 Swaps (cellule et tri) et l'`upg` de l'entrée « + Worklist » lisent le même diff vivant.
 
 ### BottomGearBand
-8 cartes (mirror compact de l'inventaire) — une par slot. Chaque carte montre nom,
+8 cartes (mirror compact de l'inventaire) — une par slot, dans l'ordre de l'écran d'équipement du jeu
+(`GAME_GEAR_GRID`, partagé avec Builds et Presets) : grille 4 × 2 Arme | EE | Tête | Torse / Accessoire |
+Talisman | Gants | Bottes dès 1616 px de fenêtre (quatre cartes `w-80` à côté de la colonne `w-72`), sinon
+le même ordre passe à la ligne. Chaque carte montre nom,
 enhance level, icône slot, main stat, subs (avec ticks). En plus :
 - **Talisman / EE** : l'allocation de gemmes recommandée par le build (stat + valeur,
   badge **swap** si elle diffère des gemmes socketées).
@@ -473,7 +476,7 @@ l'inventaire (slot repris de la position sur le fil) et pièce présente dans **
 <preset> » — deux presets peuvent jouer le même combat) sont marquées sur la tuile et dans un bandeau. Un
 preset vide est listé replié.
 
-**Disposition.** Les pièces suivent la grille 4 × 2 de l'écran d'équipement du jeu (`GAME_GRID` de l'écran) :
+**Disposition.** Les pièces suivent la grille 4 × 2 de l'écran d'équipement du jeu (`GAME_GEAR_GRID` de `design/tokens.ts`, en slots moteur) :
 Arme, EE, Tête, Torse / Accessoire, Talisman, Gants, Bottes ; `PRESET_SLOTS` garde ses 7 slots (signature,
 worklist, tests), seule la grille d'affichage change, et une pièce de slot inconnu suit la grille. La case EE
 montre l'EE que porte aujourd'hui le héros de référence de la carte (`referenceUid`, ou le porteur unique

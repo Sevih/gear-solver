@@ -183,7 +183,8 @@ results, the bottom band shows the selected build's pieces.
   A crit rate past the in-game 100 % cap shows as **100% ⁺42** (the overflow in amber; hover for
   the raw value and how much is wasted past the 2 % buffer), and the column shades and sorts on
   the raw value — the **Current → Projected** panel shows it the same way.
-- **Click a row** → the **bottom gear band** shows the 8 pieces of that build, including the
+- **Click a row** → the **bottom gear band** shows the 8 pieces of that build, laid out like the
+  game's equipment screen (Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots), including the
   **recommended gem allocation** (with a "swap" badge if it differs from what's socketed) and,
   if a Reforge mode is on, the **projected** max-roll stats.
 - **Equip build** — above the gear band, applies the selected build's pieces to the hero. A

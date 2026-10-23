@@ -3,22 +3,13 @@
  */
 import { useMemo } from "react";
 import type { Character, GameData, GearPiece } from "@gear-solver/core";
-import type { SlotId } from "../../design/tokens.js";
+import { GAME_GEAR_GRID, toEngineSlot, type SlotId } from "../../design/tokens.js";
 import { toUiPiece } from "../../design/adapter.js";
 import { ResultItemDetail } from "../../design/ResultGearDetail.js";
 import { projectPieceForReforge } from "../../lib/solver/engine.js";
 import type { SolveBuild } from "../../lib/solver/types.js";
 import type { SlotDiff } from "../../lib/buildDiff.js";
 import type { ReforgeContext } from "./reforge.js";
-
-/** Slots shown in the bottom card band — all 8 pieces, in the same order
- *  the in-game build screen displays them. EE and Talisman are full
- *  citizens of the solver scope (their mains contribute via the IOT_BUFF
- *  channel and the filter chips below count them). */
-const RESULT_GEAR_SLOTS: SlotId[] = [
-  "weapon", "exclusive", "helmet", "armor",
-  "accessory", "talisman", "gloves", "boots",
-];
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Bottom gear band — one card per main slot for the selected result
@@ -66,12 +57,16 @@ export function BottomGearBand({
     return map;
   }, [diff, game, reforge]);
 
+  // All 8 pieces (EE and Talisman are full citizens of the solver scope: their
+  // mains contribute via the IOT_BUFF channel) on the game's equipment screen
+  // grid, 4 × 2, once four w-80 cards fit beside the Builder's w-72 column:
+  // 4 × 320 + 3 × 8 gaps + 288 + 8 gap + 16 padding = 1616 px. Narrower, the
+  // same order wraps.
   return (
-    <div className="flex shrink-0 flex-wrap gap-2">
-      {RESULT_GEAR_SLOTS.map((slot) => {
-        // RESULT_GEAR_SLOTS uses design names — convert "talisman" back to
-        // the engine "ooparts" lookup key.
-        const engineSlot = slot === "talisman" ? "ooparts" : slot;
+    <div className="flex shrink-0 flex-wrap gap-2 min-[1616px]:grid min-[1616px]:grid-cols-[repeat(4,max-content)]">
+      {GAME_GEAR_GRID.map((slot) => {
+        // The diff is keyed by engine slot ("ooparts" for the talisman).
+        const engineSlot = toEngineSlot(slot);
         const entry = pieceBySlot.get(engineSlot) ?? null;
         const piece = entry?.piece ?? null;
         // Only Talisman / EE carry gems — surface the build's recommended

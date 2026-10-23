@@ -27,6 +27,7 @@
 - **Builder**: CP before / after at the top of « Current → Projected »; the « Upg » column is now
   **Swaps** (slots that change vs the current loadout, not upgrades to do); right-click a value in the
   results to set it as a **Min ≥ / Max ≤** threshold and solve again.
+- **Builder**: the selected build's gear cards follow the in-game layout, like Builds and Presets.
 
 ## [1.14.0] — 2026-10-22
 

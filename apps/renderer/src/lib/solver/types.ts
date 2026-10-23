@@ -215,9 +215,10 @@ export type WorkerInput = SolveRequestMsg | CancelMessage | InitMessage | Estima
 /** One ranked build returned by the solver. UIDs only — main thread looks
  *  up the full piece data from its inventory map for the table + bottom band. */
 export interface SolveBuild {
-  /** 8 piece UIDs in slot order: weapon, helmet, armor, gloves, boots,
-   *  accessory, exclusive, ooparts. Order matches `RESULT_GEAR_SLOTS` minus
-   *  the design renaming (engine slot names). */
+  /** 8 piece UIDs in the engine's slot order: weapon, helmet, armor, gloves,
+   *  boots, accessory, exclusive, ooparts (the talisman last — `variantSignature`).
+   *  Display order is separate: the bottom band keys pieces by slot and lays
+   *  them out by `GAME_GEAR_GRID`. */
   pieceUids: string[];
   /** Gem allocation the build was scored with — OptionIDs in slot order
    *  (length up to 5 each), 0 = empty. Surfaced so the UI can show the

@@ -410,7 +410,10 @@ re-read off the current inventory (`buildDiff`), not the solve-time `upg`: after
 Swaps column (cell and sort) and the "+ Worklist" entry's `upg` read the same live diff.
 
 ### BottomGearBand
-8 cards (compact mirror of the inventory) — one per slot. Each card shows name,
+8 cards (compact mirror of the inventory) — one per slot, in the game's equipment screen order
+(`GAME_GEAR_GRID`, shared with Builds and Presets): a 4 × 2 grid Weapon | EE | Helmet | Armor / Accessory |
+Talisman | Gloves | Boots from a 1616 px window (four `w-80` cards beside the `w-72` column), otherwise the
+same order wraps. Each card shows name,
 enhance level, slot icon, main stat, subs (with ticks). In addition:
 - **Talisman / EE**: the gem allocation recommended by the build (stat + value,
   **swap** badge if it differs from the socketed gems).
@@ -443,7 +446,7 @@ pure and tested (`lib/presets/presetRows.ts` → `presetRows(inventory)`): a pie
 presets may play the same fight) are flagged on the tile and in a banner. An empty preset is listed
 collapsed.
 
-**Layout.** The pieces follow the 4 × 2 grid of the game's equipment screen (the screen's `GAME_GRID`):
+**Layout.** The pieces follow the 4 × 2 grid of the game's equipment screen (`GAME_GEAR_GRID` from `design/tokens.ts`, in engine slots):
 Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots; `PRESET_SLOTS` keeps its 7 slots (signature,
 worklist, tests), only the display grid changes, and a piece of unknown slot follows the grid. The EE cell
 shows the EE the card's reference hero wears today (`referenceUid`, or the proposed unique wearer, `eeOf`),

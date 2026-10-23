@@ -13,6 +13,8 @@
  *   legendary) — we adapt our core `Rarity` type (normal/magic/rare/unique).
  */
 
+import type { GearSlot } from "@gear-solver/core";
+
 export type DesignRarity = "normal" | "superior" | "epic" | "legendary";
 export type SlotId =
   | "weapon" | "helmet" | "armor" | "gloves" | "boots"
@@ -107,6 +109,15 @@ export const SLOTS: SlotMeta[] = [
 ];
 export const SLOT_BY: Record<string, SlotMeta> = Object.fromEntries(SLOTS.map((s) => [s.id, s]));
 
+/** The game's equipment screen, 4 × 2, row by row: Weapon, EE, Helmet, Armor /
+ *  Accessory, Talisman, Gloves, Boots. The one order for a build's pieces
+ *  (Builds cards, Presets, the Builder's bottom band); `SLOTS` above stays the
+ *  Inventory tab's. */
+export const GAME_GEAR_GRID: readonly SlotId[] = [
+  "weapon", "exclusive", "helmet", "armor",
+  "accessory", "talisman", "gloves", "boots",
+];
+
 /** Engine rarity → design rarity. The core types use the in-game vocabulary
  *  (normal/magic/rare/unique); the design adopts the localised one. */
 export function toDesignRarity(r: string | null | undefined): DesignRarity {
@@ -125,4 +136,9 @@ export function toDesignSlot(s: string | null | undefined): SlotId | null {
   if (s === "shoes") return "boots";
   // weapon | helmet | armor | gloves | boots | accessory | talisman | exclusive
   return s as SlotId;
+}
+
+/** Design slot ID → engine slot (the inverse of `toDesignSlot`). */
+export function toEngineSlot(s: SlotId): GearSlot {
+  return s === "talisman" ? "ooparts" : s;
 }

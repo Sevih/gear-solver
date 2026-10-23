@@ -35,7 +35,7 @@ import { Pill } from "../../design/Chips.js";
 import { CyanButton } from "../../design/Shell.js";
 import { cx } from "../../design/cx.js";
 import { toUiPiece } from "../../design/adapter.js";
-import { toDesignSlot } from "../../design/tokens.js";
+import { GAME_GEAR_GRID, toDesignSlot, toEngineSlot } from "../../design/tokens.js";
 import {
   arrangePresets, presetClasses, presetRows, type PresetPiece, type PresetRow, type PresetSort,
 } from "../../lib/presets/presetRows.js";
@@ -347,13 +347,10 @@ function PresetCard({
   );
 }
 
-/** The game's equipment screen, row by row: Weapon, EE, Helmet, Armor /
- *  Accessory, Talisman, Gloves, Boots. The EE isn't part of the preset
- *  (`PRESET_SLOTS`): its cell shows the reference hero's own. */
-const GAME_GRID: readonly GearSlot[] = [
-  "weapon", "exclusive", "helmet", "armor",
-  "accessory", "ooparts", "gloves", "boots",
-];
+/** The game's equipment screen (`GAME_GEAR_GRID`) in engine slots. The EE
+ *  isn't part of the preset (`PRESET_SLOTS`): its cell shows the reference
+ *  hero's own. */
+const GAME_GRID: readonly GearSlot[] = GAME_GEAR_GRID.map(toEngineSlot);
 
 const EE_NOTE = "EE isn't part of a preset — each hero keeps their own";
 

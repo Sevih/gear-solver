@@ -8,6 +8,37 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧩 Builder : cartes de la build sélectionnée dans l'ordre de l'écran d'équipement du jeu, ordre partagé avec Builds et Presets (2026-10-23)
+- ✅ **Pourquoi.** Retour de Sevih du 23/10 : la bande du bas du Builder alignait ses huit cartes en `flex-wrap`, au gré de
+  la largeur, alors que Builds et Presets les posent en grille 4 × 2 comme l'écran d'équipement du jeu ; et l'ordre du jeu
+  vivait en trois copies (`BUILD_SLOT_ORDER` dans `BuildsScreen.tsx`, `GAME_GRID` dans `PresetsScreen.tsx`,
+  `RESULT_GEAR_SLOTS` dans `BottomGearBand.tsx`), qu'un réordonnancement aurait fait diverger.
+- ✅ **Un seul ordre.** `design/tokens.ts` : `GAME_GEAR_GRID: readonly SlotId[]` (Arme, EE, Tête, Torse / Accessoire,
+  Talisman, Gants, Bottes), commenté « écran d'équipement, 4 × 2 », à côté de `SLOTS` qui reste l'ordre de l'onglet
+  Inventaire (inchangé), plus `toEngineSlot(s)` (talisman → `ooparts`), l'inverse de `toDesignSlot`. `BuildsScreen` et
+  `BottomGearBand` l'importent (`BUILD_SLOT_ORDER` et `RESULT_GEAR_SLOTS` supprimés, la conversion en ligne de la bande
+  passe par `toEngineSlot`) ; `PresetsScreen` dérive son `GAME_GRID` en slots moteur (`GAME_GEAR_GRID.map(toEngineSlot)`).
+  Le commentaire de `SolveBuild.pieceUids` (`lib/solver/types.ts`) citait `RESULT_GEAR_SLOTS` à tort : l'ordre des uids
+  est celui du moteur (weapon, helmet, armor, gloves, boots, accessory, exclusive, ooparts — talisman en dernier, que lit
+  `variantSignature`), sans lien avec l'affichage ; le commentaire le dit, l'ordre du champ ne change pas.
+- ✅ **Grille de la bande.** `BottomGearBand` : `flex flex-wrap gap-2` reste la base (même ordre, cartes à leur largeur),
+  et la bande passe en grille `grid-cols-[repeat(4,max-content)]` au-delà d'un seuil arbitraire `min-[1616px]:`. Ni `xl`
+  (1280) ni `2xl` (1536) ne suffisent : les cartes (`ResultItemDetail`) font `w-80`, et `BuilderScreen` encadre la bande
+  de `p-2`, d'un `gap-2` et de la colonne de droite `w-72` — 4 × 320 + 3 × 8 + 8 + 288 + 16 = 1616 px (les barres de
+  défilement sont masquées par `theme.css`, rien à ajouter). Colonnes `max-content` plutôt que `grid-cols-4` : en `1fr`,
+  une fenêtre large aurait écarté les cartes. En dessous (fenêtre par défaut de 1480 px), trois cartes par rangée dans
+  l'ordre du jeu. Rien d'autre ne change dans les cartes.
+- ✅ **Test.** `apps/renderer/test/gameGearGrid.test.ts` : les 8 slots une fois chacun, `weapon`, `exclusive` en tête, et
+  l'aller-retour `toEngineSlot` / `toDesignSlot`.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (section BottomGearBand : ordre partagé, grille et seuil ; Presets :
+  `GAME_GEAR_GRID` au lieu du `GAME_GRID` de l'écran), `wiki/Using-the-App.md` (la bande suit l'écran d'équipement),
+  `docs/release-notes.md › [Unreleased]`.
+- ✅ **Vérifié.** `npm run typecheck` (dernière ligne `> tsc --noEmit`, sans erreur) ; `npm test` (`Tests  696 passed
+  (696)`) ; `npm run lint` (`✖ 13 problems (0 errors, 13 warnings)`, inchangé).
+- ⏳ Sevih sur le fixe : les huit cartes de la build sélectionnée sont en deux rangées Arme | EE | Tête | Torse /
+  Accessoire | Talisman | Gants | Bottes, comme Builds et Presets (fenêtre d'au moins 1616 px de large ; plus étroite, le
+  même ordre passe à la ligne).
+
 ### 🎯 Builder : taux critique brut au-delà de 100 visible dans les résultats et dans « Current → Projected » (2026-10-23)
 - ✅ **Pourquoi.** Retour de Sevih du 23/10 : la feuille borne `critRate` à 100 comme le client (`composeBuild.ts`) et
   garde la somme brute dans `critRateUncapped`, que le Builder n'affichait nulle part — deux builds à 100 de crit dans le

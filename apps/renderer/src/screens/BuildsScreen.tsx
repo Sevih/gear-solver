@@ -13,16 +13,9 @@ import { CharacterPortrait, SlotMini, StatIcon } from "../design/EquipmentIcon.j
 import { RichTooltip } from "../design/RichTooltip.js";
 import { GearDetailBody } from "../design/GearDetail.js";
 import { Pill } from "../design/Chips.js";
-import { TOKENS, toDesignSlot, type SlotId } from "../design/tokens.js";
+import { GAME_GEAR_GRID, TOKENS, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toUiPiece } from "../design/adapter.js";
 import { presetSignature } from "../lib/presets/presetRows.js";
-
-/** In-game equipment layout for the build card: weapon row pairs with EE +
- *  armor pieces, second row gathers accessory/talisman + the body extremities. */
-const BUILD_SLOT_ORDER: SlotId[] = [
-  "weapon", "exclusive", "helmet", "armor",
-  "accessory", "talisman", "gloves", "boots",
-];
 
 /** Local alias re-exported for parts of BuildsScreen that previously read
  *  `FinalStats` from this module. The single source of truth now lives in
@@ -787,7 +780,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
 
       <div className="relative shrink-0">
         <div className={cx("grid grid-cols-4 grid-rows-2 gap-1.5", equipped.size === 0 && "opacity-40")}>
-          {BUILD_SLOT_ORDER.map((id) => {
+          {GAME_GEAR_GRID.map((id) => {
             const p = equipped.get(id);
             const mini = <SlotMini slot={id} piece={p?.iconPiece ?? null} size={55} />;
             // Filled slots become inspectable on hover (main/subs/gems), the way
