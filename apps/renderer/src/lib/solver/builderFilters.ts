@@ -37,6 +37,9 @@ export interface SolverOptions {
    *  free armor slots open to any piece. False forces every armor piece to be
    *  part of a 2pc/4pc — and lets the solver pre-prune the armor pools. */
   allowBrokenSets: boolean;
+  /** Transistone potential — project the best eligible substat line of each
+   *  6★ Legendary up to stage 4 (`lib/solver/reroll.ts`). Off by default. */
+  rerollPotential: boolean;
 }
 
 export type MinMax = { min?: number; max?: number };
@@ -141,7 +144,7 @@ export const INITIAL_FILTERS: SolverFilters = {
   //     heroes (ranks set in the Builds tab; an unranked hero gets a default
   //     rank by CP there, below the manual ones), never strip an equal/higher one.
   //     With no ranks it degrades to own+free (isLowerPriority ∞>∞ is false).
-  options: { onlyMaxed: false, reforgeMode: "classic", equippedScope: "lower", keepCurrent: false, allowBrokenSets: true },
+  options: { onlyMaxed: false, reforgeMode: "classic", equippedScope: "lower", keepCurrent: false, allowBrokenSets: true, rerollPotential: false },
   excludedHeroes: new Set(),
   statFilters: {},
   ratingFilters: {},

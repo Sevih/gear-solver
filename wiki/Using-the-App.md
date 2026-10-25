@@ -164,6 +164,10 @@ results, the bottom band shows the selected build's pieces.
   +10R6: +10 with ≥ 6 reforges done · +10R9: +10 with ≥ 9 reforges · +15R9: +15 with ≥ 9
   reforges (the talisman, which stops at +10, only needs +10; a piece that can't ascend only
   needs +10 and its own reforges — a 5★ at +10 with 5 reforges counts as maxed). Use it to answer "what's my best build with zero further investment?".
+- **Transistone potential** — on a 6★ Legendary with no stage-4 substat, a Transistone can
+  reroll one line up to stage 4 (a 5 % draw per pass, reforges kept). This toggle previews the
+  best case: the hero's highest-priority line (else the largest roll) raised to stage 4, marked
+  `T+n` on the result cards. Works with or without a reforge mode; ignored under **Maxed only**.
 - **Equipped items** — a three-way control for which gear worn by *other* heroes the solver
   may pull in: **None** (only the hero's own gear + free gear), **≤ Lower** (default — also
   gear on heroes ranked strictly lower in the Builds priority ranking; with no ranks set this

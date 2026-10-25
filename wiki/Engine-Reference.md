@@ -636,6 +636,10 @@ mode's ceiling (+10 R6 classic, +10 R9 ascended10, +15 R9 ascended, the Singular
 passive in ascended only); a piece **under 6★, or a 6★ that isn't `unique`**, stops
 at **+10**, at **its own reforge count** (`maxReforgesOf`: its star under 6★, 6 for
 a 6★), **with no passive**, whatever the mode.
+With the **Transistone potential** option (`reroll = true`), the reroll potential
+(`applyRerollPotential`, `lib/solver/reroll.ts`: one line of a 6★ `unique` piece with
+4 substats and no stage 4 raised to base stage 4, reforges kept, LV6 cap) goes
+**before** the reforges; it also applies in `disable` mode.
 
 **Talisman slot (ooparts) and EE (exclusive) explicitly excluded**: their
 `subs` is actually the list of socketed gems (the parser stores

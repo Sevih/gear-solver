@@ -37,6 +37,7 @@ import { dmgSkillFactor, turnSkillFactor } from "../dmgSkill.js";
 import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./types.js";
 import { allSetsComplete, armorSetWhitelist, planSetIds, setsFeasible } from "./setPlans.js";
 import { gearPieceQualityTier, QUALITY_TIERS, type QualityTier } from "../quality.js";
+import { applyRerollPotential } from "./reroll.js";
 
 /** Map engine GearSlot → design SlotId used by the BuilderScreen's
  *  mainPicks / effect chip maps. Only `ooparts` differs (UI calls it
@@ -158,10 +159,13 @@ export function pieceReforgePlan(
 
 /** Project a single pool piece to its reforge-mode ceiling (`pieceReforgePlan`):
  *  main-stat re-scale (`projectMainToCeiling`) + substat reforge ticks
- *  (`simulateReforges`) up to the piece's budget in that mode. `disable` and
- *  Talisman/EE return the piece untouched. Shared by `precomputeContext` (pool
- *  scoring) and the Builder's bottom gear band (display), so the previewed card
- *  matches the scored stats. */
+ *  (`simulateReforges`) up to the piece's budget in that mode. With `reroll`,
+ *  the Transistone potential (`applyRerollPotential`: one line's base up to
+ *  stage 4) goes first, so the reforge ticks then spread under the LV6 cap of
+ *  the raised line. `disable` without `reroll`, and Talisman/EE, return the
+ *  piece untouched. Shared by `precomputeContext` (pool scoring) and the
+ *  Builder's bottom gear band (display), so the previewed card matches the
+ *  scored stats. */
 export function projectPieceForReforge(
   piece: GearPiece,
   game: GameData,
@@ -169,11 +173,15 @@ export function projectPieceForReforge(
   priority: Record<string, number>,
   /** No-priority tick weights (`reforgeTickWeights`) — see `simulateReforges`. */
   tickWeights?: ReforgeTickWeights,
+  /** Apply the Transistone potential (`SolverOptions.rerollPotential`). */
+  reroll = false,
 ): GearPiece {
-  if (mode === "disable" || piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
+  if (piece.slot === "ooparts" || piece.slot === "exclusive") return piece;
+  const base = reroll ? applyRerollPotential(piece, game, { priority }) : piece;
+  if (mode === "disable") return base;
   const rules = gameRulesOf(game);
-  const plan = pieceReforgePlan(piece, mode, rules);
-  const projected = simulateReforges(projectMainToCeiling(piece, game, plan.ceiling), priority, plan.budget, tickWeights, rules);
+  const plan = pieceReforgePlan(base, mode, rules);
+  const projected = simulateReforges(projectMainToCeiling(base, game, plan.ceiling), priority, plan.budget, tickWeights, rules);
   // The unconditional Singularity passive (DMG+ on weapon/accessory, DMG- on the
   // four armor pieces) unlocks ONLY at +15 — not at ascension. So only the +15
   // plan carries `ceiling.ascended`; +10R9 (ascended for reforges) and +10R6
@@ -584,9 +592,13 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // value sent every tick to flat HP (180 a tick against 4 % for the rest).
   // The weights are returned with the context so the Builder's gear band
   // re-projects the same ticks.
+  //
+  // The Transistone potential (`rerollPotential`) is a projection too: it runs
+  // here, with or without a reforge mode, and never under "Only maxed".
   let reforgeWeights: ReforgeTickWeights | null = null;
-  if (reforgeMode !== "disable" && !filters.options.onlyMaxed) {
-    if (!hasPriority) {
+  const reroll = filters.options.rerollPotential ?? false;
+  if ((reforgeMode !== "disable" || reroll) && !filters.options.onlyMaxed) {
+    if (reforgeMode !== "disable" && !hasPriority) {
       const equippedNow = inv.gear.filter((g) => g.equippedBy === heroUid);
       reforgeWeights = reforgeTickWeights(
         composed.noGearStats, composed.scaling, equippedNow, game,
@@ -595,7 +607,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       );
     }
     for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const) {
-      pools[slot] = pools[slot].map((p) => projectPieceForReforge(p, game, reforgeMode, filters.priority, reforgeWeights ?? undefined));
+      pools[slot] = pools[slot].map((p) => projectPieceForReforge(p, game, reforgeMode, filters.priority, reforgeWeights ?? undefined, reroll));
     }
   }
 

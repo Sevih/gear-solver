@@ -17,7 +17,7 @@ import { GameText } from "./GameText.js";
 import { HoverHint } from "./HoverHint.js";
 import { SetCombatBadge } from "./SetCombatBadge.js";
 import { cx } from "./cx.js";
-import { QUALITY_COLOR, type QualityTier } from "../lib/quality.js";
+import { QUALITY_COLOR, QUALITY_REACHABLE_HELP, type QualityTier } from "../lib/quality.js";
 
 /** Per-tier UI tone (text class + bar color + label). `bar` pulls from the
  *  shared `QUALITY_COLOR` so the Inventory filter and the quality bar agree. */
@@ -221,6 +221,7 @@ export function GearDetailBody({ piece, game, equippedChar = null, inTooltip = f
               <span className="font-mono tabular-nums">
                 <span className={cx("font-bold", tone.text)}>{q.current}</span>
                 <span className="text-white/60"> / {q.max}</span>
+                {q.reachable != null && <span className="text-violet-300" title={QUALITY_REACHABLE_HELP}> → {q.reachable} reachable</span>}
                 <span className={cx("ml-2", tone.text)}>{tone.label}</span>
               </span>
             </div>

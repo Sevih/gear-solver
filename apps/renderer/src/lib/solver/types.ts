@@ -68,6 +68,11 @@ export interface SolveFilters {
      *  partial set requirement (e.g. a single 2pc) lets any piece fill the free
      *  slots. Absent → treated as true for back-compat with older payloads. */
     allowBrokenSets?: boolean;
+    /** Project the Transistone potential (`lib/solver/reroll.ts`): one
+     *  substat line of a 6★ Legendary without a stage-4 line climbs to stage
+     *  4. Skipped under `onlyMaxed`, like the reforge projection. Absent →
+     *  false (payloads from before the field). */
+    rerollPotential?: boolean;
   };
   /** Hero UIDs whose currently-equipped gear is locked out of the pool. */
   excludedHeroes: string[];

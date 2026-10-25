@@ -23,7 +23,7 @@ import { CharFace, EquipmentIcon, StatIcon } from "./EquipmentIcon.js";
 import { RARITY, SINGULARITY_GRADIENT_V, STAT } from "./tokens.js";
 import { GameText } from "./GameText.js";
 import { cx } from "./cx.js";
-import { QUALITY_COLOR, type QualityTier } from "../lib/quality.js";
+import { QUALITY_COLOR, QUALITY_REACHABLE_HELP, type QualityTier } from "../lib/quality.js";
 
 /** Per-tier UI tone (text class + bar color + label). `bar` pulls from the
  *  shared `QUALITY_COLOR` so the Inventory filter and the quality bar agree. */
@@ -73,7 +73,7 @@ const QUALITY_HELP = "Sum of every substat tick (initial roll + reforge procs) v
  *  Gold-tinted once the sub hits its cap of 6 total ticks (base + reforges) —
  *  fixed at 6 regardless of the item's star tier. A 6★ socle is 4/4/3/3, so a
  *  sub only reaches 6 after reforges, never at socle. */
-function SubstatRow({ s, added = 0, compact = false }: { s: UiPiece["subs"][number]; added?: number; compact?: boolean }) {
+function SubstatRow({ s, added = 0, transistone = 0, compact = false }: { s: UiPiece["subs"][number]; added?: number; transistone?: number; compact?: boolean }) {
   const isMax = s.lv >= 6;
   const sign = s.value.startsWith("-") ? "" : "+";
   // Split the tick count into Base (initial roll) + Actuelle (reforges actually
@@ -81,6 +81,11 @@ function SubstatRow({ s, added = 0, compact = false }: { s: UiPiece["subs"][numb
   const base = s.lv - s.reforges;
   const extrapole = Math.max(0, added);
   const actuelle = s.reforges - extrapole;
+  // Ticks the Transistone potential added to the line's base (its own marker,
+  // apart from the reforge split: the base above already includes them).
+  const transistoneMark = transistone > 0 && (
+    <span className="shrink-0 text-[10px] text-violet-300" title={`Transistone: base LV ${base - transistone} → ${base}`}>T+{transistone}</span>
+  );
   if (compact) {
     // Compact: "[n] (+added) [icon]  value" — the label and the base + reforges
     // split move to the row's title.
@@ -93,6 +98,7 @@ function SubstatRow({ s, added = 0, compact = false }: { s: UiPiece["subs"][numb
         <span className={cx("w-4 shrink-0 rounded-sm text-center text-[10px] leading-4", isMax ? "bg-amber-400/15 text-amber-300" : "bg-white/8 text-white/80")}>{s.lv}</span>
         <span className="w-5 shrink-0 text-[10px] text-cyan-300">{extrapole > 0 ? `+${extrapole}` : ""}</span>
         <StatIcon stat={s.stat} size={16} className="shrink-0" />
+        {transistoneMark}
         <span className={cx("ml-auto font-semibold", isMax ? "text-amber-200" : "text-white")}>{sign}{s.value}</span>
       </div>
     );
@@ -111,6 +117,7 @@ function SubstatRow({ s, added = 0, compact = false }: { s: UiPiece["subs"][numb
       </span>
       <StatIcon stat={s.stat} size={16} className="shrink-0" />
       <span className="flex-1">{statLong(s.stat)}</span>
+      {transistoneMark}
       <span className={cx("font-semibold", isMax ? "text-amber-200" : "text-white")}>{sign}{s.value}</span>
     </div>
   );
@@ -161,11 +168,14 @@ interface ResultGearDetailBodyProps {
   /** Per-sub reforge ticks the projection ADDED (aligned to `piece.subs`) — used
    *  to split each sub's LV into Base + Actuelle + Extrapolé. */
   addedTicks?: number[];
+  /** Per-sub ticks the Transistone potential ADDED (aligned to `piece.subs`) —
+   *  a distinct marker on the line. */
+  transistoneTicks?: number[];
   /** Compact card (Settings › Solver › Compact result cards). */
   compact?: boolean;
 }
 
-export function ResultGearDetailBody({ piece, game, equippedChar = null, addedTicks, compact = false }: ResultGearDetailBodyProps) {
+export function ResultGearDetailBody({ piece, game, equippedChar = null, addedTicks, transistoneTicks, compact = false }: ResultGearDetailBodyProps) {
   const rarity = RARITY[piece.rarity];
   // EE (exclusive) shows just its image + gems — no main stats, no effects.
   const isEE = piece.slot === "exclusive";
@@ -215,7 +225,7 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, addedTi
         <GemPanel slots={piece.gemSlots} />
       ) : !isEE && piece.subs.length > 0 ? (
         <div className="space-y-1">
-          {piece.subs.map((s, i) => <SubstatRow key={i} s={s} added={addedTicks?.[i] ?? 0} compact={compact} />)}
+          {piece.subs.map((s, i) => <SubstatRow key={i} s={s} added={addedTicks?.[i] ?? 0} transistone={transistoneTicks?.[i] ?? 0} compact={compact} />)}
         </div>
       ) : null}
 
@@ -228,6 +238,7 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, addedTi
           <div className="font-mono text-[12px] tabular-nums" title={compact ? QUALITY_HELP : undefined}>
             <span className={cx("font-bold", tone.text)}>{q.current}</span>
             <span className="text-white/60">/{q.max}</span>
+            {q.reachable != null && <span className="text-violet-300" title={QUALITY_REACHABLE_HELP}> → {q.reachable} reachable</span>}
             <span className={cx("ml-2 font-semibold", tone.text)}>{tone.label}</span>
           </div>
         );
@@ -304,8 +315,8 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, addedTi
  *  the SOLVE-results cards look pixel-identical to the inventory card while
  *  staying independently editable. */
 export function ResultItemDetail({
-  piece, equippedChar, game, excluded, onToggleExclude, addedTicks, compact = false,
-}: { piece: UiPiece | null; equippedChar: Character | null; game: GameData | null; excluded?: boolean; onToggleExclude?: (uid: string) => void; addedTicks?: number[]; compact?: boolean }) {
+  piece, equippedChar, game, excluded, onToggleExclude, addedTicks, transistoneTicks, compact = false,
+}: { piece: UiPiece | null; equippedChar: Character | null; game: GameData | null; excluded?: boolean; onToggleExclude?: (uid: string) => void; addedTicks?: number[]; transistoneTicks?: number[]; compact?: boolean }) {
   const width = compact ? "w-64" : "w-80";
   if (!piece) {
     return (
@@ -325,7 +336,7 @@ export function ResultItemDetail({
   return (
     <aside className={cx("flex h-full shrink-0 flex-col overflow-hidden rounded-xl border border-white/8 bg-bg-elev-1", width)}>
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <ResultGearDetailBody piece={piece} game={game} equippedChar={equippedChar} addedTicks={addedTicks} compact={compact} />
+        <ResultGearDetailBody piece={piece} game={game} equippedChar={equippedChar} addedTicks={addedTicks} transistoneTicks={transistoneTicks} compact={compact} />
       </div>
       {onToggleExclude && (
         <div className="shrink-0 border-t border-white/8 px-4 py-2.5">

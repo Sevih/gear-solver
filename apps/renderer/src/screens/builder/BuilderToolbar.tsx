@@ -151,6 +151,12 @@ export function BuilderToolbar({
           onClick={() => dispatch({ type: "setOption", key: "onlyMaxed", value: !filters.options.onlyMaxed })}
           title="No extrapolation — only pieces ALREADY at their own ceiling in the reforge mode (or better), scored on their real rolls. Off mode: any piece as-is · +10R6: enhance ≥10 & ≥6 reforges · +10R9: enhance ≥10 & ≥9 reforges · +15R9: +15 & ≥9 reforges. A piece that can't ascend (under 6★, or a 6★ that isn't Unique) only needs +10 and its own reforges (its star, 6 for a 6★)."
         />
+        <ToolbarToggle
+          label="Transistone potential"
+          on={filters.options.rerollPotential ?? false}
+          onClick={() => dispatch({ type: "setOption", key: "rerollPotential", value: !(filters.options.rerollPotential ?? false) })}
+          title="Project the best eligible substat line up to level 4 — a 6★ Legendary without a stage-4 line can reroll one line to stage 4 by Transistone (a 5 % draw per pass; reforge ticks are kept). The line: the hero's highest-priority substat, else the largest roll. Works with or without a reforge mode; ignored under Maxed only (no extrapolation)."
+        />
         <ToolbarDivider />
         <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
           <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />

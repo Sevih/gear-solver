@@ -13,16 +13,19 @@ export interface ReforgeContext {
   /** No-priority tick weights the engine projected with (`reforgeTickWeights`);
    *  absent on builds saved before them → per-roll-norm fallback. */
   tickWeights?: ReforgeTickWeights | null;
+  /** The Transistone potential was projected (`SolverOptions.rerollPotential`);
+   *  absent on builds saved before it → off. */
+  rerollPotential?: boolean;
 }
 
 /** Migrate a persisted reforge context (saved builds) to the current shape.
  *  Pre-reforge-modes builds stored a `useReforged` boolean → map true to
  *  "classic" (the only projection that existed then), false/absent to
  *  "disable". */
-export function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number>; tickWeights?: ReforgeTickWeights | null } | undefined): ReforgeContext {
+export function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number>; tickWeights?: ReforgeTickWeights | null; rerollPotential?: boolean } | undefined): ReforgeContext {
   if (!r) return { reforgeMode: "disable", priority: {} };
   const reforgeMode = r.reforgeMode ?? (r.useReforged ? "classic" : "disable");
-  return { reforgeMode, priority: r.priority, tickWeights: r.tickWeights ?? null };
+  return { reforgeMode, priority: r.priority, tickWeights: r.tickWeights ?? null, rerollPotential: r.rerollPotential ?? false };
 }
 
 /** UI metadata for the reforge-mode segmented control — order = cycle order,

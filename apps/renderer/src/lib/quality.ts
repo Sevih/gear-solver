@@ -6,6 +6,7 @@
  * them from silently drifting apart.
  */
 import type { GearPiece, GearSlot } from "@gear-solver/core";
+import { rerollMaxGain } from "./solver/reroll.js";
 
 export type QualityTier = "poor" | "decent" | "good" | "excellent" | "perfect";
 export const QUALITY_TIERS: QualityTier[] = ["poor", "decent", "good", "excellent", "perfect"];
@@ -42,7 +43,15 @@ export interface QualityScore {
   max: number;
   pct: number;
   tier: QualityTier;
+  /** Score reachable with the Transistone potential (`lib/solver/reroll.ts`:
+   *  one line's base up to stage 4) — set only when the piece has one. The max,
+   *  the percentage and the tier stay those of the current rolls. */
+  reachable?: number;
 }
+
+/** Tooltip of the "→ N reachable" suffix, shared by the detail panels. */
+export const QUALITY_REACHABLE_HELP =
+  "With a Transistone: a 6★ Legendary without a stage-4 substat can reroll one line up to stage 4 (a 5 % draw per pass, one such line per piece). Reachable = the current score with the best line at stage 4.";
 
 /** The one quality rule — sum of every substat tick vs the cap for the piece's
  *  CURRENT investment (base 14 + 1 per spent reforge proc). Null for slots
@@ -54,18 +63,23 @@ export function qualityScore(
   star: number | null,
   reforgeCount: number,
   ticks: readonly number[],
+  /** Ticks the Transistone potential would add (`rerollMaxGain`) — > 0 sets
+   *  `reachable`. */
+  rerollGain = 0,
 ): QualityScore | null {
   if (slot === "ooparts" || slot === "exclusive") return null;
   if (ticks.length === 0 || (star ?? 0) <= 0) return null;
   const current = ticks.reduce((sum, t) => sum + t, 0);
   const max = 14 + reforgeCount;
   const pct = Math.min(100, Math.round((current / max) * 100));
-  return { current, max, pct, tier: qualityTierFromScore(current, max) };
+  const score: QualityScore = { current, max, pct, tier: qualityTierFromScore(current, max) };
+  if (rerollGain > 0) score.reachable = Math.min(max, current + rerollGain);
+  return score;
 }
 
-/** `qualityScore` of a raw gear piece. */
+/** `qualityScore` of a raw gear piece, its Transistone potential included. */
 export function gearPieceQuality(p: GearPiece): QualityScore | null {
-  return qualityScore(p.slot, p.star, p.reforgeCount, p.subs.map((s) => s.ticks ?? 0));
+  return qualityScore(p.slot, p.star, p.reforgeCount, p.subs.map((s) => s.ticks ?? 0), rerollMaxGain(p));
 }
 
 /** Quality tier of a raw gear piece, or null when it has no quality score

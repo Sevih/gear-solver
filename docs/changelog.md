@@ -8,6 +8,66 @@
 
 ## Items de backlog clôturés (index)
 
+### 💎 Potentiel de reroll Transistone dans la projection du Builder et la qualité atteignable, règle du client (2026-10-25)
+- ✅ **Pourquoi.** Le patch du 20/10 permet de monter une ligne de sous-stat jusqu'au palier 4 par Transistone ; rien
+  n'en était modélisé (la projection ne couvrait que la main et les reforges, la qualité ne comptait que les ticks
+  présents). Les deux questions du TODO (une ligne, une fois ? toutes les étoiles ?) sont tranchées par le client.
+- ✅ **La règle du client** (écrite, fichier et ligne, en tête de `apps/renderer/src/lib/solver/reroll.ts`). Le
+  Transistone est un **reroll aléatoire**, pas une montée garantie : Individual retire la ligne choisie et verrouille
+  les autres, Total retire les quatre et lève le verrou ; le joueur garde ou jette le résultat
+  (`item/subOptionChange`, `IsSelected`), sans compteur de passes (seuls le Transistone et l'or sont vérifiés). L'onglet
+  s'ouvre sur 5★ Rare/Unique et 6★ Magic/Rare/Unique à exactement 4 lignes (`CItem.GetIsEnableOptionChange`), mais
+  seules les lignes 24 et 48 de `ItemOptionChangeTemplet` (6★ `IG_UNIQUE`) portent le groupe de niveaux 4 : base 0/1/2
+  à ~31,7 % chacune, base 3 = **palier 4 à 5 %, une seule ligne par pièce** (`MaxCount` 1, texte
+  SYS_OPTION_REPLACE_SUB_OPTION_LEVEL_MAX « Up to 1 sub-options on Legendary 6★ gear can be applied up to Stage 4 »).
+  Les reforges sont gardées (« Current reforge values will be maintained »), la valeur reste plafonnée à
+  `OptionMaxValue` = 6 ticks. Donc : **6★ Légendaire seulement, une ligne au palier 4 par pièce, autant de passes
+  qu'on veut** ; une pièce qui a déjà une ligne au palier 4 (drop 4/3/3/3, native 4/4/3/3) n'a plus rien à gagner.
+  Le module modélise le **plafond** (la meilleure ligne au palier 4), comme la projection des reforges modélise des
+  rolls max.
+- ✅ **`reroll.ts` (pur).** `rerollEligible`, `rerollGains` (gain par ligne : palier de base = `ticks - reforgeTicks`
+  porté à 4, sous le plafond LV6 ; null si inéligible ou ligne 4 présente), `rerollMaxGain`, `rerollPotential(piece,
+  game, pick)` → `{ index, ticks }` (+1 à +3) ou null — la ligne : la plus forte priorité du héros (clés d'axes,
+  `STAT_TO_PRIORITY`), jamais une ligne à priorité négative (pas de Transistone pour une stat dont le héros ne veut
+  pas ; toutes négatives → null), sans priorité ou à égalité la plus grande valeur normalisée (`ROLL_NORMS`) — et
+  `applyRerollPotential` (base montée, `reforgeTicks` inchangés, valeur au tick).
+- ✅ **Projection.** `SolverOptions.rerollPotential` (défaut false, `INITIAL_FILTERS`, persisté avec les filtres par
+  héros, défaut false pour un preset nommé plus ancien dans `filterPresets.ts`) ; `SolveFilters.options.rerollPotential`
+  optionnel. `projectPieceForReforge` gagne un paramètre `reroll` : le potentiel passe **avant** les reforges (les
+  ticks de reforge se répartissent ensuite sous le LV6 de la ligne montée) et s'applique aussi en mode `disable` ;
+  `precomputeContext` projette quand le mode reforge ou l'option est actif, **jamais sous Maxed only**. Le contexte
+  d'affichage (`ReforgeContext.rerollPotential`, snapshoté par `useSolverSession`, sauvé avec le build et relu par
+  `migrateReforge`) le passe à `BottomGearBand`, qui sépare les ticks Transistone des procs de reforge : marqueur
+  violet `T+n` sur la ligne, titre « Transistone: base LV b → 4 » (`ResultGearDetail.tsx`, cartes normales et
+  compactes). L'interrupteur est un `ToolbarToggle` « Transistone potential » à côté de « Maxed only », dans la
+  rangée du mode reforge de la toolbar (c'est là que vivent le mode et Maxed only ; le panneau Options n'a que le
+  scope, Keep current et Allow broken sets) ; son titre reprend « Project the best eligible substat line up to level
+  4 ».
+- ✅ **Qualité.** `QualityScore.reachable` (posé seulement quand la pièce a un potentiel ; max, pourcentage et palier
+  restent ceux des rolls actuels) : `qualityScore` prend un `rerollGain` optionnel, `gearPieceQuality` y passe
+  `rerollMaxGain` (plus grand gain sur une ligne, indépendant de la priorité). La ligne qualité dit « 11/14 → 13
+  reachable » (violet, titre `QUALITY_REACHABLE_HELP`) dans les cartes de résultat et dans la carte d'inspection
+  `GearDetail.tsx` — partagée par l'Inventaire et l'infobulle des Builds, seul ajout visuel hors Builder, demandé par
+  le lot ; tableau, filtres et répartition de l'accueil inchangés (palier inchangé). Sur une carte déjà projetée
+  avec l'option, la ligne est au palier 4 : plus de suffixe.
+- ✅ **Tests.** `apps/renderer/test/reroll.test.ts` (nouveau, 13) : éligible / inéligible (étoile, rareté, 3 lignes,
+  Talisman / EE), ligne 4 présente (4/3/3/3, 4/4/3/3), palier de base et non total, sans sous-stat, choix par priorité
+  (axe `atk` pour `atkPct`), par valeur normalisée (sans priorité, à égalité, priorité hors de la pièce), priorité
+  négative écartée, +1 / +2 / +3, plafond LV6 qui saute une ligne, application sans muter la pièce.
+  `reforgeProjection.test.ts` (+3) : option à false → pièce telle quelle, à true sans mode reforge → ligne CRC à 4 et
+  la bande reprojette pareil, Maxed only l'ignore, avec +10R6 la ligne monte d'abord (+3 ticks au total, 2 reforges
+  sur la ligne prioritaire) et le moteur projette la même pièce. `quality.test.ts` (+4) : `reachable` posé seulement
+  avec un gain, 3/3/3/2 → 13, rien pour 4/3/3/3 et 4/4/3/3, ni sous 6★ ni sous Légendaire, reforges gardées sous LV6.
+  `docs/solver.md` / `wiki/Solver.md` (Options), `docs/reference.md` / `wiki/Engine-Reference.md` (projection) et
+  `wiki/Using-the-App.md` (Options) le disent. `npm run typecheck` : `tsc --noEmit` sans sortie dans chaque workspace ;
+  `npm test` : `Tests  169 passed (169)`, `Tests  199 passed (199)`, `Tests  729 passed (729)` ; `npm run lint` :
+  `✖ 13 problems (0 errors, 13 warnings)`, inchangé.
+- ✅ **Laissé, hors périmètre.** Le coût en Transistones, une liste de pièces à reroller, Presets et Worklist. Le ΔCP
+  du Builder (`deltaCpLabel`) ne dit « build at … » que pour un mode reforge : en mode Off avec l'option, le build
+  est projeté sans que le libellé le dise.
+- ⏳ **Sevih, sur le fixe** : Builder › « Transistone potential » → une pièce 4/3/3/3 ne bouge pas, une 3/3/3/1 gagne
+  sur sa meilleure ligne (marqueur `T+n` sur la carte), la qualité dit « → N reachable » sans l'option.
+
 ### 🧾 Suivi en direct : Worklist lue dans le snapshot courant, pièce disparue dite disparue, `PresetList` nettoyé (2026-10-25)
 - ✅ **Pourquoi.** Trois restes du suivi en direct (G44). (1) Une ligne de Worklist affichait le `toName` figé à la mise
   en file, et le `toMain` stocké ne servait nulle part : après un enchant suivi en direct, le nom et la main d'une

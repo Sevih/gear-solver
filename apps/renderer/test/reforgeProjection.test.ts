@@ -144,3 +144,43 @@ describe("reforge projection without a priority — CP-weighted ticks", () => {
     expect(prepareContext(request(gear, "cp", maxed)).reforgeTickWeights).toBeNull();
   });
 });
+
+describe("Transistone potential — projected with the option on, never under 'Maxed only'", () => {
+  // A +10 helmet rolled 3/2/3/1, no reforge yet. By normalized value the CRC
+  // line (12 / 20) is the best: it climbs to stage 4 (+1).
+  const helmet = piece("h", "helmet", {
+    enhanceLevel: 10, ascended: false, singularityLevel: 0, reforgeCount: 0, main: [r("hp", 1000, false)],
+    subs: [r("critRate", 12, true, 3), r("critDmg", 8.8, true, 2), r("hp", 540, false, 3), r("atkPct", 4, true, 1)],
+  });
+  const gear = maxedGear().map((g) => (g.slot === "helmet" ? helmet : g));
+  const ticksOf = (p: GearPiece) => p.subs.map((s) => s.ticks);
+
+  it("reforge mode off: the option alone projects the line, off leaves the piece as captured", () => {
+    const off = precomputeContext(request(gear, "cp", {})).pools.helmet[0]!;
+    expect(off).toBe(helmet);
+    const on = precomputeContext(request(gear, "cp", { options: { rerollPotential: true } as SolveFilters["options"] })).pools.helmet[0]!;
+    expect(ticksOf(on)).toEqual([4, 2, 3, 1]);
+    expect(on.subs[0]!.value).toBe(16);
+    // The gear band re-projects the same piece.
+    expect(projectPieceForReforge(helmet, GAME, "disable", {}, undefined, true).subs).toEqual(on.subs);
+  });
+
+  it("'Maxed only' skips it (no extrapolation)", () => {
+    const maxed = { options: { onlyMaxed: true, rerollPotential: true } as SolveFilters["options"] };
+    expect(precomputeContext(request(gear, "cp", maxed)).pools.helmet[0]).toBe(helmet);
+  });
+
+  it("with a reforge mode: the line climbs first, the reforge ticks spread on top under LV6", () => {
+    const priority = { atk: 3 };
+    const without = projectPieceForReforge(helmet, GAME, "classic", priority, undefined, false);
+    const withIt = projectPieceForReforge(helmet, GAME, "classic", priority, undefined, true);
+    // ATK% is the priority line: base 1 → 4 (+3), then 2 reforges to LV6.
+    expect(without.subs[3]!.ticks).toBe(6);
+    expect(withIt.subs[3]).toMatchObject({ ticks: 6, reforgeTicks: 2 });
+    const total = (p: GearPiece) => p.subs.reduce((n, s) => n + (s.ticks ?? 0), 0);
+    expect(total(withIt)).toBe(total(without) + 3);
+    // In the engine, through the option.
+    const ctx = precomputeContext(request(gear, "cp", { priority, options: { reforgeMode: "classic", rerollPotential: true } as SolveFilters["options"] }));
+    expect(ctx.pools.helmet[0]!.subs).toEqual(withIt.subs);
+  });
+});

@@ -302,6 +302,15 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   ses meilleurs rolls (une +15R9 dans un solve +10R6 n'est pas redescendue au plafond +10). Talisman :
   enhance seul, +10 au plus (son plafond) ; l'EE du héros n'est jamais filtré. (Remplace l'ancien cut plat `enhanceLevel < 15`,
   aveugle au mode.)
+- **Transistone potential** (`rerollPotential`, toggle de la toolbar à côté de Maxed only, **défaut
+  off**) — projette le potentiel de reroll Transistone (`lib/solver/reroll.ts`, règle lue dans le
+  client en tête du module) : une 6★ Légendaire à 4 sous-stats **sans ligne au palier 4** monte UNE
+  ligne jusqu'au palier de base 4 (+1 à +3 ticks, reforges conservées, valeur plafonnée à LV6). La
+  ligne : la sous-stat de plus forte priorité du héros (jamais une priorité négative), sans priorité
+  ou à égalité la plus grande valeur normalisée (`ROLL_NORMS`). Appliqué par
+  `projectPieceForReforge` **avant** les reforges, avec ou sans mode reforge, **jamais sous Maxed
+  only** ; snapshoté dans le contexte d'affichage et sauvé avec le build, les gear cards marquent
+  la ligne (`T+n`, titre « Transistone »). C'est un plafond : en jeu le palier 4 est un tirage à 5 %.
 - **Equipped items** (`equippedScope`, **défaut ≤ Lower**) — quelles pièces équipées sur
   d'**autres** héros le solver peut piocher. Défaut `lower` : seulement les héros **strictement
   moins** prioritaires (auto-rangés par CP à la capture) → ne déshabille jamais un héros

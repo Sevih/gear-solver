@@ -71,6 +71,32 @@ describe("qualityScore — the rule", () => {
   });
 });
 
+describe("reachable — the score with the Transistone potential", () => {
+  it("qualityScore: set only with a gain, max / pct / tier stay the current rolls'", () => {
+    expect(qualityScore("weapon", 6, 0, [3, 3, 3, 2])).not.toHaveProperty("reachable");
+    expect(qualityScore("weapon", 6, 0, [3, 3, 3, 2], 2)).toEqual({ current: 11, max: 14, pct: 79, tier: "good", reachable: 13 });
+  });
+
+  it("gearPieceQuality: a 3/3/3/2 6★ Legendary reaches 13/14; 4/3/3/3 and the native 4/4/3/3 have nothing to reach", () => {
+    expect(gearPieceQuality(piece("helmet", 6, 0, [3, 3, 3, 2]))?.reachable).toBe(13); // best line: the 2 → 4
+    expect(gearPieceQuality(piece("helmet", 6, 0, [3, 3, 3, 3]))?.reachable).toBe(13);
+    expect(gearPieceQuality(piece("helmet", 6, 0, [4, 3, 3, 3]))).not.toHaveProperty("reachable");
+    expect(gearPieceQuality(piece("helmet", 6, 0, [4, 4, 3, 3]))).not.toHaveProperty("reachable");
+  });
+
+  it("only on a 6★ Legendary", () => {
+    expect(gearPieceQuality(piece("helmet", 5, 0, [3, 3, 3, 2]))).not.toHaveProperty("reachable");
+    expect(gearPieceQuality({ ...piece("helmet", 6, 0, [3, 3, 3, 2]), rarity: "rare" })).not.toHaveProperty("reachable");
+  });
+
+  it("reforge ticks are kept on top of the raised base, under the LV6 cap", () => {
+    // Bases 1/3/3/3 with 5 reforges on the 1 (LV6): that line can't climb, the
+    // others gain +1 → 15 + 1 = 16 of 19.
+    const g: GearPiece = { ...piece("boots", 6, 5, []), subs: [sub(6, 5), sub(3), sub(3), sub(3)] };
+    expect(gearPieceQuality(g)).toEqual({ current: 15, max: 19, pct: 79, tier: "good", reachable: 16 });
+  });
+});
+
 describe("toUiPiece — precomputed quality and search text", () => {
   it("quality is the rule's score; searchText is the lower-cased haystack", () => {
     const g: GearPiece = {

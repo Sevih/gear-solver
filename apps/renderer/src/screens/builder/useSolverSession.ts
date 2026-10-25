@@ -178,10 +178,12 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     // a later filter edit can't mutate what `onResult` reads). Under "Only
     // maxed" the engine skips the projection (pieces scored as-is), so the
     // display context is "disable" — the cards must show the real rolls the
-    // engine scored, not a re-projected preview.
+    // engine scored, not a re-projected preview. Same for the Transistone
+    // potential.
     solveReforgeRef.current = {
       reforgeMode: filters.options.onlyMaxed ? "disable" : filters.options.reforgeMode,
       priority: { ...filters.priority },
+      rerollPotential: !filters.options.onlyMaxed && (filters.options.rerollPotential ?? false),
     };
     const serializedFilters = buildSolveFilters(filters);
     orchestrator.solve({

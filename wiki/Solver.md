@@ -292,6 +292,15 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   (a +15R9 piece in a +10R6 solve is not scaled down to the +10 ceiling). Talisman: enhance
   only, +10 at most (its ceiling); the hero's own EE is never filtered. (Replaces the old mode-blind flat
   `enhanceLevel < 15` cut.)
+- **Transistone potential** (`rerollPotential`, toolbar toggle next to Maxed only, **default
+  off**) — projects the Transistone reroll potential (`lib/solver/reroll.ts`, the rule read from the
+  client at the top of the module): a 6★ Legendary with 4 substats and **no stage-4 line** raises ONE
+  line to base stage 4 (+1 to +3 ticks, reforges kept, value capped at LV6). The line: the hero's
+  highest-priority substat (never a negative priority), without a priority or on a tie the largest
+  normalized value (`ROLL_NORMS`). Applied by `projectPieceForReforge` **before** the reforges, with
+  or without a reforge mode, **never under Maxed only**; snapshotted in the display context and
+  saved with the build, the gear cards mark the line (`T+n`, titled "Transistone"). It is a
+  ceiling: in-game stage 4 is a 5 % draw.
 - **Equipped items** (`equippedScope`, **3 states**, **default ≤ Lower**) — which pieces
   equipped on **other** heroes the solver may pull. Default `lower`: only heroes of
   **strictly lower** priority (auto-ranked by CP at capture, via `isLowerPriority`) → never

@@ -646,6 +646,10 @@ sur arme/accessoire (`ST_DMG_BOOST`), DMG- sur les 4 armures
 `fromBuff` → `buffPct.dmgUp`/`dmgReduce`, donc compte dans le score ET la CP, pas
 juste l'affichage. Une pièce **déjà ascended** garde son **vrai roll** (jamais
 écrasé par le plafond). Talisman/EE intouchés (pas d'ascension).
+Avec l'option **Transistone potential** (`reroll = true`), le potentiel de reroll
+(`applyRerollPotential`, `lib/solver/reroll.ts` : une ligne d'une 6★ `unique` à 4
+sous-stats sans palier 4 montée au palier de base 4, reforges conservées, plafond LV6)
+passe **avant** les reforges ; il s'applique aussi en mode `disable`.
 
 **Slot Talisman (ooparts) et EE (exclusive) explicitement exclus** : leur
 `subs` est en réalité la liste des gems socketés (le parser stocke

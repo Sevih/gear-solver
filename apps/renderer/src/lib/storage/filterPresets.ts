@@ -99,6 +99,8 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
       options: {
         ...f.options,
         allowBrokenSets: f.options?.allowBrokenSets ?? true,
+        // `rerollPotential` (Transistone) came later — absent → off.
+        rerollPotential: f.options?.rerollPotential ?? false,
         equippedScope: f.options?.equippedScope
           ?? ((f.options as { includeEquippedOnOthers?: boolean })?.includeEquippedOnOthers === false ? "none" : "all"),
         // `reforgeMode` replaced the `useReforged` boolean (true → "classic").

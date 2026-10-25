@@ -7,6 +7,7 @@ import { GAME_GEAR_GRID, toEngineSlot, type SlotId } from "../../design/tokens.j
 import { toUiPiece } from "../../design/adapter.js";
 import { ResultItemDetail } from "../../design/ResultGearDetail.js";
 import { projectPieceForReforge } from "../../lib/solver/engine.js";
+import { rerollPotential } from "../../lib/solver/reroll.js";
 import type { SolveBuild } from "../../lib/solver/types.js";
 import type { SlotDiff } from "../../lib/buildDiff.js";
 import type { ReforgeContext } from "./reforge.js";
@@ -23,7 +24,7 @@ export function BottomGearBand({
   diff: SlotDiff[];
   game: GameData | null;
   /** Reforge context the displayed build was solved with — when the mode is
-   *  not "disable", each card re-runs the deterministic `projectPieceForReforge`
+   *  not "disable" (or the Transistone potential is on), each card re-runs the deterministic `projectPieceForReforge`
    *  so its main/substats match the build's projected `finalStats` instead of
    *  the pieces' current rolls (the engine scored the projected clones). */
   reforge: ReforgeContext;
@@ -40,21 +41,27 @@ export function BottomGearBand({
   // already resolved each uid to its piece and slot) and, when a reforge mode
   // is active, swap in the projected clone.
   // `projectPieceForReforge` self-filters (returns the original for Talisman/EE,
-  // "disable" mode, or when there's nothing left to project), so identity
+  // "disable" mode without the Transistone potential, or when there's nothing
+  // left to project), so identity
   // inequality is a reliable "was projected" signal.
   const pieceBySlot = useMemo(() => {
-    const map = new Map<string, { piece: GearPiece; equippedBy: string | null; addedTicks: number[] }>();
+    const map = new Map<string, { piece: GearPiece; equippedBy: string | null; addedTicks: number[]; transistoneTicks: number[] }>();
     for (const { slot, proposed: original } of diff) {
-      const piece = game ? projectPieceForReforge(original, game, reforge.reforgeMode, reforge.priority, reforge.tickWeights ?? undefined) : original;
+      const reroll = reforge.rerollPotential ?? false;
+      const piece = game ? projectPieceForReforge(original, game, reforge.reforgeMode, reforge.priority, reforge.tickWeights ?? undefined, reroll) : original;
       const reforged = piece !== original;
+      // Ticks the Transistone potential added (projected first, on the captured
+      // piece — the same `rerollPotential` call the projection made).
+      const pot = reforged && reroll ? rerollPotential(original, game, { priority: reforge.priority }) : null;
+      const transistoneTicks = pot ? original.subs.map((_, i) => (i === pot.index ? pot.ticks : 0)) : [];
       // Per-sub reforge procs the projection added (delta of total ticks vs the
-      // captured piece) — `simulateReforges` clones subs 1:1 in order, so index
-      // alignment holds. Surfaces "which sub got how many extra ticks" on the
-      // card instead of just a silently-higher value.
+      // captured piece, minus the Transistone ticks) — `simulateReforges` clones
+      // subs 1:1 in order, so index alignment holds. Surfaces "which sub got how
+      // many extra ticks" on the card instead of just a silently-higher value.
       const addedTicks = reforged && piece.subs.length === original.subs.length
-        ? piece.subs.map((s, i) => (s.ticks ?? 0) - (original.subs[i]?.ticks ?? 0))
+        ? piece.subs.map((s, i) => (s.ticks ?? 0) - (original.subs[i]?.ticks ?? 0) - (transistoneTicks[i] ?? 0))
         : [];
-      map.set(slot, { piece, equippedBy: original.equippedBy, addedTicks });
+      map.set(slot, { piece, equippedBy: original.equippedBy, addedTicks, transistoneTicks });
     }
     return map;
   }, [diff, game, reforge]);
@@ -96,7 +103,7 @@ export function BottomGearBand({
         const pieceForCard = piece && recommendedGems && recommendedGems.some((id) => id > 0)
           ? { ...piece, gemSlots: recommendedGems }
           : piece;
-        return <GearCard key={slot} slot={slot} piece={pieceForCard} game={game} equippedChar={equippedChar} excluded={excluded} onToggleExclude={onToggleExclude} addedTicks={entry?.addedTicks} compact={compact} />;
+        return <GearCard key={slot} slot={slot} piece={pieceForCard} game={game} equippedChar={equippedChar} excluded={excluded} onToggleExclude={onToggleExclude} addedTicks={entry?.addedTicks} transistoneTicks={entry?.transistoneTicks} compact={compact} />;
       })}
     </div>
   );
@@ -107,7 +114,7 @@ export function BottomGearBand({
  *  portrait, exclude footer, empty state) so the results look pixel-identical to
  *  the Inventory tab's left card. The piece (already reforge-projected upstream
  *  in `BottomGearBand`) goes through the same `toUiPiece` adapter. */
-function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedTicks, compact }: {
+function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedTicks, transistoneTicks, compact }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
@@ -119,6 +126,8 @@ function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedT
   onToggleExclude?: (uid: string) => void;
   /** Per-sub reforge procs the projection added — tick markers on the subs. */
   addedTicks?: number[];
+  /** Per-sub ticks the Transistone potential added — their own marker. */
+  transistoneTicks?: number[];
   /** Compact card (Settings › Solver › Compact result cards). */
   compact?: boolean;
 }) {
@@ -133,6 +142,7 @@ function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedT
       excluded={excluded}
       onToggleExclude={onToggleExclude}
       addedTicks={addedTicks}
+      transistoneTicks={transistoneTicks}
       compact={compact}
     />
   );
