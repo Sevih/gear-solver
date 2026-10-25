@@ -8,6 +8,87 @@
 
 ## Items de backlog clôturés (index)
 
+### 📦 Outillage de release : electron-builder 25.1.8 → 26.15.3 et electron-updater aligné, installeur de banc 1.15.0-g55 (2026-10-25)
+- ✅ **Pourquoi.** `npm audit` (23/10) : 27 vulnérabilités (1 modérée, 25 hautes, 1 critique `tar`), dont l'essentiel
+  dans l'arbre d'`electron-builder` 25 (`app-builder-lib`, `builder-util*`, `dmg-builder`, `electron-publish`,
+  `@electron/rebuild`, `node-gyp`, `cacache`, `make-fetch-happen`, `tar`, `@xmldom/xmldom`…) ;
+  `npm audit fix --dry-run` ne proposait que la 26.15.3, majeure.
+- ✅ **Versions.** `apps/desktop/package.json` : `electron-builder` `^26.15.3` ; `electron-updater` `^6.8.9` aux deux
+  endroits (dépendance et `build.extraMetadata.dependencies`). 6.8.9 est l'electron-updater publié avec la 26.15.0
+  (même minute, le 05/06), la dernière sur `builder-util-runtime` 9.7.0, celui qu'épingle `app-builder-lib` 26.15.3
+  (les 26.15.1 à 26.15.3 n'ont pas republié l'updater ; la 6.8.10 suit la 26.17.0). Le lock résolvait **déjà**
+  `electron-updater` 6.8.9 sous l'ancien `^6.3.9` : la 1.15.0 installée embarque la même version, seul le plancher
+  du range monte. `npm install electron-builder@26.15.3 -D -w @gear-solver/desktop` : `package.json` sans autre
+  retouche, `package-lock.json` +1 022 / −1 957 (67 paquets ajoutés, 140 retirés, 37 changés, dont `7zip-bin` et
+  `app-builder-bin` sortis). Contrôle du périmètre par atteignabilité dans le lock : les paquets atteignables depuis
+  les workspaces **sans passer par `electron-builder` ni `electron-updater`** sont les mêmes 344, aux mêmes versions,
+  avant et après ; le lock ne bouge que dans l'arbre de ces deux paquets.
+- ✅ **Notes de version lues** (releases GitHub 26.0.0-alpha.0 → 26.0.20, puis le `CHANGELOG.md` d'`app-builder-lib`
+  26.1.0 → 26.15.3). Aucune clé de notre `build` n'est retirée ni renommée : pas de signature (`win.signtoolOptions`
+  sans objet), pas de `desktop` (Linux), pas d'`electronDist`, `win.target nsis` x64 seul (l'installeur universel ne
+  nous concerne pas), `electronVersion` épinglé `44.9.3` (la 26.12.1 refuse une version non épinglée), `npmRebuild` /
+  `nodeGypRebuild` / `buildDependenciesFromSource` toujours lus (« skipped dependencies rebuild reason=npmRebuild is
+  set to false »). Ce qui touche l'auto-update : blockmap réécrit en TypeScript (26.14.0, plus d'`app-builder-bin`),
+  ordre des fichiers de `latest.yml` rendu déterministe (26.12.0) ; détection des workspaces npm et collecte des
+  `node_modules` par `npm list` (« detected workspace root for project using lock file »). La config est validée par
+  le nouveau validateur ajv de la 26.13.1 sans avertissement.
+- ✅ **Pack et hook.** `npm run desktop:build` puis `npm run pack -w @gear-solver/desktop -- --win` (le `--dir` seul
+  viserait Linux) → « packaging platform=win32 arch=x64 electron=44.9.3 appOutDir=release/win-unpacked », sans
+  erreur. `before-pack.mjs` n'a pas eu à changer : la 26 résout toujours `beforePack` en fonction et émet le contexte
+  `{ packager, … }`, `PlatformPackager` garde `get config()` et `readonly info: Packager` (`projectDir`). Comme
+  `resources/prod-cert/` n'existe plus, le hook ne dit rien ; avec un `resources/prod-cert/` vide créé le temps d'un
+  second pack, puis retiré, l'avertissement « [pack] …/apps/desktop/resources/prod-cert is left over from an older
+  build — ignored, NOT packaged… » s'affiche avant « packaging », chemin tiré de `context.packager.info.projectDir`.
+- ✅ **Installeur non publié.** `npm run fetch-binaries -w @gear-solver/desktop` → « [ok] capture-steam plugin 0.4.0
+  (16 896 bytes) » ; `npm run dist -w @gear-solver/desktop -- --win --publish never
+  '-c.artifactName=${productName} Setup ${version}-g55.${ext}'` → « building target=nsis … oneClick=false
+  perMachine=false », puis « building block map » → `apps/desktop/release/Outerpedia Gear Solver Setup 1.15.0-g55.exe`,
+  copié dans `~/Echanges-Claude/` (112 824 374 octets, contre 115 875 200 pour la 1.15.0 ; SHA-256
+  `605ea5688ae222f2fdbfc8f50dd2fa10fe0ef3d107c1d4999b50a92f49209a4a`). `latest.yml` et `builder-debug.yml` de
+  `release/` remis comme après la 1.15.0 (non suivis). Le `latest.yml` produit garde la forme lue par l'app
+  (`files[].url` à tirets, `sha512`, `size`, `path`, `releaseDate`).
+- ✅ **Comparaison avec le `win-unpacked` de la 1.15.0.** Même liste de fichiers (`resources/app.asar`,
+  `app-update.yml`, `elevate.exe`, `capture-steam/GearSolverCapture.dll` 16 896 octets, les 21 tables de
+  `data/derived`, `renderer/dist`), aux assets hashés du renderer près (17 → 18, le code de G53/G54/G56) ;
+  `app-update.yml` identique à l'octet (`updaterCacheDirName: '@gear-solverdesktop-updater'` compris). Dans
+  `app.asar`, les 16 modules d'exécution sont aux mêmes versions (`electron-updater` 6.8.9, `builder-util-runtime`
+  9.7.0, `js-yaml` 4.2.0, `semver` 7.7.4…) ; seuls `builder-util-runtime` et `semver` remontent de
+  `node_modules/electron-updater/node_modules/` à `node_modules/` (l'ancien `builder-util-runtime` 9.2.10 d'electron-builder
+  25 occupait la place). Les 3 Mo de moins viennent de l'archive interne `$PLUGINSDIR/app-64.7z` (115 039 206 →
+  111 986 289 octets pour 391 979 254 octets décompressés, contre 391 995 347) : même méthode LZMA2:20 BCJ2, refaite
+  par le 7-Zip du toolset 26 au lieu de `7zip-bin` ; `7z t` sur l'archive extraite → « Everything is Ok »
+  (125 fichiers). `builder-debug.yml` : motifs d'exclusion par défaut élargis (`pnpm-lock.yaml`, `bun.lock`, `*.obj`)
+  et section de composants de désinstallation NSIS, rien qui nous concerne.
+- ✅ **`scripts/release.mjs` tient, rien de changé.** Nom de l'exe : motif par défaut de la cible NSIS toujours
+  `${productName} Setup ${version}${archSuffix}.${ext}` (sans suffixe en x64 seul), donc `hashInstaller` (« setup »
+  + `.exe` + version) le trouve ; nom de l'asset GitHub toujours les espaces changés en tirets
+  (`computeSafeArtifactNameIfNeeded`), ce que suppose `integrityNote` ; `electron-publish` 26 crée toujours un
+  **draft** par défaut (promu à l'étape 8) avec le tag `v` + version, et lit `GH_TOKEN` / `GITHUB_TOKEN` ; le script
+  ne lit ni `latest.yml` ni le blockmap, qu'electron-builder téléverse lui-même.
+- ✅ **`npm audit` après : 12 vulnérabilités (1 modérée, 11 hautes, 0 critique)**, contre 27. Il ne reste dans l'arbre
+  d'electron-builder que des paquets partagés ou corrigibles sans majeure : `js-yaml` 4.2.0 (haute,
+  `app-builder-lib` / `builder-util` / `dmg-builder` et `electron-updater`, donc embarqué) et `brace-expansion` 5.0.6
+  (haute, via le `minimatch` 10.2.5 partagé avec `eslint` et `@typescript-eslint`). Le reste ne vient pas de lui :
+  `axios`, `follow-redirects`, `joi` (`wait-on` 8.0.5, racine) ; `vite` 6.4.3 (et ses `launch-editor`), `postcss`,
+  `nanoid`, `source-map-js` (renderer, `vite` / `@tailwindcss/vite`) ; `browserslist` et `baseline-browser-mapping`
+  (modérée) (`eslint-plugin-react-hooks` → `@babel/core`) ; `undici` 7.28.0 (`electron` → `@electron/get`). Tous
+  « fix available via `npm audit fix` », hors périmètre de ce lot.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` sans erreur (les trois workspaces) ; `npm test` →
+  « Tests 169 passed (169) » (core), « Tests 199 passed (199) » (desktop), « Tests 729 passed (729) » (renderer) ;
+  `npm run lint` → « ✖ 13 problems (0 errors, 13 warnings) », inchangé. `git diff --stat` : `apps/desktop/package.json`,
+  `package-lock.json` (et ce journal). Le `package.json` racine, écrasé en cours de session par un `asar extract-file`
+  lancé à la racine, a été restauré depuis HEAD avant ces vérifications (le build et le dist avaient tourné avant).
+- ✅ **Laissé.** L'`npm audit fix` des 12 restantes (lock seul, sans majeure, mais il touche `wait-on`, `vite`,
+  `eslint`, `electron`) ; la montée au-delà de la 26.15.3 (26.18.0 publiée le 20/10). `npm install` avertit que
+  `electron-winstaller` (cible Squirrel, inutilisée), `esbuild` et `globals` ont des scripts d'installation hors
+  `allowScripts`. Le `node_modules` local mêle des liens `.pnpm/` du 23/10 au soir (`wait-on`,
+  `eslint-plugin-react-hooks`…), d'où un « invalid » de `npm ls` sur `vitest` ; sans effet sur le lock ni la CI.
+- ⏳ **Sevih, sur le fixe** : installer `Outerpedia Gear Solver Setup 1.15.0-g55.exe` (`~/Echanges-Claude/`) par-dessus
+  la 1.15.0 → lancement, capture au lobby, un solve, « Equip this build » jeu fermé. Puis, à la prochaine release,
+  l'auto-update depuis la 1.15.0 est **le** contrôle : l'updater installé ne change pas (6.8.9 des deux côtés), mais
+  `latest.yml` et le blockmap sont désormais produits par la 26 (blockmap en TypeScript) et doivent rester lisibles par
+  l'app installée, téléchargement différentiel compris.
+
 ### 💎 Potentiel de reroll Transistone dans la projection du Builder et la qualité atteignable, règle du client (2026-10-25)
 - ✅ **Pourquoi.** Le patch du 20/10 permet de monter une ligne de sous-stat jusqu'au palier 4 par Transistone ; rien
   n'en était modélisé (la projection ne couvrait que la main et les reforges, la qualité ne comptait que les ticks
