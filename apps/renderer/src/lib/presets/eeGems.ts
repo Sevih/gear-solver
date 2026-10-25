@@ -7,7 +7,8 @@
  *
  * The gems on offer are the hero's own EE ones plus those sitting on a
  * Talisman / EE nobody wears — never the preset's Talisman (shared with every
- * hero of the preset) nor a piece another hero wears.
+ * hero of the preset), a piece another hero wears, nor a free piece the
+ * worklist reserves for another hero (`ctx.worklistClaims`, like the Builder).
  *
  * Pure: the screen feeds it the same context as `evaluatePresetFor`.
  */
@@ -36,11 +37,12 @@ export function bestEeGemsFor(heroUid: string, presetPieces: readonly GearPiece[
 
   // The gem pool sees the hero's EE and the free gem-bearing pieces only: the
   // preset's pieces are fixed, every worn piece of another hero is off limits,
-  // and the hero's own Talisman comes off when the preset goes on.
+  // and the hero's own Talisman comes off when the preset goes on. A free
+  // piece reserved for another hero by the worklist counts as theirs.
   const presetUids = new Set(presetPieces.map((p) => p.uid));
   const pool = buildGemPool(
     { ...ctx.inventory, gear: ctx.inventory.gear.filter((g) => g.uid === ee.uid || (!g.equippedBy && !presetUids.has(g.uid))) },
-    { heroUid, equippedScope: "none", heroPriority: {}, excludedHeroes: new Set() },
+    { heroUid, equippedScope: "none", heroPriority: {}, excludedHeroes: new Set(), worklistClaims: ctx.worklistClaims },
   );
   if (pool.size === 0) return null;
 

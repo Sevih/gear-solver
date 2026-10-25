@@ -33,8 +33,9 @@ export interface HeroBase {
   turnFactor: number;
   /** The hero's Builder priority; null when none is set (no score then). */
   priority: Record<string, number> | null;
-  /** Where `priority` comes from — the Builder's session filters, or the most
-   *  recent saved build when the hero wasn't opened this session. */
+  /** Where `priority` comes from — the Builder's session filters (stored when
+   *  the Builder switches away from the hero), or the most recent saved build
+   *  when none is stored. */
   prioritySource?: PrioritySource;
 }
 
@@ -51,6 +52,10 @@ export interface PresetEvalContext {
   game: GameData | null;
   heroes: ReadonlyMap<string, HeroBase>;
   savedBuilds: SavedBuildsMap;
+  /** pieceUid → claiming heroUid (`worklistClaims`, the Builder's and Builds'
+   *  value): a Talisman / EE reserved by an unapplied worklist entry counts as
+   *  worn by that hero in the EE gem pool (`bestEeGemsFor`). */
+  worklistClaims?: Readonly<Record<string, string>>;
 }
 
 export interface PresetEval {
@@ -197,10 +202,12 @@ export function heroBases(
 }
 
 /** The priority the Presets tab scores a hero with: the Builder's filters of
- *  this session (`gs.solver.heroFilters`, sessionStorage — the Builder starts
- *  clean at each launch), else the priority the hero's most recent saved build
- *  was solved with (`reforge.priority`), else null. A priority without any
- *  weight doesn't count, the next source is read. */
+ *  this session (`gs.solver.heroFilters`, sessionStorage — kept over a window
+ *  reload, gone at each launch; written when the Builder switches away from a
+ *  hero, so the hero open in the Builder has their previous set, if any), else
+ *  the priority the hero's most recent saved build was solved with
+ *  (`reforge.priority`), else null. A priority without any weight doesn't
+ *  count, the next source is read. */
 export function presetPriorityOf(
   sessionPriority: (uid: string) => Record<string, number> | null | undefined,
   savedBuilds: SavedBuildsMap,

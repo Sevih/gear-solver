@@ -521,8 +521,9 @@ priorité ; la carte montre Score, Dmg et DmgS.
 héros) ; ce que chaque héros règle, ce sont les gemmes de **son** EE. `bestEeGemsFor`
 (`lib/presets/eeGems.ts`) les choisit comme le moteur, pièces fixées : `buildGemPool` restreint aux gemmes
 de l'EE du héros et à celles des Talismans / EE que personne ne porte (jamais celles des pièces du preset,
-même libres, ni d'une pièce portée par un autre héros, ni du Talisman du héros, qui part quand le preset
-arrive), `scoreGemPool` avec la priorité du héros (remplissage par gain de `dmg` sur la tenue,
+même libres, ni d'une pièce portée par un autre héros, ni d'une pièce libre que la Worklist réserve à un
+autre héros — `worklistClaims`, la même valeur que le Builder et Builds —, ni du Talisman du héros, qui
+part quand le preset arrive), `scoreGemPool` avec la priorité du héros (remplissage par gain de `dmg` sur la tenue,
 `gemDmgGains`), `allocateGemsCapped` sur les seuls emplacements de l'EE (`gemSlotsOf`, CHC sans les gemmes
 d'EE pour le plafond). Une gemme déjà sertie garde son emplacement (`alignToSockets`, le moins de lignes de
 Worklist) et un emplacement laissé vide garde sa gemme (le jeu n'en retire pas seul). Pas de proposition
@@ -558,10 +559,12 @@ filtres du héros — jamais sur ceux du héros sortant ; la ligne de statut dit
 outerpedia's "<build>" reco. » (ou « from the outfit », suivi des notes).
 
 **Priorité.** `presetPriorityOf` lit, dans l'ordre, la priorité du Builder de la session
-(`gs.solver.heroFilters`, sessionStorage : le Builder repart propre à chaque lancement), puis
+(`gs.solver.heroFilters`, sessionStorage : gardée au rechargement de la fenêtre, perdue à chaque
+lancement ; écrite quand le Builder quitte un héros pour un autre, si bien que le héros ouvert dans le
+Builder compte avec le jeu qu'il avait la dernière fois qu'on l'a quitté, ou pas du tout), puis
 `reforge.priority` de la build sauvegardée la plus récente du héros, puis rien ; une priorité sans poids
 passe à la source suivante. La ligne dit « priority from saved build » dans le second cas. Un héros sans
-build sauvegardée ni passage dans le Builder depuis le lancement n'a pas de score.
+build sauvegardée ni priorité laissée dans le Builder depuis le lancement n'a pas de score.
 Un associé est comparé à sa **meilleure tenue connue** (`bestKnownFor` : sa build sauvegardée la plus
 récente, re-notée avec la priorité **courante**, sinon son équipement actuel) : `loss = 1 − score(preset) /
 score(best)`, affichée en % « vs saved build » / « vs current gear » ; au-delà du seuil (15 % par défaut,

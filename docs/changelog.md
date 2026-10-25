@@ -8,6 +8,41 @@
 
 ## Items de backlog clôturés (index)
 
+### 💎 Presets : pool de gemmes d'EE avec les réservations de la Worklist, source de la priorité dite juste (2026-10-25)
+- ✅ **Pourquoi.** Deux restes des Presets. (1) `bestEeGemsFor` (`lib/presets/eeGems.ts`) appelait `buildGemPool` sans
+  `worklistClaims` : une gemme assise sur un Talisman ou une EE libre, réservée par une entrée de Worklist non
+  appliquée, était proposée à un autre héros du preset, alors que le Builder et Builds traitent cette pièce comme
+  portée par le héros qui la réserve. (2) L'onglet disait la priorité « du Builder de cette session » et le reste à
+  faire supposait les filtres par héros persistés : il fallait vérifier ce qui survit vraiment.
+- ✅ **Réservations.** `PresetEvalContext` (`lib/presets/evaluate.ts`) gagne `worklistClaims?` ; `App.tsx` passe à
+  `PresetsScreen` le même `solverWorklistClaims` que Builder et Builds, l'écran le met dans le contexte (et dans les
+  dépendances du `useMemo`), `bestEeGemsFor` le transmet à `buildGemPool`, dont la règle du propriétaire (réservation,
+  sinon `equippedBy`, puis `equippedScope: "none"`) écarte la pièce libre réservée pour un autre héros et garde celle
+  réservée pour ce héros. Le modèle ne bouge pas : chaque héros du preset garde ses propres gemmes d'EE.
+- ✅ **Priorité : ce qui est vrai.** Les filtres par héros du Builder (`lib/storage/heroFilters.ts`,
+  `gs.solver.heroFilters`) sont en **sessionStorage**, pas en localStorage : vérifié sur Electron 44.9.3 du dépôt par un
+  script jetable (même serveur `http://127.0.0.1:<port>/`, même `userData`) — la valeur survit au rechargement de la
+  fenêtre, pas à un relancement, où le localStorage, lui, survit. Le mot « session » est donc juste et la source reste
+  `session` (pas de renommage, pas de test à changer). Ce qui était faux, c'est le moment : `BuilderScreen` n'écrit le
+  jeu d'un héros qu'en le quittant pour un autre (`snapshotOnHeroSwitch` → `persistHeroFilters`), si bien que le héros
+  encore ouvert dans le Builder compte, côté Presets, avec le jeu qu'il avait la dernière fois qu'on l'a quitté (ou pas
+  du tout). Textes corrigés en ce sens : en-tête de l'onglet (« the priority each hero was last left with in the
+  Builder this session »), `title` du badge « priority from saved build » (« No Builder priority kept this session (the
+  Builder keeps a hero's priority when you switch to another hero) — … »), commentaires de `PresetsScreen.tsx` et
+  d'`evaluate.ts` (`HeroBase.prioritySource`, `presetPriorityOf`), `docs/solver.md` § Priorité et son miroir
+  `wiki/Solver.md`, `wiki/Using-the-App.md` ; le pool de gemmes d'EE y dit aussi les réservations.
+- ✅ **Tests.** `apps/renderer/test/presetsGems.test.ts` (12 → 13) : une EE libre de deux gemmes de taux critique est
+  proposée à B sans réservation, ne l'est plus réservée pour C, l'est (les deux) réservée pour B ; le test tombe sans le
+  correctif. `docs/reference.md` et `wiki/Engine-Reference.md` à 13. `npm run typecheck` : `tsc --noEmit` sans sortie
+  dans chaque workspace ; `npm test` : `Tests  169 passed (169)`, `Tests  199 passed (199)`, `Tests  702 passed
+  (702)` ; `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)`, inchangé.
+- ⏳ **Sevih sur le fixe** : une gemme d'une EE (ou d'un Talisman) libre réservée par la Worklist pour un héros
+  n'apparaît plus dans les gemmes proposées à un autre héros du preset ; réservée pour ce héros, elle y reste.
+- ⏳ **Laissé, hors périmètre.** (a) Le héros ouvert dans le Builder n'est vu par les Presets qu'une fois quitté : écrire
+  son jeu à chaque changement de filtres (ou au départ de l'onglet) toucherait `BuilderScreen`, à décider. (b) Une pièce
+  portée par un autre héros mais réservée par la Worklist pour ce héros reste hors du pool de gemmes d'EE (le préfiltre
+  des pièces portées passe avant la réservation), comme avant ; le Builder, lui, la compterait au héros.
+
 ### 🗜️ Builder : mode compact des cartes de la build sélectionnée, réglage Settings › Solver (2026-10-23)
 - ✅ **Pourquoi.** Demande de Sevih du 23/10 : comparer les huit cartes de la bande d'un coup, sans ce qui n'apporte rien
   (noms d'objets longs, libellés de stats que l'icône dit déjà, effets sur plusieurs lignes).

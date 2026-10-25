@@ -488,8 +488,9 @@ factors) and `computeScore` with their priority; the card shows Score, Dmg and D
 **EE gems per hero.** The Talisman and its gems are part of the preset (shared, never tuned per hero); what
 each hero tunes is the gems of **their own** EE. `bestEeGemsFor` (`lib/presets/eeGems.ts`) picks them like
 the engine does, pieces fixed: `buildGemPool` restricted to the gems of the hero's EE and those of the
-Talismans / EEs nobody wears (never the preset's pieces, even free, nor a piece another hero wears, nor the
-hero's own Talisman, which comes off when the preset goes on), `scoreGemPool` with the hero's priority
+Talismans / EEs nobody wears (never the preset's pieces, even free, nor a piece another hero wears, nor a
+free piece the Worklist reserves for another hero — `worklistClaims`, the same value as the Builder and
+Builds —, nor the hero's own Talisman, which comes off when the preset goes on), `scoreGemPool` with the hero's priority
 (fillers by `dmg` gain on the outfit, `gemDmgGains`), `allocateGemsCapped` on the EE's slots alone
 (`gemSlotsOf`, CHC without the EE gems for the cap). A gem already socketed keeps its socket
 (`alignToSockets`, the fewest Worklist lines) and a socket the pick leaves empty keeps its gem (the game
@@ -523,10 +524,12 @@ status line says "Optimizing preset #<num> <name> — same weapon / accessory / 
 priority substats from the outfit + outerpedia's "<build>" reco." (or "from the outfit", then the notes).
 
 **Priority.** `presetPriorityOf` reads, in order, the Builder priority of the session
-(`gs.solver.heroFilters`, sessionStorage: the Builder starts clean at each launch), then `reforge.priority`
+(`gs.solver.heroFilters`, sessionStorage: kept over a window reload, gone at each launch; written when the
+Builder switches from one hero to another, so the hero open in the Builder counts with the set they had when
+last left, or not at all), then `reforge.priority`
 of the hero's most recent saved build, then nothing; a priority without any weight falls through to the next
-source. The line says "priority from saved build" in the second case. A hero with no saved build and not
-opened in the Builder since launch has no score. An associated hero is compared to their **best known outfit** (`bestKnownFor`:
+source. The line says "priority from saved build" in the second case. A hero with no saved build and no
+priority left in the Builder since launch has no score. An associated hero is compared to their **best known outfit** (`bestKnownFor`:
 their most recent saved build, re-scored with the **current** priority, else their current gear):
 `loss = 1 − score(preset) / score(best)`, shown in % "vs saved build" / "vs current gear"; past the
 threshold (15 % by default, Settings → Solver, `gs.solver.presetLossWarn`) the line turns orange with

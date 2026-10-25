@@ -106,6 +106,17 @@ describe("bestEeGemsFor", () => {
     expect(free.ee).not.toContain(DMGUP6);
   });
 
+  it("a free EE reserved by the worklist for another hero is off limits; reserved for this hero, it's on offer", () => {
+    const inv: Inventory = { ...INVENTORY, gear: [...GEAR, piece("exclusive", "eeFree", null, [], [CRC6, CRC6, 0, 0, 0])] };
+    const ctx = (claims?: Record<string, string>): PresetEvalContext => ({
+      ...ctxWith([base("B")]), inventory: inv, ...(claims ? { worklistClaims: claims } : {}),
+    });
+    const pieces = presetRows(inv)[0]!.presentPieces;
+    expect(bestEeGemsFor("B", pieces, ctx())!.ee).toContain(CRC6);
+    expect(bestEeGemsFor("B", pieces, ctx({ eeFree: "C" }))!.ee).not.toContain(CRC6);
+    expect(bestEeGemsFor("B", pieces, ctx({ eeFree: "B" }))!.ee.filter((id) => id === CRC6)).toHaveLength(2);
+  });
+
   it("no priority → no proposal", () => {
     expect(bestEeGemsFor("B", row().presentPieces, ctxWith([base("B", null)]))).toBeNull();
   });

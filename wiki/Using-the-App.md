@@ -95,8 +95,9 @@ the game.
   much they lose versus their own best known build — their latest **saved build**, or their
   current gear without one. Past the threshold (15 % by default, **Settings → Solver**) the line
   turns orange: "Ame loses 23 % vs their saved build". The priority is the one set in the Builder
-  this session, else the one the hero's latest saved build was solved with ("priority from saved
-  build"); a hero with neither gets no score — open them in the Builder and set one.
+  this session — the Builder keeps it when you switch to another hero, so one you are still editing
+  counts once you move on — else the one the hero's latest saved build was solved with ("priority
+  from saved build"); a hero with neither gets no score — open them in the Builder and set one.
 - **Overcap** — when the outfit pushes a hero's **crit rate** past 102 % or their **penetration**
   past 100 %, the line shows a badge, the same as on the Builds tab: "Crit rate 142% — 40% wasted
   over the 102% cap". From 10 points wasted the line turns orange; below, the badge alone. The

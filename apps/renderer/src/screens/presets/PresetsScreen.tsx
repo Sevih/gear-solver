@@ -22,8 +22,9 @@
  * `arrangePresets`) — kept for the mount only, like the rest of the screen.
  *
  * Nothing is written to the game: the groups are local (`gs.presetHeroes`).
- * The priority is the Builder's of this session, else the one of the hero's
- * most recent saved build (`presetPriorityOf`).
+ * The priority is the Builder's of this session — as the Builder last left the
+ * hero (`snapshotOnHeroSwitch`) — else the one of the hero's most recent saved
+ * build (`presetPriorityOf`).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Character, GameData, GearPiece, GearSlot, Inventory, UserGeasLevels } from "@gear-solver/core";
@@ -73,6 +74,10 @@ interface PresetsScreenProps {
   worklistHeroUids?: ReadonlySet<string>;
   /** Queue an entry (one per hero, App's `addToWorklist` — toast included). */
   onAddToWorklist?: (entry: WorklistEntry, note?: string) => void;
+  /** pieceUid → claiming heroUid of the unapplied worklist entries (App's
+   *  `solverWorklistClaims`, as Builder / Builds get it) — the EE gem pool
+   *  leaves a free piece reserved for another hero out. */
+  worklistClaims?: Readonly<Record<string, string>>;
   /** Open the Builder on a hero (App's `setBuilderHero` + tab switch). */
   onOptimize?: (heroUid: string) => void;
   /** Open the Builder on a preset's reference hero with filters overlaid and
@@ -97,9 +102,10 @@ interface HeroView {
 const CLASS_ORDER = CLASSES.map((c) => c.id);
 const classLabel = (id: string): string | null => CLASSES.find((c) => c.id === id)?.label ?? null;
 
-export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
-  // Read once per mount — the screen remounts on every tab switch, so an edit
-  // made in the Builder (saved build, priority) is picked up on the way back.
+export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, worklistClaims, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
+  // Read once per mount — the screen remounts on every tab switch, so a build
+  // saved in the Builder is picked up on the way back; a Builder priority once
+  // the Builder has switched away from that hero (it's stored on the switch).
   const [savedBuilds] = useState(loadSavedBuilds);
   const [heroFilters] = useState(loadHeroFilters);
   const [presetHeroes, setPresetHeroes] = useState<PresetHeroesMap>(loadPresetHeroes);
@@ -126,8 +132,8 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
       (uid) => (heroFilters[uid] ? filtersForHero(heroFilters, uid, INITIAL_FILTERS).priority : null),
       savedBuilds,
     ));
-    return { inventory, game, heroes: bases, savedBuilds };
-  }, [inventory, game, userGeasLevels, userCodexLevel, heroFilters, savedBuilds]);
+    return { inventory, game, heroes: bases, savedBuilds, worklistClaims };
+  }, [inventory, game, userGeasLevels, userCodexLevel, heroFilters, savedBuilds, worklistClaims]);
   const cards = useMemo(() => rows.map((row) => {
     const stored = presetHeroesFor(presetHeroes, row.preset.num, roster);
     return { row, stored, classes: presetClasses(row, stored, (uid) => heroes.get(uid)?.cls ?? null) };
@@ -152,7 +158,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
         <span className="font-mono uppercase tracking-wider text-zinc-400">Presets</span>
         <span className="text-zinc-400">
           A preset is one reference hero's outfit, worn as-is by its associated heroes (each keeps their own EE).
-          Scores use each hero's Builder priority (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a {lossWarnPct} % loss.
+          Scores use the priority each hero was last left with in the Builder this session (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a {lossWarnPct} % loss.
         </span>
         <div className="flex gap-1">
           {CLASSES.map((cl) => {
@@ -524,7 +530,7 @@ function HeroLine({
               </span>
             )
           )}
-          {fromSaved && <span className="text-[11.5px] italic text-zinc-400" title="Not opened in the Builder this session — scored with the priority their most recent saved build was solved with">priority from saved build</span>}
+          {fromSaved && <span className="text-[11.5px] italic text-zinc-400" title="No Builder priority kept this session (the Builder keeps a hero's priority when you switch to another hero) — scored with the priority their most recent saved build was solved with">priority from saved build</span>}
           {overcap.map((o) => (
             <span
               key={o.key}
