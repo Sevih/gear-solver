@@ -15,7 +15,7 @@ import { HomeScreen } from "./screens/home/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
 import { DEFAULT_PRESET_LOSS_WARN } from "./lib/storage/presetHeroes.js";
-import { appliedNotice, equippedByHero, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, upsertWorklistEntry, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
+import { appliedNotice, equippedByHero, goneNotice, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, upsertWorklistEntry, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
 import { reconcileDataHash } from "./lib/storage/dataHash.js";
@@ -245,18 +245,25 @@ export function App() {
   // is done for real → drop it (and any entry it empties), and say so in one
   // toast per import — unless the import follows the Worklist's own Apply,
   // whose result the screen already shows. Source of truth is the fresh
-  // snapshot, not the manual "done" ticks.
+  // snapshot, not the manual "done" ticks. A queued piece that left the
+  // inventory since the previous snapshot (eaten, sold or dissolved in-game)
+  // stays listed as gone, and a toast says so once.
   // An unchanged list keeps its ref, so nothing re-renders or gets written.
   // The notice is computed outside the state updater (StrictMode runs those
   // twice), from the latest list mirrored in `worklistRef`.
   const worklistRef = useRef(worklist);
   useEffect(() => { worklistRef.current = worklist; });
   const quietReconcile = useRef(false);
+  const previousInv = useRef<Inventory | null>(null);
   useEffect(() => {
     const quiet = quietReconcile.current;
     quietReconcile.current = false;
+    const previous = previousInv.current;
+    previousInv.current = inv;
     const base = worklistRef.current;
-    const r = reconcileWorklist(base, inv, equipped);
+    const r = reconcileWorklist(base, inv, equipped, previous);
+    const gone = goneNotice(r.gone);
+    if (gone) notify(gone);
     if (!r.changed) return;
     setWorklist((prev) => (prev === base ? r.next : reconcileWorklist(prev, inv, equipped).next));
     const notice = appliedNotice(r.applied);

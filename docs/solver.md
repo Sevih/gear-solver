@@ -393,7 +393,11 @@ Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
   inter-héros, **une entrée par héros** (un nouveau build **remplace** l'entrée du héros,
   `upsertWorklistEntry` ; le bouton dit alors « Replace in worklist »), où chaque changement est une ligne
   cochable + un **Apply locally** (même `equipPieces` ; les gemmes ne sont pas serties par l'app, elles se
-  sertissent en jeu). États *applied / stale / conflict* **dérivés live** de l'inventaire (rien n'est figé ;
+  sertissent en jeu). États *applied / stale / conflict* **dérivés live** de l'inventaire (rien n'est figé :
+  nom et main de la pièce lus dans le snapshot courant, `worklistTarget`, les `toName` / `toMain` stockés
+  n'étant qu'un repli pour une pièce disparue ; une ligne *stale* — pièce mangée, vendue ou dissoute en jeu —
+  dit « piece gone » en ambre, ne compte ni dans le badge ni dans les réservations, et un toast le dit au
+  snapshot qui la perd ;
   une ligne gemme est *applied* quand sa pièce est sur le héros et porte assez d'exemplaires de la gemme,
   quel que soit l'emplacement — `toCount`, posé à la mise en Worklist : exemplaires gardés par la build + rang
   de la ligne parmi celles de cet id, le jeu sertissant dans le premier emplacement libre) ;

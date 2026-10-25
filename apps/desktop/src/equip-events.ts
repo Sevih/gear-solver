@@ -21,7 +21,9 @@
  * `breakLimit` / `craft` create). A "simple" one (uid + `Quantity`: a material
  * stack consumed or given back) only sets that entry's `Quantity`, and 0
  * removes the entry, as `CItemInventory.UpdateItem` does in the client (a piece
- * eaten as fodder no longer exists). Each event sets absolute state, so
+ * eaten as fodder no longer exists) — and, like `CItemInventory.RemoveItem`
+ * (`DeletePresetEquipUID`), zeroes its uid in the `ItemUIDList` of every
+ * preset that held it, so the preset no longer counts it. Each event sets absolute state, so
  * replaying the whole journal onto a snapshot that already holds part of it
  * lands on the same state: the follower replays it all whenever something
  * changed instead of tracking a partial offset.
@@ -62,6 +64,8 @@ type FoldableItem = { ItemUID: string; CharUID: string } & Record<string, unknow
 /** The slice of `RawUserItem` the fold touches; other keys are carried over. */
 interface FoldableUserItem {
   ItemList: FoldableItem[];
+  /** `RawPreset[]` — only `ItemUIDList` is read, as loosely as the uids. */
+  PresetList?: unknown;
 }
 
 /** Responses that carry items, by path, and in which fields (one entry or a
@@ -176,10 +180,34 @@ function entriesOf(e: EquipEvent, kind: "upsert" | "simple"): unknown[] {
   return fields[kind].flatMap((k) => (Array.isArray(r[k]) ? (r[k] as unknown[]) : r[k] != null ? [r[k]] : []));
 }
 
+/** `CItemInventory.DeletePresetEquipUID` for each uid of `removed`, in order:
+ *  in every preset, the first slot holding it becomes 0 (same type as the
+ *  slot: the wire may spell uids as numbers or strings). Returns the list (the
+ *  same ref when no slot held a removed uid) and how many slots it cleared. */
+function clearPresetSlots(presets: unknown, removed: readonly string[]): { presets: unknown; cleared: number } {
+  if (removed.length === 0 || !Array.isArray(presets)) return { presets, cleared: 0 };
+  let cleared = 0;
+  const next = presets.map((p: unknown) => {
+    const list = (p as { ItemUIDList?: unknown } | null)?.ItemUIDList;
+    if (!Array.isArray(list)) return p;
+    const slots = [...list] as unknown[];
+    let hit = false;
+    for (const id of removed) {
+      const i = slots.findIndex((v) => uid(v) === id);
+      if (i < 0) continue;
+      slots[i] = typeof slots[i] === "number" ? 0 : UNEQUIPPED;
+      hit = true;
+      cleared++;
+    }
+    return hit ? { ...(p as object), ItemUIDList: slots } : p;
+  });
+  return cleared > 0 ? { presets: next, cleared } : { presets, cleared: 0 };
+}
+
 /** Apply `events` to a snapshot's `ItemList`, by uid, in journal order (the
  *  game's). Returns a NEW object (other keys shallow-copied), how many items
- *  actually changed (owner, gems, substats, level, quantity…), joined or left,
- *  and how many were skipped — a move or a simple entry whose uid is absent
+ *  actually changed (owner, gems, substats, level, quantity…), joined or left
+ *  — plus the preset slots cleared by a removal —, and how many were skipped — a move or a simple entry whose uid is absent
  *  from the inventory (a piece obtained after this snapshot: not invented), an
  *  unreadable uid, or an item response with no usable entry. Never throws on
  *  event data. */
@@ -188,6 +216,9 @@ export function foldEquipEvents<T extends FoldableUserItem>(
 ): { next: T; applied: number; skipped: number } {
   const items = new Map(raw.ItemList.map((it) => [it.ItemUID, it]));
   const touched = new Set<string>();
+  // Entries removed (quantity 0), in journal order — even one an upsert
+  // brings back later: the client doesn't put a re-added uid back in a preset.
+  const removed: string[] = [];
   let skipped = 0;
   for (const e of events) {
     for (const [itemRaw, ownerRaw] of movesOf(e)) {
@@ -212,7 +243,10 @@ export function foldEquipEvents<T extends FoldableUserItem>(
     for (const s of simples) {
       const it = s ? items.get(s.ItemUID) : undefined;
       if (!s || !it) { skipped++; continue; } // a stack this snapshot lacks: not invented
-      if (s.Quantity === 0) items.delete(s.ItemUID);
+      if (s.Quantity === 0) {
+        items.delete(s.ItemUID);
+        removed.push(s.ItemUID);
+      }
       else if (it.Quantity !== s.Quantity) items.set(s.ItemUID, { ...it, Quantity: s.Quantity });
       touched.add(s.ItemUID);
     }
@@ -228,7 +262,9 @@ export function foldEquipEvents<T extends FoldableUserItem>(
       ItemList.push(it);
     } else ItemList.push(was);
   }
-  return { next: { ...raw, ItemList }, applied, skipped };
+  const { presets, cleared } = clearPresetSlots(raw.PresetList, removed);
+  if (cleared === 0) return { next: { ...raw, ItemList }, applied, skipped };
+  return { next: { ...raw, ItemList, PresetList: presets }, applied: applied + cleared, skipped };
 }
 
 /** What the follower last folded: the journal's first/last `seq` and the

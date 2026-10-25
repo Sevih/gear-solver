@@ -347,6 +347,54 @@ describe("foldEquipEvents — upgrades (enchant, limit break, smelting, merge, c
     expect(twice.next).toEqual(once.next);
     expect(twice.applied).toBe(0);
   });
+
+  // CItemInventory.RemoveItem → DeletePresetEquipUID: in every preset, the
+  // first slot holding the removed uid becomes 0.
+  describe("presets of a removed piece", () => {
+    const withPresets = () => ({
+      ...base(),
+      PresetList: [
+        { PresetType: 0, Num: 1, Name: "", ItemUIDList: [W2, FODDER, "0", "0", "0", "0", "0", "0"], Favorites: 0 },
+        { PresetType: 0, Num: 2, Name: "", ItemUIDList: [Number(FODDER), 0, 0, 0, 0, 0, 0, 0], Favorites: 0 },
+        { PresetType: 0, Num: 3, Name: "", ItemUIDList: [W1, H2, "0", "0", "0", "0", "0", "0"], Favorites: 0 },
+      ],
+    });
+    const slots = (raw: { PresetList?: unknown }) => (raw.PresetList as Array<{ ItemUIDList: unknown[] }>).map((p) => p.ItemUIDList);
+
+    it("an enchant that eats a preset's piece zeroes its slot, in the slot's own type", () => {
+      const raw = withPresets();
+      const { next, applied } = foldEquipEvents(raw, [enchant(1, 1200)]);
+      expect(slots(next)).toEqual([
+        [W2, "0", "0", "0", "0", "0", "0", "0"],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [W1, H2, "0", "0", "0", "0", "0", "0"],
+      ]);
+      // A preset that didn't hold it keeps its ref; the input is untouched.
+      expect((next.PresetList as unknown[])[2]).toBe(raw.PresetList[2]);
+      expect(raw.PresetList[0]!.ItemUIDList[1]).toBe(FODDER);
+      // W2, FODDER, STONE + the two slots cleared.
+      expect(applied).toBe(5);
+    });
+
+    it("is idempotent, and a removed piece brought back stays out of the preset", () => {
+      const events: EquipEvent[] = [
+        enchant(1, 1200),
+        { seq: 2, path: "/item/merge", res: { getItem: wire(FODDER, 0, 5, [0, 0, 0, 0, 0], { Quantity: 1 }), useItem: simple(PIECE, 2) } },
+      ];
+      const once = foldEquipEvents(withPresets(), events);
+      expect(slots(once.next)[0]![1]).toBe("0");
+      const twice = foldEquipEvents(once.next, events);
+      expect(twice.next).toEqual(once.next);
+      expect(twice.applied).toBe(0);
+    });
+
+    it("a removal that no preset holds leaves PresetList as is; one without ItemUIDList is tolerated", () => {
+      const raw = withPresets();
+      const dissolve: EquipEvent = { seq: 1, path: "/item/dissolve", res: { ItemList: [simple(H1, 0, 3)], RewardList: [], Asset_0: 1 } };
+      expect(foldEquipEvents(raw, [dissolve]).next.PresetList).toBe(raw.PresetList);
+      expect(foldEquipEvents(base(), [enchant(1, 1200)]).next.PresetList).toEqual([{ Num: 1 }]);
+    });
+  });
 });
 
 describe("parseEquipJournal", () => {

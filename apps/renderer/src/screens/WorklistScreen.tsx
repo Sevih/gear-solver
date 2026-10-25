@@ -11,7 +11,9 @@
  * self-heals as pieces move: a change whose target piece is already on the hero
  * (with the gem socketed on it, for a gem line) reads as applied (green), a
  * target wanted by two heroes flags a conflict, and a target that vanished
- * from the inventory (post data-sync) reads as stale.
+ * from the inventory (eaten as fodder, sold or dissolved in-game) reads as
+ * gone (amber). A line's name and main are read from the current snapshot too
+ * (`worklistTarget`), the copies stored at queue time only once it's gone.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Character, GameData, GearPiece, Inventory } from "@gear-solver/core";
@@ -21,6 +23,7 @@ import { cx } from "../design/cx.js";
 import { SLOT_BY, toDesignSlot } from "../design/tokens.js";
 import { EQUIP_FAILURE, equipAssignments, equipPieces } from "../equip.js";
 import { changeKey, gemSlotsByUid, type EquippedByHero, type GemSlotsByUid, type WorklistChange, type WorklistEntry, type WorklistGem } from "../lib/storage/worklist.js";
+import { worklistTarget } from "../lib/worklist/changes.js";
 import { changeState, planWorklist } from "../lib/worklist/plan.js";
 
 interface WorklistScreenProps {
@@ -77,12 +80,13 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
   // flat assignment list for the atomic "Apply all". Single source of truth for
   // the cross-entry concerns the per-card view can't see.
   const plan = useMemo(() => planWorklist(worklist, inventory), [worklist, inventory]);
-  // uid → display name, for the contention banner (drawn from the queued diffs).
+  // uid → display name, for the contention banner (the queued pieces, named
+  // from the current snapshot).
   const nameOf = useMemo(() => {
     const m = new Map<string, string>();
-    for (const e of worklist) for (const c of e.changes) if (c.kind !== "gem") m.set(c.toUid, c.toName);
+    for (const e of worklist) for (const c of e.changes) if (c.kind !== "gem") m.set(c.toUid, worklistTarget(c, pieceByUid.get(c.toUid) ?? null, game).name);
     return m;
-  }, [worklist]);
+  }, [worklist, pieceByUid, game]);
 
   const applyAll = async () => {
     if (!game || plan.assignments.length === 0) return;
@@ -211,23 +215,25 @@ function WorklistCard({
   const mounted = useMountedRef();
 
   // Per-change live state — applied (target already on hero, gem socketed),
-  // stale (target gone from the inventory), or conflicting (wanted by another
-  // hero too, the plan's contention) — plus the live piece (image +
-  // stats) and its current owner.
+  // stale (target gone from the inventory: eaten, sold or dissolved in-game),
+  // or conflicting (wanted by another hero too, the plan's contention) — plus
+  // the live piece (image + stats, name + main), and its current owner.
   const rows = orderLines(entry.changes).map((c) => {
     const { applied, stale, conflict } = changeState(c, { equippedOnHero, invUids, contended, gemSlots, lines: entry.changes });
     // Engine slot → player-facing design slot (ooparts → Talisman, shoes →
     // Boots) for the label + icon; the game never shows "ooparts".
     const ds = toDesignSlot(c.slot) ?? c.slot;
     const piece = pieceByUid.get(c.toUid) ?? null;
+    const target = worklistTarget(c, piece, game);
     const ui = c.kind !== "gem" && piece && game ? toUiPiece(piece, game) : null;
     const owner = piece?.equippedBy ? (charByUid.get(piece.equippedBy) ?? null) : null;
     // A gem line sits under its piece's line when the entry moves that piece.
     const nested = c.kind === "gem" && entry.changes.some((x) => x.kind !== "gem" && x.toUid === c.toUid);
-    return { c, applied, stale, conflict, ds, ui, hasPiece: !!piece, owner, nested };
+    return { c, applied, stale, conflict, ds, ui, target, hasPiece: !!piece, owner, nested };
   });
   const remaining = rows.filter((r) => !r.applied && !r.stale).length;
-  const allApplied = rows.every((r) => r.applied || r.stale);
+  // A gone line is nothing left to do, but nothing applied either.
+  const allApplied = rows.every((r) => r.applied);
   // Apply locally moves pieces only — gems are socketed in-game.
   const pieceTodo = rows.some((r) => r.c.kind !== "gem" && !r.applied && !r.stale);
   const hasConflict = rows.some((r) => r.conflict && !r.applied);
@@ -293,9 +299,9 @@ function WorklistCard({
           </span>
         )}
         {hasStale && (
-          <span title="A target piece is no longer in the inventory (data re-synced) — it's skipped on apply."
-            className="shrink-0 rounded border border-white/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white/50">
-            stale
+          <span title="A target piece is no longer in the inventory (consumed or sold in-game) — it's skipped on apply."
+            className="shrink-0 rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-200">
+            gone
           </span>
         )}
       </div>
@@ -303,10 +309,11 @@ function WorklistCard({
       {/* Change lines — one per changed slot. Each shows the TARGET item's image,
        *  stats, and current owner, since the name alone can't identify a copy. */}
       <div className="flex flex-col divide-y divide-white/5">
-        {rows.map(({ c, applied, stale, conflict, ds, ui, hasPiece, owner, nested }) => c.kind === "gem" ? (
+        {rows.map(({ c, applied, stale, conflict, ds, ui, target, hasPiece, owner, nested }) => c.kind === "gem" ? (
           <GemLine
             key={changeKey(c)}
             c={c}
+            pieceName={target.name}
             game={game}
             applied={applied}
             stale={stale}
@@ -341,13 +348,13 @@ function WorklistCard({
               {/* Slot · item name · status. */}
               <div className="flex items-center gap-1.5">
                 <span className="shrink-0 text-[9.5px] uppercase tracking-wider text-white/45">{SLOT_BY[ds]?.label ?? ds}</span>
-                <span className={cx("min-w-0 truncate text-[12.5px] font-medium", applied ? "text-emerald-300" : "text-white")}>{c.toName}</span>
+                <span className={cx("min-w-0 truncate text-[12.5px] font-medium", applied ? "text-emerald-300" : "text-white")}>{target.name}</span>
                 {applied ? (
                   <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-emerald-300">applied</span>
                 ) : conflict ? (
                   <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-amber-300">contested</span>
                 ) : stale ? (
-                  <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-white/40">gone</span>
+                  <PieceGone />
                 ) : null}
               </div>
               {/* Stats — main(s) then substats (the deterministic identifier). */}
@@ -363,6 +370,13 @@ function WorklistCard({
                       <StatIcon stat={s.stat} size={11} className="shrink-0" />{s.value}
                     </span>
                   ))}
+                </div>
+              )}
+              {/* No live piece to draw (gone, or no game data): its main alone. */}
+              {!ui && target.main && (
+                <div className="mt-1 flex items-center gap-0.5 font-mono text-[10.5px] tabular-nums text-white/90">
+                  <StatIcon stat={target.main.stat} size={11} className="shrink-0" />
+                  {target.main.value}{target.main.percent ? "%" : ""}
                 </div>
               )}
               {/* Where the item currently lives + what it replaces on the hero. */}
@@ -427,6 +441,15 @@ function orderLines(changes: readonly WorklistChange[]): WorklistChange[] {
   return out;
 }
 
+/** The status of a line whose piece left the inventory. */
+function PieceGone() {
+  return (
+    <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-amber-300">
+      piece gone (consumed or sold in-game)
+    </span>
+  );
+}
+
 /** "+12%" — a gem's stat value, signed like the gem panels. */
 function gemValue(g: WorklistGem): string | null {
   if (!g.stat) return null;
@@ -436,8 +459,10 @@ function gemValue(g: WorklistGem): string | null {
 /** One gem to socket — under its piece's line (`nested`) or on its own, then
  *  naming the piece. Never applied by the app: the user sockets it in-game and
  *  the line clears itself once the snapshot shows it. */
-function GemLine({ c, game, applied, stale, nested, slotLabel, onToggle }: {
+function GemLine({ c, pieceName, game, applied, stale, nested, slotLabel, onToggle }: {
   c: Extract<WorklistChange, { kind: "gem" }>;
+  /** The piece's name, read from the current snapshot (`worklistTarget`). */
+  pieceName: string;
   game: GameData | null;
   applied: boolean;
   stale: boolean;
@@ -479,13 +504,13 @@ function GemLine({ c, game, applied, stale, nested, slotLabel, onToggle }: {
           {applied ? (
             <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-emerald-300">applied</span>
           ) : stale ? (
-            <span className="ml-auto shrink-0 text-[9.5px] font-semibold uppercase tracking-wider text-white/40">gone</span>
+            <PieceGone />
           ) : (
             <span className="ml-auto shrink-0 text-[9.5px] uppercase tracking-wider text-white/40">socket in-game</span>
           )}
         </div>
         <div className="mt-0.5 text-[10.5px] text-white/35">
-          {!nested && <span className="text-white/55">on {c.toName} · </span>}
+          {!nested && <span className="text-white/55">on {pieceName} · </span>}
           was {c.fromGem ? <span className="line-through">{c.fromGem.name}</span> : "empty"}
         </div>
       </div>

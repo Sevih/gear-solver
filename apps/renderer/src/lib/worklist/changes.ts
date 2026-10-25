@@ -14,7 +14,7 @@ import { resolveOption, type GameData, type GearPiece } from "@gear-solver/core"
 import { STAT } from "../../design/tokens.js";
 import type { SlotDiff } from "../buildDiff.js";
 import type { SolveBuild } from "../solver/types.js";
-import type { WorklistChange, WorklistGem } from "../storage/worklist.js";
+import type { WorklistChange, WorklistGem, WorklistPieceChange } from "../storage/worklist.js";
 
 /** Gem-bearing engine slot → its key in `gemAllocation`. */
 const GEM_ALLOCATION_KEY = { ooparts: "talisman", exclusive: "ee" } as const;
@@ -22,6 +22,26 @@ const GEM_ALLOCATION_KEY = { ooparts: "talisman", exclusive: "ee" } as const;
 /** Display name of a piece — the game's item name, as the cards show it. */
 export function pieceName(p: GearPiece, game: GameData | null): string {
   return game?.equipment[String(p.itemId)]?.name ?? p.name ?? `Item ${p.itemId}`;
+}
+
+/** A piece's main stat as a worklist line stores it — the first non-combat
+ *  main, null when none resolves. */
+function pieceMain(p: GearPiece): WorklistPieceChange["toMain"] {
+  const main = p.main.find((m) => !m.combatOnly) ?? null;
+  return main ? { stat: main.stat, value: main.value, percent: main.percent } : null;
+}
+
+/** What a line shows of its target piece: its name and main read from the
+ *  CURRENT snapshot (an enchant followed live changes a talisman's main, the
+ *  stored copy doesn't follow), the values stored at queue time only when
+ *  the piece is gone from it. */
+export function worklistTarget(
+  c: WorklistChange,
+  piece: GearPiece | null,
+  game: GameData | null,
+): { name: string; main: WorklistPieceChange["toMain"] } {
+  if (piece) return { name: pieceName(piece, game), main: pieceMain(piece) };
+  return { name: c.toName, main: c.kind === "gem" ? null : (c.toMain ?? null) };
 }
 
 /** Snapshot of a gem for a worklist line — "Lv 3 Attack%" + its stat. */
@@ -41,12 +61,11 @@ export function worklistChangesFor(
   const changes: WorklistChange[] = [];
   for (const { slot, proposed: p, worn: current, changed } of diff) {
     if (!changed) continue; // unchanged slot — not actionable
-    const main = p.main.find((m) => !m.combatOnly) ?? null;
     changes.push({
       slot,
       toUid: p.uid,
       toName: pieceName(p, game),
-      toMain: main ? { stat: main.stat, value: main.value, percent: main.percent } : null,
+      toMain: pieceMain(p),
       fromUid: current?.uid ?? null,
       fromName: current ? pieceName(current, game) : null,
       done: false,

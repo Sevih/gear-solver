@@ -5,12 +5,15 @@ import type { GameData, GearPiece, Inventory, RawUserItem } from "@gear-solver/c
 import { createToastStore, ToastStack, TOAST_TTL_MS } from "../src/design/Toast.js";
 import { EQUIP_FAILURE, equipAssignments, equipPieces } from "../src/equip.js";
 import type { SlotDiff } from "../src/lib/buildDiff.js";
-import { worklistChangesFor } from "../src/lib/worklist/changes.js";
+import { worklistChangesFor, worklistTarget } from "../src/lib/worklist/changes.js";
+import { WorklistScreen } from "../src/screens/WorklistScreen.js";
 import { changeState, planWorklist } from "../src/lib/worklist/plan.js";
 import {
   appliedNotice,
   changeKey,
+  equippedByHero,
   gemSlotsByUid,
+  goneNotice,
   loadWorklist,
   reconcileWorklist,
   remainingChangeCount,
@@ -251,6 +254,88 @@ describe("appliedNotice — one toast per import", () => {
     expect(r.changed).toBe(false);
     expect(r.next).toBe(list);
     expect(appliedNotice(r.applied)).toBeNull();
+  });
+});
+
+describe("live target — name and main read from the current snapshot", () => {
+  const stored = { ...change("ooparts", "T"), toName: "Old Talisman", toMain: { stat: "atk", value: 10, percent: true } } as WorklistChange;
+  const talisman = (value: number) =>
+    ({ ...piece("T", "ooparts", 1), main: [{ stat: "spd", value: 99, percent: false, combatOnly: true }, { stat: "atk", value, percent: true }] }) as unknown as GearPiece;
+
+  it("a piece in the snapshot gives its current name and main (an enchant followed live)", () => {
+    expect(worklistTarget(stored, talisman(18), GAME)).toEqual({ name: "Talisman of Test", main: { stat: "atk", value: 18, percent: true } });
+  });
+
+  it("a gone piece falls back on the values stored at queue time", () => {
+    expect(worklistTarget(stored, null, GAME)).toEqual({ name: "Old Talisman", main: { stat: "atk", value: 10, percent: true } });
+    // Saved before `toMain`, or a gem line: no main.
+    expect(worklistTarget(change("weapon", "P"), null, GAME)).toEqual({ name: "P", main: null });
+    expect(worklistTarget(gemChange("T", 0, 15001), null, GAME)).toEqual({ name: "T", main: null });
+  });
+
+  it("the screen draws the live name and main, not the stored ones", () => {
+    const inventory = { gear: [talisman(18)], characters: [] } as unknown as Inventory;
+    const list = [entry("a", "h1", [stored, gemChange("T", 0, 15001)])];
+    const html = renderToStaticMarkup(createElement(WorklistScreen, {
+      inventory, game: null, equipped: equippedByHero(inventory), worklist: list, onChange: () => {}, onAfterApply: () => {},
+    }));
+    expect(html).toContain("Item 1"); // no game data: pieceName's own fallback
+    expect(html).not.toContain("Old Talisman");
+    expect(html).toContain("18%");
+    expect(html).not.toContain("piece gone");
+  });
+});
+
+describe("gone pieces — eaten, sold or dissolved in-game", () => {
+  const list = [
+    entry("b", "h2", [change("weapon", "Q"), change("helmet", "G")]),
+    entry("a", "h1", [change("ooparts", "G"), gemChange("G", 0, 15001), change("weapon", "P")]),
+  ];
+  const before = inv([{ uid: "P" }, { uid: "Q" }, { uid: "G" }]);
+  const after = inv([{ uid: "P" }, { uid: "Q" }]);
+
+  it("a gone line is stale, out of the badge count and of the reservations", () => {
+    expect(changeState(change("weapon", "G"), { equippedOnHero: null, invUids: new Set(["P", "Q"]), contended: new Map() }).stale).toBe(true);
+    expect(remainingChangeCount(list, after)).toBe(2);
+    expect(remainingChangeCount(list, before)).toBe(5);
+    expect(worklistClaims(list, after)).toEqual({ Q: "h2", P: "h1" });
+    expect(worklistClaims(list, before)).toEqual({ Q: "h2", G: "h2", P: "h1" });
+  });
+
+  it("reconcileWorklist keeps the line and reports the piece once, when it leaves", () => {
+    const r = reconcileWorklist(list, after, undefined, before);
+    expect(r.changed).toBe(false);
+    expect(r.next).toBe(list);
+    expect(r.gone).toEqual([
+      { heroUid: "h2", heroName: "Hero h2", uid: "G" },
+      { heroUid: "h1", heroName: "Hero h1", uid: "G" },
+    ]);
+    // The next snapshot lacks it too: already said. No previous snapshot: nothing to compare.
+    expect(reconcileWorklist(list, after, undefined, after).gone).toEqual([]);
+    expect(reconcileWorklist(list, after).gone).toEqual([]);
+  });
+
+  it("goneNotice counts the pieces, not the lines, and names each hero once", () => {
+    expect(goneNotice(reconcileWorklist(list, after, undefined, before).gone)).toBe("Worklist: 1 queued piece is gone — Hero h2, Hero h1");
+    expect(goneNotice([
+      { heroUid: "h1", heroName: "Ame", uid: "G" },
+      { heroUid: "h1", heroName: "Ame", uid: "H" },
+    ])).toBe("Worklist: 2 queued pieces are gone — Ame");
+    expect(goneNotice([])).toBeNull();
+  });
+
+  it("the screen says the piece is gone, keeps the stored name and doesn't call the card applied", () => {
+    const inventory = { gear: [], characters: [] } as unknown as Inventory;
+    const stored = { ...change("ooparts", "G"), toName: "Lost Talisman", toMain: { stat: "atk", value: 10, percent: true } } as WorklistChange;
+    const html = renderToStaticMarkup(createElement(WorklistScreen, {
+      inventory, game: GAME, equipped: equippedByHero(inventory), worklist: [entry("a", "h1", [stored])], onChange: () => {}, onAfterApply: () => {},
+    }));
+    expect(html).toContain("piece gone (consumed or sold in-game)");
+    expect(html).toContain("Lost Talisman");
+    expect(html).toContain("10%");
+    expect(html).toContain("0 of 1 to do");
+    expect(html).not.toContain("all applied");
+    expect(html).toMatch(/<input type="checkbox" disabled=""/);
   });
 });
 

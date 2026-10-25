@@ -8,6 +8,63 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧾 Suivi en direct : Worklist lue dans le snapshot courant, pièce disparue dite disparue, `PresetList` nettoyé (2026-10-25)
+- ✅ **Pourquoi.** Trois restes du suivi en direct (G44). (1) Une ligne de Worklist affichait le `toName` figé à la mise
+  en file, et le `toMain` stocké ne servait nulle part : après un enchant suivi en direct, le nom et la main d'une
+  pièce en file pouvaient ne plus être ceux du jeu. (2) Une pièce en file mangée en jeu (fodder d'un enchant,
+  dissolution) sort du snapshot, mais la ligne ne le disait qu'en gris (« gone », badge « stale » titré « data
+  re-synced »), comptait encore dans le badge de l'onglet (`remainingChangeCount`) et réservait encore la pièce
+  (`worklistClaims`) ; une carte dont toutes les lignes avaient disparu se disait « all applied ». (3) Le `PresetList`
+  du snapshot gardait l'uid d'une pièce retirée jusqu'au lobby, alors que le client le remet à 0.
+- ✅ **Nom et main lus dans le snapshot.** `worklistTarget(c, piece, game)` (`lib/worklist/changes.ts`) rend le nom
+  (`pieceName`) et la main (première main hors combat, même règle qu'à la mise en file, factorisée en `pieceMain`) de
+  la pièce présente, et ne retombe sur `toName` / `toMain` stockés que quand elle manque (main nulle pour une ligne
+  gemme ou une entrée stockée sans `toMain`). `WorklistScreen.tsx` s'en sert pour la ligne de pièce, le « on … » d'une
+  ligne gemme hors de sa pièce (nouvelle prop `pieceName` de `GemLine`) et les noms du bandeau « Contested » ; sans
+  pièce vivante à dessiner (disparue, ou pas de données de jeu), la ligne montre la main seule sous le nom. Pas de
+  migration : les deux champs restent écrits, pour les anciennes entrées et pour le repli.
+- ✅ **Pièce disparue.** `gearUids` (`lib/storage/worklist.ts`) donne les uids du snapshot. Une ligne dont `toUid` y
+  manque est dite « piece gone (consumed or sold in-game) » en ambre (`PieceGone`, lignes de pièce et de gemme), reste
+  non cochable, sort de `remainingChangeCount` et de `worklistClaims` (sans inventaire, les réservations restent
+  toutes posées, comme avant) ; le badge d'en-tête devient « gone » en ambre, titré « consumed or sold in-game », et
+  la carte ne se dit plus « all applied » quand il ne lui reste que des lignes disparues (« 0 of 1 to do »).
+  `reconcileWorklist` gagne un 4e paramètre `previous` (le snapshot d'avant) et rend `gone` : les pièces en file que
+  `previous` portait et que le snapshot courant n'a plus, par héros ; la ligne est gardée. `App.tsx` garde le
+  snapshot précédent dans une ref et passe `goneNotice(gone)` au toast (« Worklist: 1 queued piece is gone — Hero ») :
+  dit une fois, au snapshot qui perd la pièce, rien au premier import (pas de précédent).
+- ✅ **`PresetList` nettoyé.** Vérifié dans le client : `CItemInventory.RemoveItem` appelle `DeletePresetEquipUID`,
+  qui, dans chaque preset, met à `0L` le premier slot de `m_EquipUIDs` portant l'uid (le slot reste, pas de retrait
+  de la liste). `foldEquipEvents` (`apps/desktop/src/equip-events.ts`) note chaque entrée retirée à quantité 0, dans
+  l'ordre du journal, et `clearPresetSlots` fait pareil dans chaque `PresetList[].ItemUIDList` (0 numérique ou `"0"`
+  selon le type du slot, le fil pouvant écrire les uids des deux façons ; un preset sans `ItemUIDList` est laissé
+  tel quel, celui qui ne portait pas la pièce garde sa ref). Une pièce retirée puis rendue par un upsert ne revient
+  pas dans le preset, comme dans le client. Chaque slot vidé compte dans `applied`, pour que le snapshot soit écrit.
+  Le rejeu reste idempotent : sur un snapshot déjà plié, l'entrée n'existe plus et le slot est déjà à 0. Une pièce
+  retirée par un pli antérieur à ce lot reste dans son preset jusqu'au lobby (le rejeu ne la voit plus partir).
+  Commentaire de tête du module, `docs/reference.md` et `wiki/Engine-Reference.md` le disent.
+- ✅ **Tests.** `apps/renderer/test/worklist.test.ts` (30 → 37) : cible vivante (nom et main d'un talisman après
+  enchant, repli sur les valeurs stockées, entrée sans `toMain` et ligne gemme sans main, rendu de l'écran sans le nom
+  stocké), pièce disparue (ligne *stale*, hors du badge et des réservations, `reconcileWorklist` qui la garde et la
+  signale une fois puis plus, rien sans snapshot précédent, `goneNotice` qui compte les pièces et non les lignes,
+  rendu « piece gone » avec nom et main stockés, case désactivée, pas « all applied »).
+  `apps/desktop/test/equip-events.test.ts` (32 → 35) : un enchant qui mange la pièce de deux presets met leurs slots à
+  0 dans le type de chacun, laisse l'autre preset (même ref) et l'entrée intacts ; idempotence, pièce rendue par
+  `merge` qui reste hors du preset ; retrait qu'aucun preset ne porte et preset sans `ItemUIDList` tolérés.
+  `docs/reference.md` et `wiki/Engine-Reference.md` à 37 ; `docs/solver.md` (états de la Worklist) et
+  `wiki/Using-the-App.md` (« piece gone », toast, nom et main à jour) suivent. `npm run typecheck` : `tsc --noEmit`
+  sans sortie dans chaque workspace ; `npm test` : `Tests  169 passed (169)`, `Tests  199 passed (199)`,
+  `Tests  709 passed (709)` ; `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)`, inchangé.
+- ✅ **Piste, hors périmètre : `item/sell` et `item/lock`.** Leurs réponses ne portent pas l'item : `CWebRES_ItemSell`
+  ne rend que l'or (`Asset_0`), le client retire les pièces d'après sa requête (`CWebREQ_ItemSell.ItemList`, uids en
+  chaînes) ; `CWebRES_ItemLock.OnApply` lit `ItemUID` et `IsLock` de `CWebREQ_ItemLock`. Pour les suivre, le plugin
+  devrait journaliser aussi le corps de la requête (`{ seq, at, path, req, res }`) pour ces deux chemins ; l'app
+  plierait alors une vente comme des entrées simples à 0 (presets nettoyés compris) et un verrou comme `IsLock`.
+  Une pièce vendue en jeu reste donc dans le snapshot jusqu'au lobby, et la Worklist ne la dit disparue qu'à ce
+  moment-là. (`item/sell/consumable` porte un `ItemList` de `WSItemData`, mais ne vend que des consommables.)
+- ⏳ Sevih, sur le fixe : enchanter en jeu un talisman en file → sa main suit dans la Worklist ; manger en jeu une
+  pièce en file → ligne « piece gone » en ambre et toast « 1 queued piece is gone » ; la pièce disparaît aussi de la
+  carte du preset qui la portait (onglet Presets), sans repasser par le lobby.
+
 ### 💎 Presets : pool de gemmes d'EE avec les réservations de la Worklist, source de la priorité dite juste (2026-10-25)
 - ✅ **Pourquoi.** Deux restes des Presets. (1) `bestEeGemsFor` (`lib/presets/eeGems.ts`) appelait `buildGemPool` sans
   `worklistClaims` : une gemme assise sur un Talisman ou une EE libre, réservée par une entrée de Worklist non

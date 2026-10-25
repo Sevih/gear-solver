@@ -29,6 +29,9 @@ export interface WorklistPieceChange {
   slot: string;
   /** Piece to equip (the build's pick for this slot). */
   toUid: string;
+  /** Name and main at queue time — a fallback only: the screen reads both from
+   *  the current snapshot (`worklistTarget`) and shows these once the piece is
+   *  gone from it. */
   toName: string;
   /** Target piece's main stat (non-combat) — surfaced on talisman lines where
    *  the main is variable and the name alone doesn't identify the piece in-game.
@@ -179,6 +182,14 @@ export function gemSlotsByUid(inventory: Inventory | null): GemSlotsByUid {
   return m;
 }
 
+/** Uids of every piece in the snapshot — a line whose `toUid` isn't there is
+ *  GONE: the piece was eaten as fodder, sold or dissolved in-game. */
+export function gearUids(inventory: Inventory | null): Set<string> {
+  const s = new Set<string>();
+  if (inventory) for (const g of inventory.gear) s.add(g.uid);
+  return s;
+}
+
 /** A line is applied once its piece is on the hero — and, for a gem line, once
  *  that piece holds at least `toCount` copies of the gem, in any socket (the
  *  game fills the first free one). A line stored without `toCount` needs its
@@ -220,25 +231,53 @@ export function appliedNotice(applied: readonly ReconciledHero[]): string | null
   return `Worklist: ${n} change${n === 1 ? "" : "s"} applied — ${heroes}`;
 }
 
+/** A queued piece that left the inventory since the previous snapshot, per
+ *  hero whose entry targets it. */
+export interface GonePiece {
+  heroUid: string;
+  heroName: string;
+  uid: string;
+}
+
+/** The toast for the pieces one `reconcileWorklist` pass found gone —
+ *  "Worklist: 1 queued piece is gone — Hero A". Null when none. */
+export function goneNotice(gone: readonly GonePiece[]): string | null {
+  const n = new Set(gone.map((g) => g.uid)).size;
+  if (n === 0) return null;
+  const heroes = [...new Set(gone.map((g) => g.heroName))].join(", ");
+  return `Worklist: ${n} queued piece${n === 1 ? " is" : "s are"} gone — ${heroes}`;
+}
+
 /** Prune changes that are now DONE for real — the target piece is equipped on
  *  the hero in the current snapshot (the user did the swap in-game and it shows
  *  up after a recapture, or "Apply locally" rewrote it). Entries left with no
  *  changes are dropped entirely. Returns `changed=false` (and the same list ref)
  *  when nothing applied, so the caller can skip a needless write/re-render.
  *
- *  Only "applied" is pruned — a `stale` target (piece gone from inventory) is
- *  kept visible so the user notices, not silently swallowed. `applied` lists,
- *  per hero, how many lines this pass removed (empty when nothing changed). */
+ *  Only "applied" is pruned — a GONE target (piece eaten, sold or dissolved
+ *  in-game, so absent from the snapshot) is kept visible so the user notices,
+ *  not silently swallowed. `applied` lists, per hero, how many lines this pass
+ *  removed (empty when nothing changed). `gone` lists the queued pieces that
+ *  `previous` (the snapshot before this one) still held — each one reported
+ *  once, when it leaves; none without a previous snapshot. */
 export function reconcileWorklist(
   list: WorklistEntry[],
   inventory: Inventory | null,
   equipped: EquippedByHero = equippedByHero(inventory),
-): { next: WorklistEntry[]; changed: boolean; applied: ReconciledHero[] } {
-  if (!inventory) return { next: list, changed: false, applied: [] };
+  previous: Inventory | null = null,
+): { next: WorklistEntry[]; changed: boolean; applied: ReconciledHero[]; gone: GonePiece[] } {
+  if (!inventory) return { next: list, changed: false, applied: [], gone: [] };
   const gems = gemSlotsByUid(inventory);
+  const present = gearUids(inventory);
+  const before = previous ? gearUids(previous) : null;
   const applied: ReconciledHero[] = [];
+  const gone: GonePiece[] = [];
   const next: WorklistEntry[] = [];
   for (const e of list) {
+    if (before) {
+      const uids = new Set(e.changes.map((c) => c.toUid).filter((u) => !present.has(u) && before.has(u)));
+      for (const uid of uids) gone.push({ heroUid: e.heroUid, heroName: e.heroName, uid });
+    }
     const onHero = equipped.get(e.heroUid);
     const kept = e.changes.filter((c) => !isChangeApplied(c, onHero, gems, e.changes));
     if (kept.length !== e.changes.length) {
@@ -247,7 +286,7 @@ export function reconcileWorklist(
     if (kept.length === 0) continue;                              // fully applied → drop entry
     next.push(kept.length !== e.changes.length ? { ...e, changes: kept } : e);
   }
-  return applied.length > 0 ? { next, changed: true, applied } : { next: list, changed: false, applied };
+  return applied.length > 0 ? { next, changed: true, applied, gone } : { next: list, changed: false, applied, gone };
 }
 
 /** Map pieceUid → heroUid of the worklist entry claiming it, for changes NOT
@@ -258,18 +297,20 @@ export function reconcileWorklist(
  *  (same rule as stealing equipped gear) and never touches an equal/higher
  *  one; `none` keeps all claimed pieces out; `all` ignores claims like it
  *  ignores equipment. Newest entry wins a double-claim (list is newest-first);
- *  claims on pieces gone from the inventory are harmless (never matched).
- *  Gem lines reserve nothing (their piece line, if any, does). */
+ *  a piece gone from the inventory reserves nothing (without an inventory,
+ *  every unapplied target is claimed). Gem lines reserve nothing (their piece
+ *  line, if any, does). */
 export function worklistClaims(
   list: WorklistEntry[],
   inventory: Inventory | null,
   equipped: EquippedByHero = equippedByHero(inventory),
 ): Record<string, string> {
   const claims: Record<string, string> = {};
+  const present = inventory ? gearUids(inventory) : null;
   for (const e of list) {
     const onHero = equipped.get(e.heroUid);
     for (const c of e.changes) {
-      if (c.kind === "gem" || onHero?.has(c.toUid)) continue;
+      if (c.kind === "gem" || onHero?.has(c.toUid) || (present && !present.has(c.toUid))) continue;
       if (!(c.toUid in claims)) claims[c.toUid] = e.heroUid;
     }
   }
@@ -278,7 +319,8 @@ export function worklistClaims(
 
 /** Total changes still NOT applied (target piece not yet on the hero, gem not
  *  yet socketed) across the whole worklist — the Worklist tab's badge
- *  count. Null when no inventory is loaded (can't tell what's applied yet). */
+ *  count. A line whose piece is gone is left out: nothing to do in-game.
+ *  Null when no inventory is loaded (can't tell what's applied yet). */
 export function remainingChangeCount(
   list: WorklistEntry[],
   inventory: Inventory | null,
@@ -286,10 +328,11 @@ export function remainingChangeCount(
 ): number | null {
   if (!inventory) return null;
   const gems = gemSlotsByUid(inventory);
+  const present = gearUids(inventory);
   let n = 0;
   for (const e of list) {
     const onHero = equipped.get(e.heroUid);
-    for (const c of e.changes) if (!isChangeApplied(c, onHero, gems, e.changes)) n++;
+    for (const c of e.changes) if (present.has(c.toUid) && !isChangeApplied(c, onHero, gems, e.changes)) n++;
   }
   return n;
 }

@@ -238,8 +238,10 @@ one the cards sit two per row.
   frees a piece before the build that reuses it.
 - The list stays truthful on its own: lines flip to **applied** when the piece lands on the
   hero (for a gem, once the piece holds it — in any socket), **contested** when two queued builds want the
-  same single copy (resolve one before Apply all), and **gone** when the piece vanished from
-  your inventory.
+  same single copy (resolve one before Apply all), and **piece gone** (amber) when the piece left
+  your inventory — eaten as fodder, sold or dissolved in-game; a notice says so when it happens, and
+  the line no longer counts in the tab's badge. Each line names its piece (and a Talisman's main) as
+  it is now, so an enhance done in-game shows right away.
 
 ---
 
