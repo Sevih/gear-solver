@@ -18,7 +18,7 @@
     "publish": "electron-builder --win --publish always"
   },
   "dependencies": {
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.8.11"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
@@ -42,7 +42,7 @@
     "beforePack": "./scripts/before-pack.mjs",
     "extraMetadata": {
       "dependencies": {
-        "electron-updater": "^6.3.9"
+        "electron-updater": "^6.8.11"
       }
     },
     "files": [
