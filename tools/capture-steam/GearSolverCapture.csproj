@@ -25,7 +25,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>GearSolverCapture</AssemblyName>
     <RootNamespace>GearSolverCapture</RootNamespace>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Deterministic>true</Deterministic>
     <DebugType>none</DebugType>

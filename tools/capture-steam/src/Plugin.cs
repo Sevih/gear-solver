@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using BepInEx;
@@ -18,7 +19,8 @@ namespace GearSolverCapture
     /// Gear Solver capture source for the OUTERPLANE Steam client.
     ///
     /// The game talks to its servers through <c>CWebManager</c> (BestHTTP/2 +
-    /// a repeating-key XOR on the body). Two hooks, both read-only:
+    /// a repeating-key XOR on the body). Two hooks, both read-only, plus two
+    /// for the gestures whose response doesn't name the pieces (3):
     ///
     ///  1. <c>CWebManager.Log2InternalWeb(string message, string cmd, bool request)</c>
     ///     — an empty logging stub the devs left in, called on every successful
@@ -28,6 +30,15 @@ namespace GearSolverCapture
     ///     response goes through. Fallback only: if hook 1 never fires (the stub
     ///     is tiny and Mono's JIT may inline it into its caller), we identify the
     ///     payload by its top-level keys instead of the path.
+    ///  3. <c>CWebRES_ItemSell.OnApply(CWebRequestBase _req)</c> and
+    ///     <c>CWebRES_ItemLock.OnApply</c> — a sale only returns the new gold
+    ///     and a lock toggle nothing: the client applies its own REQUEST
+    ///     (<c>CWebREQ_ItemSell.ItemList</c>, <c>CWebREQ_ItemLock.ItemUID</c> /
+    ///     <c>IsLock</c>). Hook 1 can't see it: its <c>request == true</c> call
+    ///     only exists on the coroutine request path, and both gestures go
+    ///     through the callback one (<c>CNetwork.Request(req, callback)</c>).
+    ///     <c>OnApply</c> runs on success only, right after hook 1 saw the
+    ///     response, on both paths.
     ///
     /// Nothing is modified, nothing is sent: the postfixes copy a string to disk
     /// and return. Every hook body is wrapped so a plugin bug can never bubble
@@ -36,7 +47,8 @@ namespace GearSolverCapture
     /// Output mirrors tools/capture/addon.py: <c>user_item.json</c>,
     /// <c>user_character.json</c>, … plus a <c>.captured</c> sentinel once the
     /// inventory landed, an <c>equip-events.ndjson</c> journal of the gear moves,
-    /// gem, substat and upgrade changes made in-game since the last <c>/user/item</c>,
+    /// gem, substat and upgrade changes, sales and lock toggles made in-game
+    /// since the last <c>/user/item</c>,
     /// unknown endpoints under
     /// <c>_unknown/</c>, and a <c>.steam-plugin.json</c> heartbeat the desktop
     /// app reads to show "plugin live".
@@ -46,7 +58,7 @@ namespace GearSolverCapture
     {
         public const string Id = "outerpedia.gearsolver.capture";
         public const string Name = "Gear Solver Capture";
-        public const string Version = "0.4.0";
+        public const string Version = "0.5.0";
 
         internal static ManualLogSource Log;
 
@@ -94,6 +106,9 @@ namespace GearSolverCapture
         /// then on the shape-based fallback stays silent.</summary>
         internal static volatile bool PathHookFired;
 
+        /// <summary>Request fields the OnApply hooks copy (null = not hooked).</summary>
+        private static PropertyInfo _sellItemList, _lockItemUID, _lockIsLock;
+
         public static void Apply()
         {
             var harmony = new Harmony(Plugin.Id);
@@ -122,6 +137,45 @@ namespace GearSolverCapture
             {
                 Plugin.Log.LogError("neither hook target exists — capture disabled.");
             }
+
+            _sellItemList = RequestProperty("CWebREQ_ItemSell", "ItemList");
+            if (!HookOnApply(harmony, "CWebRES_ItemSell", "/item/sell", nameof(AfterItemSellApply), _sellItemList != null)) _sellItemList = null;
+            _lockItemUID = RequestProperty("CWebREQ_ItemLock", "ItemUID");
+            _lockIsLock = RequestProperty("CWebREQ_ItemLock", "IsLock");
+            if (!HookOnApply(harmony, "CWebRES_ItemLock", "/item/lock", nameof(AfterItemLockApply), _lockItemUID != null && _lockIsLock != null))
+                _lockItemUID = _lockIsLock = null;
+        }
+
+        private static PropertyInfo RequestProperty(string type, string name)
+        {
+            var t = AccessTools.TypeByName(type);
+            return t == null ? null : AccessTools.Property(t, name);
+        }
+
+        /// <summary>Postfix on <c>resType.OnApply</c> and route <c>path</c>'s
+        /// responses to the request journal. Anything missing (the game
+        /// changed) logs a warning and leaves the path out: no line at all.</summary>
+        private static bool HookOnApply(Harmony harmony, string resType, string path, string postfix, bool requestOk)
+        {
+            try
+            {
+                var t = AccessTools.TypeByName(resType);
+                var apply = t == null ? null : AccessTools.DeclaredMethod(t, "OnApply");
+                if (apply == null || !requestOk)
+                {
+                    Plugin.Log.LogWarning($"{resType}.OnApply or its request fields not found — the game changed; {path} not journaled.");
+                    return false;
+                }
+                harmony.Patch(apply, postfix: new HarmonyMethod(typeof(Hooks), postfix));
+                Sink.TrackRequest(path);
+                Plugin.Log.LogInfo($"hooked {resType}.OnApply ({path}, with its request).");
+                return true;
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogWarning($"{resType}.OnApply hook: {e.Message} — {path} not journaled.");
+                return false;
+            }
         }
 
         // Parameter names MUST match the original signature for Harmony to bind them.
@@ -136,6 +190,37 @@ namespace GearSolverCapture
             catch (Exception e)
             {
                 Plugin.Log.LogError($"Log2InternalWeb hook: {e}");
+            }
+        }
+
+        // Only the request's fields are copied here; the line is built on the
+        // writer thread.
+        private static void AfterItemSellApply(object _req)
+        {
+            try
+            {
+                var list = _sellItemList.GetValue(_req, null) as IEnumerable<string>;
+                if (list == null) return;
+                Sink.CaptureRequest("/item/sell", new { ItemList = new List<string>(list) });
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError($"ItemSell.OnApply hook: {e}");
+            }
+        }
+
+        private static void AfterItemLockApply(object _req)
+        {
+            try
+            {
+                var uid = _lockItemUID.GetValue(_req, null) as string;
+                var isLock = _lockIsLock.GetValue(_req, null);
+                if (uid == null || !(isLock is bool)) return;
+                Sink.CaptureRequest("/item/lock", new { ItemUID = uid, IsLock = (bool)isLock });
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError($"ItemLock.OnApply hook: {e}");
             }
         }
 
@@ -203,6 +288,16 @@ namespace GearSolverCapture
         };
         private const string JournalFile = "equip-events.ndjson";
 
+        /// <summary>Gestures journaled WITH the client's request, one line per
+        /// gesture written by the OnApply hook (<c>{ seq, at, path, req, res }</c>):
+        /// <c>/item/sell</c>, <c>/item/lock</c> (filled by <see cref="TrackRequest"/>
+        /// for each hook that took). Their response alone writes nothing: it is
+        /// kept for the next line of its path. Never in <see cref="Journal"/>.</summary>
+        private static readonly HashSet<string> WithRequest = new HashSet<string>(StringComparer.Ordinal);
+        /// <summary>Last response per <see cref="WithRequest"/> path, taken by
+        /// the next line (writer thread only).</summary>
+        private static readonly Dictionary<string, string> LastRes = new Dictionary<string, string>(StringComparer.Ordinal);
+
         /// <summary>Login / heartbeat noise never worth keeping.</summary>
         private static readonly string[] IgnorePrefixes = { "/account/", "/server/" };
 
@@ -257,6 +352,17 @@ namespace GearSolverCapture
             var q = path.IndexOf('?');
             if (q >= 0) path = path.Substring(0, q);
 
+            if (WithRequest.Contains(path))
+            {
+                var rp = path;
+                Writes.Add(() =>
+                {
+                    NoteSeen(rp);
+                    LastRes[rp] = json;
+                });
+                return;
+            }
+
             if (Journal.Contains(path))
             {
                 var jp = path;
@@ -294,6 +400,33 @@ namespace GearSolverCapture
                 catch (Exception e)
                 {
                     Plugin.Log.LogError($"write {p2}: {e.Message}");
+                }
+            });
+        }
+
+        /// <summary>Hooks set-up only (main thread, before any response).</summary>
+        public static void TrackRequest(string path)
+        {
+            WithRequest.Add(path);
+        }
+
+        /// <summary>A sale or lock the client just applied: one journal line
+        /// with its request and the response seen for it (<c>{}</c> if none).</summary>
+        public static void CaptureRequest(string path, object req)
+        {
+            if (_dir == null) return;
+            Writes.Add(() =>
+            {
+                try
+                {
+                    string res;
+                    if (LastRes.TryGetValue(path, out res)) LastRes.Remove(path);
+                    else res = "{}";
+                    AppendJournal(path, res, JsonConvert.SerializeObject(req));
+                }
+                catch (Exception e)
+                {
+                    Plugin.Log.LogError($"journal {path}: {e.Message}");
                 }
             });
         }
@@ -342,17 +475,20 @@ namespace GearSolverCapture
             Plugin.Log.LogInfo($"{path} → {name}.json ({json.Length:N0} chars)");
         }
 
-        /// <summary>One NDJSON line: <c>{"seq":n,"at":ISO,"path":…,"res":&lt;response&gt;}</c>.
+        /// <summary>One NDJSON line: <c>{"seq":n,"at":ISO,"path":…,"res":&lt;response&gt;}</c>,
+        /// or <c>{…,"path":…,"req":&lt;request&gt;,"res":…}</c> for a
+        /// <see cref="WithRequest"/> path (<paramref name="req"/> one-line JSON).
         /// The response is embedded as is (it's already JSON); re-serialized only
         /// if it spans several lines, which would break the one-line framing.</summary>
-        private static void AppendJournal(string path, string json)
+        private static void AppendJournal(string path, string json, string req = null)
         {
             if (json.IndexOf('\n') >= 0 || json.IndexOf('\r') >= 0) json = JToken.Parse(json).ToString(Formatting.None);
-            var sb = new StringBuilder(json.Length + 96);
+            var sb = new StringBuilder(json.Length + (req?.Length ?? 0) + 96);
             sb.Append("{\"seq\":").Append(++_seq)
               .Append(",\"at\":\"").Append(DateTime.UtcNow.ToString("o"))
-              .Append("\",\"path\":").Append(JsonConvert.ToString(path))
-              .Append(",\"res\":").Append(json)
+              .Append("\",\"path\":").Append(JsonConvert.ToString(path));
+            if (req != null) sb.Append(",\"req\":").Append(req);
+            sb.Append(",\"res\":").Append(json)
               .Append("}\n");
             File.AppendAllText(Path.Combine(_dir, JournalFile), sb.ToString(), new UTF8Encoding(false));
             _captures++;

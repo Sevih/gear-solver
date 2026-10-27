@@ -397,6 +397,91 @@ describe("foldEquipEvents — upgrades (enchant, limit break, smelting, merge, c
   });
 });
 
+// The plugin journals the client's REQUEST for these two (CWebREQ_ItemSell /
+// CWebREQ_ItemLock): the responses don't name the pieces.
+describe("foldEquipEvents — sale and lock (request-carrying lines)", () => {
+  const base = () => ({
+    ...snapshot(),
+    ItemList: snapshot().ItemList.map((it) => ({ ...it, IsLock: 0 })),
+    PresetList: [
+      { PresetType: 0, Num: 1, Name: "", ItemUIDList: [W1, H2, "0", "0", "0", "0", "0", "0"], Favorites: 0 },
+      { PresetType: 0, Num: 2, Name: "", ItemUIDList: [W2, "0", "0", "0", "0", "0", "0", "0"], Favorites: 0 },
+    ],
+  });
+  const uids = (raw: { ItemList: Array<{ ItemUID: string }> }) => raw.ItemList.map((it) => it.ItemUID);
+  const slots = (raw: { PresetList?: unknown }) => (raw.PresetList as Array<{ ItemUIDList: unknown[] }>).map((p) => p.ItemUIDList);
+  const sell = (seq: number, ItemList: unknown[]): EquipEvent =>
+    ({ seq, path: "/item/sell", req: { ItemList }, res: { ResultInfoList: [], Asset_0: 70205983 } });
+  const lock = (seq: number, ItemUID: string, IsLock: boolean): EquipEvent =>
+    ({ seq, path: "/item/lock", req: { ItemUID, IsLock }, res: {} });
+
+  it("sell: each uid of the request leaves the inventory, off its hero and out of its preset", () => {
+    const raw = base();
+    const { next, applied, skipped } = foldEquipEvents(raw, [sell(1, [W2, H2])]);
+    expect(uids(next)).toEqual([W1, H1]);
+    expect(slots(next)).toEqual([
+      [W1, "0", "0", "0", "0", "0", "0", "0"],
+      ["0", "0", "0", "0", "0", "0", "0", "0"],
+    ]);
+    // W2 (on A), H2 + the two preset slots cleared.
+    expect([applied, skipped]).toEqual([4, 0]);
+    expect(uids(raw)).toEqual([W1, W2, H1, H2]);
+  });
+
+  it("sell: an uid the snapshot lacks is skipped, the others still leave", () => {
+    const { next, applied, skipped } = foldEquipEvents(base(), [sell(1, ["6399999999", H1, "0", null])]);
+    expect(uids(next)).toEqual([W1, W2, H2]);
+    expect([applied, skipped]).toEqual([1, 3]);
+  });
+
+  it("lock then unlock: IsLock follows the request, as a number", () => {
+    const locked = foldEquipEvents(base(), [lock(1, W1, true)]);
+    expect(byUid(locked.next, W1)!.IsLock).toBe(1);
+    expect(locked.applied).toBe(1);
+    const both = foldEquipEvents(base(), [lock(1, W1, true), lock(2, W1, false)]);
+    expect(byUid(both.next, W1)!.IsLock).toBe(0);
+    expect(both.applied).toBe(0);
+  });
+
+  it("a sale or lock line without a usable request is skipped, never thrown on", () => {
+    const events: EquipEvent[] = [
+      { seq: 1, path: "/item/lock", res: {} },
+      { seq: 2, path: "/item/sell", res: { ResultInfoList: [], Asset_0: 1 } },
+      { seq: 3, path: "/item/lock", req: { ItemUID: W1, IsLock: 1 }, res: {} },
+      { seq: 4, path: "/item/lock", req: { ItemUID: "6399999999", IsLock: true }, res: {} },
+      { seq: 5, path: "/item/sell", req: ["not", "an", "object"], res: {} },
+      { seq: 6, path: "/item/sell", req: { ItemList: [] }, res: {} },
+    ];
+    const { next, applied, skipped } = foldEquipEvents(base(), events);
+    expect(next.ItemList).toEqual(base().ItemList);
+    expect([applied, skipped]).toEqual([0, 6]);
+  });
+
+  it("mixes with equip moves, upgrades and dissolves in journal order", () => {
+    const events: EquipEvent[] = [
+      equip(1, { CharUID: HERO_B, ToEquipUID: W1 }), // W1: free → B
+      lock(2, W1, true),
+      { seq: 3, path: "/item/enchant", res: { Item: wire(W1, HERO_B, 1, [160001, 0, 0, 0, 0], { Exp: 300, IsLock: 1 }), ItemList: [] } },
+      { seq: 4, path: "/item/dissolve", res: { ItemList: [{ ItemUID: H1, Quantity: 0 }] } },
+      sell(5, [H2]),
+      equip(6, { CharUID: HERO_A, ToEquipUID: H2 }), // sold already: skipped
+    ];
+    const { next, skipped } = foldEquipEvents(base(), events);
+    expect(byUid(next, W1)).toMatchObject({ CharUID: HERO_B, IsLock: 1, Exp: 300 });
+    expect(uids(next)).toEqual([W1, W2]);
+    expect(slots(next)[0]).toEqual([W1, "0", "0", "0", "0", "0", "0", "0"]);
+    expect(skipped).toBe(1);
+  });
+
+  it("is idempotent: a replay onto the folded snapshot changes nothing", () => {
+    const events: EquipEvent[] = [lock(1, W1, true), sell(2, [W2, H2]), lock(3, H1, true), lock(4, H1, false)];
+    const once = foldEquipEvents(base(), events);
+    const twice = foldEquipEvents(once.next, events);
+    expect(twice.next).toEqual(once.next);
+    expect(twice.applied).toBe(0);
+  });
+});
+
 describe("parseEquipJournal", () => {
   it("reads complete lines only and drops malformed ones", () => {
     const text = [

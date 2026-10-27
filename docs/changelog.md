@@ -8,6 +8,67 @@
 
 ## Items de backlog clôturés (index)
 
+### 🏷️ Vente et verrou faits en jeu suivis en direct : la requête du client journalisée pour `item/sell` et `item/lock` (plugin 0.5.0) (2026-10-27)
+- ✅ **Pourquoi.** Piste laissée par G44 et demandée le 27/10 : une pièce vendue en jeu restait dans le snapshot (et
+  dans l'Inventaire) jusqu'au lobby, un verrou posé en jeu n'apparaissait pas. Les réponses ne disent rien des pièces :
+  `CWebRES_ItemSell` ne rend que l'or (`Asset_0`) et le client retire les pièces d'après SA requête
+  (`CWebREQ_ItemSell.ItemList`, uids en chaînes, cf. `CUIItemClear`, `CUIItemSmelting`, `CUICraftingResult`) ;
+  `CWebRES_ItemLock.OnApply` lit `ItemUID` et `IsLock` (bool) de `CWebREQ_ItemLock`.
+- ✅ **Pourquoi pas la voie requête de `Log2InternalWeb`.** Vérifié dans `CWebManager` : l'appel
+  `Log2InternalWeb(text, cmdResource, request: true)` n'existe que dans la voie coroutine
+  (`CRequestCommand<TReq, TRes>`, chemin écrit `item/sell` sans `/`) ; la vente et le verrou passent tous deux par
+  `CNetwork.Request(req, callback)` → `CHttpGame.Request` → `CWebManager.CRequestCommand<T>(…, Action)`, qui sérialise
+  et chiffre la requête sans jamais la journaliser. Le hook ne l'aurait jamais vue. Décision de Sevih (27/10) : un
+  postfix Harmony sur `CWebRES_ItemSell.OnApply` et `CWebRES_ItemLock.OnApply`, appelés sur les deux voies,
+  seulement en cas de succès et juste après la réponse passée par `Log2InternalWeb` (ordre vérifié dans les deux
+  voies).
+- ✅ **Plugin** (`tools/capture-steam/src/Plugin.cs`, 0.4.0 → 0.5.0 dans `Plugin.Version` et le `.csproj`).
+  `Hooks.HookOnApply` résout par nom `CWebRES_ItemSell` / `CWebRES_ItemLock`, leur `OnApply` déclaré, et les
+  propriétés de requête (`CWebREQ_ItemSell.ItemList`, `CWebREQ_ItemLock.ItemUID` / `IsLock`) ; une pièce manquante
+  ou un `Patch` qui échoue → `LogWarning`, le chemin n'est pas suivi (aucune ligne), rien d'autre ne change. Les
+  postfixes (`AfterItemSellApply`, `AfterItemLockApply`, `object _req`) ne font que copier les champs typés
+  (`List<string>` recopiée ; uid + bool) et les mettre dans la file du writer (`Sink.CaptureRequest`). Nouvel ensemble
+  `Sink.WithRequest` (rempli par `TrackRequest` pour chaque hook posé), hors de `Journal` : la réponse d'un de ces
+  chemins n'écrit rien, elle est gardée dans `LastRes` (writer seulement) et prise par la ligne suivante du chemin ;
+  la ligne `{ seq, at, path, req, res }` (`path` `/item/sell` ou `/item/lock`, `res` = cette réponse ou `{}`) est
+  écrite par le hook `OnApply`, via `AppendJournal(path, res, req)` (paramètre `req` optionnel, clé placée avant
+  `res`). Une ligne par geste, jamais une ligne `res` seule ; une requête refusée par le serveur (pas d'`OnApply`)
+  n'écrit rien. Les chemins de `Journal` gardent `{ seq, at, path, res }`. Effet de bord : les réponses de ces deux
+  chemins ne vont plus dans `_unknown/` (`KeepUnknown`), puisqu'ils sont suivis. README du plugin : le hook dans la
+  table des postfixes, une table des chemins avec la colonne « Request journaled », le pourquoi de la voie requête,
+  les deux formes de ligne dans « Output ».
+- ✅ **Desktop** (`apps/desktop/src/equip-events.ts`). `EquipEvent.req?: unknown` ; `reqOf` (objet ou null) ;
+  `soldOf` change chaque uid de `req.ItemList` en entrée simple à quantité 0, qui suit le chemin des entrées simples
+  (retirée d'`ItemList`, uid noté dans `removed`, donc `clearPresetSlots` compris, comme une dissolution) ;
+  `/item/lock` met `IsLock` de l'entrée `req.ItemUID` à 1 ou 0 d'après `req.IsLock` (le snapshot porte un entier,
+  la requête un bool). Uid absent, `IsLock` non booléen, ligne sans `req` ou `ItemList` vide → `skipped`, jamais
+  d'exception. Rejeu idempotent (état absolu ; un uid déjà vendu est absent donc ignoré).
+- ✅ **Renderer, vérifié sans changement.** L'Inventaire montre le cadenas d'après `piece.locked`
+  (`screens/inventory/VirtualGearGrid.tsx`, et `design/ResultGearDetail.tsx`), lu de `IsLock === 1` par core
+  `parse.ts` ; la Worklist dit « gone » une pièce absente de l'inventaire (`changeState`, G54) : une pièce vendue y
+  passe telle quelle.
+- ✅ **Docs.** `docs/reference.md` et `wiki/Engine-Reference.md` (les deux formes de ligne et le pli vente /
+  verrou), `wiki/Capture-Pipeline.md` (la ligne `equip-events.ndjson` de la table des fichiers), `wiki/FAQ.md`,
+  `docs/release-notes.md › [Unreleased]`. `docs/todo.md` inchangé : il n'a pas d'item « Suivi en direct — restes »
+  ni d'item qui nomme `item/sell` / `item/lock` (l'item Equip / Unequip ne parle que des déplacements).
+- ✅ **Tests.** `equip-events.test.ts`, bloc « sale and lock » (6 cas) : vente de deux pièces dont une équipée et une
+  dans un preset (pièces retirées, slots des presets à 0) ; vente d'un uid inconnu au milieu d'uids valides ;
+  verrou puis déverrou ; lignes sans `req` ou à `req` inutilisable (6 `skipped`, snapshot intact) ; mélange avec
+  equip, enchant (G44), dissolve et un equip d'une pièce déjà vendue (G54) ; idempotence. `npm run typecheck` →
+  dernière ligne « > tsc --noEmit » (renderer), code 0 ; `npm test` → « Tests 169 passed (169) » (core),
+  « Tests 205 passed (205) » (desktop), « Tests 747 passed (747) » (renderer) ; `npm run lint` → « ✖ 13 problems
+  (0 errors, 13 warnings) », inchangé. `dotnet build tools/capture-steam -c Release` (SDK 8.0 présent sur le
+  portable, jeu + BepInEx installés) → « 0 Erreur(s) », DLL 0.5.0 dans `dist/` (ignoré par git).
+- ✅ **Build du plugin.** Il n'y a pas de workflow CI `capture-plugin` (`.github/workflows` : `ci.yml`,
+  `data-sync.yml`, `publish-wiki.yml`) : le plugin se construit à la main (`npm run capture-steam:build`), et
+  `apps/desktop/scripts/fetch-binaries.mjs` le reconstruit à chaque `npm run release` en vérifiant que
+  `Plugin.Version`, le `.csproj` et la DLL disent la même version.
+- ✅ **Laissé.** `item/sell/consumable` (consommables seulement), le Custom Gear, l'or rendu par la vente.
+- ⏳ **Sevih, sur le fixe** (après la release et Settings › Setup › Update plugin, jeu fermé) : vendre en jeu une
+  pièce en file → ligne « piece gone » dans la Worklist dans les 5 s, la pièce quitte l'Inventaire ; verrouiller une
+  pièce → cadenas dans l'Inventaire ; `equip-events.ndjson` du dossier de capture porte des lignes avec `req` pour
+  ces deux chemins ; `LogOutput.log` dit « hooked CWebRES_ItemSell.OnApply » et « hooked CWebRES_ItemLock.OnApply ».
+
 ### 🔒 Presets du jeu : rang de priorité et verrou, pièces des presets mieux classés ou verrouillés hors du pool (2026-10-27)
 - ✅ **Pourquoi.** « Optimize preset → » (G47) envoyait au Builder des filtres, mais le Builder puisait dans tout
   l'inventaire comme si aucun preset n'existait : une pièce du preset n°1 pouvait partir dans la build proposée pour le

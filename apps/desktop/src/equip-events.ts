@@ -8,7 +8,12 @@
  * `item/breakLimit`, `item/smelting`, `item/smeltingReset`, `item/merge`,
  * `item/craft` or `item/dissolve`. The Steam plugin appends those to
  * `equip-events.ndjson` (one line per response, `{ seq, at, path, res }`) and
- * truncates the file whenever a fresh `/user/item` lands. This module folds the
+ * truncates the file whenever a fresh `/user/item` lands. A sale
+ * (`item/sell`) or a lock toggle (`item/lock`) comes with the client's own
+ * REQUEST instead (`{ seq, at, path, req, res }`): the response says nothing
+ * about the pieces (`CWebRES_ItemSell` only carries the new gold, and the
+ * client removes the pieces from `CWebREQ_ItemSell.ItemList`;
+ * `CWebRES_ItemLock` reads `ItemUID` / `IsLock` off `CWebREQ_ItemLock`). This module folds the
  * journal into `user_item.json` so the renderer's follower re-imports on the
  * mtime change, as after a lobby.
  *
@@ -23,7 +28,9 @@
  * removes the entry, as `CItemInventory.UpdateItem` does in the client (a piece
  * eaten as fodder no longer exists) — and, like `CItemInventory.RemoveItem`
  * (`DeletePresetEquipUID`), zeroes its uid in the `ItemUIDList` of every
- * preset that held it, so the preset no longer counts it. Each event sets absolute state, so
+ * preset that held it, so the preset no longer counts it. Each uid sold is
+ * folded the same way, as a simple entry at quantity 0; a lock sets the
+ * entry's `IsLock` to 1 or 0. Each event sets absolute state, so
  * replaying the whole journal onto a snapshot that already holds part of it
  * lands on the same state: the follower replays it all whenever something
  * changed instead of tracking a partial offset.
@@ -55,6 +62,10 @@ export interface EquipEvent {
   at?: string;
   path: string;
   res: unknown;
+  /** The client's request, for the paths whose response doesn't say what
+   *  changed (`/item/sell`: `{ ItemList: string[] }`, `/item/lock`:
+   *  `{ ItemUID: string, IsLock: boolean }`). */
+  req?: unknown;
 }
 
 /** One `ItemList` entry as the fold sees it: the uids it keys on, every other
@@ -180,6 +191,23 @@ function entriesOf(e: EquipEvent, kind: "upsert" | "simple"): unknown[] {
   return fields[kind].flatMap((k) => (Array.isArray(r[k]) ? (r[k] as unknown[]) : r[k] != null ? [r[k]] : []));
 }
 
+/** The request of a request-carrying event, or null when the line has none. */
+function reqOf(e: EquipEvent): Record<string, unknown> | null {
+  const r = e.req;
+  return r && typeof r === "object" && !Array.isArray(r) ? (r as Record<string, unknown>) : null;
+}
+
+/** `item/sell`: each uid of the request's `ItemList` as a simple entry at
+ *  quantity 0 (the client's `RemoveItem`). Null for an unusable uid. */
+function soldOf(e: EquipEvent): Array<{ ItemUID: string; Quantity: number } | null> {
+  const list = reqOf(e)?.ItemList;
+  if (!Array.isArray(list)) return [];
+  return list.map((v) => {
+    const ItemUID = uid(v);
+    return ItemUID === null || ItemUID === UNEQUIPPED ? null : { ItemUID, Quantity: 0 };
+  });
+}
+
 /** `CItemInventory.DeletePresetEquipUID` for each uid of `removed`, in order:
  *  in every preset, the first slot holding it becomes 0 (same type as the
  *  slot: the wire may spell uids as numbers or strings). Returns the list (the
@@ -209,7 +237,8 @@ function clearPresetSlots(presets: unknown, removed: readonly string[]): { prese
  *  actually changed (owner, gems, substats, level, quantity…), joined or left
  *  — plus the preset slots cleared by a removal —, and how many were skipped — a move or a simple entry whose uid is absent
  *  from the inventory (a piece obtained after this snapshot: not invented), an
- *  unreadable uid, or an item response with no usable entry. Never throws on
+ *  unreadable uid, an item response with no usable entry, or a sale / lock
+ *  line without a usable request. Never throws on
  *  event data. */
 export function foldEquipEvents<T extends FoldableUserItem>(
   raw: T, events: readonly EquipEvent[],
@@ -230,9 +259,21 @@ export function foldEquipEvents<T extends FoldableUserItem>(
       if (it.CharUID !== to) items.set(item!, { ...it, CharUID: to });
       touched.add(item!);
     }
-    if (!ITEM_FIELDS.has(e.path)) continue;
+    if (e.path === "/item/lock") {
+      // CWebRES_ItemLock.OnApply: the request's IsLock onto the request's uid.
+      const r = reqOf(e);
+      const item = uid(r?.ItemUID);
+      const it = item === null ? undefined : items.get(item);
+      if (!it || typeof r?.IsLock !== "boolean") { skipped++; continue; }
+      const IsLock = r.IsLock ? 1 : 0;
+      if (it.IsLock !== IsLock) items.set(item!, { ...it, IsLock });
+      touched.add(item!);
+      continue;
+    }
+    const sold = e.path === "/item/sell";
+    if (!sold && !ITEM_FIELDS.has(e.path)) continue;
     const upserts = entriesOf(e, "upsert").map(itemOf);
-    const simples = entriesOf(e, "simple").map(simpleOf);
+    const simples = sold ? soldOf(e) : entriesOf(e, "simple").map(simpleOf);
     if (!upserts.some((it) => it !== null) && !simples.some((s) => s !== null)) { skipped++; continue; }
     for (const it of upserts) {
       if (!it) { skipped++; continue; }
@@ -253,7 +294,7 @@ export function foldEquipEvents<T extends FoldableUserItem>(
   }
   const before = new Map(raw.ItemList.map((it) => [it.ItemUID, it]));
   let applied = 0;
-  for (const id of before.keys()) if (!items.has(id)) applied++; // consumed, dissolved
+  for (const id of before.keys()) if (!items.has(id)) applied++; // consumed, dissolved, sold
   const ItemList: FoldableItem[] = [];
   for (const [id, it] of items) {
     const was = before.get(id);

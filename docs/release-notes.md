@@ -12,6 +12,9 @@
 
 ## [Unreleased]
 
+- **Selling or locking a piece in-game now reaches the app live**: a sold piece leaves the
+  inventory, a locked one shows the padlock within a few seconds. Update the capture plugin
+  (0.5.0): Settings › Setup › **Update plugin** with the game closed.
 - **Presets now have a priority rank and a lock, like heroes**: optimizing a preset never takes
   pieces from a higher-ranked or locked preset, and a locked preset's pieces are never proposed to
   any other solve. Rank and lock on each card of the Presets tab (new **Sort: Priority**); result

@@ -93,7 +93,9 @@ closed). With the game open you don't need them: equip the pieces and socket the
 app follows each change on its own within a few seconds (no need to go back to the lobby), so
 the Worklist lines tick themselves as **applied**. Upgrades you do in-game (enhance, limit break,
 smelting, reset, merge, craft, dissolve) reach the app the same way (capture plugin 0.4.0+): the
-inventory shows the new +N and the fodder pieces disappear.
+inventory shows the new +N and the fodder pieces disappear. So do sales and locks (capture plugin
+0.5.0+): a piece sold in-game leaves the inventory (a Worklist line on it says the piece is gone),
+a piece locked in-game shows the padlock.
 
 ---
 
