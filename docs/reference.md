@@ -192,6 +192,20 @@ Pipeline détaillé dans [solver.md](solver.md). Résumé :
 - **Worker** — instance d'engine, calcul d'un chunk.
 - **Engine** — `prepareContext + solveChunk + finalizeBuilds`. Phases 1-6 :
   précompute → pools → prune budget → cartesian + set-prune → compose + ratings + heap → CP.
+- **Règles de pool** (`allow()` dans `precomputeContext`, cumulées) : pièces exclues à la main
+  (`excludedPieceUids`), **presets du jeu** (ci-dessous), puis propriétaire effectif (réservation de la
+  Worklist ?? `equippedBy`) gaté par `equippedScope` + rang des héros et `excludedHeroes`, puis
+  plancher *Maxed only*, qualité, classe, mains, effets, sets.
+- **Presets du jeu** (`lib/presets/presetHolds.ts`, `SolveRequest.presetHolds` + `targetPresetNum`) :
+  chaque preset a un **rang unique** (`gs.presets.rank`, clé = `num`, 1 = le plus important, non classé =
+  le plus bas, mêmes opérations que les héros via `lib/storage/rankPriority.ts`, rang par défaut = ordre
+  en jeu `comparePresets`) et un **verrou** (`gs.presets.locked`). Une pièce tenue par un preset P
+  (`itemUids`, EE et slots vides exclus) sort du pool quand (a) P est verrouillé et n'est pas le preset
+  visé, ou (b) un preset Q est visé (« Optimize preset → ») et P n'est pas **strictement** moins
+  prioritaire que Q (`isLowerPriority`, P ≠ Q). Sans preset visé (solve d'un héros), seule (a) compte,
+  y compris pour les pièces que porte le héros lui-même. Pièce tenue par plusieurs presets : la plus
+  contraignante gagne. Table calculée une fois par solve (`presetBlockedUids`), appliquée aussi au pool
+  de gemmes (§2.7).
 
 ### 1.7 Édition d'équipement (`packages/core/src/equip.ts`)
 
@@ -543,7 +557,8 @@ pièces** (`allow()` côté engine) : le gear du héros courant est toujours
 inclus ; le gear équipé sur un autre héros est gaté par `equippedScope`
 (`none` = exclu, `lower` = seulement si le porteur est strictement plus bas
 dans le ranking de priorité via `isLowerPriority`, `all` = inclus) ; le gear
-sur un héros exclu n'est jamais compté. Sans ce gating, le solver pouvait
+sur un héros exclu n'est jamais compté ; le Talisman qu'un preset du jeu garde hors du pool
+(`presetBlocked`, §1.6) garde aussi ses gemmes. Sans ce gating, le solver pouvait
 proposer des gemmes qui exigent physiquement de désé­quiper le Talisman/EE
 d'un héros que l'utilisateur venait juste d'exclure.
 
@@ -820,7 +835,8 @@ sur l'onglet Builds, avec un badge "drift" quand un stat diverge.
 | `apps/renderer/test/statRegistry.test.ts` | 13 tests — registre de stats : `PCT_ROLL_KEYS` = les variantes `pct`, `magnitudeScoreOf` ignore un main en % sur un axe plat seulement (Phantasm), `FINAL_STAT_KEYS` ↔ champs `FinalStats` (aucune clé legacy crc/chd/res…), pont `STAT_TO_PRIORITY` (couvre chaque variante `ROLL_NORMS`, cibles = vrais axes, identité hors collapses flat/%), tokens design complets, snapshot numérique `ROLL_NORMS`/`STAT_NORMS`, migration des clés legacy (idempotente, ordre préservé, entrée nullish) |
 | `apps/renderer/test/worklist.test.ts` | 37 tests — `upsertWorklistEntry` (remplace par `heroUid`, garde l'ordre des autres, coches comprises), `loadWorklist` (entrée stockée sans `kind` lue comme pièce, deux entrées d'un héros → la première), lignes gemme (`worklistChangesFor` : build qui ne change qu'une gemme, `fromGem`, 0 ignorés, pièces puis gemmes, `toCount` = exemplaires gardés + rang ; appliquée = pièce sur le héros + assez d'exemplaires de la gemme, quel que soit l'emplacement — exemplaire déjà gardé qui ne coche pas la ligne du second, deux lignes d'un id dont la seconde attend son exemplaire après le retrait de la première, repli par rang dans l'entrée sans `toCount` ; `remainingChangeCount`, `worklistClaims` et `planWorklist` les ignorent, `reconcileWorklist` + `appliedNotice`), cible lue dans le snapshot courant (`worklistTarget` : nom et main de la pièce présente, repli sur `toName` / `toMain` stockés quand elle manque, rendu de l'écran), pièce disparue (ligne *stale*, hors du compte de `remainingChangeCount` et des réservations de `worklistClaims`, `reconcileWorklist` la garde et la signale une fois, au snapshot qui la perd, `goneNotice` compte les pièces et non les lignes, l'écran la dit « piece gone » sans dire la carte appliquée), issue d'Apply par cause (`equipAssignments` / `equipPieces`, `EQUIP_FAILURE`), toasts (store à timers factices, rendu de la pile) |
 | `apps/renderer/test/worklistPlan.test.ts` | 20 tests — `planWorklist` (planification de transaction) : plan vide sans inventaire/entrées, entrées indépendantes (pas de deps), ordre **free-before-use** (l'entrée qui libère une pièce passe d'abord), **contention** (une copie voulue par deux héros) flaggée — même héros ×2 ≠ contention, plus de `superseded` (une entrée par héros), le repli `equipAssignments` rend `"ok"` et donne la pièce au héros, cycles free/need marqués mais applicables atomiquement (seuls les membres du cycle ; une entrée qui en dépend s'ordonne après), exclusion des changes applied (déjà équipé) / stale (disparu de l'inventaire) ; `worklistClaims` (réservations solveur) : cible de chaque change non appliqué → héros réclamant, changes déjà appliqués ignorés, double-claim = l'entrée la plus récente gagne, map vide sans inventaire |
-| `apps/renderer/test/presets.test.ts` | 28 tests — onglet Presets : `presetRows` (ordre de l'éditeur du jeu : favoris, ordre du joueur, numéro, Master League après ; numéro à défaut, EE jamais dans le preset, porteur exact malgré une autre EE / une pièce de différence → pas porteur, pièce absente avec son slot du fil, pièce partagée flaggée des deux côtés, preset vide), `presetSignature` ; `presetClasses` (arme restreinte, accessoire restreint, deux classes gardées, repli référence → porteurs → associés, inconnue) ; `arrangePresets` (filtre, cartes vides / inconnues masquées, tri par classe avec et sans filtre) ; `evaluatePresetFor` (pièces du preset + l'EE du héros, pas celle du preset : −200 ATK d'une arme connue), `loss` 0 quand preset = meilleure tenue, null sans priorité ; `bestKnownFor` (build sauvegardée la plus récente > tenue actuelle, re-notée avec la priorité courante) ; store `gs.presetHeroes` (aller-retour, uid hors roster ignoré, un rôle par héros, stockage illisible) |
+| `apps/renderer/test/presets.test.ts` | 29 tests — onglet Presets : `presetRows` (ordre de l'éditeur du jeu : favoris, ordre du joueur, numéro, Master League après ; numéro à défaut, EE jamais dans le preset, porteur exact malgré une autre EE / une pièce de différence → pas porteur, pièce absente avec son slot du fil, pièce partagée flaggée des deux côtés, preset vide), `presetSignature` ; `presetClasses` (arme restreinte, accessoire restreint, deux classes gardées, repli référence → porteurs → associés, inconnue) ; `arrangePresets` (filtre, cartes vides / inconnues masquées, tri par classe avec et sans filtre, tri par priorité : rang 1 d'abord, non classés à la fin dans l'ordre du jeu) ; `evaluatePresetFor` (pièces du preset + l'EE du héros, pas celle du preset : −200 ATK d'une arme connue), `loss` 0 quand preset = meilleure tenue, null sans priorité ; `bestKnownFor` (build sauvegardée la plus récente > tenue actuelle, re-notée avec la priorité courante) ; store `gs.presetHeroes` (aller-retour, uid hors roster ignoré, un rôle par héros, stockage illisible) |
+| `apps/renderer/test/presetHolds.test.ts` | 17 tests — presets du jeu dans le pool : `presetHolds` (pièces de chaque preset, EE et slots vides exclus), `presetBlockedUids` (verrouillé hors de tout pool sauf le sien, preset visé rang 3 sans les rangs 1 et 2 mais avec le 4 et les non classés, rang 1 prend tout, visé non classé ne prend rien d'un autre, sans preset visé seuls les verrous, pièce tenue par deux presets → la plus contraignante), `presetHoldersOf` (tenants hors preset visé, mieux classé d'abord), rang par défaut = ordre du jeu (`presetGameOrder` + `fillUnrankedByOrder`, rang effacé gardé effacé) ; `allow()` sur le vrai contrat (`precomputeContext`) : sans preset visé / visé / preset verrouillé visé, requête sans table, cumul avec `excludedPieceUids` et `worklistClaims`, pièce portée par le héros lui-même ; pool de gemmes (`presetBlocked`) |
 | `apps/renderer/test/presetsGems.test.ts` | 13 tests — onglet Presets, réglage : `bestEeGemsFor` sur la table de gemmes réelle (jamais les gemmes du Talisman du preset, même libre, ni de l'EE d'un autre héros, ni du Talisman du héros ; EE libre réservée par la Worklist pour un autre héros hors pool, pour ce héros dans le pool ; gemme sertie gardée à sa place ; null sans priorité ou quand l'EE a déjà le meilleur ; score avec les gemmes proposées > tel que serti ; `eeGems` = gemmes serties compose comme l'EE), `alignToSockets` ; `presetWorklistFor` (pièces qui diffèrent puis lignes gemme de l'EE seules, pièce absente exclue, porteur sans rien à régler → rien, remplacement de l'entrée du héros) ; `presetPriorityOf` (session > build sauvegardée la plus récente > null, priorité sans poids ignorée) ; `gs.presetHeroes` dans la sauvegarde (aller-retour, l'entrée locale gagne, sauvegarde sans le champ) |
 | `apps/renderer/test/presetOptimize.test.ts` | 9 tests — « Optimize preset → » : `presetOptimizePatch` (effets de l'arme, de l'accessoire et du talisman en `required`, talisman élargi à sa famille ; pièce absente ou sans effet → slot ouvert et note ; sous-stats de la tenue seule 4+/3/2 pièces → 3/2/1, talisman et EE à part ; fusion avec la reco, max des poids, ordre reco puis nombre de pièces, coupe à 5 ; tenue vide sans reco → aucune priorité ; mains de la reco seulement, `setPlans` vide ; fusion par `mergePreset` : bornes gardées, sets ouverts) ; `presetOptimizeNote` (avec et sans reco) |
 | `apps/renderer/test/presetsOvercap.test.ts` | 9 tests — caps gaspillés : `overcapOf` (règle partagée Builds / Presets : rien sous les caps, rien à 102 de crit pile ni à 100 de PEN, crit brut 142 avec `critRate` borné à 100 → 40 gaspillés et le texte de Builds, repli sur `critRate` sans somme brute, PEN 120 → 20, deux axes crit d'abord) ; `presetOvercap` (ton d'avertissement à partir de `OVERCAP_WARN_PTS`, sans évaluation → rien, part des gemmes d'EE proposées vs telles que serties) |
@@ -891,6 +907,7 @@ apps/renderer/src/
 │   ├── overcap.ts                 ← overcapOf + overcapText (caps CRC 102 / PEN 100 gaspillés, Builds, Presets et tooltip crit du Builder)
 │   ├── presets/
 │   │   ├── presetRows.ts           ← presets du jeu : pièces, porteurs, pièces absentes / partagées, classe, filtre / tri
+│   │   ├── presetHolds.ts          ← presetHolds + presetBlockedUids (pièces des presets mieux classés / verrouillés hors du pool)
 │   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + presetPriorityOf + presetOvercap (preset noté sur un héros)
 │   │   ├── eeGems.ts               ← bestEeGemsFor (gemmes d'EE par héros, pièces fixées)
 │   │   ├── presetWorklist.ts       ← presetWorklistFor (entrée Worklist d'un héros du preset)
@@ -898,6 +915,8 @@ apps/renderer/src/
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← localStorage per-hero saved builds
 │   │   ├── presetHeroes.ts         ← localStorage référence + associés par preset
+│   │   ├── rankPriority.ts         ← modèle de rang partagé (héros, presets) : rankOrder, isLowerPriority, reorderRank, …
+│   │   ├── presetPriority.ts       ← localStorage rang + verrou par preset
 │   │   └── filterPresets.ts        ← localStorage per-hero filter snapshots
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
@@ -913,7 +932,7 @@ apps/renderer/src/
 └── screens/
     ├── inventory/                  ← InventoryScreen.tsx (gear table) + filters.ts, FilterModal, VirtualGearGrid, ItemDetail…
     ├── BuildsScreen.tsx            ← per-hero current build cards (uses calcBattlePower)
-    ├── presets/PresetsScreen.tsx   ← onglet Presets : ordre du jeu, filtre / tri par classe, grille du jeu, preset noté sur la référence et les associés, gemmes d'EE, overcap, + Worklist, Optimize → / Optimize preset →
+    ├── presets/PresetsScreen.tsx   ← onglet Presets : ordre du jeu, filtre / tri par classe ou priorité, rang + verrou par preset, grille du jeu, preset noté sur la référence et les associés, gemmes d'EE, overcap, + Worklist, Optimize → / Optimize preset →
     └── builder/                    ← BuilderScreen.tsx (useReducer(SolverFilters) + mise en page) + useSolverSession.ts
                                       (orchestrator wiring) + un module par panneau, ResultsTable, RightSidebar (Library)…
 

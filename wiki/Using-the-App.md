@@ -113,6 +113,14 @@ the game.
   without a recommendation, they come from the outfit alone.
 - **Optimize →** — on an associated hero's line: opens the Builder on that hero, like on the
   Builds tab.
+- **Rank and lock** — each preset has a priority **rank**, like the heroes on the Builds tab
+  (1 = most important; type a position, or drag the ⠿ handle with **Sort: Priority**; empty =
+  unranked = lowest; new presets get one in the in-game order). **Optimize preset →** never takes
+  a piece from a preset ranked above or equal to it (unranked counts as lowest). The 🔒 **Lock**
+  button keeps a preset's pieces out of every solve — any hero, any preset — except **Optimize
+  preset →** on that preset itself; a locked card has an amber outline. In the Builder, the
+  Library says which preset is being optimized, and a proposed piece that sits in another preset
+  says **from preset ‹name›** on its card.
 - **Warnings** — a piece no longer in your inventory, or a piece that sits in **two** presets
   (two presets can't be worn in the same fight), is marked on the piece and in the card's banner.
   Empty presets are listed collapsed.

@@ -16,7 +16,7 @@ import type { ReforgeContext } from "./reforge.js";
  * Bottom gear band — one card per main slot for the selected result
  * ───────────────────────────────────────────────────────────────────────── */
 export function BottomGearBand({
-  build, diff, game, reforge, charsByUid, excludedPieceUids, onToggleExclude, compact = false,
+  build, diff, game, reforge, charsByUid, presetsOf, excludedPieceUids, onToggleExclude, compact = false,
 }: {
   build: SolveBuild | null;
   /** The build's per-slot diff vs the hero's loadout (`diffBuildVsLoadout`) —
@@ -30,6 +30,9 @@ export function BottomGearBand({
   reforge: ReforgeContext;
   /** Roster indexed by uid — resolves each piece's `equippedBy` to a character. */
   charsByUid: Map<string, Character>;
+  /** In-game presets holding a piece, other than the one being optimized
+   *  (names, best-ranked first) — "from preset ‹name›" on its card. */
+  presetsOf?: (uid: string) => string[];
   /** Global exclusion set + toggle — drives the inventory-style card's exclude
    *  footer so a trash roll can be excluded right from the results. */
   excludedPieceUids?: Set<string>;
@@ -103,7 +106,8 @@ export function BottomGearBand({
         const pieceForCard = piece && recommendedGems && recommendedGems.some((id) => id > 0)
           ? { ...piece, gemSlots: recommendedGems }
           : piece;
-        return <GearCard key={slot} slot={slot} piece={pieceForCard} game={game} equippedChar={equippedChar} excluded={excluded} onToggleExclude={onToggleExclude} addedTicks={entry?.addedTicks} transistoneTicks={entry?.transistoneTicks} compact={compact} />;
+        const fromPresets = piece ? presetsOf?.(piece.uid) : undefined;
+        return <GearCard key={slot} slot={slot} piece={pieceForCard} game={game} equippedChar={equippedChar} fromPresets={fromPresets} excluded={excluded} onToggleExclude={onToggleExclude} addedTicks={entry?.addedTicks} transistoneTicks={entry?.transistoneTicks} compact={compact} />;
       })}
     </div>
   );
@@ -114,12 +118,14 @@ export function BottomGearBand({
  *  portrait, exclude footer, empty state) so the results look pixel-identical to
  *  the Inventory tab's left card. The piece (already reforge-projected upstream
  *  in `BottomGearBand`) goes through the same `toUiPiece` adapter. */
-function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedTicks, transistoneTicks, compact }: {
+function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleExclude, addedTicks, transistoneTicks, compact }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
   /** Character currently wearing the piece (any owner) — header portrait. */
   equippedChar?: Character | null;
+  /** In-game presets the piece comes from — "from preset ‹name›". */
+  fromPresets?: string[];
   /** This piece is in the global exclusion set — exclude-footer state. */
   excluded?: boolean;
   /** Toggle the piece's exclusion (App-owned). Gates the exclude footer. */
@@ -138,6 +144,7 @@ function GearCard({ piece, game, equippedChar, excluded, onToggleExclude, addedT
     <ResultItemDetail
       piece={ui}
       equippedChar={equippedChar ?? null}
+      fromPresets={fromPresets}
       game={game}
       excluded={excluded}
       onToggleExclude={onToggleExclude}

@@ -165,6 +165,10 @@ interface ResultGearDetailBodyProps {
   /** Optional equipped-on character — shows a small portrait in the header.
    *  Omit on surfaces where the owner is already obvious (e.g. a build card). */
   equippedChar?: Character | null;
+  /** In-game presets holding the piece, other than the one being optimized
+   *  (names, best-ranked first) — "from preset ‹name›" under the header, as
+   *  the portrait says which hero the piece comes from. */
+  fromPresets?: string[];
   /** Per-sub reforge ticks the projection ADDED (aligned to `piece.subs`) — used
    *  to split each sub's LV into Base + Actuelle + Extrapolé. */
   addedTicks?: number[];
@@ -175,7 +179,7 @@ interface ResultGearDetailBodyProps {
   compact?: boolean;
 }
 
-export function ResultGearDetailBody({ piece, game, equippedChar = null, addedTicks, transistoneTicks, compact = false }: ResultGearDetailBodyProps) {
+export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPresets, addedTicks, transistoneTicks, compact = false }: ResultGearDetailBodyProps) {
   const rarity = RARITY[piece.rarity];
   // EE (exclusive) shows just its image + gems — no main stats, no effects.
   const isEE = piece.slot === "exclusive";
@@ -199,6 +203,14 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, addedTi
         {/* Equipped-on hero — top-right corner of the card, round. */}
         {equippedChar && <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={32} className="rounded-full" />}
       </div>
+      {fromPresets && fromPresets.length > 0 && (
+        <div
+          className={cx("truncate text-amber-200/85", compact ? "-mt-1 text-[10px]" : "-mt-2 text-[11px]")}
+          title={`Held by the in-game preset${fromPresets.length === 1 ? "" : "s"} ${fromPresets.join(", ")} — taking it changes ${fromPresets.length === 1 ? "that preset" : "those presets"}`}
+        >
+          from preset {fromPresets.join(", ")}
+        </div>
+      )}
 
       {/* icon + main stat(s) to its right (no rarity/slot line). EE shows just
        *  its image — no main. */}
@@ -315,8 +327,8 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, addedTi
  *  the SOLVE-results cards look pixel-identical to the inventory card while
  *  staying independently editable. */
 export function ResultItemDetail({
-  piece, equippedChar, game, excluded, onToggleExclude, addedTicks, transistoneTicks, compact = false,
-}: { piece: UiPiece | null; equippedChar: Character | null; game: GameData | null; excluded?: boolean; onToggleExclude?: (uid: string) => void; addedTicks?: number[]; transistoneTicks?: number[]; compact?: boolean }) {
+  piece, equippedChar, fromPresets, game, excluded, onToggleExclude, addedTicks, transistoneTicks, compact = false,
+}: { piece: UiPiece | null; equippedChar: Character | null; fromPresets?: string[]; game: GameData | null; excluded?: boolean; onToggleExclude?: (uid: string) => void; addedTicks?: number[]; transistoneTicks?: number[]; compact?: boolean }) {
   const width = compact ? "w-64" : "w-80";
   if (!piece) {
     return (
@@ -336,7 +348,7 @@ export function ResultItemDetail({
   return (
     <aside className={cx("flex h-full shrink-0 flex-col overflow-hidden rounded-xl border border-white/8 bg-bg-elev-1", width)}>
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <ResultGearDetailBody piece={piece} game={game} equippedChar={equippedChar} addedTicks={addedTicks} transistoneTicks={transistoneTicks} compact={compact} />
+        <ResultGearDetailBody piece={piece} game={game} equippedChar={equippedChar} fromPresets={fromPresets} addedTicks={addedTicks} transistoneTicks={transistoneTicks} compact={compact} />
       </div>
       {onToggleExclude && (
         <div className="shrink-0 border-t border-white/8 px-4 py-2.5">

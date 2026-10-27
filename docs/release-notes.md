@@ -12,7 +12,10 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Presets now have a priority rank and a lock, like heroes**: optimizing a preset never takes
+  pieces from a higher-ranked or locked preset, and a locked preset's pieces are never proposed to
+  any other solve. Rank and lock on each card of the Presets tab (new **Sort: Priority**); result
+  cards say **from preset ‹name›** when a piece comes from another preset.
 
 ## [1.15.0] — 2026-10-23
 

@@ -16,6 +16,7 @@ import { Pill } from "../design/Chips.js";
 import { GAME_GEAR_GRID, TOKENS, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toUiPiece } from "../design/adapter.js";
 import { presetSignature } from "../lib/presets/presetRows.js";
+import { RankDragHandle, RankInput } from "../design/RankInput.js";
 
 /** Local alias re-exported for parts of BuildsScreen that previously read
  *  `FinalStats` from this module. The single source of truth now lives in
@@ -549,40 +550,8 @@ interface BuildCardProps {
 
 const NOTE_MAX = 200;
 
-/** Priority-position editor on a build card. Positional & contiguous (rank 1 =
- *  highest priority); typing N moves the hero to position N (others shift),
- *  empty = unranked = lowest. Same effect as dragging it there. Drives the
- *  Builder's "Equipped items → ≤ lower priority" scope. Local draft so typing
- *  doesn't fight the store; commits on blur / Enter. */
-function RankInput({ uid, rank, onSetRank }: { uid: string; rank: number | null; onSetRank: (uid: string, pos: number | null) => void }) {
-  const [draft, setDraft] = useState(rank == null ? "" : String(rank));
-  // Re-sync when the stored rank changes out from under us (e.g. a swap caused
-  // by ranking another hero to this one's number).
-  useEffect(() => { setDraft(rank == null ? "" : String(rank)); }, [rank]);
-  const commit = () => {
-    const t = draft.trim();
-    if (t === "") { onSetRank(uid, null); return; }
-    const n = parseInt(t, 10);
-    onSetRank(uid, Number.isFinite(n) ? n : null);
-  };
-  return (
-    <label
-      className="flex flex-col items-center gap-0.5"
-      title="Priority rank — 1 = highest (smaller number = more important). Type a position or drag the ⠿ handle to reorder; empty = unranked = lowest. Drives the Builder's '≤ lower priority' equipped-items scope."
-    >
-      <span className="text-[8.5px] uppercase tracking-wider text-white/45">Rank</span>
-      <input
-        type="number"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-        placeholder="—"
-        className="w-11 rounded border border-white/10 bg-black/30 px-1 py-0.5 text-center font-mono text-[10.5px] text-white placeholder:text-white/30 focus:border-cyan-400/40 focus:outline-none"
-      />
-    </label>
-  );
-}
+/** Hover help of the rank field on a build card. */
+const HERO_RANK_TITLE = "Priority rank — 1 = highest (smaller number = more important). Type a position or drag the ⠿ handle to reorder; empty = unranked = lowest. Drives the Builder's '≤ lower priority' equipped-items scope.";
 
 /** Free-form per-hero note. Capped at NOTE_MAX chars — the textarea hard-stops
  *  via maxLength but we also show a small counter that goes amber past 90%.
@@ -735,17 +704,8 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
       {/* Rank column — left of the portrait: drag handle (reorder) + the
        *  editable position field. Higher priority = smaller number; rank 1 = top. */}
       <div className="flex shrink-0 flex-col items-center gap-1">
-        {dragEnabled && (
-          <span
-            draggable
-            onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStartRank(uid); }}
-            title="Drag to reorder priority (rank 1 = highest)"
-            className="cursor-grab select-none text-[13px] leading-none text-white/35 hover:text-white/70 active:cursor-grabbing"
-          >
-            ⠿
-          </span>
-        )}
-        <RankInput uid={uid} rank={rank} onSetRank={onSetRank} />
+        {dragEnabled && <RankDragHandle uid={uid} onDragStartRank={onDragStartRank} />}
+        <RankInput uid={uid} rank={rank} onSetRank={onSetRank} title={HERO_RANK_TITLE} />
       </div>
 
       <div className="flex shrink-0 flex-col items-center gap-1">

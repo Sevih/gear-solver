@@ -12,6 +12,7 @@ import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import SolverWorker from "../../workers/solver.worker.ts?worker";
 import { debug, debugEnabled } from "../log.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
+import type { PresetHolds } from "../presets/presetHolds.js";
 import { collapseTalismanVariants, compareBuilds, precomputeContext, TALISMAN_VARIANTS_KEPT, type ReforgeTickWeights } from "./engine.js";
 import type {
   EquippedScope,
@@ -167,6 +168,10 @@ export interface SolveArgs {
   /** Worklist reservations (pieceUid → claiming heroUid) — a claimed piece is
    *  treated as equipped on the claiming hero for the scope/rank rules. */
   worklistClaims?: Record<string, string>;
+  /** In-game presets' pieces, ranks and locks, and the preset being optimized
+   *  (null for a hero solve) — see `presetBlockedUids`. */
+  presetHolds?: PresetHolds;
+  targetPresetNum?: number | null;
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
   /** Per-worker local top-K (orchestrator merges → returns top-N). Default 1000. */
@@ -326,6 +331,8 @@ export class SolverOrchestrator {
       heroPriority: args.heroPriority,
       excludedPieceUids: args.excludedPieceUids,
       worklistClaims: args.worklistClaims,
+      presetHolds: args.presetHolds,
+      targetPresetNum: args.targetPresetNum,
       userSkills: args.userSkills,
       filters: args.filters,
       topK,
@@ -460,6 +467,8 @@ export class SolverOrchestrator {
       heroPriority: args.heroPriority,
       excludedPieceUids: args.excludedPieceUids,
       worklistClaims: args.worklistClaims,
+      presetHolds: args.presetHolds,
+      targetPresetNum: args.targetPresetNum,
       userSkills: args.userSkills,
       filters: args.filters,
     };

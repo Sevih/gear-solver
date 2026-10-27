@@ -14,6 +14,8 @@ import { SettingsModal } from "./design/settings/SettingsModal.js";
 import { HomeScreen } from "./screens/home/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
+import { PRESET_LOCKED_KEY, PRESET_RANK_KEY, type PresetRank } from "./lib/storage/presetPriority.js";
+import { presetHolds } from "./lib/presets/presetHolds.js";
 import { DEFAULT_PRESET_LOSS_WARN } from "./lib/storage/presetHeroes.js";
 import { appliedNotice, equippedByHero, goneNotice, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, upsertWorklistEntry, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
@@ -104,6 +106,11 @@ export function App() {
   // for the "Equipped items → ≤ lower priority" scope. Owned here so an edit in
   // Builds is live in the (kept-mounted) Builder.
   const [heroPriority, setHeroPriority] = usePersistedState<HeroPriority>(HERO_PRIORITY_KEY, {});
+  // In-game presets' ranks and locks — edited in Presets, read by the Builder
+  // (a locked preset's pieces stay out of every solve but its own; "Optimize
+  // preset →" also keeps out those of the better-ranked presets).
+  const [presetRank, setPresetRank] = usePersistedState<PresetRank>(PRESET_RANK_KEY, {});
+  const [presetLocked, setPresetLocked] = usePersistedState<number[]>(PRESET_LOCKED_KEY, []);
   const [status, setStatus] = useState("");
   // Floating notices for what changes out of sight (see design/Toast.tsx).
   const { toasts, notify, dismiss: dismissToast } = useToasts();
@@ -171,7 +178,7 @@ export function App() {
   const [builderHero, setBuilderHero] = useState<string | null>(null);
   // Filters the Presets tab's "Optimize preset →" sends along with the hero,
   // cleared with it.
-  const [builderPatch, setBuilderPatch] = useState<{ patch: RecoFilterPatch; note: string } | null>(null);
+  const [builderPatch, setBuilderPatch] = useState<{ patch: RecoFilterPatch; note: string; presetNum?: number } | null>(null);
   // Cross-hero gear-change queue — built from the Builder ("Add to worklist"),
   // worked through on the Worklist tab. Owned here so an add in the (kept-mounted)
   // Builder is live on the Worklist tab. Persisted to localStorage on each change.
@@ -194,6 +201,8 @@ export function App() {
   // so solving the NEXT hero respects what earlier builds already reserved
   // (equipped scope + rank rules apply to claims like to real equipment).
   const solverWorklistClaims = useMemo(() => worklistClaims(worklist, inv, equipped), [worklist, inv, equipped]);
+  // The presets' pieces with their ranks and locks, for the solver.
+  const solverPresetHolds = useMemo(() => (inv ? presetHolds(inv, presetRank, presetLocked) : undefined), [inv, presetRank, presetLocked]);
   // Pending (not-yet-applied) gear changes across all queued builds — the
   // Worklist tab badge.
   const worklistRemaining = useMemo(() => remainingChangeCount(worklist, inv, equipped), [worklist, inv, equipped]);
@@ -481,7 +490,7 @@ export function App() {
               />
             </ScreenErrorBoundary>
           )}
-          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} worklistHeroUids={worklistHeroUids} worklistClaims={solverWorklistClaims} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Builder"); }} onOptimizePreset={(uid, patch, note) => { setBuilderHero(uid); setBuilderPatch({ patch, note }); setTab("Builder"); }} /></ScreenErrorBoundary>}
+          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} worklistHeroUids={worklistHeroUids} worklistClaims={solverWorklistClaims} presetRank={presetRank} onPresetRankChange={setPresetRank} presetLocked={presetLocked} onPresetLockedChange={setPresetLocked} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Builder"); }} onOptimizePreset={(uid, patch, note, presetNum) => { setBuilderHero(uid); setBuilderPatch({ patch, note, presetNum }); setTab("Builder"); }} /></ScreenErrorBoundary>}
           {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} worklistClaims={solverWorklistClaims} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a
@@ -490,7 +499,7 @@ export function App() {
           {builderMounted && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} />
               </ScreenErrorBoundary>
             </div>
           )}

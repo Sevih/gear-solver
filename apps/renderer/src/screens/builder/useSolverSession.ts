@@ -9,6 +9,7 @@ import type { Character, GameData, Inventory, UserGeasLevels } from "@gear-solve
 import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../../lib/solver/orchestrator.js";
 import type { PoolSizes, SolveBuild, SolveEmptyCause, SolveMode } from "../../lib/solver/types.js";
 import type { HeroPriority } from "../../lib/storage/heroPriority.js";
+import type { PresetHolds } from "../../lib/presets/presetHolds.js";
 import { buildSolveFilters, type MinMax, type SolverFilters } from "../../lib/solver/builderFilters.js";
 import type { ReforgeContext } from "./reforge.js";
 import { ZERO_SOLVE_COUNTS, createSolveCountsStore } from "./solveCounts.js";
@@ -51,12 +52,16 @@ interface SolverSessionInput {
   heroPriority: HeroPriority;
   excludedPieceUids: Set<string> | undefined;
   worklistClaims: Record<string, string> | undefined;
+  /** In-game presets' pieces, ranks and locks (App's `presetHolds`). */
+  presetHolds: PresetHolds | undefined;
+  /** The preset being optimized ("Optimize preset →"), null otherwise. */
+  targetPresetNum: number | null;
   workerCount: number | null;
   topN: number;
   topK: number;
 }
 
-export function useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, workerCount, topN, topK }: SolverSessionInput) {
+export function useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, workerCount, topN, topK }: SolverSessionInput) {
   // Primary SOLVE mode (split button), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
   // RANKING differs: Score ranks by priority — or raw roll magnitude without
@@ -196,6 +201,8 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
       heroPriority,
       excludedPieceUids: excludedPieceUids ? Array.from(excludedPieceUids) : undefined,
       worklistClaims,
+      presetHolds,
+      targetPresetNum,
       userSkills: {
         first: selected.skills.first,
         second: selected.skills.second,
@@ -254,6 +261,8 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
         heroPriority,
         excludedPieceUids: excludedPieceUids ? Array.from(excludedPieceUids) : undefined,
         worklistClaims,
+        presetHolds,
+        targetPresetNum,
         userSkills: {
           first: selected.skills.first,
           second: selected.skills.second,
@@ -265,7 +274,7 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     }, 250);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [solving, selectedUid, inventory, game, selected, filters, solveMode, heroPriority, excludedPieceUids, worklistClaims, userGeasLevels, userCodexLevel]);
+  }, [solving, selectedUid, inventory, game, selected, filters, solveMode, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, userGeasLevels, userCodexLevel]);
 
   return {
     solveMode, setSolveMode, orchestratorRef, resultsReforge, setResultsReforge, solving, setSolving, progressStore,

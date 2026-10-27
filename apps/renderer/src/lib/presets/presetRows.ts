@@ -24,7 +24,7 @@ export const PRESET_SLOTS: readonly GearSlot[] = [
 ];
 
 /** An empty preset slot comes as uid 0 on the wire. */
-const isEmptyUid = (uid: string): boolean => uid === "" || uid === "0";
+export const isEmptyUid = (uid: string): boolean => uid === "" || uid === "0";
 
 /** Sorted, comma-joined UID key for a set of gear pieces, EE pieces and empty
  *  slots excluded. Same routine on both sides (preset vs hero) keeps the
@@ -172,24 +172,33 @@ function distinct(values: Array<string | null>): string[] {
   return [...new Set(values.filter((v): v is string => !!v))];
 }
 
-export type PresetSort = "game" | "class";
+export type PresetSort = "game" | "class" | "priority";
 
 /** The cards the Presets tab shows, given its class filter and sort. `items`
  *  come in the game's order. Filter: a card stays when one of its classes is
  *  selected; an empty card or one of unknown class is hidden as soon as a
  *  class is. Sort "class": by the first of the card's classes in `classOrder`
  *  (only the selected ones count when filtering), unknown last, the game's
- *  order within a class. */
+ *  order within a class. Sort "priority": by the preset rank (`presetRank`, key =
+ *  num; rank 1 first, unranked last), the game's order among the unranked. */
 export function arrangePresets<T extends { row: PresetRow; classes: readonly string[] }>(
   items: readonly T[],
   selected: ReadonlySet<string>,
   sort: PresetSort,
   classOrder: readonly string[],
+  presetRank: Readonly<Record<string, number>> = {},
 ): T[] {
   const kept = selected.size === 0
     ? [...items]
     : items.filter((it) => !it.row.empty && it.classes.some((c) => selected.has(c)));
   if (sort === "game") return kept;
+  if (sort === "priority") {
+    const order = (it: T) => presetRank[String(it.row.preset.num)] ?? Number.POSITIVE_INFINITY;
+    return kept
+      .map((it) => ({ it, r: order(it) }))
+      .sort((a, b) => (a.r === b.r ? 0 : a.r - b.r))
+      .map(({ it }) => it);
+  }
   const order = selected.size === 0 ? classOrder : classOrder.filter((c) => selected.has(c));
   const rank = (classes: readonly string[]) => {
     const ranks = classes.map((c) => order.indexOf(c)).filter((i) => i >= 0);

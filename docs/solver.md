@@ -320,6 +320,11 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   réservée par le build en attente d'un autre héros compte comme équipée sur lui (une entrée
   appliquée/retirée libère ses claims — dérivés live par `worklistClaims`). Le **gem pool**
   (`buildGemPool`) suit la même règle.
+  Les **presets du jeu** s'y ajoutent, quel que soit le scope (`presetHolds`, cf. reference.md §1.6) :
+  les pièces d'un preset **verrouillé** ne sortent jamais, sauf pour « Optimize preset → » sur ce preset ;
+  « Optimize preset → » ne prend pas les pièces d'un preset de rang égal ou meilleur. Le Builder le dit
+  dans la Library (« Optimizing preset ‹nom› (rank N) — … », perdu au changement de héros) et les gear
+  cards nomment le preset d'où vient une pièce (« from preset ‹nom› »).
 - **Keep current** — verrouille les slots déjà équipés à leur pièce actuelle.
 - **Allow broken sets** (`allowBrokenSets`, défaut **true**) — *true* : un set requis partiel
   (ex. un seul `2pc`) laisse n'importe quelle pièce remplir les slots armor libres (comportement

@@ -197,6 +197,20 @@ Pipeline detailed in [Solver](Solver). Summary:
   only as a fallback when the precompute is absent).
 - **Engine** — `prepareContext + solveChunk + finalizeBuilds`. Phases 1-6:
   precompute → pools → combo-budget prune → cartesian + set-prune → compose + ratings + heap → CP.
+- **Pool rules** (`allow()` in `precomputeContext`, stacked): pieces excluded by hand
+  (`excludedPieceUids`), **in-game presets** (below), then the effective owner (Worklist
+  reservation ?? `equippedBy`) gated by `equippedScope` + hero ranks and `excludedHeroes`, then the
+  *Maxed only* floor, quality, class, mains, effects, sets.
+- **In-game presets** (`lib/presets/presetHolds.ts`, `SolveRequest.presetHolds` + `targetPresetNum`):
+  each preset has a **unique rank** (`gs.presets.rank`, key = `num`, 1 = most important, unranked =
+  lowest, the same operations as the heroes through `lib/storage/rankPriority.ts`, default rank =
+  the in-game order `comparePresets`) and a **lock** (`gs.presets.locked`). A piece held by a preset
+  P (`itemUids`, EE and empty slots left out) leaves the pool when (a) P is locked and isn't the
+  targeted preset, or (b) a preset Q is targeted ("Optimize preset →") and P isn't **strictly** lower
+  priority than Q (`isLowerPriority`, P ≠ Q). Without a target preset (a hero solve), only (a)
+  counts, the hero's own worn pieces included. A piece held by several presets: the most
+  restrictive wins. The table is built once per solve (`presetBlockedUids`) and also applies to
+  the gem pool (§2.7).
 
 ### 1.7 Equipment editing (`packages/core/src/equip.ts`)
 
@@ -541,7 +555,8 @@ Talisman + EE of the inventory. **Eligibility mirrors the piece selection**
 (`allow()` on the engine side): the current hero's gear is always included;
 gear equipped on another hero is gated by `equippedScope` (`none` excludes all,
 `lower` keeps only strictly-lower-priority heroes via `heroPriority`, `all`
-keeps everything); gear on an excluded hero is never counted. Without this
+keeps everything); gear on an excluded hero is never counted; a Talisman an in-game preset
+keeps out of the pool (`presetBlocked`, §1.6) keeps its gems too. Without this
 gating, the solver could propose gems that physically require unequipping the
 Talisman/EE of a hero the user just excluded or outranks.
 
@@ -815,7 +830,8 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/statRegistry.test.ts` | 13 tests — stat registry (`STAT_AXES`): `PCT_ROLL_KEYS` = the `pct` variants, `magnitudeScoreOf` ignores a % main on a flat-only axis (Phantasm), FinalStats coverage, `STAT_TO_PRIORITY` flat/%→axis bridge, design-token completeness, numeric parity snapshot, legacy-key migration |
 | `apps/renderer/test/worklist.test.ts` | 37 tests — `upsertWorklistEntry` (replaces by `heroUid`, keeps the others' order, ticks included), `loadWorklist` (an entry stored without `kind` reads as a piece line, two entries of one hero → the first), gem lines (`worklistChangesFor`: a build changing only a gem, `fromGem`, zeros ignored, pieces then gems, `toCount` = copies kept + rank; applied = piece on the hero + enough copies of the gem, in any socket — a copy already kept doesn't tick the line for a second one, two lines for one id where the second waits for its copy once the first is pruned, rank-in-entry fallback without `toCount`; `remainingChangeCount`, `worklistClaims` and `planWorklist` ignore them, `reconcileWorklist` + `appliedNotice`), target read from the current snapshot (`worklistTarget`: the present piece's name and main, falling back on the stored `toName` / `toMain` when it's missing, screen render), gone piece (a *stale* line, out of `remainingChangeCount`'s count and of `worklistClaims`' reservations, `reconcileWorklist` keeps it and reports it once, on the snapshot that loses it, `goneNotice` counts pieces rather than lines, the screen says "piece gone" without calling the card applied), apply outcome per cause (`equipAssignments` / `equipPieces`, `EQUIP_FAILURE`), toasts (fake-timer store, stack render) |
 | `apps/renderer/test/worklistPlan.test.ts` | 20 tests — `planWorklist` transaction planning: free-before-use ordering, contention flags (one copy wanted twice), no `superseded` any more (one entry per hero), the `equipAssignments` fold returns `"ok"` and hands the piece over, cycles applicable atomically (only the cycle's members; an entry depending on one is ordered after it), applied/stale changes excluded, empty plan; `worklistClaims` (solver reservations): each unapplied change's target → claiming hero, already-applied changes skipped, newest entry wins a double-claim, empty map without inventory |
-| `apps/renderer/test/presets.test.ts` | 28 tests — Presets tab: `presetRows` (the game editor's order: favorites, player's order, number, Master League last; number otherwise, EE never in the preset, exact wearer despite another EE / one piece off → not a wearer, missing piece with its wire slot, shared piece flagged on both sides, empty preset), `presetSignature`; `presetClasses` (restricted weapon, restricted accessory, two classes kept, fallback reference → wearers → associated, unknown); `arrangePresets` (filter, empty / unknown cards hidden, class sort with and without a filter); `evaluatePresetFor` (the preset's pieces + the hero's EE, not the preset's: −200 ATK from a known weapon), `loss` 0 when the preset is the best outfit, null without a priority; `bestKnownFor` (most recent saved build over the current gear, re-scored with the current priority); `gs.presetHeroes` store (round-trip, uid outside the roster ignored, one role per hero, unreadable storage) |
+| `apps/renderer/test/presets.test.ts` | 29 tests — Presets tab: `presetRows` (the game editor's order: favorites, player's order, number, Master League last; number otherwise, EE never in the preset, exact wearer despite another EE / one piece off → not a wearer, missing piece with its wire slot, shared piece flagged on both sides, empty preset), `presetSignature`; `presetClasses` (restricted weapon, restricted accessory, two classes kept, fallback reference → wearers → associated, unknown); `arrangePresets` (filter, empty / unknown cards hidden, class sort with and without a filter, priority sort: rank 1 first, the unranked last in the game's order); `evaluatePresetFor` (the preset's pieces + the hero's EE, not the preset's: −200 ATK from a known weapon), `loss` 0 when the preset is the best outfit, null without a priority; `bestKnownFor` (most recent saved build over the current gear, re-scored with the current priority); `gs.presetHeroes` store (round-trip, uid outside the roster ignored, one role per hero, unreadable storage) |
+| `apps/renderer/test/presetHolds.test.ts` | 17 tests — in-game presets in the pool: `presetHolds` (each preset's pieces, EE and empty slots left out), `presetBlockedUids` (a locked preset out of every pool but its own, target rank 3 without ranks 1 and 2 but with rank 4 and the unranked, rank 1 takes everything, an unranked target takes nothing of another, without a target only the locks, a piece held by two presets → the most restrictive), `presetHoldersOf` (holders other than the target, best-ranked first), default rank = the game's order (`presetGameOrder` + `fillUnrankedByOrder`, a cleared rank stays cleared); `allow()` on the real contract (`precomputeContext`): no target / a target / the locked preset targeted, a request without the table, stacked with `excludedPieceUids` and `worklistClaims`, a piece the hero wears; gem pool (`presetBlocked`) |
 | `apps/renderer/test/presetsGems.test.ts` | 13 tests — Presets tab, tuning: `bestEeGemsFor` on the real gem table (never the gems of the preset's Talisman, even free, nor another hero's EE, nor the hero's own Talisman; a free EE the Worklist reserves for another hero out of the pool, for this hero in it; a socketed gem kept in place; null without a priority or when the EE already holds the best; score with the proposed gems > as socketed; `eeGems` = the socketed gems composes like the EE), `alignToSockets`; `presetWorklistFor` (the differing pieces then the EE gem lines alone, missing piece left out, a wearer with nothing to tune → nothing, the hero's entry replaced); `presetPriorityOf` (session > most recent saved build > null, a weightless priority skipped); `gs.presetHeroes` in the backup (round-trip, the local entry wins, a backup without the field) |
 | `apps/renderer/test/presetOptimize.test.ts` | 9 tests — "Optimize preset →": `presetOptimizePatch` (the weapon's, accessory's and talisman's effects `required`, the talisman widened to its family; a piece missing or without an effect → slot left open and a note; substats from the outfit alone 4+/3/2 pieces → 3/2/1, talisman and EE aside; merged with the reco, max of the weights, reco first then piece count, cut at 5; empty outfit without a reco → no priority; mains from the reco only, empty `setPlans`; merged by `mergePreset`: bands kept, sets open); `presetOptimizeNote` (with and without a reco) |
 | `apps/renderer/test/presetsOvercap.test.ts` | 9 tests — wasted caps: `overcapOf` (the rule shared by Builds / Presets: nothing under the caps, nothing at 102 crit exactly nor at 100 PEN, raw crit 142 with `critRate` bounded at 100 → 40 wasted and the Builds text, fallback on `critRate` without the raw sum, PEN 120 → 20, two axes crit first); `presetOvercap` (warning tone from `OVERCAP_WARN_PTS`, no evaluation → nothing, the proposed EE gems' share vs as socketed) |
@@ -884,6 +900,7 @@ apps/renderer/src/
 │   ├── overcap.ts                 ← overcapOf + overcapText (wasted CRC 102 / PEN 100 caps, Builds, Presets and the Builder's crit tooltip)
 │   ├── presets/
 │   │   ├── presetRows.ts           ← in-game presets: pieces, wearers, missing / shared pieces, class, filter / sort
+│   │   ├── presetHolds.ts          ← presetHolds + presetBlockedUids (pieces of better-ranked / locked presets out of the pool)
 │   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + presetPriorityOf + presetOvercap (a preset scored on one hero)
 │   │   ├── eeGems.ts               ← bestEeGemsFor (EE gems per hero, pieces fixed)
 │   │   ├── presetWorklist.ts       ← presetWorklistFor (the Worklist entry of one hero of the preset)
@@ -891,6 +908,8 @@ apps/renderer/src/
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← localStorage per-hero saved builds
 │   │   ├── presetHeroes.ts         ← localStorage reference + associated heroes per preset
+│   │   ├── rankPriority.ts         ← shared rank model (heroes, presets): rankOrder, isLowerPriority, reorderRank, …
+│   │   ├── presetPriority.ts       ← localStorage rank + lock per preset
 │   │   └── filterPresets.ts        ← localStorage per-hero filter snapshots
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
@@ -906,7 +925,7 @@ apps/renderer/src/
 └── screens/
     ├── inventory/                  ← InventoryScreen.tsx (gear table) + filters.ts, FilterModal, VirtualGearGrid, ItemDetail…
     ├── BuildsScreen.tsx            ← per-hero current build cards (uses calcBattlePower)
-    ├── presets/PresetsScreen.tsx   ← Presets tab: game order, class filter / sort, in-game grid, a preset scored on its reference and associated heroes, EE gems, overcap, + Worklist, Optimize → / Optimize preset →
+    ├── presets/PresetsScreen.tsx   ← Presets tab: game order, class filter / sort by class or priority, rank + lock per preset, in-game grid, a preset scored on its reference and associated heroes, EE gems, overcap, + Worklist, Optimize → / Optimize preset →
     └── builder/                    ← BuilderScreen.tsx (useReducer(SolverFilters) + layout) + useSolverSession.ts
                                       (orchestrator wiring) + one module per panel, ResultsTable, RightSidebar (Library)…
 

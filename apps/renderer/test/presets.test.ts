@@ -171,6 +171,11 @@ describe("arrangePresets", () => {
   it("class sort with a filter: only the selected classes rank a card", () => {
     expect(nums(arrangePresets(CARDS, new Set(["CCT_MAGE", "CCT_ATTACKER"]), "class", ORDER))).toEqual([3, 1, 5]);
   });
+  it("priority sort: rank 1 first, the unranked last in the game's order", () => {
+    expect(nums(arrangePresets(CARDS, new Set(), "priority", ORDER, { 5: 1, 3: 2, 1: 3 }))).toEqual([5, 3, 1, 2, 4]);
+    expect(nums(arrangePresets(CARDS, new Set(["CCT_MAGE"]), "priority", ORDER, { 5: 2, 1: 1 }))).toEqual([1, 5]);
+    expect(nums(arrangePresets(CARDS, new Set(), "priority", ORDER))).toEqual([1, 2, 3, 4, 5]);
+  });
 });
 
 const sc = (baseValue: number): StatScaling => ({

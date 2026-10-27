@@ -34,7 +34,7 @@ function ActionButton({
 export function RightSidebar({
   canSave,
   onSaveBuild,
-  canGetPreset, onGetPreset, recoBusy, recoStatus,
+  canGetPreset, onGetPreset, recoBusy, recoStatus, presetStatus = null,
   savedBuilds, onRestoreBuild, onRemoveBuild,
   presets, onLoadPreset, onRemovePreset,
 }: {
@@ -45,6 +45,9 @@ export function RightSidebar({
   recoBusy: boolean;
   /** Inline result of the last Get-preset attempt (error / none / warnings). */
   recoStatus: { tone: "ok" | "warn" | "error"; text: string } | null;
+  /** The in-game preset being optimized and what it keeps out of the pool
+   *  ("Optimize preset →"), null otherwise. */
+  presetStatus?: string | null;
   savedBuilds: ReadonlyArray<SavedBuild>;
   onRestoreBuild: (b: SavedBuild) => void;
   onRemoveBuild: (id: string) => void;
@@ -70,6 +73,9 @@ export function RightSidebar({
           )}>
             {recoStatus.text}
           </div>
+        )}
+        {presetStatus && (
+          <div className="mt-1.5 text-[10px] leading-snug text-cyan-200/80">{presetStatus}</div>
         )}
       </Panel>
 

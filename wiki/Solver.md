@@ -311,6 +311,11 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   reserved by another hero's queued build counts as equipped on that hero (applying or
   removing the entry lifts its claims — derived live by `worklistClaims`). The **gem pool**
   (`buildGemPool`) follows the same rule.
+  The **in-game presets** stack on top, whatever the scope (`presetHolds`, see Engine Reference
+  §1.6): a **locked** preset's pieces never come out, except for "Optimize preset →" on that
+  preset; "Optimize preset →" never takes the pieces of a preset ranked equal or better. The
+  Builder says so in the Library ("Optimizing preset ‹name› (rank N) — …", dropped when you switch
+  heroes) and the gear cards name the preset a piece comes from ("from preset ‹name›").
 - **Keep current** — locks the already-equipped slots to their current piece.
 - **Allow broken sets** (`allowBrokenSets`, default **true**) — *true*: a partial set
   requirement (e.g. a single `2pc`) lets any gear fill the free armor slots (legacy

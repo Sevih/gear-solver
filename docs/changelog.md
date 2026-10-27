@@ -8,6 +8,66 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔒 Presets du jeu : rang de priorité et verrou, pièces des presets mieux classés ou verrouillés hors du pool (2026-10-27)
+- ✅ **Pourquoi.** « Optimize preset → » (G47) envoyait au Builder des filtres, mais le Builder puisait dans tout
+  l'inventaire comme si aucun preset n'existait : une pièce du preset n°1 pouvait partir dans la build proposée pour le
+  n°3. Règle demandée (27/10), celle des persos : le preset de rang 1 peut tout prendre, le rang 3 pas les pièces des
+  rangs 1 et 2 ; plus un verrou par preset, dont les pièces ne sont jamais proposées.
+- ✅ **Rang.** Le modèle de rang de `heroPriority.ts` est extrait tel quel dans `lib/storage/rankPriority.ts`
+  (`rankOrder`, `isLowerPriority`, `reorderRank`, `moveRankBefore`, `fillUnrankedByOrder`, `loadSeen` / `persistSeen`
+  paramétrés par clé de stockage) ; `heroPriority.ts` le réexporte et garde ses clés (`gs.priority.rank` / `.seen`),
+  les 21 tests de `heroPriority.test.ts` passent sans retouche. `lib/storage/presetPriority.ts` : `gs.presets.rank`
+  (clé = `num` en chaîne), `gs.presets.seen`, `gs.presets.locked` (`number[]`), `toggleLocked`. Un preset jamais vu
+  reçoit un rang sous les classés dans l'ordre en jeu (`presetGameOrder` = `comparePresets`, favoris, `sortOrder`
+  décroissant, num ; Master League après), à l'ouverture de l'onglet Presets, comme Builds remplit les persos par CP ;
+  un rang effacé le reste. Rang et verrous appartiennent à `App` (`usePersistedState`), donc vivants pour le Builder
+  resté monté.
+- ✅ **Solveur.** `lib/presets/presetHolds.ts` : `presetHolds(inventory, rank, locked)` donne la table uid → presets
+  tenants (EE et slots vides exclus, comme `presetSignature` ; `isEmptyUid` exporté de `presetRows.ts`) avec rangs et
+  verrous ; `presetBlockedUids(holds, targetNum)` calcule une fois par solve les pièces retirées : (a) preset verrouillé
+  qui n'est pas le preset visé, (b) preset visé Q et tenant P non strictement moins prioritaire (`isLowerPriority`,
+  P ≠ Q) ; une pièce à plusieurs tenants sort dès qu'un tenant la bloque (= le plus contraignant gagne). `SolveRequest`
+  / `EstimateRequestMsg` / `SolveArgs` portent `presetHolds` et `targetPresetNum` (orchestrateur, solve et estimation) ;
+  `allow()` teste l'ensemble juste après `excludedPieceUids`, avant le propriétaire effectif : les règles existantes
+  (`equippedScope`, rang des héros, `excludedHeroes`, `worklistClaims`) sont inchangées et se cumulent. Un verrou vaut
+  aussi pour les pièces que porte le héros résolu (« quel que soit le perso »). Le pool de gemmes suit (`presetBlocked`
+  dans `buildGemPool`) : le Talisman d'un preset bloqué garde ses gemmes, pour que l'invariant « éligibilité des gemmes
+  = celle des pièces » de `reference.md` §2.7 reste vrai.
+- ✅ **Preset visé.** `onOptimizePreset` reçoit le `num` du preset (`App` → `builderPatch.presetNum` →
+  `initialPatch.presetNum`) ; `BuilderScreen` le tient lié au héros ouvert (`targetPreset`) et le perd au changement de
+  perso ; « Optimize → » (héros associé), Builds, Home et la Worklist n'en posent pas, donc seuls les verrous comptent.
+  Ligne de statut sous la note G47 dans la Library (`RightSidebar.presetStatus`) : « Optimizing preset ‹nom› (rank N) —
+  pieces of higher-ranked and locked presets excluded » (« unranked » sans rang).
+- ✅ **Interface.** Onglet Presets : sur chaque carte le même éditeur de rang que Builds (`RankInput` et la poignée ⠿
+  sortis de `BuildsScreen.tsx` dans `design/RankInput.tsx`, titre en paramètre, rendu identique), drag-to-reorder en
+  tri « Priority » (nouveau, à côté de « In-game » et « Class » : `arrangePresets(…, presetRank)`, rang 1 d'abord, non
+  classés à la fin dans l'ordre du jeu), bouton 🔓 Lock / 🔒 Locked à droite de l'en-tête avec un titre explicite, carte
+  verrouillée à liseré ambre. Résultats du Builder : une pièce tenue par un autre preset que le preset visé dit « from
+  preset ‹nom› » sous l'en-tête de sa gear card (`presetHoldersOf`, mieux classé d'abord ; `BottomGearBand.presetsOf` →
+  `ResultItemDetail.fromPresets`), compact compris, comme le portrait dit le perso d'où vient la pièce.
+- ✅ **Tests.** `presetHolds.test.ts` (17) : table (EE et vides exclus, pièce à deux presets), verrouillé hors de tout
+  pool sauf le sien, visé rang 3 sans les rangs 1 et 2 mais avec le 4 et les non classés, rang 1 prend tout, visé non
+  classé ne prend rien d'un autre, sans preset visé seuls les verrous, pièce tenue par deux presets, `presetHoldersOf`,
+  rang par défaut = ordre en jeu ; `allow()` par `precomputeContext` sur le vrai contrat (sans visé / visé / verrouillé
+  visé, requête sans table, cumul avec `excludedPieceUids` et `worklistClaims` sous « lower », pièce portée par le
+  héros) ; pool de gemmes. `presets.test.ts` : tri « priority » (+1).
+- ✅ **Docs.** `reference.md` + `wiki/Engine-Reference.md` (§1.6 règles de pool et presets du jeu, §2.7, tables de tests,
+  carte des modules), `solver.md` + `wiki/Solver.md` (Equipped items), `wiki/Using-the-App.md` (Rank and lock),
+  `release-notes.md › [Unreleased]`. `wiki/FAQ.md` ne parle des presets que pour la confidentialité : inchangée.
+  `docs/todo.md` n'a pas d'item « Presets du jeu — restes » (relu le 27/10) : inchangé.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` sans erreur (les trois workspaces) ; `npm test` →
+  « Tests 169 passed (169) » (core), « Tests 199 passed (199) » (desktop), « Tests 747 passed (747) » (renderer) ;
+  `npm run lint` → « ✖ 13 problems (0 errors, 13 warnings) », inchangé (l'avertissement `set-state-in-effect` de
+  `RankInput` a suivi le composant de `BuildsScreen.tsx` à `design/RankInput.tsx`).
+- ✅ **Laissé.** La sauvegarde (`lib/storage/transfer.ts`) ne porte ni `gs.presets.*` ni, déjà, `gs.priority.*` ; les
+  gemmes d'EE proposées dans l'onglet Presets (`bestEeGemsFor`) ignorent rangs et verrous (l'EE n'est jamais dans un
+  preset) ; les rangs d'un preset supprimé en jeu restent stockés, comme ceux d'un perso disparu.
+- ⏳ **Sevih, sur le fixe** : classer deux presets (rang 1 et 2), verrouiller un troisième, « Optimize preset → » sur le
+  rang 2 → aucune pièce du rang 1 ni du verrouillé dans les résultats, les pièces du rang 3 et des non classés y sont
+  et sont dites « from preset … » ; « Optimize preset → » sur le rang 1 → tout sauf le verrouillé ; un solve de perso
+  lancé depuis Builds → seul le verrouillé est écarté. Vérifier aussi la ligne de statut de la Library et sa
+  disparition au changement de perso.
+
 ### 📦 Outillage de release : electron-builder 25.1.8 → 26.15.3 et electron-updater aligné, installeur de banc 1.15.0-g55 (2026-10-25)
 - ✅ **Pourquoi.** `npm audit` (23/10) : 27 vulnérabilités (1 modérée, 25 hautes, 1 critique `tar`), dont l'essentiel
   dans l'arbre d'`electron-builder` 25 (`app-builder-lib`, `builder-util*`, `dmg-builder`, `electron-publish`,

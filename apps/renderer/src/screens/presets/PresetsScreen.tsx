@@ -20,13 +20,19 @@
  * Cards come in the in-game editor's order (`presetRows`); the class chips
  * filter them and "Sort: Class" groups them by class (`presetClasses`,
  * `arrangePresets`) — kept for the mount only, like the rest of the screen.
+ * Each card carries the preset's priority rank (positional field, ⠿ drag in
+ * "Sort: Priority") and a lock, on the model of the hero ranks of Builds: App
+ * owns both (`gs.presets.rank` / `gs.presets.locked`) and the solver reads them
+ * through `presetHolds` — a locked preset's pieces never enter another solve,
+ * and "Optimize preset →" never takes the pieces of a better-ranked preset. A
+ * preset never offered a rank gets one in the in-game order.
  *
  * Nothing is written to the game: the groups are local (`gs.presetHeroes`).
  * The priority is the Builder's of this session — as the Builder last left the
  * hero (`snapshotOnHeroSwitch`) — else the one of the hero's most recent saved
  * build (`presetPriorityOf`).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { Character, GameData, GearPiece, GearSlot, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { effectiveCharacter } from "@gear-solver/core";
 import { CharacterPortrait, SlotMini } from "../../design/EquipmentIcon.js";
@@ -35,6 +41,7 @@ import { RichTooltip } from "../../design/RichTooltip.js";
 import { Pill } from "../../design/Chips.js";
 import { CyanButton } from "../../design/Shell.js";
 import { cx } from "../../design/cx.js";
+import { RankDragHandle, RankInput } from "../../design/RankInput.js";
 import { toUiPiece } from "../../design/adapter.js";
 import { GAME_GEAR_GRID, toDesignSlot, toEngineSlot } from "../../design/tokens.js";
 import {
@@ -48,6 +55,9 @@ import { overcapText } from "../../lib/overcap.js";
 import { bestEeGemsFor } from "../../lib/presets/eeGems.js";
 import { presetWorklistFor } from "../../lib/presets/presetWorklist.js";
 import { presetOptimizeNote, presetOptimizePatch } from "../../lib/presets/optimize.js";
+import { presetGameOrder } from "../../lib/presets/presetHolds.js";
+import { loadSeenPresets, persistSeenPresets, toggleLocked, type PresetRank } from "../../lib/storage/presetPriority.js";
+import { fillUnrankedByOrder, moveRankBefore, reorderRank } from "../../lib/storage/rankPriority.js";
 import { fetchRecoForHero } from "../../lib/reco/fetchReco.js";
 import { talismanFamilyKeys, type RecoFilterPatch } from "../../lib/reco/translateReco.js";
 import { worklistGem } from "../../lib/worklist/changes.js";
@@ -78,12 +88,22 @@ interface PresetsScreenProps {
    *  `solverWorklistClaims`, as Builder / Builds get it) — the EE gem pool
    *  leaves a free piece reserved for another hero out. */
   worklistClaims?: Readonly<Record<string, string>>;
+  /** Preset priority ranks (preset num → unique rank, App-owned) and App's
+   *  setter (functional updates supported). */
+  presetRank: PresetRank;
+  onPresetRankChange: Dispatch<SetStateAction<PresetRank>>;
+  /** Locked preset nums (App-owned) and App's setter. */
+  presetLocked: readonly number[];
+  onPresetLockedChange: Dispatch<SetStateAction<number[]>>;
   /** Open the Builder on a hero (App's `setBuilderHero` + tab switch). */
   onOptimize?: (heroUid: string) => void;
-  /** Open the Builder on a preset's reference hero with filters overlaid and
-   *  the status line to show ("Optimize preset →"). */
-  onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string) => void;
+  /** Open the Builder on a preset's reference hero with filters overlaid, the
+   *  status line to show and the preset optimized ("Optimize preset →"). */
+  onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string, presetNum: number) => void;
 }
+
+/** Hover help of the rank field on a preset card. */
+const PRESET_RANK_TITLE = "Preset priority rank — 1 = highest (smaller number = more important). Type a position or drag the ⠿ handle (Sort: Priority) to reorder; empty = unranked = lowest. Optimize preset → never takes the pieces of a preset ranked above it.";
 
 /** Same rounding as the Builder's results table. */
 function fmtNum(v: number | null | undefined): string {
@@ -102,7 +122,7 @@ interface HeroView {
 const CLASS_ORDER = CLASSES.map((c) => c.id);
 const classLabel = (id: string): string | null => CLASSES.find((c) => c.id === id)?.label ?? null;
 
-export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, worklistClaims, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
+export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, worklistClaims, presetRank, onPresetRankChange, presetLocked, onPresetLockedChange, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
   // Read once per mount — the screen remounts on every tab switch, so a build
   // saved in the Builder is picked up on the way back; a Builder priority once
   // the Builder has switched away from that hero (it's stored on the switch).
@@ -138,7 +158,28 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const stored = presetHeroesFor(presetHeroes, row.preset.num, roster);
     return { row, stored, classes: presetClasses(row, stored, (uid) => heroes.get(uid)?.cls ?? null) };
   }), [rows, presetHeroes, roster, heroes]);
-  const shown = useMemo(() => arrangePresets(cards, classFilter, sort, CLASS_ORDER), [cards, classFilter, sort]);
+  const shown = useMemo(() => arrangePresets(cards, classFilter, sort, CLASS_ORDER, presetRank), [cards, classFilter, sort, presetRank]);
+  // Rank edits — positional model, contiguous 1..N, as on the Builds cards.
+  const setRank = useCallback((key: string, pos: number | null) => {
+    onPresetRankChange((prev) => reorderRank(prev, key, pos));
+  }, [onPresetRankChange]);
+  const dragKey = useRef<string | null>(null);
+  const onDragStartRank = useCallback((key: string) => { dragKey.current = key; }, []);
+  const onDropRank = useCallback((targetKey: string) => {
+    const dragged = dragKey.current;
+    dragKey.current = null;
+    if (dragged) onPresetRankChange((prev) => moveRankBefore(prev, dragged, targetKey));
+  }, [onPresetRankChange]);
+  // A preset never offered a rank (first use, a preset saved since) gets one
+  // below the ranked ones, in the in-game order; a cleared rank stays cleared.
+  useEffect(() => {
+    if (!inventory || inventory.presets.length === 0) return;
+    const order = presetGameOrder(inventory.presets);
+    const seen = loadSeenPresets();
+    const next = fillUnrankedByOrder(presetRank, order, seen);
+    if (order.some((k) => !seen.has(k))) persistSeenPresets([...seen, ...order]);
+    if (next) onPresetRankChange(next);
+  }, [inventory, presetRank, onPresetRankChange]);
   const toggleClass = (id: string) => setClassFilter((s) => {
     const n = new Set(s);
     if (n.has(id)) n.delete(id); else n.add(id);
@@ -183,7 +224,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
         <div className="inline-flex items-center gap-1.5">
           <span className="font-mono uppercase tracking-wider text-zinc-400">Sort</span>
           <div role="radiogroup" aria-label="Sort presets" className="inline-flex h-7 items-center rounded-md border border-white/7 bg-black/30 p-0.5">
-            {([["game", "In-game", "The order of the in-game preset editor — favorites first"], ["class", "Class", "Grouped by class, in the in-game order within a class"]] as const).map(([id, label, title]) => (
+            {([["game", "In-game", "The order of the in-game preset editor — favorites first"], ["class", "Class", "Grouped by class, in the in-game order within a class"], ["priority", "Priority", "By priority rank (1 first, unranked last) — drag the ⠿ handle to reorder"]] as const).map(([id, label, title]) => (
               <button
                 key={id}
                 type="button"
@@ -224,6 +265,13 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
             worklist={{ heroUids: worklistHeroUids, onAdd: onAddToWorklist }}
             onOptimize={onOptimize}
             onOptimizePreset={onOptimizePreset}
+            rank={presetRank[String(row.preset.num)] ?? null}
+            onSetRank={setRank}
+            dragEnabled={sort === "priority"}
+            onDragStartRank={onDragStartRank}
+            onDropRank={onDropRank}
+            locked={presetLocked.includes(row.preset.num)}
+            onToggleLock={() => onPresetLockedChange((l) => toggleLocked(l, row.preset.num))}
             onSetReference={(uid) => setPresetHeroes((m) => setPresetReference(m, row.preset.num, uid))}
             onAddAssociated={(uid) => setPresetHeroes((m) => addPresetAssociated(m, row.preset.num, uid))}
             onRemoveAssociated={(uid) => setPresetHeroes((m) => removePresetAssociated(m, row.preset.num, uid))}
@@ -241,7 +289,8 @@ interface WorklistHook {
 }
 
 function PresetCard({
-  row, classes, game, ctx, heroes, roster, stored, lossWarnPct, worklist, onOptimize, onOptimizePreset, onSetReference, onAddAssociated, onRemoveAssociated,
+  row, classes, game, ctx, heroes, roster, stored, lossWarnPct, worklist, onOptimize, onOptimizePreset,
+  rank, onSetRank, dragEnabled, onDragStartRank, onDropRank, locked, onToggleLock, onSetReference, onAddAssociated, onRemoveAssociated,
 }: {
   row: PresetRow;
   /** Raw `CCT_*` ids (`presetClasses`), empty when unknown. */
@@ -254,7 +303,18 @@ function PresetCard({
   lossWarnPct: number;
   worklist: WorklistHook;
   onOptimize?: (heroUid: string) => void;
-  onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string) => void;
+  onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string, presetNum: number) => void;
+  /** This preset's priority rank (null = unranked = lowest). */
+  rank: number | null;
+  /** Move a preset (key = num as a string) to 1-based position (null clears). */
+  onSetRank: (key: string, pos: number | null) => void;
+  /** Show the drag handle + accept drops (only in "Sort: Priority"). */
+  dragEnabled: boolean;
+  onDragStartRank: (key: string) => void;
+  onDropRank: (targetKey: string) => void;
+  /** Locked: its pieces stay out of every solve but its own. */
+  locked: boolean;
+  onToggleLock: () => void;
   onSetReference: (uid: string | null) => void;
   onAddAssociated: (uid: string) => void;
   onRemoveAssociated: (uid: string) => void;
@@ -267,12 +327,31 @@ function PresetCard({
   const associatedUids = stored.associatedUids.filter((u) => u !== referenceUid);
   const candidates = roster.filter((c) => c.uid !== referenceUid && !associatedUids.includes(c.uid));
   const sharedWith = [...new Map(pieces.flatMap((p) => p.sharedWith).map((r) => [r.num, r])).values()];
+  const key = String(preset.num);
+  const [dragOver, setDragOver] = useState(false);
 
   return (
     // No backdrop-filter on the card: it would make it a stacking context, and
     // the HeroSelect list (z-30) would then slide under the next card.
-    <section className="flex flex-col gap-2.5 rounded-xl border border-white/7 bg-bg-elev-2 px-3 py-2.5">
+    <section
+      className={cx(
+        "relative flex flex-col gap-2.5 rounded-xl border bg-bg-elev-2 px-3 py-2.5",
+        dragOver ? "border-cyan-400/60 ring-1 ring-cyan-400/40" : locked ? "border-amber-400/45 ring-1 ring-amber-400/20" : "border-white/7",
+      )}
+      // Drop target for rank drag-to-reorder (only in "Sort: Priority").
+      onDragOver={dragEnabled ? (e) => { e.preventDefault(); setDragOver(true); } : undefined}
+      onDragLeave={dragEnabled ? () => setDragOver(false) : undefined}
+      onDrop={dragEnabled ? (e) => { e.preventDefault(); setDragOver(false); onDropRank(key); } : undefined}
+    >
+      {/* Insertion marker — a drop puts the dragged preset BEFORE this card. */}
+      {dragEnabled && dragOver && (
+        <div className="pointer-events-none absolute -top-1 left-2 right-2 z-10 h-0.5 rounded-full bg-cyan-400 shadow-[0_0_8px_2px_rgba(34,211,238,0.6)]" />
+      )}
       <header className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
+          {dragEnabled && <RankDragHandle uid={key} onDragStartRank={onDragStartRank} />}
+          <RankInput uid={key} rank={rank} onSetRank={onSetRank} title={PRESET_RANK_TITLE} />
+        </div>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -298,6 +377,20 @@ function PresetCard({
             })}
           </div>
         )}
+        <button
+          type="button"
+          onClick={onToggleLock}
+          aria-pressed={locked}
+          title={locked
+            ? "Locked — its pieces are never proposed by a solve, except Optimize preset → on this preset. Click to unlock."
+            : "Lock this preset — its pieces will never be proposed by a solve, except Optimize preset → on this preset."}
+          className={cx(
+            "ml-auto inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors",
+            locked ? "border-amber-400/45 bg-amber-500/12 text-amber-200" : "border-white/8 bg-white/3 text-zinc-400 hover:text-zinc-200",
+          )}
+        >
+          <span aria-hidden>{locked ? "🔒" : "🔓"}</span>{locked ? "Locked" : "Lock"}
+        </button>
       </header>
 
       {open && (
@@ -442,7 +535,7 @@ function HeroLine({
   lossWarnPct: number;
   worklist: WorklistHook;
   onOptimize?: (heroUid: string) => void;
-  onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string) => void;
+  onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string, presetNum: number) => void;
   reference?: boolean;
   onRemove?: () => void;
 }) {
@@ -476,7 +569,7 @@ function HeroLine({
       game,
       talismanFamily: talismanFamilyKeys(game.equipment),
     });
-    onOptimizePreset(uid, result.patch, presetOptimizeNote(row.preset, result));
+    onOptimizePreset(uid, result.patch, presetOptimizeNote(row.preset, result), row.preset.num);
   };
   const fromSaved = ctx.heroes.get(uid)?.prioritySource === "saved";
   const gemNames = eeGems?.ee.filter((id) => id).map((id) => worklistGem(id, ctx.game).name) ?? [];

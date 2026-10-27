@@ -30,6 +30,7 @@ import {
 import { calcBattlePower, makeCpEvaluator } from "./cp.js";
 import { debug, debugEnabled } from "../log.js";
 import { isLowerPriority } from "../storage/heroPriority.js";
+import { presetBlockedUids } from "../presets/presetHolds.js";
 import { allocateGems, allocateGemsByCp, allocateGemsCapped, allocateGemsReachingCap, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type GemAllocation, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
 import { isPctRollWithoutNorm } from "../statRegistry.js";
@@ -419,6 +420,10 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // rules below apply to reservations exactly like to real equipment. A claim
   // overrides the physical `equippedBy` (the claim is where the piece is going).
   const worklistClaims = req.worklistClaims ?? {};
+  // In-game presets — pieces of a locked preset (unless it is the one being
+  // optimized) and, when a preset is optimized, of every preset not strictly
+  // lower priority than it. Built once; checked right after the exclusions.
+  const presetBlocked = presetBlockedUids(req.presetHolds, req.targetPresetNum);
   // "Only maxed" = NO extrapolation: the solve only uses pieces ALREADY at
   // their own ceiling in the reforge mode, taken as-is (the projection below
   // is skipped). The floor is each piece's ceiling (`meetsMaxedFloor` on
@@ -441,6 +446,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const allow = (g: GearPiece, slot: string): boolean => {
     if (g.slot !== slot) return false;
     if (excludedPieces.has(g.uid)) return false;
+    if (presetBlocked.has(g.uid)) return false;
     // Owned by ANOTHER hero — physically equipped OR reserved by a worklist
     // claim. Own + free gear is always in. The scope gates the rest: "none"
     // excludes all; "lower" keeps only gear on a strictly lower-priority hero
@@ -812,7 +818,8 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // Gem pool eligibility mirrors `allow()` for pieces: gear on other heroes
   // honors the same equipped scope (own + free always in; "lower" only takes
   // gems off strictly-lower-priority heroes; "none" excludes all others) and
-  // excluded heroes. Otherwise the solver could recommend gems that require
+  // excluded heroes, and leaves the gems of a Talisman an in-game preset keeps
+  // out (`presetBlocked`). Otherwise the solver could recommend gems that require
   // unequipping a Talisman/EE on a hero the user just opted out of / outranks.
   //
   // Once the priority is served, the slots it leaves free take the zero-score
@@ -824,6 +831,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     heroPriority,
     excludedHeroes: excludedSet,
     worklistClaims,
+    presetBlocked,
   });
   const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
   // SOLVE CP without a priority: the reference composition the gems are weighed

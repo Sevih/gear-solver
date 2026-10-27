@@ -23,6 +23,7 @@ import { computeFinalStats } from "../../lib/composeBuild.js";
 import { calcBattlePower } from "../../lib/solver/cp.js";
 import type { SolveMode } from "../../lib/solver/types.js";
 import type { HeroPriority } from "../../lib/storage/heroPriority.js";
+import { presetHoldersOf, type PresetHolds } from "../../lib/presets/presetHolds.js";
 import {
   INITIAL_FILTERS, solverFiltersReducer,
 } from "../../lib/solver/builderFilters.js";
@@ -82,6 +83,11 @@ interface BuilderScreenProps {
    *  the claiming hero, so the equipped scope + rank rules honor what earlier
    *  queued builds already reserved. */
   worklistClaims?: Record<string, string>;
+  /** In-game presets' pieces, ranks and locks (owned by App, edited in
+   *  Presets) — a locked preset's pieces never enter a solve but its own, and
+   *  "Optimize preset →" (`initialPatch.presetNum`) also keeps out the pieces
+   *  of every preset not strictly lower priority than it. */
+  presetHolds?: PresetHolds;
   /** Heroes that already have a Worklist entry (owned by App) — "+ Worklist"
    *  then replaces it, and says so. */
   worklistHeroUids?: ReadonlySet<string>;
@@ -96,8 +102,10 @@ interface BuilderScreenProps {
   onInitialHeroConsumed?: () => void;
   /** Filters to overlay on `initialHeroUid`'s remembered ones, with the status
    *  line saying where they come from — set by the Presets tab's
-   *  "Optimize preset →", read with `initialHeroUid` (and cleared with it). */
-  initialPatch?: { patch: RecoFilterPatch; note: string } | null;
+   *  "Optimize preset →", read with `initialHeroUid` (and cleared with it).
+   *  `presetNum` is the preset optimized: the solver's target preset until the
+   *  user switches heroes. */
+  initialPatch?: { patch: RecoFilterPatch; note: string; presetNum?: number } | null;
   /** Called after "Equip build" rewrote the captured snapshot, so the parent
    *  re-imports the inventory (App's `refreshInventory`). */
   onAfterEquip?: () => void;
@@ -136,8 +144,12 @@ function formatCombos(n: number): string {
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true, compactCards = false }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true, compactCards = false }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
+  // The preset "Optimize preset →" aims at, tied to the hero it opened — set
+  // with the patch below, dropped as soon as the user switches heroes.
+  const [targetPreset, setTargetPreset] = useState<{ uid: string; num: number } | null>(null);
+  const targetPresetNum = targetPreset && targetPreset.uid === selectedUid ? targetPreset.num : null;
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
   // Persisted so the user's preferred split survives reloads.
@@ -231,7 +243,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setLastDebugInfo, solveError, setSolveError, emptyCause, setEmptyCause, estimatePools, selectedBuildIdx,
     setSelectedBuildIdx, displayFilter, setDisplayFilter, lastSolveMode, setLastSolveMode, startSolve, cancelSolve,
     displayedResults, resolvedWorkers, applyClientFilter,
-  } = useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, workerCount, topN, topK });
+  } = useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, workerCount, topN, topK });
 
   /** Right-click on a result cell → "Min ≥ / Max ≤ <value>": set that bound
    *  (the other one stays) and re-solve in the last solve's mode. The solve
@@ -423,6 +435,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   useEffect(() => {
     if (initialHeroUid) {
       const pending = initialPatch ? { uid: initialHeroUid, ...initialPatch } : null;
+      setTargetPreset(initialPatch?.presetNum != null ? { uid: initialHeroUid, num: initialPatch.presetNum } : null);
       if (pending && selectedUidRef.current === initialHeroUid) {
         dispatch({ type: "mergePreset", patch: pending.patch });
         setRecoStatus({ tone: "ok", text: pending.note });
@@ -445,7 +458,20 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const pending = pendingPatchRef.current;
     setRecoStatus(pending && pending.uid === selectedUid ? { tone: "ok", text: pending.note } : null);
     setRecoPicker(null);
+    setTargetPreset((t) => (t && t.uid === selectedUid ? t : null));
   }, [selectedUid]);
+  // Names of the in-game presets, for the target's status line and the
+  // result cards' "from preset ‹name›".
+  const presetNames = useMemo(() => new Map((inventory?.presets ?? []).map((p) => [p.num, p.name || `#${p.num}`])), [inventory]);
+  const presetStatus = useMemo(() => {
+    if (targetPresetNum == null) return null;
+    const rank = presetHolds?.rank[String(targetPresetNum)];
+    return `Optimizing preset ${presetNames.get(targetPresetNum) ?? `#${targetPresetNum}`} (${rank != null ? `rank ${rank}` : "unranked"}) — pieces of higher-ranked and locked presets excluded`;
+  }, [targetPresetNum, presetHolds, presetNames]);
+  const presetsOf = useCallback(
+    (uid: string) => presetHoldersOf(presetHolds, uid, targetPresetNum).map((n) => presetNames.get(n) ?? `#${n}`),
+    [presetHolds, targetPresetNum, presetNames],
+  );
 
   // Switching heroes: RESULTS are a clean slate (per-hero, stale otherwise), but
   // FILTERS are remembered per hero (session-scoped) — snapshot the outgoing
@@ -774,7 +800,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <BottomGearBand build={selectedBuild} diff={buildDiff} game={game} reforge={resultsReforge} charsByUid={charsByUid} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} compact={compactCards} />
+              <BottomGearBand build={selectedBuild} diff={buildDiff} game={game} reforge={resultsReforge} charsByUid={charsByUid} presetsOf={presetsOf} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} compact={compactCards} />
             </div>
           </div>
         </div>
@@ -799,6 +825,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
             onGetPreset={() => void getPreset()}
             recoBusy={recoBusy}
             recoStatus={recoStatus}
+            presetStatus={presetStatus}
             savedBuilds={savedBuildsForHero}
             onRestoreBuild={restoreBuild}
             onRemoveBuild={removeBuildById}

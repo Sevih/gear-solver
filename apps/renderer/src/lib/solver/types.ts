@@ -7,6 +7,7 @@ import type { FinalStats } from "../composeBuild.js";
 import type { PrecomputedSolveContext, ReforgeMode } from "./engine.js";
 import type { CheapRatings } from "./ratings.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
+import type { PresetHolds } from "../presets/presetHolds.js";
 
 /** How much of the OTHER heroes' equipped gear the solver may pull into the
  *  candidate pool (the selected hero's own gear + free gear is always in):
@@ -140,6 +141,15 @@ export interface SolveRequest {
    *  (solving hero B won't take what hero A's queued build reserved, unless
    *  the scope/rank would let B strip A anyway). Absent = no claims. */
   worklistClaims?: Record<string, string>;
+  /** In-game presets' pieces with their ranks and locks (`presetHolds`). A
+   *  piece of a locked preset is out of every pool but that preset's own
+   *  solve; with `targetPresetNum` set, so are the pieces of every preset not
+   *  STRICTLY lower priority than the target (`presetBlockedUids`). Stacks
+   *  with the rules above. Absent = no preset rule. */
+  presetHolds?: PresetHolds;
+  /** The preset being optimized ("Optimize preset →"), null/absent for a
+   *  plain hero solve — then only the locks apply. */
+  targetPresetNum?: number | null;
   /** Captured per-character skill levels. `chainPassive` is the auto-leveled
    *  Skill_5 row (not user-controllable) but it contributes additively to
    *  CP via the `skillSum` term, so feeding 0 would under-report CP for any
@@ -202,6 +212,8 @@ export interface EstimateRequestMsg {
   heroPriority: HeroPriority;
   excludedPieceUids?: string[];
   worklistClaims?: Record<string, string>;
+  presetHolds?: PresetHolds;
+  targetPresetNum?: number | null;
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
 }

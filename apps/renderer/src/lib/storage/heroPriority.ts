@@ -1,5 +1,6 @@
 /**
- * Hero priority ranking — an account-global, persisted map of `charUid → rank`.
+ * Hero priority ranking — an account-global, persisted map of `charUid → rank`
+ * (the generic rank model lives in `rankPriority.ts`, shared with the presets).
  *
  * The rank is a UNIQUE integer per hero (no two heroes share one), where
  * **rank 1 = highest priority** (a smaller number is more important). A hero
@@ -15,95 +16,22 @@
  * Edited (and filtered/sorted) from the Builds tab; read by the Builder to feed
  * the solver. Owned by `App` so an edit in Builds is live for the Builder.
  */
+import { loadSeen, persistSeen, type PriorityRank } from "./rankPriority.js";
+
+export { fillUnrankedByOrder, isLowerPriority, moveRankBefore, rankOrder, reorderRank } from "./rankPriority.js";
+
 export const HERO_PRIORITY_KEY = "gs.priority.rank";
 /** Every hero uid that has already been offered a default rank. A hero in this
  *  list with no rank was unranked ON PURPOSE and is never re-filled. */
 export const HERO_PRIORITY_SEEN_KEY = "gs.priority.seen";
 
 /** charUid → unique integer rank. Absent = unranked (lowest priority). */
-export type HeroPriority = Record<string, number>;
+export type HeroPriority = PriorityRank;
 
 export function loadSeenHeroes(): Set<string> {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(HERO_PRIORITY_SEEN_KEY) ?? "[]") as unknown;
-    return new Set(Array.isArray(parsed) ? parsed.filter((u): u is string => typeof u === "string") : []);
-  } catch {
-    return new Set();
-  }
+  return loadSeen(HERO_PRIORITY_SEEN_KEY);
 }
 
 export function persistSeenHeroes(uids: Iterable<string>): void {
-  try {
-    localStorage.setItem(HERO_PRIORITY_SEEN_KEY, JSON.stringify([...new Set(uids)]));
-  } catch {
-    // Quota / locked-down context — skip; next roster pass retries.
-  }
-}
-
-/** Comparable rank order — the stored rank (1 = highest priority), or +Infinity
- *  for an unranked hero (lowest). SMALLER = higher priority. Use it to sort
- *  ascending (rank 1 first, unranked last) or to compare priorities. */
-export function rankOrder(map: HeroPriority, uid: string): number {
-  const v = map[uid];
-  return typeof v === "number" ? v : Number.POSITIVE_INFINITY;
-}
-
-/** True when `aUid` is STRICTLY lower priority than `bUid` — i.e. hero `b` is
- *  allowed to take gear equipped on hero `a`. Lower priority = bigger rank order
- *  (rank 1 best, unranked = +∞ worst). Two unranked heroes (∞ vs ∞) are NOT
- *  comparable as lower, so neither can take from the other. */
-export function isLowerPriority(map: HeroPriority, aUid: string, bUid: string): boolean {
-  return rankOrder(map, aUid) > rankOrder(map, bUid);
-}
-
-/** Ranked uids in rank order (rank 1 first), excluding `omit`. */
-function rankedOrder(map: HeroPriority, omit?: string): string[] {
-  return Object.keys(map)
-    .filter((u) => u !== omit)
-    .sort((a, b) => (map[a] ?? 0) - (map[b] ?? 0));
-}
-
-/** Reassign contiguous ranks 1..N to an ordered uid list. */
-function fromOrder(order: string[]): HeroPriority {
-  const next: HeroPriority = {};
-  order.forEach((u, i) => { next[u] = i + 1; });
-  return next;
-}
-
-/** Move `uid` to 1-based position `pos` among the ranked heroes (others shift);
- *  every rank is rewritten contiguous 1..N. `pos == null` / non-finite unranks
- *  `uid`. Out-of-range positions clamp to [1, N+1]. The positional model: typing
- *  "2" means "make this hero rank 2", exactly like dropping it there. New map;
- *  never mutates the input. */
-export function reorderRank(map: HeroPriority, uid: string, pos: number | null): HeroPriority {
-  const order = rankedOrder(map, uid);
-  if (pos != null && Number.isFinite(pos)) {
-    const i = Math.max(0, Math.min(order.length, Math.trunc(pos) - 1));
-    order.splice(i, 0, uid);
-  }
-  return fromOrder(order);
-}
-
-/** Normalize against the roster (given in CP-desc order): keep the already-ranked
- *  heroes (in their current rank order, compacted — no gaps) and append every
- *  unranked NEWCOMER after them in CP order, renumbering contiguous 1..N.
- *  Preserves manual ranks while giving newcomers a sensible default below them.
- *  A hero in `seen` was already offered a rank: if it has none, the user cleared
- *  it, and it stays unranked. Returns `null` when no newcomer is unranked
- *  (caller skips the write). */
-export function fillUnrankedByOrder(map: HeroPriority, rosterByCp: string[], seen: ReadonlySet<string> = new Set()): HeroPriority | null {
-  const unranked = rosterByCp.filter((u) => map[u] == null && !seen.has(u));
-  if (unranked.length === 0) return null;
-  const ranked = rosterByCp.filter((u) => map[u] != null).sort((a, b) => (map[a] ?? 0) - (map[b] ?? 0));
-  return fromOrder([...ranked, ...unranked]);
-}
-
-/** Drag-to-reorder: insert `draggedUid` immediately BEFORE `targetUid` in rank
- *  order (or at the end when `targetUid` is unranked), then renumber 1..N. */
-export function moveRankBefore(map: HeroPriority, draggedUid: string, targetUid: string): HeroPriority {
-  if (draggedUid === targetUid) return map;
-  const order = rankedOrder(map, draggedUid);
-  const ti = order.indexOf(targetUid);
-  order.splice(ti === -1 ? order.length : ti, 0, draggedUid);
-  return fromOrder(order);
+  persistSeen(HERO_PRIORITY_SEEN_KEY, uids);
 }
