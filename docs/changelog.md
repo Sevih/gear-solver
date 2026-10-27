@@ -8,6 +8,44 @@
 
 ## Items de backlog clôturés (index)
 
+### 🩹 Dépendances : `npm audit fix` des 12 vulnérabilités restantes, `package-lock.json` seul (2026-10-27)
+- ✅ **Pourquoi.** Après la montée d'electron-builder (25/10), `npm audit` disait encore 12 vulnérabilités (1 modérée,
+  11 hautes, 0 critique), toutes « fix available » sans majeure : `axios` (1.0.0 – 1.19.0), `follow-redirects`
+  (1.16.0), `joi` (18.0.0 – 18.2.8) via `wait-on` à la racine ; `vite` (≤ 6.4.3), `postcss` (≤ 8.5.22), `nanoid`
+  (≤ 3.3.17), `source-map-js` (1.0.0 – 1.2.1) côté renderer ; `browserslist` (≤ 4.28.6) et `baseline-browser-mapping`
+  (modérée, < 2.11.0) via `eslint-plugin-react-hooks` → `@babel/core` ; `js-yaml` (4.0.0 – 4.3.1, embarqué par
+  `electron-updater`) ; `brace-expansion` (3.0.0 – 5.0.11, via `minimatch`) ; `undici` (7.0.0 – 7.30.0, `electron` →
+  `@electron/get`). `launch-editor`, cité le 25/10, n'est pas dans le lock : l'audit ne le listait pas.
+- ✅ **Comment.** `npm audit fix` sans `--force` → « found 0 vulnerabilities ». `git diff --stat` : `package-lock.json`
+  seul (+57 / −57) ; aucun `package.json` touché, pas de `pnpm-lock.yaml`. `electron` reste 44.9.3, `electron-builder`
+  26.15.3, `electron-updater` 6.8.9.
+- ✅ **Ce qui a bougé dans le lock** (script sur `git show HEAD:package-lock.json` et le lock du working tree, entrée
+  par entrée de `packages`) : 587 entrées avant et après, aucune ajoutée ni retirée, 16 changées, toutes en version
+  (et `resolved` / `integrity` / plages de dépendances) — `axios` 1.18.1 → 1.21.0, `follow-redirects` 1.16.0 →
+  1.16.2, `joi` 18.2.3 → 18.3.0, `vite` 6.4.3 → 6.4.5, `postcss` 8.5.15 → 8.5.32, `nanoid` 3.3.15 → 3.3.20,
+  `source-map-js` 1.2.1 → 1.2.2, `browserslist` 4.28.4 → 4.29.5, `baseline-browser-mapping` 2.10.38 → 2.11.33,
+  `js-yaml` 4.2.0 → 4.3.2, `brace-expansion` 5.0.6 → 5.0.12, `undici` 7.28.0 → 7.30.1, plus les quatre dépendances
+  de `browserslist` montées avec lui : `caniuse-lite` 1.0.30001799 → 1.0.30001819, `electron-to-chromium` 1.5.377 →
+  1.5.465, `node-releases` 2.0.48 → 2.0.60, `update-browserslist-db` 1.2.3 → 1.3.4. Le reste du lock est identique à
+  l'octet (la liste étant courte, pas besoin du contrôle par atteignabilité). `npm ls --all` sort en code 0 : le
+  « invalid » sur `vitest` noté le 25/10 (liens `.pnpm/` du 23/10) a disparu avec la réinstallation.
+- ✅ **Renderer.** `apps/renderer/dist` construit avant le fix (vite 6.4.3) puis après (« vite v6.4.5 building for
+  production ») : 29 fichiers dont 18 assets, 961 347 octets des deux côtés, mêmes noms hashés fichier par fichier,
+  donc un contenu identique (écart 0 %, sous les 5 % demandés).
+- ✅ **Pack.** `npm run desktop:build` sans erreur, puis `npm run pack -w @gear-solver/desktop -- --win` →
+  « packaging platform=win32 arch=x64 electron=44.9.3 appOutDir=release/win-unpacked », sans erreur. Dans
+  `release/win-unpacked/resources/app.asar` (`asar list` lancé depuis `apps/desktop/release/`, `extract-file` vers un
+  dossier temporaire hors du dépôt) : les mêmes 16 modules d'exécution, `node_modules/js-yaml/package.json` à
+  « 4.3.2 », `electron-updater` 6.8.9 et `builder-util-runtime` 9.7.0 inchangés ; `js-yaml` est le seul des 16
+  paquets changés présents dans l'asar. Pas d'installeur de banc.
+- ✅ **Vérification.** `npm run typecheck` → dernière ligne « > tsc --noEmit » (renderer), code 0 ; `npm test` →
+  « Tests 169 passed (169) » (core), « Tests 205 passed (205) » (desktop), « Tests 747 passed (747) » (renderer) ;
+  `npm run lint` → « ✖ 13 problems (0 errors, 13 warnings) », inchangé.
+- ✅ **Laissé.** Rien côté audit (0 restante). `npm install` avertit toujours qu'`electron-winstaller` et `esbuild` ont
+  des scripts d'installation hors `allowScripts`. `docs/todo.md` ne cite pas l'audit : inchangé.
+- ⏳ **Sevih** : à la prochaine release, rien de particulier à contrôler, l'updater embarqué ne change pas de version
+  (`electron-updater` 6.8.9) — seul `js-yaml` bouge dans l'asar.
+
 ### 🏷️ Vente et verrou faits en jeu suivis en direct : la requête du client journalisée pour `item/sell` et `item/lock` (plugin 0.5.0) (2026-10-27)
 - ✅ **Pourquoi.** Piste laissée par G44 et demandée le 27/10 : une pièce vendue en jeu restait dans le snapshot (et
   dans l'Inventaire) jusqu'au lobby, un verrou posé en jeu n'apparaissait pas. Les réponses ne disent rien des pièces :
