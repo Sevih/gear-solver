@@ -8,6 +8,43 @@
 
 ## Items de backlog clôturés (index)
 
+### 🩹 Capture : la dissolution faite en jeu retire enfin la pièce, pliée d'après la requête journalisée (plugin 0.5.1) (2026-10-28)
+- ✅ **Pourquoi.** G44 pliait `/item/dissolve` d'après le `ItemList` de sa RÉPONSE (« les pièces dissoutes, quantité 0 »).
+  Une capture réelle du 28/10 dit le contraire : `CWebRES_ItemDissolve` ne porte que `RewardList` (deux `WSRewardData`,
+  `RT_TOTAL` et `RT_NORMAL`, avec les matériaux reçus — `WSItemData` à `ItemUID` 0, par ex. l'objet 21102 × 40 — et des
+  `AssetList`), aucun `ItemList` au premier niveau ; le client retire les pièces d'après SA requête
+  (`CUIItemClear.RequestItemDissolve` → `CPlayer.ItemInventory.RemoveItem(uid)` sur chaque uid envoyé), comme pour la vente.
+  Depuis G44, une dissolution faite en jeu ne retirait donc jamais la pièce avant le lobby (le cas que G54 avait prévu).
+- ✅ **Plugin 0.5.0 → 0.5.1** (`tools/capture-steam/src/Plugin.cs`, `GearSolverCapture.csproj`) : `/item/dissolve` quitte
+  `Journal` (réponse seule) et rejoint les chemins à requête de G59 — postfix sur `CWebRES_ItemDissolve.OnApply` par
+  `HookOnApply`, propriété `CWebREQ_ItemDissolve.ItemList` (`List<string>`) copiée dans la file du writer, ligne
+  `{ seq, at, path, req: { ItemList }, res }`, la réponse vue pour ce chemin en `res`. Classe, méthode ou champ absent :
+  avertissement et chemin non journalisé, comme pour la vente et le verrou. Doc XML du plugin et README (table des hooks,
+  table des chemins à requête, ligne `/item/dissolve` retirée de la table des améliorations, table Output) suivent.
+- ✅ **Desktop** (`apps/desktop/src/equip-events.ts`) : `/item/dissolve` sort de `ITEM_FIELDS` ; un ensemble
+  `REMOVED_BY_REQUEST` (`/item/sell`, `/item/dissolve`) plie chaque uid de `req.ItemList` en entrée simple à quantité 0
+  (`soldOf` renommé `removedOf`) — retrait, `clearPresetSlots` compris. `res.ItemList` n'est plus lu. Une ligne
+  `/item/dissolve` sans `req` (journal d'un plugin 0.5.0) compte en `skipped`, sans exception : la pièce attend le lobby.
+  Les matériaux reçus (`RewardList`) ne sont PAS pliés : ce ne sont pas des pièces, et leurs entrées à `ItemUID` 0 n'ont
+  pas d'uid de pile à mettre à jour.
+- ✅ **Tests** (`apps/desktop/test/equip-events.test.ts`, 42) : réponse de dissolution façonnée d'après la capture
+  (`RewardList` seul) ; dissolution de deux pièces, l'une équipée, l'une dans un preset (4 changements, 0 ignoré, aucun
+  matériau ajouté, entrée intacte) ; lignes sans `req`, avec un `res.ItemList` à 0 (non lu) et avec des uids inconnus ou
+  nuls (0 changement, 4 ignorés) ; mélange avec équipement, verrou, amélioration et vente ; idempotence avec une
+  dissolution dans la suite. Le test G44 « pieces listed at 0 » est retiré (comportement faux), celui des presets et le
+  mélange passent à `req`.
+- ✅ **Docs** : `docs/reference.md` + `wiki/Engine-Reference.md` (le journal, `/item/dissolve` à requête, plus la phrase
+  qui disait le pliage d'après la réponse), `wiki/FAQ.md` (dissolution sous 0.5.1+), `wiki/Capture-Pipeline.md` (ligne
+  `equip-events.ndjson`), `docs/release-notes.md › [Unreleased]`. `docs/todo.md` n'en parlait pas.
+- ✅ **Vérification.** Sur une copie propre de HEAD avec ces changements : `npm run typecheck` → `> tsc --noEmit` (sans
+  erreur) ; `npm test` → core « Tests 169 passed (169) », desktop « Tests 205 passed | 1 skipped (206) », renderer
+  « Tests 746 passed | 1 skipped (747) ». Dans l'arbre partagé, seuls les 25 tests de `apps/desktop/test/data-sync.test.ts`
+  tombent, sur des fichiers d'un autre lot en cours (`data-sync.ts`, `solver-files.json`, `data/sync.mjs`), aucun des
+  miens. `npm run lint` → « ✖ 13 problems (0 errors, 13 warnings) », inchangé. `dotnet build tools/capture-steam -c
+  Release` → « 0 Erreur(s) ».
+- ⏳ **Sevih, sur le fixe** (après la release et Settings › Setup › Update plugin jeu fermé) : désassembler une pièce en
+  jeu → elle quitte l'Inventaire de GS dans les 5 s ; `equip-events.ndjson` porte la ligne `/item/dissolve` avec `req`.
+
 ### 🔎 Inventaire : filtre sur les paliers de base des sous-stats, motif trié, « au moins » ou « moins bien que » (G62) (2026-10-28)
 - ✅ **Quoi.** La modale Filter de l'Inventaire gagne une section **Base rolls** : quatre sélecteurs 0–4 (0 = any) lus
   « ≥ a / b / c / d », une bascule **at least** / **worse than** et une ligne d'aide. Les paliers de base des lignes de

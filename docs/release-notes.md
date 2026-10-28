@@ -12,6 +12,8 @@
 
 ## [Unreleased]
 
+- **Dissolving a piece in-game now removes it from the app live**; update the capture plugin
+  (0.5.1): Settings › Setup › **Update plugin** with the game closed.
 - **Inventory › Filter › Base rolls**: filter pieces on the initial tiers of their substats, best
   line first (e.g. "at least 3/3/3/0" for the keepers, "worse than 3/3/3/0" for the pieces to sell).
 

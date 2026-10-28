@@ -29,17 +29,17 @@ once the game has decrypted them:
 - Output: `<capture folder>/{user_item,user_character,…}.json` (`.cache/capture-out` in dev,
   `<userData>/capture-out` packaged). The manual import reads the same files.
 - Changes made in-game (plugin 0.2.0 for gear moves, 0.3.0 for gems and substats, 0.4.0 for
-  upgrades, 0.5.0 for selling and locking): the game only re-sends `/user/item` at the lobby, but every move answers `/item/equip`
+  upgrades, 0.5.0 for selling and locking, 0.5.1 for dissolving): the game only re-sends `/user/item` at the lobby, but every move answers `/item/equip`
   or `/item/equipAll`, socketing, removing or rerolling a gem or changing substats (reforge,
   Transistone) answers `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption` or
   `/item/subOptionChange`, and an upgrade answers `/item/enchant`, `/item/enchantReset`,
-  `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`, `/item/craft` or
-  `/item/dissolve`; the
+  `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge` or `/item/craft`; the
   plugin appends those to `equip-events.ndjson` (one `{ seq, at, path, res }` line per response,
-  emptied on every `/user/item`) — a sale `/item/sell` and a lock toggle `/item/lock` go in with the
-  client's request, which their response doesn't repeat (one `{ seq, at, path, req, res }` line per
-  gesture, written from `CWebRES_ItemSell.OnApply` / `CWebRES_ItemLock.OnApply`, the response seen
-  for that path as `res`) —, and the app folds them into `user_item.json` on every
+  emptied on every `/user/item`) — a sale `/item/sell`, a dissolve `/item/dissolve` and a lock
+  toggle `/item/lock` go in with the client's request, which their response doesn't repeat (one
+  `{ seq, at, path, req, res }` line per gesture, written from `CWebRES_ItemSell.OnApply` /
+  `CWebRES_ItemDissolve.OnApply` / `CWebRES_ItemLock.OnApply`, the response seen for that path as
+  `res`) —, and the app folds them into `user_item.json` on every
   `GET /api/capture/status` (polled every 5 s) — `foldEquipEvents` in
   [equip-events.ts](https://github.com/Sevih/gear-solver/blob/main/apps/desktop/src/equip-events.ts),
   by uid: moves rewrite `CharUID`; the others carry, per the `ITEM_FIELDS` table (by path), whole
@@ -50,11 +50,12 @@ once the game has decrypted them:
   `CItemInventory.UpdateItem` does (the piece an enhance eats no longer exists) — and its uid becomes
   0 in the `ItemUIDList` of every preset holding it, as `CItemInventory.RemoveItem`
   (`DeletePresetEquipUID`) does, without waiting for the lobby. The gem stack
-  `gemInsert` consumes isn't in its response: it stays as is until the next lobby; likewise the
-  client removes dissolved pieces from its own request, and `item/dissolve` is folded from its
-  response's `ItemList` only. A sale folds each uid of `req.ItemList` as a simple entry at 0
-  (removed, presets included), a lock sets the `IsLock` of the `req.ItemUID` entry to 1 or 0 from
-  `req.IsLock`; such a line without `req` is skipped. `item/sell/consumable` and Custom Gear aren't
+  `gemInsert` consumes isn't in its response: it stays as is until the next lobby. A sale or a
+  dissolve folds each uid of `req.ItemList` as a simple entry at 0 (removed, presets included) —
+  the `item/dissolve` response only carries the materials received (`RewardList`, `ItemUID` 0),
+  which aren't pieces and aren't folded —, a lock sets the `IsLock` of the `req.ItemUID` entry to 1
+  or 0 from `req.IsLock`; such a line without `req` is skipped (so a dissolve journaled by a 0.5.0
+  plugin waits for the lobby). `item/sell/consumable` and Custom Gear aren't
   followed. What the app already folded is noted in
   `.equip-events.applied`.
 

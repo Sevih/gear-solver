@@ -30,12 +30,14 @@ namespace GearSolverCapture
     ///     response goes through. Fallback only: if hook 1 never fires (the stub
     ///     is tiny and Mono's JIT may inline it into its caller), we identify the
     ///     payload by its top-level keys instead of the path.
-    ///  3. <c>CWebRES_ItemSell.OnApply(CWebRequestBase _req)</c> and
-    ///     <c>CWebRES_ItemLock.OnApply</c> — a sale only returns the new gold
+    ///  3. <c>CWebRES_ItemSell.OnApply(CWebRequestBase _req)</c>,
+    ///     <c>CWebRES_ItemDissolve.OnApply</c> and <c>CWebRES_ItemLock.OnApply</c>
+    ///     — a sale only returns the new gold, a dissolve the materials it gave
     ///     and a lock toggle nothing: the client applies its own REQUEST
-    ///     (<c>CWebREQ_ItemSell.ItemList</c>, <c>CWebREQ_ItemLock.ItemUID</c> /
-    ///     <c>IsLock</c>). Hook 1 can't see it: its <c>request == true</c> call
-    ///     only exists on the coroutine request path, and both gestures go
+    ///     (<c>CWebREQ_ItemSell.ItemList</c>, <c>CWebREQ_ItemDissolve.ItemList</c>,
+    ///     <c>CWebREQ_ItemLock.ItemUID</c> / <c>IsLock</c>). Hook 1 can't see
+    ///     it: its <c>request == true</c> call only exists on the coroutine
+    ///     request path, and these gestures go
     ///     through the callback one (<c>CNetwork.Request(req, callback)</c>).
     ///     <c>OnApply</c> runs on success only, right after hook 1 saw the
     ///     response, on both paths.
@@ -47,7 +49,7 @@ namespace GearSolverCapture
     /// Output mirrors tools/capture/addon.py: <c>user_item.json</c>,
     /// <c>user_character.json</c>, … plus a <c>.captured</c> sentinel once the
     /// inventory landed, an <c>equip-events.ndjson</c> journal of the gear moves,
-    /// gem, substat and upgrade changes, sales and lock toggles made in-game
+    /// gem, substat and upgrade changes, sales, dissolves and lock toggles made in-game
     /// since the last <c>/user/item</c>,
     /// unknown endpoints under
     /// <c>_unknown/</c>, and a <c>.steam-plugin.json</c> heartbeat the desktop
@@ -58,7 +60,7 @@ namespace GearSolverCapture
     {
         public const string Id = "outerpedia.gearsolver.capture";
         public const string Name = "Gear Solver Capture";
-        public const string Version = "0.5.0";
+        public const string Version = "0.5.1";
 
         internal static ManualLogSource Log;
 
@@ -107,7 +109,7 @@ namespace GearSolverCapture
         internal static volatile bool PathHookFired;
 
         /// <summary>Request fields the OnApply hooks copy (null = not hooked).</summary>
-        private static PropertyInfo _sellItemList, _lockItemUID, _lockIsLock;
+        private static PropertyInfo _sellItemList, _dissolveItemList, _lockItemUID, _lockIsLock;
 
         public static void Apply()
         {
@@ -140,6 +142,9 @@ namespace GearSolverCapture
 
             _sellItemList = RequestProperty("CWebREQ_ItemSell", "ItemList");
             if (!HookOnApply(harmony, "CWebRES_ItemSell", "/item/sell", nameof(AfterItemSellApply), _sellItemList != null)) _sellItemList = null;
+            _dissolveItemList = RequestProperty("CWebREQ_ItemDissolve", "ItemList");
+            if (!HookOnApply(harmony, "CWebRES_ItemDissolve", "/item/dissolve", nameof(AfterItemDissolveApply), _dissolveItemList != null))
+                _dissolveItemList = null;
             _lockItemUID = RequestProperty("CWebREQ_ItemLock", "ItemUID");
             _lockIsLock = RequestProperty("CWebREQ_ItemLock", "IsLock");
             if (!HookOnApply(harmony, "CWebRES_ItemLock", "/item/lock", nameof(AfterItemLockApply), _lockItemUID != null && _lockIsLock != null))
@@ -209,6 +214,20 @@ namespace GearSolverCapture
             }
         }
 
+        private static void AfterItemDissolveApply(object _req)
+        {
+            try
+            {
+                var list = _dissolveItemList.GetValue(_req, null) as IEnumerable<string>;
+                if (list == null) return;
+                Sink.CaptureRequest("/item/dissolve", new { ItemList = new List<string>(list) });
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError($"ItemDissolve.OnApply hook: {e}");
+            }
+        }
+
         private static void AfterItemLockApply(object _req)
         {
             try
@@ -264,7 +283,7 @@ namespace GearSolverCapture
         /// at the lobby; the equip responses say which piece left or joined which
         /// hero, the gem / substat ones carry the whole updated item (and the gem
         /// item, for a removal or a reroll), the upgrade ones (enhance, reset,
-        /// limit break, smelting, merge, craft, dissolve) the improved or created
+        /// limit break, smelting, merge, craft) the improved or created
         /// items and the new count of the stacks they consume. They're appended to
         /// <c>equip-events.ndjson</c> (one line per response) and the desktop app
         /// folds them into <c>user_item.json</c>. Truncated whenever a full
@@ -284,13 +303,12 @@ namespace GearSolverCapture
             "/item/smeltingReset",
             "/item/merge",
             "/item/craft",
-            "/item/dissolve",
         };
         private const string JournalFile = "equip-events.ndjson";
 
         /// <summary>Gestures journaled WITH the client's request, one line per
         /// gesture written by the OnApply hook (<c>{ seq, at, path, req, res }</c>):
-        /// <c>/item/sell</c>, <c>/item/lock</c> (filled by <see cref="TrackRequest"/>
+        /// <c>/item/sell</c>, <c>/item/dissolve</c>, <c>/item/lock</c> (filled by <see cref="TrackRequest"/>
         /// for each hook that took). Their response alone writes nothing: it is
         /// kept for the next line of its path. Never in <see cref="Journal"/>.</summary>
         private static readonly HashSet<string> WithRequest = new HashSet<string>(StringComparer.Ordinal);
@@ -410,7 +428,7 @@ namespace GearSolverCapture
             WithRequest.Add(path);
         }
 
-        /// <summary>A sale or lock the client just applied: one journal line
+        /// <summary>A sale, dissolve or lock the client just applied: one journal line
         /// with its request and the response seen for it (<c>{}</c> if none).</summary>
         public static void CaptureRequest(string path, object req)
         {

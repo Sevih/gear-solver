@@ -209,7 +209,7 @@ describe("foldEquipEvents — whole items (gems, substats)", () => {
   });
 });
 
-describe("foldEquipEvents — upgrades (enchant, limit break, smelting, merge, craft, dissolve)", () => {
+describe("foldEquipEvents — upgrades (enchant, limit break, smelting, merge, craft)", () => {
   const FODDER = "6300000001"; // free 1★ weapon, eaten by the enhance
   const STONE = "6300000002"; // enhance material stack
   const RESET = "6300000003"; // reset ticket stack
@@ -301,14 +301,6 @@ describe("foldEquipEvents — upgrades (enchant, limit break, smelting, merge, c
     expect([applied, skipped]).toEqual([5, 0]);
   });
 
-  it("dissolve: pieces listed at 0 leave the inventory, even off a hero", () => {
-    const res = { ItemList: [simple(H2, 0, 4), simple(H1, 0, 3)], RewardList: [], Asset_0: 1 };
-    const { next, applied } = foldEquipEvents(base(), [{ seq: 1, path: "/item/dissolve", res }]);
-    expect(uids(next)).not.toContain(H2);
-    expect(uids(next)).not.toContain(H1);
-    expect(applied).toBe(2);
-  });
-
   it("a simple entry whose uid the snapshot lacks is skipped; a response with nothing usable too", () => {
     const { next, applied, skipped } = foldEquipEvents(base(), [
       { seq: 1, path: "/item/enchant", res: { Item: wire(W2, HERO_A, 2, [160001, 0, 0, 0, 0], { Exp: 5 }), ItemList: [simple("6399999999", 3), { ItemUID: STONE, Quantity: -1 }] } },
@@ -390,16 +382,16 @@ describe("foldEquipEvents — upgrades (enchant, limit break, smelting, merge, c
 
     it("a removal that no preset holds leaves PresetList as is; one without ItemUIDList is tolerated", () => {
       const raw = withPresets();
-      const dissolve: EquipEvent = { seq: 1, path: "/item/dissolve", res: { ItemList: [simple(H1, 0, 3)], RewardList: [], Asset_0: 1 } };
+      const dissolve: EquipEvent = { seq: 1, path: "/item/dissolve", req: { ItemList: [H1] }, res: { RewardList: [] } };
       expect(foldEquipEvents(raw, [dissolve]).next.PresetList).toBe(raw.PresetList);
       expect(foldEquipEvents(base(), [enchant(1, 1200)]).next.PresetList).toEqual([{ Num: 1 }]);
     });
   });
 });
 
-// The plugin journals the client's REQUEST for these two (CWebREQ_ItemSell /
-// CWebREQ_ItemLock): the responses don't name the pieces.
-describe("foldEquipEvents — sale and lock (request-carrying lines)", () => {
+// The plugin journals the client's REQUEST for these (CWebREQ_ItemSell /
+// CWebREQ_ItemDissolve / CWebREQ_ItemLock): the responses don't name the pieces.
+describe("foldEquipEvents — sale, dissolve and lock (request-carrying lines)", () => {
   const base = () => ({
     ...snapshot(),
     ItemList: snapshot().ItemList.map((it) => ({ ...it, IsLock: 0 })),
@@ -414,6 +406,12 @@ describe("foldEquipEvents — sale and lock (request-carrying lines)", () => {
     ({ seq, path: "/item/sell", req: { ItemList }, res: { ResultInfoList: [], Asset_0: 70205983 } });
   const lock = (seq: number, ItemUID: string, IsLock: boolean): EquipEvent =>
     ({ seq, path: "/item/lock", req: { ItemUID, IsLock }, res: {} });
+  // CWebRES_ItemDissolve as captured: only RewardList (RT_TOTAL + RT_NORMAL),
+  // the materials received at ItemUID 0 — no piece, no top-level ItemList.
+  const reward = { ItemList: [{ ItemUID: "0", ItemID: 21102, Quantity: 40 }], AssetList: [{ AssetType: 0, Value: 1200 }] };
+  const dissolveRes = { RewardList: [{ RewardType: "RT_TOTAL", ...reward }, { RewardType: "RT_NORMAL", ...reward }] };
+  const dissolve = (seq: number, ItemList: unknown[]): EquipEvent =>
+    ({ seq, path: "/item/dissolve", req: { ItemList }, res: dissolveRes });
 
   it("sell: each uid of the request leaves the inventory, off its hero and out of its preset", () => {
     const raw = base();
@@ -432,6 +430,31 @@ describe("foldEquipEvents — sale and lock (request-carrying lines)", () => {
     const { next, applied, skipped } = foldEquipEvents(base(), [sell(1, ["6399999999", H1, "0", null])]);
     expect(uids(next)).toEqual([W1, W2, H2]);
     expect([applied, skipped]).toEqual([1, 3]);
+  });
+
+  it("dissolve: each uid of the request leaves, equipped or in a preset; the materials received aren't folded", () => {
+    const raw = base();
+    const { next, applied, skipped } = foldEquipEvents(raw, [dissolve(1, [W2, H2])]);
+    expect(uids(next)).toEqual([W1, H1]);
+    expect(slots(next)).toEqual([
+      [W1, "0", "0", "0", "0", "0", "0", "0"],
+      ["0", "0", "0", "0", "0", "0", "0", "0"],
+    ]);
+    // W2 (on A), H2 + the two preset slots cleared; nothing joins.
+    expect([applied, skipped]).toEqual([4, 0]);
+    expect(next.ItemList.some((it) => it.ItemID === 21102)).toBe(false);
+    expect(uids(raw)).toEqual([W1, W2, H1, H2]);
+  });
+
+  it("dissolve without req (0.5.0 plugin journal) is skipped, and a response ItemList isn't read", () => {
+    const events: EquipEvent[] = [
+      { seq: 1, path: "/item/dissolve", res: dissolveRes },
+      { seq: 2, path: "/item/dissolve", res: { ItemList: [{ ItemUID: H1, Quantity: 0 }], RewardList: [] } },
+      { seq: 3, path: "/item/dissolve", req: { ItemList: ["6399999999", null] }, res: dissolveRes },
+    ];
+    const { next, applied, skipped } = foldEquipEvents(base(), events);
+    expect(next.ItemList).toEqual(base().ItemList);
+    expect([applied, skipped]).toEqual([0, 4]);
   });
 
   it("lock then unlock: IsLock follows the request, as a number", () => {
@@ -462,7 +485,7 @@ describe("foldEquipEvents — sale and lock (request-carrying lines)", () => {
       equip(1, { CharUID: HERO_B, ToEquipUID: W1 }), // W1: free → B
       lock(2, W1, true),
       { seq: 3, path: "/item/enchant", res: { Item: wire(W1, HERO_B, 1, [160001, 0, 0, 0, 0], { Exp: 300, IsLock: 1 }), ItemList: [] } },
-      { seq: 4, path: "/item/dissolve", res: { ItemList: [{ ItemUID: H1, Quantity: 0 }] } },
+      dissolve(4, [H1]),
       sell(5, [H2]),
       equip(6, { CharUID: HERO_A, ToEquipUID: H2 }), // sold already: skipped
     ];
@@ -474,7 +497,7 @@ describe("foldEquipEvents — sale and lock (request-carrying lines)", () => {
   });
 
   it("is idempotent: a replay onto the folded snapshot changes nothing", () => {
-    const events: EquipEvent[] = [lock(1, W1, true), sell(2, [W2, H2]), lock(3, H1, true), lock(4, H1, false)];
+    const events: EquipEvent[] = [lock(1, W1, true), sell(2, [W2]), lock(3, H1, true), lock(4, H1, false), dissolve(5, [H2, H1])];
     const once = foldEquipEvents(base(), events);
     const twice = foldEquipEvents(once.next, events);
     expect(twice.next).toEqual(once.next);
