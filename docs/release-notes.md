@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.16.0] — 2026-10-28
+
 - **Selling or locking a piece in-game now reaches the app live**: a sold piece leaves the
   inventory, a locked one shows the padlock within a few seconds. Update the capture plugin
   (0.5.0): Settings › Setup › **Update plugin** with the game closed.
