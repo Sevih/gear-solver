@@ -3673,6 +3673,10 @@
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
 
+## [1.17.0] — 2026-10-28
+
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
 ## [1.16.0] — 2026-10-28
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
