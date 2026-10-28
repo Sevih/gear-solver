@@ -61,7 +61,9 @@ jobs:
         run: |
           OUTERPEDIA_PATH="$GITHUB_WORKSPACE/outerpedia" node data/sync.mjs | tee "$RUNNER_TEMP/sync.log"
           outerpedia_sha=$(git -C outerpedia rev-parse --short HEAD)
-          if git diff --quiet -- data/derived apps/desktop/src/game-client.json; then
+          # `git status --porcelain`, not `git diff`: a table published for the first
+          # time is an UNTRACKED file, invisible to `git diff` (items.json, 28/10).
+          if [ -z "$(git status --porcelain -- data/derived apps/desktop/src/game-client.json)" ]; then
             echo "Tables up to date with outerpedia \`$outerpedia_sha\`: nothing to propose." >> "$GITHUB_STEP_SUMMARY"
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
