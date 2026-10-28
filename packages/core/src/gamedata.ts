@@ -533,12 +533,32 @@ export interface GameData {
    *  synced before the table existed doesn't have it yet; `gameRulesOf`
    *  (rules.ts) falls back to `DEFAULT_RULES`. */
   progression?: { evoUnlockLevel: Record<string, number> };
+  /** Non-gear items (`items.json`, outerpedia A83): materials, currencies,
+   *  consumables… by item id, to name them in the UI. Empty until the table
+   *  is published and synced (it is an optional artifact of the contract). */
+  items: ItemsTable;
 }
 
 /** `{ "<star>": { "<engine stat key>": { step, percent } } }` — `step` is the
  *  per-tick value, `percent` whether it's a %-stat (value already in display
  *  units, e.g. 4 = 4%). Derived from outerpedia's `subStatPools`. */
 export type SubTickTable = Record<string, Record<string, { step: number; percent: boolean }>>;
+
+/** One non-gear item of `items.json`. `name` / `icon` null when the game
+ *  table has none; `itemType` / `itemSubType` / `grade` are the raw game
+ *  enums (e.g. `IT_*`); `sellPrice` in gold, meaningful when `canSell`. */
+export interface ItemInfo {
+  name: string | null;
+  icon: string | null;
+  itemType: string;
+  itemSubType: string;
+  grade: string;
+  canSell: boolean;
+  sellPrice: number;
+}
+
+/** `{ "<item id>": ItemInfo }` — every item that is not equipment. */
+export type ItemsTable = Record<string, ItemInfo>;
 
 /** The character a captured hero actually IS in-game: the Core Fusion variant
  *  (`27xxxxx`) when `fusionCharId` is set, the origin otherwise. The fused

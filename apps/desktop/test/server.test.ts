@@ -33,4 +33,11 @@ describe("desktop server — malformed percent-encoding", () => {
     const res = await fetch(`${base}/gamedata/version.json`, { signal: AbortSignal.timeout(2000) });
     expect(res.status).toBe(200);
   });
+
+  // An optional table not synced yet (items.json before its publication) is a
+  // plain 404 the renderer reads as "absent" (`getJSON` → null).
+  it("a data file absent from the tree is a 404", async () => {
+    const res = await fetch(`${base}/gamedata/not-synced.json`, { signal: AbortSignal.timeout(2000) });
+    expect(res.status).toBe(404);
+  });
 });

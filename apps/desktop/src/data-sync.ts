@@ -12,22 +12,31 @@
  *    an unchanged hash, only a version.json whose stamp moved is rewritten).
  *    Every artifact is read and parsed before anything is written: one missing
  *    or unreadable file refuses the whole sync and keeps the cache, like
- *    `data/sync.mjs`. No network.
+ *    `data/sync.mjs` — except an OPTIONAL one that is absent (below). No
+ *    network.
  *
  *  - REPO mode (packaged build, any machine): no checkout. Resolve the latest
  *    commit SHA of `Sevih/outerpedia`, and if it changed since last sync,
  *    download its version.json; only when the data hash differs too are the
- *    other 19 artifacts downloaded from the GitHub CDN into the writable cache
+ *    other artifacts downloaded from the GitHub CDN into the writable cache
  *    (at an unchanged hash, only version.json is rewritten, when it differs).
  *    This is what lets the app track game patches WITHOUT shipping a new
  *    installer. Every download must parse as JSON, else nothing is written.
  *    Degrades cleanly offline (uses the cached derived tree, when complete).
  *
+ * OPTIONAL artifacts (`solver-files-optional.json`, today `items.json`) are
+ * tables the app can live without, listed before outerpedia publishes them:
+ * absent from the source (missing file / 404) they are skipped and the result
+ * message says so, the other tables are delivered as usual (a cached copy
+ * stays where it is); present, they are delivered — and refused — like any
+ * other. A cache doesn't need them to count as complete.
+ *
  * Both modes write in two steps — every file to a temp file, then the renames,
  * version.json last — and report a write failure as a status. One sync runs at
  * a time: a call while one is in flight gets that sync's promise.
  *
- * The artifact list is `solver-files.json`, shared with `data/sync.mjs`.
+ * The artifact list is `solver-files.json`, and its optional subset
+ * `solver-files-optional.json`, both shared with `data/sync.mjs`.
  *
  * Electron-free (paths passed in) so the Vite config can import it.
  */
@@ -38,17 +47,29 @@ import { fetchRepoFile, readShaState, resolveLatestSha, writeShaState } from "./
 // The one list of solver artifacts, also imported by `data/sync.mjs` (the
 // committed-tree refresh) — a table added or dropped changes both.
 import solverFiles from "./solver-files.json" with { type: "json" };
+import optionalSolverFiles from "./solver-files-optional.json" with { type: "json" };
 
 /** Repo-relative dir holding the solver artifacts. */
 const SOLVER_DIR = "data/generated/solver";
 
-/** The 21 derived tables — the exact set outerpedia's solver generator emits
- *  (and the committed `data/derived/` tree mirrors). All but one feed the
+/** The 22 derived tables — the set outerpedia's solver generator emits
+ *  (and the committed `data/derived/` tree mirrors), `items.json` included
+ *  ahead of its publication (see OPTIONAL_SOLVER_FILES). All but two feed the
  *  engine: `stat-keys.json` (`ST_*` / `OAT_*` → contract stat key, % nature,
  *  abbreviation) is downloaded like the others but never loaded — only
  *  `packages/core/test/stat-keys.test.ts` reads it, to hold `GAME_STAT`
- *  (packages/core/src/stats.ts) against the contract. */
+ *  (packages/core/src/stats.ts) against the contract; `items.json` (non-gear
+ *  item id → name, icon, type, grade, sell) only names items for the UI. */
 export const SOLVER_FILES: readonly string[] = solverFiles;
+
+/** The entries of SOLVER_FILES whose absence at the source is not an error. */
+export const OPTIONAL_SOLVER_FILES: readonly string[] = optionalSolverFiles;
+const isOptional = (f: string): boolean => OPTIONAL_SOLVER_FILES.includes(f);
+
+/** Suffix of a synced message naming the optional tables the source lacks. */
+function skippedNote(skipped: readonly string[]): string {
+  return skipped.length ? `; ${skipped.join(", ")} not published yet, skipped` : "";
+}
 
 /** Locate a local outerpedia checkout carrying the solver artifacts, if any.
  *  `OUTERPEDIA_PATH` env wins; with a `repoRoot` (dev) `.env.local` and a
@@ -181,11 +202,11 @@ function refreshVersionStamp(derivedDir: string, body: Buffer | string): string 
   return cur.toString() !== next ? commitFiles(derivedDir, new Map(), next) : null;
 }
 
-/** A usable cache holds every artifact of the list: one missing table (a
- *  half-seeded or hand-pruned folder) is neither "fresh" nor an offline
- *  fallback. */
+/** A usable cache holds every required artifact of the list: one missing
+ *  table (a half-seeded or hand-pruned folder) is neither "fresh" nor an
+ *  offline fallback. An optional one may be missing. */
 function cacheComplete(derivedDir: string): boolean {
-  return SOLVER_FILES.every((f) => existsSync(join(derivedDir, f)));
+  return SOLVER_FILES.every((f) => isOptional(f) || existsSync(join(derivedDir, f)));
 }
 
 export interface SyncResult {
@@ -262,9 +283,11 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     // file must never leave `derivedDir` half one snapshot, half another.
     // version.json is the body already checked above.
     const tables = new Map<string, string>();
+    const skipped: string[] = [];
     for (const f of SOLVER_FILES) {
       if (f === "version.json") continue;
       const src = join(checkout, f);
+      if (!existsSync(src) && isOptional(f)) { skipped.push(f); continue; }
       if (!existsSync(src)) return refused(`${f} is missing from the outerpedia checkout`, derivedReady);
       let text: string;
       try { text = readFileSync(src, "utf-8"); } catch { return refused(`${f} is unreadable in the outerpedia checkout`, derivedReady); }
@@ -273,7 +296,7 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
     const unwritten = commitFiles(derivedDir, tables, compact(body).toString());
     if (unwritten) return refused(unwritten, derivedReady);
     const copied = tables.size + 1;
-    return { status: "synced", message: `synced ${copied} tables (checkout ${srcHash ?? "?"})`, copied };
+    return { status: "synced", message: `synced ${copied} tables (checkout ${srcHash ?? "?"})${skippedNote(skipped)}`, copied };
   }
 
   // ── REPO mode ─────────────────────────────────────────────────────────────
@@ -322,9 +345,13 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
   // (characters.json from one patch + equipment.json from another would be
   // an incoherent snapshot).
   let failed: string | null = null;
+  const skipped: string[] = [];
   await pool(SOLVER_FILES.filter((f) => f !== "version.json"), 8, async (f) => {
     if (failed) return;
     const got = await fetchRepoFile(latest, `${SOLVER_DIR}/${f}`);
+    // Only a 404 means "not published": any other failure of an optional
+    // table refuses the sync like a required one.
+    if (got.status === 404 && isOptional(f)) { skipped.push(f); return; }
     if (got.status !== 200 || !got.buf) { failed = `${f} (${got.status})`; return; }
     bufs.set(f, got.buf);
   });
@@ -337,7 +364,7 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
   // body is refused whole, nothing written, SHA not recorded.
   const tables = new Map<string, string>();
   for (const f of SOLVER_FILES) {
-    if (f === "version.json") continue;
+    if (f === "version.json" || skipped.includes(f)) continue;
     try { tables.set(f, JSON.stringify(JSON.parse(bufs.get(f)!.toString("utf-8")))); } catch {
       return refused(`${f} downloaded from outerpedia is not valid JSON`, derivedReady);
     }
@@ -346,5 +373,6 @@ async function runSync(opts: SyncOptions): Promise<SyncResult> {
   if (unwritten) return refused(unwritten, derivedReady);
   // Only record the SHA after a complete write — a failed sync retries next launch.
   writeShaState(shaStateFile, latest);
-  return { status: "synced", message: `synced ${bufs.size} tables @ ${latest.slice(0, 7)}`, copied: bufs.size };
+  skipped.sort();
+  return { status: "synced", message: `synced ${bufs.size} tables @ ${latest.slice(0, 7)}${skippedNote(skipped)}`, copied: bufs.size };
 }

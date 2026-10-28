@@ -8,6 +8,53 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗂️ Données : table `items.json` du contrat synchronisée (facultative) et exposée au renderer, `itemNameOf` (G63) (2026-10-28)
+- ✅ **Pourquoi.** outerpedia ajoute au contrat solver une table des objets hors équipement (A83 :
+  `{ [id]: { name, icon, itemType, itemSubType, grade, canSell, sellPrice } }`) pour nommer les matériaux, monnaies et
+  consommables que l'app ne sait aujourd'hui dire que par leur id. La table n'est pas encore publiée : la synchro devait
+  la connaître sans échouer sur son absence, puisqu'elle livre tout ou rien (un artefact manquant refusait la synchro
+  entière, au checkout comme en repo, et rendait le cache « incomplet »).
+- ✅ **Liste** : `apps/desktop/src/solver-files.json` gagne `items.json` (22 noms) ; nouveau
+  `apps/desktop/src/solver-files-optional.json` (`["items.json"]`), le sous-ensemble dont l'absence à la source n'est pas
+  une erreur, importé comme la liste par `data-sync.ts` (`OPTIONAL_SOLVER_FILES`) et par `data/sync.mjs`.
+- ✅ **Synchro de l'app** (`apps/desktop/src/data-sync.ts`) : en CHECKOUT, un facultatif absent est sauté ; en REPO, un
+  **404** seulement le saute — tout autre échec (5xx des deux hôtes, réseau) refuse la synchro comme pour une table
+  obligatoire. Les autres tables sont livrées, le message `synced` ajoute « ; items.json not published yet, skipped »
+  (c'est la ligne `data sync: synced — …` du log de `main.ts`), une copie déjà en cache reste en place. Publiée, la table
+  est livrée et refusée (JSON cassé) comme les autres. `cacheComplete` n'exige plus que les fichiers obligatoires : un
+  cache sans `items.json` reste « fresh » à hash égal et sert de repli hors ligne.
+- ✅ **`data/sync.mjs`** : un facultatif absent du checkout donne une ligne `optional artifact not published yet: <chemin>;
+  skipped` sur stdout et la suite continue ; la PR quotidienne (`data-sync.yml`) ne tombe donc pas sur son absence. Un
+  `items.json` présent mais illisible sort en erreur comme avant. Le dépôt n'embarque pas de `data/derived/items.json` :
+  il arrivera par la PR de synchro une fois la table publiée.
+- ✅ **Renderer** : `GameData.items: ItemsTable` (`ItemInfo` = `{ name: string | null; icon: string | null; itemType;
+  itemSubType; grade; canSell; sellPrice }`, `packages/core/src/gamedata.ts`), chargé par `loadGameData`
+  (`apps/renderer/src/data.ts`) via `getJSON("/gamedata/items.json")`, `{}` sur 404 — le serveur desktop (`serveStatic`,
+  `api-handler.ts`, aussi monté par Vite en dev) répond un 404 propre à un fichier absent, que `getJSON` lit en null, sans
+  faire tomber le chargement. Helpers `itemNameOf(game, id)` (nom, ou null : pas de table, id inconnu, objet sans nom) et
+  `itemLabel(game, id)` (le nom, ou `item <id>`). Aucun écran ne s'en sert encore (hors périmètre), d'où ni
+  release-notes ni changement visuel.
+- ✅ **Tests** : `apps/desktop/test/data-sync.test.ts` (110) — REPO : source sans `items.json` (404) → 21 tables livrées,
+  message dit, SHA enregistré ; copie en cache gardée sur 404 ; table publiée livrée (22) ; 5xx sur `items.json` → échec,
+  cache intact ; `items.json` non JSON → refus ; un AUTRE fichier en 404 → toujours un échec ; cache sans `items.json` →
+  « fresh » et repli « offline ». CHECKOUT : sans `items.json` → 21 tables copiées, message dit ; non JSON → refus ; les
+  tests « fichier manquant » tournent sur les tables obligatoires. `data/sync.mjs` : sans `items.json` la ligne de log
+  sort et le script va jusqu'à la table obligatoire manquante suivante, `data/derived` intact ; `items.json` non JSON →
+  sortie non nulle ; liste et sous-liste facultative cohérentes. `apps/desktop/test/server.test.ts` : un fichier absent de
+  `/gamedata/` → 404. Nouveau `apps/renderer/test/items.test.ts` (4) : 404 → `items` vide, données chargées ; table
+  présente → `game.items` ; `itemNameOf` / `itemLabel` (id nombre ou chaîne, inconnu, sans nom, table vide, pas de
+  donnée). Fixture `packages/core/test/parse.test.ts` : `items: {}`.
+- ✅ **Docs** : `docs/data-schema.md` + `wiki/Data-Schema.md` (la table, sa forme, son caractère facultatif),
+  `docs/reference.md` + `wiki/Engine-Reference.md` (ligne de la table des dérivés, 22 artefacts, l'exception des
+  facultatifs), `docs/architecture.md` + `wiki/Architecture.md` (22 artefacts). `docs/todo.md` n'en parlait pas.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` (sans erreur) ; `npm test` → core « Tests 169 passed (169) »,
+  desktop « Tests 219 passed (219) », renderer « Tests 761 passed (761) » ; `npm run lint` → « ✖ 13 problems (0 errors,
+  13 warnings) », inchangé.
+- ⏳ **Sevih** : après la promotion d'A83 côté outerpedia et la PR de synchro mergée, `data/derived/items.json` existe et
+  `game.items` n'est plus vide (Settings › Debug ou la console). D'ici là, le log de lancement dit « items.json not
+  published yet, skipped ». Une table retirée plus tard de la source laisserait sa dernière copie en cache (choix
+  assumé : elle ne sert qu'à nommer).
+
 ### 🩹 Capture : la dissolution faite en jeu retire enfin la pièce, pliée d'après la requête journalisée (plugin 0.5.1) (2026-10-28)
 - ✅ **Pourquoi.** G44 pliait `/item/dissolve` d'après le `ItemList` de sa RÉPONSE (« les pièces dissoutes, quantité 0 »).
   Une capture réelle du 28/10 dit le contraire : `CWebRES_ItemDissolve` ne porte que `RewardList` (deux `WSRewardData`,

@@ -92,6 +92,7 @@ particular):
 | `ArchiveBonusTemplet.json`           | `archive-bonus.json`      | `CompleteCount` → codex level (1..11)                  |
 | `CharacterArchiveStatTemplet.json` (via `computeCharacterIngredients`) | `codex-curve.json` | codex level idx 0..11 → {atkPct, defPct, hpPct} |
 | `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data; `trust-buffs.json` is synced with the contract but never loaded by the renderer (combat buffs, absent from the stat sheet) |
+| `ItemTemplet.json` (non-gear items, outerpedia A83) | `items.json` | ItemID → {name, icon, itemType, itemSubType, grade, canSell, sellPrice}; **optional** (`solver-files-optional.json`): skipped until outerpedia publishes it, loaded as `game.items` (`{}` otherwise), read by `itemNameOf` / `itemLabel` (`data.ts`) to name items |
 | `datagen/lib/stat-keys.ts` (outerpedia; client rule `CUtilUI.IsPercentStat` / `GetStatValue`) | `stat-keys.json` | `ST_*` → `OAT_*` → {key (contract vocabulary: `atk`, `atkPct`, `chc`, `resRate`…), percent, abbr}; read by a test only (`packages/core/test/stat-keys.test.ts`), `GAME_STAT` stays the runtime table |
 
 Refresh after a game patch: `npm run data:sync` (`data/sync.mjs`, once
@@ -747,31 +748,40 @@ incremented wrongly, premature flush.
 ### 3.1 In-game tables referenced
 
 The raw source tables live in outerpedia's datamine; the app only ever sees
-the 21 derived artifacts. Refreshed **at launch** by `data-sync.ts`
+the 22 derived artifacts, one of them optional (`items.json`, see below). Refreshed **at launch** by `data-sync.ts`
 (`apps/desktop/src`) in two modes:
 - **checkout** (dev / maintainer machine) — copy from a local outerpedia
   checkout (`data/generated/solver/`), guarded by the version.json hash
   (at an unchanged hash, only a differing version.json is copied), zero network;
-  all 21 files are read before anything is written: a missing or unreadable
+  all 22 files are read before anything is written: a missing or unreadable
   artifact refuses the sync and keeps the cache, like `data/sync.mjs` (same
   list, `apps/desktop/src/solver-files.json`);
-- **repo** (packaged build) — downloads the 21 artifacts from the public repo
+- **repo** (packaged build) — downloads the 22 artifacts from the public repo
   `Sevih/outerpedia` via the jsDelivr CDN, gated on the SHA of the latest
   commit (`api.github.com/.../commits/main`). Allows following patches
   **without publishing a new build**. Every downloaded artifact must parse as
   JSON, else nothing is written. Degrades gracefully offline (uses the
   already-cached `data/derived`, when complete).
 
-In both modes a cache counts only if all 21 files are there; writes go in two
+In both modes a cache counts only if all 21 required files are there; writes go in two
 steps (every `.tmp`, then the renames, version.json last) and a write failure
 is an `error` status naming the file; one sync at a time (a call while a sync
 runs gets its promise).
 
+Exception: the **optional** artifacts (`solver-files-optional.json`, today
+`items.json`), listed before outerpedia publishes them. Absent from the source
+(file missing from the checkout, 404 in repo mode — any other failure refuses
+the sync as for a required table), they are skipped: the other tables are
+delivered, the sync message (hence the `data sync:` log line) adds
+"items.json not published yet, skipped", a copy already cached stays in place;
+`data/sync.mjs` does the same with a log line. Present, they are delivered and
+refused (broken JSON) like the others.
+
 `data/sync.mjs` (the dev-time copy) finds the outerpedia checkout via the
 `OUTERPEDIA_PATH` env var, then `OUTERPEDIA_PATH` in `.env.local`, then the
 sibling `../outerpedia` checkout, and exits non-zero
-if the checkout or any of the 21 artifacts is missing or not JSON, before
-writing anything.
+if the checkout or any of the 21 required artifacts is missing, or any
+artifact is not JSON, before writing anything.
 
 `sub-ticks.json` (derived): per-tick values of the ATK/DEF/HP flat+% subs per
 star (5★/6★), recomposed by outerpedia's solver generator from `ItemOptionTemplet`

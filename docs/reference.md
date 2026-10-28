@@ -89,6 +89,7 @@ cibles dérivent de la même table — `ItemSpecialOptionTemplet` notamment) :
 | `ArchiveBonusTemplet.json`           | `archive-bonus.json`      | `CompleteCount` → codex level (1..11)                  |
 | `CharacterArchiveStatTemplet.json` (via `computeCharacterIngredients`) | `codex-curve.json` | codex level idx 0..11 → {atkPct, defPct, hpPct} |
 | `ExpCharacterTemplet.json` (col TrustExp) + `TrustBuffTemplet.json` | `trust-character.json`, `trust-buffs.json` | trust system data ; `trust-buffs.json` synchronisé avec le contrat mais jamais chargé par le renderer (buffs de combat, absents de la fiche) |
+| `ItemTemplet.json` (objets hors équipement, outerpedia A83) | `items.json` | ItemID → {name, icon, itemType, itemSubType, grade, canSell, sellPrice} ; **facultative** (`solver-files-optional.json`) : sautée tant qu'outerpedia ne la publie pas, chargée en `game.items` (`{}` sinon), lue par `itemNameOf` / `itemLabel` (`data.ts`) pour nommer les objets |
 | `datagen/lib/stat-keys.ts` (outerpedia ; règle `CUtilUI.IsPercentStat` / `GetStatValue` du client) | `stat-keys.json` | `ST_*` → `OAT_*` → {key (vocabulaire du contrat : `atk`, `atkPct`, `chc`, `resRate`…), percent, abbr} ; lu par un test seulement (`packages/core/test/stat-keys.test.ts`), `GAME_STAT` reste la table d'exécution |
 
 Rafraîchir après un patch jeu : `npm run data:sync` (une fois le
@@ -761,26 +762,35 @@ dans `buf`, `workersDone` incrémenté à tort, flush prématuré.
 ### 3.1 Tables in-game référencées
 
 Les tables brutes vivent dans le datamine d'outerpedia ; l'app ne voit que les
-21 artefacts dérivés. Rafraîchis **au lancement** par `data-sync.ts`
+22 artefacts dérivés, dont un facultatif (`items.json`, voir plus bas). Rafraîchis **au lancement** par `data-sync.ts`
 (`apps/desktop/src`) en deux modes :
 - **checkout** (dev / machine mainteneur) — copie depuis un checkout local
   d'outerpedia (`data/generated/solver/`), gardé par le hash de version.json
   (à hash égal, seul un version.json différent est recopié), zéro réseau ;
-  les 21 fichiers sont lus avant toute écriture : un artefact absent ou
+  les 22 fichiers sont lus avant toute écriture : un artefact absent ou
   illisible refuse la synchro et garde le cache, comme `data/sync.mjs` (même
   liste, `apps/desktop/src/solver-files.json`) ;
-- **repo** (build packagé) — télécharge les 21 artefacts depuis le repo public
+- **repo** (build packagé) — télécharge les 22 artefacts depuis le repo public
   `Sevih/outerpedia` via le CDN jsDelivr, gaté sur le SHA du dernier commit
   (`api.github.com/.../commits/main`). Permet de suivre les patchs **sans
   publier de nouveau build**. Chaque artefact téléchargé doit se parser en
   JSON, sinon rien n'est écrit. Dégrade proprement hors-ligne (utilise le
   `data/derived` déjà en cache, s'il est complet).
 
-Dans les deux modes, un cache ne compte que si les 21 fichiers y sont ;
+Dans les deux modes, un cache ne compte que si les 21 fichiers obligatoires y sont ;
 l'écriture se fait en deux temps (tous les `.tmp`, puis les renommages,
 version.json en dernier) et un échec d'écriture rend un statut `error` qui
 nomme le fichier ; une seule synchro à la fois (un appel pendant qu'une
 synchro tourne reçoit sa promesse).
+
+Exception : les artefacts **facultatifs** (`solver-files-optional.json`,
+aujourd'hui `items.json`), listés avant qu'outerpedia les publie. Absents de la
+source (fichier manquant au checkout, 404 en repo — tout autre échec refuse la
+synchro comme pour une table obligatoire), ils sont sautés : les autres tables
+sont livrées, le message de synchro (et donc le log `data sync:`) ajoute
+« items.json not published yet, skipped », une copie déjà en cache reste en
+place ; `data/sync.mjs` fait de même avec une ligne de log. Présents, ils sont
+livrés et refusés (JSON cassé) comme les autres.
 
 `sub-ticks.json` (dérivé) : valeurs par tick des subs ATK/DEF/HP flat+% par étoile
 (5★/6★), recomposées par le generator solver d'outerpedia depuis `ItemOptionTemplet`

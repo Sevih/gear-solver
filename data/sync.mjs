@@ -18,7 +18,9 @@
  * silently ship stale data, and when the checkout's `version.json` carries a
  * contract schema this build can't read (scripts/solver-schema.mjs). Every
  * artifact is read before anything is written, `version.json` last — the same
- * rule as the app's CHECKOUT mode (apps/desktop/src/data-sync.ts).
+ * rule as the app's CHECKOUT mode (apps/desktop/src/data-sync.ts). An optional
+ * artifact (`solver-files-optional.json`) absent from the checkout is skipped
+ * with a log line instead; present, it is checked and copied like the others.
  */
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -27,9 +29,10 @@ import { REPO_ROOT, findOuterpediaCheckout } from "../scripts/outerpedia-checkou
 import { schemaRefusal } from "../scripts/solver-schema.mjs";
 // The one list of solver artifacts, shared with the app's runtime sync
 // (apps/desktop/src/data-sync.ts); outerpedia's datagen/generators/solver.ts
-// emits the same set of 21 tables. `stat-keys.json` is copied like the others
-// but only packages/core/test/stat-keys.test.ts reads it.
+// emits the same set of tables (`items.json` once published). `stat-keys.json`
+// is copied like the others but only packages/core/test/stat-keys.test.ts reads it.
 import SOLVER_FILES from "../apps/desktop/src/solver-files.json" with { type: "json" };
+import OPTIONAL_SOLVER_FILES from "../apps/desktop/src/solver-files-optional.json" with { type: "json" };
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DERIVED = join(here, "derived");
@@ -55,6 +58,10 @@ if (refusal) {
 const tables = new Map();
 for (const f of SOLVER_FILES) {
   const src = join(checkout, f);
+  if (!existsSync(src) && OPTIONAL_SOLVER_FILES.includes(f)) {
+    console.log(`optional artifact not published yet: ${src}; skipped`);
+    continue;
+  }
   if (!existsSync(src)) {
     console.error(`missing artifact: ${src}; data/derived left untouched`);
     process.exit(1);

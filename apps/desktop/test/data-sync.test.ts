@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as tsImpl from "../src/data-sync.js";
-import { SOLVER_FILES, syncGameData } from "../src/data-sync.js";
+import { OPTIONAL_SOLVER_FILES, SOLVER_FILES, syncGameData } from "../src/data-sync.js";
 
 // `writeFileSync` that fails for the paths `fsFault.failWrite` picks — a
 // read-only folder can't be made portably (the CI also runs on Windows).
@@ -92,6 +92,94 @@ describe("syncGameData — REPO mode", () => {
     const r = await syncGameData({ derivedDir, shaStateFile, force: true });
     expect(r.status).toBe("synced");
     expect(urls.filter((u) => !u.startsWith("https://api.github.com/"))).toHaveLength(SOLVER_FILES.length);
+  });
+});
+
+describe("syncGameData — items.json is optional (REPO mode)", () => {
+  /** stubRemote("h2"), `items.json` answered by `items` (a status, or a body). */
+  function remoteItems(items: number | unknown) {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      urls.push(url);
+      if (url.startsWith("https://api.github.com/")) return new Response(NEW_SHA);
+      if (url.endsWith("/version.json")) return Response.json({ hash: "h2", builtAt: "2026-02-02" });
+      if (url.endsWith("/items.json")) return typeof items === "number" ? new Response("nope", { status: items }) : Response.json(items);
+      return Response.json({ from: "remote" });
+    }));
+    return urls;
+  }
+
+  it("a source without items.json (404) still delivers every other table, and says so", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    rmSync(join(derivedDir, "items.json"));
+    remoteItems(404);
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "synced", message: `synced 21 tables @ ${NEW_SHA.slice(0, 7)}; items.json not published yet, skipped`, copied: 21 });
+    for (const f of TABLES) if (f !== "items.json") expect(JSON.parse(readFileSync(join(derivedDir, f), "utf-8"))).toEqual({ from: "remote" });
+    expect(existsSync(join(derivedDir, "items.json"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8")).hash).toBe("h2");
+    expect(JSON.parse(readFileSync(shaStateFile, "utf-8")).sha).toBe(NEW_SHA);
+  });
+
+  it("a 404 on items.json leaves a cached copy where it is", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    remoteItems(404);
+    expect((await syncGameData({ derivedDir, shaStateFile, force: false })).status).toBe("synced");
+    expect(readFileSync(join(derivedDir, "items.json"), "utf-8")).toBe("{}");
+  });
+
+  it("a published items.json is delivered like the others", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    const urls = remoteItems({ "10": { name: "Gold" } });
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "synced", message: `synced 22 tables @ ${NEW_SHA.slice(0, 7)}`, copied: 22 });
+    expect(tableUrls(urls).some((u) => u.endsWith("/items.json"))).toBe(true);
+    expect(JSON.parse(readFileSync(join(derivedDir, "items.json"), "utf-8"))).toEqual({ "10": { name: "Gold" } });
+  });
+
+  it("an items.json that fails otherwise than 404 refuses the sync, cache and SHA kept", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    remoteItems(500);
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    // 5xx on both hosts → status 0 (repo-source.ts).
+    expect(r).toEqual({ status: "error", message: "download failed: items.json (0) — keeping cached data" });
+    expectAllTablesIntact(derivedDir, shaStateFile);
+  });
+
+  it("an items.json that is not JSON refuses the sync like any table", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.startsWith("https://api.github.com/")) return new Response(NEW_SHA);
+      if (url.endsWith("/version.json")) return Response.json({ hash: "h2", builtAt: "2026-02-02" });
+      if (url.endsWith("/items.json")) return new Response("<html>Bad gateway</html>");
+      return Response.json({ from: "remote" });
+    }));
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "error", message: "items.json downloaded from outerpedia is not valid JSON; keeping the cached data" });
+    expectAllTablesIntact(derivedDir, shaStateFile);
+  });
+
+  it("another table missing (404) is still a failure", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.startsWith("https://api.github.com/")) return new Response(NEW_SHA);
+      if (url.endsWith("/version.json")) return Response.json({ hash: "h2", builtAt: "2026-02-02" });
+      if (url.endsWith("/sets.json") || url.endsWith("/items.json")) return new Response("nope", { status: 404 });
+      return Response.json({ from: "remote" });
+    }));
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "error", message: "download failed: sets.json (404) — keeping cached data" });
+    expectAllTablesIntact(derivedDir, shaStateFile);
+  });
+
+  it("a cache without items.json is complete: fresh at the same hash, offline fallback", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    rmSync(join(derivedDir, "items.json"));
+    const urls = stubRemote("h1");
+    expect((await syncGameData({ derivedDir, shaStateFile, force: false })).status).toBe("fresh");
+    expect(tableUrls(urls)).toEqual([]);
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
+    expect(await syncGameData({ derivedDir, shaStateFile, force: false })).toEqual({ status: "offline", message: "offline — using cached game data" });
   });
 });
 
@@ -375,6 +463,8 @@ describe("syncGameData — contract schema (CHECKOUT mode)", () => {
 });
 
 const TABLES = SOLVER_FILES.filter((f) => f !== "version.json");
+/** The tables whose absence refuses a sync. */
+const REQUIRED_TABLES = TABLES.filter((f) => !OPTIONAL_SOLVER_FILES.includes(f));
 
 /** The cache `cache("h1")` built, every table included, untouched. */
 function expectAllTablesIntact(derivedDir: string, shaStateFile: string) {
@@ -395,17 +485,36 @@ describe("syncGameData — CHECKOUT mode reads every artifact before writing", (
     const { derivedDir, shaStateFile } = cache("h1");
     checkoutMode();
     const r = await syncGameData({ derivedDir, shaStateFile, force: false });
-    expect(r).toEqual({ status: "synced", message: "synced 21 tables (checkout h2)", copied: 21 });
+    expect(r).toEqual({ status: "synced", message: "synced 22 tables (checkout h2)", copied: 22 });
     for (const f of TABLES) expect(JSON.parse(readFileSync(join(derivedDir, f), "utf-8"))).toEqual({ from: "checkout" });
     expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8"))).toEqual({ schema: 2, hash: "h2", builtAt: "2026-02-02" });
   });
 
   // version.json is not in the list: without it the checkout isn't found at all (REPO mode).
-  it.each(TABLES)("a missing %s writes nothing and keeps the cache", async (f) => {
+  it.each(REQUIRED_TABLES)("a missing %s writes nothing and keeps the cache", async (f) => {
     const { derivedDir, shaStateFile } = cache("h1");
     rmSync(join(checkoutMode(), f));
     const r = await syncGameData({ derivedDir, shaStateFile, force: true });
     expect(r).toEqual({ status: "error", message: `${f} is missing from the outerpedia checkout; keeping the cached data` });
+    expectAllTablesIntact(derivedDir, shaStateFile);
+  });
+
+  it("a checkout without items.json copies every other table, and says so", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    rmSync(join(checkoutMode(), "items.json"));
+    const r = await syncGameData({ derivedDir, shaStateFile, force: false });
+    expect(r).toEqual({ status: "synced", message: "synced 21 tables (checkout h2); items.json not published yet, skipped", copied: 21 });
+    for (const f of REQUIRED_TABLES) expect(JSON.parse(readFileSync(join(derivedDir, f), "utf-8"))).toEqual({ from: "checkout" });
+    // The cached copy is left as it was.
+    expect(readFileSync(join(derivedDir, "items.json"), "utf-8")).toBe("{}");
+    expect(JSON.parse(readFileSync(join(derivedDir, "version.json"), "utf-8")).hash).toBe("h2");
+  });
+
+  it("an items.json that is not JSON writes nothing and keeps the cache", async () => {
+    const { derivedDir, shaStateFile } = cache("h1");
+    writeFileSync(join(checkoutMode(), "items.json"), "{ truncated");
+    const r = await syncGameData({ derivedDir, shaStateFile, force: true });
+    expect(r).toEqual({ status: "error", message: "items.json is not valid JSON in the outerpedia checkout; keeping the cached data" });
     expectAllTablesIntact(derivedDir, shaStateFile);
   });
 
@@ -438,11 +547,18 @@ describe("syncGameData — CHECKOUT mode reads every artifact before writing", (
 });
 
 describe("one list of solver artifacts", () => {
-  it("data-sync.ts exports solver-files.json, 21 distinct names", () => {
+  it("data-sync.ts exports solver-files.json, 22 distinct names", () => {
     const shared = JSON.parse(readFileSync(fileURLToPath(new URL("../src/solver-files.json", import.meta.url)), "utf-8"));
     expect(SOLVER_FILES).toEqual(shared);
-    expect(new Set(SOLVER_FILES).size).toBe(21);
+    expect(new Set(SOLVER_FILES).size).toBe(22);
     expect(SOLVER_FILES).toContain("version.json");
+  });
+
+  it("the optional ones are entries of the list: items.json, never version.json", () => {
+    const shared = JSON.parse(readFileSync(fileURLToPath(new URL("../src/solver-files-optional.json", import.meta.url)), "utf-8"));
+    expect(OPTIONAL_SOLVER_FILES).toEqual(shared);
+    expect(OPTIONAL_SOLVER_FILES).toEqual(["items.json"]);
+    for (const f of OPTIONAL_SOLVER_FILES) expect(SOLVER_FILES).toContain(f);
   });
 });
 
@@ -503,7 +619,9 @@ describe("data/sync.mjs — contract schema", () => {
 describe("data/sync.mjs — reads the shared list, every artifact before writing", () => {
   const script = fileURLToPath(new URL("../../../data/sync.mjs", import.meta.url));
   const derived = fileURLToPath(new URL("../../../data/derived", import.meta.url));
-  const snapshot = () => Object.fromEntries(SOLVER_FILES.map((f) => [f, readFileSync(join(derived, f), "utf-8")]));
+  // An optional table may be absent from the committed tree (items.json until published).
+  const committed = () => SOLVER_FILES.filter((f) => existsSync(join(derived, f)));
+  const snapshot = () => Object.fromEntries(committed().map((f) => [f, readFileSync(join(derived, f), "utf-8")]));
 
   /** A fake checkout holding the committed tree's own bytes: even a broken
    *  script that wrote before failing would leave data/derived unchanged. */
@@ -511,7 +629,7 @@ describe("data/sync.mjs — reads the shared list, every artifact before writing
     const root = mkdtempSync(join(tmpdir(), "gs-outerpedia-"));
     const solver = join(root, "data", "generated", "solver");
     mkdirSync(solver, { recursive: true });
-    for (const f of SOLVER_FILES) cpSync(join(derived, f), join(solver, f));
+    for (const f of committed()) cpSync(join(derived, f), join(solver, f));
     // The copied game-client.json would make a full run touch the repo: never reached here.
     return { root, solver };
   }
@@ -519,13 +637,38 @@ describe("data/sync.mjs — reads the shared list, every artifact before writing
   const run = (root: string) =>
     spawnSync(process.execPath, [script], { env: { ...process.env, OUTERPEDIA_PATH: root }, encoding: "utf-8" });
 
-  it.each(TABLES)("a checkout without %s (an entry of solver-files.json) exits non-zero, data/derived untouched", (f) => {
+  it.each(REQUIRED_TABLES)("a checkout without %s (an entry of solver-files.json) exits non-zero, data/derived untouched", (f) => {
     const before = snapshot();
     const { root, solver } = checkoutOfCommittedTree();
-    rmSync(join(solver, f));
+    rmSync(join(solver, f), { force: true });
     const r = run(root);
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain(`missing artifact: ${join(solver, f)}; data/derived left untouched`);
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("a checkout without items.json goes past it with a log line", () => {
+    const before = snapshot();
+    const { root, solver } = checkoutOfCommittedTree();
+    rmSync(join(solver, "items.json"), { force: true });
+    // A later required table missing stops the run before any write: reaching
+    // it proves the absent items.json was not the failure.
+    rmSync(join(solver, "trust-character.json"));
+    const r = run(root);
+    expect(r.stdout).toContain(`optional artifact not published yet: ${join(solver, "items.json")}; skipped`);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(`missing artifact: ${join(solver, "trust-character.json")}; data/derived left untouched`);
+    expect(r.stderr).not.toContain("items.json");
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("an items.json that is not JSON exits non-zero, data/derived untouched", () => {
+    const before = snapshot();
+    const { root, solver } = checkoutOfCommittedTree();
+    writeFileSync(join(solver, "items.json"), "{ truncated");
+    const r = run(root);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(`unreadable or not JSON: ${join(solver, "items.json")}; data/derived left untouched`);
     expect(snapshot()).toEqual(before);
   });
 

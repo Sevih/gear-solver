@@ -234,3 +234,15 @@ au dernier vu (`gs.data.hash`, localStorage) : au changement, `reconcileDataHash
 (`apps/renderer/src/lib/storage/dataHash.ts`) retire des presets de filtres et des filtres par héros les
 ids de set et les clés d'effet que la nouvelle donnée ne connaît plus, sans rien effacer d'autre ; les
 builds sauvés ne sont pas touchés.
+
+**Table facultative `items.json`.** Les objets hors équipement (matériaux, monnaies,
+consommables…) : `{ "<ItemID>": { name, icon, itemType, itemSubType, grade, canSell,
+sellPrice } }` (`name` / `icon` null quand le jeu n'en donne pas, `itemType` / `itemSubType` /
+`grade` les enums bruts du jeu, `sellPrice` en or). Listée dans `solver-files.json` et dans
+`solver-files-optional.json` (`apps/desktop/src/`) : tant qu'outerpedia ne la publie pas, la
+synchro de l'app (checkout ou repo, un 404 seulement) et `data/sync.mjs` la sautent avec une
+ligne de log et livrent les autres tables ; publiée, elle est livrée et refusée comme les
+autres (JSON cassé, autre échec de téléchargement). Un cache sans elle reste complet. Le
+renderer la charge en `game.items` (`ItemsTable`, `core/gamedata.ts`), `{}` sur 404 ;
+`itemNameOf(game, id)` / `itemLabel(game, id)` (`apps/renderer/src/data.ts`) rendent le nom,
+ou null / `item <id>`.

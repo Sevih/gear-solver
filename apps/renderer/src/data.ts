@@ -63,7 +63,7 @@ export async function loadDataVersion(): Promise<DataVersion | null> {
 }
 
 export async function loadGameData(): Promise<GameData | null> {
-  const [options, equipment, sets, equipmentPassives, multiTierPassives, gems, singularityOptions, eePassives, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, subTicks, progression] = await Promise.all([
+  const [options, equipment, sets, equipmentPassives, multiTierPassives, gems, singularityOptions, eePassives, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, subTicks, progression, items] = await Promise.all([
     getJSON<GameData["options"]>("/gamedata/options.json"),
     getJSON<GameData["equipment"]>("/gamedata/equipment.json"),
     getJSON<GameData["sets"]>("/gamedata/sets.json"),
@@ -82,16 +82,30 @@ export async function loadGameData(): Promise<GameData | null> {
     getJSON<GameData["trustCharacter"]>("/gamedata/trust-character.json"),
     getJSON<GameData["subTicks"]>("/gamedata/sub-ticks.json"),
     getJSON<NonNullable<GameData["progression"]>>("/gamedata/progression.json"),
+    getJSON<GameData["items"]>("/gamedata/items.json"),
   ]);
   if (!options || !equipment || !sets || !equipmentPassives || !multiTierPassives || !gems || !singularityOptions || !eePassives || !characters || !enhance || !buffs || !expCharacter || !charLevelMax || !codexCurve || !archiveBonus || !trustCharacter) return null;
   // subTicks is optional — only powers the flat-vs-% info panel; default to {}
   // so a stale cache built before the table existed doesn't fail the load.
   // progression is optional too: a cache synced before it existed (the launch
   // sync fetches it on its next pass) falls back to DEFAULT_RULES (rules.ts).
+  // items is optional as well — not published yet by outerpedia, and the sync
+  // skips it until it is (a 404 here): {} names nothing.
   return {
-    options, equipment, sets, equipmentPassives, multiTierPassives, gems, singularityOptions, eePassives, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, subTicks: subTicks ?? {},
+    options, equipment, sets, equipmentPassives, multiTierPassives, gems, singularityOptions, eePassives, characters, enhance, buffs, expCharacter, charLevelMax, codexCurve, archiveBonus, trustCharacter, subTicks: subTicks ?? {}, items: items ?? {},
     ...(progression ? { progression } : {}),
   };
+}
+
+/** Name of a non-gear item (`game.items`), null when unknown — no table yet,
+ *  an id newer than the synced data, or an item the game leaves unnamed. */
+export function itemNameOf(game: Pick<GameData, "items"> | null | undefined, id: string | number): string | null {
+  return game?.items[String(id)]?.name || null;
+}
+
+/** `itemNameOf`, or `item <id>` when the name is unknown. */
+export function itemLabel(game: Pick<GameData, "items"> | null | undefined, id: string | number): string {
+  return itemNameOf(game, id) ?? `item ${id}`;
 }
 
 export interface LoadResult {
