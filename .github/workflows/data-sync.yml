@@ -34,11 +34,11 @@ jobs:
         # Explicit bash = `-eo pipefail`: a failing sync.mjs fails its `| tee`.
         shell: bash
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Public repo, no secret. Only what data/sync.mjs reads; non-cone patterns
       # because cone mode only takes directories and game-client.json is a file.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Sevih/outerpedia
           path: outerpedia
