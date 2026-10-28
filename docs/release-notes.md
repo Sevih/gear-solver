@@ -12,7 +12,8 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Inventory › Filter › Base rolls**: filter pieces on the initial tiers of their substats, best
+  line first (e.g. "at least 3/3/3/0" for the keepers, "worse than 3/3/3/0" for the pieces to sell).
 
 ## [1.16.0] — 2026-10-28
 

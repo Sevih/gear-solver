@@ -9,7 +9,7 @@ import { StatIcon } from "../../design/EquipmentIcon.js";
 import { RARITY, STAT, type DesignRarity } from "../../design/tokens.js";
 import { QUALITY_TIERS, type QualityTier } from "../../lib/quality.js";
 import { QUALITY_TONE } from "../../design/GearDetail.js";
-import { GEAR_STATS, emptyFilters, type FilterState } from "./filters.js";
+import { GEAR_STATS, emptyFilters, type BaseRollsFilter, type FilterState } from "./filters.js";
 
 // ── filter pieces ───────────────────────────────────────────────────────
 function FPill({
@@ -130,6 +130,63 @@ function ModeToggle({
   );
 }
 
+/** "at least" / "worse than" toggle of the Base rolls section — same look as
+ *  the OR / AND toggle. */
+function BaseRollsModeToggle({
+  mode, onChange,
+}: { mode: BaseRollsFilter["mode"]; onChange: (m: BaseRollsFilter["mode"]) => void }) {
+  return (
+    <div className="inline-flex rounded border border-white/10 bg-black/30 p-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider">
+      {([["atLeast", "at least"], ["below", "worse than"]] as const).map(([m, label]) => {
+        const active = mode === m;
+        return (
+          <button
+            key={m}
+            onClick={() => onChange(m)}
+            className={cx(
+              "rounded-sm px-1.5 py-0.5 transition-colors",
+              active ? "bg-cyan-500/20 text-cyan-200" : "text-white/70 hover:text-white",
+            )}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Four 0–4 selectors (0 = any) for the sorted base-stage pattern, read
+ *  "≥ a / b / c / d", best line first. */
+function BaseRollsInputs({
+  min, onChange,
+}: { min: BaseRollsFilter["min"]; onChange: (next: BaseRollsFilter["min"]) => void }) {
+  return (
+    <div className="flex items-center gap-1.5 font-mono text-[12px] text-white">
+      <span className="text-white/70">≥</span>
+      {min.map((v, i) => (
+        <span key={i} className="flex items-center gap-1.5">
+          {i > 0 && <span className="text-white/40">/</span>}
+          <select
+            value={v}
+            aria-label={`Line ${i + 1} minimum base tier`}
+            onChange={(e) => {
+              const next = [...min] as BaseRollsFilter["min"];
+              next[i] = Number(e.target.value);
+              onChange(next);
+            }}
+            className="rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 text-[12px] text-white focus:border-cyan-400/40 focus:outline-none"
+          >
+            {[0, 1, 2, 3, 4].map((n) => (
+              <option key={n} value={n}>{n === 0 ? "any" : n}</option>
+            ))}
+          </select>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** Top-right button that opens the game-style filter modal. Mirrors the
  *  in-game CM_Btn_Filter icon and surfaces a small badge with the active
  *  filter count so the player knows at a glance whether their view is
@@ -155,7 +212,7 @@ export function FilterButton({
 }
 
 /** Game-style filter modal — opens via the filter button, exposes every
- *  filter dimension (Rarity, Stars, Quality, Main, Sub, Set, Status,
+ *  filter dimension (Rarity, Stars, Quality, Main, Sub, Base rolls, Set, Status,
  *  Singularity, Search) as multi-select pill groups. Draft state lives
  *  locally so Cancel discards uncommitted changes; Apply pushes the draft
  *  to the parent's FilterState and closes; Reset clears all dimensions
@@ -387,6 +444,19 @@ export function FilterModal({
               />
             </ModalSection>
           )}
+
+          <ModalSection
+            label="Base rolls"
+            right={<BaseRollsModeToggle mode={draft.baseRolls.mode} onChange={(m) => setDraft({ ...draft, baseRolls: { ...draft.baseRolls, mode: m } })} />}
+          >
+            <BaseRollsInputs
+              min={draft.baseRolls.min}
+              onChange={(min) => setDraft({ ...draft, baseRolls: { ...draft.baseRolls, min } })}
+            />
+            <div className="mt-1.5 text-[10px] text-white/60">
+              Initial tiers of the sub-stats, best line first, before reforge and enhancement (Talisman / EE count as 0/0/0/0).
+            </div>
+          </ModalSection>
 
           {availableArmorSets.size > 0 && (
             <div

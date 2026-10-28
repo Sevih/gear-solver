@@ -8,6 +8,36 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔎 Inventaire : filtre sur les paliers de base des sous-stats, motif trié, « au moins » ou « moins bien que » (G62) (2026-10-28)
+- ✅ **Quoi.** La modale Filter de l'Inventaire gagne une section **Base rolls** : quatre sélecteurs 0–4 (0 = any) lus
+  « ≥ a / b / c / d », une bascule **at least** / **worse than** et une ligne d'aide. Les paliers de base des lignes de
+  sous-stats de la pièce sont triés décroissant et complétés par 0 jusqu'à 4 lignes ; `atLeast` garde les pièces dont
+  chaque ligne atteint son minimum, `below` garde les autres (au moins une ligne sous son minimum) : le mode « rebut »
+  à vendre. Un motif tout à 0 est inactif dans les deux modes ; actif, il compte dans la pastille du bouton Filter.
+- ✅ **Pourquoi.** Trier son stock par qualité de drop (le palier tiré au drop, pas les reforges ni l'enhance) pour
+  repérer les bonnes pièces ou la ferraille, avec la même notion de « 3/3/3/1 » que la règle Transistone (G56).
+- ✅ **Comment.** Pas de champ ajouté au core : dans `parse.ts`, `ticks = Level + 1` et `reforgeTicks = Level −
+  BaseLevel`, donc `ticks − reforgeTicks = BaseLevel + 1`, exactement le palier de ligne 1..4 de `lib/solver/reroll.ts`
+  (stage 4 = `BaseLevel` 3) ; l'enhance n'ajoute rien aux `Level` des sous-stats. `baseStage` y est exporté (paramètre
+  élargi à `Pick<RolledStat, "ticks" | "reforgeTicks">`) et `screens/inventory/filters.ts` l'appelle sur
+  `UiSubstat.lv` / `reforges` via `baseRollPattern(p)`. `FilterState.baseRolls = { min, mode }`, défaut
+  `[0,0,0,0]` / `atLeast` ; champ additif : `FILTER_CODEC.deserialize` pose déjà les valeurs stockées sur
+  `emptyFilters()`, un état v3 sans `baseRolls` lit le défaut, la clé reste `gs.inv.filters.v3`. Talisman et EE (gemmes,
+  pas de sous-stats) valent 0/0/0/0 : exclus par « at least » dès qu'un minimum est posé, gardés par « worse than » ;
+  l'aide de la modale le dit. `FilterModal.tsx` : `BaseRollsModeToggle` (même rendu que le OR / AND) et
+  `BaseRollsInputs`, section placée entre Secondary Stat et Set Effect, aucun autre changement visuel.
+- ✅ **Tests.** `apps/renderer/test/inventoryBaseRolls.test.ts` part du fil (`RawItem.SubOptionList` → `parseGearPiece`
+  → `toUiPiece`) : 1/3/3/3 sur le fil = 3/3/3/1 ; pièce à 3 lignes = 4e ligne 0, sans sous-stats = 0/0/0/0 ; base 2
+  reforgée à 4 reste 2 ; 3/3/3/1 passe « ≥ 3/3/3/0 », 3/3/2/2 non, `below` l'inverse ; une reforge ne fait pas passer
+  une ligne au-dessus du motif ; motif à 0 inactif et non compté ; codec aller-retour et lecture d'un état sans
+  `baseRolls`. Vérifié sur une copie de HEAD + les fichiers du lot (le working tree portait le travail en cours d'un
+  autre lot côté desktop) : `npm run typecheck` sort en code 0 ; `npm test` → core « Tests  169 passed (169) »,
+  desktop « Tests  204 passed | 1 skipped (205) », renderer « Tests  756 passed | 1 skipped (757) » ; `npm run lint`
+  → « ✖ 13 problems (0 errors, 13 warnings) », inchangé.
+- ✅ **Docs.** `wiki/Using-the-App.md` (filtres de l'Inventaire), `docs/release-notes.md › [Unreleased]`.
+- ⏳ **Sevih** : Inventaire › Filter › Base rolls « worse than 3/3/3/0 » → seules les pièces dont une des trois
+  meilleures lignes est sous le palier 3 restent ; basculer « at least » → le complément.
+
 ### 🩹 Dépendances : `npm audit fix` des 12 vulnérabilités restantes, `package-lock.json` seul (2026-10-27)
 - ✅ **Pourquoi.** Après la montée d'electron-builder (25/10), `npm audit` disait encore 12 vulnérabilités (1 modérée,
   11 hautes, 0 critique), toutes « fix available » sans majeure : `axios` (1.0.0 – 1.19.0), `follow-redirects`

@@ -6,6 +6,7 @@ import { jsonWithSets } from "../../hooks/usePersistedState.js";
 import { STAT, type DesignRarity, type SlotId } from "../../design/tokens.js";
 import type { UiPiece } from "../../design/adapter.js";
 import type { QualityTier } from "../../lib/quality.js";
+import { baseStage } from "../../lib/solver/reroll.js";
 
 // Gear-rollable stat keys — everything in `STAT` minus the three set-only
 // stats (lifesteal / counter / enterAp) which never appear as a piece's
@@ -44,8 +45,19 @@ export interface FilterState {
    *  them — exposed in the modal as an "Exclude equipped gear" checkbox
    *  (inverted polarity to match the in-game wording). */
   showEquipped: boolean;
+  /** Base rolls pattern — the base stages of the piece's sub lines sorted
+   *  best first, padded with 0 to 4 lines, against `min` (0 = any).
+   *  `atLeast` keeps the pieces where every line reaches its minimum;
+   *  `below` keeps the others (the "worse than" scrap view). All-zero `min`
+   *  = inactive in either mode. */
+  baseRolls: BaseRollsFilter;
   singularityOnly: boolean;
   query: string;
+}
+
+export interface BaseRollsFilter {
+  min: [number, number, number, number];
+  mode: "atLeast" | "below";
 }
 
 export function emptyFilters(): FilterState {
@@ -60,6 +72,7 @@ export function emptyFilters(): FilterState {
     armorSets: new Set(),
     classes: new Set(),
     showEquipped: true,
+    baseRolls: { min: [0, 0, 0, 0], mode: "atLeast" },
     singularityOnly: false,
     query: "",
   };
@@ -101,6 +114,19 @@ export function matchesTab(p: UiPiece, tab: InvTab): boolean {
   if (tab === "all") return true;
   if (!p.slot) return false;
   return TAB_SLOTS[tab].includes(p.slot);
+}
+
+/** Base stages of the piece's sub lines, best first, padded with 0 to 4
+ *  lines — before reforge (`baseStage`, the Transistone's notion) and
+ *  enhancement. Talisman / EE carry gems, no rolled subs: 0/0/0/0. */
+export function baseRollPattern(p: UiPiece): number[] {
+  const stages = p.subs.map((s) => baseStage({ ticks: s.lv, reforgeTicks: s.reforges })).sort((a, b) => b - a).slice(0, 4);
+  while (stages.length < 4) stages.push(0);
+  return stages;
+}
+
+function baseRollsActive(b: BaseRollsFilter): boolean {
+  return b.min.some((m) => m > 0);
 }
 
 export function matchesFilters(p: UiPiece, f: FilterState): boolean {
@@ -147,6 +173,11 @@ export function matchesFilters(p: UiPiece, f: FilterState): boolean {
   // Equipped pieces hidden when the player ticked "Exclude equipped gear"
   // in the modal — useful when looking for swappable inventory.
   if (!f.showEquipped && p.status === "equipped") return false;
+  if (baseRollsActive(f.baseRolls)) {
+    const stages = baseRollPattern(p);
+    const meets = f.baseRolls.min.every((m, i) => (stages[i] ?? 0) >= m);
+    if (meets !== (f.baseRolls.mode === "atLeast")) return false;
+  }
   // Trim before testing so a whitespace-only query is a no-op here too —
   // otherwise it filters the grid while `activeFilterCount` (which trims)
   // shows no active filter, an invisible mismatch.
@@ -170,6 +201,7 @@ export function activeFilterCount(f: FilterState): number {
   if (f.armorSets.size > 0) n++;
   if (f.classes.size > 0) n++;
   if (!f.showEquipped) n++;
+  if (baseRollsActive(f.baseRolls)) n++;
   if (f.singularityOnly) n++;
   if (f.query.trim() !== "") n++;
   return n;

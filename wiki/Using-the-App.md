@@ -35,6 +35,11 @@ A dense, searchable table of every gear piece you own.
 - **Filters** (the Filter button, top-right): slot, rarity, star, **quality**, main stat, sub
   stats (AND/OR), armor set, class-restricted, and "exclude equipped gear". Chips that can't
   match anything in the current view are greyed out so you never zero out the grid by accident.
+- **Base rolls** (in the Filter modal): the initial tiers of a piece's substats, best line first,
+  before reforge and enhancement — the same "3/3/3/1" as the Transistone reroll. Set four minimums
+  (0 = any), e.g. ≥ 3/3/3/0, then **at least** keeps the pieces that reach every minimum and
+  **worse than** keeps the others (the ones to sell). A piece with three lines has a 4th line at 0;
+  Talisman and EE (gems, no substats) count as 0/0/0/0.
 - **Sort**: by enhance level, stars, breakthrough, or by a specific substat's value.
 - **Click any piece** → the left panel shows the full detail: main stat(s), substats with their
   tick counts (or gems for Talisman/EE), reforge / breakthrough / Singularity state, a

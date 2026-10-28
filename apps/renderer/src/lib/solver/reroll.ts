@@ -58,8 +58,10 @@ export interface RerollPotential {
   ticks: number;
 }
 
-/** Base stage of a substat line: its ticks minus the reforge ticks on top. */
-function baseStage(s: RolledStat): number {
+/** Base stage of a substat line: its ticks minus the reforge ticks on top
+ *  (the drop's tier, 1..4). Shared with the Inventory's Base rolls filter so
+ *  a "3/3/3/1" means the same thing in both places. */
+export function baseStage(s: Pick<RolledStat, "ticks" | "reforgeTicks">): number {
   return (s.ticks ?? 0) - (s.reforgeTicks ?? 0);
 }
 
