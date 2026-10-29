@@ -8,6 +8,55 @@
 
 ## Items de backlog clôturés (index)
 
+### 💾 Inventaire : presets de filtres enregistrables (Load / Save as… / Delete) et preset fourni « Scrap candidates » (G67) (2026-10-29)
+- ✅ **Pourquoi.** Le tri du rebut repose chaque jour sur le même jeu de filtres (5★ / 6★, Base rolls `not` + « at
+  least 3/3/3/X », +0, T0, non reforgée, sans les pièces portées) qu'il fallait recocher à la main ; et tout autre jeu
+  de filtres récurrent se reconstruisait de zéro.
+- ✅ **Module** `apps/renderer/src/lib/storage/inventoryFilterPresets.ts` : clé localStorage `gs.inv.filterPresets`,
+  liste globale (pas par héros, contrairement à `filterPresets.ts` du Builder, non réutilisé) de
+  `{ id, name, filters, createdAt }` où `filters` est la chaîne de `FILTER_CODEC.serialize`, `query` vidée à
+  l'enregistrement. Lecture tolérante : une entrée sans id / nom / chaîne / date, au nom invalide, ou dont la chaîne
+  n'est pas un objet JSON est ignorée ; `FILTER_CODEC.deserialize` à la lecture, donc un preset enregistré avant un
+  champ du filtre lit son défaut actuel. `validPresetName` : nom rogné de 1 à 24 caractères, le nom du preset fourni
+  refusé. `saveInventoryFilterPreset(name, filters)` écrase sur place (même id, même rang) le preset du même nom, sinon
+  ajoute en fin de liste (`crypto.randomUUID()`) ; `deleteInventoryFilterPreset(id)` ; `loadInventoryFilterPresets()`
+  dans l'ordre d'enregistrement.
+- ✅ **Preset fourni** `SCRAP_CANDIDATES` : défini en code sur `emptyFilters()` (il suit le filtre), jamais stocké,
+  `filters()` rend des Sets neufs à chaque appel : étoiles 5 et 6, Base rolls `{ op: "gte", lines: [3, 3, 3, null],
+  not: true }`, `enhanceZero`, `breakthroughZero`, `notReforged`, `showEquipped: false`. Son `title` : « Keeps the
+  unequipped 5★ and 6★ gear at +0, T0 and never reforged that lacks three sub lines at base tier 3 or better. »
+- ✅ **Modale** (`FilterModal.tsx`) : `PresetsRow`, une rangée « Presets » entre l'en-tête et le corps : sélecteur
+  (« — », « Scrap candidates », puis les presets de l'utilisateur ; le `title` du preset fourni sur l'option et sur le
+  sélecteur quand il est choisi), `Load` remplace le draft (Apply reste à faire), `Save as…` ouvre un champ inline
+  (`maxLength` 24, Entrée enregistre, Échap ferme le champ sans fermer la modale) avec Save (désactivé sur un nom
+  invalide, `title` « Overwrites the preset of the same name. » quand le nom existe) et Cancel, `Delete` à droite,
+  actif sur un preset de l'utilisateur seulement. La liste est relue à chaque ouverture de la modale (la rangée ne
+  monte qu'ouverte). Un preset porte tout `FilterState` (emplacements compris) sauf la recherche ; l'onglet All / Gear
+  / Special n'en fait pas partie.
+- ✅ **Sauvegarde** (`lib/storage/transfer.ts`) : `BackupBundle.inventoryFilterPresets` (facultatif, une sauvegarde
+  antérieure se lit sans), exporté par `buildBackup` ; à l'import, une entrée dont l'id OU le nom existe déjà est
+  sautée (l'entrée locale gagne, comme pour les builds), le reste copié tel quel ; `ImportResult.inventoryPresets`.
+  `design/settings/BackupPane.tsx` additionne ce compte à celui des presets du Builder dans le message d'import (même
+  libellé « N presets »).
+- ✅ **Tests** : `apps/renderer/test/inventoryFilterPresets.test.ts` (9 cas) : aller-retour d'un `FilterState` à Sets
+  (emplacements, étoiles, sous-stats en AND, sets, Base rolls `not`, recherche vidée, chaîne stockée), entrées invalides
+  ignorées (null, sans filtres, JSON cassé, tableau, nom vide ou de 25 caractères) et stockage illisible, entrée d'avant
+  un champ, nom repris écrasé sur place, noms refusés (vide, 25 caractères, celui du preset fourni ; 24 accepté),
+  suppression ; « Scrap candidates » par `matchesFilters` sur des `UiPiece` du fil : 6★ 2/2/1/0 et 6★ 3/2/2/1 libres à
+  +0 T0 non reforgées gardées, 6★ 3/3/3/0, 5★ 2/2/2/2 +3, 4★ 1/1/1/1 et un talisman rejetés, une pièce portée
+  rejetée. `apps/renderer/test/transfer.test.ts` (+2) : export de la liste, import qui ne prend que l'entrée neuve
+  (id et nom déjà présents sautés), sauvegarde sans le champ.
+- ✅ **Docs** : `wiki/Using-the-App.md` (puce « Presets » dans l'Inventaire, la note de relance dit que les presets
+  restent, la ligne Backup cite les presets de l'Inventaire) ; `docs/release-notes.md › [Unreleased]` une ligne.
+  `docs/todo.md` n'avait pas d'item correspondant : inchangé.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` (sans erreur, code 0) ; `npm test` → core « Tests 169
+  passed (169) », desktop « Tests 219 passed (219) », renderer « Tests 790 passed (790) » ; `npm run lint` → « ✖ 13
+  problems (0 errors, 13 warnings) », même compte qu'avant. Pas de rendu réel possible ici (ni `npm run dev` ni
+  Electron) : la rangée n'a été vérifiée qu'à la lecture.
+- ⏳ **Sevih** sur le fixe : Inventaire › Filter › Presets › « Scrap candidates » › Load › Apply → la liste du rebut
+  attendue ; Save as… un jeu de filtres, fermer, rouvrir, Load ; reprendre le même nom (écrasé) ; Delete ; la rangée
+  à juger à l'œil (largeur du sélecteur, champ nom inline) ; une sauvegarde Settings › Backup qui ramène les presets.
+
 ### 🔎 Inventaire : filtre « Base rolls » en toutes lettres avec inversion `not`, talismans et EE exclus, cases « +0 only » / « T0 only » / « Not reforged » (G66) (2026-10-29)
 - ✅ **Pourquoi.** Essai de G65 sur le fixe (29/10) : les symboles ≥ > = ≤ < se lisent mal dans le sélecteur ; la
   recherche la plus fréquente, « tout ce qui n'a pas au moins trois lignes à 3 de base », ne s'écrivait pas (« < 3/3/3/X »

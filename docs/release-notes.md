@@ -16,6 +16,9 @@
   at most, less than), a **not** box keeps the pieces that don't match (e.g. "not at least
   3/3/3/X"), and Talismans / EE no longer slip through.
 - **Inventory › Filter**: new **+0 only**, **T0 only** and **Not reforged** boxes.
+- **Inventory › Filter › Presets**: save your filters under a name and load them back in one
+  click; a built-in **Scrap candidates** preset lists the 5★ / 6★ pieces worth scrapping.
+  Inventory presets are part of the Settings › Backup export.
 
 ## [1.18.0] — 2026-10-29
 

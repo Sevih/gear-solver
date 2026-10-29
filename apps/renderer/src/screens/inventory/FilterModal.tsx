@@ -10,6 +10,10 @@ import { RARITY, STAT, type DesignRarity } from "../../design/tokens.js";
 import { QUALITY_TIERS, type QualityTier } from "../../lib/quality.js";
 import { QUALITY_TONE } from "../../design/GearDetail.js";
 import { GEAR_STATS, emptyFilters, type BaseRollsFilter, type FilterState } from "./filters.js";
+import {
+  PRESET_NAME_MAX, SCRAP_CANDIDATES, deleteInventoryFilterPreset, loadInventoryFilterPresets,
+  saveInventoryFilterPreset, validPresetName, type InventoryFilterPreset,
+} from "../../lib/storage/inventoryFilterPresets.js";
 
 // ── filter pieces ───────────────────────────────────────────────────────
 function FPill({
@@ -182,6 +186,99 @@ function BaseRollsInputs({
   );
 }
 
+const PRESET_BTN_CLASS = "rounded-md border border-white/10 bg-white/3 px-2 py-0.5 text-[11.5px] font-semibold text-white hover:bg-white/6 disabled:pointer-events-none disabled:opacity-40";
+
+/** Presets row under the modal title: pick a preset ("—", the built-in, then
+ *  the user's), Load it into the draft (the user adjusts, then Apply), Save
+ *  the draft under a name (inline field), Delete a user preset. Presets are
+ *  read from storage each time the modal opens. */
+function PresetsRow({
+  draft, onLoad,
+}: { draft: FilterState; onLoad: (next: FilterState) => void }) {
+  const [presets, setPresets] = useState<InventoryFilterPreset[]>(loadInventoryFilterPresets);
+  const [selected, setSelected] = useState("");
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
+  const builtin = selected === SCRAP_CANDIDATES.id;
+  const userPreset = presets.find((p) => p.id === selected);
+  const validName = validPresetName(name);
+  const overwrites = validName !== null && presets.some((p) => p.name === validName);
+  const load = () => {
+    if (builtin) onLoad(SCRAP_CANDIDATES.filters());
+    else if (userPreset) onLoad(userPreset.filters);
+  };
+  const save = () => {
+    const saved = saveInventoryFilterPreset(name, draft);
+    if (!saved) return;
+    setPresets(loadInventoryFilterPresets());
+    setSelected(saved.id);
+    setNaming(false);
+    setName("");
+  };
+  const remove = () => {
+    if (!userPreset) return;
+    deleteInventoryFilterPreset(userPreset.id);
+    setPresets(loadInventoryFilterPresets());
+    setSelected("");
+  };
+  return (
+    <div className="flex items-center gap-2 border-b border-white/8 px-4 py-2">
+      <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/70">Presets</span>
+      <select
+        value={selected}
+        aria-label="Filter preset"
+        title={builtin ? SCRAP_CANDIDATES.title : undefined}
+        onChange={(e) => setSelected(e.target.value)}
+        className={cx(SELECT_CLASS, "max-w-[14rem]")}
+      >
+        <option value="">—</option>
+        <option value={SCRAP_CANDIDATES.id} title={SCRAP_CANDIDATES.title}>{SCRAP_CANDIDATES.name}</option>
+        {presets.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
+      <button onClick={load} disabled={!builtin && !userPreset} className={PRESET_BTN_CLASS}>Load</button>
+      {naming ? (
+        <span className="flex items-center gap-1.5">
+          <input
+            type="text"
+            autoFocus
+            value={name}
+            maxLength={PRESET_NAME_MAX}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              // Escape leaves the name field, not the modal.
+              if (e.key === "Escape") { e.stopPropagation(); setNaming(false); setName(""); }
+            }}
+            placeholder="Preset name"
+            aria-label="Preset name"
+            className="w-36 rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 text-[12px] text-white placeholder:text-white/55 focus:border-cyan-400/40 focus:outline-none"
+          />
+          <button
+            onClick={save}
+            disabled={!validName}
+            title={overwrites ? "Overwrites the preset of the same name." : undefined}
+            className={PRESET_BTN_CLASS}
+          >
+            Save
+          </button>
+          <button onClick={() => { setNaming(false); setName(""); }} className={PRESET_BTN_CLASS}>Cancel</button>
+        </span>
+      ) : (
+        <button onClick={() => setNaming(true)} className={PRESET_BTN_CLASS}>Save as…</button>
+      )}
+      <button
+        onClick={remove}
+        disabled={!userPreset}
+        className="ml-auto rounded-md border border-rose-400/30 bg-rose-500/10 px-2 py-0.5 text-[11.5px] font-semibold text-rose-100 hover:bg-rose-500/20 disabled:pointer-events-none disabled:opacity-40"
+      >
+        Delete
+      </button>
+    </div>
+  );
+}
+
 /** Top-right button that opens the game-style filter modal. Mirrors the
  *  in-game CM_Btn_Filter icon and surfaces a small badge with the active
  *  filter count so the player knows at a glance whether their view is
@@ -290,6 +387,9 @@ export function FilterModal({
             </svg>
           </button>
         </div>
+
+        {/* ── presets: load / save the draft under a name ── */}
+        <PresetsRow draft={draft} onLoad={setDraft} />
 
         {/* ── body: scrollable sections ── */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">

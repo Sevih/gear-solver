@@ -112,3 +112,25 @@ describe("transfer — a mounted screen keeps the imported entries", () => {
     expect(calls).toBe(1);
   });
 });
+
+describe("transfer — Inventory filter presets", () => {
+  const INV_KEY = "gs.inv.filterPresets";
+  const entry = (id: string, name: string) => ({ id, name, filters: "{}", createdAt: 0 });
+
+  it("exports the list, imports the new entries, the local one wins on id or name", () => {
+    store.set(INV_KEY, JSON.stringify([entry("a", "A")]));
+    expect(buildBackup(0).inventoryFilterPresets).toEqual([entry("a", "A")]);
+    const res = applyBackup({
+      kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: {},
+      inventoryFilterPresets: [entry("a", "other"), entry("z", "A"), entry("b", "B")],
+    });
+    expect(res.inventoryPresets).toBe(1);
+    expect(JSON.parse(store.get(INV_KEY)!).map((e: { id: string }) => e.id)).toEqual(["a", "b"]);
+  });
+
+  it("a backup without the field imports none", () => {
+    const res = applyBackup({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: {} });
+    expect(res.inventoryPresets).toBe(0);
+    expect(store.has(INV_KEY)).toBe(false);
+  });
+});

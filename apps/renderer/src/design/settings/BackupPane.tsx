@@ -64,7 +64,10 @@ async function importBackupFile(file: File | null, onStatus: (message: string) =
   if (!file) return;
   try {
     const parsed = JSON.parse(await file.text()) as unknown;
-    const { builds, presets, presetGroups } = applyBackup(parsed);
+    const result = applyBackup(parsed);
+    const { builds, presetGroups } = result;
+    // Builder and Inventory filter presets read as one "presets" count.
+    const presets = result.presets + result.inventoryPresets;
     if (builds === 0 && presets === 0 && presetGroups === 0) {
       onStatus("Nothing new to import — every build and preset in this file is already present.");
     } else {

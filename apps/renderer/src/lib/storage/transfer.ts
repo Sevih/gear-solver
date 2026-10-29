@@ -1,7 +1,7 @@
 /**
  * Backup transfer — export / import of the user's saved builds, filter
- * presets and preset heroes (the Presets tab's reference / associated heroes)
- * as a single JSON file (device migration, sharing, manual backup).
+ * presets, Inventory filter presets and preset heroes (the Presets tab's
+ * reference / associated heroes) as a single JSON file (device migration, sharing, manual backup).
  *
  * Operates at the on-disk JSON level, NOT the in-memory level: the presets
  * blob already serializes its `Set` fields to arrays on disk (see
@@ -13,6 +13,7 @@
 import { SAVED_BUILDS_KEY } from "./savedBuilds.js";
 import { FILTER_PRESETS_KEY } from "./filterPresets.js";
 import { PRESET_HEROES_KEY } from "./presetHeroes.js";
+import { INVENTORY_FILTER_PRESETS_KEY } from "./inventoryFilterPresets.js";
 
 const BACKUP_KIND = "gear-solver-backup";
 const BACKUP_VERSION = 1 as const;
@@ -36,6 +37,9 @@ export interface BackupBundle {
   /** Serialized `gs.presetHeroes` blob (preset number → its heroes). Absent
    *  from a backup made before it was exported — read as none. */
   presetHeroes?: Record<string, unknown>;
+  /** Serialized `gs.inv.filterPresets` list (Inventory filter presets).
+   *  Absent from a backup made before it was exported — read as none. */
+  inventoryFilterPresets?: unknown[];
 }
 
 export interface ImportResult {
@@ -43,6 +47,8 @@ export interface ImportResult {
   presets: number;
   /** In-game presets whose heroes were imported. */
   presetGroups: number;
+  /** Inventory filter presets added. */
+  inventoryPresets: number;
 }
 
 function readRaw<T extends object = ListMap>(key: string): T {
@@ -66,7 +72,45 @@ export function buildBackup(exportedAt: number): BackupBundle {
     savedBuilds: readRaw(SAVED_BUILDS_KEY),
     filterPresets: readRaw(FILTER_PRESETS_KEY),
     presetHeroes: readRaw<Record<string, unknown>>(PRESET_HEROES_KEY),
+    inventoryFilterPresets: readList(INVENTORY_FILTER_PRESETS_KEY),
   };
+}
+
+function readList(key: string): unknown[] {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Merge the incoming Inventory filter presets: an entry whose id or name is
+ *  already here is skipped — the local entry wins, as for the builds.
+ *  Entries are otherwise copied verbatim; `loadInventoryFilterPresets`
+ *  ignores a malformed one. */
+function mergeInventoryPresets(current: unknown[], incoming: unknown[]): { merged: unknown[]; added: number } {
+  const merged = [...current];
+  const ids = new Set<unknown>();
+  const names = new Set<unknown>();
+  for (const e of current) {
+    if (e && typeof e === "object") {
+      ids.add((e as { id?: unknown }).id);
+      names.add((e as { name?: unknown }).name);
+    }
+  }
+  let added = 0;
+  for (const e of incoming) {
+    if (!e || typeof e !== "object") continue;
+    const { id, name } = e as { id?: unknown; name?: unknown };
+    if (typeof id !== "string" || typeof name !== "string" || ids.has(id) || names.has(name)) continue;
+    merged.push(e);
+    ids.add(id);
+    names.add(name);
+    added++;
+  }
+  return { merged, added };
 }
 
 /** Merge an incoming per-hero list map into the current one, deduping by
@@ -117,6 +161,7 @@ function assertBundle(value: unknown): asserts value is BackupBundle {
   if (!b.savedBuilds || typeof b.savedBuilds !== "object") throw new Error("Missing savedBuilds.");
   if (!b.filterPresets || typeof b.filterPresets !== "object") throw new Error("Missing filterPresets.");
   if (b.presetHeroes != null && typeof b.presetHeroes !== "object") throw new Error("Malformed presetHeroes.");
+  if (b.inventoryFilterPresets != null && !Array.isArray(b.inventoryFilterPresets)) throw new Error("Malformed inventoryFilterPresets.");
 }
 
 /** Screens that hold the maps in memory (the Builder stays mounted, hidden,
@@ -143,9 +188,11 @@ export function applyBackup(value: unknown): ImportResult {
   const builds = mergeListMap(readRaw(SAVED_BUILDS_KEY), value.savedBuilds);
   const presets = mergeListMap(readRaw(FILTER_PRESETS_KEY), value.filterPresets);
   const groups = mergePresetHeroes(readRaw<Record<string, unknown>>(PRESET_HEROES_KEY), value.presetHeroes ?? {});
+  const invPresets = mergeInventoryPresets(readList(INVENTORY_FILTER_PRESETS_KEY), value.inventoryFilterPresets ?? []);
   localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(builds.merged));
   localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets.merged));
   if (groups.added > 0) localStorage.setItem(PRESET_HEROES_KEY, JSON.stringify(groups.merged));
+  if (invPresets.added > 0) localStorage.setItem(INVENTORY_FILTER_PRESETS_KEY, JSON.stringify(invPresets.merged));
   for (const listener of importListeners) listener();
-  return { builds: builds.added, presets: presets.added, presetGroups: groups.added };
+  return { builds: builds.added, presets: presets.added, presetGroups: groups.added, inventoryPresets: invPresets.added };
 }

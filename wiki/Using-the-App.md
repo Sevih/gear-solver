@@ -45,13 +45,19 @@ A dense, searchable table of every gear piece you own.
   everything without three lines at 3 (a 3/2/2/1 stays, which "less than 3/3/3/X" would drop). A
   piece with three lines has a 4th line at 0; Talisman and EE (gems, no substats) never pass an
   active Base rolls filter, with or without not.
+- **Presets** (top row of the Filter modal): pick a preset and **Load** it into the modal (adjust,
+  then **Apply**); **Save as…** saves the current filters under a name (1–24 characters; an
+  existing name is overwritten); **Delete** removes one of yours. A preset keeps every filter
+  except the search and the sub-tab (All / Gear / Special Gear). The built-in **Scrap
+  candidates** (always first, can't be deleted) shows the unequipped 5★ / 6★ gear at +0, T0, never
+  reforged, with Base rolls **not at least 3/3/3/X** — the pieces without three lines at 3.
 - **Sort**: by enhance level, stars, breakthrough, or by a specific substat's value.
 - **Click any piece** → the left panel shows the full detail: main stat(s), substats with their
   tick counts (or gems for Talisman/EE), reforge / breakthrough / Singularity state, a
   **quality score**, and any item / set passives.
 
 > Sorts and filters reset to their defaults each time you relaunch the app — so you always
-> start from a clean view.
+> start from a clean view. Filter presets are kept.
 
 ---
 
@@ -281,9 +287,9 @@ A tabbed modal:
 - **Data** — **Sync game data** (refresh the game tables after a patch), reset the onboarding
   wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
   (game version of the tables, hash and date — so you can see which snapshot is loaded).
-- **Backup** — **Export / Import** your saved builds, filter presets and the heroes of your
-  in-game presets (Presets tab) as a JSON file (move them to another PC; captured gear isn't
-  included — re-capture it there).
+- **Backup** — **Export / Import** your saved builds, filter presets (Builder and Inventory) and
+  the heroes of your in-game presets (Presets tab) as a JSON file (move them to another PC;
+  captured gear isn't included — re-capture it there).
 - **Debug** — developer toggles (safe to ignore).
 
 ---
