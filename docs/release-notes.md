@@ -14,6 +14,10 @@
 
 _Nothing yet — user-facing notes for the next release go here._
 
+## [1.20.0] — 2026-10-29
+
+_Nothing yet — user-facing notes for the next release go here._
+
 ## [1.19.2] — 2026-10-29
 
 _Nothing yet — user-facing notes for the next release go here._
