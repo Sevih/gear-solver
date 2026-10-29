@@ -74,7 +74,8 @@ async function createWindow(): Promise<void> {
   // the window title bar + taskbar entry at least show the right artwork
   // (electron.exe itself stays default; only the packaged build can swap that).
   // In prod the .exe metadata already carries the icon via electron-builder.
-  const iconPath = join(__dirname, "..", "build", "icon.ico");
+  // Linux windows take a PNG (used only when build/icon.png exists).
+  const iconPath = join(__dirname, "..", "build", process.platform === "linux" ? "icon.png" : "icon.ico");
   const win = new BrowserWindow({
     width: 1480,
     height: 920,

@@ -1,9 +1,8 @@
 /**
- * "Download → verify → unzip" primitives for runtime provisioning (BepInEx
- * for the Steam capture plugin). Pure Node — no Electron import — so the Vite
- * dev middleware can use them too.
+ * "Download → verify" primitive for runtime provisioning (BepInEx for the
+ * Steam capture plugin; unzipping is OS-specific, see platform.ts). Pure Node
+ * — no Electron import — so the Vite dev middleware can use it too.
  */
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream, rmSync } from "node:fs";
 
@@ -41,19 +40,5 @@ export async function downloadVerified(url: string, out: string, sha256: string,
     file.destroy();
     rmSync(out, { force: true });
     throw err;
-  }
-}
-
-/** Expand a `.zip` into `dest` through PowerShell (no zip lib in the Electron
- *  main bundle). The path MUST end in `.zip` — Expand-Archive refuses any
- *  other extension outright. */
-export function expandZip(zipPath: string, dest: string): void {
-  const r = spawnSync("powershell.exe", [
-    "-NoProfile", "-NonInteractive", "-Command",
-    `$ErrorActionPreference='Stop'; Expand-Archive -Force -Path "${zipPath}" -DestinationPath "${dest}"`,
-  ], { windowsHide: true, encoding: "utf-8" });
-  if (r.status !== 0) {
-    const detail = (r.stderr || "").trim().split("\n")[0] || `exit ${r.status}`;
-    throw new Error(`extracting ${zipPath} failed: ${detail}`);
   }
 }

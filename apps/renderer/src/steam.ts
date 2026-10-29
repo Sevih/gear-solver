@@ -37,6 +37,9 @@ export interface SteamStatus {
   live: boolean;
   /** Installed + plugin present, up to date and pointed at our folder. */
   ready: boolean;
+  /** Proton only: the Steam launch options carry `WINEDLLOVERRIDES="winhttp=n,b"`.
+   *  Null on Windows or when Steam's `localconfig.vdf` is unreadable. */
+  launchOptionsOk: boolean | null;
 }
 
 export async function getSteamStatus(): Promise<SteamStatus | null> {

@@ -124,6 +124,15 @@ Manual equivalent: same three files. Config keys (`[Capture]`): `Enabled` (bool)
 Steam's folder ACL lets the current user write there without elevation (that's how Steam
 itself installs), so no UAC prompt.
 
+**Linux (Steam + Proton).** The OS-specific steps go through `apps/desktop/src/platform.ts`:
+Steam roots under `HOME` (`.local/share/Steam`, `.steam/steam`, `.steam/root`, Flatpak), the game
+found in `/proc/<pid>/cmdline` (the Wine process carries `OUTERPLANE.exe`; its heartbeat `pid` is
+Wine's own, so the app matches the heartbeat by the process start time instead), BepInEx unzipped
+by `unzip`, and `OutDir` written as Wine reads it (`Z:\home\…`, translated back for the status).
+The loader needs the Steam launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%`; the app
+reads it from `<steam>/userdata/<id>/config/localconfig.vdf` and Settings → Setup shows the line
+to paste when it's missing (Steam must be restarted after editing it).
+
 ## Build
 
 ```powershell

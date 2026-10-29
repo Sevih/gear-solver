@@ -30,6 +30,9 @@ vi.mock("node:crypto", async (importOriginal) => {
 });
 
 const { REFERENCE_CLIENT, resetSteamCaches, steamStatus } = await import("../src/steam-capture.js");
+// These fakes are the Windows helpers: pin the win32 platform on any host.
+const { setPlatform, win32Platform } = await import("../src/platform.js");
+setPlatform(win32Platform());
 
 /** A Steam library with OUTERPLANE + BepInEx + our plugin, and a capture
  *  folder whose heartbeat belongs to pid 4242. */

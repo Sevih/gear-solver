@@ -111,6 +111,8 @@ export function SteamSetupPane({ steam, loading, busy, onInstall, onLaunch, onPr
         })}
       </div>
 
+      {s?.installed && s.launchOptionsOk != null && <ProtonLaunchOptionsRow ok={s.launchOptionsOk} />}
+
       {ready && (
         <div className="flex flex-col gap-2.5 rounded-lg border border-emerald-400/35 bg-emerald-500/8 px-3.5 py-3">
           <div className="flex items-center gap-2">
@@ -167,6 +169,19 @@ function SteamRemoveSection({ steam, busy, onDone, onStatus }: { steam: SteamSta
           >{working ? "Removing…" : armed ? "Click again to confirm" : "Remove"}</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Linux / Proton only (`launchOptionsOk` is null on Windows): BepInEx's
+ *  winhttp.dll proxy loads only with the WINEDLLOVERRIDES launch option. */
+function ProtonLaunchOptionsRow({ ok }: { ok: boolean }) {
+  if (ok) return <StepDoneRow title="Proton launch option set — WINEDLLOVERRIDES" />;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11.5px] text-amber-200">
+      <span>Proton launch option missing — BepInEx won't load without it. Paste this line in Steam › OUTERPLANE › Properties › General › Launch Options:</span>
+      <code className="w-fit select-all rounded bg-black/30 px-2 py-1 font-mono text-[11px] text-amber-100">WINEDLLOVERRIDES="winhttp=n,b" %command%</code>
+      <span className="text-amber-200/70">Steam must be restarted after editing it.</span>
     </div>
   );
 }

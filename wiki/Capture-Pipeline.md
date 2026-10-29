@@ -38,6 +38,22 @@ Then launch the game from Steam and reach the lobby: the app re-imports on its o
 `user_item.json`, `user_character.json`, `user_gift.json` or `user_archive.json` changes (a hero
 or geas level gained without a new inventory is picked up too).
 
+### Linux (Steam + Proton)
+
+The game runs as its Windows build under Proton, and the same plugin works there. The app finds
+Steam under your home folder (`~/.local/share/Steam`, `~/.steam/steam`, `~/.steam/root`, or the
+Flatpak's `~/.var/app/com.valvesoftware.Steam/…`), unzips BepInEx with `unzip` (install it if
+missing), and writes the plugin's `OutDir` as the game sees it through Wine
+(`Z:\home\<you>\.config\Outerpedia Gear Solver\capture-out`). One manual step: Wine must load
+BepInEx's `winhttp.dll` instead of its own, so set the game's launch option in Steam
+(OUTERPLANE → Properties → General → Launch Options) to
+
+```
+WINEDLLOVERRIDES="winhttp=n,b" %command%
+```
+
+then restart Steam. Settings → Setup shows whether it's set, and the line to paste when it isn't.
+
 ## Output (the app's capture folder)
 
 | File | Source | Notes |

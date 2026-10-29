@@ -3,8 +3,8 @@
  * that hooks the OUTERPLANE Steam client (tools/capture-steam/).
  *
  * The flow, from the desktop app's point of view:
- *  1. `findOuterplane()` locates the Steam install (registry → libraryfolders.vdf
- *     → appmanifest_4247320.acf) so the user never types a path.
+ *  1. `findOuterplane()` locates the Steam install (registry or known roots →
+ *     libraryfolders.vdf → appmanifest_4247320.acf) so the user never types a path.
  *  2. `installSteamPlugin()` drops BepInEx (checksum-verified download from the
  *     official GitHub release, skipped if the game already has one) and our
  *     `GearSolverCapture.dll` into the game folder, then writes the plugin's
@@ -15,15 +15,18 @@
  *     running, and the plugin's heartbeat file (written by the plugin itself)
  *     to tell "live" from "installed but not loaded".
  *
+ * Everything OS-specific (Steam roots, process list, launching, unzip, the
+ * plugin's view of paths under Proton) goes through `platform()` (platform.ts).
+ *
  * Pure Node (fs + child_process) — no Electron deps so the Vite dev middleware
  * can import it too for parity between dev and packaged builds.
  */
-import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { dirname, join, normalize, resolve } from "node:path";
 import { writeAtomic } from "./atomic-write.js";
-import { downloadVerified, expandZip } from "./download.js";
+import { downloadVerified } from "./download.js";
+import { platform } from "./platform.js";
 // Committed copy of outerpedia's `data/curated/game-client.json` (the shared
 // reference for the Steam client), refreshed by `npm run data:sync`. Bundled at
 // build time — never downloaded at runtime, so each release keeps the BepInEx
@@ -57,31 +60,22 @@ const PLUGIN_DIR_NAME = "GearSolverCapture";
 // Steam / game discovery
 // ---------------------------------------------------------------------------
 
-/** Run a helper exe asynchronously and resolve with its stdout ("" on any
- *  failure — missing exe, timeout, non-zero exit). Never blocks the main
- *  process, which also serves the renderer's HTTP. */
-function run(file: string, args: string[], timeout: number): Promise<string> {
-  return new Promise((resolveRun) => {
-    execFile(file, args, { windowsHide: true, encoding: "utf-8", timeout }, (_err, stdout) => resolveRun(stdout || ""));
-  });
-}
-
-/** Steam's install root: HKCU `SteamPath` (set by the Steam client itself),
- *  then the reference's usual Windows roots (`steam.roots.windows`). Null when
- *  Steam isn't installed. */
+/** Steam's install root: HKCU `SteamPath` on Windows (set by the Steam client
+ *  itself), then the reference's usual roots for the OS (`steam.roots.windows`,
+ *  or `steam.roots.linux` under HOME) — the first that has `steamapps`. Null
+ *  when Steam isn't installed. */
 export async function findSteamRoot(): Promise<string | null> {
+  const os = platform();
   try {
-    const stdout = await run("reg.exe", ["query", "HKCU\\Software\\Valve\\Steam", "/v", "SteamPath"], 3000);
-    const m = /SteamPath\s+REG_SZ\s+(.+)$/im.exec(stdout);
-    if (m?.[1]) {
+    const reg = os.registrySteamPath ? await os.registrySteamPath() : null;
+    if (reg) {
       // The registry value is lower-cased; realpath restores the on-disk
       // casing so the path reads well in the UI.
-      const p = realpathSync.native(normalize(m[1].trim()));
+      const p = realpathSync.native(normalize(reg));
       if (existsSync(join(p, "steamapps"))) return p;
     }
   } catch { /* unreadable path — fall through */ }
-  for (const r of gameClient.steam.roots.windows) {
-    const p = normalize(r);
+  for (const p of os.steamRoots()) {
     if (existsSync(join(p, "steamapps"))) return p;
   }
   return null;
@@ -100,10 +94,11 @@ async function cachedSteamRoot(): Promise<string | null> {
   return root;
 }
 
-/** Forget the cached Steam root and DLL hashes (tests). */
+/** Forget the cached Steam root, DLL hashes and launch options (tests). */
 export function resetSteamCaches(): void {
   steamRootCache = null;
   hashCache.clear();
+  launchOptionsCache.clear();
 }
 
 /** Every Steam library folder (the root itself + `libraryfolders.vdf` entries). */
@@ -196,6 +191,9 @@ export interface SteamStatus {
   live: boolean;
   /** Everything is in place: installed + plugin present/up to date/pointed at us. */
   ready: boolean;
+  /** Proton only: the game's Steam launch options carry the `WINEDLLOVERRIDES`
+   *  BepInEx needs (`localconfig.vdf`). Null on Windows or when unreadable. */
+  launchOptionsOk: boolean | null;
 }
 
 function readBepinexVersion(gameDir: string): string | null {
@@ -232,15 +230,9 @@ function cachedSha256(p: string): string | null {
   return hash;
 }
 
-/** `tasklist` pids for OUTERPLANE.exe (empty when not running). */
+/** Pids of the running OUTERPLANE.exe (empty when not running). */
 export async function gamePids(): Promise<number[]> {
-  const stdout = await run("tasklist.exe", ["/FI", `IMAGENAME eq ${GAME_EXE}`, "/FO", "CSV", "/NH"], 4000);
-  const pids: number[] = [];
-  for (const line of stdout.split(/\r?\n/)) {
-    const m = /^"[^"]+","(\d+)"/.exec(line.trim());
-    if (m) pids.push(Number(m[1]));
-  }
-  return pids;
+  return platform().gamePids(GAME_EXE);
 }
 
 function pluginPaths(gameDir: string) {
@@ -261,6 +253,90 @@ function readConfiguredOutDir(cfg: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Minimal reader for Valve's text KeyValues (`.vdf`): quoted keys and
+ *  values, `{ }` blocks, `//` comments, `\"` / `\\` escapes. Keys are kept as
+ *  written; look them up with `vdfChild` (Steam treats them case-insensitively). */
+type Vdf = { [key: string]: string | Vdf };
+function parseVdf(txt: string): Vdf {
+  const root: Vdf = {};
+  const stack: Vdf[] = [root];
+  let pendingKey: string | null = null;
+  let i = 0;
+  while (i < txt.length) {
+    const c = txt[i]!;
+    if (c === "/" && txt[i + 1] === "/") { const nl = txt.indexOf("\n", i); i = nl < 0 ? txt.length : nl + 1; continue; }
+    if (c === "{") {
+      const block: Vdf = {};
+      if (pendingKey != null) stack[stack.length - 1]![pendingKey] = block;
+      stack.push(block);
+      pendingKey = null;
+      i++;
+      continue;
+    }
+    if (c === "}") { if (stack.length > 1) stack.pop(); pendingKey = null; i++; continue; }
+    if (c === '"') {
+      let out = "";
+      i++;
+      while (i < txt.length && txt[i] !== '"') {
+        if (txt[i] === "\\" && i + 1 < txt.length) { const n = txt[i + 1]!; out += n === "n" ? "\n" : n === "t" ? "\t" : n; i += 2; }
+        else out += txt[i++];
+      }
+      i++;
+      if (pendingKey == null) pendingKey = out;
+      else { stack[stack.length - 1]![pendingKey] = out; pendingKey = null; }
+      continue;
+    }
+    i++;
+  }
+  return root;
+}
+
+function vdfChild(node: string | Vdf | undefined, key: string): string | Vdf | undefined {
+  if (node == null || typeof node === "string") return undefined;
+  const k = Object.keys(node).find((n) => n.toLowerCase() === key.toLowerCase());
+  return k == null ? undefined : node[k];
+}
+
+/** `localconfig.vdf` → does the game's LaunchOptions carry the Proton
+ *  override (`WINEDLLOVERRIDES="winhttp=n,b" %command%`, so the game loads
+ *  BepInEx's winhttp.dll proxy instead of Wine's builtin one)? Cached on size + mtime: the file is large and the status polls
+ *  every 5 s. Null when unreadable. */
+const launchOptionsCache = new Map<string, { size: number; mtimeMs: number; ok: boolean | null }>();
+function localConfigLaunchOptionsOk(file: string): boolean | null {
+  let st;
+  try { st = statSync(file); } catch { launchOptionsCache.delete(file); return null; }
+  const c = launchOptionsCache.get(file);
+  if (c && c.size === st.size && c.mtimeMs === st.mtimeMs) return c.ok;
+  let ok: boolean | null;
+  try {
+    const vdf = parseVdf(readFileSync(file, "utf-8"));
+    const app = ["UserLocalConfigStore", "Software", "Valve", "Steam", "apps", OUTERPLANE_APPID]
+      .reduce<string | Vdf | undefined>((node, key) => vdfChild(node, key), vdf);
+    const opts = vdfChild(app, "LaunchOptions");
+    ok = typeof opts === "string" && opts.includes("WINEDLLOVERRIDES") && opts.includes("winhttp=n,b");
+  } catch {
+    ok = null;
+  }
+  launchOptionsCache.set(file, { size: st.size, mtimeMs: st.mtimeMs, ok });
+  return ok;
+}
+
+/** The Proton launch option across every Steam account of `steamRoot`
+ *  (`userdata/<id>/config/localconfig.vdf`): true if one of them has it,
+ *  false if none does, null when no file is readable. */
+export function protonLaunchOptionsOk(steamRoot: string): boolean | null {
+  const userdata = join(steamRoot, "userdata");
+  let ids: string[];
+  try { ids = readdirSync(userdata); } catch { return null; }
+  let seen = false;
+  for (const id of ids) {
+    const ok = localConfigLaunchOptionsOk(join(userdata, id, "config", "localconfig.vdf"));
+    if (ok) return true;
+    if (ok === false) seen = true;
+  }
+  return seen ? false : null;
 }
 
 function sameDir(a: string | null, b: string): boolean {
@@ -296,7 +372,7 @@ export function readHeartbeat(captureOut: string): SteamPluginHeartbeat | null {
 export async function steamPluginLive(captureOut: string): Promise<boolean> {
   const heartbeat = readHeartbeat(captureOut);
   if (!heartbeat) return false;
-  return (await gamePids()).includes(heartbeat.pid);
+  return platform().ownsHeartbeat(heartbeat, await gamePids());
 }
 
 /** Full status snapshot. `bundledDll` = the plugin DLL this app ships (used
@@ -304,7 +380,7 @@ export async function steamPluginLive(captureOut: string): Promise<boolean> {
 export async function steamStatus(captureOut: string, bundledDll: string): Promise<SteamStatus> {
   const [game, pids] = await Promise.all([findOuterplane(), gamePids()]);
   const heartbeat = readHeartbeat(captureOut);
-  const live = pids.length > 0 && heartbeat != null && pids.includes(heartbeat.pid);
+  const live = pids.length > 0 && heartbeat != null && platform().ownsHeartbeat(heartbeat, pids);
   const bundleAvailable = existsSync(bundledDll);
   if (!game) {
     return {
@@ -313,14 +389,18 @@ export async function steamStatus(captureOut: string, bundledDll: string): Promi
       bepinex: { present: false, version: null },
       plugin: { present: false, upToDate: false, outDir: null, outDirOk: false },
       bundleAvailable, gameRunning: pids.length > 0, heartbeat, live, ready: false,
+      launchOptionsOk: null,
     };
   }
   const p = pluginPaths(game.gameDir);
   const bepPresent = existsSync(p.core) && existsSync(p.winhttp);
   const present = existsSync(p.dll);
   const upToDate = present && bundleAvailable && cachedSha256(p.dll) === cachedSha256(bundledDll);
-  const outDir = readConfiguredOutDir(p.cfg);
+  // The config holds the path as the plugin reads it (`Z:\…` under Proton).
+  const configured = readConfiguredOutDir(p.cfg);
+  const outDir = configured == null ? null : platform().fromPluginPath(configured);
   const outDirOk = sameDir(outDir, captureOut);
+  const root = platform().protonLaunchOptions ? await cachedSteamRoot() : null;
   return {
     installed: true, gameDir: game.gameDir, buildId: game.buildId,
     reference: REFERENCE_CLIENT,
@@ -331,6 +411,7 @@ export async function steamStatus(captureOut: string, bundledDll: string): Promi
     gameRunning: pids.length > 0,
     heartbeat, live,
     ready: bepPresent && present && upToDate && outDirOk,
+    launchOptionsOk: root ? protonLaunchOptionsOk(root) : null,
   };
 }
 
@@ -385,7 +466,7 @@ export async function installSteamPlugin(opts: InstallOpts): Promise<SteamStatus
   const pids = await gamePids();
   const running = pids.length > 0;
   const hb = readHeartbeat(captureOut);
-  const pluginLoaded = running && hb != null && pids.includes(hb.pid);
+  const pluginLoaded = running && hb != null && platform().ownsHeartbeat(hb, pids);
   if (pluginLoaded) {
     throw new Error("OUTERPLANE is running with the plugin loaded — close the game, then retry (the plugin file is locked while loaded).");
   }
@@ -406,7 +487,7 @@ export async function installSteamPlugin(opts: InstallOpts): Promise<SteamStatus
     log(">  Checksum OK - extracting into the game folder...");
     rmSync(stage, { recursive: true, force: true });
     mkdirSync(stage, { recursive: true });
-    expandZip(zip, stage);
+    platform().expandZip(zip, stage);
     if (!existsSync(join(stage, "winhttp.dll")) || !existsSync(join(stage, "BepInEx", "core", "BepInEx.dll"))) {
       throw new Error("BepInEx zip layout unexpected (winhttp.dll / BepInEx/core missing)");
     }
@@ -428,8 +509,9 @@ export async function installSteamPlugin(opts: InstallOpts): Promise<SteamStatus
 
   // --- 3. Config → OutDir ---------------------------------------------------
   mkdirSync(captureOut, { recursive: true });
-  writePluginConfig(p.cfg, captureOut);
-  log(`v  Plugin config → OutDir = ${captureOut}`);
+  const pluginOut = platform().toPluginPath(captureOut);
+  writePluginConfig(p.cfg, pluginOut);
+  log(`v  Plugin config → OutDir = ${pluginOut}`);
   log(running
     ? ">  OUTERPLANE is running: restart it to load the plugin, then play to the lobby — snapshots land automatically."
     : ">  Launch OUTERPLANE from Steam and play to the lobby — snapshots land automatically.");
@@ -465,6 +547,5 @@ export async function uninstallSteamPlugin(opts: { captureOut: string; bundledDl
 /** Ask Steam to launch the game (`steam://rungameid/<appid>` through the
  *  shell). Fire-and-forget; Steam handles login / updates itself. */
 export function launchGame(): void {
-  const child = spawn("cmd.exe", ["/c", "start", "", `steam://rungameid/${OUTERPLANE_APPID}`], { windowsHide: true, detached: true, stdio: "ignore" });
-  child.unref();
+  platform().launchGame(OUTERPLANE_APPID);
 }

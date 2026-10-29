@@ -8,6 +8,61 @@
 
 ## Items de backlog clôturés (index)
 
+### 🐧 Desktop : couche plateforme avec implémentation Linux (Steam natif, jeu sous Proton, chemins Wine) (G75) (2026-10-29)
+- ✅ **Pourquoi.** Le desktop ne tournait que sous Windows : Steam trouvé par `reg.exe`, le jeu par `tasklist.exe`, lancé
+  par `cmd.exe /c start steam://…`, BepInEx décompressé par PowerShell. Sous Fedora le jeu tourne sous Proton (Steam
+  natif, `OUTERPLANE.exe` dans un préfixe Wine) et le même plugin BepInEx marche si l'option de lancement
+  `WINEDLLOVERRIDES="winhttp=n,b" %command%` est posée. Pas de cible de build Linux ici (G76).
+- ✅ **Couche plateforme.** Nouveau `apps/desktop/src/platform.ts` : interface `Platform` (`registrySteamPath?`,
+  `steamRoots`, `gamePids(exe)`, `ownsHeartbeat`, `launchGame(appId)`, `expandZip`, `toPluginPath` / `fromPluginPath`,
+  `protonLaunchOptions`), `win32Platform()` (le code d'avant, déplacé tel quel avec `run()`), `linuxPlatform({ home,
+  procDir })`, `platformFor(os)` (Linux → linux, le reste → win32), `platform()` et `setPlatform` pour les tests.
+  `steam-capture.ts` et `download.ts` ne contiennent plus ni `reg.exe`, ni `tasklist.exe`, ni `cmd.exe`, ni
+  `powershell.exe` (`expandZip` a quitté `download.ts`).
+- ✅ **Linux.** Racines Steam = `steam.roots.linux` de `game-client.json`, résolues contre `HOME`, la première qui a
+  `steamapps` : la table curée les porte déjà (natif, `.steam/steam`, `.steam/root`, les deux formes Flatpak), donc rien
+  n'y est ajouté et le code n'en garde pas de seconde liste. `gamePids` lit `/proc/<pid>/cmdline` (un argument dont le nom
+  de fichier est `OUTERPLANE.exe` : le processus Wine, et aussi les lanceurs de Proton). `launchGame` = `xdg-open
+  steam://rungameid/<appid>` détaché ; `expandZip` = `unzip -o -q`, avec « unzip is not installed — … » si absent.
+  `toPluginPath` : `/home/x/…` → `Z:\home\x\…` (le plugin lit sa config dans Wine), `fromPluginPath` l'inverse (autre
+  lecteur laissé tel quel) ; `installSteamPlugin` écrit l'`OutDir` traduit, `steamStatus` le relit traduit avant
+  `outDirOk` (identité sous Windows).
+- ✅ **Écart à la consigne, nécessaire : le heartbeat sous Wine.** Le plugin écrit `Process.GetCurrentProcess().Id`, qui
+  sous Wine est le pid Windows de Wine, jamais un pid Linux : la comparaison au pid aurait laissé `live` toujours faux,
+  et désarmé la garde du write-back `user_item` et du wipe (`steamPluginLive`). `Platform.ownsHeartbeat` : sous Windows
+  la comparaison au pid d'avant ; sous Linux, le heartbeat appartient au jeu quand son `startedAt` suit le démarrage d'un
+  des processus du jeu (`/proc/<pid>/stat` champ 22 + `btime` de `/proc/stat`, 100 ticks/s, 2 s de marge) ; un
+  heartbeat d'une session précédente est plus ancien et ne compte pas. Le plugin n'est pas touché.
+- ✅ **Option de lancement Proton.** `SteamStatus.launchOptionsOk: boolean | null` (desktop et miroir
+  `apps/renderer/src/steam.ts`) : lu dans `<steamRoot>/userdata/<id>/config/localconfig.vdf`
+  (`UserLocalConfigStore › Software › Valve › Steam › apps › 4247320 › LaunchOptions`, clés sans casse, petit lecteur
+  KeyValues `parseVdf` avec échappements et commentaires), vrai si l'un des comptes porte `WINEDLLOVERRIDES` et
+  `winhttp=n,b`, faux si aucun, null sous Windows, sans jeu ou sans fichier lisible ; résultat en cache sur taille +
+  mtime (fichier gros, statut toutes les 5 s). `SteamSetupPane.tsx` : sous la liste des étapes, une ligne ✓ « Proton
+  launch option set » ou un encadré ambre avec la ligne exacte à coller dans Steam › OUTERPLANE › Properties › General ›
+  Launch Options et « Steam must be restarted after editing it » ; rien sous Windows (null). `ready` et la pastille
+  d'en-tête ne changent pas.
+- ✅ **Icône et docs.** `main.ts` : icône de fenêtre `build/icon.png` sous Linux si le fichier existe (sinon rien, le
+  fichier est l'affaire de G76). Paragraphe Linux / Proton dans `docs/architecture.md` et son miroir
+  `wiki/Architecture.md`, `wiki/Capture-Pipeline.md` (section « Linux (Steam + Proton) ») et
+  `tools/capture-steam/README.md` (source de cette page).
+- ✅ **Tests.** `apps/desktop/test/steam-linux.test.ts` (12), plateforme injectée : racines (HOME factice, Flatpak seul,
+  natif préféré, racine sans `steamapps` sautée, aucune) ; `gamePids` sur un `/proc` factice (le processus Wine et le
+  script Proton retenus, un `bash` qui cite OUTERPLANE non, `self` ignoré) ; `ownsHeartbeat` (après le démarrage oui,
+  session précédente non, aucun processus non, date vide non) ; traduction aller-retour avec espaces et accents, autre
+  lecteur intact ; `localconfig.vdf` factices (aucun, sans l'option, autre option, avec l'option sur un second compte) ;
+  `steamStatus` avec une config en `Z:\…` (`outDirOk`, `ready`, `launchOptionsOk`, `live`) puis config native, heartbeat
+  périmé, option absente ; `installSteamPlugin` qui écrit l'`OutDir` en `Z:\…`. `steam-status.test.ts` épingle
+  `win32Platform()` (une ligne : ses faux `reg.exe` / `tasklist.exe` doivent tourner sur l'hôte Linux de la CI), ses
+  assertions sont inchangées. `npm run typecheck` : `tsc --noEmit` sans erreur ; `npm test` : `Tests  169 passed (169)`,
+  `Tests  231 passed (231)`, `Tests  842 passed (842)` ; `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)`, comme
+  avant.
+- ⏳ **Laissé.** Sevih teste sur le portable Fedora avec la build de G76 (jeu, Steam et `desktop:dev` jamais lancés
+  ici) : à vérifier, la détection du processus et `live` sous Proton réel, la ligne d'option relue après redémarrage de
+  Steam, l'`OutDir` en `Z:\…` lu par le plugin. `launchOptionsOk` reste null quand Steam est introuvable ou qu'aucun
+  `localconfig.vdf` n'est lisible : l'écran n'affiche alors pas de rappel. Le README annonce encore « Windows » seulement
+  (installation Linux : G76).
+
 ### 🪙 Inventaire : valeur de rebut des pièces filtrées, vente et désassemblage depuis les tables (G74) (2026-10-29)
 - ✅ **Pourquoi.** Demande de Sevih du 29/10 : savoir ce que vaut un lot de rebut avant d'aller le vider en jeu. Quand
   un filtre est posé, une ligne sous la barre de tri dit ce que les pièces affichées rendraient : l'or de leur vente,

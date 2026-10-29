@@ -18,6 +18,16 @@ by hand (manual import).
   Steam game folder (`/api/steam/install`). It hooks the game's own HTTP layer and writes
   `user_item.json` / `user_character.json` / … into the capture folder while you
   play — no root, no proxy, no certificate. See [Capture Pipeline](Capture-Pipeline).
+  Everything OS-specific in the install flow (Steam roots, the game's process, launching it, unzipping
+  BepInEx, how a path reads from inside the game) sits behind `apps/desktop/src/platform.ts`:
+  `win32` (registry, `tasklist.exe`, `cmd.exe`, PowerShell) and `linux` — native Steam running
+  the Windows build under **Proton**: Steam roots under `HOME` (native, `~/.steam`, Flatpak), the
+  game found as the Wine process carrying `OUTERPLANE.exe` in `/proc/<pid>/cmdline`, the plugin
+  heartbeat matched by start time (Wine's pids aren't Linux pids), `xdg-open steam://…`,
+  `unzip`, and the plugin's `OutDir` written as Wine reads it (`Z:\home\…`). BepInEx's
+  `winhttp.dll` proxy only loads with the Steam launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%`:
+  the status reads it from `userdata/<id>/config/localconfig.vdf` and Settings → Setup shows the
+  line to paste when it's missing.
 - **packages/core** — pure TypeScript, no DOM, no Node APIs. The brain: wire types,
   parser (wire → domain model), stat resolution, character stat composition. Reusable
   from a Web Worker, a CLI, or the desktop shell. (The combination solver itself lives
