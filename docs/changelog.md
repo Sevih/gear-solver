@@ -8,6 +8,30 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎯 Inventaire : filtre « Reachable quality », le palier atteignable avec une Transistone (G68) (2026-10-29)
+- ✅ **Pourquoi.** Le détail d'une pièce affiche déjà « → N reachable » (score avec la meilleure ligne montée au stade 4
+  par une Transistone) mais rien ne permettait de trier l'inventaire sur ce potentiel : une 6★ Legendary « Good » qui
+  passerait « Excellent » après un reroll se noyait dans les autres « Good ».
+- ✅ **Filtre** (`apps/renderer/src/screens/inventory/filters.ts`) : `FilterState.reachable: Set<QualityTier>`, vide par
+  défaut, ajouté à la liste des Sets de `FILTER_CODEC` (sinon perdu au rechargement et dans les presets de G67) et
+  compté par `activeFilterCount`. `reachableTier(p)` exportée : `qualityTierFromScore(q.reachable ?? q.current, q.max)`
+  quand `p.quality` existe, null sinon — une pièce sans potentiel compte à son palier courant, une pièce sans score
+  (talisman, EE, non tirée) ne passe jamais le filtre, comme pour Quality. `matchesFilters` : sémantique OR sur les
+  paliers cochés. Une session ou un preset enregistrés avant lisent le défaut vide.
+- ✅ **Modale** (`FilterModal.tsx`) : section « Reachable quality » juste sous la rangée Class restriction / Quality,
+  mêmes pilules (`QUALITY_TIERS`, couleurs `QUALITY_TONE`), `title` = `QUALITY_REACHABLE_HELP`. `InventoryScreen.tsx`
+  calcule `availableReachable` dans la même passe que `availableQualities` (pilules grisées hors de la vue) et élague
+  la sélection devenue indisponible dans le même effet que les autres dimensions.
+- ✅ **Docs** : `wiki/Using-the-App.md` (paragraphe Reachable quality sous la liste des filtres).
+- ✅ **Tests** `apps/renderer/test/inventoryReachable.test.ts` (6) : une 6★ Legendary 3/3/3/2 « good » (11/14,
+  atteignable 13/14 = 93 %) gardée par `reachable = {excellent}` et rejetée par `quality = {excellent}` ; une pièce
+  sans potentiel (ligne déjà au stade 4, ou 5★) a pour `reachableTier` son palier courant ; un talisman ne passe pas ;
+  aller-retour du codec avec `reachable` rempli, ancien filtre sans le champ lu vide ; `activeFilterCount` compte le
+  filtre. `npm run typecheck` : `tsc --noEmit` sans erreur (dernière ligne) ; `npm test` : `Tests  796 passed (796)`
+  (renderer, dernière ligne ; core 169, desktop 219) ; `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)`,
+  comme avant.
+- ⏳ À voir par Sevih : la section en jeu (placement sous Quality, grisage des pilules) sur un vrai inventaire.
+
 ### 💾 Inventaire : presets de filtres enregistrables (Load / Save as… / Delete) et preset fourni « Scrap candidates » (G67) (2026-10-29)
 - ✅ **Pourquoi.** Le tri du rebut repose chaque jour sur le même jeu de filtres (5★ / 6★, Base rolls `not` + « at
   least 3/3/3/X », +0, T0, non reforgée, sans les pièces portées) qu'il fallait recocher à la main ; et tout autre jeu

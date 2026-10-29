@@ -36,6 +36,12 @@ A dense, searchable table of every gear piece you own.
   stats (AND/OR), armor set, class-restricted, "exclude equipped gear", and three boxes next to
   it: **+0 only**, **T0 only** (no breakthrough) and **Not reforged**. Chips that can't
   match anything in the current view are greyed out so you never zero out the grid by accident.
+- **Reachable quality** (in the Filter modal, right after Quality): the tier a piece would reach
+  if a Transistone raised its best substat line to stage 4 — the "→ N reachable" of the detail
+  panel. Only a 6★ Legendary with four lines and none at stage 4 yet has that potential; any other
+  piece counts at its current tier. A **Good** piece that a reroll would push past 85 % shows under
+  **Excellent** here and not under Quality's Excellent. Talismans and EE have no quality score and
+  never match.
 - **Base rolls** (in the Filter modal): the initial tiers of a piece's substats, best line first,
   before reforge and enhancement — the same "3/3/3/1" as the Transistone reroll. Pick an operator
   (at least, more than, exactly, at most, less than) and four values (X = any): every line must

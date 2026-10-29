@@ -5,7 +5,7 @@
 import { jsonWithSets } from "../../hooks/usePersistedState.js";
 import { STAT, type DesignRarity, type SlotId } from "../../design/tokens.js";
 import type { UiPiece } from "../../design/adapter.js";
-import type { QualityTier } from "../../lib/quality.js";
+import { qualityTierFromScore, type QualityTier } from "../../lib/quality.js";
 import { baseStage } from "../../lib/solver/reroll.js";
 
 // Gear-rollable stat keys — everything in `STAT` minus the three set-only
@@ -23,6 +23,9 @@ export interface FilterState {
   rarities: Set<DesignRarity>;
   stars: Set<number>;
   quality: Set<QualityTier>;
+  /** Reachable quality tiers — OR semantics on `reachableTier` (the tier with
+   *  the Transistone potential, the current one without). */
+  reachable: Set<QualityTier>;
   /** Selected main-stat keys — OR semantics (a piece passes if any of its
    *  mains is in the set). Mains only ever have AND-impossible single-stat
    *  semantics for gear (helmet has 1 main); talismans/EE expose multiple
@@ -77,6 +80,7 @@ export function emptyFilters(): FilterState {
     rarities: new Set(),
     stars: new Set(),
     quality: new Set(),
+    reachable: new Set(),
     mains: new Set(),
     subs: new Set(),
     subMode: "or",
@@ -97,7 +101,7 @@ export function emptyFilters(): FilterState {
 // (`useSessionState`). The deserializer overlays stored values on top of
 // `emptyFilters()` so older sessions missing newer non-Set fields (e.g.
 // `subMode`) get the current defaults instead of undefined.
-const _setCodec = jsonWithSets<FilterState>(["slots", "rarities", "stars", "quality", "mains", "subs", "armorSets", "classes"]);
+const _setCodec = jsonWithSets<FilterState>(["slots", "rarities", "stars", "quality", "reachable", "mains", "subs", "armorSets", "classes"]);
 export const FILTER_CODEC = {
   serialize: _setCodec.serialize,
   deserialize: (raw: string): FilterState => {
@@ -167,6 +171,14 @@ export function baseRollPattern(p: UiPiece): number[] {
   return stages;
 }
 
+/** The tier the piece would reach if its best line went up to stage 4 with a
+ *  Transistone (`QualityScore.reachable`) — its current tier when it has no
+ *  such potential, null when it has no quality score (Talisman / EE, un-rolled). */
+export function reachableTier(p: UiPiece): QualityTier | null {
+  const q = p.quality;
+  return q ? qualityTierFromScore(q.reachable ?? q.current, q.max) : null;
+}
+
 /** No rolled sub line to compare — the same test that makes the Quality
  *  score null (`qualityScore`): a Talisman / EE slot, or no subs at all. */
 function hasNoRolledSubs(p: UiPiece): boolean {
@@ -197,6 +209,11 @@ export function matchesFilters(p: UiPiece, f: FilterState): boolean {
     // excluded the moment a quality chip is active, since "Excellent" is
     // meaningless for gem-bearing slots.
     if (!p.quality || !f.quality.has(p.quality.tier)) return false;
+  }
+  if (f.reachable.size > 0) {
+    // Same exclusion as Quality: no score, no reachable tier.
+    const t = reachableTier(p);
+    if (!t || !f.reachable.has(t)) return false;
   }
   if (f.mains.size > 0) {
     // OR semantics — a piece passes if ANY of its main-stat keys is in the
@@ -261,6 +278,7 @@ export function activeFilterCount(f: FilterState): number {
   if (f.rarities.size > 0) n++;
   if (f.stars.size > 0) n++;
   if (f.quality.size > 0) n++;
+  if (f.reachable.size > 0) n++;
   if (f.mains.size > 0) n++;
   if (f.subs.size > 0) n++;
   if (f.armorSets.size > 0) n++;

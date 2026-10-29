@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { cx } from "../../design/cx.js";
 import { StatIcon } from "../../design/EquipmentIcon.js";
 import { RARITY, STAT, type DesignRarity } from "../../design/tokens.js";
-import { QUALITY_TIERS, type QualityTier } from "../../lib/quality.js";
+import { QUALITY_REACHABLE_HELP, QUALITY_TIERS, type QualityTier } from "../../lib/quality.js";
 import { QUALITY_TONE } from "../../design/GearDetail.js";
 import { GEAR_STATS, emptyFilters, type BaseRollsFilter, type FilterState } from "./filters.js";
 import {
@@ -304,7 +304,7 @@ export function FilterButton({
 }
 
 /** Game-style filter modal — opens via the filter button, exposes every
- *  filter dimension (Rarity, Stars, Quality, Main, Sub, Base rolls, Set, Status,
+ *  filter dimension (Rarity, Stars, Quality, Reachable quality, Main, Sub, Base rolls, Set, Status,
  *  Singularity, Search) as multi-select pill groups. Draft state lives
  *  locally so Cancel discards uncommitted changes; Apply pushes the draft
  *  to the parent's FilterState and closes; Reset clears all dimensions
@@ -312,7 +312,7 @@ export function FilterButton({
 export function FilterModal({
   open, onClose, current, onApply,
   availableMains, availableSubs, availableArmorSets, availableClasses,
-  availableStars, availableRarities, availableQualities,
+  availableStars, availableRarities, availableQualities, availableReachable,
 }: {
   open: boolean;
   onClose: () => void;
@@ -327,6 +327,7 @@ export function FilterModal({
   availableStars: Set<number>;
   availableRarities: Set<DesignRarity>;
   availableQualities: Set<QualityTier>;
+  availableReachable: Set<QualityTier>;
 }) {
   const [draft, setDraft] = useState<FilterState>(current);
   // Re-seed draft from current whenever the modal transitions to open —
@@ -518,6 +519,28 @@ export function FilterModal({
                 </div>
               </ModalSection>
             </div>
+          </div>
+
+          <div title={QUALITY_REACHABLE_HELP}>
+            <ModalSection label="Reachable quality">
+              <div className="flex flex-wrap gap-1.5">
+                <AllPill active={draft.reachable.size === 0} onClick={() => setDraft({ ...draft, reachable: new Set() })} />
+                {QUALITY_TIERS.map((q) => {
+                  const enabled = availableReachable.has(q);
+                  return (
+                    <FPill
+                      key={q}
+                      active={draft.reachable.has(q)}
+                      color={QUALITY_TONE[q].bar}
+                      className={cx("px-2", !enabled && "pointer-events-none opacity-30")}
+                      onClick={() => setDraft({ ...draft, reachable: toggle(draft.reachable, q) })}
+                    >
+                      {QUALITY_TONE[q].label}
+                    </FPill>
+                  );
+                })}
+              </div>
+            </ModalSection>
           </div>
 
           {availableMains.size > 0 && (

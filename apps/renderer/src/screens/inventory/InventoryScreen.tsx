@@ -4,7 +4,7 @@ import { useSessionState } from "../../hooks/usePersistedState.js";
 import type { DesignRarity, SlotId } from "../../design/tokens.js";
 import { toUiPiece, type UiPiece } from "../../design/adapter.js";
 import type { QualityTier } from "../../lib/quality.js";
-import { emptyFilters, FILTER_CODEC, FILTERS_STORAGE_KEY, TAB_SLOTS, matchesTab, matchesFilters, activeFilterCount, type FilterState, type InvTab } from "./filters.js";
+import { emptyFilters, FILTER_CODEC, FILTERS_STORAGE_KEY, TAB_SLOTS, matchesTab, matchesFilters, activeFilterCount, reachableTier, type FilterState, type InvTab } from "./filters.js";
 import { SortHeader, type FixedSortKey, type SortKey } from "./SortHeader.js";
 import { ItemDetail } from "./ItemDetail.js";
 import { SubTabBar, SlotBar } from "./InventoryTabs.js";
@@ -125,7 +125,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // individual `availableX` binding unchanged.
   const {
     availableMains, availableSubs, availableArmorSets, availableClasses,
-    availableStars, availableRarities, availableQualities,
+    availableStars, availableRarities, availableQualities, availableReachable,
   } = useMemo(() => {
     const mains = new Set<string>();
     const subs = new Set<string>();
@@ -139,6 +139,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
     const stars = new Set<number>();
     const rarities = new Set<DesignRarity>();
     const qualities = new Set<QualityTier>();
+    const reachable = new Set<QualityTier>();
     for (const p of scopedForStats) {
       for (const m of p.main) mains.add(m.stat);
       for (const sub of p.subs) subs.add(sub.stat);
@@ -150,11 +151,14 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
       stars.add(p.stars);
       rarities.add(p.rarity);
       if (p.quality) qualities.add(p.quality.tier);
+      const rt = reachableTier(p);
+      if (rt) reachable.add(rt);
     }
     return {
       availableMains: mains, availableSubs: subs, availableArmorSets: armorSets,
       availableClasses: classes, availableStars: stars,
       availableRarities: rarities, availableQualities: qualities,
+      availableReachable: reachable,
     };
   }, [scopedForStats, game]);
 
@@ -171,20 +175,23 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
       const nextStars = new Set([...prev.stars].filter((n) => availableStars.has(n)));
       const nextRarities = new Set([...prev.rarities].filter((r) => availableRarities.has(r)));
       const nextQuality = new Set([...prev.quality].filter((q) => availableQualities.has(q)));
+      const nextReachable = new Set([...prev.reachable].filter((q) => availableReachable.has(q)));
       if (nextMains.size === prev.mains.size
         && nextSubs.size === prev.subs.size
         && nextArmorSets.size === prev.armorSets.size
         && nextClasses.size === prev.classes.size
         && nextStars.size === prev.stars.size
         && nextRarities.size === prev.rarities.size
-        && nextQuality.size === prev.quality.size) return prev;
+        && nextQuality.size === prev.quality.size
+        && nextReachable.size === prev.reachable.size) return prev;
       return {
         ...prev,
         mains: nextMains, subs: nextSubs, armorSets: nextArmorSets, classes: nextClasses,
         stars: nextStars, rarities: nextRarities, quality: nextQuality,
+        reachable: nextReachable,
       };
     });
-  }, [availableMains, availableSubs, availableArmorSets, availableClasses, availableStars, availableRarities, availableQualities, setF]);
+  }, [availableMains, availableSubs, availableArmorSets, availableClasses, availableStars, availableRarities, availableQualities, availableReachable, setF]);
 
   const sorted = useMemo(() => {
     const out = [...filtered];
@@ -308,6 +315,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         availableStars={availableStars}
         availableRarities={availableRarities}
         availableQualities={availableQualities}
+        availableReachable={availableReachable}
       />
     </div>
   );
