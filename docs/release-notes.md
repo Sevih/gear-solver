@@ -14,6 +14,10 @@
 
 _Nothing yet — user-facing notes for the next release go here._
 
+## [1.19.2] — 2026-10-29
+
+_Nothing yet — user-facing notes for the next release go here._
+
 ## [1.19.1] — 2026-10-29
 
 - **Builder › filter presets**: one damaged entry in a restored backup no longer hides every other
