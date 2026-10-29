@@ -16,6 +16,12 @@
   preset (and no longer gets them overwritten at the next save).
 - **Settings › Backup** and **Home › Export roster**: the file name carries your local date, not
   the UTC one (an export just after midnight was dated the day before).
+- **Home → Inventory**: clicking a quality tier, slot or set on Home opens the Inventory filtered on
+  it again, whatever sub-tab you had left it on.
+- **Inventory › Filter › Presets**: a preset holding a slot of another sub-tab switches the view to
+  **All** so its slot chip shows; a selected value no piece of the view carries stays in the modal,
+  dimmed, so you can remove it; **Load** keeps the search you typed.
+- **Settings › Backup › Import**: the preset counts only include the presets that actually load.
 
 ## [1.19.0] — 2026-10-29
 

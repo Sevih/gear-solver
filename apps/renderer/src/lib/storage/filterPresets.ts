@@ -112,6 +112,17 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
   };
 }
 
+/** Whether `loadFilterPresets` would load this stored entry — `applyBackup`
+ *  merges and counts only those. */
+export function isReadableFilterPreset(entry: unknown): boolean {
+  try {
+    fromSerialized(entry as SerializedPreset);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function loadFilterPresets(): FilterPresetsMap {
   try {
     const raw = localStorage.getItem(KEY);

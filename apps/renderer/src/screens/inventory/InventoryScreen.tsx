@@ -87,6 +87,15 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
     onDrillConsumed?.();
   }, [drill, setF, setTabState, onDrillConsumed]);
 
+  // Apply from the filter modal. A loaded filter preset may carry a slot the
+  // current tab doesn't show (saved on another tab): the view switches to
+  // All, so the SlotBar shows that chip instead of a grid emptied by an
+  // invisible criterion.
+  const applyFilters = useCallback((next: FilterState) => {
+    setF(next);
+    if ([...next.slots].some((s) => !TAB_SLOTS[tab].includes(s))) setTabState("all");
+  }, [tab, setF, setTabState]);
+
   const toggleSlot = useCallback((s: SlotId) => {
     setF((prev) => {
       const next = new Set(prev.slots);
@@ -165,8 +174,12 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // Auto-prune any selection that becomes unavailable when the scope
   // narrows, so a chip the user can no longer see can't silently zero out
   // the grid. Runs whenever any availability set changes (tab / slot
-  // toggle, or the inventory itself when capture updates).
+  // toggle, or the inventory itself when capture updates). Skipped while a
+  // Home drill is pending: on mount both effects run in the same commit and
+  // the availabilities here are still those of the tab and slots the drill
+  // replaces — the prune runs on the next render, in the drill's own scope.
   useEffect(() => {
+    if (drill) return;
     setF((prev) => {
       const nextMains = new Set([...prev.mains].filter((s) => availableMains.has(s)));
       const nextSubs = new Set([...prev.subs].filter((s) => availableSubs.has(s)));
@@ -191,7 +204,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         reachable: nextReachable,
       };
     });
-  }, [availableMains, availableSubs, availableArmorSets, availableClasses, availableStars, availableRarities, availableQualities, availableReachable, setF]);
+  }, [drill, availableMains, availableSubs, availableArmorSets, availableClasses, availableStars, availableRarities, availableQualities, availableReachable, setF]);
 
   const sorted = useMemo(() => {
     const out = [...filtered];
@@ -307,7 +320,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         open={filterModalOpen}
         onClose={() => setFilterModalOpen(false)}
         current={f}
-        onApply={setF}
+        onApply={applyFilters}
         availableMains={availableMains}
         availableSubs={availableSubs}
         availableArmorSets={availableArmorSets}
@@ -316,6 +329,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         availableRarities={availableRarities}
         availableQualities={availableQualities}
         availableReachable={availableReachable}
+        armorSetName={(id) => game?.sets?.[id]?.name ?? `Set #${id}`}
       />
     </div>
   );

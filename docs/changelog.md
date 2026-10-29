@@ -8,6 +8,61 @@
 
 ## Items de backlog clôturés (index)
 
+### 🐞 Inventaire : drill de Home respecté, preset de filtres visible hors portée, recherche gardée au Load, compte d'import exact (G70) (2026-10-29)
+- ✅ **Quoi.** Les quatre (b) de l'audit G69, tranchés par Sevih le 29/10. Chaque rejeu du todo est devenu un test qui
+  échoue sans la correction, puis passe.
+- ✅ **Drill de Home.** `apps/renderer/src/screens/inventory/InventoryScreen.tsx` : au montage, l'effet du drill et
+  l'auto-prune tournaient dans le même commit ; l'updater de l'auto-prune recevait l'état posé par le drill
+  (`quality = {excellent}`, onglet All) avec les disponibilités de l'onglet et des emplacements quittés (session) et
+  élaguait le palier : grille All non filtrée. L'auto-prune porte maintenant `if (drill) return;` et `drill` dans ses
+  dépendances (seule exception à la note « À NE PAS toucher » du todo) : il repasse au rendu suivant, drill consommé,
+  dans la portée du drill. Test : Inventaire laissé sur Special avec la puce Talisman, drill sur le palier d'un casque
+  → onglet All, `quality` = ce palier, aucun emplacement ; échouait (`Set{}`), passe.
+- ✅ **Preset hors de la portée affichée.** (i) `InventoryScreen.tsx` : l'Apply de la modale passe par `applyFilters`,
+  qui bascule sur l'onglet All quand le filtre porte un emplacement absent de `TAB_SLOTS[tab]` ; la `SlotBar` montre
+  alors la puce. Voie la plus simple retenue : l'écran déduit l'onglet du filtre appliqué, la modale ne change pas
+  d'API (pas d'`onTabChange`) ; seul un preset chargé peut porter un tel emplacement (la modale n'a pas de pilule
+  d'emplacement, `setTab` élague les autres), et la bascule se fait à l'Apply, un Cancel laisse l'onglet.
+  Test : preset `slots = {talisman}` appliqué sur Gear → onglet All, puce Talisman ; échouait (`gear`), passe ; un
+  preset Casque sur Gear y reste. (ii) `FilterModal.tsx` : une valeur sélectionnée dans le brouillon mais absente des
+  disponibilités reste rendue, à la suite des disponibles, en `opacity-50` avec le `title` « No piece in the current
+  view », et cliquable pour la retirer : Main et Sub (`StatPillGrid`, prop `unavailable`), Set et Class (la section
+  s'affiche aussi quand seule une valeur sélectionnée la remplit ; le nom d'un set hors vue vient de la nouvelle prop
+  `armorSetName`, `game.sets` puis `Set #id` comme dans l'écran), Star, Grade, Quality et Reachable (`pillAvailability` :
+  non sélectionnée et indisponible, la pilule reste grisée et inerte comme avant). Aucun élagage ajouté à l'Apply.
+  Test `apps/renderer/test/inventoryFilterModal.test.ts` (4, rendu serveur, portail remplacé par ses enfants) : Sub
+  EFF hors vue ; Main SPD, Class Healer, Set « Swift » hors vue (le Set disponible non marqué) ; 5★, Epic et Perfect
+  (Quality et Reachable) cliquables et marqués ; sans sélection, 4★ reste inerte et rien n'est marqué. Les trois
+  premiers échouaient, passent.
+- ✅ **Load garde la recherche.** `PresetsRow.load` : `onLoad({ ...filters, query: draft.query })`, pour un preset de
+  l'utilisateur comme pour « Scrap candidates » ; le preset ne stocke toujours pas la recherche. Test : brouillon
+  « boots », Load d'un preset Talisman → emplacements du preset, recherche « boots » ; échouait (`""`), passe.
+- ✅ **Compte d'import.** `lib/storage/transfer.ts` : `mergeListMap` prend un prédicat `accept` ; les presets du Builder
+  passent par `isReadableFilterPreset` (nouveau, `filterPresets.ts` : `fromSerialized` ne lève pas), ceux de
+  l'Inventaire par `isReadableInventoryPreset` (nouveau, `inventoryFilterPresets.ts` : forme, `validPresetName` et
+  `filters` lisibles). Une entrée refusée n'est ni fusionnée ni comptée, et un héros sans entrée neuve ne reçoit plus
+  de liste vide. Test `apps/renderer/test/transfer.test.ts` (+3) : preset `{ id, name }` sans `filters` → compte 0,
+  carte `{}` ; à côté d'un preset lisible → 1, seul lui écrit ; six presets d'Inventaire invalides (nom vide, 25
+  caractères, nom du preset fourni, sans `filters`, JSON cassé, tableau) → 0, rien d'écrit. Échouaient (1, 2, 6),
+  passent.
+- ✅ **Banc des effets.** `apps/renderer/test/inventoryScreen.test.ts` (nouveau, 4) : vitest tourne sans DOM, donc
+  `react` y est remplacé par un petit moteur de hooks (emplacements `useState` / `useMemo` / `useCallback` / `useRef`,
+  effets lancés dans l'ordre de déclaration après le rendu, comme un commit, re-rendu tant qu'un état change) ; le
+  composant est appelé comme une fonction et l'arbre rendu ne sert qu'à lire les props de `SlotBar` et `FilterModal`,
+  ou à appeler celles de `PresetsRow`.
+- ✅ **Docs.** `docs/todo.md` : les quatre (b) retirées, la (c) restante gardée. `wiki/Using-the-App.md` (Presets :
+  Load garde la recherche, bascule sur All à l'Apply, valeur hors vue grisée et retirable). `docs/release-notes.md ›
+  [Unreleased]` (trois lignes).
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` (sans erreur, code 0) ; `npm test` → core « Tests 169
+  passed (169) », desktop « Tests 219 passed (219) », renderer « Tests 811 passed (811) » (dernière ligne) ;
+  `npm run lint` → « ✖ 13 problems (0 errors, 13 warnings) », même compte qu'avant (fichier par fichier aussi).
+- ⏳ **Laissé, hors périmètre** : l'auto-prune tourne toujours à chaque changement de portée, Apply compris : un preset
+  qui change les emplacements ou l'onglet perd, sans le dire, une valeur absente de la nouvelle portée (ex. Casque +
+  sub EFF sans casque EFF). Le cas du todo (même portée) est couvert ; ce cas-là touche l'auto-prune, à trancher.
+  `docs/reference.md` donne encore « 8 tests » pour `transfer.test.ts` (déjà faux avant ce lot).
+- ⏳ **Sevih** sur le fixe : Home › clic sur un palier avec l'Inventaire laissé sur Special Gear → liste filtrée sur le
+  palier ; un preset enregistré sur Special Gear chargé sur Gear → bascule sur All à l'Apply.
+
 ### 🐞 Audit de bugs sur `main` (1.19.0) : deux corrections sûres, le reste au todo (G69) (2026-10-29)
 - ✅ **Méthode.** Lecture du code récent (G61 à G68) puis des modules listés (Inventaire, clés `gs.*`, presets, solveur,
   desktop, `parse.ts`) ; chaque soupçon prouvé par un test vitest ou un rejeu `npx tsx` sur les vrais modules avec des

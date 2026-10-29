@@ -11,9 +11,9 @@
  * in-memory shape.
  */
 import { SAVED_BUILDS_KEY } from "./savedBuilds.js";
-import { FILTER_PRESETS_KEY } from "./filterPresets.js";
+import { FILTER_PRESETS_KEY, isReadableFilterPreset } from "./filterPresets.js";
 import { PRESET_HEROES_KEY } from "./presetHeroes.js";
-import { INVENTORY_FILTER_PRESETS_KEY } from "./inventoryFilterPresets.js";
+import { INVENTORY_FILTER_PRESETS_KEY, isReadableInventoryPreset } from "./inventoryFilterPresets.js";
 
 const BACKUP_KIND = "gear-solver-backup";
 const BACKUP_VERSION = 1 as const;
@@ -87,9 +87,9 @@ function readList(key: string): unknown[] {
 }
 
 /** Merge the incoming Inventory filter presets: an entry whose id or name is
- *  already here is skipped — the local entry wins, as for the builds.
- *  Entries are otherwise copied verbatim; `loadInventoryFilterPresets`
- *  ignores a malformed one. */
+ *  already here is skipped — the local entry wins, as for the builds — and so
+ *  is one `loadInventoryFilterPresets` would ignore, so the count matches what
+ *  loads. Entries are otherwise copied verbatim. */
 function mergeInventoryPresets(current: unknown[], incoming: unknown[]): { merged: unknown[]; added: number } {
   const merged = [...current];
   const ids = new Set<unknown>();
@@ -102,9 +102,9 @@ function mergeInventoryPresets(current: unknown[], incoming: unknown[]): { merge
   }
   let added = 0;
   for (const e of incoming) {
-    if (!e || typeof e !== "object") continue;
-    const { id, name } = e as { id?: unknown; name?: unknown };
-    if (typeof id !== "string" || typeof name !== "string" || ids.has(id) || names.has(name)) continue;
+    if (!isReadableInventoryPreset(e)) continue;
+    const { id, name } = e as { id: string; name: string };
+    if (ids.has(id) || names.has(name)) continue;
     merged.push(e);
     ids.add(id);
     names.add(name);
@@ -115,15 +115,18 @@ function mergeInventoryPresets(current: unknown[], incoming: unknown[]): { merge
 
 /** Merge an incoming per-hero list map into the current one, deduping by
  *  entry `id` (incoming wins are skipped when the id already exists — the
- *  existing entry is kept). Returns a fresh map and a count of added entries. */
-function mergeListMap(current: ListMap, incoming: ListMap): { merged: ListMap; added: number } {
+ *  existing entry is kept). An incoming entry `accept` refuses (one its loader
+ *  would skip) is neither merged nor counted. Returns a fresh map and a count
+ *  of added entries. */
+function mergeListMap(current: ListMap, incoming: ListMap, accept: (entry: unknown) => boolean = () => true): { merged: ListMap; added: number } {
   const merged: ListMap = { ...current };
   let added = 0;
   for (const [uid, list] of Object.entries(incoming)) {
     if (!Array.isArray(list)) continue;
     const existing = merged[uid] ?? [];
     const seen = new Set(existing.map((e) => e.id).filter((id) => typeof id === "string"));
-    const fresh = list.filter((e) => e && typeof e.id === "string" && !seen.has(e.id));
+    const fresh = list.filter((e) => e && typeof e.id === "string" && !seen.has(e.id) && accept(e));
+    if (fresh.length === 0) continue;
     added += fresh.length;
     merged[uid] = [...existing, ...fresh];
   }
@@ -186,7 +189,7 @@ export function onBackupImported(listener: () => void): () => void {
 export function applyBackup(value: unknown): ImportResult {
   assertBundle(value);
   const builds = mergeListMap(readRaw(SAVED_BUILDS_KEY), value.savedBuilds);
-  const presets = mergeListMap(readRaw(FILTER_PRESETS_KEY), value.filterPresets);
+  const presets = mergeListMap(readRaw(FILTER_PRESETS_KEY), value.filterPresets, isReadableFilterPreset);
   const groups = mergePresetHeroes(readRaw<Record<string, unknown>>(PRESET_HEROES_KEY), value.presetHeroes ?? {});
   const invPresets = mergeInventoryPresets(readList(INVENTORY_FILTER_PRESETS_KEY), value.inventoryFilterPresets ?? []);
   localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(builds.merged));

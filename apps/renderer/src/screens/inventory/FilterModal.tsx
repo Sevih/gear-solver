@@ -17,11 +17,12 @@ import {
 
 // ── filter pieces ───────────────────────────────────────────────────────
 function FPill({
-  children, active, color, className, onClick,
-}: { children: React.ReactNode; active?: boolean; color?: string; className?: string; onClick?: () => void }) {
+  children, active, color, className, title, onClick,
+}: { children: React.ReactNode; active?: boolean; color?: string; className?: string; title?: string; onClick?: () => void }) {
   return (
     <button
       onClick={onClick}
+      title={title}
       className={cx(
         "inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-[10.5px] font-medium transition-colors",
         active ? "text-white" : "border-white/7 bg-black/25 text-white hover:bg-white/5",
@@ -66,25 +67,28 @@ function Checkbox({
 }
 
 /** Compact stat pill — icon + short label. Used by the Main / Sub filter
- *  groups, which list every gear-rollable stat from the STAT token table. */
+ *  groups, which list every gear-rollable stat from the STAT token table.
+ *  A stat in `unavailable` (selected, no piece in the view) renders marked. */
 function StatPillGrid({
-  stats, selected, onToggle,
-}: { stats: string[]; selected: Set<string>; onToggle: (s: string) => void }) {
+  stats, selected, unavailable, onToggle,
+}: { stats: string[]; selected: Set<string>; unavailable: Set<string>; onToggle: (s: string) => void }) {
   return (
     <div className="flex flex-wrap gap-1">
       {stats.map((s) => {
         const meta = STAT[s];
         const active = selected.has(s);
+        const missing = unavailable.has(s);
         return (
           <button
             key={s}
             onClick={() => onToggle(s)}
-            title={meta?.longLabel ?? s}
+            title={missing ? UNAVAILABLE_TITLE : meta?.longLabel ?? s}
             className={cx(
               "inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-[10.5px] font-medium transition-colors",
               active
                 ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-200"
                 : "border-white/7 bg-black/25 text-white hover:bg-white/5",
+              missing && UNAVAILABLE_CLASS,
             )}
           >
             <StatIcon stat={s} size={12} />
@@ -94,6 +98,25 @@ function StatPillGrid({
       })}
     </div>
   );
+}
+
+/** A value selected in the draft (a loaded filter preset) that no piece of
+ *  the current view carries: still rendered, dimmed, and clickable so the
+ *  criterion never filters the grid without a visible pill to remove. */
+const UNAVAILABLE_TITLE = "No piece in the current view";
+const UNAVAILABLE_CLASS = "opacity-50";
+
+/** Class for a fixed-list pill (Star / Grade / Quality / Reachable): an
+ *  available value is plain, an unavailable selected one is marked, an
+ *  unavailable unselected one is disabled. */
+function pillAvailability(enabled: boolean, active: boolean): { className?: string; title?: string } {
+  if (enabled) return {};
+  return active ? { className: UNAVAILABLE_CLASS, title: UNAVAILABLE_TITLE } : { className: "pointer-events-none opacity-30" };
+}
+
+/** The selected values missing from `available`. */
+function missingFrom<T>(selected: Set<T>, available: { has: (v: T) => boolean }): Set<T> {
+  return new Set([...selected].filter((v) => !available.has(v)));
 }
 
 /** Non-interactive "OR" badge — communicates that the selection uses OR
@@ -203,9 +226,10 @@ function PresetsRow({
   const userPreset = presets.find((p) => p.id === selected);
   const validName = validPresetName(name);
   const overwrites = validName !== null && presets.some((p) => p.name === validName);
+  // A preset carries no search: the one in the draft stays in place.
   const load = () => {
-    if (builtin) onLoad(SCRAP_CANDIDATES.filters());
-    else if (userPreset) onLoad(userPreset.filters);
+    if (builtin) onLoad({ ...SCRAP_CANDIDATES.filters(), query: draft.query });
+    else if (userPreset) onLoad({ ...userPreset.filters, query: draft.query });
   };
   const save = () => {
     const saved = saveInventoryFilterPreset(name, draft);
@@ -312,7 +336,7 @@ export function FilterButton({
 export function FilterModal({
   open, onClose, current, onApply,
   availableMains, availableSubs, availableArmorSets, availableClasses,
-  availableStars, availableRarities, availableQualities, availableReachable,
+  availableStars, availableRarities, availableQualities, availableReachable, armorSetName,
 }: {
   open: boolean;
   onClose: () => void;
@@ -323,11 +347,14 @@ export function FilterModal({
   availableArmorSets: Map<string, string>;
   availableClasses: Set<string>;
   /** Chips for these dimensions stay rendered but go grayed-out + non-
-   *  interactive when their value isn't present in the current scope. */
+   *  interactive when their value isn't present in the current scope —
+   *  unless selected, then marked unavailable and still clickable. */
   availableStars: Set<number>;
   availableRarities: Set<DesignRarity>;
   availableQualities: Set<QualityTier>;
   availableReachable: Set<QualityTier>;
+  /** Label of an armor set selected in the draft but absent from the view. */
+  armorSetName: (id: string) => string;
 }) {
   const [draft, setDraft] = useState<FilterState>(current);
   // Re-seed draft from current whenever the modal transitions to open —
@@ -353,6 +380,15 @@ export function FilterModal({
   // zero items by construction.
   const classActive = draft.classes.size > 0;
   const setsActive = draft.armorSets.size > 0;
+  // Selected values the view doesn't carry are listed after the available ones.
+  const missingMains = missingFrom(draft.mains, availableMains);
+  const missingSubs = missingFrom(draft.subs, availableSubs);
+  const missingClasses = missingFrom(draft.classes, availableClasses);
+  const missingSets = missingFrom(draft.armorSets, availableArmorSets);
+  const mainStats = GEAR_STATS.filter((s) => availableMains.has(s) || missingMains.has(s));
+  const subStats = GEAR_STATS.filter((s) => availableSubs.has(s) || missingSubs.has(s));
+  const classPills = [...availableClasses, ...missingClasses];
+  const setPills: [string, string][] = [...availableArmorSets.entries(), ...[...missingSets].map((id): [string, string] => [id, armorSetName(id)])];
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -432,13 +468,15 @@ export function FilterModal({
                 <div className="flex flex-wrap gap-1.5">
                   <AllPill active={draft.stars.size === 0} onClick={() => setDraft({ ...draft, stars: new Set() })} />
                   {[6, 5, 4, 3, 2, 1].map((n) => {
-                    const enabled = availableStars.has(n);
+                    const active = draft.stars.has(n);
+                    const { className, title } = pillAvailability(availableStars.has(n), active);
                     return (
                       <FPill
                         key={n}
-                        active={draft.stars.has(n)}
+                        active={active}
                         color="#facc15"
-                        className={cx("px-2", !enabled && "pointer-events-none opacity-30")}
+                        className={cx("px-2", className)}
+                        title={title}
                         onClick={() => setDraft({ ...draft, stars: toggle(draft.stars, n) })}
                       >
                         {n}★
@@ -453,13 +491,15 @@ export function FilterModal({
                 <div className="flex flex-wrap gap-1.5">
                   <AllPill active={draft.rarities.size === 0} onClick={() => setDraft({ ...draft, rarities: new Set() })} />
                   {(Object.keys(RARITY) as DesignRarity[]).map((k) => {
-                    const enabled = availableRarities.has(k);
+                    const active = draft.rarities.has(k);
+                    const { className, title } = pillAvailability(availableRarities.has(k), active);
                     return (
                       <FPill
                         key={k}
-                        active={draft.rarities.has(k)}
+                        active={active}
                         color={RARITY[k].fg}
-                        className={cx(!enabled && "pointer-events-none opacity-30")}
+                        className={className}
+                        title={title}
                         onClick={() => setDraft({ ...draft, rarities: toggle(draft.rarities, k) })}
                       >
                         {RARITY[k].label}
@@ -476,7 +516,7 @@ export function FilterModal({
               piece in the scope is class-locked the class column drops out
               and Quality takes the full row. */}
           <div className="flex gap-3">
-            {availableClasses.size > 0 && (
+            {classPills.length > 0 && (
               <div
                 className={cx("flex-1", setsActive && "pointer-events-none opacity-40")}
                 title={setsActive ? "Disabled while Set Effect is active — armor 4-pc pieces aren't class-locked." : undefined}
@@ -484,10 +524,12 @@ export function FilterModal({
                 <ModalSection label="Class restriction" right={<ModeBadge mode="or" />}>
                   <div className="flex flex-wrap gap-1.5">
                     <AllPill active={draft.classes.size === 0} onClick={() => setDraft({ ...draft, classes: new Set() })} />
-                    {[...availableClasses].map((c) => (
+                    {classPills.map((c) => (
                       <FPill
                         key={c}
                         active={draft.classes.has(c)}
+                        className={cx(missingClasses.has(c) && UNAVAILABLE_CLASS)}
+                        title={missingClasses.has(c) ? UNAVAILABLE_TITLE : undefined}
                         onClick={() => setDraft({ ...draft, classes: toggle(draft.classes, c) })}
                       >
                         <img src={`/img/ui/class/IG_Turn_Class_${c}.webp`} alt="" className="h-3.5 w-3.5" />
@@ -503,13 +545,15 @@ export function FilterModal({
                 <div className="flex flex-wrap gap-1.5">
                   <AllPill active={draft.quality.size === 0} onClick={() => setDraft({ ...draft, quality: new Set() })} />
                   {QUALITY_TIERS.map((q) => {
-                    const enabled = availableQualities.has(q);
+                    const active = draft.quality.has(q);
+                    const { className, title } = pillAvailability(availableQualities.has(q), active);
                     return (
                       <FPill
                         key={q}
-                        active={draft.quality.has(q)}
+                        active={active}
                         color={QUALITY_TONE[q].bar}
-                        className={cx("px-2", !enabled && "pointer-events-none opacity-30")}
+                        className={cx("px-2", className)}
+                        title={title}
                         onClick={() => setDraft({ ...draft, quality: toggle(draft.quality, q) })}
                       >
                         {QUALITY_TONE[q].label}
@@ -526,13 +570,15 @@ export function FilterModal({
               <div className="flex flex-wrap gap-1.5">
                 <AllPill active={draft.reachable.size === 0} onClick={() => setDraft({ ...draft, reachable: new Set() })} />
                 {QUALITY_TIERS.map((q) => {
-                  const enabled = availableReachable.has(q);
+                  const active = draft.reachable.has(q);
+                  const { className, title } = pillAvailability(availableReachable.has(q), active);
                   return (
                     <FPill
                       key={q}
-                      active={draft.reachable.has(q)}
+                      active={active}
                       color={QUALITY_TONE[q].bar}
-                      className={cx("px-2", !enabled && "pointer-events-none opacity-30")}
+                      className={cx("px-2", className)}
+                      title={title}
                       onClick={() => setDraft({ ...draft, reachable: toggle(draft.reachable, q) })}
                     >
                       {QUALITY_TONE[q].label}
@@ -543,24 +589,26 @@ export function FilterModal({
             </ModalSection>
           </div>
 
-          {availableMains.size > 0 && (
+          {mainStats.length > 0 && (
             <ModalSection label="Primary Stat" right={<ModeBadge mode="or" />}>
               <StatPillGrid
-                stats={GEAR_STATS.filter((s) => availableMains.has(s))}
+                stats={mainStats}
                 selected={draft.mains}
+                unavailable={missingMains}
                 onToggle={(s) => setDraft({ ...draft, mains: toggle(draft.mains, s) })}
               />
             </ModalSection>
           )}
 
-          {availableSubs.size > 0 && (
+          {subStats.length > 0 && (
             <ModalSection
               label="Secondary Stat"
               right={<ModeToggle mode={draft.subMode} onChange={(m) => setDraft({ ...draft, subMode: m })} />}
             >
               <StatPillGrid
-                stats={GEAR_STATS.filter((s) => availableSubs.has(s))}
+                stats={subStats}
                 selected={draft.subs}
+                unavailable={missingSubs}
                 onToggle={(s) => setDraft({ ...draft, subs: toggle(draft.subs, s) })}
               />
             </ModalSection>
@@ -573,7 +621,7 @@ export function FilterModal({
             </div>
           </ModalSection>
 
-          {availableArmorSets.size > 0 && (
+          {setPills.length > 0 && (
             <div
               className={cx(classActive && "pointer-events-none opacity-40")}
               title={classActive ? "Disabled while Class restriction is active — class-locked pieces don't carry an armor 4-pc set." : undefined}
@@ -581,10 +629,12 @@ export function FilterModal({
               <ModalSection label="Set Effect" right={<ModeBadge mode="or" />}>
                 <div className="flex flex-wrap gap-1.5">
                   <AllPill active={draft.armorSets.size === 0} onClick={() => setDraft({ ...draft, armorSets: new Set() })} />
-                  {[...availableArmorSets.entries()].map(([id, name]) => (
+                  {setPills.map(([id, name]) => (
                     <FPill
                       key={id}
                       active={draft.armorSets.has(id)}
+                      className={cx(missingSets.has(id) && UNAVAILABLE_CLASS)}
+                      title={missingSets.has(id) ? UNAVAILABLE_TITLE : undefined}
                       onClick={() => setDraft({ ...draft, armorSets: toggle(draft.armorSets, id) })}
                     >
                       {name}

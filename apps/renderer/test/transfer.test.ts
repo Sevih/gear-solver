@@ -134,3 +134,34 @@ describe("transfer — Inventory filter presets", () => {
     expect(store.has(INV_KEY)).toBe(false);
   });
 });
+
+describe("transfer — entries the loaders reject", () => {
+  const bundle = (over: object) => ({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: {}, ...over });
+
+  it("a Builder preset without filters counts 0 and writes nothing", () => {
+    const res = applyBackup(bundle({ filterPresets: { h1: [{ id: "p1", name: "broken" }] } }));
+    expect(res.presets).toBe(0);
+    expect(JSON.parse(store.get(PRESETS_KEY)!)).toEqual({});
+  });
+
+  it("a readable Builder preset next to a broken one counts 1", () => {
+    const good = { id: "p2", name: "ok", heroUid: "h1", createdAt: 0, filters: { excludedHeroes: [] } };
+    const res = applyBackup(bundle({ filterPresets: { h1: [{ id: "p1", name: "broken" }, good] } }));
+    expect(res.presets).toBe(1);
+    expect(JSON.parse(store.get(PRESETS_KEY)!).h1.map((p: { id: string }) => p.id)).toEqual(["p2"]);
+  });
+
+  it("an Inventory preset with an invalid name or unreadable filters counts 0", () => {
+    const INV_KEY = "gs.inv.filterPresets";
+    const res = applyBackup(bundle({ inventoryFilterPresets: [
+      { id: "a", name: "", filters: "{}", createdAt: 0 },
+      { id: "b", name: "x".repeat(25), filters: "{}", createdAt: 0 },
+      { id: "c", name: "no filters", createdAt: 0 },
+      { id: "d", name: "bad json", filters: "{", createdAt: 0 },
+      { id: "e", name: "array", filters: "[]", createdAt: 0 },
+      { id: "f", name: "Scrap candidates", filters: "{}", createdAt: 0 },
+    ] }));
+    expect(res.inventoryPresets).toBe(0);
+    expect(store.has(INV_KEY)).toBe(false);
+  });
+});

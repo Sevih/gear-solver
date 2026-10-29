@@ -86,6 +86,12 @@ function readFilters(raw: string): FilterState | null {
   }
 }
 
+/** Whether `loadInventoryFilterPresets` would load this stored entry —
+ *  `applyBackup` merges and counts only those. */
+export function isReadableInventoryPreset(entry: unknown): boolean {
+  return isStoredPreset(entry) && readFilters(entry.filters) !== null;
+}
+
 function persist(list: StoredPreset[]): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(list));

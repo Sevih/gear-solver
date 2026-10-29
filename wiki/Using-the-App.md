@@ -54,7 +54,10 @@ A dense, searchable table of every gear piece you own.
 - **Presets** (top row of the Filter modal): pick a preset and **Load** it into the modal (adjust,
   then **Apply**); **Save as…** saves the current filters under a name (1–24 characters; an
   existing name is overwritten); **Delete** removes one of yours. A preset keeps every filter
-  except the search and the sub-tab (All / Gear / Special Gear). The built-in **Scrap
+  except the search and the sub-tab (All / Gear / Special Gear): **Load** leaves your search in
+  place, and a preset holding a slot the current sub-tab doesn't show switches the view to **All**
+  on Apply. A selected value no piece of the view carries stays in the modal, dimmed, so you can
+  remove it. The built-in **Scrap
   candidates** (always first, can't be deleted) shows the unequipped 5★ / 6★ gear at +0, T0, never
   reforged, with Base rolls **not at least 3/3/3/X** — the pieces without three lines at 3.
 - **Sort**: by enhance level, stars, breakthrough, or by a specific substat's value.
