@@ -8,6 +8,44 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔎 Inventaire : filtre « Base rolls » refait, un opérateur (≥, >, =, ≤, <) appliqué ligne à ligne et X libre, à la place de « at least » / « worse than » (G65) (2026-10-29)
+- ✅ **Pourquoi.** Retour du 29/10 sur le fixe : le « worse than 2/2/2/2 » de G62 voulait dire « au moins une ligne sous
+  son minimum », si bien qu'une 3/3/1/1 restait visible alors que Sevih y lit « aucune ligne à 2 ou plus ». La règle
+  voulue : le motif se lit ligne à ligne, meilleure ligne d'abord, et CHAQUE ligne doit satisfaire `ligne <op> valeur` ;
+  « X » sur une ligne = pas de contrainte. Les deux modes de G62 disparaissent.
+- ✅ **Filtre** (`screens/inventory/filters.ts`) : `FilterState.baseRolls` devient `{ op: "gte" | "gt" | "eq" | "lte" |
+  "lt"; lines: [v, v, v, v] }`, `v` = 0..4 ou `null` (= X), défaut `≥ X/X/X/X` ; inactif (et non compté par
+  `activeFilterCount`) tant que les quatre lignes sont X. `matchesFilters` prend `baseRollPattern(p)` (inchangé : paliers
+  de base triés décroissants, complétés par 0, reforges ignorées) puis exige, pour chaque ligne, `lines[i] === null ||
+  stage <op> lines[i]` (`compareStage`). Pas de cas spécial pour 0 : « < 0 » ne passe jamais, « ≤ 0 » passe à 0
+  seulement, et la 4e ligne d'une pièce à trois lignes vaut 0 (« = 3/3/3/1 » l'exclut).
+- ✅ **Migration de l'état stocké** : `FILTER_CODEC.deserialize` passe `baseRolls` par `readBaseRolls`, qui lit la
+  nouvelle forme (valeur hors 0..4 → X) ou celle de G62 (`atLeast` → `gte`, `below` → `lt`, minimum 0 → X) et retombe
+  sur le défaut pour tout le reste ; `serialize` n'écrit que la nouvelle forme. La lecture tolérant l'ancien état, la clé
+  `gs.inv.filters.v3` ne change pas.
+- ✅ **Modale** (`FilterModal.tsx`) : la section « Base rolls » perd la bascule `BaseRollsModeToggle` ; le « ≥ » fixe
+  devant les quatre sélecteurs devient un sélecteur d'opérateur (≥ par défaut, puis >, =, ≤, <, même style que les
+  sélecteurs de ligne), et les sélecteurs de ligne proposent « X, 0, 1, 2, 3, 4 » (X par défaut, à la place de « any,
+  1..4 »). Aide d'une ligne : « Initial tiers of the sub-stats, best line first, before reforge and enhancement. Every
+  line must match; X = any. ». La pastille du compte du bouton Filter est inchangée ; rien d'autre ne bouge.
+- ✅ **Tests** : `apps/renderer/test/inventoryBaseRolls.test.ts` repris (15 cas, dont les 3 de `baseRollPattern`
+  inchangés) : « < 2-2-2-2 » exclut 3/1/3/1 et 2/2/2/2, garde 1/1/1/1 ; « ≤ 2-2-2-2 » garde 2/2/2/2 ; « ≥ 4-3-X-X »
+  garde 4/3/1/0, 4/4/4/4 et 3/4/1/1 (trié 4/3/1/1), exclut 3/3/3/3 et 4/2/2/2 ; « = 3-3-3-1 » garde 3/3/3/1 (aussi
+  saisie 1/3/3/3) et exclut 3/3/3/0, 3/3/3/2, 4/3/3/1 ; « > » et les lignes à 0 ; reforge sans effet ; « ≥ X-X-X-X »
+  inactif et non compté ; codec aller-retour (X compris), migration des deux modes de G62, écriture de la seule
+  nouvelle forme, état sans `baseRolls` → défaut.
+- ✅ **Docs** : `wiki/Using-the-App.md` (la phrase de G62 décrit l'opérateur et X, avec les trois exemples) ;
+  `docs/release-notes.md › [Unreleased]` gagne « Base rolls filter: pick an operator and use X for a free line » (la
+  ligne de G62 est déjà publiée dans `## [1.17.0]`, elle reste). `docs/todo.md` n'avait pas d'item correspondant :
+  inchangé.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` (sans erreur) ; `npm test` → core « Tests 169 passed (169) »,
+  desktop « Tests 219 passed (219) », renderer « Tests 770 passed (770) » ; `npm run lint` → « ✖ 13 problems (0 errors,
+  13 warnings) », inchangé. Pas de rendu réel possible ici (ni `npm run dev` ni Electron) : la modale n'a été vérifiée
+  qu'à la lecture.
+- ⏳ **Sevih** sur le fixe : Inventaire › Filter › Base rolls « < 2-2-2-2 » → plus aucune pièce avec un 3 ou un 4 ;
+  « ≥ 4-3-X-X » → seulement les pièces dont les deux meilleures lignes sont 4 puis au moins 3. Un filtre G62 resté en
+  session doit revenir converti (« worse than » → « < », 0 → X).
+
 ### 📜 Inventaire : la grille défile seule sous un en-tête fixe, virtualisation effective (hauteur bornée) (G64) (2026-10-29)
 - ✅ **Pourquoi.** Relevé du 28/10 sur le fixe (1 575 pièces) : en descendant dans l'Inventaire, l'en-tête (onglets,
   compteurs, `SlotBar`, tri, « Filter ») partait avec la grille, et le défilement ramait. Cause confirmée à la lecture :

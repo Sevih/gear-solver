@@ -46,18 +46,20 @@ export interface FilterState {
    *  (inverted polarity to match the in-game wording). */
   showEquipped: boolean;
   /** Base rolls pattern — the base stages of the piece's sub lines sorted
-   *  best first, padded with 0 to 4 lines, against `min` (0 = any).
-   *  `atLeast` keeps the pieces where every line reaches its minimum;
-   *  `below` keeps the others (the "worse than" scrap view). All-zero `min`
-   *  = inactive in either mode. */
+   *  best first, padded with 0 to 4 lines, compared line by line to `lines`
+   *  with `op`: every line must satisfy `stage <op> value`, a `null` line
+   *  (X) is free. Four `null` lines = inactive. */
   baseRolls: BaseRollsFilter;
   singularityOnly: boolean;
   query: string;
 }
 
+export type BaseRollsOp = "gte" | "gt" | "eq" | "lte" | "lt";
+/** A base tier 0..4, or `null` = X (any). */
+export type BaseRollsLine = number | null;
 export interface BaseRollsFilter {
-  min: [number, number, number, number];
-  mode: "atLeast" | "below";
+  op: BaseRollsOp;
+  lines: [BaseRollsLine, BaseRollsLine, BaseRollsLine, BaseRollsLine];
 }
 
 export function emptyFilters(): FilterState {
@@ -72,7 +74,7 @@ export function emptyFilters(): FilterState {
     armorSets: new Set(),
     classes: new Set(),
     showEquipped: true,
-    baseRolls: { min: [0, 0, 0, 0], mode: "atLeast" },
+    baseRolls: { op: "gte", lines: [null, null, null, null] },
     singularityOnly: false,
     query: "",
   };
@@ -93,9 +95,32 @@ export const FILTER_CODEC = {
     const clean = Object.fromEntries(
       Object.entries(parsed).filter(([, v]) => v !== undefined),
     ) as Partial<FilterState>;
-    return { ...emptyFilters(), ...clean };
+    const out = { ...emptyFilters(), ...clean };
+    out.baseRolls = readBaseRolls(clean.baseRolls);
+    return out;
   },
 };
+
+/** The stored Base rolls filter, current shape or G62's `{ min, mode }`
+ *  (`atLeast` → `gte`, `below` → `lt`, a 0 minimum → X). Anything else
+ *  reads the inactive default. */
+function readBaseRolls(raw: unknown): BaseRollsFilter {
+  const fallback = emptyFilters().baseRolls;
+  if (!raw || typeof raw !== "object") return fallback;
+  const r = raw as { op?: unknown; lines?: unknown; min?: unknown; mode?: unknown };
+  const ops: BaseRollsOp[] = ["gte", "gt", "eq", "lte", "lt"];
+  const tier = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 4;
+  if (typeof r.op === "string" && ops.includes(r.op as BaseRollsOp) && Array.isArray(r.lines) && r.lines.length === 4) {
+    return { op: r.op as BaseRollsOp, lines: r.lines.map((v) => (tier(v) ? v : null)) as BaseRollsFilter["lines"] };
+  }
+  if ((r.mode === "atLeast" || r.mode === "below") && Array.isArray(r.min) && r.min.length === 4) {
+    return {
+      op: r.mode === "atLeast" ? "gte" : "lt",
+      lines: r.min.map((v) => (tier(v) && v > 0 ? v : null)) as BaseRollsFilter["lines"],
+    };
+  }
+  return fallback;
+}
 export const FILTERS_STORAGE_KEY = "gs.inv.filters.v3";
 
 // ── tab state ──────────────────────────────────────────────────────────
@@ -126,7 +151,17 @@ export function baseRollPattern(p: UiPiece): number[] {
 }
 
 function baseRollsActive(b: BaseRollsFilter): boolean {
-  return b.min.some((m) => m > 0);
+  return b.lines.some((v) => v !== null);
+}
+
+function compareStage(op: BaseRollsOp, stage: number, v: number): boolean {
+  switch (op) {
+    case "gte": return stage >= v;
+    case "gt":  return stage > v;
+    case "eq":  return stage === v;
+    case "lte": return stage <= v;
+    case "lt":  return stage < v;
+  }
 }
 
 export function matchesFilters(p: UiPiece, f: FilterState): boolean {
@@ -175,8 +210,8 @@ export function matchesFilters(p: UiPiece, f: FilterState): boolean {
   if (!f.showEquipped && p.status === "equipped") return false;
   if (baseRollsActive(f.baseRolls)) {
     const stages = baseRollPattern(p);
-    const meets = f.baseRolls.min.every((m, i) => (stages[i] ?? 0) >= m);
-    if (meets !== (f.baseRolls.mode === "atLeast")) return false;
+    const { op, lines } = f.baseRolls;
+    if (!lines.every((v, i) => v === null || compareStage(op, stages[i] ?? 0, v))) return false;
   }
   // Trim before testing so a whitespace-only query is a no-op here too —
   // otherwise it filters the grid while `activeFilterCount` (which trims)

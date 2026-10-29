@@ -130,55 +130,42 @@ function ModeToggle({
   );
 }
 
-/** "at least" / "worse than" toggle of the Base rolls section — same look as
- *  the OR / AND toggle. */
-function BaseRollsModeToggle({
-  mode, onChange,
-}: { mode: BaseRollsFilter["mode"]; onChange: (m: BaseRollsFilter["mode"]) => void }) {
-  return (
-    <div className="inline-flex rounded border border-white/10 bg-black/30 p-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider">
-      {([["atLeast", "at least"], ["below", "worse than"]] as const).map(([m, label]) => {
-        const active = mode === m;
-        return (
-          <button
-            key={m}
-            onClick={() => onChange(m)}
-            className={cx(
-              "rounded-sm px-1.5 py-0.5 transition-colors",
-              active ? "bg-cyan-500/20 text-cyan-200" : "text-white/70 hover:text-white",
-            )}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+const BASE_ROLLS_OPS: [BaseRollsFilter["op"], string][] = [["gte", "≥"], ["gt", ">"], ["eq", "="], ["lte", "≤"], ["lt", "<"]];
+const SELECT_CLASS = "rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 text-[12px] text-white focus:border-cyan-400/40 focus:outline-none";
 
-/** Four 0–4 selectors (0 = any) for the sorted base-stage pattern, read
- *  "≥ a / b / c / d", best line first. */
+/** Operator selector then four X / 0–4 selectors (X = any) for the sorted
+ *  base-stage pattern, read "<op> a / b / c / d", best line first. */
 function BaseRollsInputs({
-  min, onChange,
-}: { min: BaseRollsFilter["min"]; onChange: (next: BaseRollsFilter["min"]) => void }) {
+  value, onChange,
+}: { value: BaseRollsFilter; onChange: (next: BaseRollsFilter) => void }) {
   return (
     <div className="flex items-center gap-1.5 font-mono text-[12px] text-white">
-      <span className="text-white/70">≥</span>
-      {min.map((v, i) => (
+      <select
+        value={value.op}
+        aria-label="Base rolls operator"
+        onChange={(e) => onChange({ ...value, op: e.target.value as BaseRollsFilter["op"] })}
+        className={SELECT_CLASS}
+      >
+        {BASE_ROLLS_OPS.map(([op, label]) => (
+          <option key={op} value={op}>{label}</option>
+        ))}
+      </select>
+      {value.lines.map((v, i) => (
         <span key={i} className="flex items-center gap-1.5">
           {i > 0 && <span className="text-white/40">/</span>}
           <select
-            value={v}
-            aria-label={`Line ${i + 1} minimum base tier`}
+            value={v === null ? "x" : String(v)}
+            aria-label={`Line ${i + 1} base tier`}
             onChange={(e) => {
-              const next = [...min] as BaseRollsFilter["min"];
-              next[i] = Number(e.target.value);
-              onChange(next);
+              const lines = [...value.lines] as BaseRollsFilter["lines"];
+              lines[i] = e.target.value === "x" ? null : Number(e.target.value);
+              onChange({ ...value, lines });
             }}
-            className="rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 text-[12px] text-white focus:border-cyan-400/40 focus:outline-none"
+            className={SELECT_CLASS}
           >
+            <option value="x">X</option>
             {[0, 1, 2, 3, 4].map((n) => (
-              <option key={n} value={n}>{n === 0 ? "any" : n}</option>
+              <option key={n} value={n}>{n}</option>
             ))}
           </select>
         </span>
@@ -445,16 +432,10 @@ export function FilterModal({
             </ModalSection>
           )}
 
-          <ModalSection
-            label="Base rolls"
-            right={<BaseRollsModeToggle mode={draft.baseRolls.mode} onChange={(m) => setDraft({ ...draft, baseRolls: { ...draft.baseRolls, mode: m } })} />}
-          >
-            <BaseRollsInputs
-              min={draft.baseRolls.min}
-              onChange={(min) => setDraft({ ...draft, baseRolls: { ...draft.baseRolls, min } })}
-            />
+          <ModalSection label="Base rolls">
+            <BaseRollsInputs value={draft.baseRolls} onChange={(baseRolls) => setDraft({ ...draft, baseRolls })} />
             <div className="mt-1.5 text-[10px] text-white/60">
-              Initial tiers of the sub-stats, best line first, before reforge and enhancement (Talisman / EE count as 0/0/0/0).
+              Initial tiers of the sub-stats, best line first, before reforge and enhancement. Every line must match; X = any.
             </div>
           </ModalSection>
 

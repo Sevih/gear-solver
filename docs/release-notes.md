@@ -14,6 +14,8 @@
 
 - **Inventory**: the gear grid scrolls on its own, the header stays put, and scrolling is smooth
   again on big inventories.
+- **Inventory › Filter › Base rolls**: pick an operator (≥, >, =, ≤, <) and use X for a free line;
+  every line must match (e.g. "< 2/2/2/2" never shows a 3 or a 4, "≥ 4/3/X/X" for the keepers).
 
 ## [1.17.0] — 2026-10-28
 

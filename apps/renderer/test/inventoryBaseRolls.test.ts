@@ -1,11 +1,12 @@
 // Inventory Base rolls filter (screens/inventory/filters.ts): the base stages
-// of the sub lines sorted best first, padded to 4, against "at least" or
-// "worse than" a pattern — from the wire (`BaseLevel`), reforges ignored.
+// of the sub lines sorted best first, padded to 4, compared line by line to a
+// pattern with one operator, X = any — from the wire (`BaseLevel`), reforges
+// ignored.
 import { describe, expect, it } from "vitest";
 import { parseGearPiece, type RawItem } from "@gear-solver/core";
 import { toUiPiece } from "../src/design/adapter.js";
 import {
-  FILTER_CODEC, activeFilterCount, baseRollPattern, emptyFilters, matchesFilters, type FilterState,
+  FILTER_CODEC, activeFilterCount, baseRollPattern, emptyFilters, matchesFilters, type BaseRollsFilter, type FilterState,
 } from "../src/screens/inventory/filters.js";
 
 /** A wire item whose sub lines carry these base stages (BaseLevel = stage - 1)
@@ -17,10 +18,9 @@ const item = (stages: number[], reforges: number[] = []): RawItem => ({
 } as RawItem);
 const ui = (stages: number[], reforges?: number[]) => toUiPiece(parseGearPiece(item(stages, reforges)));
 
-const withBase = (min: [number, number, number, number], mode: "atLeast" | "below"): FilterState =>
-  ({ ...emptyFilters(), baseRolls: { min, mode } });
-const AT_LEAST_3330 = withBase([3, 3, 3, 0], "atLeast");
-const BELOW_3330 = withBase([3, 3, 3, 0], "below");
+const withBase = (op: BaseRollsFilter["op"], lines: BaseRollsFilter["lines"]): FilterState =>
+  ({ ...emptyFilters(), baseRolls: { op, lines } });
+const X = null;
 
 describe("baseRollPattern", () => {
   it("sorts the wire lines best first: 1/3/3/3 reads 3/3/3/1", () => {
@@ -38,40 +38,82 @@ describe("baseRollPattern", () => {
 });
 
 describe("matchesFilters — Base rolls", () => {
-  it("at least 3/3/3/0: 3/3/3/1 passes, 3/3/2/2 doesn't", () => {
-    expect(matchesFilters(ui([3, 3, 3, 1]), AT_LEAST_3330)).toBe(true);
-    expect(matchesFilters(ui([3, 3, 2, 2]), AT_LEAST_3330)).toBe(false);
+  it("< 2-2-2-2: every line under 2, never a 3 or a 4", () => {
+    const f = withBase("lt", [2, 2, 2, 2]);
+    expect(matchesFilters(ui([3, 1, 3, 1]), f)).toBe(false);
+    expect(matchesFilters(ui([2, 2, 2, 2]), f)).toBe(false);
+    expect(matchesFilters(ui([1, 1, 1, 1]), f)).toBe(true);
   });
 
-  it("worse than 3/3/3/0: the complement", () => {
-    expect(matchesFilters(ui([3, 3, 3, 1]), BELOW_3330)).toBe(false);
-    expect(matchesFilters(ui([3, 3, 2, 2]), BELOW_3330)).toBe(true);
+  it("≤ 2-2-2-2 keeps 2/2/2/2", () => {
+    expect(matchesFilters(ui([2, 2, 2, 2]), withBase("lte", [2, 2, 2, 2]))).toBe(true);
+    expect(matchesFilters(ui([3, 2, 2, 2]), withBase("lte", [2, 2, 2, 2]))).toBe(false);
   });
 
-  it("the 4th line of a 3-line piece is 0", () => {
-    expect(matchesFilters(ui([3, 3, 3]), AT_LEAST_3330)).toBe(true);
-    expect(matchesFilters(ui([3, 3, 3]), withBase([3, 3, 3, 1], "atLeast"))).toBe(false);
+  it("≥ 4-3-X-X: best line 4, second at least 3, the rest free", () => {
+    const f = withBase("gte", [4, 3, X, X]);
+    expect(matchesFilters(ui([4, 3, 1]), f)).toBe(true);
+    expect(matchesFilters(ui([4, 4, 4, 4]), f)).toBe(true);
+    // sorted best first: 3/4/1/1 reads 4/3/1/1
+    expect(matchesFilters(ui([3, 4, 1, 1]), f)).toBe(true);
+    expect(matchesFilters(ui([3, 3, 3, 3]), f)).toBe(false);
+    expect(matchesFilters(ui([4, 2, 2, 2]), f)).toBe(false);
+  });
+
+  it("= 3-3-3-1: exactly that pattern, a 3-line piece's 4th line is 0", () => {
+    const f = withBase("eq", [3, 3, 3, 1]);
+    expect(matchesFilters(ui([1, 3, 3, 3]), f)).toBe(true);
+    expect(matchesFilters(ui([3, 3, 3]), f)).toBe(false);
+    expect(matchesFilters(ui([3, 3, 3, 2]), f)).toBe(false);
+    expect(matchesFilters(ui([4, 3, 3, 1]), f)).toBe(false);
+  });
+
+  it("> and a 0 line: < 0 never passes, ≤ 0 passes at 0 only", () => {
+    expect(matchesFilters(ui([4, 3, 3, 2]), withBase("gt", [3, X, X, X]))).toBe(true);
+    expect(matchesFilters(ui([3, 3, 3, 3]), withBase("gt", [3, X, X, X]))).toBe(false);
+    expect(matchesFilters(ui([1, 1, 1]), withBase("lt", [X, X, X, 0]))).toBe(false);
+    expect(matchesFilters(ui([1, 1, 1]), withBase("lte", [X, X, X, 0]))).toBe(true);
+    expect(matchesFilters(ui([1, 1, 1, 1]), withBase("lte", [X, X, X, 0]))).toBe(false);
   });
 
   it("reforge doesn't lift a line over the pattern", () => {
-    expect(matchesFilters(ui([3, 3, 2, 1], [0, 0, 2, 0]), AT_LEAST_3330)).toBe(false);
-    expect(matchesFilters(ui([3, 3, 2, 1], [0, 0, 2, 0]), BELOW_3330)).toBe(true);
+    expect(matchesFilters(ui([3, 3, 2, 1], [0, 0, 2, 0]), withBase("gte", [3, 3, 3, X]))).toBe(false);
   });
 
-  it("all-zero pattern is inactive in both modes and not counted", () => {
-    expect(matchesFilters(ui([1, 1, 1, 1]), withBase([0, 0, 0, 0], "below"))).toBe(true);
-    expect(activeFilterCount(withBase([0, 0, 0, 0], "below"))).toBe(0);
-    expect(activeFilterCount(AT_LEAST_3330)).toBe(1);
+  it("≥ X-X-X-X is inactive and not counted; one fixed line counts", () => {
+    expect(matchesFilters(ui([]), withBase("gte", [X, X, X, X]))).toBe(true);
+    expect(activeFilterCount(withBase("lt", [X, X, X, X]))).toBe(0);
+    expect(activeFilterCount(withBase("gte", [X, X, 0, X]))).toBe(1);
+    expect(activeFilterCount(emptyFilters())).toBe(0);
   });
 });
 
 describe("FILTER_CODEC — Base rolls", () => {
-  it("round-trips the pattern and the mode", () => {
-    expect(FILTER_CODEC.deserialize(FILTER_CODEC.serialize!(BELOW_3330)).baseRolls).toEqual(BELOW_3330.baseRolls);
+  it("round-trips the operator and the lines, X included", () => {
+    const f = withBase("lte", [4, X, 0, 2]);
+    expect(FILTER_CODEC.deserialize(FILTER_CODEC.serialize!(f)).baseRolls).toEqual(f.baseRolls);
+  });
+
+  /** A stored state in G62's shape (`min` + `mode`). */
+  const g62 = (min: number[], mode: string) =>
+    FILTER_CODEC.deserialize(JSON.stringify({ ...JSON.parse(FILTER_CODEC.serialize!(emptyFilters())), baseRolls: { min, mode } })).baseRolls;
+
+  it("migrates G62's at least: gte, a 0 minimum becomes X", () => {
+    expect(g62([3, 3, 3, 0], "atLeast")).toEqual({ op: "gte", lines: [3, 3, 3, X] });
+  });
+
+  it("migrates G62's worse than: lt, a 0 minimum becomes X", () => {
+    expect(g62([2, 2, 0, 0], "below")).toEqual({ op: "lt", lines: [2, 2, X, X] });
+    expect(g62([0, 0, 0, 0], "below")).toEqual({ op: "lt", lines: [X, X, X, X] });
+  });
+
+  it("writes the new shape only", () => {
+    const stored = JSON.parse(FILTER_CODEC.serialize!(FILTER_CODEC.deserialize(JSON.stringify({ baseRolls: { min: [3, 0, 0, 0], mode: "atLeast" } }))));
+    expect(stored.baseRolls).toEqual({ op: "gte", lines: [3, null, null, null] });
   });
 
   it("an older stored state without baseRolls reads the inactive default", () => {
     const { baseRolls: _, ...old } = emptyFilters();
-    expect(FILTER_CODEC.deserialize(FILTER_CODEC.serialize!(old as FilterState)).baseRolls).toEqual({ min: [0, 0, 0, 0], mode: "atLeast" });
+    expect(FILTER_CODEC.deserialize(FILTER_CODEC.serialize!(old as FilterState)).baseRolls).toEqual({ op: "gte", lines: [X, X, X, X] });
   });
 });
