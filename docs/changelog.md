@@ -8,6 +8,52 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔎 Inventaire : filtre « Base rolls » en toutes lettres avec inversion `not`, talismans et EE exclus, cases « +0 only » / « T0 only » / « Not reforged » (G66) (2026-10-29)
+- ✅ **Pourquoi.** Essai de G65 sur le fixe (29/10) : les symboles ≥ > = ≤ < se lisent mal dans le sélecteur ; la
+  recherche la plus fréquente, « tout ce qui n'a pas au moins trois lignes à 3 de base », ne s'écrivait pas (« < 3/3/3/X »
+  jette une 3-2-2-1 qu'il faut garder) ; et les talismans / EE, rendus 0/0/0/0 par `baseRollPattern`, passaient
+  « less than 2/2/2/2 » et polluaient la liste des pièces à vendre. Il manquait aussi trois critères simples de tri du
+  rebut : pièce à +0, sans percée, jamais reforgée.
+- ✅ **Opérateurs en lettres** (`FilterModal.tsx`) : `BASE_ROLLS_OPS` affiche `at least` (gte), `more than` (gt),
+  `exactly` (eq), `at most` (lte), `less than` (lt), même ordre et mêmes valeurs stockées ; le `title` du sélecteur
+  dit « Every line of the piece, best first, must be <op> the chosen tier; X = any. » avec l'opérateur choisi.
+- ✅ **Inversion** (`filters.ts`) : `BaseRollsFilter` gagne `not: boolean` (false par défaut) ; `matchesFilters` calcule
+  le résultat du motif puis rejette la pièce si `match === not`. Case `not` à droite des quatre sélecteurs (le
+  `Checkbox` de la modale). `not` + « at least 3/3/3/X » garde une 3-2-2-1 et rejette une 3-3-3-0. Un motif inactif
+  (quatre X) reste inactif, `not` coché ou non.
+- ✅ **Talismans et EE exclus** : quand le filtre Base rolls est actif, `hasNoRolledSubs(p)` fait échouer la pièce AVANT
+  l'inversion. Critère repris de `qualityScore` (`lib/quality.ts`), celui qui rend `quality` null : emplacement
+  Talisman ou EE (`slot` `talisman` / `exclusive` côté UI, `ooparts` / `exclusive` côté core) ou aucune sous-stat
+  (`subs.length === 0`) ; la troisième condition de `qualityScore` (pas d'étoile) n'est pas reprise, elle ne dit rien
+  des lignes tirées. `baseRollPattern` est inchangé (il rend toujours 0/0/0/0 pour ces pièces, le filtre ne le lit
+  plus pour elles).
+- ✅ **Trois cases** : `FilterState` gagne `enhanceZero` (`enhance === 0`), `breakthroughZero` (`bt === 0`) et
+  `notReforged` (`reforge.n === 0`), false par défaut, comptés chacun par `activeFilterCount`, appliqués sur tous les
+  onglets. Dans l'en-tête de la modale, à côté de « Exclude equipped gear » : « +0 only », « T0 only », « Not
+  reforged ». Les cinq cases de l'en-tête passent d'une rangée flex à une grille de trois colonnes (deux rangées) :
+  cinq `Checkbox` en `w-full` sur une rangée de modale `max-w-2xl` auraient coupé les libellés sur deux lignes.
+- ✅ **Stockage** : la clé `gs.inv.filters.v3` ne change pas. Les trois champs absents d'une session existante prennent
+  false par le recouvrement sur `emptyFilters()` déjà en place ; `readBaseRolls` lit `not === true`, false sinon (forme
+  G65 sans `not` comme migration G62).
+- ✅ **Tests** : `apps/renderer/test/inventoryBaseRolls.test.ts` (15 → 24 cas) : « less than 2/2/2/2 » ne garde ni
+  talisman ni EE, `not` + « at least 2/2/2/2 » non plus (et garde une 2-2-2-1) ; un motif inactif montre encore un
+  talisman ; `not` + « at least 3/3/3/X » garde 3-2-2-1, rejette 3-3-3-0 (et « less than 3/3/3/X » jette 3-2-2-1) ;
+  « +0 only » rejette +3, « T0 only » rejette bt 1, « Not reforged » rejette `reforge.n` 1 ; `activeFilterCount`
+  compte chaque case ; un état v3 stocké sans les trois champs ni `not` se lit avec false ; aller-retour du codec avec
+  `not`. Les attentes de migration G62 portent désormais `not: false`.
+- ✅ **Docs** : `wiki/Using-the-App.md` (la phrase de G65 passe aux opérateurs en lettres, décrit `not` avec l'exemple
+  3/3/3/X, dit que Talisman et EE ne passent jamais un filtre actif ; la liste des filtres cite les trois cases) ;
+  `docs/release-notes.md › [Unreleased]` gagne deux lignes (Base rolls en lettres avec not et pièces à gemmes exclues ;
+  les trois cases). L'entrée G65 ci-dessous reste telle quelle, c'est un journal. `docs/todo.md` n'avait pas d'item
+  correspondant : inchangé.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` (sans erreur, code 0) ; `npm test` → core « Tests 169
+  passed (169) », desktop « Tests 219 passed (219) », renderer « Tests 779 passed (779) » ; `npm run lint` → « ✖ 13
+  problems (0 errors, 13 warnings) », même compte qu'avant. Pas de rendu réel possible ici (ni `npm run dev` ni
+  Electron) : la modale n'a été vérifiée qu'à la lecture.
+- ⏳ **Sevih** sur le fixe : Inventaire › Filter › Base rolls `not` + « at least 3/3/3/X » → les 3-2-2-1 restent, les
+  3-3-3-x partent, aucun talisman ni EE ; « less than 2/2/2/2 » sans talisman ni EE ; l'en-tête de la modale (deux
+  rangées de cases) à juger à l'œil ; « +0 only » + « Not reforged » pour le rebut.
+
 ### 🔎 Inventaire : filtre « Base rolls » refait, un opérateur (≥, >, =, ≤, <) appliqué ligne à ligne et X libre, à la place de « at least » / « worse than » (G65) (2026-10-29)
 - ✅ **Pourquoi.** Retour du 29/10 sur le fixe : le « worse than 2/2/2/2 » de G62 voulait dire « au moins une ligne sous
   son minimum », si bien qu'une 3/3/1/1 restait visible alors que Sevih y lit « aucune ligne à 2 ou plus ». La règle

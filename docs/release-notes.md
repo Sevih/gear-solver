@@ -12,7 +12,10 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Inventory › Filter › Base rolls**: the operators read in words (at least, more than, exactly,
+  at most, less than), a **not** box keeps the pieces that don't match (e.g. "not at least
+  3/3/3/X"), and Talismans / EE no longer slip through.
+- **Inventory › Filter**: new **+0 only**, **T0 only** and **Not reforged** boxes.
 
 ## [1.18.0] — 2026-10-29
 

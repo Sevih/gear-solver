@@ -130,19 +130,24 @@ function ModeToggle({
   );
 }
 
-const BASE_ROLLS_OPS: [BaseRollsFilter["op"], string][] = [["gte", "≥"], ["gt", ">"], ["eq", "="], ["lte", "≤"], ["lt", "<"]];
+const BASE_ROLLS_OPS: [BaseRollsFilter["op"], string][] = [
+  ["gte", "at least"], ["gt", "more than"], ["eq", "exactly"], ["lte", "at most"], ["lt", "less than"],
+];
 const SELECT_CLASS = "rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 text-[12px] text-white focus:border-cyan-400/40 focus:outline-none";
 
 /** Operator selector then four X / 0–4 selectors (X = any) for the sorted
- *  base-stage pattern, read "<op> a / b / c / d", best line first. */
+ *  base-stage pattern, read "<op> a / b / c / d", best line first, and the
+ *  `not` box that inverts it. */
 function BaseRollsInputs({
   value, onChange,
 }: { value: BaseRollsFilter; onChange: (next: BaseRollsFilter) => void }) {
+  const opLabel = BASE_ROLLS_OPS.find(([op]) => op === value.op)?.[1] ?? value.op;
   return (
     <div className="flex items-center gap-1.5 font-mono text-[12px] text-white">
       <select
         value={value.op}
         aria-label="Base rolls operator"
+        title={`Every line of the piece, best first, must be ${opLabel} the chosen tier; X = any.`}
         onChange={(e) => onChange({ ...value, op: e.target.value as BaseRollsFilter["op"] })}
         className={SELECT_CLASS}
       >
@@ -170,6 +175,9 @@ function BaseRollsInputs({
           </select>
         </span>
       ))}
+      <span className="ml-2 font-sans">
+        <Checkbox label="not" checked={value.not} onChange={() => onChange({ ...value, not: !value.not })} />
+      </span>
     </div>
   );
 }
@@ -255,7 +263,7 @@ export function FilterModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── header: title + status toggles + close ── */}
-        {/* Singularity-only / Exclude-equipped live up here (not as a body
+        {/* Singularity-only / Exclude-equipped / +0 / T0 / Not reforged live up here (not as a body
             section) because they're meta toggles that the player will flip
             independently of the per-dimension filters below — keeping them
             visible at all times means the status of the current view is
@@ -265,9 +273,12 @@ export function FilterModal({
             <img src="/img/ui/inven/CM_Btn_Filter.webp" alt="" className="h-5 w-5" />
             <span className="text-[13px] font-semibold text-white">Filters</span>
           </div>
-          <div className="ml-8 flex flex-1 items-center gap-4">
+          <div className="ml-8 grid flex-1 grid-cols-3 items-center gap-x-4">
             <Checkbox label="Singularity only" checked={draft.singularityOnly} tone="violet" onChange={() => setDraft({ ...draft, singularityOnly: !draft.singularityOnly })} />
             <Checkbox label="Exclude equipped gear" checked={!draft.showEquipped} onChange={() => setDraft({ ...draft, showEquipped: !draft.showEquipped })} />
+            <Checkbox label="+0 only" checked={draft.enhanceZero} onChange={() => setDraft({ ...draft, enhanceZero: !draft.enhanceZero })} />
+            <Checkbox label="T0 only" checked={draft.breakthroughZero} onChange={() => setDraft({ ...draft, breakthroughZero: !draft.breakthroughZero })} />
+            <Checkbox label="Not reforged" checked={draft.notReforged} onChange={() => setDraft({ ...draft, notReforged: !draft.notReforged })} />
           </div>
           <button
             onClick={onClose}
@@ -435,7 +446,7 @@ export function FilterModal({
           <ModalSection label="Base rolls">
             <BaseRollsInputs value={draft.baseRolls} onChange={(baseRolls) => setDraft({ ...draft, baseRolls })} />
             <div className="mt-1.5 text-[10px] text-white/60">
-              Initial tiers of the sub-stats, best line first, before reforge and enhancement. Every line must match; X = any.
+              Initial tiers of the sub-stats, best line first, before reforge and enhancement. Every line must match; X = any. Not inverts the pattern. Talismans and EE never pass.
             </div>
           </ModalSection>
 

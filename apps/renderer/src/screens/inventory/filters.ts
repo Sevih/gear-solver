@@ -45,10 +45,17 @@ export interface FilterState {
    *  them — exposed in the modal as an "Exclude equipped gear" checkbox
    *  (inverted polarity to match the in-game wording). */
   showEquipped: boolean;
+  /** "+0 only" — enhance level 0. */
+  enhanceZero: boolean;
+  /** "T0 only" — no breakthrough (`bt === 0`). */
+  breakthroughZero: boolean;
+  /** "Not reforged" — no reforge proc spent (`reforge.n === 0`). */
+  notReforged: boolean;
   /** Base rolls pattern — the base stages of the piece's sub lines sorted
    *  best first, padded with 0 to 4 lines, compared line by line to `lines`
    *  with `op`: every line must satisfy `stage <op> value`, a `null` line
-   *  (X) is free. Four `null` lines = inactive. */
+   *  (X) is free, `not` inverts the result. Four `null` lines = inactive.
+   *  Talisman / EE (no rolled subs) fail an active pattern, inverted or not. */
   baseRolls: BaseRollsFilter;
   singularityOnly: boolean;
   query: string;
@@ -60,6 +67,8 @@ export type BaseRollsLine = number | null;
 export interface BaseRollsFilter {
   op: BaseRollsOp;
   lines: [BaseRollsLine, BaseRollsLine, BaseRollsLine, BaseRollsLine];
+  /** Inverts the pattern: the piece passes when it does NOT match it. */
+  not: boolean;
 }
 
 export function emptyFilters(): FilterState {
@@ -74,7 +83,10 @@ export function emptyFilters(): FilterState {
     armorSets: new Set(),
     classes: new Set(),
     showEquipped: true,
-    baseRolls: { op: "gte", lines: [null, null, null, null] },
+    enhanceZero: false,
+    breakthroughZero: false,
+    notReforged: false,
+    baseRolls: { op: "gte", lines: [null, null, null, null], not: false },
     singularityOnly: false,
     query: "",
   };
@@ -102,21 +114,26 @@ export const FILTER_CODEC = {
 };
 
 /** The stored Base rolls filter, current shape or G62's `{ min, mode }`
- *  (`atLeast` → `gte`, `below` → `lt`, a 0 minimum → X). Anything else
- *  reads the inactive default. */
+ *  (`atLeast` → `gte`, `below` → `lt`, a 0 minimum → X). A missing `not`
+ *  reads false. Anything else reads the inactive default. */
 function readBaseRolls(raw: unknown): BaseRollsFilter {
   const fallback = emptyFilters().baseRolls;
   if (!raw || typeof raw !== "object") return fallback;
-  const r = raw as { op?: unknown; lines?: unknown; min?: unknown; mode?: unknown };
+  const r = raw as { op?: unknown; lines?: unknown; not?: unknown; min?: unknown; mode?: unknown };
   const ops: BaseRollsOp[] = ["gte", "gt", "eq", "lte", "lt"];
   const tier = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 4;
   if (typeof r.op === "string" && ops.includes(r.op as BaseRollsOp) && Array.isArray(r.lines) && r.lines.length === 4) {
-    return { op: r.op as BaseRollsOp, lines: r.lines.map((v) => (tier(v) ? v : null)) as BaseRollsFilter["lines"] };
+    return {
+      op: r.op as BaseRollsOp,
+      lines: r.lines.map((v) => (tier(v) ? v : null)) as BaseRollsFilter["lines"],
+      not: r.not === true,
+    };
   }
   if ((r.mode === "atLeast" || r.mode === "below") && Array.isArray(r.min) && r.min.length === 4) {
     return {
       op: r.mode === "atLeast" ? "gte" : "lt",
       lines: r.min.map((v) => (tier(v) && v > 0 ? v : null)) as BaseRollsFilter["lines"],
+      not: false,
     };
   }
   return fallback;
@@ -148,6 +165,12 @@ export function baseRollPattern(p: UiPiece): number[] {
   const stages = p.subs.map((s) => baseStage({ ticks: s.lv, reforgeTicks: s.reforges })).sort((a, b) => b - a).slice(0, 4);
   while (stages.length < 4) stages.push(0);
   return stages;
+}
+
+/** No rolled sub line to compare — the same test that makes the Quality
+ *  score null (`qualityScore`): a Talisman / EE slot, or no subs at all. */
+function hasNoRolledSubs(p: UiPiece): boolean {
+  return p.slot === "talisman" || p.slot === "exclusive" || p.subs.length === 0;
 }
 
 function baseRollsActive(b: BaseRollsFilter): boolean {
@@ -208,10 +231,17 @@ export function matchesFilters(p: UiPiece, f: FilterState): boolean {
   // Equipped pieces hidden when the player ticked "Exclude equipped gear"
   // in the modal — useful when looking for swappable inventory.
   if (!f.showEquipped && p.status === "equipped") return false;
+  if (f.enhanceZero && p.enhance !== 0) return false;
+  if (f.breakthroughZero && p.bt !== 0) return false;
+  if (f.notReforged && p.reforge.n !== 0) return false;
   if (baseRollsActive(f.baseRolls)) {
+    // Gem-bearing pieces have no pattern to read (0/0/0/0 would pass a
+    // "less than") — they fail before the inversion, like Quality.
+    if (hasNoRolledSubs(p)) return false;
     const stages = baseRollPattern(p);
-    const { op, lines } = f.baseRolls;
-    if (!lines.every((v, i) => v === null || compareStage(op, stages[i] ?? 0, v))) return false;
+    const { op, lines, not } = f.baseRolls;
+    const match = lines.every((v, i) => v === null || compareStage(op, stages[i] ?? 0, v));
+    if (match === not) return false;
   }
   // Trim before testing so a whitespace-only query is a no-op here too —
   // otherwise it filters the grid while `activeFilterCount` (which trims)
@@ -236,6 +266,9 @@ export function activeFilterCount(f: FilterState): number {
   if (f.armorSets.size > 0) n++;
   if (f.classes.size > 0) n++;
   if (!f.showEquipped) n++;
+  if (f.enhanceZero) n++;
+  if (f.breakthroughZero) n++;
+  if (f.notReforged) n++;
   if (baseRollsActive(f.baseRolls)) n++;
   if (f.singularityOnly) n++;
   if (f.query.trim() !== "") n++;
