@@ -660,7 +660,8 @@ at **+10**, at **its own reforge count** (`maxReforgesOf`: its star under 6★, 
 a 6★), **with no passive**, whatever the mode.
 With the **Transistone potential** option (`reroll = true`), the reroll potential
 (`applyRerollPotential`, `lib/solver/reroll.ts`: one line of a 6★ `unique` piece with
-4 substats and no stage 4 raised to base stage 4, reforges kept, LV6 cap) goes
+4 substats raised to base stage 4 — to stage 3 when the piece already has a stage-4
+line —, reforges kept, LV6 cap) goes
 **before** the reforges; it also applies in `disable` mode.
 
 **Talisman slot (ooparts) and EE (exclusive) explicitly excluded**: their

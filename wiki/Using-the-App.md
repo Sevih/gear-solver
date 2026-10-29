@@ -38,8 +38,10 @@ A dense, searchable table of every gear piece you own.
   match anything in the current view are greyed out so you never zero out the grid by accident.
 - **Reachable quality** (in the Filter modal, right after Quality): the tier a piece would reach
   if a Transistone raised its best substat line to stage 4 — the "→ N reachable" of the detail
-  panel. Only a 6★ Legendary with four lines and none at stage 4 yet has that potential; any other
-  piece counts at its current tier. A **Good** piece that a reroll would push past 85 % shows under
+  panel. Only a 6★ Legendary with four lines has that potential: one line can go up to stage 4,
+  or up to stage 3 when the piece already has a stage-4 line (a 3/3/3/3 can become 4/3/3/3, a
+  4/4/3/2 can become 4/4/3/3); a 4/3/3/3 or a 4/4/3/3 has nothing left to gain. Any other piece
+  counts at its current tier. A **Good** piece that a reroll would push past 85 % shows under
   **Excellent** here and not under Quality's Excellent. Talismans and EE have no quality score and
   never match.
 - **Base rolls** (in the Filter modal): the initial tiers of a piece's substats, best line first,
@@ -198,8 +200,10 @@ results, the bottom band shows the selected build's pieces.
   reforges (the talisman, which stops at +10, only needs +10; a piece that can't ascend only
   needs +10 and its own reforges — a 5★ at +10 with 5 reforges counts as maxed). Use it to answer "what's my best build with zero further investment?".
 - **Transistone potential** — on a 6★ Legendary with no stage-4 substat, a Transistone can
-  reroll one line up to stage 4 (a 5 % draw per pass, reforges kept). This toggle previews the
-  best case: the hero's highest-priority line (else the largest roll) raised to stage 4, marked
+  reroll one line up to stage 4 (a 5 % draw per pass, reforges kept); a piece already holding a
+  stage-4 line can't get a second one but can still raise a line to stage 3 (a 3/3/3/3 can become
+  4/3/3/3, a 4/4/3/2 can become 4/4/3/3). This toggle previews the best case: the hero's
+  highest-priority line (else the largest roll) raised that far, marked
   `T+n` on the result cards. Works with or without a reforge mode; ignored under **Maxed only**.
 - **Equipped items** — a three-way control for which gear worn by *other* heroes the solver
   may pull in: **None** (only the hero's own gear + free gear), **≤ Lower** (default — also

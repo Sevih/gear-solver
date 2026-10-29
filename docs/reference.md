@@ -673,7 +673,8 @@ juste l'affichage. Une pièce **déjà ascended** garde son **vrai roll** (jamai
 écrasé par le plafond). Talisman/EE intouchés (pas d'ascension).
 Avec l'option **Transistone potential** (`reroll = true`), le potentiel de reroll
 (`applyRerollPotential`, `lib/solver/reroll.ts` : une ligne d'une 6★ `unique` à 4
-sous-stats sans palier 4 montée au palier de base 4, reforges conservées, plafond LV6)
+sous-stats montée au palier de base 4 — au palier 3 si la pièce a déjà une ligne au
+palier 4 —, reforges conservées, plafond LV6)
 passe **avant** les reforges ; il s'applique aussi en mode `disable`.
 
 **Slot Talisman (ooparts) et EE (exclusive) explicitement exclus** : leur

@@ -171,8 +171,8 @@ export function baseRollPattern(p: UiPiece): number[] {
   return stages;
 }
 
-/** The tier the piece would reach if its best line went up to stage 4 with a
- *  Transistone (`QualityScore.reachable`) — its current tier when it has no
+/** The tier the piece would reach if its best line went up to stage 4 (3 when
+ *  it already has a stage-4 line) with a Transistone (`QualityScore.reachable`) — its current tier when it has no
  *  such potential, null when it has no quality score (Talisman / EE, un-rolled). */
 export function reachableTier(p: UiPiece): QualityTier | null {
   const q = p.quality;

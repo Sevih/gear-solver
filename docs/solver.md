@@ -305,7 +305,9 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
 - **Transistone potential** (`rerollPotential`, toggle de la toolbar à côté de Maxed only, **défaut
   off**) — projette le potentiel de reroll Transistone (`lib/solver/reroll.ts`, règle lue dans le
   client en tête du module) : une 6★ Légendaire à 4 sous-stats **sans ligne au palier 4** monte UNE
-  ligne jusqu'au palier de base 4 (+1 à +3 ticks, reforges conservées, valeur plafonnée à LV6). La
+  ligne jusqu'au palier de base 4 (+1 à +3 ticks, reforges conservées, valeur plafonnée à LV6) ; une
+  pièce qui a **déjà** une ligne au palier 4 n'en reçoit pas de deuxième mais monte une ligne jusqu'au
+  palier 3 (4/4/3/2 → 4/4/3/3 ; 4/3/3/3 et 4/4/3/3 n'ont rien à gagner). La
   ligne : la sous-stat de plus forte priorité du héros (jamais une priorité négative), sans priorité
   ou à égalité la plus grande valeur normalisée (`ROLL_NORMS`). Appliqué par
   `projectPieceForReforge` **avant** les reforges, avec ou sans mode reforge, **jamais sous Maxed

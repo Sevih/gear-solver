@@ -20,8 +20,10 @@
  *    ("Up to {0} sub-options on Legendary 6★ gear can be applied up to Stage
  *    {1}") with `GetSubOptionTopLevelMaxCount` (`CUtilUI.cs:584-587`, MaxCount of
  *    level 3 = 1) and the group's max level + 1 = 4. So ONE line at stage 4 per
- *    piece: a piece that already has one (the native 4/4/3/3 and the 4/3/3/3
- *    drops) gains nothing.
+ *    piece: a piece without one can bring one line to stage 4; a piece that
+ *    already has one can't draw a second, but levels 0/1/2 have no limit, so a
+ *    line still climbs to stage 3 (4/4/3/2 → 4/4/3/3, 3/3/3/3 → 4/3/3/3). The
+ *    native 4/4/3/3 and the 4/3/3/3 drops gain nothing.
  *  - Reforges are kept (SYS_OPTION_REPLACE_TOOLTIP_01 "Current reforge values
  *    will be maintained"): the reroll changes the line's base level
  *    (`WSSubOption.BaseLevel`), its reforge ticks stay on top. The value still
@@ -36,14 +38,15 @@
  *    keeps or discards the result (`item/subOptionChange`, `IsSelected`).
  *
  * The draw is random (5 % per pass for stage 4, and the stat itself can
- * change), so this module models the CEILING — the best line at stage 4 — the
- * same way the reforge projection models max rolls. Pure, no React, no IO.
+ * change), so this module models the CEILING — the best line at stage 4, or 3
+ * on a piece that already has a stage-4 line — the same way the reforge projection models max rolls. Pure, no React, no IO.
  */
 import type { GameData, GearPiece, RolledStat } from "@gear-solver/core";
 import { DEFAULT_RULES, gameRulesOf } from "@gear-solver/core";
 import { ROLL_NORMS, STAT_TO_PRIORITY } from "../statRegistry.js";
 
-/** Base stage a Transistone can bring one line to (base level 3 + 1). */
+/** Base stage a Transistone can bring one line to (base level 3 + 1) — on
+ *  a piece without a stage-4 line; one stage lower on a piece that has one. */
 export const REROLL_TOP_STAGE = 4;
 
 /** How the line to raise is picked: the hero's substat priority (axis keys,
@@ -72,13 +75,14 @@ export function rerollEligible(piece: GearPiece): boolean {
   return piece.star === 6 && piece.rarity === "unique" && piece.subs.length === 4;
 }
 
-/** Ticks each line would gain at stage 4 (0 = nothing to gain: already at
- *  stage 4, or held by the LV6 value cap), or null when the piece can't climb
- *  at all (not eligible, or one line already at stage 4). */
+/** Ticks each line would gain by Transistone (0 = nothing to gain: already at
+ *  the target stage, or held by the LV6 value cap), or null when the piece is
+ *  not eligible. The target stage is 4 on a piece without a stage-4 line, 3 on
+ *  a piece that already has one (one stage-4 line per piece). */
 export function rerollGains(piece: GearPiece, maxTicksPerSub: number = DEFAULT_RULES.reforge.maxTicksPerSub): number[] | null {
   if (!rerollEligible(piece)) return null;
-  if (piece.subs.some((s) => baseStage(s) >= REROLL_TOP_STAGE)) return null;
-  return piece.subs.map((s) => Math.max(0, Math.min(REROLL_TOP_STAGE - baseStage(s), maxTicksPerSub - (s.ticks ?? 0))));
+  const target = piece.subs.some((s) => baseStage(s) >= REROLL_TOP_STAGE) ? REROLL_TOP_STAGE - 1 : REROLL_TOP_STAGE;
+  return piece.subs.map((s) => Math.max(0, Math.min(target - baseStage(s), maxTicksPerSub - (s.ticks ?? 0))));
 }
 
 /** The largest gain on any line — what the "reachable" quality adds. 0 when
@@ -89,7 +93,7 @@ export function rerollMaxGain(piece: GearPiece, maxTicksPerSub?: number): number
 }
 
 /** The line a Transistone would raise, and by how much, or null (piece not
- *  eligible, a line already at stage 4, no line with anything to gain).
+ *  eligible, no line with anything to gain).
  *  With a priority: the line whose stat weighs most for the hero — never one
  *  ranked below zero (no point spending a Transistone on it); without one, or
  *  between equal weights: the line of largest normalized value
@@ -118,7 +122,8 @@ export function rerollPotential(piece: GearPiece, game: GameData | null, pick: R
 }
 
 /** The piece with its Transistone potential applied (`rerollPotential`): the
- *  picked line's base climbs to stage 4, its reforge ticks unchanged, its value
+ *  picked line's base climbs by `pot.ticks` (to stage 4, or 3 on a piece that
+ *  already has a stage-4 line), its reforge ticks unchanged, its value
  *  scaled per tick. The piece itself when there is no potential. */
 export function applyRerollPotential(piece: GearPiece, game: GameData | null, pick: RerollPick): GearPiece {
   const pot = rerollPotential(piece, game, pick);

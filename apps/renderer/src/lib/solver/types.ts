@@ -70,8 +70,8 @@ export interface SolveFilters {
      *  slots. Absent → treated as true for back-compat with older payloads. */
     allowBrokenSets?: boolean;
     /** Project the Transistone potential (`lib/solver/reroll.ts`): one
-     *  substat line of a 6★ Legendary without a stage-4 line climbs to stage
-     *  4. Skipped under `onlyMaxed`, like the reforge projection. Absent →
+     *  substat line of a 6★ Legendary climbs to stage 4 (to stage 3 when the
+     *  piece already has a stage-4 line). Skipped under `onlyMaxed`, like the reforge projection. Absent →
      *  false (payloads from before the field). */
     rerollPotential?: boolean;
   };

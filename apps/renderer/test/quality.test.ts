@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { EquipmentTable, GearPiece, GearSlot, RolledStat } from "@gear-solver/core";
 import { toUiPiece, type UiPiece } from "../src/design/adapter.js";
-import { gearPieceQuality, gearPieceQualityTier, qualityScore, qualityTierFromScore, type QualityTier } from "../src/lib/quality.js";
+import { gearPieceQuality, gearPieceQualityTier, qualityScore, qualityTierFromScore, type QualityScore, type QualityTier } from "../src/lib/quality.js";
 
 const equipment = JSON.parse(
   readFileSync(new URL("../../../data/derived/equipment.json", import.meta.url), "utf8"),
@@ -65,7 +65,8 @@ describe("qualityScore — the rule", () => {
 
   it("gearPieceQualityTier keeps its signature and reads the same rule", () => {
     const p = piece("gloves", 6, 3, [5, 4, 4, 2]);
-    expect(gearPieceQuality(p)).toEqual(qualityScore("gloves", 6, 3, [5, 4, 4, 2]));
+    // Its 2 can still climb to stage 3 beside the stage-4 lines: +1 reachable.
+    expect(gearPieceQuality(p)).toEqual(qualityScore("gloves", 6, 3, [5, 4, 4, 2], 1));
     expect(gearPieceQualityTier(p)).toBe("excellent"); // 15/17 = 88 %
     expect(gearPieceQualityTier(piece("ooparts", 6, 0, [4, 4, 3, 3]))).toBeNull();
   });
@@ -82,6 +83,12 @@ describe("reachable — the score with the Transistone potential", () => {
     expect(gearPieceQuality(piece("helmet", 6, 0, [3, 3, 3, 3]))?.reachable).toBe(13);
     expect(gearPieceQuality(piece("helmet", 6, 0, [4, 3, 3, 3]))).not.toHaveProperty("reachable");
     expect(gearPieceQuality(piece("helmet", 6, 0, [4, 4, 3, 3]))).not.toHaveProperty("reachable");
+  });
+
+  it("gearPieceQuality: a 4/4/3/2 still raises its 2 to stage 3 → 14/14, Perfect", () => {
+    const q = gearPieceQuality(piece("helmet", 6, 0, [4, 4, 3, 2]));
+    expect(q).toEqual({ current: 13, max: 14, pct: 93, tier: "excellent", reachable: 14 });
+    expect(qualityTierFromScore(q!.reachable!, q!.max)).toBe("perfect");
   });
 
   it("only on a 6★ Legendary", () => {
@@ -114,6 +121,13 @@ describe("toUiPiece — precomputed quality and search text", () => {
 });
 
 describe("the three former quality paths agree with the merged one", () => {
+  // The former copies had no Transistone potential: compare the current score.
+  const withoutReachable = (q: QualityScore | null) => {
+    if (!q) return q;
+    const { reachable, ...current } = q;
+    return current;
+  };
+
   // Deterministic spread of tick layouts / reforge counts: 0..4 subs, 1..6
   // ticks each, 0..9 reforges.
   const layouts: Array<{ ticks: number[]; reforges: number }> = [];
@@ -130,7 +144,7 @@ describe("the three former quality paths agree with the merged one", () => {
         const g = piece(meta.slot as GearSlot, meta.star ?? null, reforges, ticks, Number(id));
         const ui = toUiPiece(g);
         const legacyUi = legacyUiQuality(ui);
-        expect(ui.quality).toEqual(legacyUi);
+        expect(withoutReachable(ui.quality)).toEqual(legacyUi);
         expect(gearPieceQualityTier(g)).toBe(legacyGearPieceQualityTier(g));
         expect(legacyGearPieceQualityTier(g)).toBe(legacyUi?.tier ?? null);
         if (ui.quality) scored++;

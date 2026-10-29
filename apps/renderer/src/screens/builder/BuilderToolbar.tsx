@@ -155,7 +155,7 @@ export function BuilderToolbar({
           label="Transistone potential"
           on={filters.options.rerollPotential ?? false}
           onClick={() => dispatch({ type: "setOption", key: "rerollPotential", value: !(filters.options.rerollPotential ?? false) })}
-          title="Project the best eligible substat line up to level 4 — a 6★ Legendary without a stage-4 line can reroll one line to stage 4 by Transistone (a 5 % draw per pass; reforge ticks are kept). The line: the hero's highest-priority substat, else the largest roll. Works with or without a reforge mode; ignored under Maxed only (no extrapolation)."
+          title="Project the best eligible substat line up to level 4 — a 6★ Legendary without a stage-4 line can reroll one line to stage 4 by Transistone (a 5 % draw per pass; reforge ticks are kept); one that already has a stage-4 line can still raise one line to stage 3. The line: the hero's highest-priority substat, else the largest roll. Works with or without a reforge mode; ignored under Maxed only (no extrapolation)."
         />
         <ToolbarDivider />
         <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>

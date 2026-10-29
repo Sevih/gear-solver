@@ -38,7 +38,8 @@ export interface SolverOptions {
    *  part of a 2pc/4pc — and lets the solver pre-prune the armor pools. */
   allowBrokenSets: boolean;
   /** Transistone potential — project the best eligible substat line of each
-   *  6★ Legendary up to stage 4 (`lib/solver/reroll.ts`). Off by default. */
+   *  6★ Legendary up to stage 4, or 3 when the piece already has a stage-4
+   *  line (`lib/solver/reroll.ts`). Off by default. */
   rerollPotential: boolean;
 }
 

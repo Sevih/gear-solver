@@ -162,7 +162,7 @@ export function pieceReforgePlan(
  *  main-stat re-scale (`projectMainToCeiling`) + substat reforge ticks
  *  (`simulateReforges`) up to the piece's budget in that mode. With `reroll`,
  *  the Transistone potential (`applyRerollPotential`: one line's base up to
- *  stage 4) goes first, so the reforge ticks then spread under the LV6 cap of
+ *  stage 4, or 3 beside a stage-4 line) goes first, so the reforge ticks then spread under the LV6 cap of
  *  the raised line. `disable` without `reroll`, and Talisman/EE, return the
  *  piece untouched. Shared by `precomputeContext` (pool scoring) and the
  *  Builder's bottom gear band (display), so the previewed card matches the

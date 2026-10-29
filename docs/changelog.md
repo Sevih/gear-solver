@@ -8,6 +8,33 @@
 
 ## Items de backlog clôturés (index)
 
+### 💎 Transistone : une pièce qui a déjà un palier 4 peut encore monter une ligne au palier 3 (G71) (2026-10-29)
+- ✅ **Pourquoi.** Règle redite par Sevih le 29/10 : une pièce sans ligne au palier 4 peut en monter UNE au palier 4 ;
+  une pièce qui en a déjà une ne peut pas en recevoir une deuxième, mais peut monter une ligne au palier 3 (4/4/3/2 →
+  4/4/3/3, 3/3/3/3 → 4/3/3/3). `rerollGains` rendait null dès qu'une ligne était au palier 4 : une 4/4/3/2 sortait de
+  « Reachable › Perfect » et perdait sa projection Transistone dans le Builder. C'est la conséquence directe de la règle
+  du client déjà notée en tête du module (MaxCount 1 pour le niveau 3 = palier 4, niveaux 0/1/2 sans limite) ; le
+  commentaire d'en-tête le dit maintenant.
+- ✅ **Comment.** `apps/renderer/src/lib/solver/reroll.ts` : palier cible 4 sans ligne au palier 4, 3 sinon ; par ligne
+  `max(0, min(cible − baseStage, cap LV6))` ; null seulement si la pièce est inéligible. Une 4/4/3/3 ou une 4/3/3/3
+  rend des gains tous à 0 : `rerollMaxGain` 0, `reachable` absent, `rerollPotential` null, comme avant. Choix de la ligne
+  inchangé ; `applyRerollPotential` monte bien la ligne de `pot.ticks` (pas « jusqu'à 4 » en dur), donc rien à y changer
+  hors commentaire. Textes d'accord : `QUALITY_REACHABLE_HELP` (`lib/quality.ts`), infobulle « Transistone potential »
+  de `BuilderToolbar.tsx`, commentaires de `quality.ts`, `types.ts`, `builderFilters.ts`, `engine.ts` et
+  `screens/inventory/filters.ts` ; `wiki/Using-the-App.md` (« Reachable quality » et « Transistone potential », avec les
+  deux exemples de Sevih), `wiki/Engine-Reference.md` et ses miroirs `docs/reference.md`, `docs/solver.md`.
+- ✅ **Tests.** `apps/renderer/test/reroll.test.ts` (20) : 4/4/3/2 → gains [0,0,0,1], max 1 ; 3/3/3/3 → [1,1,1,1], max 1 ;
+  4/4/3/3 et 4/3/3/3 → gains tous 0, max 0 ; 4/4/1/1 → [0,0,2,2] ; 5★ et 3 lignes → null ; plafond LV6 respecté à côté
+  d'une ligne au palier 4 sur des lignes reforgées ; projection d'une ligne reforgée de base 1 → 3 (pas 4) à côté de
+  deux paliers 4. `apps/renderer/test/quality.test.ts` : 4/4/3/2 → `reachable` 14/14, palier Perfect ; le test de
+  signature passe le gain de 1 de la 5/4/4/2 ; la comparaison aux trois anciennes copies (sans potentiel Transistone)
+  porte sur le score courant, `reachable` mis de côté — ses dispositions synthétiques ont toutes une ligne ≥ 4 et
+  comptaient sur l'ancien null. `npm run typecheck` : `tsc --noEmit` sans erreur ; `npm test` : `Tests  169 passed
+  (169)`, `Tests  219 passed (219)`, `Tests  819 passed (819)` ; `npm run lint` : `✖ 13 problems (0 errors, 13
+  warnings)`, comme avant.
+- ⏳ **Sevih, sur le fixe** : Inventaire › Reachable quality › Perfect → une 4/4/3/2 6★ Legendary y apparaît ; Builder ›
+  « Transistone potential » → sa ligne au palier 2 porte `T+1`, une 4/4/3/3 ne bouge pas.
+
 ### 🐞 Inventaire : drill de Home respecté, preset de filtres visible hors portée, recherche gardée au Load, compte d'import exact (G70) (2026-10-29)
 - ✅ **Quoi.** Les quatre (b) de l'audit G69, tranchés par Sevih le 29/10. Chaque rejeu du todo est devenu un test qui
   échoue sans la correction, puis passe.
