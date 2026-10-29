@@ -8,6 +8,57 @@
 
 ## Items de backlog clôturés (index)
 
+### 🐞 Audit de bugs sur `main` (1.19.0) : deux corrections sûres, le reste au todo (G69) (2026-10-29)
+- ✅ **Méthode.** Lecture du code récent (G61 à G68) puis des modules listés (Inventaire, clés `gs.*`, presets, solveur,
+  desktop, `parse.ts`) ; chaque soupçon prouvé par un test vitest ou un rejeu `npx tsx` sur les vrais modules avec des
+  données factices avant d'être écrit. Classement : (a) sûr et petit → corrigé ici ; (b) prouvé mais plus large ou à
+  trancher, (c) plausible non prouvé → `docs/todo.md`, section « Bugs trouvés par l'audit du 2026-10-29 (G69) ».
+- ✅ **(a) Presets du Builder : une entrée illisible ne cache plus toutes les autres.**
+  `apps/renderer/src/lib/storage/filterPresets.ts` `loadFilterPresets` : une seule entrée sans `filters` (sauvegarde
+  retouchée à la main, fusionnée par `applyBackup`, qui n'exige qu'un `id`) faisait lever `fromSerialized`
+  (`f.excludedHeroes` sur undefined) et le `catch` global rendait `{}` : plus aucun preset au Builder, et le premier
+  « Save » suivant écrivait cette carte vide par-dessus les bons. Rejeu `npx tsx` : un preset local, import d'un
+  `{ id: "x", name: "broken" }` → message « 1 preset », puis `loadFilterPresets()` → aucune clé. Correction : chaque
+  entrée passe par un `try`, une entrée qui lève est sautée (`flatMap`). Test `apps/renderer/test/filterPresets.test.ts`
+  (+2 : entrée sans `filters` sautée, les autres héros et presets chargés ; import d'une sauvegarde abîmée qui laisse
+  le preset local lisible) : 2 échecs sans la correction, 12/12 avec.
+- ✅ **(a) Date des fichiers exportés en heure locale.** `design/settings/BackupPane.tsx` (`gear-solver-backup-…`) et
+  `screens/home/ExportRosterButton.tsx` (`outerpedia-roster-…`) prenaient `toISOString().slice(0, 10)`, le jour UTC :
+  exporté à 00:30 à Paris le 30/10, le fichier s'appelait `…-2026-10-29.json` (rejeu `TZ=Europe/Paris`). Nouveau
+  `apps/renderer/src/lib/dateStamp.ts`, `localDateStamp(ms)` (`getFullYear` / `getMonth` / `getDate`), appelé aux deux
+  endroits. Test `apps/renderer/test/dateStamp.test.ts` (2) : Paris 00:30, l'ancienne expression y rend le 29
+  (assertion gardée dans le test) et `localDateStamp` le 30 ; Los Angeles 23:30 (UTC au lendemain) → le jour même.
+- ✅ **(b) et (c) : 4 (b), 2 (c)**, au todo. Le plus lourd : un clic sur un palier de Home peut ouvrir l'Inventaire
+  non filtré (l'auto-prune élague le drill avec les disponibilités de l'onglet quitté). Puis : un preset de filtres
+  appliqué hors de sa portée (emplacement d'un autre onglet, Main / Sub / Set / Class absents) vide la grille sans
+  puce visible ; Load efface la recherche en cours ; l'import compte des entrées que le chargeur jette. En (c) : la clé
+  `num` des presets du jeu quel que soit `PresetType`, l'auto-prune sur un inventaire pas encore chargé.
+- ✅ **Examiné sans rien trouver** (pour ne pas refaire) : `screens/inventory/filters.ts` (codec, `readBaseRolls` et les
+  formes G62 / G65, champs Set ou booléens absents d'une session ancienne, `activeFilterCount` qui compte chaque
+  dimension — les emplacements exceptés, voulu —, `reachableTier`, Base rolls `not` et talismans) ;
+  `lib/storage/inventoryFilterPresets.ts` (lecture tolérante, écrasement par nom) ; `hooks/usePersistedState.ts`
+  (`jsonWithSets`, valeur illisible → défaut) ; les autres clés `gs.*` : `rankPriority` / `heroPriority` /
+  `presetPriority` (rang non numérique lu « non classé », compactage), `excludedPieces`, `savedBuilds` (migrations),
+  `heroFilters`, `presetHeroes`, `worklist` (garde de forme, un par héros), `dataHash` (élagage), `transfer`
+  (fusions) ; les effets qui écrivent ce qu'ils lisent (remplissage des rangs de Builds et Presets : converge en un
+  passage, `seen` persisté ; auto-prune : rend `prev` à taille égale, pas de boucle) ; `RankInput` ;
+  `lib/presets/presetHolds.ts` (`presetBlockedUids`, tri ∞ − ∞ = NaN rattrapé par `|| a - b`) et le pool de gemmes
+  (mêmes règles que le pool de pièces ; `bestEeGemsFor` sans rangs ni verrous, déjà assumé le 27/10) ;
+  `lib/solver/reroll.ts` et `lib/quality.ts` (éligibilité, plafond LV6, `reachable` borné au max) ; desktop : routes
+  d'`api-handler.ts` (chaque promesse a son `catch` ; `readBody` sans écouteur `error` ne fait pas tomber le serveur,
+  Node n'émet `error` sur la requête que si quelqu'un l'écoute), `equip-events.ts` (pliage idempotent, lignes
+  déchirées, uids ≤ 2^53 : les uids réels plafonnent vers 6·10⁹), `data-sync.ts` (tout ou rien, facultatif sur 404
+  seulement ; le hash d'outerpedia couvre `items.json`, sa publication a bien changé le hash, donc pas de cache
+  « fresh » qui l'ignore), `updater.ts` (rejets attrapés) ; renderer : promesses du suivi de capture et de la synchro
+  (toutes absorbées) ; `packages/core/src/parse.ts` (ticks toujours posés, uids de preset en chaîne).
+- ✅ **Docs** : `docs/release-notes.md › [Unreleased]` (deux lignes). Aucun passage de `docs/` ou `wiki/` rendu faux (les
+  tables de tests de `reference.md` ne listent ni `filterPresets.test.ts` ni les exports).
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` (sans erreur, code 0) ; `npm test` → core « Tests 169
+  passed (169) », desktop « Tests 219 passed (219) », renderer « Tests 800 passed (800) » (dernière ligne) ;
+  `npm run lint` → « ✖ 13 problems (0 errors, 13 warnings) », même compte qu'avant.
+- ⏳ **Sevih** : trancher les quatre (b) du todo (le drill de Home d'abord) ; sur une capture avec des presets Master
+  League, regarder si des `Num` se recoupent avec les presets classiques.
+
 ### 🎯 Inventaire : filtre « Reachable quality », le palier atteignable avec une Transistone (G68) (2026-10-29)
 - ✅ **Pourquoi.** Le détail d'une pièce affiche déjà « → N reachable » (score avec la meilleure ligne montée au stade 4
   par une Transistone) mais rien ne permettait de trier l'inventaire sur ce potentiel : une 6★ Legendary « Good » qui

@@ -58,6 +58,52 @@
       R2. Vérifier `/img/*` ne tape R2 que sur miss · 2e lancement inchangé = instantané · simuler un patch
       (`OUTERPEDIA_REF` autre branche) · offline cold-cache = pas de crash.
 
+## Bugs trouvés par l'audit du 2026-10-29 (G69)
+
+> (b) = prouvé, mais plus large ou à trancher ; (c) = plausible, non prouvé. Les corrections sûres de l'audit sont
+> dans le changelog.
+
+- [ ] 🔴 (b) **Drill de Home élagué par l'onglet quitté** — `apps/renderer/src/screens/inventory/InventoryScreen.tsx:75`
+      (effet du drill) et `:165` (auto-prune). Au montage, les deux effets tournent dans le même commit : le drill pose
+      `quality = {excellent}` et l'onglet « all », puis l'updater de l'auto-prune reçoit ce nouvel état avec des
+      disponibilités calculées sur l'ANCIEN onglet et l'ancien filtre d'emplacement (sessionStorage). Rejeu `npx tsx`
+      (`filters.ts` réel, pièces factices) : Inventaire laissé sur Special, clic « Excellent » sur Home → `quality`
+      élaguée à vide, la grille All montre toutes les pièces, talismans et EE compris. Même mécanisme pour un drill de
+      set d'armure, ou d'un palier absent de l'onglet / de la puce d'emplacement laissés. Pour l'utilisateur : le nombre
+      cliqué ne correspond pas à la liste ouverte, sans indice. Recommandation : sauter l'auto-prune tant qu'un drill
+      est en attente (`if (drill) return;`, `drill` dans ses dépendances : il repasse au rendu suivant avec la bonne
+      portée) — touche l'auto-prune listé « à ne pas toucher » ci-dessous, d'où la décision.
+- [ ] 🟡 (b) **Preset de filtres appliqué hors de la portée affichée** — `FilterModal.tsx:206` (`load`). Un preset
+      porte ses emplacements et ses Main / Sub / Set / Class ; appliqué sur un autre onglet ou une autre portée, ce que
+      la vue n'a pas n'est ni rendu (la `SlotBar` ne montre que les emplacements de l'onglet alors que
+      `InventoryTabs.tsx:54` promet qu'une puce périmée ne survit pas ; la modale ne liste que les valeurs disponibles,
+      `FilterModal.tsx:479`, `:546`, `:556`, `:576`) ni élagué (l'auto-prune ne tourne qu'au changement de portée, pas
+      à l'Apply). Rejeu `npx tsx` : preset `slots = {talisman}` enregistré sur Special, appliqué sur Gear → grille vide,
+      pastille du bouton Filter à 0 (les emplacements n'y comptent pas), aucune puce visible ; preset `subs = {eff}`
+      sans pièce EFF dans la vue → grille vide, pastille 1, pilule absente de la modale. Seuls « Clear Filter » ou un
+      changement d'onglet en sortent. Recommandation : à l'Apply, passer le filtre par la règle de `setTab`
+      (emplacements hors onglet retirés) et par l'auto-prune — à trancher, le critère du preset serait perdu en
+      silence ; l'autre voie : basculer sur l'onglet All au Load d'un preset qui porte un emplacement hors onglet.
+- [ ] ⚪ (b) **Load d'un preset efface la recherche en cours** — `FilterModal.tsx:206` charge `preset.filters` entier,
+      dont la `query` vidée à l'enregistrement (`lib/storage/inventoryFilterPresets.ts:114`) : la recherche du
+      brouillon disparaît, alors que G67 dit qu'un preset porte tout « sauf la recherche ». Rejeu : lecture
+      (`onLoad(userPreset.filters)`, `query: ""`). Recommandation : `onLoad({ ...filters, query: draft.query })` si
+      « sauf la recherche » veut dire « la laisse en place ».
+- [ ] ⚪ (b) **Import de sauvegarde : compte des entrées que le chargeur jette** — `lib/storage/transfer.ts:127`
+      (presets du Builder) et `:111` (presets de l'Inventaire) comptent toute entrée à `id` chaîne ; `loadFilterPresets`
+      saute une entrée illisible (G69), `loadInventoryFilterPresets` un nom invalide. Rejeu `npx tsx` : un preset
+      `{ id, name }` sans `filters` importé → message « 1 preset », rien de chargé. Pour l'utilisateur : un compte trop
+      haut, sur une sauvegarde abîmée seulement. Recommandation : appliquer à l'import les gardes des chargeurs.
+- [ ] (c) **Clé des presets du jeu = `num` seul, quel que soit `PresetType`** — `packages/core/src/parse.ts:361` ; rangs
+      et verrous (`gs.presets.rank`, `gs.presets.locked`), `lib/presets/presetHolds.ts:39`, `gs.presetHeroes` se clés
+      sur `num`. Si le jeu réutilise un `Num` entre presets classiques et Master League, deux presets partagent rang,
+      verrou et héros. À vérifier sur une capture avec des presets Master League ; s'ils se recoupent, clé
+      `PresetType:Num` (avec migration des clés stockées).
+- [ ] (c) **Auto-prune avec un inventaire pas encore chargé** — `InventoryScreen.tsx:52` / `:165` : monté avant la fin
+      d'`autoImport` (rechargement du renderer avec l'onglet Inventaire actif, `gs.tab` étant durable), `ui = []` vide
+      toutes les disponibilités et l'auto-prune vide les puces gardées en session. À vérifier : un rechargement du
+      renderer arrive-t-il en usage packagé ? Sinon sans effet (la session repart vide à chaque lancement).
+
 ---
 
 > ✅ **À NE PAS toucher (Inventory)** : virtualisation par lignes + reflow `ResizeObserver`, indexation

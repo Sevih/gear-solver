@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { GameData, Inventory } from "@gear-solver/core";
 import { cx } from "../../design/cx.js";
 import { buildHeroTrackerExport } from "../../lib/heroTracker.js";
+import { localDateStamp } from "../../lib/dateStamp.js";
 import { IC_EXPORT } from "./HomeIcons.js";
 
 /** "Export" affordance in the Roster header — writes the captured progression
@@ -31,7 +32,7 @@ export function ExportRosterButton({ inventory, game }: { inventory: Inventory |
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `outerpedia-roster-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `outerpedia-roster-${localDateStamp(Date.now())}.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();

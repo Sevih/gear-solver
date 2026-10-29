@@ -2,6 +2,7 @@
  * Settings → Backup — export / import of builds & presets (JSON).
  */
 import { applyBackup, buildBackup } from "../../lib/storage/transfer.js";
+import { localDateStamp } from "../../lib/dateStamp.js";
 import { SectionStrip, DataAction } from "./SettingsControls.js";
 
 export function BackupPane({ importInputRef, onStatus }: { importInputRef: { current: HTMLInputElement | null }; onStatus: (message: string) => void }) {
@@ -43,7 +44,7 @@ function exportBackupFile(onStatus: (message: string) => void): void {
     const bundle = buildBackup(now);
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const stamp = new Date(now).toISOString().slice(0, 10); // YYYY-MM-DD
+    const stamp = localDateStamp(now); // YYYY-MM-DD
     const a = document.createElement("a");
     a.href = url;
     a.download = `gear-solver-backup-${stamp}.json`;

@@ -120,7 +120,12 @@ export function loadFilterPresets(): FilterPresetsMap {
     if (!parsed || typeof parsed !== "object") return {};
     const out: FilterPresetsMap = {};
     for (const [uid, list] of Object.entries(parsed as Record<string, SerializedPreset[]>)) {
-      if (Array.isArray(list)) out[uid] = list.map(fromSerialized);
+      // One unreadable entry (a hand-edited backup merged by `applyBackup`) is
+      // skipped: throwing here would load no preset at all, and the next save
+      // would persist that empty map over the good ones.
+      if (Array.isArray(list)) out[uid] = list.flatMap((s) => {
+        try { return [fromSerialized(s)]; } catch { return []; }
+      });
     }
     return out;
   } catch {

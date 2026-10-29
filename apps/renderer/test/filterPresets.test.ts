@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { FILTER_PRESETS_KEY, loadFilterPresets } from "../src/lib/storage/filterPresets.js";
+import { applyBackup } from "../src/lib/storage/transfer.js";
 
 // Map-backed localStorage stub — Vitest runs in the `node` environment.
 const store = new Map<string, string>();
@@ -76,5 +77,20 @@ describe("filter presets — main exclusions", () => {
   it("saved exclusions come back as saved", () => {
     const excludes = { talisman: { atkPct: true } };
     expect(loadOne(legacyPreset({}, { mainExcludes: excludes })).mainExcludes).toEqual(excludes);
+  });
+});
+
+describe("filter presets — a malformed entry", () => {
+  it("is skipped, the other presets still load", () => {
+    store.set(FILTER_PRESETS_KEY, JSON.stringify({ h1: [legacyPreset({}), { id: "x", name: "no filters" }], h2: [legacyPreset({}, { topPct: 20 })] }));
+    const map = loadFilterPresets();
+    expect(map.h1!.map((p) => p.id)).toEqual(["p1"]);
+    expect(map.h2![0]!.filters.topPct).toBe(20);
+  });
+
+  it("merged by a backup import doesn't hide the presets already saved", () => {
+    store.set(FILTER_PRESETS_KEY, JSON.stringify({ h1: [legacyPreset({})] }));
+    applyBackup({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: { h2: [{ id: "x", name: "broken" }] } });
+    expect(loadFilterPresets().h1!.map((p) => p.id)).toEqual(["p1"]);
   });
 });

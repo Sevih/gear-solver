@@ -12,7 +12,10 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Builder › filter presets**: one damaged entry in a restored backup no longer hides every other
+  preset (and no longer gets them overwritten at the next save).
+- **Settings › Backup** and **Home › Export roster**: the file name carries your local date, not
+  the UTC one (an export just after midnight was dated the day before).
 
 ## [1.19.0] — 2026-10-29
 
