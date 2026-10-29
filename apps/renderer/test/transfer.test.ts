@@ -165,3 +165,37 @@ describe("transfer — entries the loaders reject", () => {
     expect(store.has(INV_KEY)).toBe(false);
   });
 });
+
+describe("transfer — local presets", () => {
+  const LOCAL_KEY = "gs.presets.local";
+  const WIRE = ["w", "a", "h", "b", "g", "s", "0", "t"];
+  const entry = (id: string, name: string) => ({ id, name, itemUids: WIRE, heroUid: null, createdAt: 0 });
+  const bundle = (over: object) => ({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: {}, ...over });
+
+  it("exports the list, imports the new ids, the local entry wins on id", () => {
+    store.set(LOCAL_KEY, JSON.stringify([entry("a", "Mine")]));
+    expect(buildBackup(0).localPresets).toEqual([entry("a", "Mine")]);
+    const res = applyBackup(bundle({ localPresets: [entry("a", "Theirs"), entry("b", "B")] }));
+    expect(res.localPresets).toBe(1);
+    const stored = JSON.parse(store.get(LOCAL_KEY)!);
+    expect(stored.map((e: { id: string; name: string }) => [e.id, e.name])).toEqual([["a", "Mine"], ["b", "B"]]);
+  });
+
+  it("counts only the entries the loader reads; a backup without the field imports none", () => {
+    const res = applyBackup(bundle({ localPresets: [
+      entry("long", "x".repeat(13)),
+      { ...entry("short", "Short"), itemUids: ["w"] },
+      { name: "No id", itemUids: WIRE, heroUid: null, createdAt: 0 },
+      entry("ok", "Ok"),
+    ] }));
+    expect(res.localPresets).toBe(1);
+    expect(JSON.parse(store.get(LOCAL_KEY)!).map((e: { id: string }) => e.id)).toEqual(["ok"]);
+    store.clear();
+    expect(applyBackup(bundle({})).localPresets).toBe(0);
+    expect(store.has(LOCAL_KEY)).toBe(false);
+  });
+
+  it("rejects a malformed list", () => {
+    expect(() => applyBackup(bundle({ localPresets: {} }))).toThrow(/localPresets/);
+  });
+});

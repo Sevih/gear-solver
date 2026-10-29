@@ -1,7 +1,8 @@
 /**
  * Backup transfer — export / import of the user's saved builds, filter
- * presets, Inventory filter presets and preset heroes (the Presets tab's
- * reference / associated heroes) as a single JSON file (device migration, sharing, manual backup).
+ * presets, Inventory filter presets, preset heroes (the Presets tab's
+ * reference / associated heroes) and local presets (the Presets tab's, kept in
+ * GS) as a single JSON file (device migration, sharing, manual backup).
  *
  * Operates at the on-disk JSON level, NOT the in-memory level: the presets
  * blob already serializes its `Set` fields to arrays on disk (see
@@ -14,6 +15,7 @@ import { SAVED_BUILDS_KEY } from "./savedBuilds.js";
 import { FILTER_PRESETS_KEY, isReadableFilterPreset } from "./filterPresets.js";
 import { PRESET_HEROES_KEY } from "./presetHeroes.js";
 import { INVENTORY_FILTER_PRESETS_KEY, isReadableInventoryPreset } from "./inventoryFilterPresets.js";
+import { LOCAL_PRESETS_KEY, isReadableLocalPreset } from "./localPresets.js";
 
 const BACKUP_KIND = "gear-solver-backup";
 const BACKUP_VERSION = 1 as const;
@@ -40,6 +42,9 @@ export interface BackupBundle {
   /** Serialized `gs.inv.filterPresets` list (Inventory filter presets).
    *  Absent from a backup made before it was exported — read as none. */
   inventoryFilterPresets?: unknown[];
+  /** Serialized `gs.presets.local` list (local presets). Absent from a backup
+   *  made before it was exported — read as none. */
+  localPresets?: unknown[];
 }
 
 export interface ImportResult {
@@ -49,6 +54,8 @@ export interface ImportResult {
   presetGroups: number;
   /** Inventory filter presets added. */
   inventoryPresets: number;
+  /** Local presets added. */
+  localPresets: number;
 }
 
 function readRaw<T extends object = ListMap>(key: string): T {
@@ -73,6 +80,7 @@ export function buildBackup(exportedAt: number): BackupBundle {
     filterPresets: readRaw(FILTER_PRESETS_KEY),
     presetHeroes: readRaw<Record<string, unknown>>(PRESET_HEROES_KEY),
     inventoryFilterPresets: readList(INVENTORY_FILTER_PRESETS_KEY),
+    localPresets: readList(LOCAL_PRESETS_KEY),
   };
 }
 
@@ -108,6 +116,25 @@ function mergeInventoryPresets(current: unknown[], incoming: unknown[]): { merge
     merged.push(e);
     ids.add(id);
     names.add(name);
+    added++;
+  }
+  return { merged, added };
+}
+
+/** Merge the incoming local presets by id: an entry whose id is already here
+ *  is skipped — the local entry wins — and so is one `loadLocalPresets` would
+ *  ignore, so the count matches what loads. Entries are otherwise copied
+ *  verbatim. */
+function mergeLocalPresets(current: unknown[], incoming: unknown[]): { merged: unknown[]; added: number } {
+  const merged = [...current];
+  const ids = new Set<unknown>(current.map((e) => (e && typeof e === "object" ? (e as { id?: unknown }).id : undefined)));
+  let added = 0;
+  for (const e of incoming) {
+    if (!isReadableLocalPreset(e)) continue;
+    const { id } = e as { id: string };
+    if (ids.has(id)) continue;
+    merged.push(e);
+    ids.add(id);
     added++;
   }
   return { merged, added };
@@ -165,6 +192,7 @@ function assertBundle(value: unknown): asserts value is BackupBundle {
   if (!b.filterPresets || typeof b.filterPresets !== "object") throw new Error("Missing filterPresets.");
   if (b.presetHeroes != null && typeof b.presetHeroes !== "object") throw new Error("Malformed presetHeroes.");
   if (b.inventoryFilterPresets != null && !Array.isArray(b.inventoryFilterPresets)) throw new Error("Malformed inventoryFilterPresets.");
+  if (b.localPresets != null && !Array.isArray(b.localPresets)) throw new Error("Malformed localPresets.");
 }
 
 /** Screens that hold the maps in memory (the Builder stays mounted, hidden,
@@ -192,10 +220,12 @@ export function applyBackup(value: unknown): ImportResult {
   const presets = mergeListMap(readRaw(FILTER_PRESETS_KEY), value.filterPresets, isReadableFilterPreset);
   const groups = mergePresetHeroes(readRaw<Record<string, unknown>>(PRESET_HEROES_KEY), value.presetHeroes ?? {});
   const invPresets = mergeInventoryPresets(readList(INVENTORY_FILTER_PRESETS_KEY), value.inventoryFilterPresets ?? []);
+  const locals = mergeLocalPresets(readList(LOCAL_PRESETS_KEY), value.localPresets ?? []);
   localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(builds.merged));
   localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets.merged));
   if (groups.added > 0) localStorage.setItem(PRESET_HEROES_KEY, JSON.stringify(groups.merged));
   if (invPresets.added > 0) localStorage.setItem(INVENTORY_FILTER_PRESETS_KEY, JSON.stringify(invPresets.merged));
+  if (locals.added > 0) localStorage.setItem(LOCAL_PRESETS_KEY, JSON.stringify(locals.merged));
   for (const listener of importListeners) listener();
-  return { builds: builds.added, presets: presets.added, presetGroups: groups.added, inventoryPresets: invPresets.added };
+  return { builds: builds.added, presets: presets.added, presetGroups: groups.added, inventoryPresets: invPresets.added, localPresets: locals.added };
 }

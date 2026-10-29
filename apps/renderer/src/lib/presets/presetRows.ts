@@ -8,6 +8,8 @@
  * tuned by its gems). The wire list (`Preset.itemUids`, 8 entries) carries an
  * EE slot anyway — it is skipped here, like in `presetSignature`.
  *
+ * Local presets (kept in GS, `localPresetRows`) get the same rows.
+ *
  * Pure: no React, no storage — the screen feeds it the inventory.
  */
 import { comparePresets, type GearPiece, type GearSlot, type Inventory, type Preset } from "@gear-solver/core";
@@ -69,11 +71,57 @@ export interface PresetRow {
   sharedCount: number;
   /** No piece at all — listed collapsed. */
   empty: boolean;
+  /** Set on a local preset's row (`localPresetRows`): its id. */
+  localId?: string;
 }
 
 /** One row per in-game preset, in the order of the in-game preset editor
  *  (`comparePresets`: favorites, then the player's order, then `num`). */
 export function presetRows(inventory: Inventory): PresetRow[] {
+  const index = indexInventory(inventory);
+  const presets = [...inventory.presets].sort(comparePresets);
+  // Non-EE slots of each preset, and which presets hold each uid.
+  const slotsOf = presets.map((p) => presetSlots(p, index.byUid));
+  const holders = new Map<string, PresetRef[]>();
+  presets.forEach((p, i) => {
+    for (const { uid } of slotsOf[i]!) {
+      const list = holders.get(uid);
+      const ref = { num: p.num, name: p.name };
+      if (list) list.push(ref);
+      else holders.set(uid, [ref]);
+    }
+  });
+  return presets.map((preset, i) => toRow(preset, slotsOf[i]!, index, (uid) => (holders.get(uid) ?? []).filter((r) => r.num !== preset.num)));
+}
+
+/** A local preset (`lib/storage/localPresets.ts`) to show on a preset card. */
+export interface LocalPresetInput {
+  id: string;
+  name: string;
+  itemUids: readonly string[];
+}
+
+/** One row per local preset, in the order given — the same card as an
+ *  in-game preset. Each carries a synthetic `Preset`: `num` negative (−1, −2…
+ *  by position) so it never meets an in-game preset's number nor a
+ *  `gs.presets.*` key, not a favorite, and `localId` set. A local preset holds
+ *  nothing in-game, so no piece of it is shared (`sharedWith` empty). */
+export function localPresetRows(locals: readonly LocalPresetInput[], inventory: Inventory): PresetRow[] {
+  const index = indexInventory(inventory);
+  return locals.map((l, i) => {
+    const preset: Preset = { num: -(i + 1), name: l.name, itemUids: [...l.itemUids], favorite: false, presetType: 0, sortOrder: 0 };
+    return { ...toRow(preset, presetSlots(preset, index.byUid), index, () => []), localId: l.id };
+  });
+}
+
+interface InventoryIndex {
+  byUid: Map<string, GearPiece>;
+  slotByUid: Map<string, GearPiece["slot"]>;
+  /** Heroes indexed by their EE-excluded signature — one lookup per preset. */
+  heroesBySig: Map<string, string[]>;
+}
+
+function indexInventory(inventory: Inventory): InventoryIndex {
   const byUid = new Map<string, GearPiece>();
   const slotByUid = new Map<string, GearPiece["slot"]>();
   const equippedByHero = new Map<string, string[]>();
@@ -85,8 +133,6 @@ export function presetRows(inventory: Inventory): PresetRow[] {
     if (list) list.push(g.uid);
     else equippedByHero.set(g.equippedBy, [g.uid]);
   }
-
-  // Heroes indexed by their EE-excluded signature — one lookup per preset.
   const heroesBySig = new Map<string, string[]>();
   for (const c of inventory.characters) {
     const sig = presetSignature(equippedByHero.get(c.uid) ?? [], slotByUid);
@@ -95,39 +141,29 @@ export function presetRows(inventory: Inventory): PresetRow[] {
     if (list) list.push(c.uid);
     else heroesBySig.set(sig, [c.uid]);
   }
+  return { byUid, slotByUid, heroesBySig };
+}
 
-  const presets = [...inventory.presets].sort(comparePresets);
-  // Non-EE slots of each preset, and which presets hold each uid.
-  const slotsOf = presets.map((p) => presetSlots(p, byUid));
-  const holders = new Map<string, PresetRef[]>();
-  presets.forEach((p, i) => {
-    for (const { uid } of slotsOf[i]!) {
-      const list = holders.get(uid);
-      const ref = { num: p.num, name: p.name };
-      if (list) list.push(ref);
-      else holders.set(uid, [ref]);
-    }
+function toRow(
+  preset: Preset,
+  slots: Array<{ uid: string; slot: GearSlot | null }>,
+  index: InventoryIndex,
+  sharedWith: (uid: string) => PresetRef[],
+): PresetRow {
+  const pieces = slots.map(({ uid, slot }): PresetPiece => {
+    const piece = index.byUid.get(uid) ?? null;
+    return { slot, uid, piece, missing: piece == null, sharedWith: sharedWith(uid) };
   });
-
-  return presets.map((preset, i) => {
-    const pieces = slotsOf[i]!.map(({ uid, slot }): PresetPiece => {
-      const piece = byUid.get(uid) ?? null;
-      return {
-        slot, uid, piece, missing: piece == null,
-        sharedWith: (holders.get(uid) ?? []).filter((r) => r.num !== preset.num),
-      };
-    });
-    const sig = presetSignature(preset.itemUids, slotByUid);
-    return {
-      preset,
-      pieces,
-      presentPieces: pieces.flatMap((p) => (p.piece ? [p.piece] : [])),
-      wearerUids: sig ? heroesBySig.get(sig) ?? [] : [],
-      missingCount: pieces.filter((p) => p.missing).length,
-      sharedCount: pieces.filter((p) => p.sharedWith.length > 0).length,
-      empty: pieces.length === 0,
-    };
-  });
+  const sig = presetSignature(preset.itemUids, index.slotByUid);
+  return {
+    preset,
+    pieces,
+    presentPieces: pieces.flatMap((p) => (p.piece ? [p.piece] : [])),
+    wearerUids: sig ? index.heroesBySig.get(sig) ?? [] : [],
+    missingCount: pieces.filter((p) => p.missing).length,
+    sharedCount: pieces.filter((p) => p.sharedWith.length > 0).length,
+    empty: pieces.length === 0,
+  };
 }
 
 /** A preset's non-EE, non-empty uids with their slot, in `PRESET_SLOTS` order

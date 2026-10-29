@@ -30,6 +30,7 @@ by hand (manual import).
   per-piece detail, `screens/inventory/`), **Builds** (equipped/composed roster + Optimize→),
   **Presets** (the in-game equipment presets — wearers, a reference hero and its associated
   heroes, the preset scored on each with the EE gems proposed for them, "+ Worklist" per hero;
+  under them the local presets kept in GS only (`lib/storage/localPresets.ts`);
   nothing written to the game, `screens/presets/` over the pure `lib/presets/`),
   **Builder** (the solver — `screens/builder/`: one module per panel, the solve state in the
   `useSolverSession` hook), **Worklist** (cross-hero queue of gear changes — the Builder's

@@ -27,6 +27,14 @@
  * and "Optimize preset →" never takes the pieces of a better-ranked preset. A
  * preset never offered a rank gets one in the in-game order.
  *
+ * Under them, the local presets (`lib/storage/localPresets.ts`, kept in GS
+ * only): saved from a Builder result or copied from an in-game card ("Copy as
+ * local preset"), most recent first, on the same card built from a synthetic
+ * row (`localPresetRows`) — a "Local" badge, Rename and Delete in place of the
+ * rank, lock and favorite, and their reference hero's line without the
+ * associated heroes, the Worklist or "Optimize preset →". They hold no piece
+ * for the solver (`presetHolds` reads the in-game presets only).
+ *
  * Nothing is written to the game: the groups are local (`gs.presetHeroes`).
  * The priority is the Builder's of this session — as the Builder last left the
  * hero (`snapshotOnHeroSwitch`) — else the one of the hero's most recent saved
@@ -45,7 +53,7 @@ import { RankDragHandle, RankInput } from "../../design/RankInput.js";
 import { toUiPiece } from "../../design/adapter.js";
 import { GAME_GEAR_GRID, toDesignSlot, toEngineSlot } from "../../design/tokens.js";
 import {
-  arrangePresets, presetClasses, presetRows, type PresetPiece, type PresetRow, type PresetSort,
+  arrangePresets, localPresetRows, presetClasses, presetRows, type PresetPiece, type PresetRow, type PresetSort,
 } from "../../lib/presets/presetRows.js";
 import { CLASSES } from "../../lib/homeStats.js";
 import {
@@ -68,6 +76,10 @@ import {
   type PresetHeroesMap,
 } from "../../lib/storage/presetHeroes.js";
 import { loadSavedBuilds } from "../../lib/storage/savedBuilds.js";
+import {
+  addLocalPreset, LOCAL_PRESET_NAME_MAX, loadLocalPresets, localCopyOf, removeLocalPreset, renameLocalPreset, validLocalPresetName,
+  type LocalPreset,
+} from "../../lib/storage/localPresets.js";
 import { filtersForHero, loadHeroFilters } from "../../lib/storage/heroFilters.js";
 import { INITIAL_FILTERS } from "../../lib/solver/builderFilters.js";
 import { HeroSelect } from "../builder/HeroSelect.js";
@@ -132,7 +144,12 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
   useEffect(() => { persistPresetHeroes(presetHeroes); }, [presetHeroes]);
   // A backup imported while the tab is open (Settings modal) — reload, or the
   // next edit would write the pre-import groups back.
-  useEffect(() => onBackupImported(() => setPresetHeroes(loadPresetHeroes())), []);
+  // Local presets: each edit writes storage, then the list is read back.
+  const [locals, setLocals] = useState<LocalPreset[]>(loadLocalPresets);
+  useEffect(() => onBackupImported(() => {
+    setPresetHeroes(loadPresetHeroes());
+    setLocals(loadLocalPresets());
+  }), []);
   const [classFilter, setClassFilter] = useState<ReadonlySet<string>>(() => new Set());
   const [sort, setSort] = useState<PresetSort>("game");
 
@@ -159,6 +176,23 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
     return { row, stored, classes: presetClasses(row, stored, (uid) => heroes.get(uid)?.cls ?? null) };
   }), [rows, presetHeroes, roster, heroes]);
   const shown = useMemo(() => arrangePresets(cards, classFilter, sort, CLASS_ORDER, presetRank), [cards, classFilter, sort, presetRank]);
+  // Local presets: same class filter, always in their own order (newest first).
+  const localCards = useMemo(() => {
+    if (!inventory) return [];
+    const rowsOf = localPresetRows(locals, inventory);
+    return rowsOf.map((row, i) => {
+      const heroUid = locals[i]!.heroUid;
+      const stored = { referenceUid: heroUid && roster.has(heroUid) ? heroUid : null, associatedUids: [] };
+      return { row, stored, classes: presetClasses(row, stored, (uid) => heroes.get(uid)?.cls ?? null) };
+    });
+  }, [inventory, locals, roster, heroes]);
+  const localShown = useMemo(() => arrangePresets(localCards, classFilter, "game", CLASS_ORDER), [localCards, classFilter]);
+  const slotByUid = useMemo(() => new Map(inventory?.gear.map((g) => [g.uid, g.slot] as const) ?? []), [inventory]);
+  const copyAsLocal = useCallback((row: PresetRow, heroUid: string | null): boolean => {
+    const saved = addLocalPreset({ ...localCopyOf(row.preset, (uid) => slotByUid.get(uid)), heroUid });
+    if (saved) setLocals(loadLocalPresets());
+    return saved != null;
+  }, [slotByUid]);
   // Rank edits — positional model, contiguous 1..N, as on the Builds cards.
   const setRank = useCallback((key: string, pos: number | null) => {
     onPresetRankChange((prev) => reorderRank(prev, key, pos));
@@ -189,7 +223,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
   if (!inventory || !ctx) {
     return <Empty title="No capture yet" subtitle="Arm capture and import your account to see your equipment presets here." />;
   }
-  if (rows.length === 0) {
+  if (rows.length === 0 && locals.length === 0) {
     return <Empty title="No presets" subtitle="This capture holds no equipment preset. Save one in-game, then reload." />;
   }
 
@@ -250,7 +284,9 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-6 pb-6 pt-3">
-        {shown.length === 0 && <span className="text-[11.5px] italic text-zinc-400">No preset of the selected classes.</span>}
+        {rows.length === 0
+          ? <span className="text-[11.5px] italic text-zinc-400">This capture holds no in-game preset.</span>
+          : shown.length === 0 && <span className="text-[11.5px] italic text-zinc-400">No preset of the selected classes.</span>}
         {shown.map(({ row, stored, classes }) => (
           <PresetCard
             key={row.preset.num}
@@ -275,6 +311,54 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
             onSetReference={(uid) => setPresetHeroes((m) => setPresetReference(m, row.preset.num, uid))}
             onAddAssociated={(uid) => setPresetHeroes((m) => addPresetAssociated(m, row.preset.num, uid))}
             onRemoveAssociated={(uid) => setPresetHeroes((m) => removePresetAssociated(m, row.preset.num, uid))}
+            onCopyLocal={(heroUid) => copyAsLocal(row, heroUid)}
+          />
+        ))}
+
+        <div className="mt-3 flex items-center gap-2 text-[11.5px]">
+          <span className="font-mono uppercase tracking-wider text-zinc-400">Local presets</span>
+          <Pill tone="neutral">{locals.length}{localShown.length < locals.length ? ` · ${localShown.length} shown` : ""}</Pill>
+          <span className="text-zinc-400">Kept in GS only — nothing is sent to the game, and they keep no piece away from a solve.</span>
+        </div>
+        {locals.length === 0 ? (
+          <span className="text-[11.5px] italic text-zinc-400">No local preset yet — save one from a Builder result (Save as local preset…) or copy an in-game preset.</span>
+        ) : localShown.length === 0 && (
+          <span className="text-[11.5px] italic text-zinc-400">No local preset of the selected classes.</span>
+        )}
+        {localShown.map(({ row, stored, classes }) => (
+          <PresetCard
+            key={row.localId}
+            row={row}
+            classes={classes}
+            game={game}
+            ctx={ctx}
+            heroes={heroes}
+            roster={inventory.characters}
+            stored={stored}
+            lossWarnPct={lossWarnPct}
+            worklist={NO_WORKLIST}
+            onOptimize={onOptimize}
+            rank={null}
+            onSetRank={noop}
+            dragEnabled={false}
+            onDragStartRank={noop}
+            onDropRank={noop}
+            locked={false}
+            onToggleLock={noop}
+            onSetReference={noop}
+            onAddAssociated={noop}
+            onRemoveAssociated={noop}
+            local={{
+              onRename: (name) => {
+                const ok = renameLocalPreset(row.localId!, name);
+                if (ok) setLocals(loadLocalPresets());
+                return ok;
+              },
+              onDelete: () => {
+                removeLocalPreset(row.localId!);
+                setLocals(loadLocalPresets());
+              },
+            }}
           />
         ))}
       </div>
@@ -288,9 +372,21 @@ interface WorklistHook {
   onAdd?: (entry: WorklistEntry, note?: string) => void;
 }
 
+/** A local preset's card queues nothing. */
+const NO_WORKLIST: WorklistHook = {};
+const noop = () => {};
+
+/** A local preset's card actions — set only on those cards. */
+interface LocalActions {
+  /** Rename; false when the name is refused (`validLocalPresetName`). */
+  onRename: (name: string) => boolean;
+  onDelete: () => void;
+}
+
 function PresetCard({
   row, classes, game, ctx, heroes, roster, stored, lossWarnPct, worklist, onOptimize, onOptimizePreset,
   rank, onSetRank, dragEnabled, onDragStartRank, onDropRank, locked, onToggleLock, onSetReference, onAddAssociated, onRemoveAssociated,
+  onCopyLocal, local,
 }: {
   row: PresetRow;
   /** Raw `CCT_*` ids (`presetClasses`), empty when unknown. */
@@ -318,11 +414,19 @@ function PresetCard({
   onSetReference: (uid: string | null) => void;
   onAddAssociated: (uid: string) => void;
   onRemoveAssociated: (uid: string) => void;
+  /** In-game card: save its pieces as a local preset, the hero shown as its
+   *  reference with them. False when nothing was saved. */
+  onCopyLocal?: (heroUid: string | null) => boolean;
+  /** Set on a local preset's card: no rank, lock, favorite, associated heroes,
+   *  Worklist or "Optimize preset →"; a "Local" badge, Rename and Delete. */
+  local?: LocalActions;
 }) {
   const { preset, pieces, wearerUids } = row;
   const [open, setOpen] = useState(!row.empty);
-  // A unique current wearer is proposed as the reference until one is picked.
-  const suggested = stored.referenceUid == null && wearerUids.length === 1 ? wearerUids[0]! : null;
+  const [copied, setCopied] = useState(false);
+  // A unique current wearer is proposed as the reference until one is picked
+  // (in-game presets only — a local preset keeps the hero it was saved with).
+  const suggested = !local && stored.referenceUid == null && wearerUids.length === 1 ? wearerUids[0]! : null;
   const referenceUid = stored.referenceUid ?? suggested;
   const associatedUids = stored.associatedUids.filter((u) => u !== referenceUid);
   const candidates = roster.filter((c) => c.uid !== referenceUid && !associatedUids.includes(c.uid));
@@ -348,10 +452,14 @@ function PresetCard({
         <div className="pointer-events-none absolute -top-1 left-2 right-2 z-10 h-0.5 rounded-full bg-cyan-400 shadow-[0_0_8px_2px_rgba(34,211,238,0.6)]" />
       )}
       <header className="flex flex-wrap items-center gap-2">
-        <div className="flex shrink-0 items-center gap-1.5">
-          {dragEnabled && <RankDragHandle uid={key} onDragStartRank={onDragStartRank} />}
-          <RankInput uid={key} rank={rank} onSetRank={onSetRank} title={PRESET_RANK_TITLE} />
-        </div>
+        {local ? (
+          <span className="shrink-0 rounded border border-cyan-400/40 bg-cyan-500/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-cyan-200" title="Kept in GS only — not an in-game preset">Local</span>
+        ) : (
+          <div className="flex shrink-0 items-center gap-1.5">
+            {dragEnabled && <RankDragHandle uid={key} onDragStartRank={onDragStartRank} />}
+            <RankInput uid={key} rank={rank} onSetRank={onSetRank} title={PRESET_RANK_TITLE} />
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -359,7 +467,7 @@ function PresetCard({
           aria-expanded={open}
         >
           <span className={cx("inline-block text-[9px] text-zinc-400 transition-transform", open && "rotate-90")}>▸</span>
-          <span className="font-mono text-[11px] tabular-nums text-zinc-400">#{preset.num}</span>
+          {!local && <span className="font-mono text-[11px] tabular-nums text-zinc-400">#{preset.num}</span>}
           {classes.map((id) => {
             const label = classLabel(id);
             return label ? <ClassIcon key={id} label={label} /> : null;
@@ -377,6 +485,17 @@ function PresetCard({
             })}
           </div>
         )}
+        {local ? <LocalPresetActions name={preset.name} actions={local} /> : (
+          <>
+        {onCopyLocal && (
+          <button
+            type="button"
+            onClick={() => { if (onCopyLocal(referenceUid)) setCopied(true); }}
+            disabled={row.empty}
+            title="Save this preset's pieces as a local preset (kept in GS only, listed under Local presets), with the hero shown as its reference. The EE is left out; the name is cut to 12 characters."
+            className="ml-auto inline-flex h-7 items-center rounded-md border border-white/8 bg-white/3 px-2 text-[11px] text-zinc-400 transition-colors hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+          >{copied ? "Copied ✓" : "Copy as local preset"}</button>
+        )}
         <button
           type="button"
           onClick={onToggleLock}
@@ -385,12 +504,15 @@ function PresetCard({
             ? "Locked — its pieces are never proposed by a solve, except Optimize preset → on this preset. Click to unlock."
             : "Lock this preset — its pieces will never be proposed by a solve, except Optimize preset → on this preset."}
           className={cx(
-            "ml-auto inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors",
+            "inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] transition-colors",
+            !onCopyLocal && "ml-auto",
             locked ? "border-amber-400/45 bg-amber-500/12 text-amber-200" : "border-white/8 bg-white/3 text-zinc-400 hover:text-zinc-200",
           )}
         >
           <span aria-hidden>{locked ? "🔒" : "🔓"}</span>{locked ? "Locked" : "Lock"}
         </button>
+          </>
+        )}
       </header>
 
       {open && (
@@ -411,6 +533,14 @@ function PresetCard({
           <div className="flex flex-col gap-2.5 xl:flex-row xl:items-start xl:gap-4">
             <PresetPieces pieces={pieces} game={game} ee={referenceUid ? eeOf(referenceUid, ctx) : null} />
 
+            {local ? (
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <span className="text-[11px] uppercase tracking-wider text-zinc-400">Reference</span>
+                {referenceUid
+                  ? <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} reference />
+                  : <span className="text-[11.5px] italic text-zinc-400">No reference hero — saved without one, or no longer in your roster.</span>}
+              </div>
+            ) : (
             <div className="flex min-w-0 flex-1 flex-col gap-2.5">
               <div className="flex flex-col gap-1.5">
                 <div className="flex flex-wrap items-center gap-2">
@@ -439,10 +569,62 @@ function PresetCard({
                 ))}
               </div>
             </div>
+            )}
           </div>
         </>
       )}
     </section>
+  );
+}
+
+/** Rename (inline field, 12 characters) and Delete (one more click: the button
+ *  turns into "Delete?") on a local preset's card. */
+function LocalPresetActions({ name, actions }: { name: string; actions: LocalActions }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const valid = draft != null ? validLocalPresetName(draft) : null;
+  const submit = () => {
+    if (valid && actions.onRename(valid)) setDraft(null);
+  };
+  return (
+    <div className="ml-auto flex items-center gap-1.5">
+      {draft != null ? (
+        <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+          <input
+            autoFocus
+            value={draft}
+            maxLength={LOCAL_PRESET_NAME_MAX}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setDraft(null); }}
+            aria-label="Local preset name"
+            className="h-7 w-32 rounded-md border border-white/8 bg-black/30 px-1.5 text-[11px] text-white focus:border-cyan-400/40 focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={!valid}
+            className="inline-flex h-7 items-center rounded-md border border-cyan-400/40 bg-cyan-500/15 px-2 text-[11px] text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+          >Save</button>
+          <button type="button" onClick={() => setDraft(null)} className="px-1 text-[11px] text-zinc-400 hover:text-zinc-200">Cancel</button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setDraft(name)}
+          title={`Rename (${LOCAL_PRESET_NAME_MAX} characters max, the in-game limit)`}
+          className="inline-flex h-7 items-center rounded-md border border-white/8 bg-white/3 px-2 text-[11px] text-zinc-400 transition-colors hover:text-zinc-200"
+        >Rename</button>
+      )}
+      <button
+        type="button"
+        onClick={() => { if (confirm) actions.onDelete(); else setConfirm(true); }}
+        onBlur={() => setConfirm(false)}
+        title={confirm ? "Click again to delete this local preset" : "Delete this local preset"}
+        className={cx(
+          "inline-flex h-7 items-center rounded-md border px-2 text-[11px] transition-colors",
+          confirm ? "border-rose-400/50 bg-rose-500/15 text-rose-200" : "border-white/8 bg-white/3 text-zinc-400 hover:text-rose-300",
+        )}
+      >{confirm ? "Delete?" : "Delete"}</button>
+    </div>
   );
 }
 

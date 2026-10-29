@@ -44,6 +44,7 @@ import {
   addFilterPreset, loadFilterPresets, persistFilterPresets, removeFilterPreset,
   type FilterPreset, type FilterPresetsMap,
 } from "../../lib/storage/filterPresets.js";
+import { addLocalPreset, wireUidsFromBuild } from "../../lib/storage/localPresets.js";
 import { onBackupImported } from "../../lib/storage/transfer.js";
 import { onDataPruned, pruneFilters } from "../../lib/storage/dataHash.js";
 import { migrateReforge, REFORGE_MODES } from "./reforge.js";
@@ -335,6 +336,15 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     }
     return n;
   }, [solving, livePoolSizes, estimatePools]);
+
+  // "Save as local preset…" — the selected build's 7 pieces (the EE left out),
+  // in the in-game preset order, with the Builder's hero as the reference. Kept
+  // in GS only (Presets tab); nothing to hold in memory here, the tab reads the
+  // list on mount.
+  const saveLocalPreset = (name: string): string | null => {
+    if (!selectedBuild || !selectedUid) return null;
+    return addLocalPreset({ name, itemUids: wireUidsFromBuild(selectedBuild.pieceUids), heroUid: selectedUid })?.name ?? null;
+  };
 
   // Saved-builds handlers — `selectedUid` gates everything; the UI hides /
   // disables the controls when no hero is picked so we don't have to thread
@@ -821,6 +831,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           <RightSidebar
             canSave={selectedBuild != null}
             onSaveBuild={saveCurrentBuild}
+            onSaveLocalPreset={saveLocalPreset}
             canGetPreset={selectedUid != null}
             onGetPreset={() => void getPreset()}
             recoBusy={recoBusy}

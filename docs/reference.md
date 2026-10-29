@@ -215,7 +215,8 @@ Pipeline détaillé dans [solver.md](solver.md). Résumé :
   prioritaire que Q (`isLowerPriority`, P ≠ Q). Sans preset visé (solve d'un héros), seule (a) compte,
   y compris pour les pièces que porte le héros lui-même. Pièce tenue par plusieurs presets : la plus
   contraignante gagne. Table calculée une fois par solve (`presetBlockedUids`), appliquée aussi au pool
-  de gemmes (§2.7).
+  de gemmes (§2.7). Les presets locaux (`gs.presets.local`, gardés dans GS) n'y entrent pas : ils ne
+  retiennent aucune pièce.
 
 ### 1.7 Édition d'équipement (`packages/core/src/equip.ts`)
 
@@ -935,6 +936,7 @@ apps/renderer/src/
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← localStorage per-hero saved builds
 │   │   ├── presetHeroes.ts         ← localStorage référence + associés par preset
+│   │   ├── localPresets.ts         ← localStorage presets locaux (gardés dans GS, jamais envoyés au jeu)
 │   │   ├── rankPriority.ts         ← modèle de rang partagé (héros, presets) : rankOrder, isLowerPriority, reorderRank, …
 │   │   ├── presetPriority.ts       ← localStorage rang + verrou par preset
 │   │   └── filterPresets.ts        ← localStorage per-hero filter snapshots

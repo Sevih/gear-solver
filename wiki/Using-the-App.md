@@ -151,6 +151,15 @@ the game.
 - **Warnings** — a piece no longer in your inventory, or a piece that sits in **two** presets
   (two presets can't be worn in the same fight), is marked on the piece and in the card's banner.
   Empty presets are listed collapsed.
+- **Local presets** — presets kept in GS only, to prepare an outfit without touching the game:
+  a name (12 characters, the in-game limit) and the 7 pieces, no EE. Make one from a Builder
+  result (**Save as local preset…**, the Builder's hero as its reference) or with **Copy as local
+  preset** on an in-game card (same pieces, the hero shown as reference, the name cut to 12
+  characters). They're listed under the in-game presets, most recent first, on the same card
+  with a **Local** badge: the pieces (a missing one is marked), the reference hero's line with
+  their score and **Optimize →**. No rank, lock, associated heroes, Worklist or **Optimize preset
+  →**; **Rename** in place, **Delete** asks for one more click (**Delete?**). They keep no piece
+  away from a solve, and the class filter applies to them too.
 
 ---
 
@@ -250,6 +259,9 @@ In the right sidebar (**Library**):
 - **Save / Remove build** — bookmark the selected build for this hero. Saving a build also
   saves the filters that produced it as a **filter preset** under the same name — one action,
   no separate "save preset" step.
+- **Save as local preset…** — type a name (12 characters max) and **Save**: the selected build's
+  7 pieces (the EE left out) become a **local preset** on the Presets tab, with this hero as its
+  reference. Nothing is sent to the game.
 - **Filter presets** — reload (or remove) a saved set of filters per hero, independently of
   the build it was saved with.
 - **Restore** — push a saved build back into the table + gear band.
@@ -300,9 +312,9 @@ A tabbed modal:
 - **Data** — **Sync game data** (refresh the game tables after a patch), reset the onboarding
   wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
   (game version of the tables, hash and date — so you can see which snapshot is loaded).
-- **Backup** — **Export / Import** your saved builds, filter presets (Builder and Inventory) and
-  the heroes of your in-game presets (Presets tab) as a JSON file (move them to another PC;
-  captured gear isn't included — re-capture it there).
+- **Backup** — **Export / Import** your saved builds, filter presets (Builder and Inventory),
+  the heroes of your in-game presets and your local presets (Presets tab) as a JSON file (move
+  them to another PC; captured gear isn't included — re-capture it there).
 - **Debug** — developer toggles (safe to ignore).
 
 ---

@@ -217,7 +217,8 @@ Pipeline detailed in [Solver](Solver). Summary:
   priority than Q (`isLowerPriority`, P ≠ Q). Without a target preset (a hero solve), only (a)
   counts, the hero's own worn pieces included. A piece held by several presets: the most
   restrictive wins. The table is built once per solve (`presetBlockedUids`) and also applies to
-  the gem pool (§2.7).
+  the gem pool (§2.7). Local presets (`gs.presets.local`, kept in GS) never enter it: they hold no
+  piece.
 
 ### 1.7 Equipment editing (`packages/core/src/equip.ts`)
 
@@ -925,6 +926,7 @@ apps/renderer/src/
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← localStorage per-hero saved builds
 │   │   ├── presetHeroes.ts         ← localStorage reference + associated heroes per preset
+│   │   ├── localPresets.ts         ← localStorage local presets (kept in GS, never sent to the game)
 │   │   ├── rankPriority.ts         ← shared rank model (heroes, presets): rankOrder, isLowerPriority, reorderRank, …
 │   │   ├── presetPriority.ts       ← localStorage rank + lock per preset
 │   │   └── filterPresets.ts        ← localStorage per-hero filter snapshots

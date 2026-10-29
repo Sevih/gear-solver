@@ -1,10 +1,11 @@
 /**
  * Builder right sidebar — save / preset actions and the per-hero library.
  */
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cx } from "../../design/cx.js";
 import type { SavedBuild } from "../../lib/storage/savedBuilds.js";
 import type { FilterPreset } from "../../lib/storage/filterPresets.js";
+import { LOCAL_PRESET_NAME_MAX, validLocalPresetName } from "../../lib/storage/localPresets.js";
 import { Panel } from "./Panel.js";
 
 function ActionButton({
@@ -34,12 +35,16 @@ function ActionButton({
 export function RightSidebar({
   canSave,
   onSaveBuild,
+  onSaveLocalPreset,
   canGetPreset, onGetPreset, recoBusy, recoStatus, presetStatus = null,
   savedBuilds, onRestoreBuild, onRemoveBuild,
   presets, onLoadPreset, onRemovePreset,
 }: {
   canSave: boolean;
   onSaveBuild: () => void;
+  /** Save the selected build's pieces as a local preset under `name` (Presets
+   *  tab, never sent to the game). Returns the saved name, null if refused. */
+  onSaveLocalPreset?: (name: string) => string | null;
   canGetPreset: boolean;
   onGetPreset: () => void;
   recoBusy: boolean;
@@ -63,6 +68,7 @@ export function RightSidebar({
             {recoBusy ? "Fetching…" : "Get preset"}
           </ActionButton>
           <ActionButton disabled={!canSave} onClick={onSaveBuild}>Save build + filter preset</ActionButton>
+          {onSaveLocalPreset && <SaveLocalPreset canSave={canSave} onSave={onSaveLocalPreset} />}
         </div>
         {recoStatus && (
           <div className={cx(
@@ -115,6 +121,62 @@ export function RightSidebar({
         )}
       </Panel>
     </aside>
+  );
+}
+
+/** "Save as local preset…" — opens an inline name field (12 characters, the
+ *  in-game limit); Save stores the selected build's pieces as a local preset,
+ *  listed on the Presets tab. The line under it says what was saved. */
+function SaveLocalPreset({ canSave, onSave }: { canSave: boolean; onSave: (name: string) => string | null }) {
+  const [name, setName] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const valid = name != null ? validLocalPresetName(name) : null;
+  const submit = () => {
+    if (!valid) return;
+    const done = onSave(valid);
+    if (!done) return;
+    setSaved(done);
+    setName(null);
+  };
+  if (name == null) {
+    return (
+      <>
+        <ActionButton
+          disabled={!canSave}
+          onClick={() => { setSaved(null); setName(""); }}
+        >Save as local preset…</ActionButton>
+        {saved && <div className="text-[10px] leading-snug text-emerald-300/80">Saved as local preset “{saved}” — see the Presets tab.</div>}
+      </>
+    );
+  }
+  return (
+    <form
+      className="flex items-center gap-1"
+      onSubmit={(e) => { e.preventDefault(); submit(); }}
+      title="A local preset is kept in GS only — nothing is sent to the game, and it keeps no piece away from a solve."
+    >
+      <input
+        autoFocus
+        value={name}
+        maxLength={LOCAL_PRESET_NAME_MAX}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Escape") setName(null); }}
+        placeholder={`Name (${LOCAL_PRESET_NAME_MAX} chars max)`}
+        aria-label="Local preset name"
+        className="min-w-0 flex-1 rounded-md border border-white/8 bg-black/30 px-1.5 py-1 text-[11px] text-white placeholder:text-white/40 focus:border-cyan-400/40 focus:outline-none"
+      />
+      <button
+        type="submit"
+        disabled={!valid || !canSave}
+        className="rounded-md border border-cyan-400/40 bg-cyan-500/15 px-2 py-1 text-[11px] font-medium text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+      >Save</button>
+      <button
+        type="button"
+        onClick={() => setName(null)}
+        title="Cancel"
+        className="px-1 text-[12px] text-white/55 hover:text-white"
+      >✕</button>
+    </form>
   );
 }
 

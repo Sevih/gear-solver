@@ -8,6 +8,65 @@
 
 ## Items de backlog clôturés (index)
 
+### 📋 Presets locaux : enregistrés dans GS depuis le Builder ou par copie d'un preset du jeu, listés dans l'onglet Presets (G72) (2026-10-29)
+- ✅ **Pourquoi.** Demande de Sevih du 29/10 : préparer des presets sans toucher au jeu, pour les retrouver plus tard. Un
+  preset local = un nom (1 à 12 caractères, la limite du jeu, pour qu'il puisse un jour porter le même nom en jeu) et
+  huit emplacements dans l'ordre du fil, EE toujours à "0". Rien n'est écrit vers le jeu, et un preset local ne retient
+  aucune pièce pour le solveur.
+- ✅ **Stockage.** `apps/renderer/src/lib/storage/localPresets.ts`, clé `gs.presets.local` (une liste, comme
+  `gs.inv.filterPresets`) : `{ id, name, itemUids (8, fil), heroUid | null, createdAt }` ; `loadLocalPresets` (plus
+  récent d'abord, entrée mal formée ignorée, EE remise à "0" à la lecture, stockage illisible = liste vide),
+  `addLocalPreset` (nom trimé, refusé hors 1..12 ou liste ≠ 8), `renameLocalPreset`, `removeLocalPreset`,
+  `isReadableLocalPreset` (garde de l'import), `wireUidsFromBuild` (ordre moteur weapon, helmet, armor, gloves, boots,
+  accessory, exclusive, ooparts → ordre du fil weapon, accessory, helmet, armor, gloves, boots, EE, ooparts ; EE à "0")
+  et `localCopyOf` (pièces d'un preset du jeu rangées par leur slot d'inventaire, sinon par leur position sur le fil ;
+  EE à "0" ; nom coupé à 12 caractères, « Preset #num » pour un preset sans nom). Pas de limite de nombre.
+- ✅ **Création.** Builder (`RightSidebar.tsx`, panneau Library, sous « Save build + filter preset ») : « Save as local
+  preset… » ouvre un champ inline (12 caractères, Save, Échap ou ✕ pour annuler) ; `BuilderScreen.tsx`
+  `saveLocalPreset` enregistre les 7 pièces du résultat sélectionné (sans l'EE) et le héros du Builder en référence ; une
+  ligne verte dit ce qui a été enregistré. Onglet Presets : « Copy as local preset » dans l'en-tête de chaque carte du
+  jeu (désactivé sur un preset vide, « Copied ✓ » après), héros de référence = celui que la carte affiche (choisi, sinon
+  le porteur unique proposé).
+- ✅ **Onglet Presets** (`PresetsScreen.tsx`). Section « Local presets » sous les presets du jeu : titre, compte (avec «
+  · N shown » sous un filtre de classe, qui s'applique aussi aux presets locaux ; ordre toujours de création, plus
+  récent d'abord), une ligne discrète quand il n'y en a aucun ; l'onglet ne montre plus « No presets » quand la capture
+  n'a aucun preset du jeu mais qu'il existe des presets locaux. Chaque preset local a la même `PresetCard`, construite
+  sur une ligne synthétique : `localPresetRows(locals, inventory)` (`lib/presets/presetRows.ts`) fabrique un `Preset`
+  à `num` négatif (−1, −2… par position, jamais un numéro du jeu ni une clé `gs.presets.*`, qui ne voient jamais ces
+  lignes) et pose `PresetRow.localId` ; `presetRows` est inchangé (le calcul commun est sorti dans `indexInventory` /
+  `toRow`). Pièces résolues contre l'inventaire, pièce manquante marquée, « Worn by » ; aucune pièce n'y est « shared »
+  (un preset local ne tient rien en jeu). Sur la carte locale : badge « Local », ni rang, ni numéro, ni favori, ni
+  verrou, ni héros associés, ni « + Worklist » (il réserverait des pièces), ni « Optimize preset → » ; la ligne du héros
+  de référence avec son évaluation et « Optimize → » (sinon « No reference hero ») ; Rename inline (12 caractères) et
+  Delete en deux clics (le bouton devient « Delete? », revient à « Delete » en perdant le focus).
+- ✅ **Solveur.** `presetHolds` ne lit que `inventory.presets` : les presets locaux n'entrent ni dans
+  `presetBlockedUids` ni dans `presetHoldersOf` (un test le fixe).
+- ✅ **Sauvegarde.** `lib/storage/transfer.ts` : `localPresets` dans le bundle (absent d'une ancienne sauvegarde = aucun,
+  autre chose qu'une liste refusé), fusion par id (l'entrée locale gagne), une entrée que `loadLocalPresets` ignorerait
+  n'est ni fusionnée ni comptée (modèle G70) ; `ImportResult.localPresets`, ajouté au message d'import de
+  `BackupPane.tsx` (« , N local presets ») et à la description de l'export.
+- ✅ **Docs.** `wiki/Using-the-App.md` (Presets › Local presets, Builder › Save as local preset…, Settings › Backup),
+  `docs/architecture.md` et `wiki/Architecture.md` (onglet Presets), `docs/reference.md` et `wiki/Engine-Reference.md`
+  (§1.6 : les presets locaux n'entrent pas dans les holds ; arbre de `storage/`). Aucun item de `docs/todo.md` ne
+  correspondait.
+- ✅ **Tests.** `apps/renderer/test/localPresets.test.ts` (10) : aller-retour (plus récent d'abord, nom trimé, EE à
+  "0"), nom de 13 caractères / vide / liste de 7 refusés, rename (trimé, 13 caractères refusé, id inconnu) et remove,
+  entrées mal formées ignorées et stockage illisible ; conversion moteur → fil d'un `SolveBuild` factice (chaque uid à
+  son index, EE à "0", slot vide à "0") ; copie d'un preset du jeu (EE à "0", nom coupé à « A very long », preset sans
+  nom → « Preset #7 », liste courte rangée par slot) ; `localPresetRows` (num −1/−2 et `localId`, pièce manquante avec
+  son slot du fil, rien de partagé avec le preset du jeu qui tient les mêmes pièces, porteur, `presetRows` inchangé) ;
+  `presetBlockedUids` ignore un preset local enregistré. `apps/renderer/test/transfer.test.ts` (+3) : export de la
+  liste, import des seuls ids nouveaux, ne compte que le lisible, sauvegarde sans le champ, liste mal formée refusée.
+  `npm run typecheck` : `tsc --noEmit` sans erreur ; `npm test` : `Tests  169 passed (169)`, `Tests  219 passed
+  (219)`, `Tests  832 passed (832)` ; `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)`, comme avant.
+- ⏳ **Hors périmètre, laissé.** Le tableau des tests de `docs/reference.md` / `wiki/Engine-Reference.md` ne liste pas
+  `localPresets.test.ts` (son compte est déjà en retard, reste noté de G70). L'édition pièce par pièce d'un preset
+  local, l'envoi vers le jeu et le tri restent à décider.
+- ⏳ **Sevih, sur le fixe** : Builder › un résultat › « Save as local preset… » → nom → Save ; onglet Presets › la carte
+  « Local » sous les presets du jeu, avec le héros du Builder et « Optimize → » ; « Copy as local preset » sur une carte
+  du jeu ; Rename, Delete → « Delete? » ; Settings › Backup › Export puis Import sur une base vide → « , N local
+  presets » dans le message.
+
 ### 💎 Transistone : une pièce qui a déjà un palier 4 peut encore monter une ligne au palier 3 (G71) (2026-10-29)
 - ✅ **Pourquoi.** Règle redite par Sevih le 29/10 : une pièce sans ligne au palier 4 peut en monter UNE au palier 4 ;
   une pièce qui en a déjà une ne peut pas en recevoir une deuxième, mais peut monter une ligne au palier 3 (4/4/3/2 →
