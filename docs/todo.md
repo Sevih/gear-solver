@@ -94,11 +94,6 @@
       saute une entrée illisible (G69), `loadInventoryFilterPresets` un nom invalide. Rejeu `npx tsx` : un preset
       `{ id, name }` sans `filters` importé → message « 1 preset », rien de chargé. Pour l'utilisateur : un compte trop
       haut, sur une sauvegarde abîmée seulement. Recommandation : appliquer à l'import les gardes des chargeurs.
-- [ ] (c) **Clé des presets du jeu = `num` seul, quel que soit `PresetType`** — `packages/core/src/parse.ts:361` ; rangs
-      et verrous (`gs.presets.rank`, `gs.presets.locked`), `lib/presets/presetHolds.ts:39`, `gs.presetHeroes` se clés
-      sur `num`. Si le jeu réutilise un `Num` entre presets classiques et Master League, deux presets partagent rang,
-      verrou et héros. À vérifier sur une capture avec des presets Master League ; s'ils se recoupent, clé
-      `PresetType:Num` (avec migration des clés stockées).
 - [ ] (c) **Auto-prune avec un inventaire pas encore chargé** — `InventoryScreen.tsx:52` / `:165` : monté avant la fin
       d'`autoImport` (rechargement du renderer avec l'onglet Inventaire actif, `gs.tab` étant durable), `ui = []` vide
       toutes les disponibilités et l'auto-prune vide les puces gardées en session. À vérifier : un rechargement du
