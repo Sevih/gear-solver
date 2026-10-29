@@ -2,11 +2,12 @@ import type { ReactNode } from "react";
 import { cx } from "./cx.js";
 import { describeSteam, type SteamStatus } from "../steam.js";
 
-/** Vivid violet/cyan glow background — matches the design's PageBackground. */
-export function PageBackground({ children }: { children: ReactNode }) {
+/** Vivid violet/cyan glow background — matches the design's PageBackground.
+ *  `className` lets the app shell add its layout (a full-height flex column). */
+export function PageBackground({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div
-      className="gs-scope relative min-h-full"
+      className={cx("gs-scope relative min-h-full", className)}
       style={{
         background: `
           radial-gradient(60% 50% at 25% 0%, oklch(0.30 0.10 290 / 0.18), transparent 70%),

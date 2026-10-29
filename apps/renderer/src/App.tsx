@@ -368,7 +368,7 @@ export function App() {
   }
 
   return (
-    <PageBackground>
+    <PageBackground className="flex h-screen flex-col overflow-hidden">
       <GsHeader
         active={tab}
         onTabChange={setTab}
@@ -454,41 +454,51 @@ export function App() {
         </div>
       )}
 
-      <main className="min-h-[calc(100vh-60px)]">
+      {/* Fixed height (the space left under the header and the status bar), not
+          a min-height: every screen's `h-full` resolves against it, so a screen
+          scrolls inside its own `overflow-y-auto` area and keeps its header in
+          place — and the Inventory grid's virtualizer windows to the visible
+          rows instead of mounting every tile. Screens without an inner scroll
+          area (Home, Worklist) get a scrolling wrapper below. */}
+      <main className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-400">Loading {tab.toLowerCase()}…</div>}>
           {/* Home / Inventory / Builds are cheap to rebuild, so they stay
               conditionally rendered (and remount fresh — which also resets
               their per-screen error boundary). */}
           {tab === "Home" && (
-            <ScreenErrorBoundary>
-              <HomeScreen
-                inventory={inv}
-                game={game}
-                capStatus={capStatus}
-                steam={steam}
-                appVersion={APP_VERSION}
-                busy={running !== "none"}
-                onSteamInstall={() => void runSteamInstall()}
-                onSteamLaunch={() => void runSteamLaunch()}
-                onReload={() => void refreshInventory("Reloaded inventory")}
-                onSyncData={() => void syncGameData()}
-                onOpenBuilder={() => setTab("Builder")}
-                onDrill={(d) => { setInvDrill(d); setTab("Inventory"); }}
-              />
-            </ScreenErrorBoundary>
+            <div className="h-full overflow-y-auto">
+              <ScreenErrorBoundary>
+                <HomeScreen
+                  inventory={inv}
+                  game={game}
+                  capStatus={capStatus}
+                  steam={steam}
+                  appVersion={APP_VERSION}
+                  busy={running !== "none"}
+                  onSteamInstall={() => void runSteamInstall()}
+                  onSteamLaunch={() => void runSteamLaunch()}
+                  onReload={() => void refreshInventory("Reloaded inventory")}
+                  onSyncData={() => void syncGameData()}
+                  onOpenBuilder={() => setTab("Builder")}
+                  onDrill={(d) => { setInvDrill(d); setTab("Inventory"); }}
+                />
+              </ScreenErrorBoundary>
+            </div>
           )}
           {tab === "Inventory" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} drill={invDrill} onDrillConsumed={() => setInvDrill(null)} excludedPieces={excludedPieces} onToggleExclude={toggleExclude} /></ScreenErrorBoundary>}
           {tab === "Worklist" && (
-            <ScreenErrorBoundary>
-              <WorklistScreen
-                inventory={inv}
-                game={game}
-                equipped={equipped}
-                worklist={worklist}
-                onChange={setWorklist}
-                onAfterApply={() => { quietReconcile.current = true; void refreshInventory("Applied worklist change"); }}
-              />
-            </ScreenErrorBoundary>
+            <div className="h-full overflow-y-auto">
+              <ScreenErrorBoundary>
+                <WorklistScreen
+                  inventory={inv}
+                  game={game}
+                  equipped={equipped}
+                  worklist={worklist}
+                  onChange={setWorklist}
+                  onAfterApply={() => { quietReconcile.current = true; void refreshInventory("Applied worklist change"); }}
+                />
+              </ScreenErrorBoundary>
+            </div>
           )}
           {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} worklistHeroUids={worklistHeroUids} worklistClaims={solverWorklistClaims} presetRank={presetRank} onPresetRankChange={setPresetRank} presetLocked={presetLocked} onPresetLockedChange={setPresetLocked} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Builder"); }} onOptimizePreset={(uid, patch, note, presetNum) => { setBuilderHero(uid); setBuilderPatch({ patch, note, presetNum }); setTab("Builder"); }} /></ScreenErrorBoundary>}
           {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} worklistClaims={solverWorklistClaims} /></ScreenErrorBoundary>}

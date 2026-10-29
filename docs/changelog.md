@@ -8,6 +8,52 @@
 
 ## Items de backlog clôturés (index)
 
+### 📜 Inventaire : la grille défile seule sous un en-tête fixe, virtualisation effective (hauteur bornée) (G64) (2026-10-29)
+- ✅ **Pourquoi.** Relevé du 28/10 sur le fixe (1 575 pièces) : en descendant dans l'Inventaire, l'en-tête (onglets,
+  compteurs, `SlotBar`, tri, « Filter ») partait avec la grille, et le défilement ramait. Cause confirmée à la lecture :
+  `App.tsx` posait `<main className="min-h-[calc(100vh-60px)]">`, une hauteur MINIMALE ; le `h-full` des écrans qui en
+  dépendent (Inventaire, Builds, Presets, Builder) valait donc `auto`, le conteneur de `VirtualGearGrid` (`flex-1 min-h-0
+  overflow-y-auto`) s'étirait à toute la liste, c'était la PAGE qui défilait, et le virtualiseur, dont la fenêtre était
+  aussi haute que la liste, montait toutes les tuiles. Mesure (nouveau test, géométrie de la grille : tuile 96 px,
+  écart 4, overscan 4, 10 colonnes à 1 000 px) : 1 500 pièces → **1 500 tuiles montées** avec un conteneur à la hauteur
+  de la liste (l'avant), **100** avec un conteneur borné à 600 px (l'après, fenêtre minimale de l'app), **130** à 900 px
+  et **170** à 900 px défilé à la ligne 100 (la fenêtre reste plate).
+- ✅ **Hauteur bornée** : `PageBackground` (`design/Shell.tsx`) accepte un `className` ; `App.tsx` en fait une colonne
+  flex `h-screen overflow-hidden` (barre du haut, barre de statut quand elle s'affiche, `main`, ligne « Manual
+  fallback » sans capture) et `main` devient `min-h-0 flex-1 overflow-hidden` : une hauteur FIXE, le reste de la
+  fenêtre, qui suit aussi l'apparition de la barre de statut (pas de `calc(100vh-60px)` magique). La page elle-même ne
+  défile plus ; chaque écran défile dans sa zone.
+- ✅ **Écran par écran.** **Inventaire** : racine `h-full` désormais résolue ; onglets, `SlotBar`, tri et « Filter »
+  restent en place, `parentRef` de `VirtualGearGrid` est la seule zone qui défile ; le panneau de détail (`ItemDetail`,
+  `h-full` + son `overflow-y-auto`) est borné lui aussi et défile dans son cadre. **Builds** et **Presets** : leur
+  barre du haut (filtres / en-tête) reste en place et la liste défile dans la zone `flex-1 min-h-0 overflow-y-auto`
+  qu'elles avaient déjà (prévue pour ça, jamais active). **Builder** : la chaîne de hauteur définie qu'il attendait
+  (wrapper `h-full` du montage permanent) fonctionne : barre d'outils et table des résultats (hauteur fixe, déjà
+  virtualisée) restent, la bande d'équipement et la colonne de droite (`w-72`) défilent chacune dans leur
+  `overflow-y-auto`. **Home** et **Worklist**, sans zone défilante à eux, sont enveloppés dans `App.tsx` d'un
+  `<div className="h-full overflow-y-auto">` : ils défilent comme avant, sous la barre du haut. **Settings** et les
+  autres modales (`fixed inset-0`) ne bougent pas. Aucun écran ne se retrouve coupé ou sans ascenseur.
+- ✅ **Rendus.** Pas de rendus en masse à corriger : les props de `GearTile` (`memo`) sont déjà stables (`onSelect` et
+  `toggleExclude` en `useCallback`, `sorted` et `charsByUid` en `useMemo`) ; la lenteur venait des 1 500 tuiles montées.
+  `VirtualGearGrid.tsx` exporte sa géométrie (`TILE_SIZE`, `TILE_GAP`, `GRID_OVERSCAN`, `gridColumns`) pour le test, sans
+  changer le calcul ; son commentaire dit que la fenêtre exige un parent borné.
+- ✅ **Effet visible annexe** : sans capture, la ligne « Manual fallback » sous `main` est maintenant collée en bas de la
+  fenêtre au lieu d'être repoussée sous le pli par la hauteur minimale. Rien d'autre ne change (espacements, en-têtes,
+  largeurs) ; la position de défilement de la grille ne survit pas au changement d'onglet (remontage, comme avant).
+- ✅ **Tests** : nouveau `apps/renderer/test/inventoryGridWindow.test.ts` (4) — le `Virtualizer` de
+  `@tanstack/react-virtual` piloté sans DOM (rect et offset fournis à la main, faute de jsdom dans le dépôt) avec la
+  géométrie de la grille : 10 colonnes à 1 000 px ; conteneur à la hauteur de la liste → 1 500 tuiles ; borné à 600 px →
+  au plus une fenêtre + overscan, moins d'un dixième des pièces ; défilé profond → fenêtre de même taille.
+- ✅ **Docs** : `docs/release-notes.md › [Unreleased]`. `wiki/Using-the-App.md` ne décrit pas le défilement, `docs/todo.md`
+  n'avait pas d'item correspondant : inchangés.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` (sans erreur) ; `npm test` → core « Tests 169 passed (169) »,
+  desktop « Tests 219 passed (219) », renderer « Tests 765 passed (765) » ; `npm run lint` → « ✖ 13 problems (0 errors,
+  13 warnings) », inchangé. Pas de rendu réel possible ici (ni `npm run dev` ni Electron) : la mise en page n'a été
+  vérifiée qu'à la lecture des classes.
+- ⏳ **Sevih** sur le fixe : Inventaire, défiler jusqu'en bas → l'en-tête et « Filter » restent visibles, défilement
+  fluide ; chaque autre onglet (Home, Builds, Presets, Builder, Worklist, et Settings) défile encore jusqu'à son bas,
+  y compris avec la barre de statut et son log ouverts.
+
 ### 🗂️ Données : table `items.json` du contrat synchronisée (facultative) et exposée au renderer, `itemNameOf` (G63) (2026-10-28)
 - ✅ **Pourquoi.** outerpedia ajoute au contrat solver une table des objets hors équipement (A83 :
   `{ [id]: { name, icon, itemType, itemSubType, grade, canSell, sellPrice } }`) pour nommer les matériaux, monnaies et

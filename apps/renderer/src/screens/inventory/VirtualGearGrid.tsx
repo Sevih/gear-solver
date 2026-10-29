@@ -106,9 +106,20 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect,
  *  visible rows + a small overscan window are mounted as React subtrees,
  *  which keeps DOM/JS footprint flat regardless of inventory size — the
  *  legacy non-virtualized grid mounted every GearTile up-front, which
- *  ballooned past 2k mounted components on heavy inventories. */
-const TILE_SIZE = 96;
-const TILE_GAP = 4;
+ *  ballooned past 2k mounted components on heavy inventories. The window is
+ *  the scroll container's height, so it needs a bounded parent (App's `main`
+ *  has a fixed height): an auto-height container grows to the whole list and
+ *  every row is "visible" again. */
+export const TILE_SIZE = 96;
+export const TILE_GAP = 4;
+/** Rows mounted past each edge of the visible window. */
+export const GRID_OVERSCAN = 4;
+/** Column math: same packing logic as the old `repeat(auto-fill, minmax(96px, 1fr))`.
+ *  Min 1 column so the math doesn't blow up before the first ResizeObserver
+ *  callback fires (width=0 at first paint). */
+export function gridColumns(width: number): number {
+  return Math.max(1, Math.floor((width + TILE_GAP) / (TILE_SIZE + TILE_GAP)));
+}
 export function VirtualGearGrid({
   items, selectedId, onSelect, charsByUid, excludedPieces, onToggleExclude,
 }: {
@@ -135,16 +146,13 @@ export function VirtualGearGrid({
     return () => obs.disconnect();
   }, []);
 
-  // Column math: same packing logic as the old `repeat(auto-fill, minmax(96px, 1fr))`.
-  // Min 1 column so the math doesn't blow up before the first ResizeObserver
-  // callback fires (width=0 at first paint).
-  const cols = Math.max(1, Math.floor((width + TILE_GAP) / (TILE_SIZE + TILE_GAP)));
+  const cols = gridColumns(width);
   const rowCount = Math.ceil(items.length / cols);
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
     estimateSize: () => TILE_SIZE + TILE_GAP,
-    overscan: 4,
+    overscan: GRID_OVERSCAN,
   });
 
   return (
