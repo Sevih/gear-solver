@@ -67,6 +67,10 @@
       d'`autoImport` (rechargement du renderer avec l'onglet Inventaire actif, `gs.tab` étant durable), `ui = []` vide
       toutes les disponibilités et l'auto-prune vide les puces gardées en session. À vérifier : un rechargement du
       renderer arrive-t-il en usage packagé ? Sinon sans effet (la session repart vide à chaque lancement).
+- [ ] (b) **Auto-prune à l'Apply d'un preset qui change de portée** — laissé par G70 : un preset qui change les
+      emplacements ou l'onglet (ex. Casque + sub EFF, sans casque EFF) perd encore en silence la valeur absente de la
+      nouvelle portée ; le cas « même portée » est couvert (valeur grisée, retirable). Touche l'auto-prune : à trancher.
+- [ ] ⚪ `docs/reference.md` donne « 8 tests » pour `transfer.test.ts`, compte périmé depuis G67 / G70.
 
 ---
 
