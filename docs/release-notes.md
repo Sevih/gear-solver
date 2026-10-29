@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.18.0] — 2026-10-29
+
 - **Inventory**: the gear grid scrolls on its own, the header stays put, and scrolling is smooth
   again on big inventories.
 - **Inventory › Filter › Base rolls**: pick an operator (≥, >, =, ≤, <) and use X for a free line;
