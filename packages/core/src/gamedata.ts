@@ -62,8 +62,23 @@ export interface EquipmentDef {
   armorSetIcon: string | null;
   /** Class restriction display name (Striker/Mage/Ranger/Defender/Healer). null when unrestricted. */
   class: string | null;
+  /** Scrap fields (outerpedia G73), absent from tables synced before them:
+   *  `ItemTemplet.CanSell` / `SellPrice` (gold) and `CanDissolve` with the
+   *  dissolve rewards — `assets` by asset type (`AT_GOLD` = gold), `items` by
+   *  item id (`game.items`), each a min..max roll. Read by the Inventory's
+   *  scrap-value line (`lib/inventory/scrapValue.ts`). */
+  canSell?: boolean;
+  sellPrice?: number;
+  canDissolve?: boolean;
+  dissolve?: EquipmentDissolve | null;
 }
 export type EquipmentTable = Record<string, EquipmentDef>;
+
+/** What dissolving one piece returns (`EquipmentDef.dissolve`). */
+export interface EquipmentDissolve {
+  assets: Array<{ type: string; min: number; max: number }>;
+  items: Array<{ id: string; min: number; max: number }>;
+}
 
 /** Main-stat enhancement scaling tables (outerpedia's `datagen/generators/enhance.ts`). */
 export interface EnhanceData {

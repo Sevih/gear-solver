@@ -63,6 +63,13 @@ A dense, searchable table of every gear piece you own.
   candidates** (always first, can't be deleted) shows the unequipped 5★ / 6★ gear at +0, T0, never
   reforged, with Base rolls **not at least 3/3/3/X** — the pieces without three lines at 3.
 - **Sort**: by enhance level, stars, breakthrough, or by a specific substat's value.
+- **Scrap value** (under the sort bar, once a filter is set): what the pieces on screen would return
+  in-game — the gold from selling them and the gold and materials from dissolving them (a min–max
+  range, from the game tables; past four materials, hover **+n more** for the rest). Only free pieces
+  count: equipped or locked pieces neither sell nor dissolve, and an enhanced piece doesn't sell but
+  still dissolves; it then also refunds part of its enhancement materials, which the line does not
+  estimate (it says how many such pieces there are). Information only — nothing is sold from here.
+  The line appears once the synced game data carries the sell and dissolve values.
 - **Click any piece** → the left panel shows the full detail: main stat(s), substats with their
   tick counts (or gems for Talisman/EE), reforge / breakthrough / Singularity state, a
   **quality score**, and any item / set passives.

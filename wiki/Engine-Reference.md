@@ -75,7 +75,7 @@ particular):
 
 | Source (raw game table)              | Target `data/derived/`     | Content                                                |
 |--------------------------------------|---------------------------|--------------------------------------------------------|
-| `ItemTemplet.json`                   | `equipment.json`          | ItemID → slot/grade/star/setId/armorSetId/name/image/effectIcon/class |
+| `ItemTemplet.json`                   | `equipment.json`          | ItemID → slot/grade/star/setId/armorSetId/name/image/effectIcon/class; optional: `canSell`, `sellPrice` (gold), `canDissolve`, `dissolve` (`{ assets: [{type, min, max}], items: [{id, min, max}] }` or null, `AT_GOLD` = gold) |
 | `ItemOptionTemplet.json`             | `options.json`            | OptionID → StatOption (`{st, ap, v}`) OR IOT_BUFF reference |
 | `BuffTemplet.json`                   | `buffs.json`              | BuffID → array of StatOption (per enhanceLevel)        |
 | `ItemSpecialOptionTemplet.json` + curated (outerpedia) | `sets.json` | setId → levels[] → {p2, p4, p2_desc, p4_desc, breakLimitCounts, ignoreLowSet, combatEffects}, name |

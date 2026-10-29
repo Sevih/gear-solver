@@ -72,7 +72,7 @@ cibles dérivent de la même table — `ItemSpecialOptionTemplet` notamment) :
 
 | Source (table brute du jeu)          | Cible `data/derived/`     | Contenu                                                |
 |--------------------------------------|---------------------------|--------------------------------------------------------|
-| `ItemTemplet.json`                   | `equipment.json`          | ItemID → slot/grade/star/setId/armorSetId/name/image/effectIcon/class |
+| `ItemTemplet.json`                   | `equipment.json`          | ItemID → slot/grade/star/setId/armorSetId/name/image/effectIcon/class ; facultatifs (G73) : `canSell`, `sellPrice` (or), `canDissolve`, `dissolve` (`{ assets: [{type, min, max}], items: [{id, min, max}] }` ou null, `AT_GOLD` = l'or) |
 | `ItemOptionTemplet.json`             | `options.json`            | OptionID → StatOption (`{st, ap, v}`) OU IOT_BUFF reference |
 | `BuffTemplet.json`                   | `buffs.json`              | BuffID → array of StatOption (per enhanceLevel)        |
 | `ItemSpecialOptionTemplet.json` + curated (outerpedia) | `sets.json` | setId → levels[] → {p2, p4, p2_desc, p4_desc, breakLimitCounts, ignoreLowSet, combatEffects}, name |

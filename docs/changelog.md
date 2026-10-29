@@ -8,6 +8,47 @@
 
 ## Items de backlog clôturés (index)
 
+### 🪙 Inventaire : valeur de rebut des pièces filtrées, vente et désassemblage depuis les tables (G74) (2026-10-29)
+- ✅ **Pourquoi.** Demande de Sevih du 29/10 : savoir ce que vaut un lot de rebut avant d'aller le vider en jeu. Quand
+  un filtre est posé, une ligne sous la barre de tri dit ce que les pièces affichées rendraient : l'or de leur vente,
+  l'or et les matériaux de leur désassemblage. Information seulement, rien n'est cliquable.
+- ✅ **Contrat.** `packages/core/src/gamedata.ts` : `EquipmentDef` gagne quatre champs FACULTATIFS (`canSell`,
+  `sellPrice`, `canDissolve`, `dissolve: EquipmentDissolve | null`, `{ assets: [{type, min, max}], items: [{id, min,
+  max}] }`), publiés par outerpedia (G73) et absents d'un `equipment.json` synchronisé avant eux ; `data/derived/` est
+  inchangé.
+- ✅ **Calcul.** Module pur `apps/renderer/src/lib/inventory/scrapValue.ts`. `scrapValue(pieces, equipment, items)` suit
+  les règles de l'écran « Item clear » du client : vente = `canSell`, +0, ni équipée ni verrouillée ; désassemblage =
+  `canDissolve`, ni équipée ni verrouillée (une pièce améliorée se désassemble mais ne se vend pas). Or (`AT_GOLD`) et
+  matériaux additionnés par id, min et max séparément, dans l'ordre de première rencontre ; un asset autre que l'or est
+  listé sous son type ; nom d'un matériau par `itemLabel` (`item <id>` faute de `items.json`). `enhancedCount` = les
+  pièces améliorées parmi les désassemblables (leur remboursement de matériaux d'amélioration n'est pas dans les
+  tables : compté, pas estimé) ; `unknown` = pièces sans entrée ou sans les champs. `hasScrapFields(equipment)` dit si
+  la table porte les champs ; `formatGold` groupe les milliers par une espace fine insécable (U+202F) sans locale,
+  `formatRange` écrit `a` ou `a–b`.
+- ✅ **Écran.** `InventoryScreen.tsx` : `ScrapLine` sous `SortHeader`, seulement si `activeFilterCount(f) > 0` et
+  `hasScrapFields(game.equipment)` (sinon aucun élément rendu), calculée sur `filtered` (le tri n'y change rien) : «
+  Scrap value of these 37 pieces — sell: 12 400 gold (31 sellable) · dissolve: 2 100–3 400 gold, 24–40 × Stage 2
+  Enhancement Stone, … (37 dissolvable, 3 enhanced: refund not counted) », « · n not in the game data » s'il y a des
+  inconnues ; au-delà de quatre matériaux, « +n more » souligné en pointillé avec le reste en `title`. Texte
+  `text-[11px] text-white/70`, aucune autre retouche visuelle.
+- ✅ **Docs.** `wiki/Using-the-App.md` (Inventory › Scrap value), `docs/reference.md` et `wiki/Engine-Reference.md`
+  (ligne `equipment.json` : les quatre champs facultatifs). Aucun item de `docs/todo.md` ne correspondait.
+- ✅ **Tests.** `apps/renderer/test/scrapValue.test.ts` (10) sur des entrées factices : deux pièces libres à +0 (vente
+  1 300, or 150–250, matériau commun fusionné 3–7, matériau sans nom → `item 600`) ; équipée et verrouillée exclues des
+  deux ; améliorée exclue de la vente, comptée au désassemblage avec `enhancedCount` ; pièce ni vendable ni
+  désassemblable (ni comptée ni inconnue) ; entrée sans les champs et item absent → `unknown` ; pas de table d'objets ;
+  `hasScrapFields` (vrai sur une table aux champs, faux sur une table sans aucun champ, vide ou absente : la ligne ne
+  s'affiche pas) ; `formatGold` / `formatRange`. `npm run typecheck` : `tsc --noEmit` sans erreur ; `npm test` : `Tests
+  169 passed (169)`, `Tests  219 passed (219)`, `Tests  842 passed (842)` ; `npm run lint` : `✖ 13 problems (0 errors,
+  13 warnings)`, comme avant.
+- ⏳ **Laissé.** La règle du client teste `EnchantExp == 0`, la pièce capturée ne porte que son niveau : une pièce à +0
+  avec de l'Exp partielle compte ici comme vendable alors que le jeu la refuse (cas rare ; `GearPiece` n'expose pas
+  l'Exp, l'y ajouter touche `parse.ts`). Le remboursement d'amélioration reste dit, pas calculé. Le filtre de slot
+  (SlotBar) ne compte pas dans `activeFilterCount` : un slot seul ne fait pas apparaître la ligne.
+- ⏳ **Sevih** : la ligne n'apparaît qu'après la synchronisation d'un `equipment.json` portant les champs (G73 côté
+  outerpedia) ; ensuite, Inventaire › filtre « Scrap candidates » → vérifier la ligne contre l'écran « Item clear » du
+  jeu (or de vente, or et matériaux du désassemblage).
+
 ### 📋 Presets locaux : enregistrés dans GS depuis le Builder ou par copie d'un preset du jeu, listés dans l'onglet Presets (G72) (2026-10-29)
 - ✅ **Pourquoi.** Demande de Sevih du 29/10 : préparer des presets sans toucher au jeu, pour les retrouver plus tard. Un
   preset local = un nom (1 à 12 caractères, la limite du jeu, pour qu'il puisse un jour porter le même nom en jeu) et
