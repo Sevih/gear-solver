@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.23.0] — 2026-10-30
+
 - **Builder › gems vs stat filters**: a stat filter's minimum is now served before the substat
   priority when the solver picks gems. Before, with a priority set, the solver could swap the hero's
   socketed gems for the priority's gems, drop a filtered stat under its minimum and return no result at
