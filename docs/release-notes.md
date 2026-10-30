@@ -12,7 +12,15 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Linux (AppImage)**: the app is now also published as an AppImage for Linux, next to the Windows
+  installer. Native Steam with the game under Proton is supported: Settings › Setup tells you the
+  launch option BepInEx needs (`WINEDLLOVERRIDES="winhttp=n,b" %command%`). Auto-update works when the
+  AppImage sits in a writable folder; the Home card says otherwise. See the README for the steps.
+- **Inventory › scrap value**: with a filter set, a line under the sort header says what the shown
+  pieces would return in-game — gold if sold, gold and materials if dissolved (ranges when the game
+  rolls them). Information only.
+- **Presets › Local presets**: save a build from the Builder, or copy an in-game preset, as a local
+  preset kept in the app; rename and delete them from the Presets tab.
 
 ## [1.20.0] — 2026-10-29
 
