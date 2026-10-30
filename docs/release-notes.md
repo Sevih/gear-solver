@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.21.0] — 2026-10-30
+
 - **Linux (AppImage)**: the app is now also published as an AppImage for Linux, next to the Windows
   installer. Native Steam with the game under Proton is supported: Settings › Setup tells you the
   launch option BepInEx needs (`WINEDLLOVERRIDES="winhttp=n,b" %command%`). Auto-update works when the
