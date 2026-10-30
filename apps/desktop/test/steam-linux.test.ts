@@ -145,7 +145,11 @@ describe("steamStatus / install under Linux", () => {
     return { steam, cfg, out, bundled };
   }
 
-  it("compares the OutDir after the Z: translation, reads the launch option, matches the heartbeat", async () => {
+  // The Z: mapping is of POSIX paths: on the Windows CI runner the temp
+  // folders are `C:\…`, which Wine would never show as `Z:C:\…`.
+  const posixOnly = it.skipIf(process.platform === "win32");
+
+  posixOnly("compares the OutDir after the Z: translation, reads the launch option, matches the heartbeat", async () => {
     const { steam, cfg, out, bundled } = setup(510);
     writeFileSync(cfg, `[Capture]\nOutDir = Z:${out.replace(/\//g, "\\")}\n`);
     writeLocalConfig(steam, "111", 'WINEDLLOVERRIDES="winhttp=n,b" %command%');
@@ -168,7 +172,7 @@ describe("steamStatus / install under Linux", () => {
     expect(st.live).toBe(false);
   });
 
-  it("install writes the OutDir as the plugin reads it inside Wine", async () => {
+  posixOnly("install writes the OutDir as the plugin reads it inside Wine", async () => {
     const { cfg, out, bundled } = setup(400);
     const st = await installSteamPlugin({ captureOut: out, bundledDll: bundled, scratchDir: join(out, "..", "scratch"), log: () => {} });
     expect(readFileSync(cfg, "utf-8").split("\n")).toContain(`OutDir = Z:${out.replace(/\//g, "\\")}`);
