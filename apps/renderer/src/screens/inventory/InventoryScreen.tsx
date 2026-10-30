@@ -10,7 +10,9 @@ import { ItemDetail } from "./ItemDetail.js";
 import { SubTabBar, SlotBar } from "./InventoryTabs.js";
 import { FilterButton, FilterModal } from "./FilterModal.js";
 import { VirtualGearGrid } from "./VirtualGearGrid.js";
-import { formatGold, formatRange, hasScrapFields, scrapValue, type ScrapValue } from "../../lib/inventory/scrapValue.js";
+import { ScrapCard } from "./ScrapCard.js";
+import { hasScrapFields, scrapValue } from "../../lib/inventory/scrapValue.js";
+import { addAll, materialRows, pruneSelection, scrapScope, toggleSelection } from "../../lib/inventory/scrapCard.js";
 
 // ── screen ──────────────────────────────────────────────────────────────
 
@@ -42,12 +44,15 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // Session-scoped view state — filters / sort / sub-tab survive remounting on
   // a tab swap (sessionStorage) but reset to their defaults on the next app
   // launch, so each session starts from a clean inventory view rather than last
-  // session's leftover sort+filters. `selectedId` stays fully ephemeral.
+  // session's leftover sort+filters. `selectedId` and the Scrap value card's
+  // selection (+ its mode) stay fully ephemeral.
   const [f, setF] = useSessionState<FilterState>(FILTERS_STORAGE_KEY, emptyFilters, FILTER_CODEC);
   const [tab, setTabState] = useSessionState<InvTab>("gs.inv.tab", "all");
   const [sort, setSort] = useSessionState<SortKey>("gs.inv.sort", "enhance");
   const [dir, setDir] = useSessionState<"asc" | "desc">("gs.inv.dir", "desc");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<Set<string>>(() => new Set());
+  const [selectMode, setSelectMode] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
 
   const ui = useMemo<UiPiece[]>(() => (inventory ? inventory.gear.map((g) => toUiPiece(g, game)) : []), [inventory, game]);
@@ -253,20 +258,53 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   }, [ui]);
   const selected = selectedId ? uiById.get(selectedId) ?? null : null;
 
-  // Scrap value of the filtered pieces — only once a filter narrows the view
-  // and the synced tables carry the scrap fields (older tables: no line).
-  const filterCount = activeFilterCount(f);
-  const scrap = useMemo<ScrapValue | null>(
-    () => (filterCount > 0 && game && hasScrapFields(game.equipment) ? scrapValue(filtered, game.equipment, game.items) : null),
-    [filterCount, game, filtered],
-  );
+  // The card's selection loses the pieces that left the inventory (sold,
+  // dissolved, new capture), like the filters' auto-prune — adjusted during
+  // render when the inventory changes rather than in an effect, so the card
+  // never prices a stale id for one frame.
+  const [prunedFor, setPrunedFor] = useState(uiById);
+  if (prunedFor !== uiById) {
+    setPrunedFor(uiById);
+    setSelection((prev) => pruneSelection(prev, uiById));
+  }
 
-  // Stable click handler — toggles the selection so a second click clears
-  // the detail panel. Stays referentially stable across renders so memoized
-  // `GearTile`s skip re-renders when other tiles change.
+  const filterCount = activeFilterCount(f);
+  const scrapReady = !!game && hasScrapFields(game.equipment);
+  const showScrap = scrapReady && (filterCount > 0 || selection.size > 0 || selectMode);
+
+  // Scrap value card — the selection when it isn't empty (even the pieces
+  // outside the view), the filtered view otherwise. Older tables without the
+  // scrap fields: no card.
+  const scrapCard = useMemo(() => {
+    if (!showScrap || !game) return null;
+    const scope = scrapScope(selection, filtered, uiById);
+    const scrap = scrapValue(scope.pieces, game.equipment, game.items);
+    return { scrap, label: scope.label, materials: materialRows(scrap, game.items) };
+  }, [showScrap, game, selection, filtered, uiById]);
+
+  // Stable handlers — referentially stable across selection changes (the
+  // click handler changes with the mode only) so memoized `GearTile`s skip
+  // re-renders when other tiles change.
+  // A click shows the piece in the detail panel (a second click clears it);
+  // in selection mode it also toggles the piece's selection and keeps it shown.
   const onSelect = useCallback((id: string) => {
-    setSelectedId((cur) => (cur === id ? null : id));
+    if (selectMode) {
+      setSelection((prev) => toggleSelection(prev, id));
+      setSelectedId(id);
+    } else {
+      setSelectedId((cur) => (cur === id ? null : id));
+    }
+  }, [selectMode]);
+  const onToggleSelect = useCallback((id: string) => {
+    setSelection((prev) => toggleSelection(prev, id));
   }, []);
+  const onSelectShown = useCallback(() => {
+    setSelection((prev) => addAll(prev, filtered.map((p) => p.id)));
+  }, [filtered]);
+  const onSelectExcluded = useCallback(() => {
+    if (!excludedPieces) return;
+    setSelection((prev) => addAll(prev, [...excludedPieces].filter((id) => uiById.has(id))));
+  }, [excludedPieces, uiById]);
 
   function toggleSort(k: FixedSortKey) {
     if (sort === k) setDir(dir === "desc" ? "asc" : "desc");
@@ -292,19 +330,36 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   }
 
   // 2-column layout: [ItemDetail (always shown, empty placeholder if no
-  // selection)] | [tabs + slot bar + sort header + grid]. The old right-
+  // selection) + Scrap value card] | [tabs + slot bar + sort header + grid]. The old right-
   // side FilterPanel was replaced by a game-style modal triggered from the
   // SubTabBar's right slot — same source of truth (`f` + `setF`), just a
   // different surface.
   return (
     <div className="flex h-full min-h-0 flex-1 gap-3 px-4 py-3">
-      <ItemDetail
-        piece={selected}
-        equippedChar={selected?.equippedBy ? charsByUid.get(selected.equippedBy) ?? null : null}
-        game={game}
-        excluded={selected ? (excludedPieces?.has(selected.id) ?? false) : false}
-        onToggleExclude={onToggleExclude}
-      />
+      <div className="flex w-80 shrink-0 flex-col gap-3 min-h-0">
+        <div className="flex min-h-0 flex-1">
+          <ItemDetail
+            piece={selected}
+            equippedChar={selected?.equippedBy ? charsByUid.get(selected.equippedBy) ?? null : null}
+            game={game}
+            excluded={selected ? (excludedPieces?.has(selected.id) ?? false) : false}
+            onToggleExclude={onToggleExclude}
+          />
+        </div>
+        {scrapCard && (
+          <ScrapCard
+            scrap={scrapCard.scrap}
+            label={scrapCard.label}
+            materials={scrapCard.materials}
+            selectMode={selectMode}
+            selectedCount={selection.size}
+            onToggleMode={() => setSelectMode((m) => !m)}
+            onSelectShown={onSelectShown}
+            onSelectExcluded={excludedPieces ? onSelectExcluded : undefined}
+            onClear={() => setSelection(new Set())}
+          />
+        )}
+      </div>
       <div className="min-w-0 flex-1 flex flex-col min-h-0">
         <div className="flex items-center justify-between">
           <SubTabBar tab={tab} setTab={setTab} counts={tabCounts} />
@@ -316,7 +371,6 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
           onSort={toggleSort} onSubSort={onSubSort}
           availableSubs={availableSubs}
         />
-        {scrap && <ScrapLine total={sorted.length} scrap={scrap} />}
         <VirtualGearGrid
           items={sorted}
           selectedId={selectedId}
@@ -324,6 +378,8 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
           charsByUid={charsByUid}
           excludedPieces={excludedPieces}
           onToggleExclude={onToggleExclude}
+          selection={scrapReady ? selection : undefined}
+          onToggleSelect={scrapReady ? onToggleSelect : undefined}
         />
       </div>
       <FilterModal
@@ -342,31 +398,6 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         armorSetName={(id) => game?.sets?.[id]?.name ?? `Set #${id}`}
       />
     </div>
-  );
-}
-
-/** Materials listed inline before the rest folds into "+n more". */
-const SCRAP_MATERIALS_SHOWN = 4;
-
-/** One discreet line: what the displayed pieces would return if sold or
- *  dissolved in-game. Information only — nothing here is clickable. */
-function ScrapLine({ total, scrap }: { total: number; scrap: ScrapValue }) {
-  const { sell, dissolve, unknown } = scrap;
-  const mat = (m: ScrapValue["dissolve"]["items"][number]) => `${formatRange(m)} × ${m.name}`;
-  const shown = dissolve.items.slice(0, SCRAP_MATERIALS_SHOWN);
-  const rest = dissolve.items.slice(SCRAP_MATERIALS_SHOWN);
-  const dissolveParts = [`${formatRange(dissolve.gold)} gold`, ...shown.map(mat)];
-  const notes = [`${dissolve.count} dissolvable`];
-  if (dissolve.enhancedCount > 0) notes.push(`${dissolve.enhancedCount} enhanced: refund not counted`);
-  return (
-    <p className="px-1 pt-1.5 text-[11px] text-white/70">
-      Scrap value of {total === 1 ? "this piece" : `these ${total} pieces`}
-      {" — "}sell: {formatGold(sell.gold)} gold ({sell.count} sellable)
-      {" · "}dissolve: {dissolveParts.join(", ")}
-      {rest.length > 0 && <>, <span title={rest.map(mat).join("\n")} className="underline decoration-dotted">+{rest.length} more</span></>}
-      {" "}({notes.join(", ")})
-      {unknown > 0 && <> · {unknown} not in the game data</>}
-    </p>
   );
 }
 

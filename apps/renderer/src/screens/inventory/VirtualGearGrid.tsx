@@ -21,6 +21,10 @@ interface GearItemProps {
   excluded?: boolean;
   /** Stable handler (App-owned, useCallback) so the memo stays effective. */
   onToggleExclude?: (id: string) => void;
+  /** In the Scrap value card's selection (Ctrl+click toggles it). */
+  selected?: boolean;
+  /** Stable handler (screen-owned, useCallback), same as `onToggleExclude`. */
+  onToggleSelect?: (id: string) => void;
 }
 
 /** Icon-only grid tile — clicking it surfaces the full detail in the left
@@ -32,10 +36,17 @@ interface GearItemProps {
  *    - bottom-left, above the EquipmentIcon's own T<n> tier badge: the
  *                 in-game CT_Slot_Lock sprite, served at
  *                 /img/ui/inven/CT_Slot_Lock.webp.
- *  Selection is conveyed by a soft cyan halo (ring + outer glow) rather
- *  than a hard border so the focus reads as ambient light, not a frame. */
-const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect, excluded, onToggleExclude }: GearItemProps) {
-  const onClick = useCallback(() => onSelect(piece.id), [onSelect, piece.id]);
+ *    - top-left corner: amber check when the piece is in the Scrap value
+ *                 card's selection (coexists with the exclusion style).
+ *  The displayed piece is conveyed by a soft cyan halo (ring + outer glow)
+ *  rather than a hard border so the focus reads as ambient light, not a frame. */
+const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect, excluded, onToggleExclude, selected, onToggleSelect }: GearItemProps) {
+  // Ctrl+click toggles the selection without touching the panel; a plain
+  // click goes to the screen, which decides (selection mode or not).
+  const onClick = useCallback((e: MouseEvent) => {
+    if (onToggleSelect && (e.ctrlKey || e.metaKey)) onToggleSelect(piece.id);
+    else onSelect(piece.id);
+  }, [onSelect, onToggleSelect, piece.id]);
   // Right-click toggles global solver exclusion — the discoverable surface is
   // the detail panel's button, this is the power-user shortcut.
   const onCtx = useCallback((e: MouseEvent) => {
@@ -47,7 +58,11 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect,
     <button
       onClick={onClick}
       onContextMenu={onCtx}
-      title={excluded ? `${piece.name} — excluded from the solver (right-click to include)` : piece.name}
+      title={[
+        piece.name,
+        selected && "selected (Ctrl+click to unselect)",
+        excluded && "excluded from the solver (right-click to include)",
+      ].filter(Boolean).join(" — ")}
       className={cx(
         "group relative grid place-items-center rounded-lg border-2 p-0 transition-all",
         // Selection halo: thicker (2px) cyan stroke hugging the tile edge,
@@ -72,6 +87,14 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect,
           className="pointer-events-none absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-rose-500/85 text-[10px] font-bold leading-none text-white"
         >
           ⊘
+        </span>
+      )}
+      {selected && (
+        <span
+          title="Selected"
+          className="pointer-events-none absolute -left-0.5 -top-0.5 z-10 grid h-3.5 w-3.5 place-items-center rounded-br-md rounded-tl-md bg-amber-400 text-[9px] font-bold leading-none text-black"
+        >
+          ✓
         </span>
       )}
       {/* "E" sits well inside the icon's top-left art area (not on the tile
@@ -121,7 +144,7 @@ export function gridColumns(width: number): number {
   return Math.max(1, Math.floor((width + TILE_GAP) / (TILE_SIZE + TILE_GAP)));
 }
 export function VirtualGearGrid({
-  items, selectedId, onSelect, charsByUid, excludedPieces, onToggleExclude,
+  items, selectedId, onSelect, charsByUid, excludedPieces, onToggleExclude, selection, onToggleSelect,
 }: {
   items: UiPiece[];
   selectedId: string | null;
@@ -129,6 +152,8 @@ export function VirtualGearGrid({
   charsByUid: Map<string, Character>;
   excludedPieces?: Set<string>;
   onToggleExclude?: (id: string) => void;
+  selection?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -191,6 +216,8 @@ export function VirtualGearGrid({
                       onSelect={onSelect}
                       excluded={excludedPieces?.has(p.id) ?? false}
                       onToggleExclude={onToggleExclude}
+                      selected={selection?.has(p.id) ?? false}
+                      onToggleSelect={onToggleSelect}
                     />
                   );
                 })}

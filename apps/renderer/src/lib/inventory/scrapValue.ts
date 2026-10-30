@@ -1,8 +1,8 @@
 /**
  * Scrap value of a set of pieces — what selling or dissolving them would
  * return in-game, from `equipment.json`'s scrap fields (outerpedia G73).
- * Information only: the Inventory shows it under the sort header when a
- * filter is set, nothing acts on it.
+ * Information only: the Inventory's Scrap value card shows it (the selected
+ * pieces, else the filtered view), nothing acts on it.
  *
  * Eligibility mirrors the client's "Item clear" screen:
  *   - sell     = `CanSell && EnchantExp == 0 && CharacterUID <= 0 && !IsLock`

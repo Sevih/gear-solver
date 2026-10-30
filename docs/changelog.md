@@ -8,6 +8,61 @@
 
 ## Items de backlog clôturés (index)
 
+### 🪙 Inventaire : carte « Scrap value » sous le panneau de la pièce, icônes, et sélection de pièces (G77) (2026-10-30)
+- ✅ **Pourquoi.** Retour de Sevih du 30/10 sur G74 : la ligne de texte sous la barre de tri ne suffisait pas. La valeur
+  de rebut devient une carte dans la colonne de gauche, sous le panneau de la pièce, avec l'icône de l'or et celles des
+  matériaux ; et le joueur choisit les pièces qu'il compte vendre ou désassembler, la carte chiffrant la sélection
+  quand il y en a une, la vue filtrée sinon. Information seulement : aucune action sur le jeu.
+- ✅ **Modèle.** `apps/renderer/src/lib/inventory/scrapCard.ts` (pur) : `scrapScope(selection, filtered, byId)` rend
+  `{ pieces, label }`, la sélection quand elle n'est pas vide (toutes les pièces sélectionnées, résolues par
+  `uiById`, même hors de la vue ; un id disparu n'est pas compté), « 2 selected », sinon `filtered`, « 37 shown » ; le
+  troisième argument, absent de l'énoncé, est la table id → pièce sans laquelle une pièce hors vue ne se retrouve pas.
+  `materialRows(v, items)` : `{ id, name, icon, min, max }`, nom et icône depuis `items`, inconnu → le nom de
+  `scrapValue` (`item <id>`) et `icon: null`. `toggleSelection`, `addAll`, `pruneSelection` rendent un `Set` neuf (le
+  même quand rien ne change, pour ne pas déclencher de rendu), sans muter l'entrée.
+- ✅ **Carte.** `apps/renderer/src/screens/inventory/ScrapCard.tsx`, sous `ItemDetail` : la colonne gauche devient
+  `flex w-80 flex-col gap-3`, `ItemDetail` dans un `flex min-h-0 flex-1` qui lui garde toute la hauteur restante (le
+  composant n'est pas touché). En-tête « Scrap value » + la portée ; ligne Sell (icône `CM_Goods_Gold`, montant,
+  « 31 sellable ») ; ligne Dissolve (icône or et fourchette s'il y a de l'or, puis les matériaux en tuiles de 32 px,
+  icône 24 px `/img/items/<icon>.webp`, quantité en badge, nom en `title`, icône absente → carré neutre aux deux
+  premières lettres ; six au plus puis « +n more » avec le reste en `title`) ; dessous en petit « 37 dissolvable »,
+  « 3 enhanced: refund not counted », « n not in the game data ». Bordure `border-white/6`, fond `bg-white/[0.012]`.
+  Visible quand `hasScrapFields(game.equipment)` ET (filtre posé OU sélection non vide OU mode sélection actif) : ce
+  troisième cas, ajouté, évite qu'un « Clear » sans filtre fasse disparaître la carte en laissant le mode allumé et
+  invisible.
+- ✅ **Sélection.** `InventoryScreen.tsx` : `selection: Set<string>` et `selectMode` en `useState` (jamais persistés).
+  Contrôles de la carte : « Select pieces » / « Selecting… » (bascule le mode, ambre quand actif), « Select all shown »
+  (`addAll` de `filtered`), « Select excluded » (les `excludedPieces` encore dans l'inventaire), « Clear » (désactivé
+  sans sélection), le compte. En mode, un clic sur une tuile bascule sa sélection et l'affiche dans le panneau (sans le
+  vider au second clic) ; hors mode, le clic ne fait que l'afficher, comme avant ; Ctrl+clic (ou Cmd) bascule toujours
+  sans toucher au panneau. Quitter le mode garde la sélection. Élagage des pièces sorties de l'inventaire : ajusté
+  pendant le rendu quand `uiById` change (motif « état précédent » de React) plutôt que dans un `useEffect`, qui
+  ajoutait un avertissement `set-state-in-effect` au lint ; même effet, sans une image où la carte chiffrerait un id
+  disparu. `VirtualGearGrid.tsx` : `selection` + `onToggleSelect` STABLE sur le modèle de `excludedPieces` /
+  `onToggleExclude`, `GearTile` reçoit `selected` (booléen) et ne se re-rend que si sa propre sélection change ; le
+  clic de l'écran (`onSelect`) ne change qu'avec le mode. Tuile sélectionnée : coche ambre dans le coin haut gauche
+  (`z-10`, par-dessus le bord de l'« E » d'équipement), l'exclusion garde son style ; le `title` dit « selected
+  (Ctrl+click to unselect) » et/ou « excluded from the solver ». Sans les champs de rebut dans les tables, la grille ne
+  reçoit pas la sélection (pas de coche orpheline sans carte).
+- ✅ **Supprimé.** `ScrapLine`, `SCRAP_MATERIALS_SHOWN` et le `useMemo` `scrap` de G74 (`InventoryScreen.tsx`) ; la
+  ligne sous `SortHeader` disparaît. En-tête de `scrapValue.ts` remis à jour (la carte, plus la ligne).
+- ✅ **Docs.** `wiki/Using-the-App.md` : Inventory › Scrap value décrit la carte, nouvelle puce « Selecting pieces ».
+  `docs/release-notes.md` (notes de la 1.21.0 déjà publiée, qui parlent de la ligne) laissé tel quel. Aucun item de
+  `docs/todo.md` ne correspondait.
+- ✅ **Tests.** `apps/renderer/test/scrapCard.test.ts` (8) : `scrapScope` (sélection vide → vue et « 2 shown » ;
+  sélection → ses pièces même hors vue, « 2 selected » ; id disparu non compté) ; `materialRows` (nom et icône depuis
+  `items`, inconnu → `item 600` et `null`, sans table → icônes nulles) ; `toggleSelection`, `addAll`, `pruneSelection`
+  (`Set` neuf, entrée intacte, même `Set` quand rien ne change, pièce disparue retirée). `npm run typecheck` : `tsc
+  --noEmit` sans erreur ; `npm test` : `Tests  169 passed (169)`, `Tests  237 passed (237)`, `Tests  850 passed
+  (850)` ; `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)`, comme avant.
+- ⏳ **Laissé.** Comme pour la ligne de G74, le filtre de slot (SlotBar) ne compte pas dans `activeFilterCount` : un
+  slot seul ne fait pas apparaître la carte (une sélection, oui). Aucun test d'écran sur le clic en mode sélection
+  (le runtime de `inventoryScreen.test.ts` ne lit que des props) ; le rendu de la carte n'est vérifié que par typecheck.
+- ⏳ **Sevih** : sur le desktop avec un `equipment.json` à champs de rebut, Inventaire › « Scrap candidates » → la carte
+  sous le panneau (icônes or et matériaux, « +n more »), puis Select pieces, clics, Ctrl+clic hors mode, Select all
+  shown, Select excluded, Clear ; contrôler la coche ambre à côté de l'« E » et la largeur de la colonne. Les notes de
+  la prochaine release devront dire que la ligne est devenue une carte.
+
 ### 📦 Release : cible Linux AppImage à côté de l'installeur Windows, une seule release, auto-update Linux (G76) (2026-10-30)
 - ✅ **Pourquoi.** Après la couche plateforme de G75, l'app tourne sous Linux mais ne se construisait et ne se publiait
   que pour Windows (`win.target nsis`, `electron-builder --win`) : rien à télécharger pour un joueur sous Proton, et

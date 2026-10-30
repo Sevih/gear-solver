@@ -63,13 +63,23 @@ A dense, searchable table of every gear piece you own.
   candidates** (always first, can't be deleted) shows the unequipped 5★ / 6★ gear at +0, T0, never
   reforged, with Base rolls **not at least 3/3/3/X** — the pieces without three lines at 3.
 - **Sort**: by enhance level, stars, breakthrough, or by a specific substat's value.
-- **Scrap value** (under the sort bar, once a filter is set): what the pieces on screen would return
-  in-game — the gold from selling them and the gold and materials from dissolving them (a min–max
-  range, from the game tables; past four materials, hover **+n more** for the rest). Only free pieces
-  count: equipped or locked pieces neither sell nor dissolve, and an enhanced piece doesn't sell but
-  still dissolves; it then also refunds part of its enhancement materials, which the line does not
-  estimate (it says how many such pieces there are). Information only — nothing is sold from here.
-  The line appears once the synced game data carries the sell and dissolve values.
+- **Scrap value** (a card under the piece panel, once a filter is set or pieces are selected): what
+  the pieces would return in-game — the gold from selling them, and the gold and materials from
+  dissolving them (a min–max range, from the game tables), with the gold and material icons; hover a
+  material for its name, and past six materials hover **+n more** for the rest. The card prices
+  your **selection** when there is one (every selected piece, even those outside the current view),
+  the pieces on screen otherwise; its header says which (**2 selected** or **37 shown**). Only free
+  pieces count: equipped or locked pieces neither sell nor dissolve, and an enhanced piece doesn't
+  sell but still dissolves; it then also refunds part of its enhancement materials, which the card
+  does not estimate (it says how many such pieces there are). Information only — nothing is sold
+  from here. The card appears once the synced game data carries the sell and dissolve values.
+- **Selecting pieces** (in the Scrap value card): **Select pieces** turns on selection mode, where
+  a click on a tile selects or unselects it and shows it in the panel; outside the mode a click only
+  shows it, and **Ctrl+click** always selects or unselects. **Select all shown** adds the pieces on
+  screen, **Select excluded** the pieces excluded from the solver, **Clear** empties the selection.
+  A selected tile carries an amber check in its top-left corner. Leaving the mode keeps the
+  selection; it lasts until you clear it or close the app, and a piece that leaves the inventory
+  leaves it too.
 - **Click any piece** → the left panel shows the full detail: main stat(s), substats with their
   tick counts (or gems for Talisman/EE), reforge / breakthrough / Singularity state, a
   **quality score**, and any item / set passives.
