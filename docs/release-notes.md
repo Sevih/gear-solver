@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.22.0] — 2026-10-30
+
 - **Inventory › Scrap value card**: the scrap value now sits under the piece panel as a card, with the
   gold icon and the material icons. Pick the pieces you mean to scrap: **Select pieces** (a click on a
   tile then selects it; Ctrl+click always does), **Select all shown**, **Select excluded**, **Clear** —
