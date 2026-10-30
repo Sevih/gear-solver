@@ -629,6 +629,24 @@ Les deux allocateurs sont **mémoïsés par `(talismanSlots, preGemCrc)`** (`cap
 pré-gemme (compose `round1` moins une constante par variant) ne prend qu'une poignée de valeurs
 distinctes sur des millions de combos — le slow path ne re-parcourt donc plus le pool par combo.
 
+**Bornes minimales des filtres de stats (slow path, par combo)** : un filtre est une contrainte dure, une
+priorité un ordre de préférence — les gemmes servent donc les `min` de `statFilters` **avant** la priorité.
+L'allocation par défaut (ou cap-aware) ne regarde que la priorité : avec `atk ≥ 12 000` et une priorité
+ailleurs, les gemmes ATK serties du héros cédaient la place et tous les combos tombaient sous la borne.
+Seulement quand `passesSpecs` échoue, qu'une borne `min` est manquée et qu'un delta de gemmes a été
+appliqué (`serveMinFilters` dans `solveChunk`) : manque par stat (`min − fs[key]`, arrondi vers le haut à
+10 sur ATK / DEF / HP, 0,1 sur les stats en %, 1 ailleurs), le plus grand en proportion de sa borne
+d'abord ; `allocateGemsServingMins` pose les gemmes de chaque stat manquée (tout le pool, même de score 0
+ou négatif, plus gros gain d'abord) jusqu'à couvrir le manque — gain estimé par `rollGainOnSheet`
+(`composeMultStat` avec la gemme seule moins sans elle sur ATK / DEF / HP / EFF / RES, la valeur ailleurs)
+— puis le reste par la règle courante (cap CHC si `wantCritCap`, sinon `pickOrder` sans dépasser le cap) ;
+recompose si l'allocation diffère, reteste. Échec (ou allocation inchangée) : reteste avec les gemmes
+**serties** (compose sans `gemOverride`) ; si ça passe, le build est gardé avec une allocation vide
+(« garde les gemmes de la pièce », comme sans priorité), sinon écarté. SOLVE CP sans priorité garde son
+allocation par CP et n'a que ce repli. Mémo en trie de clés entières (`(talismanSlots, preGemCrc)` puis
+`indice de spec × 2^21 + manque arrondi` par borne manquée) : une allocation par valeur distincte, pas par
+combo ; les combos qui passent du premier coup ne paient rien.
+
 **Pré-agrégation** : la contribution gem est convertie en `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`, rendue par l'allocateur avec la répartition (`GemAllocation`). La compose ajoute juste ces deltas aux buckets après l'agrégation des pièces. Évite `resolveStat` × 10 gems × N combos.
 
 **Fallback `null`** : en **SOLVE Score sans priorité**, la priority est vide (aucun gem n'a

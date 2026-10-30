@@ -395,6 +395,87 @@ export function allocateGemsReachingCap(
   return { alloc: { talisman, ee }, delta: picked > 0 ? { flat, pct } : null };
 }
 
+/** A stat filter minimum the build misses, for `allocateGemsServingMins`. */
+export interface GemMinNeed {
+  /** `FinalStats` axis of the bound (`atk`, `critDmg`…) — a gem serves it when
+   *  its stat maps there (`STAT_TO_PRIORITY`: `atkPct` and `atk` both serve `atk`). */
+  stat: string;
+  /** How far below the bound the build sits, in `FinalStats` units. */
+  shortfall: number;
+  /** Estimated gain of one gem on that axis, in `FinalStats` units. */
+  gainOf: (g: ScoredGem) => number;
+}
+
+/**
+ * Allocation that serves the stat filters' minimums BEFORE the priority: a
+ * filter is a hard constraint, the priority an order of preference. For each
+ * bound in `mins`, in the given order, the gems of its stat are placed —
+ * largest gain first, every gem of the pool, score 0 or negative included —
+ * until their summed `gainOf` covers the `shortfall`; a bound the pool can't
+ * cover gets all it has (the caller recomposes and retests). The free slots
+ * then follow the usual rule: reach the CHC cap first when `reachCap`
+ * (`allocateGemsReachingCap`), then `pickOrder` skipping the crit gems past
+ * the cap (`allocateGemsCapped`). No gem is placed twice; Talisman first,
+ * then EE. `preGemCrc` is the combo's CHC without gems.
+ */
+export function allocateGemsServingMins(
+  scored: ScoredGem[],
+  talismanSlots: number,
+  eeSlots: number,
+  mins: readonly GemMinNeed[],
+  preGemCrc: number,
+  reachCap = false,
+): GemAllocation {
+  const talisman: number[] = [];
+  const ee: number[] = [];
+  const flat: Record<string, number> = {};
+  const pct: Record<string, number> = {};
+  const total = talismanSlots + eeSlots;
+  const used = new Set<ScoredGem>();
+  let crc = preGemCrc;
+  const place = (g: ScoredGem): void => {
+    if (talisman.length < talismanSlots) talisman.push(g.id);
+    else ee.push(g.id);
+    const bucket = g.percent ? pct : flat;
+    bucket[g.stat] = (bucket[g.stat] ?? 0) + g.value;
+    if (g.stat === CRC_GEM_STAT) crc += g.value;
+    used.add(g);
+  };
+  // Stage 1 — each missed minimum, with its own stat's gems.
+  for (const m of mins) {
+    const own: Array<{ g: ScoredGem; gain: number }> = [];
+    for (const g of scored) {
+      if (used.has(g) || (STAT_TO_PRIORITY[g.stat] ?? g.stat) !== m.stat) continue;
+      const gain = m.gainOf(g);
+      if (gain > 0) own.push({ g, gain });
+    }
+    own.sort((a, b) => b.gain - a.gain);
+    let covered = 0;
+    for (const { g, gain } of own) {
+      if (covered >= m.shortfall || used.size >= total) break;
+      place(g);
+      covered += gain;
+    }
+  }
+  // Stage 2 — the free slots by the usual rule.
+  const order = pickOrder(scored);
+  if (reachCap) {
+    for (const g of order) {
+      if (used.size >= total || crc >= CRC_GEM_CAP) break;
+      if (used.has(g) || g.stat !== CRC_GEM_STAT || g.score <= 0) continue;
+      place(g);
+    }
+  }
+  for (const g of order) {
+    if (used.size >= total) break;
+    if (used.has(g) || (g.stat === CRC_GEM_STAT && crc >= CRC_GEM_CAP)) continue;
+    place(g);
+  }
+  while (talisman.length < talismanSlots) talisman.push(0);
+  while (ee.length < eeSlots) ee.push(0);
+  return { alloc: { talisman, ee }, delta: used.size > 0 ? { flat, pct } : null };
+}
+
 /** Cheap structural equality for two gem bucket deltas (`{flat, pct}` or null).
  *  Lets the hot loop skip a redundant recompose when the cap-reaching
  *  allocation lands on the exact same gem contribution as the precomputed

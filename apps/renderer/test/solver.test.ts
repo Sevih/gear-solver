@@ -22,11 +22,11 @@ import {
   computeSetBonuses, type FinalStatsBaseline, type GemOverride, type ScalingMap,
 } from "../src/lib/composeBuild.js";
 import type { StatScaling } from "@gear-solver/core";
-import { collapseTalismanVariants, compareBuilds, maxedFloorOf, meetsMaxedFloor, pieceReforgePlan, projectPieceForReforge, simulateReforges, TopKHeap } from "../src/lib/solver/engine.js";
+import { collapseTalismanVariants, compareBuilds, maxedFloorOf, meetsMaxedFloor, pieceReforgePlan, projectPieceForReforge, simulateReforges, solveChunk, TopKHeap, type SolveContext } from "../src/lib/solver/engine.js";
 import { toUiPiece } from "../src/design/adapter.js";
-import type { SolveBuild } from "../src/lib/solver/types.js";
+import type { SolveBuild, SolveFilters, SolveMode, SolveRequest } from "../src/lib/solver/types.js";
 import { calcBattlePower, makeCpEvaluator } from "../src/lib/solver/cp.js";
-import { allocateGems, buildGemPool, gemSlotsOf, scoreGemPool } from "../src/lib/solver/gems.js";
+import { allocateGems, buildGemPool, gemSlotsOf, scoreGemPool, type ScoredGem } from "../src/lib/solver/gems.js";
 import { computeCheapRatings, computeScore, STAT_NORMS, STAT_TO_PRIORITY } from "../src/lib/solver/ratings.js";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -1553,5 +1553,98 @@ describe("computeCheapRatings — best-skill factor", () => {
       expect(order(0.86, key)).toEqual(ref);
       expect(order(3.864, key)).toEqual(ref);
     }
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * STAT FILTER MINIMUMS — the gems serve them before the priority
+ * ───────────────────────────────────────────────────────────────────────── */
+
+describe("solveChunk — the gems serve a stat filter's minimum before the priority", () => {
+  // Hero: ATK 1000 without gear. Two weapons (+200 / +500 flat ATK), one
+  // 5-slot Talisman whose socketed gems are five ATK% (6 % each, +60 ATK).
+  // Priority on CHD: the default allocation puts the five CHD gems and drops
+  // the ATK% ones (score 0, filler) — the reported bug.
+  const sc = (baseValue: number): StatScaling => ({
+    baseValue, evoValue: 0, awakValue: 0, awakPct: 0, transcendPct: 0, codexPct: 0, buffPct: 0, buffValue: 0,
+  });
+  const SCALING: ScalingMap = { atk: sc(1000), def: sc(500), hp: sc(5000), eff: sc(100), res: sc(100) };
+  const BASELINE: FinalStatsBaseline = { spd: 100, chc: 5, chd: 50, pen: 0, dmgInc: 0, dmgRed: 0 };
+  const SKILLS = { first: 1, second: 1, ultimate: 1, chainPassive: 1 };
+  const roll = (s: string, value: number, percent: boolean): RolledStat => ({ stat: s as StatType, value, percent, ticks: 1, reforgeTicks: 0 });
+  const piece = (slot: string, uid: string, main: RolledStat[] = [], subs: RolledStat[] = []): GearPiece => ({
+    uid, itemId: 1, slot, setId: null, armorSetId: null, rarity: "epic", star: 6, name: uid, classLimit: null,
+    breakthrough: 0, reforgeCount: 0, enhanceLevel: 15, singularityLevel: 0, ascended: false, locked: false,
+    equippedBy: null, main, subs,
+  } as unknown as GearPiece);
+  const ATK_GEM = 1, CHD_GEM = 2;
+  // Scored like `scoreGemPool` for `{ critDmg: 3 }`: CHD first, ATK% fillers.
+  const SCORED: ScoredGem[] = [
+    ...[0, 1, 2, 3, 4].map((): ScoredGem => ({ id: CHD_GEM, stat: "critDmg", value: 5, percent: true, score: 0.75 })),
+    ...[0, 1, 2, 3, 4].map((): ScoredGem => ({ id: ATK_GEM, stat: "atkPct", value: 6, percent: true, score: 0, fill: 0 })),
+  ];
+
+  function ctxFor(statFilters: SolveFilters["statFilters"], mode: SolveMode = "score", priority: Record<string, number> = { critDmg: 3 }): SolveContext {
+    const filters: SolveFilters = {
+      options: { onlyMaxed: false, reforgeMode: "disable", equippedScope: "all", keepCurrent: false, allowBrokenSets: true },
+      excludedHeroes: [], statFilters, ratingFilters: {}, priority, topPct: 100,
+      mainPicks: {}, setPlans: [], excludedSets: [], weaponEffectPicks: {}, accessoryEffectPicks: {}, minQuality: null,
+    };
+    const req: SolveRequest = {
+      type: "solve", solveId: 1, mode, heroUid: "hero",
+      inventory: { gear: [], characters: [], presets: [] } as unknown as Inventory,
+      game, userGeasLevels: null, userCodexLevel: null, heroPriority: {}, userSkills: SKILLS,
+      filters, topK: 100, chunkIndex: 0, chunkCount: 1,
+    };
+    const def = allocateGems(SCORED, 5, 0);
+    return {
+      req, baseline: BASELINE, scaling: SCALING, ee: null, poolSizes: {}, scoredGems: SCORED,
+      pools: {
+        weapon: [piece("weapon", "w1", [roll("atk", 200, false)]), piece("weapon", "w2", [roll("atk", 500, false)])],
+        helmet: [piece("helmet", "h")], armor: [piece("armor", "a")], gloves: [piece("gloves", "g")],
+        boots: [piece("boots", "b")], accessory: [piece("accessory", "ac")],
+        ooparts: [{ ...piece("ooparts", "t", [], [0, 1, 2, 3, 4].map(() => roll("atkPct", 6, true))), gemSlots: [1, 1, 1, 1, 1] }],
+      },
+      gemDeltaByTalismanSlots: new Map([[5, def.delta]]),
+      gemAllocByTalismanSlots: new Map([[5, def.alloc]]),
+      skills: SKILLS, starMeta: { showUIStar: 5, starPlus: 0, fused: false }, dmgStat: "atk", noCrit: false,
+      skillFactor: 1, turnFactor: 1, setPlans: [], excludedSets: new Set(), allowBrokenSets: true,
+      excludedWeaponEffects: new Set(), excludedAccessoryEffects: new Set(), reforgeTickWeights: null,
+    } as unknown as SolveContext;
+  }
+  const byWeapon = (builds: SolveBuild[]) => new Map(builds.map((b) => [b.pieceUids[0]!, b]));
+
+  it("without a filter: the priority's allocation, as before", async () => {
+    const out = byWeapon((await solveChunk(ctxFor({}), 0, 1, 100)).builds);
+    expect(out.get("w1")!.gemAllocation.talisman).toEqual([CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM]);
+    expect(out.get("w1")!.finalStats.atk).toBe(1200);
+    expect(out.get("w2")!.gemAllocation.talisman).toEqual([CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM]);
+  });
+
+  it("ATK ≥ 1400 reachable only with ATK gems: results exist, their allocation carries the ATK gems", async () => {
+    const out = byWeapon((await solveChunk(ctxFor({ atk: { min: 1400 } }), 0, 1, 100)).builds);
+    expect(out.size).toBe(2);
+    // w1: 1200 → 200 short → four ATK% gems (+240), the last slot by priority.
+    expect(out.get("w1")!.gemAllocation.talisman).toEqual([ATK_GEM, ATK_GEM, ATK_GEM, ATK_GEM, CHD_GEM]);
+    expect(out.get("w1")!.finalStats.atk).toBe(1440);
+    expect(out.get("w1")!.finalStats.critDmg).toBe(55);
+    // w2 passes with the priority's allocation: untouched.
+    expect(out.get("w2")!.gemAllocation.talisman).toEqual([CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM]);
+    expect(out.get("w2")!.finalStats.atk).toBe(1500);
+  });
+
+  it("SOLVE CP without a priority keeps its allocation, and falls back on the socketed gems", async () => {
+    const out = byWeapon((await solveChunk(ctxFor({ atk: { min: 1400 } }, "cp", {}), 0, 1, 100)).builds);
+    expect(out.size).toBe(2);
+    // Empty allocation = keep the Talisman's gems (five ATK%: 1300 + 200).
+    expect(out.get("w1")!.gemAllocation).toEqual({ talisman: [], ee: [] });
+    expect(out.get("w1")!.finalStats.atk).toBe(1500);
+    expect(out.get("w2")!.gemAllocation.talisman).toEqual([CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM]);
+  });
+
+  it("a minimum out of reach with the served allocation and with the socketed gems: no result", async () => {
+    // Best possible: w2 + five ATK% = 1800.
+    const out = await solveChunk(ctxFor({ atk: { min: 1900 } }), 0, 1, 100);
+    expect(out.builds).toHaveLength(0);
   });
 });

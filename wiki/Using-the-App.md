@@ -210,7 +210,9 @@ results, the bottom band shows the selected build's pieces.
   remaining slots be anything.
 - **Weapon / Accessory effects** — require or exclude specific effect pieces.
 - **Stat filters** — min/max on any final stat (e.g. "Speed ≥ 200"). Plus rating filters and a
-  CP min/max.
+  CP min/max. Gems: a stat filter's minimum is served before the priority — a build short of
+  it gets that stat's gems first, the priority fills the remaining slots; a build that only
+  passes with its socketed gems keeps them (the gear band then shows the pieces' own gems).
 
 ### 3. Options
 

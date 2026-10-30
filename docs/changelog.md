@@ -8,6 +8,66 @@
 
 ## Items de backlog clôturés (index)
 
+### 💎 Builder : les gemmes servent les bornes minimales des filtres de stats avant la priorité, repli sur les gemmes serties (G78) (2026-10-30)
+- ✅ **Pourquoi.** Bug vu par Sevih le 30/10 : un filtre ATK ≥ 12 000 et une priorité (ATK 3, CHD 3, SPD 2, CHC 2…)
+  ne rendaient AUCUN résultat, les mêmes filtres sans priorité en rendaient. L'allocation de gemmes du solveur
+  (`gemAllocByTalismanSlots` / `gemDeltaByTalismanSlots`, puis le chemin cap-aware) remplace les gemmes serties par
+  un choix fait sur la seule priorité : les gemmes ATK du héros sautaient, l'ATK retombait sous la borne et
+  `passesSpecs` écartait toutes les combinaisons. Seules les bornes `max` étaient vues (`noFill`). Un filtre est une
+  contrainte dure, une priorité un ordre de préférence : les gemmes servent désormais les `min` d'abord.
+- ✅ **Allocateur.** `apps/renderer/src/lib/solver/gems.ts` : `allocateGemsServingMins(scored, talismanSlots, eeSlots,
+  mins, preGemCrc, reachCap = false)` (+ type `GemMinNeed { stat, shortfall, gainOf }`). Pour chaque borne manquée,
+  dans l'ordre donné, pose les gemmes dont la stat tombe sur l'axe (`STAT_TO_PRIORITY` : `atkPct` et `atk` servent
+  `atk`), tout le pool même de score 0 ou négatif, plus gros `gainOf` d'abord, jusqu'à couvrir le manque ; une borne
+  incouvrable reçoit tout ce qu'il y a. Le reste suit la règle courante : atteindre le cap de CHC d'abord si `reachCap`
+  (comme `allocateGemsReachingCap`), puis `pickOrder` en sautant les gemmes crit au-delà du cap (comme
+  `allocateGemsCapped`). Talisman puis EE, aucune gemme posée deux fois (`Set` des instances). Le 6ᵉ paramètre
+  `reachCap`, absent de l'énoncé, porte `wantCritCap` : l'allocateur ne peut pas le déduire du pool seul.
+- ✅ **Gain d'une gemme.** `apps/renderer/src/lib/composeBuild.ts` : `rollGainOnSheet(scaling, axis, value, percent)`
+  = `composeMultStat` avec la gemme seule moins sans elle sur ATK / DEF / HP / EFF / RES (base × valeur / 100 ×
+  l'amplificateur de buff pour un %, le plat × l'amplificateur pour un plat — le calcul de la pièce, réutilisé et
+  non dupliqué), la valeur elle-même sur les axes additifs. Estimation : les taux de buff portés par la gear ne sont
+  pas comptés, le retest tranche.
+- ✅ **Moteur.** `apps/renderer/src/lib/solver/engine.ts`, boucle Talisman de `solveChunk` : le delta réellement
+  appliqué est suivi (`appliedDelta`, défaut ou cap-aware). Quand `passesSpecs` échoue, qu'une borne `min` est posée
+  (`hasMinSpec`) et qu'un delta a été appliqué, `serveMinFilters` : manques par stat (`min − fs[key]`, arrondis vers le
+  haut à 10 sur ATK / DEF / HP, 0,1 sur les stats en %, 1 ailleurs : l'allocation couvre un peu plus, jamais moins),
+  ordre du plus grand en proportion de sa borne, `allocateGemsServingMins`, recompose si l'allocation diffère
+  (`gemDeltaEquals`), retest ; sinon retest avec les gemmes SERTIES (compose sans `gemOverride`), gardé alors avec
+  l'allocation vide `{ talisman: [], ee: [] }` (« garde les gemmes de la pièce », affichée comme aujourd'hui sans
+  priorité), écarté sinon. Une combinaison qui n'échoue que sur une borne `max` est écartée comme avant. SOLVE CP sans
+  priorité garde son allocation par CP et n'a que le repli sur les serties. Mémo en trie de clés entières (`MinsMemo`)
+  : racine `talismanSlots × 1 000 000 + preGemCrc` (la clé de `capAllocCache`), puis un niveau par borne manquée,
+  `indice de spec × 2^21 + manque arrondi` — une allocation par valeur distincte, pas par combinaison, et aucune
+  chaîne construite dans la boucle.
+- ✅ **Coût.** Banc temporaire (non commité) : `solveChunk` sur 823 543 combinaisons (7 pièces par emplacement),
+  priorité CHD, pool 6 CHD + 6 ATK %, médiane de 5 passes. Sans filtre : 345 ms avant, 340 ms après ; filtre
+  `atk ≥ 1500` tenu du premier coup : 343 ms avant, 336 ms après (aucune régression : rien n'est calculé avant
+  l'échec de `passesSpecs`) ; filtre `atk ≥ 3000` tenable seulement avec les gemmes ATK : 258 ms et **0 résultat**
+  avant, 713 ms et 100 résultats après (le chemin lent recompose au plus deux fois une combinaison qui était
+  jetée).
+- ✅ **Docs.** `docs/solver.md` § 5 et son miroir `wiki/Solver.md` (paragraphe « Bornes minimales des filtres de
+  stats ») ; `wiki/Using-the-App.md` › Stat filters (« a stat filter's minimum is served before the priority; a build
+  that only passes with its socketed gems keeps them »). `docs/todo.md` : aucun item ne s'y rapportait.
+- ✅ **Tests.** `apps/renderer/test/gemsCapped.test.ts`, `allocateGemsServingMins` : une stat sous sa borne prend ses
+  gemmes jusqu'au manque puis la priorité ; une gemme de score négatif servie quand même ; deux bornes dans l'ordre
+  donné (et l'ordre inverse) ; manque incouvrable → toutes les gemmes de la stat puis la priorité, Talisman puis EE ;
+  cap de CHC atteint ensuite avec `reachCap`, jamais dépassé sans ; aucune gemme posée deux fois.
+  `apps/renderer/test/solver.test.ts`, `solveChunk` de bout en bout (Talisman aux cinq gemmes ATK % serties, priorité
+  CHD) : sans filtre, l'allocation par priorité comme avant ; `atk ≥ 1400` → deux résultats, celui qui manquait la
+  borne porte quatre gemmes ATK + une CHD (ATK 1440), l'autre garde l'allocation par priorité ; SOLVE CP sans priorité
+  → repli sur les serties, allocation vide, ATK 1500 ; borne intenable avec l'allocation et avec les serties → aucun
+  résultat. Les deux premiers tests de bout en bout échouent sur le moteur d'avant (vérifié). `npm run typecheck` :
+  `tsc --noEmit` sans erreur dans les trois workspaces ; `npm test` : dernière ligne `Tests  860 passed (860)`
+  (renderer ; les deux autres workspaces : 169 et 237) ; `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)`, les 13
+  avertissements d'avant, aucun dans les fichiers touchés.
+- ⏳ **À Sevih.** Rejouer le cas réel (filtre ATK ≥ 12 000, priorité ATK 3 / CHD 3 / SPD 2 / CHC 2) : des résultats
+  doivent sortir, leur bande du bas montrant les gemmes ATK (ou celles de la pièce quand les serties suffisent), et
+  juger le temps du solve quand une grosse part des combinaisons passe par le chemin lent. Hors périmètre, non
+  touché : la pondération de la priorité, les fillers (`gemDmgGains`), l'écran des résultats, la Worklist ; une
+  borne `max` manquée à cause des gemmes de priorité n'a pas de repli sur les serties (le lot ne visait que les
+  `min`).
+
 ### 🪙 Inventaire : carte « Scrap value » sous le panneau de la pièce, icônes, et sélection de pièces (G77) (2026-10-30)
 - ✅ **Pourquoi.** Retour de Sevih du 30/10 sur G74 : la ligne de texte sous la barre de tri ne suffisait pas. La valeur
   de rebut devient une carte dans la colonne de gauche, sous le panneau de la pièce, avec l'icône de l'or et celles des

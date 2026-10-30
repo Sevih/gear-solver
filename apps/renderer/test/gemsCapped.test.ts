@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocateGemsCapped, allocateGemsReachingCap, gemDeltaEquals, type ScoredGem } from "../src/lib/solver/gems.js";
+import { allocateGemsCapped, allocateGemsReachingCap, allocateGemsServingMins, gemDeltaEquals, type GemMinNeed, type ScoredGem } from "../src/lib/solver/gems.js";
 
 // Helper to build a scored gem. Pool must be pre-sorted by score desc (the
 // allocator assumes the same ordering `scoreGemPool` produces).
@@ -121,5 +121,62 @@ describe("gemDeltaEquals", () => {
   it("handles null on either side", () => {
     expect(gemDeltaEquals(null, null)).toBe(true);
     expect(gemDeltaEquals(null, d({}, { critRate: 3 }))).toBe(false);
+  });
+});
+
+describe("allocateGemsServingMins", () => {
+  const chd = (id: number, score = 50): ScoredGem => ({ id, stat: "critDmg", value: 5, percent: true, score });
+  // An ATK% gem lifts ATK by 60 on the sheet (6 % of a 1000 base); additive stats by their value.
+  const gainOf = (g: ScoredGem) => (g.stat === "atkPct" ? g.value * 10 : g.value);
+  const need = (stat: string, shortfall: number): GemMinNeed => ({ stat, shortfall, gainOf });
+
+  it("a stat under its bound takes its gems first, up to the shortfall, then the priority", () => {
+    // ATK% gems score 0 (outside the priority): still taken for the bound.
+    const pool = [chd(1), chd(2), chd(3), chd(4), atk(11, 0), atk(12, 0), atk(13, 0), atk(14, 0)];
+    const { alloc, delta } = allocateGemsServingMins(pool, 5, 0, [need("atk", 150)], 50);
+    expect(alloc.talisman).toEqual([11, 12, 13, 1, 2]); // 3 × 60 ≥ 150, then CHD
+    expect(delta?.pct.atkPct).toBe(18);
+    expect(delta?.pct.critDmg).toBe(10);
+  });
+
+  it("takes a negatively-scored gem of the stat (the bound comes first)", () => {
+    const pool = [chd(1), chd(2), atk(11, -5)];
+    const { alloc } = allocateGemsServingMins(pool, 3, 0, [need("atk", 60)], 50);
+    expect(alloc.talisman).toEqual([11, 1, 2]);
+  });
+
+  it("two stats under their bounds are served in the given order", () => {
+    const pool = [chd(1), chd(2), chd(3), atk(11, 0), atk(12, 0)];
+    const chdFirst = allocateGemsServingMins(pool, 4, 0, [need("critDmg", 8), need("atk", 60)], 50);
+    expect(chdFirst.alloc.talisman).toEqual([1, 2, 11, 3]);
+    const atkFirst = allocateGemsServingMins(pool, 4, 0, [need("atk", 60), need("critDmg", 8)], 50);
+    expect(atkFirst.alloc.talisman).toEqual([11, 1, 2, 3]);
+  });
+
+  it("an uncoverable shortfall gets every gem of its stat, the rest by priority", () => {
+    const pool = [chd(1), chd(2), chd(3), atk(11, 0), atk(12, 0)];
+    const { alloc } = allocateGemsServingMins(pool, 3, 1, [need("atk", 1000)], 50);
+    expect(alloc.talisman).toEqual([11, 12, 1]);
+    expect(alloc.ee).toEqual([2]);
+  });
+
+  it("the CHC cap rule applies to the free slots: reached first with reachCap, never overshot", () => {
+    const pool = [atk(1, 80), atk(2, 80), crit(3, 50), crit(4, 50), crit(5, 50), { ...atk(11, 0), fill: 0 }];
+    // CHC 94: min on ATK (one gem), then two crit gems reach 100, then ATK by priority.
+    const reached = allocateGemsServingMins(pool, 5, 0, [need("atk", 60)], 94, true);
+    expect(reached.alloc.talisman).toEqual([1, 3, 4, 2, 11]);
+    expect(reached.delta?.pct.critRate).toBe(6);
+    // Without reachCap, at the cap: no crit gem at all.
+    const guarded = allocateGemsServingMins(pool, 5, 0, [need("atk", 60)], 100);
+    expect(guarded.alloc.talisman).toEqual([1, 2, 11, 0, 0]);
+    expect(guarded.delta?.pct.critRate).toBeUndefined();
+  });
+
+  it("never places a gem twice", () => {
+    // ATK% also in the priority: the bound takes the first copies, the priority the next ones.
+    const pool = [atk(11, 80), atk(12, 80), chd(1), chd(2)];
+    const { alloc } = allocateGemsServingMins(pool, 4, 1, [need("atk", 60)], 50);
+    expect(alloc.talisman).toEqual([11, 12, 1, 2]);
+    expect(alloc.ee).toEqual([0]);
   });
 });

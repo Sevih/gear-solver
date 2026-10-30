@@ -74,6 +74,22 @@ export function composeMultStat(sc: StatScaling, gearFlat: number, gearPct: numb
   );
 }
 
+/** Sheet axes composed through `composeMultStat`, with their `ScalingMap` axis. */
+const MULT_AXIS: Record<string, ScalingAxis> = { atk: "atk", def: "def", hp: "hp", eff: "eff", effRes: "res" };
+
+/** Estimated gain of ONE roll (a gem) on the sheet axis `axis`, in `FinalStats`
+ *  units. On the compound axes it is `composeMultStat` with the roll alone
+ *  minus without it — base × value / 100 × the buff amplifier for a %, the
+ *  flat × the amplifier for a flat: the gear's own rates add to the same
+ *  bundle, so it holds on any build up to the truncations and the gear's
+ *  buff-routed rates. Every other axis is additive: the value itself. */
+export function rollGainOnSheet(scaling: ScalingMap, axis: string, value: number, percent: boolean): number {
+  const m = MULT_AXIS[axis];
+  if (!m) return value;
+  const sc = scaling[m];
+  return composeMultStat(sc, percent ? 0 : value, percent ? value : 0, 0) - composeMultStat(sc, 0, 0, 0);
+}
+
 /** Aggregate active 2pc / 4pc armor-set bonuses into one list of stat options.
  *  The rows come from `wornSetRows` (core `set-level.ts`: per-piece level,
  *  min of the 2 / 4 best pieces, `ignoreLowSet`). Combat-only sets
