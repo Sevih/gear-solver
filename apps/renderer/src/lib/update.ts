@@ -10,8 +10,9 @@
  * and applies the downloaded build).
  */
 
-/** Update lifecycle phase — matches the design's state machine. */
-export type UpdatePhase = "uptodate" | "checking" | "downloading" | "downloaded" | "error";
+/** Update lifecycle phase — matches the design's state machine, plus "manual"
+ *  (an AppImage that can't replace itself: `error` says why). */
+export type UpdatePhase = "uptodate" | "checking" | "downloading" | "downloaded" | "error" | "manual";
 
 export interface UpdateStatus {
   state: UpdatePhase;
@@ -19,6 +20,7 @@ export interface UpdateStatus {
   version: string | null;
   /** Download progress 0..100 while `state === "downloading"`. */
   progress: number;
+  /** Failed check message ("error"), or why the update is by hand ("manual"). */
   error: string | null;
   /** Running app version (e.g. "0.5.0"). */
   appVersion: string;

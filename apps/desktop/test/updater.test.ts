@@ -1,5 +1,11 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { electronUpdaterMock } from "./electron-mock.js";
+
+// On Linux the updater only runs from an AppImage in a writable folder (else
+// the card goes "manual", see updater-appimage.test.ts): stand for one.
+process.env["APPIMAGE"] = join(tmpdir(), "Gear.AppImage");
 
 // updater.ts reads `app.getVersion()` in getStatus(); the check rejects the
 // way electron-updater does on a failed launch check (offline, GitHub down).

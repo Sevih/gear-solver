@@ -41,6 +41,7 @@
     "buildDependenciesFromSource": false,
     "beforePack": "./scripts/before-pack.mjs",
     "extraMetadata": {
+      "desktopName": "outerpedia-gear-solver.desktop",
       "dependencies": {
         "electron-updater": "^6.8.9"
       }
@@ -76,6 +77,23 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Outerpedia Gear Solver"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Game",
+      "executableName": "outerpedia-gear-solver",
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}.${ext}",
+      "files": [
+        "build/icon.png"
+      ]
     },
     "publish": {
       "provider": "github",

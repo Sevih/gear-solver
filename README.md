@@ -11,18 +11,30 @@ Gear optimizer for **OUTERPLANE** — Fribbels-style. Captures your account's ge
 characters from the game, then solves for the best builds per hero with a parallelized
 in-renderer Web Worker pool.
 
-Packaged as an Electron desktop app (Windows). Not a web service.
+Packaged as an Electron desktop app (Windows installer, Linux AppImage). Not a web service.
 
 ## 🎮 Just want to use it?
 
-**[⬇️ Download the latest installer](https://github.com/Sevih/gear-solver/releases/latest)**, then
+**[⬇️ Download the latest release](https://github.com/Sevih/gear-solver/releases/latest)** (the
+`Setup` `.exe` on Windows, the `.AppImage` on Linux), then
 follow the **[Getting Started guide](https://github.com/Sevih/gear-solver/wiki/Getting-Started)** —
 install, import your account, optimize a hero. No build step, no command line. The
 **[player wiki](https://github.com/Sevih/gear-solver/wiki)** (Getting Started · Using the App ·
 FAQ) walks through everything.
 
-> Needs Windows + OUTERPLANE on **Steam** — the app installs a small capture plugin into the
-> game (no root, no proxy). See the guide for the why and how.
+> Needs Windows or Linux (Steam + Proton) + OUTERPLANE on **Steam** — the app installs a small
+> capture plugin into the game (no root, no proxy). See the guide for the why and how.
+
+### 🐧 Linux (AppImage)
+
+Make the file executable (`chmod +x Outerpedia-Gear-Solver-*.AppImage`, or Properties →
+Permissions in your file manager) and run it. Installing the capture plugin needs `unzip`
+(`sudo dnf install unzip` / `sudo apt install unzip`), and the game must be launched with the
+Steam launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%` (Settings → Setup shows the
+line). The app updates itself as on Windows as long as the AppImage sits in a folder you can
+write to (e.g. `~/Applications`): the new version lands next to it under its new name and the
+old file is removed — rename the file without its version number to keep a fixed name. From a
+read-only place the Home update card says so and you download the new AppImage by hand.
 
 ### ⚠️ Antivirus / SmartScreen warnings
 
@@ -34,7 +46,9 @@ release, checksum-verified) + a small plugin into the game folder — a read-onl
 HTTP layer. See [tools/capture-steam/README.md](tools/capture-steam/README.md).
 
 **Verify your download:** every [release](https://github.com/Sevih/gear-solver/releases) publishes
-the installer's SHA-256. Check it with `Get-FileHash .\Outerpedia-Gear-Solver-Setup-*.exe -Algorithm SHA256`.
+the SHA-256 of the installer and of the AppImage. Check it with
+`Get-FileHash .\Outerpedia-Gear-Solver-Setup-*.exe -Algorithm SHA256` (Windows) or
+`sha256sum Outerpedia-Gear-Solver-*.AppImage` (Linux).
 The full source is here and the build is reproducible via `npm run release`.
 
 ## 🔧 Building / contributing?
@@ -111,7 +125,9 @@ npm run desktop:dev
 
 # Production build (renderer bundle → bundled inside Electron → installer):
 npm run desktop:build
-npm --workspace @gear-solver/desktop run dist
+npm --workspace @gear-solver/desktop run dist                 # current OS
+npm --workspace @gear-solver/desktop run dist -- --linux      # AppImage (release/)
+npm --workspace @gear-solver/desktop run dist -- --win        # NSIS installer (Wine on Linux)
 ```
 
 Dev mode reads game data (`npm run data:sync`, the in-app sync) and images from a local

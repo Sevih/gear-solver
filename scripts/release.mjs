@@ -23,8 +23,10 @@
  *   5. Rebuild the capture plugin DLL (fetch-binaries: dotnet build, version
  *      checked against Plugin.Version, staged in resources/capture-steam/ for
  *      extraResources), then build web + desktop TS
- *   6. electron-builder --publish always → uploads installer + latest.yml
- *      to a DRAFT release on GitHub (provider config in apps/desktop pkg)
+ *   6. electron-builder --win --linux --publish always → uploads the Windows
+ *      installer + latest.yml and the Linux AppImage + latest-linux.yml to
+ *      the same DRAFT release on GitHub (provider config in apps/desktop pkg);
+ *      fails when either artifact is missing
  *   7. git add + commit "chore: release vX.Y.Z" + tag + push (--follow-tags)
  *   8. Promote the draft to a live release via gh + post the curated,
  *      player-facing notes from docs/release-notes.md ([Unreleased] section).
@@ -34,8 +36,8 @@
  * Env:
  *   GH_TOKEN / GITHUB_TOKEN   required — electron-builder publish + gh.
  *   VT_API_KEY                optional — when set, step 6 auto-submits the
- *                             installer to VirusTotal and folds the scan link
- *                             into the release notes. Get a free key at
+ *                             installer and the AppImage to VirusTotal and
+ *                             folds both scan links into the release notes. Get a free key at
  *                             https://www.virustotal.com/gui/my-apikey
  *                             (free tier: 4 req/min, 500/day — ample per release).
  */
@@ -47,10 +49,10 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DESKTOP_PKG = join(ROOT, "apps", "desktop", "package.json");
-// electron-builder drops the installer here (directories.output in the desktop
-// package.json). We hash it post-build so the release notes can publish a
-// verifiable SHA-256 — the app isn't code-signed, so a hash users can check is
-// the next best integrity signal.
+// electron-builder drops the installer and the AppImage here
+// (directories.output in the desktop package.json). We hash them post-build so
+// the release notes can publish a verifiable SHA-256 — the app isn't
+// code-signed, so a hash users can check is the next best integrity signal.
 const INSTALLER_DIR = join(ROOT, "apps", "desktop", "release");
 // Two version-anchored journals, both stamped at release:
 //  - release-notes.md = curated, English, PLAYER-facing → source of the GitHub notes.
@@ -161,29 +163,32 @@ function restoreJournals(snapshots) {
   }
 }
 
-/** Find the Setup .exe electron-builder just produced for `version` and return
- *  `{ name, sha256 }`, or null if it isn't there (dry-run, or a build that
- *  didn't emit an installer). Matches on `Setup` + the version so a stale exe
- *  from a previous release in the same dir is never picked. */
-function hashInstaller(version) {
+/** The two artifacts every release ships, matched in INSTALLER_DIR on the
+ *  version right before the extension, so neither a stale file from a previous
+ *  release nor a pre-release build of the same version (`1.20.0-g37`,
+ *  `1.20.0-private.1`) in the same dir is ever picked. */
+const ARTIFACTS = [
+  { label: "Windows installer", platform: "Windows", match: (f, v) => /setup/i.test(f) && f.endsWith(` ${v}.exe`) },
+  { label: "Linux AppImage", platform: "Linux", match: (f, v) => f.endsWith(`-${v}.AppImage`) },
+];
+
+/** Find the artifacts electron-builder just produced for `version` and return
+ *  `{ label, platform, name, sha256 }` for each one found (none in dry-run). */
+function hashArtifacts(version) {
   let entries;
-  try { entries = readdirSync(INSTALLER_DIR); } catch { return null; }
-  const name = entries.find(
-    (f) => /setup/i.test(f) && f.endsWith(".exe") && f.includes(version),
-  );
-  if (!name) return null;
-  const sha256 = createHash("sha256").update(readFileSync(join(INSTALLER_DIR, name))).digest("hex");
-  return { name, sha256 };
+  try { entries = readdirSync(INSTALLER_DIR); } catch { return []; }
+  return ARTIFACTS.flatMap(({ label, platform, match }) => {
+    const name = entries.find((f) => match(f, version));
+    if (!name) return [];
+    const sha256 = createHash("sha256").update(readFileSync(join(INSTALLER_DIR, name))).digest("hex");
+    return [{ label, platform, name, sha256 }];
+  });
 }
 
-// Populated by submitToVirusTotal() in step 6; integrityNote() folds the scan
-// link into the notes when the auto-submit succeeded.
-let vtResult = null;
-
-/** Best-effort upload of the freshly-built installer to VirusTotal (v3 API).
+/** Best-effort upload of one freshly-built artifact to VirusTotal (v3 API).
  *  Needs VT_API_KEY in the env; returns `{ guiUrl }` on a successful submit,
  *  else null. NEVER throws — a VT hiccup must not fail a release. Uses the
- *  large-file `upload_url` flow since the installer (~100 MB) is over VT's
+ *  large-file `upload_url` flow since both artifacts (~100 MB) are over VT's
  *  32 MB direct-upload cap. The GUI page is keyed by SHA-256 and resolves
  *  once the (possibly queued) analysis lands. */
 async function submitToVirusTotal(installer) {
@@ -197,13 +202,13 @@ async function submitToVirusTotal(installer) {
     const urlRes = await fetch("https://www.virustotal.com/api/v3/files/upload_url", { headers: { "x-apikey": key } });
     if (!urlRes.ok) throw new Error(`upload_url HTTP ${urlRes.status}`);
     const uploadUrl = (await urlRes.json()).data;
-    // 2. Multipart upload of the .exe.
+    // 2. Multipart upload of the file.
     const form = new FormData();
     form.append("file", new Blob([buf]), installer.name.replace(/ /g, "-"));
     const upRes = await fetch(uploadUrl, { method: "POST", headers: { "x-apikey": key }, body: form });
     if (!upRes.ok) throw new Error(`upload HTTP ${upRes.status}`);
     const guiUrl = `https://www.virustotal.com/gui/file/${installer.sha256}`;
-    ok(`Submitted to VirusTotal → ${guiUrl}`);
+    ok(`Submitted ${installer.name} to VirusTotal → ${guiUrl}`);
     return { guiUrl };
   } catch (err) {
     console.error(`  \x1b[33m! VirusTotal submit failed (non-fatal): ${err?.message ?? err}\x1b[0m`);
@@ -212,30 +217,37 @@ async function submitToVirusTotal(installer) {
 }
 
 /** Markdown block appended to the release notes so users can verify the
- *  unsigned installer. Empty string when the exe wasn't found. The GitHub
- *  asset name replaces spaces with hyphens (electron-builder sanitizes the
- *  upload), so we show that — it's what the user actually downloads — and
- *  quote it in the command since it still contains no-space-but-safe chars. */
-function integrityNote(installer) {
-  if (!installer) return "";
-  const downloadName = installer.name.replace(/ /g, "-");
+ *  unsigned downloads: per artifact, its download link, SHA-256, the command
+ *  that checks it and the VirusTotal scan when the submit succeeded (`vt` on
+ *  the artifact). Empty string when none was found. The GitHub asset name
+ *  replaces spaces with hyphens (electron-builder sanitizes the upload), so we
+ *  show that — it's what the user actually downloads. */
+function integrityNote(artifacts, tag) {
+  if (artifacts.length === 0) return "";
   const lines = [
     "",
     "---",
     "",
-    "**Verify your download** (the installer isn't code-signed, so Windows/AV may warn — see the README):",
-    "",
-    "```",
-    `${downloadName}`,
-    `SHA-256: ${installer.sha256}`,
-    "```",
-    "",
-    "```powershell",
-    `Get-FileHash ".\\${downloadName}" -Algorithm SHA256`,
-    "```",
+    "**Verify your download** (nothing is code-signed, so Windows/AV may warn — see the README):",
     "",
   ];
-  if (vtResult?.guiUrl) lines.push(`🔍 **VirusTotal scan:** ${vtResult.guiUrl}`, "");
+  for (const a of artifacts) {
+    const downloadName = a.name.replace(/ /g, "-");
+    const check = a.platform === "Windows"
+      ? ["```powershell", `Get-FileHash ".\\${downloadName}" -Algorithm SHA256`, "```"]
+      : ["```bash", `sha256sum "${downloadName}"`, "```"];
+    lines.push(
+      `**${a.label}** — [${downloadName}](https://github.com/Sevih/gear-solver/releases/download/${tag}/${downloadName})`,
+      "",
+      "```",
+      `SHA-256: ${a.sha256}`,
+      "```",
+      "",
+      ...check,
+      "",
+    );
+    if (a.vt?.guiUrl) lines.push(`🔍 **VirusTotal scan:** ${a.vt.guiUrl}`, "");
+  }
   return lines.join("\n");
 }
 
@@ -367,21 +379,27 @@ try {
   run("npm run desktop:build");
 
   // ── PUBLISH (electron-builder) ───────────────────────────────────────
-  step(6, "Build installer + upload to GitHub (draft)");
+  step(6, "Build installer + AppImage + upload to GitHub (draft)");
   // `electron-builder --publish always` reads `publish` block from apps/desktop
   // package.json (provider: github / Sevih / gear-solver). Default releaseType
-  // is draft — we promote it in step 8.
-  run("npm run publish -w @gear-solver/desktop");
+  // is draft — we promote it in step 8. Both targets in one run, so they land
+  // in the same release with latest.yml and latest-linux.yml; the NSIS build
+  // goes through Wine on Linux.
+  run("npm run dist -w @gear-solver/desktop -- --win --linux --publish always");
   releasedToGitHub = true;
 
-  // Hash the freshly-built installer so step 8 can publish a verifiable
-  // SHA-256 alongside the notes.
-  const installer = hashInstaller(toVersion);
-  if (installer) ok(`Installer SHA-256: ${installer.sha256}`);
-  else skip("Installer .exe not found for hashing — notes will omit the checksum");
+  // Hash the freshly-built artifacts so step 8 can publish a verifiable
+  // SHA-256 for each alongside the notes. A release missing one of them would
+  // leave a platform without its update: stop (the catch prints how to finish).
+  const artifacts = hashArtifacts(toVersion);
+  if (!DRY_RUN) {
+    const missing = ARTIFACTS.filter(({ label }) => !artifacts.some((a) => a.label === label)).map(({ label }) => label);
+    if (missing.length) throw new Error(`${missing.join(" + ")} for ${toVersion} not found in ${relative(ROOT, INSTALLER_DIR)}`);
+  }
+  for (const a of artifacts) ok(`${a.label} SHA-256: ${a.sha256}`);
 
-  // Auto-submit to VirusTotal (best-effort; adds the scan link to the notes).
-  vtResult = await submitToVirusTotal(installer);
+  // Auto-submit to VirusTotal (best-effort; adds the scan links to the notes).
+  for (const a of artifacts) a.vt = await submitToVirusTotal(a);
 
   // ── COMMIT + PUSH ────────────────────────────────────────────────────
   step(7, `Commit + tag ${tag} + push`);
@@ -413,7 +431,7 @@ try {
       if (unreleasedBody) {
         notesBody = `${unreleasedBody}\n`;
         if (prevTag) notesBody += `\n**Full changelog:** https://github.com/Sevih/gear-solver/compare/${prevTag}...${tag}\n`;
-        notesBody += integrityNote(installer);
+        notesBody += integrityNote(artifacts, tag);
       } else {
         // `HEAD~1` excludes the `chore: release ${tag}` commit (plumbing). Falls
         // back to the whole history when there's no previous tag (first release).
@@ -431,7 +449,7 @@ try {
             if (prevTag) {
               notesBody += `\n**Full changelog:** https://github.com/Sevih/gear-solver/compare/${prevTag}...${tag}\n`;
             }
-            notesBody += integrityNote(installer);
+            notesBody += integrityNote(artifacts, tag);
           }
         } catch (err) {
           console.error(`  \x1b[33m! Couldn't gather commit log: ${err?.message ?? err}\x1b[0m`);
@@ -439,7 +457,7 @@ try {
       }
       // Even with no curated notes and an empty commit range, still publish the
       // checksum block so every release carries a verifiable hash.
-      if (!notesBody && installer) notesBody = `## ${tag}\n${integrityNote(installer)}`;
+      if (!notesBody && artifacts.length) notesBody = `## ${tag}\n${integrityNote(artifacts, tag)}`;
       const NOTES_FILE = join(ROOT, ".release-notes.tmp.md");
       const hasNotes = notesBody.length > 0;
       if (hasNotes) {
@@ -459,6 +477,7 @@ try {
 
   console.log(`\n\x1b[32m✓ Release ${tag} published.\x1b[0m`);
   console.log(`  https://github.com/Sevih/gear-solver/releases/tag/${tag}`);
+  for (const a of artifacts) console.log(`  ${a.label}: ${a.name.replace(/ /g, "-")}`);
 } catch (err) {
   console.error(`\n\x1b[31m✗ Release pipeline aborted.\x1b[0m`);
   if (err?.message) console.error(`  ${err.message.split("\n")[0]}`);

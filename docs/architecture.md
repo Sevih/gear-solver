@@ -70,9 +70,12 @@ by hand (manual import).
   automatically) so the committed mirror doesn't lag behind a game patch.
   Packaging is live: `scripts/release.mjs` refreshes `data/derived`, runs typecheck, tests and
   lint against it (a failure stops before anything is published and reverts the version bump and
-  the stamped journals), then builds and publishes the installer via
-  electron-builder (`--publish always`, `extraResources` for `data/`), and packaged builds
-  auto-update in production (`updater.ts` / `setupAutoUpdate`). The installer bundles the
+  the stamped journals), then builds and publishes the Windows installer (NSIS) and the Linux
+  AppImage to the same release via electron-builder (`--win --linux --publish always`,
+  `extraResources` for `data/`; `latest.yml` and `latest-linux.yml`, both SHA-256 in the notes),
+  and packaged builds auto-update in production (`updater.ts` / `setupAutoUpdate`). An AppImage
+  updates itself only when started from its file (`APPIMAGE`) in a writable folder; otherwise the
+  Home card goes "manual" with the reason (`appImageUpdateBlocker`). The installer bundles the
   plugin DLL (`resources/capture-steam`, rebuilt at every release by `scripts/fetch-binaries.mjs`,
   which refuses a DLL whose version differs from `Plugin.Version`); BepInEx itself is
   downloaded, checksum-verified, when the plugin is installed. At launch `legacy-cleanup.ts`

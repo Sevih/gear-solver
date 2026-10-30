@@ -12,7 +12,9 @@ app works under the hood, see [Architecture](Architecture) instead.
 
 ## 1. What you need
 
-- **Windows** (the app ships as a Windows desktop installer).
+- **Windows** or **Linux** (the app ships as a Windows installer and a Linux AppImage, both on
+  the [releases page](https://github.com/Sevih/gear-solver/releases/latest)). On Linux the game
+  runs under Proton — see [Installing on Linux](#installing-on-linux) below.
 - OUTERPLANE installed **from Steam** and logged into your account. Nothing else: the app drops
   a small capture plugin into the game folder for you. (No Steam client? You can still import
   your snapshot files by hand — the **Manual fallback** picker at the bottom of the window.)
@@ -21,6 +23,22 @@ app works under the hood, see [Architecture](Architecture) instead.
 > Importing your account reads the game's own network responses **locally on your PC** —
 > nothing is ever sent anywhere, your data stays on your machine. The plugin reads them from
 > inside the game, after the game decrypted them. (Details: [Capture Pipeline](Capture-Pipeline).)
+
+### Installing on Linux
+
+1. Download `Outerpedia-Gear-Solver-<version>.AppImage` and put it in a folder you own, e.g.
+   `~/Applications` (the app updates itself only from a folder you can write to).
+2. Make it executable: `chmod +x Outerpedia-Gear-Solver-*.AppImage` (or file manager →
+   Properties → Permissions → *Allow executing file as program*), then double-click it.
+3. Install `unzip` if it's missing (`sudo dnf install unzip`, `sudo apt install unzip`…): the
+   app needs it to unpack BepInEx when it installs the capture plugin.
+4. In Steam, set OUTERPLANE's launch option (Properties → General → Launch Options) to
+   `WINEDLLOVERRIDES="winhttp=n,b" %command%`, then restart Steam — without it the plugin never
+   loads under Proton. The setup wizard shows whether it's set.
+
+Updates: the new version is downloaded next to the old file under its new name, and the old one
+removed (rename the AppImage without its version number to keep a fixed name). If the file sits
+somewhere read-only, the Home update card says so and you download the new AppImage by hand.
 
 ---
 

@@ -8,7 +8,8 @@
  *               assemblies). Copied to resources/capture-steam/ and bundled
  *               as `<resources>/capture-steam` (BepInEx itself is downloaded
  *               at install time by steam-capture.ts, not bundled).
- *   build/icon.ico — the installer / window icon, see provisionWindowsIcon().
+ *   build/icon.ico — the installer / window icon, and build/icon.png — the
+ *               AppImage / Linux window icon, see provisionIcons().
  *
  * Needs the .NET SDK (`dotnet`, `dotnet.exe` on Windows) and the game
  * installed. scripts/release.mjs runs it before every build, so the installer
@@ -68,21 +69,26 @@ function provisionSteamPlugin() {
   console.log(`[ok] capture-steam plugin ${version} (${dllBytes.length.toLocaleString("en-US").replace(/,/g, " ")} bytes) -> ${dest}`);
 }
 
-/** Wrap a PNG as a single-image Windows ICO container. electron-builder
+/** Wrap a PNG as a single-image Windows ICO container, and stage the same PNG
+ *  as build/icon.png for the AppImage (electron-builder's linux.icon, and the
+ *  window icon main.ts passes on Linux). electron-builder
  *  needs build/icon.ico to be >= 256x256 square; the site's favicon.ico
  *  is 189x256 (the tall-logo favicon) so we regenerate from the square
  *  512x512 PNG asset of the outerpedia checkout (OUTERPEDIA_PATH env →
  *  .env.local → sibling ../outerpedia, see scripts/outerpedia-checkout.mjs). Inline because
  *  ImageMagick isn't on the dev's PATH and the format is trivial: 6-byte
- *  header + 16-byte directory entry + the raw PNG payload. */
-function provisionWindowsIcon() {
+ *  header + 16-byte directory entry + the raw PNG payload. The PNG needs no
+ *  conversion: the source is already the square 512x512 Linux wants, so it is
+ *  copied byte for byte. */
+function provisionIcons() {
   const iconRel = join("public", "icons", "icon-512x512.png");
   const checkout = findOuterpediaCheckout(REPO, iconRel);
   const srcPng = checkout ? join(checkout, iconRel) : null;
   const buildDir = join(here, "..", "build");
   const outIco = join(buildDir, "icon.ico");
+  const outPng = join(buildDir, "icon.png");
   if (!srcPng) {
-    console.warn(`[warn] no outerpedia checkout with ${iconRel} (set OUTERPEDIA_PATH?) - skipping .ico generation`);
+    console.warn(`[warn] no outerpedia checkout with ${iconRel} (set OUTERPEDIA_PATH?) - skipping .ico / .png generation`);
     return;
   }
   mkdirSync(buildDir, { recursive: true });
@@ -108,11 +114,13 @@ function provisionWindowsIcon() {
   png.copy(out, dataOffset);
   writeFileSync(outIco, out);
   console.log(`[ok] windows icon ${width}x${height} -> ${outIco}`);
+  copyFileSync(srcPng, outPng);
+  console.log(`[ok] linux icon ${width}x${height} -> ${outPng}`);
 }
 
 // Run only as a script: the test imports assertPluginVersion without building.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   provisionSteamPlugin();
-  provisionWindowsIcon();
-  console.log(`[done] plugin + icon provisioned under ${RESOURCES} and build/`);
+  provisionIcons();
+  console.log(`[done] plugin + icons provisioned under ${RESOURCES} and build/`);
 }

@@ -8,6 +8,81 @@
 
 ## Items de backlog clôturés (index)
 
+### 📦 Release : cible Linux AppImage à côté de l'installeur Windows, une seule release, auto-update Linux (G76) (2026-10-30)
+- ✅ **Pourquoi.** Après la couche plateforme de G75, l'app tourne sous Linux mais ne se construisait et ne se publiait
+  que pour Windows (`win.target nsis`, `electron-builder --win`) : rien à télécharger pour un joueur sous Proton, et
+  electron-updater n'avait pas de `latest-linux.yml` à lire.
+- ✅ **Bloc `build` d'`apps/desktop/package.json`** (seul bloc touché, scripts et dépendances intacts, `package-lock.json`
+  non modifié) : `linux` = `target AppImage` x64, `category Game`, `icon build/icon.png`, `executableName
+  outerpedia-gear-solver` (sans lui electron-builder refuse l'AppImage : le nom dérivé `@gear-solverdesktop` est
+  invalide), `artifactName "${productName}-${version}.${ext}"`, soit `Outerpedia Gear Solver-1.20.0.AppImage` en local
+  et `Outerpedia-Gear-Solver-1.20.0.AppImage` sur GitHub, le même motif que le `Setup` Windows (nom du produit + version),
+  sans l'arch puisqu'il n'y en a qu'une. `linux.files` ajoute `build/icon.png` à l'asar : l'icône de fenêtre que
+  `main.ts` passe sous Linux (`join(__dirname, "..", "build", "icon.png")`) n'existait sinon qu'en dev ; la build Windows
+  ne l'embarque pas. `extraMetadata.desktopName = "outerpedia-gear-solver.desktop"` : Electron en tire l'app_id / le
+  WM_CLASS, qui correspond ainsi au `.desktop` de l'AppImage (avertissement d'electron-builder sinon). `publish`
+  inchangé.
+- ✅ **Icône.** `fetch-binaries.mjs` : `provisionWindowsIcon` devient `provisionIcons` et copie aussi la source vers
+  `build/icon.png`. Source = `public/icons/icon-512x512.png` du checkout outerpedia, celle de l'`.ico` : déjà un PNG
+  carré 512×512 RGBA, donc copié octet pour octet, sans conversion ni dépendance (pas de PNG source dans `resources/`,
+  pas besoin d'Electron hors ligne). Le script affiche `[ok] linux icon 512x512 -> …/build/icon.png`.
+- ✅ **`scripts/release.mjs`.** L'étape 6 lance `npm run dist -w @gear-solver/desktop -- --win --linux --publish always`
+  (le script `publish` du workspace, `--win` seul, n'est plus appelé et reste en place : les scripts sont hors
+  périmètre) : les deux cibles dans une seule exécution, donc la même release brouillon avec `latest.yml` et
+  `latest-linux.yml`. `hashInstaller` devient `hashArtifacts` sur une table `ARTIFACTS` (installeur Windows, AppImage
+  Linux) ; la correspondance exige la version juste avant l'extension (` 1.20.0.exe`, `-1.20.0.AppImage`) : l'ancien
+  `includes(version)` prenait `Setup 1.20.0-private.1.exe`, présent dans `release/` sur le portable, à la place de
+  `Setup 1.20.0.exe`. Il manque l'un des deux après la build : l'étape lève une erreur qui nomme le manquant, et le
+  `catch` affiche comme avant la marche à suivre pour finir à la main (la release existe déjà sur GitHub à ce stade).
+  VirusTotal : `submitToVirusTotal` appelé pour chacun, lien rangé sur l'artefact (`a.vt`, plus de `vtResult` global).
+  `integrityNote(artifacts, tag)` : par artefact, le lien de téléchargement
+  (`releases/download/<tag>/<nom à tirets>`), le SHA-256, la commande de vérification (`Get-FileHash` pour Windows,
+  `sha256sum` pour Linux) et le lien VirusTotal ; le résumé final nomme les deux fichiers. Contrôlé en extrayant
+  `hashArtifacts` et `integrityNote` dans un script jetable lancé sur le vrai `release/` (1.20.0 → `Setup 1.20.0.exe`
+  et l'AppImage, 1.14.0 → `Setup 1.14.0.exe` et pas `-g45`) ; la release elle-même n'a pas été lancée.
+- ✅ **Auto-update Linux.** Lu dans electron-updater 6.8.9 (`AppImageUpdater`) : sans `APPIMAGE` dans l'environnement
+  (AppImage extrait, `electron .`), `checkForUpdates` rend null sans aucun événement, donc la carte restait sur « Up to
+  date » ; avec `APPIMAGE`, l'installation fait `unlinkSync` du fichier puis `mv` du nouveau dans le même dossier, donc
+  un dossier en lecture seule échouait après le téléchargement complet, en « Update check failed / Offline? ».
+  `updater.ts` : `appImageUpdateBlocker(platform, env, canWrite)` (pur, `canWrite` injecté) rend la raison, ou null :
+  rien hors Linux, « Not started from the AppImage file — download new versions from GitHub » sans `APPIMAGE` absolu,
+  « AppImage folder is read-only — move the file to a writable folder » si `accessSync(dirname, W_OK)` échoue. Quand il
+  bloque : nouvelle phase `manual` (desktop et miroir `apps/renderer/src/lib/update.ts`), `autoDownload` coupé mais
+  la vérification lancée quand même, `update-available` ne fait que noter la version, les événements `checking`,
+  `error` et `update-not-available` ne quittent pas `manual`, et `installUpdate` reste refusé (la phase n'est jamais
+  `downloaded`). Sinon le chemin d'avant, inchangé : téléchargement en fond, « vX ready », bouton Install →
+  `quitAndInstall(false, true)`, qui relance la nouvelle AppImage. `UpdateCard.tsx` : une sixième config ambre « Manual »
+  (titre « vX available » ou « Auto-update off », le message en entier et non tronqué, bouton « Check again », icône
+  triangle de l'erreur) ; les cinq autres états ne changent pas.
+- ✅ **Docs.** `README.md` (phrase « Packaged as… » : Windows et Linux, lien de téléchargement, section « 🐧 Linux (AppImage) » : `chmod +x`,
+  `unzip`, option de lancement Proton de G75, mise à jour depuis un dossier inscriptible, nom versionné remplacé par le
+  nouveau ; `sha256sum` à côté de `Get-FileHash` ; `dist -- --linux` / `-- --win` dans la build depuis les sources),
+  `wiki/Getting-Started.md` (Windows ou Linux, section « Installing on Linux » en quatre étapes), `wiki/Using-the-App.md`
+  (carte « Manual »), `docs/architecture.md` et son miroir `wiki/Architecture.md` (publication des deux cibles,
+  condition de l'auto-update AppImage). `docs/todo.md` : aucun item ne correspondait.
+- ✅ **Tests.** `apps/desktop/test/updater-appimage.test.ts` (6) : `appImageUpdateBlocker` (Windows jamais, sans
+  `APPIMAGE` ou relatif, dossier en lecture seule avec le dossier vérifié = `dirname`, dossier inscriptible) ; puis
+  `setupAutoUpdate` avec la plateforme forcée à `linux` et sans `APPIMAGE`, sur un faux `autoUpdater` qui garde ses
+  écouteurs : `manual` avec la raison et `autoDownload` faux, version nommée par `update-available`, `manual` gardé à
+  travers `checking-for-update` / `error` / `update-not-available`, `installUpdate()` faux. `updater.test.ts` (l'échec
+  de vérification au lancement) pose un `APPIMAGE` sous `tmpdir()` : sous Linux, hôte de la CI, il serait sinon passé
+  en `manual`. `npm run typecheck` : `tsc --noEmit` sans erreur ; `npm test` : `Tests  169 passed (169)`,
+  `Tests  237 passed (237)`, `Tests  842 passed (842)` ; `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)`, comme
+  avant.
+- ✅ **Build locale non publiée.** `npm run desktop:build && npm run fetch-binaries -w @gear-solver/desktop && npm run
+  dist -w @gear-solver/desktop -- --linux --publish never` : `apps/desktop/release/Outerpedia Gear Solver-1.20.0.AppImage`,
+  126 454 342 octets, SHA-256 `a4e27a0dfd0e487070463f95cb81a814ee1a8abbec6fc0fd72209e6fadff88f5` ; `latest-linux.yml` à
+  côté (`url: Outerpedia-Gear-Solver-1.20.0.AppImage`, `blockMapSize` : mise à jour différentielle possible) ;
+  `app-update.yml` dans `linux-unpacked/resources/`, et l'asar porte `dist/` (44 fichiers), `build/icon.png` et
+  `desktopName`. Rien de `release/` n'est commité. L'AppImage n'a pas été lancé.
+- ⏳ **Laissé à Sevih.** Lancer l'AppImage sur le portable (icône de fenêtre et du lanceur, carte Home, capture sous
+  Proton de G75) ; à la prochaine release, vérifier que la page porte les deux artefacts, `latest.yml` et
+  `latest-linux.yml`, puis l'auto-update réel depuis un AppImage dans `~/Applications` (un AppImage 1.20.0 local n'a
+  pas de version précédente publiée à partir de laquelle se mettre à jour). La release suivante passe Wine pour le NSIS
+  et l'AppImage dans la même commande : durée et place disque à surveiller. Une note joueur dans `docs/release-notes.md`
+  reste à écrire (« Linux AppImage »). Hors périmètre : le script `publish` du workspace (`--win` seul) n'est plus utilisé
+  par la release, à retirer quand les scripts seront ouverts ; `.rpm` / `.deb` / Flatpak, arm64 et la signature Linux.
+
 ### 🐧 Desktop : couche plateforme avec implémentation Linux (Steam natif, jeu sous Proton, chemins Wine) (G75) (2026-10-29)
 - ✅ **Pourquoi.** Le desktop ne tournait que sous Windows : Steam trouvé par `reg.exe`, le jeu par `tasklist.exe`, lancé
   par `cmd.exe /c start steam://…`, BepInEx décompressé par PowerShell. Sous Fedora le jeu tourne sous Proton (Steam

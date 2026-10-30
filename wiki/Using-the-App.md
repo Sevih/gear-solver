@@ -329,7 +329,8 @@ A tabbed modal:
 ## Keeping things up to date
 
 - **App updates** — the **Home** tab's update center checks automatically; click **Install** when
-  one is downloaded.
+  one is downloaded. On Linux the AppImage needs to sit in a folder you can write to; otherwise the
+  card reads **Manual** with the reason, and you download the new AppImage by hand.
 - **Game data** — after an OUTERPLANE patch, the app refreshes its game tables on launch. You can
   also force it from **Settings → Data → Sync game data**, then re-capture your account.
 

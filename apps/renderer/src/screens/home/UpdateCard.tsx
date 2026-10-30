@@ -1,18 +1,18 @@
 /**
- * Home update card — the state-driven update center (all five states).
+ * Home update card — the state-driven update center (all six states).
  */
 import { Spinner } from "../../design/Shell.js";
 import type { UpdatePhase, UpdateStatus } from "../../lib/update.js";
 import { IC_UPDATE } from "./HomeIcons.js";
 import { Num } from "./HomePrimitives.js";
 
-// ── update card (compact column — all five states) ───────────────────────
+// ── update card (compact column — all six states) ───────────────────────
 function IconBox({ phase, bg, color }: { phase: UpdatePhase; bg: string; color: string }) {
   return (
     <div className="grid h-10.5 w-10.5 shrink-0 place-items-center rounded-xl" style={{ background: bg, color }}>
       {phase === "checking" ? (
         <Spinner className="h-4.5 w-4.5" />
-      ) : phase === "error" ? (
+      ) : phase === "error" || phase === "manual" ? (
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 3l9 16H3z" /><path d="M12 10v4" /><circle cx={12} cy={17} r={0.6} fill="currentColor" />
         </svg>
@@ -39,6 +39,7 @@ export function UpdateCard({ status, onCheck, onInstall }: {
     downloading: { bg: "rgba(34,211,238,0.10)", color: "#67e8f9", title: `Downloading v${ver}`,   titleColor: "#fafafa", sub: "Fetching in the background",                tag: "Downloading", tagColor: "#67e8f9", border: "rgba(34,211,238,0.22)", glow: "none" },
     downloaded:  { bg: "rgba(34,211,238,0.16)", color: "#67e8f9", title: `v${ver} ready`,          titleColor: "#fafafa", sub: "Restarts and applies on install",           tag: "Ready",      tagColor: "#67e8f9", border: "rgba(34,211,238,0.45)", glow: "0 0 0 1px rgba(34,211,238,0.18), 0 0 34px -10px rgba(34,211,238,0.5)" },
     error:       { bg: "rgba(251,113,133,0.10)", color: "#fb7185", title: "Update check failed",  titleColor: "#fda4af", sub: "Offline? Couldn’t reach GitHub",            tag: "Offline",    tagColor: "#fb7185", border: "rgba(251,113,133,0.3)", glow: "none" },
+    manual:      { bg: "rgba(251,191,36,0.10)", color: "#fbbf24", title: status.version ? `v${ver} available` : "Auto-update off", titleColor: "#fafafa", sub: status.error ?? "Update by hand from GitHub", tag: "Manual", tagColor: "#fbbf24", border: "rgba(251,191,36,0.3)", glow: "none" },
   }[status.state];
   const showNew = status.state === "downloading" || status.state === "downloaded";
 
@@ -61,7 +62,8 @@ export function UpdateCard({ status, onCheck, onInstall }: {
             <span className="truncate text-[13.5px] font-semibold leading-tight" style={{ color: cfg.titleColor }}>{cfg.title}</span>
             {showNew && <span className="rounded-[5px] bg-cyan-400/15 px-1.5 py-px font-mono text-[8.5px] font-bold tracking-wider text-cyan-300">NEW</span>}
           </div>
-          <span className="truncate text-[11px] text-zinc-400">{cfg.sub}</span>
+          {/* the manual reason is a sentence to read in full, not a status line */}
+          <span className={`${status.state === "manual" ? "" : "truncate "}text-[11px] text-zinc-400`}>{cfg.sub}</span>
         </div>
       </div>
 
@@ -83,7 +85,7 @@ export function UpdateCard({ status, onCheck, onInstall }: {
         </button>
       ) : status.state === "error" ? (
         <button onClick={onCheck} className="w-full rounded-lg border border-rose-400/40 bg-rose-500/10 py-2 text-[12px] font-semibold text-rose-300 hover:bg-rose-500/20">Retry</button>
-      ) : status.state === "uptodate" ? (
+      ) : status.state === "uptodate" || status.state === "manual" ? (
         <button onClick={onCheck} className="w-full rounded-lg border border-white/10 bg-zinc-900 py-2 text-[12px] font-semibold text-zinc-400 hover:bg-zinc-800">Check again</button>
       ) : null}
 
