@@ -12,7 +12,12 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Builder › gems vs stat filters**: a stat filter's minimum is now served before the substat
+  priority when the solver picks gems. Before, with a priority set, the solver could swap the hero's
+  socketed gems for the priority's gems, drop a filtered stat under its minimum and return no result at
+  all (ATK ≥ 12,000 with a CHD priority, for instance). Now the gems of the short stat go on first, the
+  priority fills the remaining sockets; a build that only passes with its socketed gems keeps them (the
+  gear band then shows the pieces' own gems). Builds that already passed are unchanged.
 
 ## [1.22.0] — 2026-10-30
 
