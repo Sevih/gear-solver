@@ -12,7 +12,13 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Logs moved to Settings**: the status banner under the header and its "Show log" drop-down are gone.
+  Everything they showed now lives in a new **Settings › Logs** tab (timestamped, kept for the session,
+  with Copy and Clear), and the results that matter — plugin installed or failed, Steam launched, game
+  data updated, import done — show up as toasts.
+- **Compact result cards**: the EE and the talisman now share one card (seven cards in the band, four
+  then three), and the talisman's multi-tier passive is hidden like the EE's effects — hover the
+  talisman's name to read it. The regular cards are unchanged.
 
 ## [1.26.1] — 2026-10-31
 
