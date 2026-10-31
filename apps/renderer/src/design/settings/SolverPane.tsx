@@ -114,7 +114,7 @@ export function SolverPane({
       <div className="flex items-center justify-between gap-4.5">
         <div className="flex max-w-90 flex-col gap-0.5">
           <span className="text-[13px] font-medium text-white">Compact result cards</span>
-          <span className="text-[11.5px] leading-snug text-zinc-400">Shorter gear cards under the results: set names instead of item names, icon + value stats, one-line effects. Inventory and tooltips unchanged.</span>
+          <span className="text-[11.5px] leading-snug text-zinc-400">Shorter, narrower gear cards under the results: no item icon (enhance, breakthrough, stars by the name), set names instead of item names, icon + value stats with substats two per row, gems as icons, one-line quality and effects, details on hover. Inventory and tooltips unchanged.</span>
         </div>
         <Switch checked={solver.compactCards} onToggle={() => solver.setCompactCards((v) => !v)} />
       </div>

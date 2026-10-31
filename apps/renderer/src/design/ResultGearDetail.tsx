@@ -14,16 +14,21 @@
  * effect (armor 2/4-pc), and the Singularity active effect on ascended pieces.
  *
  * `compact` (Settings › Solver › Compact result cards) shortens the card for
- * an eight-card comparison: set names instead of item names, icon + value
- * stats, one-line effects, a narrower card.
+ * an eight-card comparison: no equipment icon (enhance / breakthrough / stars
+ * move to the header), set names instead of item names, icon + value stats
+ * (subs on a 2 × 2 grid, details in the `title`), gems as five icons, one-line
+ * effects and quality, an icon action row instead of the exclude button, a
+ * narrower card.
  */
+import type { ReactNode } from "react";
 import type { Character, GameData } from "@gear-solver/core";
-import type { UiPiece } from "./adapter.js";
+import type { UiEffect, UiPiece } from "./adapter.js";
 import { CharFace, EquipmentIcon, StatIcon } from "./EquipmentIcon.js";
 import { RARITY, SINGULARITY_GRADIENT_V, STAT } from "./tokens.js";
 import { GameText } from "./GameText.js";
+import { RichTooltip } from "./RichTooltip.js";
 import { cx } from "./cx.js";
-import { QUALITY_COLOR, QUALITY_REACHABLE_HELP, type QualityTier } from "../lib/quality.js";
+import { QUALITY_COLOR, QUALITY_REACHABLE_HELP, qualityShortLabel, type QualityTier } from "../lib/quality.js";
 
 /** Per-tier UI tone (text class + bar color + label). `bar` pulls from the
  *  shared `QUALITY_COLOR` so the Inventory filter and the quality bar agree. */
@@ -67,13 +72,49 @@ function plainLine(text: string): string {
   return oneLine(text).replace(/<\/?color[^>]*>/g, "");
 }
 
+/** A Singularity effect on a compact card: a stat + value effect becomes its
+ *  icon + signed value, a description-only one its name (or the first 24
+ *  characters of the untagged text). `title` keeps the full wording. */
+export type CompactEffect =
+  | { kind: "stat"; stat: string; value: string; title: string }
+  | { kind: "text"; text: string; title: string };
+
+export function compactEffect(e: Pick<UiEffect, "stat" | "value" | "name" | "desc">): CompactEffect {
+  if (e.desc) {
+    const plain = plainLine(e.desc).trim();
+    const text = e.name ?? (plain.length > 24 ? `${plain.slice(0, 24).trimEnd()}…` : plain);
+    return { kind: "text", text, title: plain };
+  }
+  const value = `${e.value.startsWith("-") ? "" : "+"}${e.value}`;
+  return { kind: "stat", stat: e.stat, value, title: `${e.name ?? statLong(e.stat)} ${value}` };
+}
+
+/** Value tone of a compact substat cell: cyan when projected reforge ticks
+ *  enter the line, violet when Transistone ticks do (cyan wins if both),
+ *  amber at the 6-tick cap, white otherwise. */
+export function compactSubTone(lv: number, added: number, transistone: number): "cyan" | "violet" | "amber" | "white" {
+  if (added > 0) return "cyan";
+  if (transistone > 0) return "violet";
+  return lv >= 6 ? "amber" : "white";
+}
+
+/** `title` of a compact substat cell — everything the cell no longer shows:
+ *  "LV 5 (4 + 1) · Attack% · T+1" (base + reforges [+ projected], Transistone). */
+export function compactSubTitle(s: Pick<UiPiece["subs"][number], "lv" | "reforges" | "stat">, added = 0, transistone = 0): string {
+  const base = s.lv - s.reforges;
+  const extrapole = Math.max(0, added);
+  const actuelle = s.reforges - extrapole;
+  const split = s.reforges > 0 ? ` (${base} + ${actuelle}${extrapole > 0 ? ` + ${extrapole}` : ""})` : "";
+  return `LV ${s.lv}${split} · ${statLong(s.stat)}${transistone > 0 ? ` · T+${transistone}` : ""}`;
+}
+
 const QUALITY_HELP = "Sum of every substat tick (initial roll + reforge procs) vs the cap for the item's CURRENT investment: base 14 (4+4+3+3) plus 1 per reforge already spent. Singularity adds up to 3 extra reforges. So a pristine 6★ caps at 14; fully reforged 20; ascended + fully reforged 23.";
 
 /** A single substat row: "LV {n} (base + reforges)  [icon]  label  value".
  *  Gold-tinted once the sub hits its cap of 6 total ticks (base + reforges) —
  *  fixed at 6 regardless of the item's star tier. A 6★ socle is 4/4/3/3, so a
  *  sub only reaches 6 after reforges, never at socle. */
-function SubstatRow({ s, added = 0, transistone = 0, compact = false }: { s: UiPiece["subs"][number]; added?: number; transistone?: number; compact?: boolean }) {
+function SubstatRow({ s, added = 0, transistone = 0 }: { s: UiPiece["subs"][number]; added?: number; transistone?: number }) {
   const isMax = s.lv >= 6;
   const sign = s.value.startsWith("-") ? "" : "+";
   // Split the tick count into Base (initial roll) + Actuelle (reforges actually
@@ -86,23 +127,6 @@ function SubstatRow({ s, added = 0, transistone = 0, compact = false }: { s: UiP
   const transistoneMark = transistone > 0 && (
     <span className="shrink-0 text-[10px] text-violet-300" title={`Transistone: base LV ${base - transistone} → ${base}`}>T+{transistone}</span>
   );
-  if (compact) {
-    // Compact: "[n] (+added) [icon]  value" — the label and the base + reforges
-    // split move to the row's title.
-    const split = s.reforges > 0 ? ` (${base} + ${actuelle}${extrapole > 0 ? ` + ${extrapole}` : ""})` : "";
-    return (
-      <div
-        className={cx("flex items-center gap-1.5 font-mono text-[12px] tabular-nums", isMax ? "text-amber-300" : "text-white")}
-        title={`LV ${s.lv}${split} · ${statLong(s.stat)}`}
-      >
-        <span className={cx("w-4 shrink-0 rounded-sm text-center text-[10px] leading-4", isMax ? "bg-amber-400/15 text-amber-300" : "bg-white/8 text-white/80")}>{s.lv}</span>
-        <span className="w-5 shrink-0 text-[10px] text-cyan-300">{extrapole > 0 ? `+${extrapole}` : ""}</span>
-        <StatIcon stat={s.stat} size={16} className="shrink-0" />
-        {transistoneMark}
-        <span className={cx("ml-auto font-semibold", isMax ? "text-amber-200" : "text-white")}>{sign}{s.value}</span>
-      </div>
-    );
-  }
   return (
     <div className={cx("flex items-center gap-2 font-mono text-[12px] tabular-nums", isMax ? "text-amber-300" : "text-white")}>
       <span className={cx("w-30 shrink-0", isMax ? "text-amber-300" : "text-white")}>
@@ -159,6 +183,102 @@ function GemPanel({ slots }: { slots: NonNullable<UiPiece["gemSlots"]> }) {
   );
 }
 
+const SUB_TONE_CLASS = { cyan: "text-cyan-300", violet: "text-violet-300", amber: "text-amber-200", white: "text-white" } as const;
+
+/** Compact substat cell: icon + value only; LV, the reforge split and the
+ *  Transistone mark move to the `title`, the value's tone keeps the cue. */
+function CompactSubCell({ s, added = 0, transistone = 0 }: { s: UiPiece["subs"][number]; added?: number; transistone?: number }) {
+  const sign = s.value.startsWith("-") ? "" : "+";
+  return (
+    <div className="flex items-center gap-1.5 font-mono text-[12px] tabular-nums" title={compactSubTitle(s, added, transistone)}>
+      <StatIcon stat={s.stat} size={16} className="shrink-0" title={null} />
+      <span className={cx("font-semibold", SUB_TONE_CLASS[compactSubTone(s.lv, added, transistone)])}>{sign}{s.value}</span>
+    </div>
+  );
+}
+
+/** Compact gem row: the five sockets as 20 px icons, details in each `title`. */
+function CompactGemRow({ slots }: { slots: NonNullable<UiPiece["gemSlots"]> }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {slots.map((s, i) => {
+        if (s.gem) {
+          const sign = s.gem.value < 0 ? "-" : "+";
+          const valueLabel = `${sign}${Math.abs(s.gem.value)}${s.gem.percent ? "%" : ""}`;
+          return (
+            <img
+              key={i}
+              src={`/img/items/TI_GEM_${s.gem.type}_${s.gem.level}.webp`}
+              alt=""
+              title={`Lv ${s.gem.level} · ${statLong(s.gem.stat)} ${valueLabel}`}
+              className="h-5 w-5 shrink-0 object-contain"
+            />
+          );
+        }
+        return (
+          <div
+            key={i}
+            title={s.unlocked ? "Empty gem slot" : "Locked — unlocks at enhance +5"}
+            className="grid h-5 w-5 shrink-0 place-items-center rounded-sm border border-dashed border-white/10 bg-white/2 text-white/65"
+          >
+            {!s.unlocked && (
+              <svg viewBox="0 0 14 14" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.4}>
+                <rect x="3" y="6" width="8" height="6" rx="1" />
+                <path d="M5 6 V4.5 a2 2 0 0 1 4 0 V6" />
+              </svg>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One quick action of a compact card's footer. */
+export interface CardAction {
+  key: string;
+  icon: ReactNode;
+  /** Hover text (and accessible name) of the icon button. */
+  label: string;
+  /** Toggled-on state — rose tint (e.g. the piece is excluded). */
+  active?: boolean;
+  onClick: () => void;
+}
+
+/** Compact card footer: a right-aligned row of 24 px icon buttons. */
+export function CardActions({ actions }: { actions: CardAction[] }) {
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      {actions.map((a) => (
+        <RichTooltip key={a.key} content={a.label}>
+          <button
+            type="button"
+            onClick={a.onClick}
+            aria-label={a.label}
+            aria-pressed={a.active ?? false}
+            className={cx(
+              "grid h-6 w-6 place-items-center rounded-md border transition-colors",
+              a.active
+                ? "border-rose-400/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
+                : "border-white/10 bg-white/3 text-white/70 hover:bg-white/6",
+            )}
+          >
+            {a.icon}
+          </button>
+        </RichTooltip>
+      ))}
+    </div>
+  );
+}
+
+/** ⊘ — the exclude-from-solver action icon. */
+const EXCLUDE_ICON = (
+  <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.4}>
+    <circle cx="7" cy="7" r="5" />
+    <path d="M3.5 10.5 L10.5 3.5" strokeLinecap="round" />
+  </svg>
+);
+
 interface ResultGearDetailBodyProps {
   piece: UiPiece;
   game: GameData | null;
@@ -200,6 +320,15 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
         >
           {compact ? compactName(piece, game) : <>{piece.name}{piece.singularity && <><br />- [Singularity]</>}</>}
         </span>
+        {/* Compact: what the dropped equipment icon carried — enhance (always),
+         *  breakthrough (when any) and the star count. */}
+        {compact && (
+          <span className="mt-0.5 flex shrink-0 items-center gap-1 font-mono text-[11px] leading-4 tabular-nums text-white/75">
+            <span title="Enhance level">+{piece.enhance}</span>
+            {piece.bt > 0 && <span title="Breakthrough">T{piece.bt}</span>}
+            <span title="Stars">{piece.stars}★</span>
+          </span>
+        )}
         {/* Equipped-on hero — top-right corner of the card, round. */}
         {equippedChar && <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={32} className="rounded-full" />}
       </div>
@@ -213,16 +342,24 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
       )}
 
       {/* icon + main stat(s) to its right (no rarity/slot line). EE shows just
-       *  its image — no main. */}
+       *  its image — no main. Compact: no icon, the main(s) on one full-width
+       *  line. */}
+      {compact ? (
+        !isEE && piece.main.length > 0 && (
+          <div className="flex items-center gap-3">
+            {piece.main.map((m, i) => (
+              <div key={i} className="flex min-w-0 flex-1 items-center gap-2 font-mono text-[13px] tabular-nums" title={m.name ?? statLong(m.stat)}>
+                <StatIcon stat={m.stat} size={18} className="shrink-0" />
+                <span className="ml-auto font-semibold text-white">{m.value}</span>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
       <div className="flex items-start gap-3">
         <EquipmentIcon piece={piece.iconPiece} size={56} />
         <div className="min-w-0 flex-1 space-y-1.5">
-          {!isEE && piece.main.map((m, i) => compact ? (
-            <div key={i} className="flex items-center gap-2 font-mono text-[13px] tabular-nums" title={m.name ?? statLong(m.stat)}>
-              <StatIcon stat={m.stat} size={18} className="shrink-0" />
-              <span className="ml-auto font-semibold text-white">{m.value}</span>
-            </div>
-          ) : (
+          {!isEE && piece.main.map((m, i) => (
             <div key={i} className="flex items-center gap-2 font-mono text-[13px] tabular-nums">
               <StatIcon stat={m.stat} size={18} className="shrink-0" />
               <span className="flex-1 text-white">{m.name ?? statLong(m.stat)}</span>
@@ -231,14 +368,22 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
           ))}
         </div>
       </div>
+      )}
 
-      {/* substats (gear) OR gems (talisman / EE) — never both. EE: gems only. */}
+      {/* substats (gear) OR gems (talisman / EE) — never both. EE: gems only.
+       *  Compact: gems as one icon row, subs on a 2 × 2 grid (row by row). */}
       {piece.gemSlots ? (
-        <GemPanel slots={piece.gemSlots} />
+        compact ? <CompactGemRow slots={piece.gemSlots} /> : <GemPanel slots={piece.gemSlots} />
       ) : !isEE && piece.subs.length > 0 ? (
+        compact ? (
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+            {piece.subs.map((s, i) => <CompactSubCell key={i} s={s} added={addedTicks?.[i] ?? 0} transistone={transistoneTicks?.[i] ?? 0} />)}
+          </div>
+        ) : (
         <div className="space-y-1">
-          {piece.subs.map((s, i) => <SubstatRow key={i} s={s} added={addedTicks?.[i] ?? 0} transistone={transistoneTicks?.[i] ?? 0} compact={compact} />)}
+          {piece.subs.map((s, i) => <SubstatRow key={i} s={s} added={addedTicks?.[i] ?? 0} transistone={transistoneTicks?.[i] ?? 0} />)}
         </div>
+        )
       ) : null}
 
       {/* quality — just the rating + label, in the label's color. No bar/header. */}
@@ -246,8 +391,19 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
         const q = piece.quality;
         if (!q) return null;
         const tone = QUALITY_TONE[q.tier];
+        if (compact) {
+          // "14/20 →17 Exc." — the full label and both help texts in the title.
+          const title = `${tone.label} — ${QUALITY_HELP}${q.reachable != null ? `\n\n${QUALITY_REACHABLE_HELP}` : ""}`;
+          return (
+            <div className="font-mono text-[12px] tabular-nums" title={title}>
+              <span className={cx("font-bold", tone.text)}>{q.current}/{q.max}</span>
+              {q.reachable != null && <span className="ml-1.5 text-violet-300">→{q.reachable}</span>}
+              <span className={cx("ml-1.5 font-semibold", tone.text)}>{qualityShortLabel(q.tier)}</span>
+            </div>
+          );
+        }
         return (
-          <div className="font-mono text-[12px] tabular-nums" title={compact ? QUALITY_HELP : undefined}>
+          <div className="font-mono text-[12px] tabular-nums">
             <span className={cx("font-bold", tone.text)}>{q.current}</span>
             <span className="text-white/60">/{q.max}</span>
             {q.reachable != null && <span className="text-violet-300" title={QUALITY_REACHABLE_HELP}> → {q.reachable} reachable</span>}
@@ -284,28 +440,30 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
             );
           })()}
 
-          {/* Singularity active effect (ascended) — same format, label removed */}
-          {piece.singularity && piece.effects.length > 0 && (
+          {/* Singularity active effect (ascended) — same format, label removed.
+           *  Compact: every effect on one line (icon + signed value, or a short
+           *  name), the full wording in each title. */}
+          {piece.singularity && piece.effects.length > 0 && compact && (
+            <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap font-mono text-[11px] leading-snug tabular-nums text-white">
+              {piece.effects.map((e, i) => {
+                const c = compactEffect(e);
+                return c.kind === "stat" ? (
+                  <span key={i} className="flex shrink-0 items-center gap-1" title={c.title}>
+                    <StatIcon stat={c.stat} size={14} className="shrink-0" title={null} />
+                    {c.value}
+                  </span>
+                ) : (
+                  <span key={i} className="min-w-0 truncate font-sans" title={c.title}>{c.text}</span>
+                );
+              })}
+            </div>
+          )}
+          {piece.singularity && piece.effects.length > 0 && !compact && (
             <div className="space-y-1.5 text-[11px] leading-snug text-white">
               {piece.effects.map((e, i) => {
-                if (e.desc && compact) {
-                  return (
-                    <div key={i} className="truncate" title={plainLine(e.desc)}>
-                      <GameText text={oneLine(e.desc)} />
-                    </div>
-                  );
-                }
                 if (e.desc) return <GameText key={i} text={e.desc} className="block wrap-break-word" />;
                 const sign = e.value.startsWith("-") ? "" : "+";
                 const label = e.name ?? statLong(e.stat);
-                if (compact) {
-                  return (
-                    <div key={i} className="flex items-center gap-2" title={`${label} ${sign}${e.value}`}>
-                      <span className="min-w-0 flex-1 truncate">{label}</span>
-                      <span className="shrink-0 text-white">{sign}{e.value}</span>
-                    </div>
-                  );
-                }
                 return (
                   <div key={i} className="flex items-start gap-2 wrap-break-word">
                     <span className="min-w-0 flex-1">{label}</span>
@@ -329,7 +487,7 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
 export function ResultItemDetail({
   piece, equippedChar, fromPresets, game, excluded, onToggleExclude, addedTicks, transistoneTicks, compact = false,
 }: { piece: UiPiece | null; equippedChar: Character | null; fromPresets?: string[]; game: GameData | null; excluded?: boolean; onToggleExclude?: (uid: string) => void; addedTicks?: number[]; transistoneTicks?: number[]; compact?: boolean }) {
-  const width = compact ? "w-64" : "w-80";
+  const width = compact ? "w-56" : "w-80";
   if (!piece) {
     return (
       <aside className={cx("flex h-full shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/6 bg-white/[0.012] px-6 py-8 text-center", width)}>
@@ -350,7 +508,18 @@ export function ResultItemDetail({
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <ResultGearDetailBody piece={piece} game={game} equippedChar={equippedChar} fromPresets={fromPresets} addedTicks={addedTicks} transistoneTicks={transistoneTicks} compact={compact} />
       </div>
-      {onToggleExclude && (
+      {onToggleExclude && compact && (
+        <div className="shrink-0 border-t border-white/8 px-4 py-1.5">
+          <CardActions actions={[{
+            key: "exclude",
+            icon: EXCLUDE_ICON,
+            label: excluded ? "Excluded from solver — click to include" : "Exclude from solver",
+            active: excluded,
+            onClick: () => onToggleExclude(piece.id),
+          }]} />
+        </div>
+      )}
+      {onToggleExclude && !compact && (
         <div className="shrink-0 border-t border-white/8 px-4 py-2.5">
           <button
             type="button"

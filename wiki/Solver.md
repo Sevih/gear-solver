@@ -430,11 +430,15 @@ Talisman | Gloves | Boots from a 1616 px window (four `w-80` cards beside the `w
 same order wraps. Each card shows name,
 enhance level, slot icon, main stat, subs (with ticks). In addition:
 - **Compact mode** (Settings › Solver › Compact result cards, `gs.builder.compactCards`, off by default):
-  `w-64` cards — the grid then starts at 1360 px (4 × 256 + 3 × 8 + 288 + 8 + 16) —, header =
-  `compactName` (« EE », the set name for armor, the item name otherwise, no « - [Singularity] » but the
-  gradient stays), mains and subs as icon + value (sub level in a small badge, base + reforges in the
-  `title`), one-line truncated effects (full text in the `title`). Gems unchanged; Inventory and tooltips
-  (`GearDetailBody`) untouched.
+  `w-56` cards — the grid then starts at 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, no equipment icon;
+  header = `compactName` (« EE », the set name for armor, the item name otherwise, no « - [Singularity] »
+  but the gradient stays) followed by the enhance (`+15`), the breakthrough (`T2`, when any) and the stars
+  (`6★`); main(s) as icon + value on one line; subs on a 2 × 2 grid, icon + value only (LV, base + reforges
+  and the Transistone mark in the `title`; value in cyan when projected ticks enter it, violet for the
+  Transistone, amber at cap); gems as one row of five icons (details in the `title`); quality on one line
+  (`14/20 →17 Exc.`); Singularity effects on one line (icon + signed value, or a short name); footer = a
+  row of action icons (`CardActions`, today exclude / include). Inventory and tooltips (`GearDetailBody`)
+  untouched.
 - **Talisman / EE**: the gem allocation recommended by the build (stat + value,
   **swap** badge if it differs from the socketed gems).
 - **Projected stats**: if the Reforge mode ≠ Off, the displayed main + subs are the projection

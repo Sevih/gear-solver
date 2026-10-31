@@ -465,11 +465,15 @@ Talisman | Gants | Bottes dès 1616 px de fenêtre (quatre cartes `w-80` à côt
 le même ordre passe à la ligne. Chaque carte montre nom,
 enhance level, icône slot, main stat, subs (avec ticks). En plus :
 - **Mode compact** (Settings › Solver › Compact result cards, `gs.builder.compactCards`, éteint par défaut) :
-  cartes `w-64` — la grille démarre alors à 1360 px (4 × 256 + 3 × 8 + 288 + 8 + 16) —, en-tête =
-  `compactName` (« EE », le nom du set pour une armure, le nom de la pièce sinon, sans « - [Singularity] »
-  mais avec le dégradé), mains et subs en icône + valeur (niveau du sub en petit badge, base + reforges en
-  `title`), effets sur une ligne tronquée (texte complet en `title`). Gemmes inchangées ; l'Inventaire et
-  les tooltips (`GearDetailBody`) ne bougent pas.
+  cartes `w-56` — la grille démarre alors à 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, sans icône de
+  pièce ; en-tête = `compactName` (« EE », le nom du set pour une armure, le nom de la pièce sinon, sans
+  « - [Singularity] » mais avec le dégradé) suivi de l'enhance (`+15`), du breakthrough (`T2`, s'il y en a
+  un) et des étoiles (`6★`) ; main(s) en icône + valeur sur une ligne ; subs en grille 2 × 2, icône + valeur
+  seulement (LV, base + reforges et marque Transistone en `title` ; valeur en cyan si des ticks projetés y
+  entrent, en violet si c'est la Transistone, en ambre au cap) ; gemmes en une ligne de cinq icônes (détail
+  en `title`) ; qualité sur une ligne (`14/20 →17 Exc.`) ; effets Singularity sur une ligne (icône + valeur
+  signée, ou nom court) ; pied = rangée d'icônes d'action (`CardActions`, aujourd'hui exclure / inclure).
+  L'Inventaire et les tooltips (`GearDetailBody`) ne bougent pas.
 - **Talisman / EE** : l'allocation de gemmes recommandée par le build (stat + valeur,
   badge **swap** si elle diffère des gemmes socketées).
 - **Stats projetées** : si le mode Reforge ≠ Off, main + subs affichés sont la projection

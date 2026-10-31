@@ -14,6 +14,17 @@ export const QUALITY_LABEL: Record<QualityTier, string> = {
   poor: "Poor", decent: "Decent", good: "Good", excellent: "Excellent", perfect: "Perfect",
 };
 
+/** Abbreviated tier label — the compact Builder result card's quality line. */
+export function qualityShortLabel(tier: QualityTier): string {
+  switch (tier) {
+    case "poor": return "Poor";
+    case "decent": return "Dec.";
+    case "good": return "Good";
+    case "excellent": return "Exc.";
+    case "perfect": return "Perf.";
+  }
+}
+
 /** Per-tier accent color — the single source of truth shared by the Inventory
  *  tab's quality filter/bar (`QUALITY_TONE`) and the Home gear-quality
  *  distribution, so the two never drift. */

@@ -73,11 +73,11 @@ export function BottomGearBand({
   // mains contribute via the IOT_BUFF channel) on the game's equipment screen
   // grid, 4 × 2, once four w-80 cards fit beside the Builder's w-72 column:
   // 4 × 320 + 3 × 8 gaps + 288 + 8 gap + 16 padding = 1616 px. Compact cards
-  // are w-64: 4 × 256 + 3 × 8 + 288 + 8 + 16 = 1360 px. Narrower, the same
+  // are w-56: 4 × 224 + 3 × 8 + 288 + 8 + 16 = 1232 px. Narrower, the same
   // order wraps.
   return (
     <div className={compact
-      ? "flex shrink-0 flex-wrap gap-2 min-[1360px]:grid min-[1360px]:grid-cols-[repeat(4,max-content)]"
+      ? "flex shrink-0 flex-wrap gap-2 min-[1232px]:grid min-[1232px]:grid-cols-[repeat(4,max-content)]"
       : "flex shrink-0 flex-wrap gap-2 min-[1616px]:grid min-[1616px]:grid-cols-[repeat(4,max-content)]"}>
       {GAME_GEAR_GRID.map((slot) => {
         // The diff is keyed by engine slot ("ooparts" for the talisman).

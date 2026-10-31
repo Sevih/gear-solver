@@ -8,6 +8,65 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗜️ Builder : mode compact des cartes de résultat resserré, sans icône de pièce, gemmes en icônes, stats sur deux colonnes, actions rapides (G79) (2026-10-31)
+- ✅ **Pourquoi.** Demande de Sevih du 31/10 : la carte compacte (Settings › Solver › « Compact result cards ») restait
+  trop haute pour comparer les huit cartes d'un coup. Tout se joue sur le chemin `compact === true` de
+  `ResultItemDetail` / `ResultGearDetailBody` (`apps/renderer/src/design/ResultGearDetail.tsx`).
+- ✅ **En-tête sans icône.** `EquipmentIcon` disparaît de la carte compacte ; à droite du nom (couleur de rareté ou
+  dégradé Singularity inchangés, cadenas et portrait du porteur conservés), en mono 11 px : `+N` (enhance, toujours,
+  `+0` compris), `T<n>` si breakthrough, `N★`. Le ou les mains passent sur une ligne pleine largeur (icône + valeur,
+  deux mains côte à côte, une moitié chacune). L'EE n'a plus de ligne d'icône du tout (pas de main).
+- ✅ **Substats 2 × 2.** `CompactSubCell` : icône 16 px + valeur, grille `grid-cols-2` dans l'ordre de `piece.subs`
+  (ligne par ligne). Plus de badge LV, de `+n` ni de `T+n` à l'écran : tout passe dans le `title` par
+  `compactSubTitle(s, added, transistone)` (« LV 5 (4 + 1) · Attack% · T+1 »). La teinte de la valeur garde l'indice
+  (`compactSubTone`) : cyan si des ticks projetés y entrent, violet si c'est la Transistone, cyan prime si les deux.
+  Choix fait sur un point que l'énoncé laissait ouvert : une ligne au cap de 6 ticks reste ambre SAUF si des ticks
+  projetés ou Transistone y entrent (le projeté prime, c'est lui qu'on veut voir d'un coup d'œil). La branche
+  compacte de `SubstatRow` est retirée, sa branche non compacte n'a pas changé.
+- ✅ **Gemmes.** `CompactGemRow` : une ligne de cinq icônes 20 px (`/img/items/TI_GEM_<type>_<level>.webp`), socket
+  vide en carré pointillé, verrouillé avec le cadenas SVG, `title` « Lv n · <stat> <valeur> » / « Empty gem slot » /
+  « Locked — unlocks at enhance +5 ». `GemPanel` n'est pas touché (le SVG du cadenas est recopié plutôt que factorisé
+  pour laisser le chemin non compact intact).
+- ✅ **Effets Singularity.** `compactEffect(e)` (pure, exportée) : stat + valeur → `{ kind: "stat" }` (icône 14 px +
+  valeur signée, `title` libellé long + valeur), `desc` → `{ kind: "text" }` (`e.name`, sinon les 24 premiers
+  caractères sans balises + « … », `desc` complète sans balises en `title`). Tous les effets de la pièce sur UNE ligne
+  (`whitespace-nowrap`, le texte tronqué). La passive multi-paliers du talisman ne change pas.
+- ✅ **Qualité.** `14/20` dans la couleur du palier, `→17` en violet si `reachable`, puis le palier abrégé ; `title` =
+  libellé complet + `QUALITY_HELP` (+ `QUALITY_REACHABLE_HELP` si `reachable`). `qualityShortLabel(tier)` exportée par
+  `apps/renderer/src/lib/quality.ts` (Poor, Dec., Good, Exc., Perf.).
+- ✅ **Actions rapides.** `CardActions({ actions })` (exporté, liste `{ key, icon, label, active?, onClick }`) : rangée
+  d'icônes 24 px alignée à droite, chaque bouton dans une `RichTooltip` (le libellé au survol) avec `aria-label` et
+  `aria-pressed`. Une seule action : exclure / inclure (icône ⊘ en SVG, teinte rose quand la pièce est exclue),
+  « Exclude from solver » / « Excluded from solver — click to include ». Le bouton pleine largeur reste en non
+  compact. Aucune autre action, aucune requête au jeu.
+- ✅ **Largeur.** Tout tient en `w-56` (224 px, 192 px utiles) : la carte compacte passe de `w-64` à `w-56` et le seuil
+  de la grille 4 colonnes de `apps/renderer/src/screens/builder/BottomGearBand.tsx` de 1360 à 1232 px
+  (4 × 224 + 3 × 8 + 288 + 8 + 16), commentaire compris. Un nom de set long passe sur deux lignes, comme avant.
+- ✅ **Chemin non compact.** Comparé par rendu : l'ancien `ResultGearDetail.tsx` (copie du commit parent) et le nouveau
+  rendus par `renderToStaticMarkup` côte à côte, `compact` absent puis `false`, sur arme Singularity verrouillée à
+  deux mains, effets stat et `desc`, passive multi-paliers, qualité avec et sans `reachable`, talisman et EE à gemmes
+  (pleine, vide, verrouillée), pièce nulle, exclu ou non, avec et sans `onToggleExclude` : markup identique sur les
+  40 combinaisons (fichier de banc temporaire, supprimé). Les seules retouches de code sur ces branches sont des
+  ternaires `compact` devenus morts (le `title` de la qualité, la branche compacte des mains et des effets).
+  `design/GearDetail.tsx` (Inventaire) n'est pas touché.
+- ✅ **Docs.** Description du réglage dans `design/settings/SolverPane.tsx` ; `wiki/Using-the-App.md` (Builder) ;
+  `docs/solver.md` / `wiki/Solver.md` (BottomGearBand, mode compact, seuil 1232 px).
+- ✅ **Tests.** `apps/renderer/test/compactCard.test.ts` (12 tests) : `qualityShortLabel` (cinq paliers),
+  `compactEffect` (stat positive et négative, `desc` avec nom, tronquée à 24 + « … », courte, balises ôtées),
+  `compactSubTitle` / `compactSubTone`, puis un rendu serveur de `ResultItemDetail` (`EquipmentIcon` mocké en
+  marqueur) : en compact pas d'`EquipmentIcon`, en-tête `+15T26★` (et `+0` sans breakthrough), quatre cellules de
+  substat dont le texte visible n'est que la valeur (ni « LV » ni `T+`) et le `title` porte « LV 5 (4 + 0 + 1) ·
+  Attack% · T+1 », gemmes sans texte visible et `title` par socket, qualité `14/17→15Good`, effets sur une ligne, UN
+  bouton d'action avec `aria-label` « Exclude from solver » (« Excluded from solver — click to include » et
+  `aria-pressed="true"` une fois exclue) ; en non compact l'icône et le bouton pleine largeur « Exclude from solver »
+  sont là. `compactName.test.ts` passe inchangé. `npm run typecheck` : sortie vide (0 erreur) ; `npm test` :
+  « Tests 872 passed (872) » (renderer), 237 et 169 dans les autres workspaces ; `npm run lint` : « ✖ 13 problems
+  (0 errors, 13 warnings) », le même compte qu'avant le lot.
+- ⏳ **Sevih sur le fixe** : Settings › Solver › Compact result cards → cartes plus étroites, sans icône de pièce
+  (`+15 T2 6★` à côté du nom), subs deux par ligne avec le détail au survol, gemmes en icônes, qualité et effets sur
+  une ligne, petite icône ⊘ en pied (infobulle, teinte rose une fois exclue) ; grille 4 × 2 dès 1232 px de fenêtre.
+  Couper le réglage : les cartes reviennent à l'identique.
+
 ### 💎 Builder : les gemmes servent les bornes minimales des filtres de stats avant la priorité, repli sur les gemmes serties (G78) (2026-10-30)
 - ✅ **Pourquoi.** Bug vu par Sevih le 30/10 : un filtre ATK ≥ 12 000 et une priorité (ATK 3, CHD 3, SPD 2, CHC 2…)
   ne rendaient AUCUN résultat, les mêmes filtres sans priorité en rendaient. L'allocation de gemmes du solveur

@@ -257,8 +257,10 @@ results, the bottom band shows the selected build's pieces.
   game's equipment screen (Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots), including the
   **recommended gem allocation** (with a "swap" badge if it differs from what's socketed) and,
   if a Reforge mode is on, the **projected** max-roll stats. **Settings › Solver › Compact result
-  cards** shortens them: set names instead of item names (« EE » for the exclusive), icon + value
-  stats, one-line effects (full text on hover).
+  cards** shortens them: no item icon (enhance, breakthrough and stars next to the name), set names
+  instead of item names (« EE » for the exclusive), icon + value stats with the substats two per row,
+  gems as icons, one-line quality and effects (details on hover), and a small exclude icon instead of
+  the button.
 - **Equip build** — above the gear band, applies the selected build's pieces to the hero. A
   confirmation popup spells out how many pieces move (and how many would be taken off other
   heroes); on confirm it rewrites your captured snapshot and re-imports. Refused while the game
