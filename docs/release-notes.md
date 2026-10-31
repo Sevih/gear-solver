@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.24.0] — 2026-10-31
+
 - **Builder › Compact result cards** (Settings › Solver): the compact gear cards under the results are
   now much shorter and narrower. No item icon (the enhance level, breakthrough and stars sit next to the
   name), substats two per row as icon + value (level, reforges and Transistone detail on hover), gems as
