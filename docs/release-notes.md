@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.26.0] — 2026-10-31
+
 - **Presets › Expand all / Collapse all**: two buttons next to the sort open or close every preset card at
   once, in-game and local ones alike, filtered or not. A card you open or close by hand afterwards keeps
   its state until the next Expand all / Collapse all.
