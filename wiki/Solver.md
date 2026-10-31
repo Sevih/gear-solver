@@ -430,14 +430,19 @@ Talisman | Gloves | Boots from a 1616 px window (four `w-80` cards beside the `w
 same order wraps. Each card shows name,
 enhance level, slot icon, main stat, subs (with ticks). In addition:
 - **Compact mode** (Settings › Solver › Compact result cards, `gs.builder.compactCards`, off by default):
-  `w-56` cards — the grid then starts at 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, no equipment icon;
+  `w-56` cards — the grid then starts at 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, the EE and the talisman
+  in ONE card (`ResultPairDetail`: EE on top, talisman below, a rule between them, each with its own exclude
+  action), so seven cells, 4 + 3, in `COMPACT_GEAR_GRID` order (Weapon | EE + Talisman | Helmet | Armor /
+  Accessory | Gloves | Boots); no equipment icon;
   header = `compactName` (« EE », the set name for armor, the item name otherwise, no « - [Singularity] »
   but the gradient stays) followed by the enhance (`+15`), the breakthrough (`T2`, when any) and the stars
   (`6★`); main(s) as icon + value on one line; subs on a 2 × 2 grid, icon + value only (LV, base + reforges
   and the Transistone mark in the `title`; value in cyan when projected ticks enter it, violet for the
   Transistone, amber at cap); gems as one row of five icons (details in the `title`); quality on one line
   (`14/20 →17 Exc.`); Singularity effects on one line (icon + signed value; the +15 bonus as colored grade + icon + short label
-  + value, `S+ DS DMG+ +12%`, via `singularityShortLabel` / `singularityGrade`; or a short name); footer = a
+  + value, `S+ DS DMG+ +12%`, via `singularityShortLabel` / `singularityGrade`; or a short name); the
+  talisman's multi-tier passive not rendered, its text (visible tiers, active first, joined by « · ») in the
+  name's `title`; footer = a
   row of action icons (`CardActions`, today exclude / include). Inventory and tooltips (`GearDetailBody`)
   untouched.
 - **Talisman / EE**: the gem allocation recommended by the build (stat + value,

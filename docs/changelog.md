@@ -8,6 +8,41 @@
 
 ## Items de backlog clôturés (index)
 
+### 🃏 Carte compacte EE + talisman fusionnée, passif du talisman masqué en compact (G84) (2026-10-31)
+- ✅ **Pourquoi.** Demande de Sevih du 31/10, suite de G79 : en compact, l'EE (ni main ni effets) et le talisman (court)
+  tiennent dans une seule carte, et le passif multi-paliers du talisman, affiché en lignes tronquées, prenait de la
+  hauteur pour rien ; il se cache comme les effets de l'EE et reste lisible au survol. La carte non compacte et les
+  huit cartes `w-80` ne bougent pas.
+- ✅ **Passif en `title`.** `ResultGearDetail.tsx` : `visiblePassiveTiers` (paliers visibles : tous, moins le palier de
+  base une fois son amélioration non additive débloquée — la logique qui vivait en ligne dans le corps) et
+  `compactPassiveTitle` (exporté : paliers visibles, actifs d'abord, sans balises, joints par « · »). En compact,
+  `ResultGearDetailBody` ne rend plus le bloc du passif et le `title` du nom devient `nom complet\npassif` ; les
+  effets Singularity restent rendus. Non compact : inchangé, via `visiblePassiveTiers`.
+- ✅ **Carte double.** Le conteneur de `ResultItemDetail` sort en `CardShell` (même bordure, fond, arrondi, colonne) et
+  son pied compact en `CompactExcludeFooter` (libellés d'origine ; avec `what`, « Exclude EE from the solver » /
+  « EE excluded from the solver — click to include »). `ResultPairDetail({ top, bottom, game, compact: true })` empile
+  deux `ResultPairCell` (`piece`, `equippedChar`, `fromPresets`, `excluded`, `onToggleExclude`, `addedTicks`,
+  `transistoneTicks`, `emptyLabel`) dans un `CardShell` `w-56`, séparées par un filet `border-t border-white/8` ;
+  chaque cellule rend `ResultGearDetailBody` compact puis son action exclure (nommée « EE » ou « talisman » d'après le
+  slot), ou son `emptyLabel` (« No EE » / « No talisman ») sans action ; la cellule du bas prend la hauteur restante.
+- ✅ **Bande compacte.** `BottomGearBand.tsx` : `COMPACT_GEAR_GRID` (exporté) = weapon, [exclusive, talisman], helmet,
+  armor, accessory, gloves, boots — sept cellules, la grille garde quatre colonnes (4 + 3). Le calcul par slot
+  (gemmes recommandées, porteur, presets, exclusion, ticks) passe dans `cardOf(slot)`, partagé par les cartes simples
+  et les deux cellules de la carte double (`pairCell` y ajoute `toUiPiece`). Non compact : huit `GearCard` dans
+  l'ordre de `GAME_GEAR_GRID`, comme avant. Docs : `docs/solver.md` et `wiki/Solver.md` (mode compact : carte double,
+  sept cellules, passif en `title`), `wiki/Using-the-App.md` (phrase des cartes compactes). `docs/todo.md` : aucun item.
+- ✅ **Tests.** `apps/renderer/test/compactCard.test.ts` (19 → 27) : `compactPassiveTitle` (ordre actifs d'abord,
+  balises retirées, palier de base masqué par son amélioration) ; talisman à passif multi-paliers : en compact, texte
+  du passif absent du corps et porté par le `title` du nom, en non compact toujours affiché ; `ResultPairDetail` : un
+  seul `aside` `w-56`, les deux noms (« EE », « Charm »), deux actions aux `aria-label` distincts, l'état vide d'un côté
+  sans action ; la bande montée en rendu statique (`BottomGearBand`, build fabriqué de huit pièces, `GameData` minimal,
+  reforge « disable ») : sept `aside` en compact dont la carte double en deuxième (EE au-dessus du talisman), huit en
+  non compact, plus l'ordre de `COMPACT_GEAR_GRID`. `npm run typecheck` : `> tsc --noEmit` sans erreur ; `npm test` :
+  `Tests  905 passed (905)` (renderer ; core 169, desktop 238) ; `npm run lint` : `✖ 8 problems (0 errors, 8
+  warnings)`, comme avant.
+- ⏳ À voir par Sevih dans l'app : la bande compacte à 1232 px et plus (la carte double rend la première rangée plus
+  haute, les autres cartes s'étirent par `h-full`) et le survol du nom du talisman.
+
 ### 📜 Journal et statut dans un onglet « Logs » de Settings, bandeau retiré (G83) (2026-10-31)
 - ✅ **Pourquoi.** Demande de Sevih du 31/10 : le bandeau sous l'en-tête (« Capture plugin installed — … Show log (6) »)
   et le journal qu'il dépliait servaient surtout au débogage et prenaient une ligne sur tous les écrans.

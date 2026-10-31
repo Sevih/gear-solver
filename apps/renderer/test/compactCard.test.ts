@@ -4,12 +4,16 @@
 // title, no equipment icon (enhance / breakthrough / stars in the header),
 // gems as icons and one icon action in the footer, the Singularity +15 bonus
 // as grade + short label + value — while the non-compact
-// card keeps its icon and its full-width exclude button. Rendered
-// server-side, the equipment icon mocked to a marker element.
+// card keeps its icon and its full-width exclude button. The talisman's
+// multi-tier passive moves to the name's title, and the EE + talisman share
+// one card in the compact band (seven cells). Rendered server-side, the
+// equipment icon mocked to a marker element.
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { GameData, GearPiece } from "@gear-solver/core";
 import type { UiPiece } from "../src/design/adapter.js";
+import type { SlotDiff } from "../src/lib/buildDiff.js";
 import { QUALITY_TIERS, qualityShortLabel } from "../src/lib/quality.js";
 
 vi.mock("../src/design/EquipmentIcon.js", async (importOriginal) => ({
@@ -17,7 +21,8 @@ vi.mock("../src/design/EquipmentIcon.js", async (importOriginal) => ({
   EquipmentIcon: () => createElement("i", { "data-equipment-icon": "" }),
 }));
 
-const { ResultItemDetail, compactEffect, compactSubTitle, compactSubTone, singularityGrade, singularityShortLabel } = await import("../src/design/ResultGearDetail.js");
+const { ResultItemDetail, ResultPairDetail, compactEffect, compactPassiveTitle, compactSubTitle, compactSubTone, singularityGrade, singularityShortLabel } = await import("../src/design/ResultGearDetail.js");
+const { BottomGearBand, COMPACT_GEAR_GRID } = await import("../src/screens/builder/BottomGearBand.js");
 
 const effect = (over: Partial<UiPiece["effects"][number]>): UiPiece["effects"][number] =>
   ({ stat: "atkPct", value: "12%", percent: true, name: null, desc: null, combatOnly: false, ...over });
@@ -224,5 +229,103 @@ describe("ResultItemDetail — non-compact card", () => {
     expect(button).toHaveLength(1);
     expect(button[0]![1]).toContain("w-full");
     expect(text(button[0]![2]!)).toBe("Exclude from solver");
+  });
+});
+
+describe("talisman multi-tier passive", () => {
+  const multiTierPassive: UiPiece["multiTierPassive"] = {
+    name: "Charm passive",
+    tiers: [
+      { unlockLevel: 0, isAdd: false, active: true, desc: "Base: <color=#ffd200>ATK</color> +5%" },
+      { unlockLevel: 5, isAdd: true, active: true, desc: "Adds: Speed +3" },
+      { unlockLevel: 10, isAdd: true, active: false, desc: "Locked: CRIT +4%" },
+    ],
+  };
+  const talisman = piece({ slot: "talisman", name: "Charm", subs: [], quality: null, multiTierPassive });
+  const nameTitle = (html: string) => html.match(/<span[^>]*title="([^"]*)"[^>]*>Charm<\/span>/)?.[1];
+
+  it("title text: visible tiers, active first, untagged, joined by ·", () => {
+    expect(compactPassiveTitle([
+      { isAdd: false, active: true, desc: "Base" },
+      { isAdd: true, active: false, desc: "Later <color=#fff>tier</color>" },
+      { isAdd: true, active: true, desc: "Now" },
+    ])).toBe("Base · Now · Later tier");
+    // An unlocked upgrade (non-additive later tier) hides the base tier.
+    expect(compactPassiveTitle([
+      { isAdd: false, active: true, desc: "Base" },
+      { isAdd: false, active: true, desc: "Upgraded" },
+    ])).toBe("Upgraded");
+  });
+
+  it("compact: not rendered, carried by the name's title", () => {
+    const html = render(talisman, true);
+    expect(text(html)).not.toMatch(/Base:|Adds:|Locked:/);
+    expect(nameTitle(html)).toBe("Charm\nBase: ATK +5% · Adds: Speed +3 · Locked: CRIT +4%");
+  });
+
+  it("non-compact: still rendered", () => {
+    const t = text(render(talisman, false));
+    expect(t).toContain("Base: ATK +5%");
+    expect(t).toContain("Locked: CRIT +4%");
+  });
+});
+
+describe("ResultPairDetail — compact EE + talisman card", () => {
+  const ee = piece({ id: "ee1", slot: "exclusive", name: "Blade of Dawn", main: [], subs: [], quality: null });
+  const tal = piece({ id: "t1", slot: "talisman", name: "Charm", subs: [], quality: null });
+  const cell = (p: UiPiece | null, emptyLabel: string) =>
+    ({ piece: p, equippedChar: null, excluded: false, onToggleExclude: () => {}, emptyLabel });
+  const renderPair = (top: UiPiece | null, bottom: UiPiece | null) =>
+    renderToStaticMarkup(createElement(ResultPairDetail, { top: cell(top, "No EE"), bottom: cell(bottom, "No talisman"), game: null, compact: true }));
+
+  it("one w-56 container, both names, two exclude actions named after their piece", () => {
+    const html = renderPair(ee, tal);
+    expect(html.match(/<aside/g)).toHaveLength(1);
+    expect(html).toContain("w-56");
+    expect(text(html)).toContain("EE");
+    expect(text(html)).toContain("Charm");
+    const labels = [...html.matchAll(/<button[^>]*aria-label="([^"]*)"/g)].map((m) => m[1]);
+    expect(labels).toEqual(["Exclude EE from the solver", "Exclude talisman from the solver"]);
+  });
+
+  it("a missing piece shows its empty label, without an action", () => {
+    const html = renderPair(ee, null);
+    expect(text(html)).toContain("No talisman");
+    expect(html.match(/<button/g)).toHaveLength(1);
+    expect(text(renderPair(null, tal))).toContain("No EE");
+  });
+});
+
+describe("BottomGearBand — compact band", () => {
+  const SLOTS = ["weapon", "exclusive", "helmet", "armor", "accessory", "ooparts", "gloves", "boots"];
+  const gear = (slot: string): GearPiece => ({
+    uid: `u-${slot}`, itemId: 1, slot, setId: null, armorSetId: null,
+    rarity: "epic", star: 6, name: `P-${slot}`, classLimit: null,
+    breakthrough: 0, reforgeCount: 0, enhanceLevel: 15, singularityLevel: 0,
+    ascended: false, locked: false, equippedBy: null, main: [], subs: [],
+  }) as unknown as GearPiece;
+  const diff: SlotDiff[] = SLOTS.map((slot) => ({ slot, proposed: gear(slot), worn: null, changed: true }) as SlotDiff);
+  const game = { equipment: {}, sets: {} } as unknown as GameData;
+  const renderBand = (compact: boolean) => renderToStaticMarkup(createElement(BottomGearBand, {
+    build: null, diff, game, reforge: { reforgeMode: "disable", priority: {} }, charsByUid: new Map(),
+    excludedPieceUids: new Set<string>(), onToggleExclude: () => {}, compact,
+  }));
+
+  it("order: weapon, EE + talisman, helmet, armor, accessory, gloves, boots", () => {
+    expect(COMPACT_GEAR_GRID).toEqual(["weapon", ["exclusive", "talisman"], "helmet", "armor", "accessory", "gloves", "boots"]);
+  });
+
+  it("compact: seven cells, one of them double (EE above the talisman)", () => {
+    const html = renderBand(true);
+    const cells = html.split("<aside").slice(1);
+    expect(cells).toHaveLength(7);
+    const pair = cells[1]!;
+    expect(pair.indexOf(">EE<")).toBeGreaterThan(-1);
+    expect(pair.indexOf(">EE<")).toBeLessThan(pair.indexOf(">P-ooparts<"));
+    expect(cells.filter((c) => c.includes("P-ooparts") || c.includes(">EE<"))).toHaveLength(1);
+  });
+
+  it("non-compact: eight cards", () => {
+    expect(renderBand(false).match(/<aside/g)).toHaveLength(8);
   });
 });

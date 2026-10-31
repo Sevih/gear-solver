@@ -18,7 +18,8 @@
  * move to the header), set names instead of item names, icon + value stats
  * (subs on a 2 × 2 grid, details in the `title`), gems as five icons, one-line
  * effects and quality, an icon action row instead of the exclude button, a
- * narrower card.
+ * narrower card, the talisman's multi-tier passive in the name's `title`, and
+ * the EE + talisman sharing one card (`ResultPairDetail`).
  */
 import type { ReactNode } from "react";
 import type { Character, GameData } from "@gear-solver/core";
@@ -144,6 +145,22 @@ export function compactSubTitle(s: Pick<UiPiece["subs"][number], "lv" | "reforge
   const actuelle = s.reforges - extrapole;
   const split = s.reforges > 0 ? ` (${base} + ${actuelle}${extrapole > 0 ? ` + ${extrapole}` : ""})` : "";
   return `LV ${s.lv}${split} · ${statLong(s.stat)}${transistone > 0 ? ` · T+${transistone}` : ""}`;
+}
+
+/** Multi-tier passive tiers a card shows: every tier, minus the base one once
+ *  its upgrade (a later non-additive tier) is unlocked. */
+function visiblePassiveTiers<T extends { isAdd: boolean; active: boolean }>(tiers: T[]): T[] {
+  const upgrade = tiers.find((t, i) => i > 0 && !t.isAdd);
+  return tiers.filter((_t, i) => !(upgrade && i === 0 && upgrade.active));
+}
+
+/** A compact card's multi-tier passive, moved to the name's `title`: the
+ *  visible tiers, active first, untagged, joined by " · ". */
+export function compactPassiveTitle(tiers: { isAdd: boolean; active: boolean; desc: string }[]): string {
+  const visible = visiblePassiveTiers(tiers);
+  return [...visible.filter((t) => t.active), ...visible.filter((t) => !t.active)]
+    .map((t) => plainLine(t.desc).trim())
+    .join(" · ");
 }
 
 const QUALITY_HELP = "Sum of every substat tick (initial roll + reforge procs) vs the cap for the item's CURRENT investment: base 14 (4+4+3+3) plus 1 per reforge already spent. Singularity adds up to 3 extra reforges. So a pristine 6★ caps at 14; fully reforged 20; ascended + fully reforged 23.";
@@ -342,6 +359,9 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
   // EE (exclusive) shows just its image + gems — no main stats, no effects.
   const isEE = piece.slot === "exclusive";
   const fullName = `${piece.name}${piece.singularity ? " - [Singularity]" : ""}`;
+  // Compact: the talisman's multi-tier passive is not rendered — its text
+  // joins the name's title (hover), as the EE's effects stay hidden.
+  const passiveTitle = compact && !isEE && piece.multiTierPassive ? compactPassiveTitle(piece.multiTierPassive.tiers) : "";
 
   return (
     <div className={cx(compact ? "space-y-2" : "space-y-3", "text-left")}>
@@ -354,7 +374,7 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
           style={piece.singularity
             ? { background: SINGULARITY_GRADIENT_V, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }
             : { color: rarity?.fg ?? "#f4f4f5" }}
-          title={compact ? fullName : undefined}
+          title={compact ? (passiveTitle ? `${fullName}\n${passiveTitle}` : fullName) : undefined}
         >
           {compact ? compactName(piece, game) : <>{piece.name}{piece.singularity && <><br />- [Singularity]</>}</>}
         </span>
@@ -453,30 +473,18 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
       {/* Effects on the card. The weapon/accessory unique-option passive and the
        *  armor set effects now live in the build-level "Effects" card under the
        *  stats panel — NOT here. The card keeps the talisman's multi-tier passive
-       *  and (always) the Singularity passive. Hidden entirely for EE. */}
+       *  (non-compact only: compact moves it to the name's title) and (always)
+       *  the Singularity passive. Hidden entirely for EE. */}
       {!isEE && (
         <>
           {/* multi-tier passive (talisman) — just the active descriptions */}
-          {piece.multiTierPassive && (() => {
-            const tiers = piece.multiTierPassive!.tiers;
-            const upgrade = tiers.find((t, i) => i > 0 && !t.isAdd);
-            const visible = tiers.filter((_t, i) => {
-              if (!upgrade) return true;
-              if (i === 0 && upgrade.active) return false;
-              return true;
-            });
-            return (
-              <div className="space-y-1.5">
-                {visible.map((t, i) => compact ? (
-                  <div key={i} className={cx("truncate text-[11px] leading-snug text-white", !t.active && "opacity-40")} title={plainLine(t.desc)}>
-                    <GameText text={oneLine(t.desc)} />
-                  </div>
-                ) : (
-                  <GameText key={i} text={t.desc} className={cx("block text-[11px] leading-snug text-white", !t.active && "opacity-40")} />
-                ))}
-              </div>
-            );
-          })()}
+          {piece.multiTierPassive && !compact && (
+            <div className="space-y-1.5">
+              {visiblePassiveTiers(piece.multiTierPassive.tiers).map((t, i) => (
+                <GameText key={i} text={t.desc} className={cx("block text-[11px] leading-snug text-white", !t.active && "opacity-40")} />
+              ))}
+            </div>
+          )}
 
           {/* Singularity active effect (ascended) — same format, label removed.
            *  Compact: every effect on one line (icon + signed value, the +15
@@ -551,20 +559,12 @@ export function ResultItemDetail({
   }
 
   return (
-    <aside className={cx("flex h-full shrink-0 flex-col overflow-hidden rounded-xl border border-white/8 bg-bg-elev-1", width)}>
+    <CardShell width={width}>
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <ResultGearDetailBody piece={piece} game={game} equippedChar={equippedChar} fromPresets={fromPresets} addedTicks={addedTicks} transistoneTicks={transistoneTicks} compact={compact} />
       </div>
       {onToggleExclude && compact && (
-        <div className="shrink-0 border-t border-white/8 px-4 py-1.5">
-          <CardActions actions={[{
-            key: "exclude",
-            icon: EXCLUDE_ICON,
-            label: excluded ? "Excluded from solver — click to include" : "Exclude from solver",
-            active: excluded,
-            onClick: () => onToggleExclude(piece.id),
-          }]} />
-        </div>
+        <CompactExcludeFooter excluded={excluded} onClick={() => onToggleExclude(piece.id)} />
       )}
       {onToggleExclude && !compact && (
         <div className="shrink-0 border-t border-white/8 px-4 py-2.5">
@@ -583,6 +583,73 @@ export function ResultItemDetail({
           </button>
         </div>
       )}
+    </CardShell>
+  );
+}
+
+/** The result card's container (border, background, rounded, column) — shared
+ *  by the single card and the compact EE + talisman pair. */
+function CardShell({ width, children }: { width: string; children: ReactNode }) {
+  return (
+    <aside className={cx("flex h-full shrink-0 flex-col overflow-hidden rounded-xl border border-white/8 bg-bg-elev-1", width)}>
+      {children}
     </aside>
+  );
+}
+
+/** Compact card footer with the exclude action. `what` names the piece in the
+ *  label when two pieces share the card ("Exclude EE from the solver"). */
+function CompactExcludeFooter({ excluded = false, onClick, what }: { excluded?: boolean; onClick: () => void; what?: string }) {
+  const label = what
+    ? (excluded ? `${what} excluded from the solver — click to include` : `Exclude ${what} from the solver`)
+    : (excluded ? "Excluded from solver — click to include" : "Exclude from solver");
+  return (
+    <div className="shrink-0 border-t border-white/8 px-4 py-1.5">
+      <CardActions actions={[{ key: "exclude", icon: EXCLUDE_ICON, label, active: excluded, onClick }]} />
+    </div>
+  );
+}
+
+/** One half of a compact pair card: a piece (or the empty label) and the data
+ *  its single card would get. */
+export interface ResultPairCell {
+  piece: UiPiece | null;
+  equippedChar: Character | null;
+  fromPresets?: string[];
+  excluded?: boolean;
+  onToggleExclude?: (uid: string) => void;
+  addedTicks?: number[];
+  transistoneTicks?: number[];
+  /** Shown in place of the body when the build has no piece there. */
+  emptyLabel: string;
+}
+
+/** Compact EE + talisman card: two pieces stacked in ONE `w-56` container (the
+ *  EE has no main and no effects, the compact talisman is short), split by a
+ *  rule, each with its own exclude action. */
+export function ResultPairDetail({ top, bottom, game }: { top: ResultPairCell; bottom: ResultPairCell; game: GameData | null; compact: true }) {
+  return (
+    <CardShell width="w-56">
+      <PairCell cell={top} game={game} />
+      <div className="border-t border-white/8" />
+      <PairCell cell={bottom} game={game} grow />
+    </CardShell>
+  );
+}
+
+function PairCell({ cell, game, grow = false }: { cell: ResultPairCell; game: GameData | null; grow?: boolean }) {
+  const { piece, onToggleExclude } = cell;
+  if (!piece) {
+    return <div className={cx("px-4 py-4 text-[12px] italic text-white/65", grow && "flex-1")}>{cell.emptyLabel}</div>;
+  }
+  return (
+    <>
+      <div className={cx("px-4 py-4", grow && "flex-1")}>
+        <ResultGearDetailBody piece={piece} game={game} equippedChar={cell.equippedChar} fromPresets={cell.fromPresets} addedTicks={cell.addedTicks} transistoneTicks={cell.transistoneTicks} compact />
+      </div>
+      {onToggleExclude && (
+        <CompactExcludeFooter excluded={cell.excluded} onClick={() => onToggleExclude(piece.id)} what={piece.slot === "exclusive" ? "EE" : (piece.slot ?? "piece")} />
+      )}
+    </>
   );
 }

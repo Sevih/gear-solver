@@ -5,12 +5,19 @@ import { useMemo } from "react";
 import type { Character, GameData, GearPiece } from "@gear-solver/core";
 import { GAME_GEAR_GRID, toEngineSlot, type SlotId } from "../../design/tokens.js";
 import { toUiPiece } from "../../design/adapter.js";
-import { ResultItemDetail } from "../../design/ResultGearDetail.js";
+import { ResultItemDetail, ResultPairDetail, type ResultPairCell } from "../../design/ResultGearDetail.js";
 import { projectPieceForReforge } from "../../lib/solver/engine.js";
 import { rerollPotential } from "../../lib/solver/reroll.js";
 import type { SolveBuild } from "../../lib/solver/types.js";
 import type { SlotDiff } from "../../lib/buildDiff.js";
 import type { ReforgeContext } from "./reforge.js";
+
+/** Compact band order: `GAME_GEAR_GRID` with the EE and the talisman sharing
+ *  one card (EE on top) in the EE's place — seven cells, 4 + 3. */
+export const COMPACT_GEAR_GRID: readonly (SlotId | readonly ["exclusive", "talisman"])[] = [
+  "weapon", ["exclusive", "talisman"], "helmet", "armor",
+  "accessory", "gloves", "boots",
+];
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Bottom gear band — one card per main slot for the selected result
@@ -69,46 +76,58 @@ export function BottomGearBand({
     return map;
   }, [diff, game, reforge]);
 
+  // Everything a slot's card gets from the selected build.
+  const cardOf = (slot: SlotId) => {
+    // The diff is keyed by engine slot ("ooparts" for the talisman).
+    const engineSlot = toEngineSlot(slot);
+    const entry = pieceBySlot.get(engineSlot) ?? null;
+    const piece = entry?.piece ?? null;
+    // Only Talisman / EE carry gems — surface the build's recommended
+    // gem allocation there so the displayed stats (computed WITH those
+    // gems in SOLVE CP) are reachable, not silently mismatched against
+    // the piece's currently-socketed gems.
+    const recommendedGems = slot === "talisman"
+      ? build?.gemAllocation?.talisman
+      : slot === "exclusive"
+        ? build?.gemAllocation?.ee
+        : undefined;
+    const equippedBy = entry?.equippedBy ?? null;
+    // The character currently wearing the piece (any owner) — mirrors the
+    // Inventory card's header portrait. Excluded = this piece is in the
+    // global "never use" set, for the card's exclude-footer state.
+    const equippedChar = equippedBy ? (charsByUid.get(equippedBy) ?? null) : null;
+    const excluded = piece ? (excludedPieceUids?.has(piece.uid) ?? false) : false;
+    // Talisman / EE: show the SOLVER'S gem allocation (what the displayed
+    // stats assume in SOLVE CP), not the captured piece's sockets — override
+    // the gem-bearing piece's slots so the inventory-style GemPanel renders
+    // the recommendation. (The alloc is slot-aligned, 0 = empty.)
+    const pieceForCard = piece && recommendedGems && recommendedGems.some((id) => id > 0)
+      ? { ...piece, gemSlots: recommendedGems }
+      : piece;
+    const fromPresets = piece ? presetsOf?.(piece.uid) : undefined;
+    return { piece: pieceForCard, equippedChar, fromPresets, excluded, addedTicks: entry?.addedTicks, transistoneTicks: entry?.transistoneTicks };
+  };
+  const pairCell = (slot: SlotId, emptyLabel: string): ResultPairCell => {
+    const c = cardOf(slot);
+    return { ...c, piece: c.piece && game ? toUiPiece(c.piece, game) : null, onToggleExclude, emptyLabel };
+  };
+
   // All 8 pieces (EE and Talisman are full citizens of the solver scope: their
   // mains contribute via the IOT_BUFF channel) on the game's equipment screen
   // grid, 4 × 2, once four w-80 cards fit beside the Builder's w-72 column:
   // 4 × 320 + 3 × 8 gaps + 288 + 8 gap + 16 padding = 1616 px. Compact cards
-  // are w-56: 4 × 224 + 3 × 8 + 288 + 8 + 16 = 1232 px. Narrower, the same
-  // order wraps.
+  // are w-56: 4 × 224 + 3 × 8 + 288 + 8 + 16 = 1232 px, the EE and the
+  // talisman sharing one card (`COMPACT_GEAR_GRID`, 4 + 3). Narrower, the
+  // same order wraps.
   return (
     <div className={compact
       ? "flex shrink-0 flex-wrap gap-2 min-[1232px]:grid min-[1232px]:grid-cols-[repeat(4,max-content)]"
       : "flex shrink-0 flex-wrap gap-2 min-[1616px]:grid min-[1616px]:grid-cols-[repeat(4,max-content)]"}>
-      {GAME_GEAR_GRID.map((slot) => {
-        // The diff is keyed by engine slot ("ooparts" for the talisman).
-        const engineSlot = toEngineSlot(slot);
-        const entry = pieceBySlot.get(engineSlot) ?? null;
-        const piece = entry?.piece ?? null;
-        // Only Talisman / EE carry gems — surface the build's recommended
-        // gem allocation there so the displayed stats (computed WITH those
-        // gems in SOLVE CP) are reachable, not silently mismatched against
-        // the piece's currently-socketed gems.
-        const recommendedGems = slot === "talisman"
-          ? build?.gemAllocation?.talisman
-          : slot === "exclusive"
-            ? build?.gemAllocation?.ee
-            : undefined;
-        const equippedBy = entry?.equippedBy ?? null;
-        // The character currently wearing the piece (any owner) — mirrors the
-        // Inventory card's header portrait. Excluded = this piece is in the
-        // global "never use" set, for the card's exclude-footer state.
-        const equippedChar = equippedBy ? (charsByUid.get(equippedBy) ?? null) : null;
-        const excluded = piece ? (excludedPieceUids?.has(piece.uid) ?? false) : false;
-        // Talisman / EE: show the SOLVER'S gem allocation (what the displayed
-        // stats assume in SOLVE CP), not the captured piece's sockets — override
-        // the gem-bearing piece's slots so the inventory-style GemPanel renders
-        // the recommendation. (The alloc is slot-aligned, 0 = empty.)
-        const pieceForCard = piece && recommendedGems && recommendedGems.some((id) => id > 0)
-          ? { ...piece, gemSlots: recommendedGems }
-          : piece;
-        const fromPresets = piece ? presetsOf?.(piece.uid) : undefined;
-        return <GearCard key={slot} slot={slot} piece={pieceForCard} game={game} equippedChar={equippedChar} fromPresets={fromPresets} excluded={excluded} onToggleExclude={onToggleExclude} addedTicks={entry?.addedTicks} transistoneTicks={entry?.transistoneTicks} compact={compact} />;
-      })}
+      {compact
+        ? COMPACT_GEAR_GRID.map((cell) => typeof cell === "string"
+          ? <GearCard key={cell} slot={cell} game={game} onToggleExclude={onToggleExclude} compact {...cardOf(cell)} />
+          : <ResultPairDetail key={cell.join("+")} top={pairCell(cell[0], "No EE")} bottom={pairCell(cell[1], "No talisman")} game={game} compact />)
+        : GAME_GEAR_GRID.map((slot) => <GearCard key={slot} slot={slot} game={game} onToggleExclude={onToggleExclude} {...cardOf(slot)} />)}
     </div>
   );
 }
