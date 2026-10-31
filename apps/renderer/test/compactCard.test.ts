@@ -6,7 +6,8 @@
 // as grade + short label + value — while the non-compact
 // card keeps its icon and its full-width exclude button. The talisman's
 // multi-tier passive moves to the name's title, and the EE + talisman share
-// one card in the compact band (seven cells). Rendered server-side, the
+// one card in the compact band (seven cells), each compact card at its own
+// content height (no row stretch). Rendered server-side, the
 // equipment icon mocked to a marker element.
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
@@ -327,5 +328,31 @@ describe("BottomGearBand — compact band", () => {
 
   it("non-compact: eight cards", () => {
     expect(renderBand(false).match(/<aside/g)).toHaveLength(8);
+  });
+
+  const rootClass = (html: string) => /^<div class="([^"]*)"/.exec(html)![1]!.split(" ");
+  const asideClasses = (html: string) => [...html.matchAll(/<aside class="([^"]*)"/g)].map((m) => m[1]!.split(" "));
+
+  it("compact: cells and rows don't stretch, no card fills its row", () => {
+    const html = renderBand(true);
+    expect(rootClass(html)).toEqual(expect.arrayContaining(["items-start", "content-start"]));
+    const asides = asideClasses(html);
+    expect(asides).toHaveLength(7);
+    for (const c of asides) expect(c).not.toContain("h-full");
+  });
+
+  it("non-compact: the band stretches and its eight cards fill their row", () => {
+    const html = renderBand(false);
+    expect(rootClass(html)).not.toContain("items-start");
+    const asides = asideClasses(html);
+    expect(asides).toHaveLength(8);
+    for (const c of asides) expect(c).toContain("h-full");
+  });
+
+  it("compact empty card keeps its content height, the non-compact one fills", () => {
+    const empty = (compact: boolean) => renderToStaticMarkup(createElement(ResultItemDetail, { piece: null, equippedChar: null, game: null, compact }));
+    expect(empty(true)).toContain("No item selected");
+    expect(asideClasses(empty(true))[0]).not.toContain("h-full");
+    expect(asideClasses(empty(false))[0]).toContain("h-full");
   });
 });

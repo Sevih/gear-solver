@@ -545,7 +545,7 @@ export function ResultItemDetail({
   const width = compact ? "w-56" : "w-80";
   if (!piece) {
     return (
-      <aside className={cx("flex h-full shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/6 bg-white/[0.012] px-6 py-8 text-center", width)}>
+      <aside className={cx("flex shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/6 bg-white/[0.012] px-6 py-8 text-center", !compact && "h-full", width)}>
         <div className="grid h-10 w-10 place-items-center rounded-md border border-white/6 bg-black/30 text-white/70">
           <svg viewBox="0 0 14 14" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.4}>
             <rect x="2" y="2" width="10" height="10" rx="1.5" />
@@ -559,7 +559,7 @@ export function ResultItemDetail({
   }
 
   return (
-    <CardShell width={width}>
+    <CardShell width={width} fill={!compact}>
       <div className="flex-1 overflow-y-auto px-4 py-4">
         <ResultGearDetailBody piece={piece} game={game} equippedChar={equippedChar} fromPresets={fromPresets} addedTicks={addedTicks} transistoneTicks={transistoneTicks} compact={compact} />
       </div>
@@ -588,10 +588,11 @@ export function ResultItemDetail({
 }
 
 /** The result card's container (border, background, rounded, column) — shared
- *  by the single card and the compact EE + talisman pair. */
-function CardShell({ width, children }: { width: string; children: ReactNode }) {
+ *  by the single card and the compact EE + talisman pair. `fill` stretches it
+ *  to its grid row (non-compact band); compact cards keep their content height. */
+function CardShell({ width, fill, children }: { width: string; fill: boolean; children: ReactNode }) {
   return (
-    <aside className={cx("flex h-full shrink-0 flex-col overflow-hidden rounded-xl border border-white/8 bg-bg-elev-1", width)}>
+    <aside className={cx("flex shrink-0 flex-col overflow-hidden rounded-xl border border-white/8 bg-bg-elev-1", fill && "h-full", width)}>
       {children}
     </aside>
   );
@@ -629,7 +630,7 @@ export interface ResultPairCell {
  *  rule, each with its own exclude action. */
 export function ResultPairDetail({ top, bottom, game }: { top: ResultPairCell; bottom: ResultPairCell; game: GameData | null; compact: true }) {
   return (
-    <CardShell width="w-56">
+    <CardShell width="w-56" fill={false}>
       <PairCell cell={top} game={game} />
       <div className="border-t border-white/8" />
       <PairCell cell={bottom} game={game} grow />

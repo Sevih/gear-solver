@@ -468,7 +468,8 @@ enhance level, icône slot, main stat, subs (avec ticks). En plus :
   cartes `w-56` — la grille démarre alors à 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, l'EE et le talisman
   dans UNE carte (`ResultPairDetail` : EE en haut, talisman en bas, un filet entre les deux, chacun son action
   exclure), soit sept cellules en 4 + 3 dans l'ordre `COMPACT_GEAR_GRID` (Arme | EE + Talisman | Tête | Torse /
-  Accessoire | Gants | Bottes) ; sans icône de pièce ; en-tête = `compactName` (« EE », le nom du set pour une armure, le nom de la pièce sinon, sans
+  Accessoire | Gants | Bottes), chaque carte à la hauteur de son contenu (pas d'étirement à la plus haute de la
+  rangée) ; sans icône de pièce ; en-tête = `compactName` (« EE », le nom du set pour une armure, le nom de la pièce sinon, sans
   « - [Singularity] » mais avec le dégradé) suivi de l'enhance (`+15`), du breakthrough (`T2`, s'il y en a
   un) et des étoiles (`6★`) ; main(s) en icône + valeur sur une ligne ; subs en grille 2 × 2, icône + valeur
   seulement (LV, base + reforges et marque Transistone en `title` ; valeur en cyan si des ticks projetés y

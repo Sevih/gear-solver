@@ -8,6 +8,30 @@
 
 ## Items de backlog clôturés (index)
 
+### 📏 Cartes compactes à la hauteur de leur contenu, sans étirement de rangée (G85) (2026-10-31)
+- ✅ **Pourquoi.** Retour de Sevih du 31/10 après G84 : en compact, les cartes de la bande étaient beaucoup trop
+  hautes. La bande (`flex-wrap`, puis grille à partir de 1232 px) gardait `align-items` / `align-content` à stretch
+  sous un parent `min-h-0 flex-1 overflow-y-auto` (`BuilderScreen.tsx`), et chaque carte portait `h-full` : dans une
+  rangée, toutes prenaient la hauteur de la plus haute (la carte double EE + talisman tirait toute la première
+  rangée), et en `flex-wrap` les lignes se partageaient la hauteur libre du parent.
+- ✅ **Comment.** `BottomGearBand.tsx` : la racine compacte reçoit `items-start content-start` (flex-wrap et grille :
+  les cases ne s'étirent plus, les lignes ne se partagent plus la hauteur libre). `ResultGearDetail.tsx` : `CardShell`
+  prend une prop `fill` qui seule pose `h-full` — `ResultItemDetail` passe `fill={!compact}`, `ResultPairDetail`
+  `fill={false}` — et l'état vide « No item selected » ne porte `h-full` qu'en non compact. Le `flex-1
+  overflow-y-auto` du corps de `ResultItemDetail` et le `grow` de la cellule du bas de `ResultPairDetail` restent : sans
+  hauteur imposée ils n'ont plus d'effet en compact, le premier sert toujours la carte non compacte, et le second
+  relève de G84, hors périmètre. Bande non compacte (huit `w-80`, `h-full`, seuil 1616 px), largeur `w-56`, seuil
+  1232 px, ordre `COMPACT_GEAR_GRID` et contenu des cartes inchangés. Docs : demi-phrase « à la hauteur de son
+  contenu » dans le paragraphe « Mode compact » de `docs/solver.md` et de `wiki/Solver.md`. `docs/todo.md` : aucun
+  item.
+- ✅ **Tests.** `apps/renderer/test/compactCard.test.ts` (27 → 30) : bande compacte, racine avec `items-start` et
+  `content-start`, aucun des sept `aside` en `h-full` ; bande non compacte, racine sans `items-start`, les huit
+  `aside` en `h-full` ; `ResultItemDetail` sans pièce : `h-full` absent en compact, présent en non compact.
+  `npm run typecheck` : `> tsc --noEmit` sans erreur ; `npm test` : `Tests  908 passed (908)` (renderer ; core 169,
+  desktop 238) ; `npm run lint` : `✖ 8 problems (0 errors, 8 warnings)`, comme avant.
+- ⏳ À voir par Sevih dans l'app : la bande compacte au-dessus et en dessous de 1232 px (chaque carte à sa hauteur,
+  rangées alignées en haut), et la bande non compacte inchangée.
+
 ### 🃏 Carte compacte EE + talisman fusionnée, passif du talisman masqué en compact (G84) (2026-10-31)
 - ✅ **Pourquoi.** Demande de Sevih du 31/10, suite de G79 : en compact, l'EE (ni main ni effets) et le talisman (court)
   tiennent dans une seule carte, et le passif multi-paliers du talisman, affiché en lignes tronquées, prenait de la

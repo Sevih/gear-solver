@@ -118,10 +118,11 @@ export function BottomGearBand({
   // 4 × 320 + 3 × 8 gaps + 288 + 8 gap + 16 padding = 1616 px. Compact cards
   // are w-56: 4 × 224 + 3 × 8 + 288 + 8 + 16 = 1232 px, the EE and the
   // talisman sharing one card (`COMPACT_GEAR_GRID`, 4 + 3). Narrower, the
-  // same order wraps.
+  // same order wraps. Compact cells and rows don't stretch (`items-start
+  // content-start`): each card keeps its own content height.
   return (
     <div className={compact
-      ? "flex shrink-0 flex-wrap gap-2 min-[1232px]:grid min-[1232px]:grid-cols-[repeat(4,max-content)]"
+      ? "flex shrink-0 flex-wrap items-start content-start gap-2 min-[1232px]:grid min-[1232px]:grid-cols-[repeat(4,max-content)]"
       : "flex shrink-0 flex-wrap gap-2 min-[1616px]:grid min-[1616px]:grid-cols-[repeat(4,max-content)]"}>
       {compact
         ? COMPACT_GEAR_GRID.map((cell) => typeof cell === "string"

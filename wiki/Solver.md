@@ -433,7 +433,8 @@ enhance level, slot icon, main stat, subs (with ticks). In addition:
   `w-56` cards — the grid then starts at 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, the EE and the talisman
   in ONE card (`ResultPairDetail`: EE on top, talisman below, a rule between them, each with its own exclude
   action), so seven cells, 4 + 3, in `COMPACT_GEAR_GRID` order (Weapon | EE + Talisman | Helmet | Armor /
-  Accessory | Gloves | Boots); no equipment icon;
+  Accessory | Gloves | Boots), each card at its own content height (no stretch to the row's tallest); no
+  equipment icon;
   header = `compactName` (« EE », the set name for armor, the item name otherwise, no « - [Singularity] »
   but the gradient stays) followed by the enhance (`+15`), the breakthrough (`T2`, when any) and the stars
   (`6★`); main(s) as icon + value on one line; subs on a 2 × 2 grid, icon + value only (LV, base + reforges
