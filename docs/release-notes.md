@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.26.1] — 2026-10-31
+
 - **Fixes from a code audit**: a single corrupted saved build no longer makes the app forget every saved
   build; a backup import that runs out of storage halfway keeps what it managed to write; the plugin
   config is written correctly when the capture folder path contains a `$`; a few screens reset their
