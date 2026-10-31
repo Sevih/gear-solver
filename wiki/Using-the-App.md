@@ -259,7 +259,9 @@ results, the bottom band shows the selected build's pieces.
   if a Reforge mode is on, the **projected** max-roll stats. **Settings › Solver › Compact result
   cards** shortens them: no item icon (enhance, breakthrough and stars next to the name), set names
   instead of item names (« EE » for the exclusive), icon + value stats with the substats two per row,
-  gems as icons, one-line quality and effects (details on hover), and a small exclude icon instead of
+  gems as icons, one-line quality and effects (the Singularity +15 bonus as grade + short label + value,
+  e.g. « S+ DS DMG+ +12% » for DMG within Dimensional Singularity or « vs Fire DMG- » for DMG taken from
+  Fire targets; details on hover), and a small exclude icon instead of
   the button.
 - **Equip build** — above the gear band, applies the selected build's pieces to the hero. A
   confirmation popup spells out how many pieces move (and how many would be taken off other

@@ -436,7 +436,8 @@ enhance level, slot icon, main stat, subs (with ticks). In addition:
   (`6★`); main(s) as icon + value on one line; subs on a 2 × 2 grid, icon + value only (LV, base + reforges
   and the Transistone mark in the `title`; value in cyan when projected ticks enter it, violet for the
   Transistone, amber at cap); gems as one row of five icons (details in the `title`); quality on one line
-  (`14/20 →17 Exc.`); Singularity effects on one line (icon + signed value, or a short name); footer = a
+  (`14/20 →17 Exc.`); Singularity effects on one line (icon + signed value; the +15 bonus as colored grade + icon + short label
+  + value, `S+ DS DMG+ +12%`, via `singularityShortLabel` / `singularityGrade`; or a short name); footer = a
   row of action icons (`CardActions`, today exclude / include). Inventory and tooltips (`GearDetailBody`)
   untouched.
 - **Talisman / EE**: the gem allocation recommended by the build (stat + value,

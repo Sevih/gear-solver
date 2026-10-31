@@ -8,6 +8,38 @@
 
 ## Items de backlog clôturés (index)
 
+### 🏷️ Builder : bonus +15 en libellé court sur la carte compacte (DS DMG+, vs Fire DMG-, grade) (G80) (2026-10-31)
+- ✅ **Pourquoi.** Demande de Sevih du 31/10, suite de G79 : sur la carte compacte, l'option Singularity (le bonus +15,
+  effet `source === "singularity"`) porte toujours `name` ET `desc` (`packages/core/src/parse.ts`), donc
+  `compactEffect` la rendait en texte, son nom long tronqué (« Increased DMG within Dim… ») : ni le gain ni la
+  condition lisibles.
+- ✅ **Libellé court.** `singularityShortLabel(name)` (pure, exportée, `apps/renderer/src/design/ResultGearDetail.tsx`) :
+  table de motifs sur le nom, insensible à la casse et aux espaces de bord — `DMG Increase to target` → `DMG+`,
+  `Reduced DMG Taken from targets` → `DMG-`, `DMG Increase vs <E>` → `vs <E> DMG+`, `Reduced DMG Taken vs <E>` →
+  `vs <E> DMG-` (Fire, Water, Earth, Light, Dark), les trois « within Dimensional Singularity » → `DS DMG+`, `DS DMG-`,
+  `DS Ult DMG+` ; tout autre nom → `null`. La table `data/derived/singularity-options.json` (229 lignes) compte en
+  fait 15 noms distincts (l'énoncé disait 30), tous couverts.
+- ✅ **Grade.** `singularityGrade(desc)` (pure, exportée) : la lettre de tête de la `desc` (`C`, `B`, `A`, `S`, `S+`) et
+  la couleur de sa balise `<color=#…>` (relevé de la table : C `#27D054`, B `#0EA8F5`, A `#F5340E`, S `#b266ff`, S+
+  `#ff00ff`) ; `null` sans grade en tête.
+- ✅ **Rendu.** `compactEffect` rend `{ kind: "short", grade, label, stat, value, title }` quand le nom est reconnu
+  (valeur signée comme avant, `title` = `desc` sans balises) ; sinon les branches `stat` et `text` sont inchangées. Sur
+  la ligne des effets compacte : grade en gras dans sa couleur, `StatIcon` 14 px, libellé court (tronqué au besoin),
+  valeur — `S+ [icône] DS DMG+ +12%`. Une option de réduction garde la valeur signée d'aujourd'hui (`DMG- +20%`, la
+  donnée est positive). Carte non compacte, Inventaire, passive du talisman et EE inchangés.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (mode compact) et `wiki/Using-the-App.md` (Builder).
+- ✅ **Tests.** `apps/renderer/test/compactCard.test.ts` (12 → 19 tests) : `singularityShortLabel` sur les 15 noms (cinq
+  éléments dans les deux sens, trois DS, deux inconditionnels dont l'espace final), casse et espaces tolérés, nom
+  inconnu / vide / `null` → `null` ; `singularityGrade` sur C, B, S+, une `desc` sans grade en tête et `null` ;
+  `compactEffect` → `short` (DS DMG+ en S+, vs Fire DMG- en C) et toujours `text` pour un nom non reconnu ; rendu
+  serveur compact d'un effet DS : texte visible `S+DS DMG++12%` (spans frères sans espace, l'icône sans texte), pas de
+  « Increased DMG within », `title` sans balises, `color:#ff00ff` sur le grade. `npm run typecheck` : `tsc --noEmit`
+  sans erreur dans les trois workspaces ; `npm test` : dernière ligne `Tests  879 passed (879)` (renderer ; les deux
+  autres workspaces : 169 et 237) ; `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)`, les 13 d'avant, aucun
+  dans les fichiers touchés.
+- ⏳ **À Sevih.** Coup d'œil en jeu réel sur une carte compacte d'une pièce Singularity (grade lisible sur le fond,
+  largeur `w-56` suffisante pour `S+ vs Water DMG- +100%`). Aucun item de `docs/todo.md` ne s'y rapportait.
+
 ### 🗜️ Builder : mode compact des cartes de résultat resserré, sans icône de pièce, gemmes en icônes, stats sur deux colonnes, actions rapides (G79) (2026-10-31)
 - ✅ **Pourquoi.** Demande de Sevih du 31/10 : la carte compacte (Settings › Solver › « Compact result cards ») restait
   trop haute pour comparer les huit cartes d'un coup. Tout se joue sur le chemin `compact === true` de

@@ -472,7 +472,8 @@ enhance level, icône slot, main stat, subs (avec ticks). En plus :
   seulement (LV, base + reforges et marque Transistone en `title` ; valeur en cyan si des ticks projetés y
   entrent, en violet si c'est la Transistone, en ambre au cap) ; gemmes en une ligne de cinq icônes (détail
   en `title`) ; qualité sur une ligne (`14/20 →17 Exc.`) ; effets Singularity sur une ligne (icône + valeur
-  signée, ou nom court) ; pied = rangée d'icônes d'action (`CardActions`, aujourd'hui exclure / inclure).
+  signée ; le bonus +15 en grade coloré + icône + libellé court + valeur, `S+ DS DMG+ +12%`, par
+  `singularityShortLabel` / `singularityGrade` ; ou nom court) ; pied = rangée d'icônes d'action (`CardActions`, aujourd'hui exclure / inclure).
   L'Inventaire et les tooltips (`GearDetailBody`) ne bougent pas.
 - **Talisman / EE** : l'allocation de gemmes recommandée par le build (stat + valeur,
   badge **swap** si elle diffère des gemmes socketées).

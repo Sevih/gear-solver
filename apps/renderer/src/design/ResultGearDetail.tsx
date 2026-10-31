@@ -72,14 +72,52 @@ function plainLine(text: string): string {
   return oneLine(text).replace(/<\/?color[^>]*>/g, "");
 }
 
+/** Short label of a Singularity option (the +15 bonus), from its name — the
+ *  only place the condition lives: "DS DMG+", "vs Fire DMG-", "DMG+"… Null
+ *  for any name outside the known patterns. */
+const SINGULARITY_LABELS: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/^DMG Increase to target$/i, () => "DMG+"],
+  [/^Reduced DMG Taken from targets$/i, () => "DMG-"],
+  [/^DMG Increase vs (Fire|Water|Earth|Light|Dark)$/i, (m) => `vs ${m[1]} DMG+`],
+  [/^Reduced DMG Taken vs (Fire|Water|Earth|Light|Dark)$/i, (m) => `vs ${m[1]} DMG-`],
+  [/^Increased DMG within Dimensional Singularity$/i, () => "DS DMG+"],
+  [/^Reduced DMG taken within Dimensional Singularity$/i, () => "DS DMG-"],
+  [/^Ultimate Skill DMG increases within Dimensional Singularity$/i, () => "DS Ult DMG+"],
+];
+
+export function singularityShortLabel(name: string | null): string | null {
+  const n = name?.trim();
+  if (!n) return null;
+  for (const [re, label] of SINGULARITY_LABELS) {
+    const m = n.match(re);
+    if (m) return label(m);
+  }
+  return null;
+}
+
+/** Grade letter a Singularity option's `desc` opens with (`C` … `S+`) and the
+ *  color of its `<color=#…>` tag; null when the desc doesn't start that way. */
+export function singularityGrade(desc: string | null): { grade: string; color: string | null } | null {
+  const m = desc?.trimStart().match(/^<color=(#[0-9a-f]{3,8})>\s*(S\+|S|A|B|C)\s*<\/color>/i);
+  return m ? { grade: m[2]!, color: m[1]! } : null;
+}
+
 /** A Singularity effect on a compact card: a stat + value effect becomes its
- *  icon + signed value, a description-only one its name (or the first 24
+ *  icon + signed value, a known +15 bonus its grade + icon + short label +
+ *  signed value, any other description-only one its name (or the first 24
  *  characters of the untagged text). `title` keeps the full wording. */
 export type CompactEffect =
   | { kind: "stat"; stat: string; value: string; title: string }
+  | { kind: "short"; grade: { grade: string; color: string | null } | null; label: string; stat: string; value: string; title: string }
   | { kind: "text"; text: string; title: string };
 
 export function compactEffect(e: Pick<UiEffect, "stat" | "value" | "name" | "desc">): CompactEffect {
+  const label = singularityShortLabel(e.name);
+  if (label) {
+    const value = `${e.value.startsWith("-") ? "" : "+"}${e.value}`;
+    const title = e.desc ? plainLine(e.desc).trim() : `${label} ${value}`;
+    return { kind: "short", grade: singularityGrade(e.desc), label, stat: e.stat, value, title };
+  }
   if (e.desc) {
     const plain = plainLine(e.desc).trim();
     const text = e.name ?? (plain.length > 24 ? `${plain.slice(0, 24).trimEnd()}…` : plain);
@@ -441,12 +479,21 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
           })()}
 
           {/* Singularity active effect (ascended) — same format, label removed.
-           *  Compact: every effect on one line (icon + signed value, or a short
-           *  name), the full wording in each title. */}
+           *  Compact: every effect on one line (icon + signed value, the +15
+           *  bonus as grade + icon + short label + value, or a short name), the
+           *  full wording in each title. */}
           {piece.singularity && piece.effects.length > 0 && compact && (
             <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap font-mono text-[11px] leading-snug tabular-nums text-white">
               {piece.effects.map((e, i) => {
                 const c = compactEffect(e);
+                if (c.kind === "short") return (
+                  <span key={i} className="flex min-w-0 items-center gap-1" title={c.title}>
+                    {c.grade && <span className="shrink-0 font-sans font-bold" style={c.grade.color ? { color: c.grade.color } : undefined}>{c.grade.grade}</span>}
+                    <StatIcon stat={c.stat} size={14} className="shrink-0" title={null} />
+                    <span className="min-w-0 truncate font-sans">{c.label}</span>
+                    <span className="shrink-0">{c.value}</span>
+                  </span>
+                );
                 return c.kind === "stat" ? (
                   <span key={i} className="flex shrink-0 items-center gap-1" title={c.title}>
                     <StatIcon stat={c.stat} size={14} className="shrink-0" title={null} />

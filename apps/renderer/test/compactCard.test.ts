@@ -2,7 +2,8 @@
 // short quality label, Singularity effects shortened to icon + value or a
 // short name, substat cells reduced to icon + value with the details in the
 // title, no equipment icon (enhance / breakthrough / stars in the header),
-// gems as icons and one icon action in the footer — while the non-compact
+// gems as icons and one icon action in the footer, the Singularity +15 bonus
+// as grade + short label + value — while the non-compact
 // card keeps its icon and its full-width exclude button. Rendered
 // server-side, the equipment icon mocked to a marker element.
 import { describe, expect, it, vi } from "vitest";
@@ -16,7 +17,7 @@ vi.mock("../src/design/EquipmentIcon.js", async (importOriginal) => ({
   EquipmentIcon: () => createElement("i", { "data-equipment-icon": "" }),
 }));
 
-const { ResultItemDetail, compactEffect, compactSubTitle, compactSubTone } = await import("../src/design/ResultGearDetail.js");
+const { ResultItemDetail, compactEffect, compactSubTitle, compactSubTone, singularityGrade, singularityShortLabel } = await import("../src/design/ResultGearDetail.js");
 
 const effect = (over: Partial<UiPiece["effects"][number]>): UiPiece["effects"][number] =>
   ({ stat: "atkPct", value: "12%", percent: true, name: null, desc: null, combatOnly: false, ...over });
@@ -74,6 +75,62 @@ describe("compactEffect", () => {
     expect(compactEffect(effect({ desc, name: "Fury" }))).toEqual({ kind: "text", text: "Fury", title: plain });
     expect(compactEffect(effect({ desc }))).toEqual({ kind: "text", text: "Increases Attack by 10%…", title: plain });
     expect(compactEffect(effect({ desc: "Short <color=#fff>one</color>" }))).toEqual({ kind: "text", text: "Short one", title: "Short one" });
+  });
+
+  it("a known Singularity option → grade + short label + signed value, untagged desc in the title", () => {
+    const desc = "<color=#ff00ff>S+</color> DMG increases by <color=#0D99DA>12%</color> within Dimensional Singularity";
+    expect(compactEffect(effect({ stat: "dmgUp", value: "12%", name: "Increased DMG within Dimensional Singularity", desc }))).toEqual({
+      kind: "short", grade: { grade: "S+", color: "#ff00ff" }, label: "DS DMG+", stat: "dmgUp", value: "+12%",
+      title: "S+ DMG increases by 12% within Dimensional Singularity",
+    });
+    const reduce = "<color=#27D054>C</color> DMG taken from Fire-type targets decreases by <color=#0D99DA>20%</color>";
+    expect(compactEffect(effect({ stat: "dmgReduce", value: "20%", name: "Reduced DMG Taken vs Fire", desc: reduce }))).toMatchObject({
+      kind: "short", grade: { grade: "C", color: "#27D054" }, label: "vs Fire DMG-", value: "+20%",
+    });
+  });
+
+  it("a desc whose name isn't a known option stays text", () => {
+    expect(compactEffect(effect({ desc: "<color=#27D054>C</color> Something else", name: "Fury" })).kind).toBe("text");
+  });
+});
+
+describe("singularityShortLabel", () => {
+  const ELEMENTS = ["Fire", "Water", "Earth", "Light", "Dark"];
+
+  it("every option name of the table → its short label", () => {
+    for (const el of ELEMENTS) {
+      expect(singularityShortLabel(`DMG Increase vs ${el}`)).toBe(`vs ${el} DMG+`);
+      expect(singularityShortLabel(`Reduced DMG Taken vs ${el}`)).toBe(`vs ${el} DMG-`);
+    }
+    expect(singularityShortLabel("Increased DMG within Dimensional Singularity")).toBe("DS DMG+");
+    expect(singularityShortLabel("Reduced DMG taken within Dimensional Singularity")).toBe("DS DMG-");
+    expect(singularityShortLabel("Ultimate Skill DMG increases within Dimensional Singularity")).toBe("DS Ult DMG+");
+    expect(singularityShortLabel("DMG Increase to target ")).toBe("DMG+");
+    expect(singularityShortLabel("Reduced DMG Taken from targets")).toBe("DMG-");
+  });
+
+  it("case and edge spaces tolerated; unknown names and null → null", () => {
+    expect(singularityShortLabel("  dmg increase VS fire ")).toBe("vs fire DMG+");
+    expect(singularityShortLabel("Reduced DMG Taken within Dimensional Singularity")).toBe("DS DMG-");
+    expect(singularityShortLabel("DMG Increase vs Wind")).toBeNull();
+    expect(singularityShortLabel("Fury")).toBeNull();
+    expect(singularityShortLabel("")).toBeNull();
+    expect(singularityShortLabel(null)).toBeNull();
+  });
+});
+
+describe("singularityGrade", () => {
+  it("leading grade letter and its color", () => {
+    expect(singularityGrade("<color=#27D054>C</color> DMG dealt to Earth-type targets increases by <color=#0D99DA>40%</color>"))
+      .toEqual({ grade: "C", color: "#27D054" });
+    expect(singularityGrade("<color=#0EA8F5>B</color> DMG taken decreases")).toEqual({ grade: "B", color: "#0EA8F5" });
+    expect(singularityGrade("<color=#ff00ff>S+</color> DMG increases")).toEqual({ grade: "S+", color: "#ff00ff" });
+  });
+
+  it("no leading grade, or no desc → null", () => {
+    expect(singularityGrade("DMG dealt increases by <color=#0D99DA>40%</color>")).toBeNull();
+    expect(singularityGrade("<color=#0D99DA>40%</color> more DMG")).toBeNull();
+    expect(singularityGrade(null)).toBeNull();
   });
 });
 
@@ -133,6 +190,17 @@ describe("ResultItemDetail — compact card", () => {
     const effects = [effect({}), effect({ desc: "Grants a shield equal to 20% of max HP." })];
     const t = text(render(piece({ singularity: true, effects }), true));
     expect(t).toContain("+12%Grants a shield equal to…");
+  });
+
+  it("the +15 bonus reads grade + short label + value, not the truncated game name", () => {
+    const desc = "<color=#ff00ff>S+</color> DMG increases by <color=#0D99DA>12%</color> within Dimensional Singularity";
+    const effects = [effect({ stat: "dmgUp", value: "12%", name: "Increased DMG within Dimensional Singularity", desc })];
+    const html = render(piece({ singularity: true, effects }), true);
+    // Markup: grade, icon (no text), label and value as sibling spans — no spaces between them.
+    expect(text(html)).toContain("S+DS DMG++12%");
+    expect(text(html)).not.toContain("Increased DMG within");
+    expect(html).toContain('title="S+ DMG increases by 12% within Dimensional Singularity"');
+    expect(html).toContain("color:#ff00ff");
   });
 
   it("footer: a single icon action with its hover label", () => {
