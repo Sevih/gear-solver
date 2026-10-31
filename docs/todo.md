@@ -70,7 +70,6 @@
 - [ ] (b) **Auto-prune à l'Apply d'un preset qui change de portée** — laissé par G70 : un preset qui change les
       emplacements ou l'onglet (ex. Casque + sub EFF, sans casque EFF) perd encore en silence la valeur absente de la
       nouvelle portée ; le cas « même portée » est couvert (valeur grisée, retirable). Touche l'auto-prune : à trancher.
-- [ ] ⚪ `docs/reference.md` donne « 8 tests » pour `transfer.test.ts`, compte périmé depuis G67 / G70.
 
 ---
 

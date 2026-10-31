@@ -97,7 +97,7 @@ export function App() {
   // Builder mounts on first visit and then stays mounted (hidden when inactive),
   // so its solver results — and a solve still running — survive tab switches.
   const [builderMounted, setBuilderMounted] = useState(false);
-  useEffect(() => { if (tab === "Builder") setBuilderMounted(true); }, [tab]);
+  if (tab === "Builder" && !builderMounted) setBuilderMounted(true);
   const [game, setGame] = useState<GameData | null>(null);
   const [inv, setInv] = useState<Inventory | null>(null);
   const [userGeas, setUserGeas] = useState<UserGeasLevels | null>(null);

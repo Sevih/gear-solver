@@ -8,6 +8,50 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔍 Audit du code : rapport bugs / perf / nettoyage et corrections sûres (G82) (2026-10-31)
+- ✅ **Pourquoi.** Demande de Sevih du 31/10 : passer le code en revue pour les bugs, les lenteurs et le nettoyage,
+  sans fonctionnalité nouvelle ; un rapport classé de tout ce qui est trouvé, puis seulement les corrections sûres.
+- ✅ **Rapport.** `docs/audit-2026-10-31.md` : 102 constats (31 bugs, 12 perf, 59 nettoyage), une ligne chacun avec
+  `fichier:ligne`, symptôme, correction proposée, risque et `Fait` ; 26 corrigés ici, 76 laissés avec le pourquoi.
+  Lecture intégrale du périmètre (solveur, core, écrans Builder / Builds / Inventaire, stockage, desktop), graphe
+  d'imports tests compris pour les exports morts, `docs/architecture.md` et `docs/solver.md` confrontés au code. Les
+  bugs du solveur sont reproduits par scripts jetables et **non corrigés** (ils changent un score, un ordre, un CP ou
+  une allocation de gemmes) : prune de dominance CP faux avec un MIN de stat (B1), réallocation crit du mode CP qui
+  repasse à l'ordre linéaire et perd du CP (B2), seuil `CRC_OVERSHOOT_CEIL = 102` qui rate les gemmes crit < 3 % (B3),
+  prune de budget qui casse des sets formables quand « Allow broken sets » est éteint (B4), arrondi d'`allocateComboBudget`
+  sur racines exactes (B6). Côté app, en attente de décision : course entre le pliage du journal d'équipement et le
+  snapshot du lobby (B9), `refreshInventory` sans `try/catch` (B15), Restore pendant une solve (B16), art masqué à
+  vie après un 404 (B17), re-rendu d'App toutes les 5 s par le poll Steam (P1).
+- ✅ **Bugs corrigés (test rouge avant, vert après).** `steam-capture.ts` `writePluginConfig` : remplacements par
+  fonction, un `$` dans le chemin de capture ne corrompt plus `OutDir` (`steam-linux.test.ts`, +1) ; `transfer.ts`
+  `applyBackup` : les écrans montés sont prévenus même si une écriture échoue à mi-chemin (quota), sinon leur sauvegarde
+  suivante effaçait les builds importés (`transfer.test.ts`, +1) ; `savedBuilds.ts` `loadSavedBuilds` : une entrée
+  cassée est écartée seule au lieu de vider tous les builds (que la sauvegarde suivante effaçait) (`savedBuilds.test.ts`,
+  +1). Sans test (course) : `statSync(f, { throwIfNoEntry: false })` au lieu d'`existsSync` + `statSync` dans
+  `equip-events.ts` et `api-handler.ts` (plus de 500 si le fichier disparaît entre les deux).
+- ✅ **Lint.** 5 avertissements « setState synchronously within an effect » corrigés mécaniquement (remise à jour
+  pendant le rendu, comparée à la valeur vue) : `App.tsx` (`builderMounted`), `RankInput.tsx`, `SettingsModal.tsx`
+  (onglet à l'ouverture), `HeroSelect.tsx`, `PromptDialog.tsx`. Les 8 restants et les 7 `eslint-disable` sont justifiés
+  un par un dans le rapport (N1 à N16) ; celui de `FilterModal.tsx` est laissé exprès, `docs/todo.md` protégeant le
+  re-seed du brouillon.
+- ✅ **Nettoyage.** `SlotGlyph` et `StarRow` (jamais importés) retirés d'`EquipmentIcon.tsx` ; `displayNameOf` de
+  `BuildsScreen.tsx` remplacé par celui de `builder/heroName.ts` (identique) et ré-export `FinalStats` inutile retiré ;
+  `export` retiré de `variantSignature`, `CRC_GEM_CAP`, `REROLL_TOP_STAGE` ; commentaires périmés corrigés
+  (`orchestrator.ts` : origine de `poolSizes`, `onerror` du worker d'estimation ; `gems.ts` : clé `critRate` ;
+  `BuilderScreen.tsx` : doc d'`Empty`). Docs : `architecture.md` (cache de données en prod, `precomputeContext`,
+  `computeFinalStatsFromPrefix`), `solver.md` (21 actions, slot de partition, Cancel, origine des `poolSizes`, durée),
+  `reference.md` (18 tests pour `transfer.test.ts`, item retiré de `docs/todo.md`).
+- ✅ **Vérification.** `npm run typecheck` : vert (`tsc --noEmit`, sortie 0) ; `npm test` : avant core 169, desktop
+  237, renderer 888 (1 294) ; après core `Tests  169 passed (169)`, desktop `Tests  238 passed (238)`, renderer
+  `Tests  890 passed (890)` (1 297) ; `npm run lint` : `✖ 13 problems (0 errors, 13 warnings)` avant,
+  `✖ 8 problems (0 errors, 8 warnings)` après. Perf : aucun gain appliqué, faute de mesure avant/après dans l'app ;
+  deux mesures jetables citées au rapport (P4 : 14,5 ns par `computeCheapRatings` ; P9 : filtres répétés négligeables,
+  0,018 contre 0,007 ms sur 1 500 pièces).
+- ⏳ Le correctif du worker d'estimation recréé après une erreur (B13) a été retiré : `orchestratorFlow.test.ts` fixe
+  sa réutilisation (une erreur non rattrapée ne tue pas un worker Chromium) ; à trancher. Les bugs du solveur B1 à B4
+  et B6 sont à prendre en lots dédiés, chacun avec un test prouvé contre les données du jeu. Les points app B9, B15 à
+  B19 et P1 à P3 demandent une décision ou une mesure dans l'app.
+
 ### 🗂️ Presets : « Expand all » / « Collapse all » dans la barre (G81) (2026-10-31)
 - ✅ **Pourquoi.** Demande de Sevih du 31/10 : sur l'onglet Presets, chaque carte s'ouvrait et se fermait une à une
   (chevron ▸ de l'en-tête, état local `useState(!row.empty)` de `PresetCard`) ; avec une trentaine de presets, rien ne

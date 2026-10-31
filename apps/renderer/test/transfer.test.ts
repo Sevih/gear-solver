@@ -103,6 +103,21 @@ describe("transfer — a mounted screen keeps the imported entries", () => {
     expect(stored.h1.map((b: { id: string }) => b.id).sort()).toEqual(["b1", "b2", "imported"]);
   });
 
+  it("still notifies when a write fails halfway (quota), then rethrows", () => {
+    let calls = 0;
+    const off = onBackupImported(() => { calls++; });
+    const setItem = localStorage.setItem;
+    localStorage.setItem = (k: string, v: string) => {
+      if (k === PRESETS_KEY) throw new Error("QuotaExceededError");
+      setItem(k, v);
+    };
+    expect(() => applyBackup(bundle({ h1: [{ id: "imported" }] }))).toThrow(/Quota/);
+    off();
+    // The builds were written: a mounted screen must reload them.
+    expect(JSON.parse(store.get(SAVED_KEY)!).h1).toHaveLength(1);
+    expect(calls).toBe(1);
+  });
+
   it("stops notifying after unsubscribe", () => {
     let calls = 0;
     const off = onBackupImported(() => { calls++; });

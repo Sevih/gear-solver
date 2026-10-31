@@ -47,7 +47,7 @@ import { ROLL_NORMS, STAT_TO_PRIORITY } from "../statRegistry.js";
 
 /** Base stage a Transistone can bring one line to (base level 3 + 1) — on
  *  a piece without a stage-4 line; one stage lower on a piece that has one. */
-export const REROLL_TOP_STAGE = 4;
+const REROLL_TOP_STAGE = 4;
 
 /** How the line to raise is picked: the hero's substat priority (axis keys,
  *  -1..3, the Builder's `priority`). Empty / all-zero = no priority. */

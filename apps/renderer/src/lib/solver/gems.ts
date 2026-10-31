@@ -184,7 +184,7 @@ export function gemSlotsOf(piece: GearPiece | null, rules: GameRules = DEFAULT_R
  *  still below 100 (the one that crosses 100 is kept, overshooting to ~102 at
  *  most) and skip any further crit gem. This guarantees CHC reaches 100 without
  *  burning slots that could hold ATK/CHD/SPD. */
-export const CRC_GEM_CAP = 100;
+const CRC_GEM_CAP = 100;
 /** Engine stat key for a crit-rate gem — the only capped allocation axis. */
 const CRC_GEM_STAT = "critRate";
 /** Max CHC a capped allocation can produce (cap + one 3% overshoot). A combo
@@ -343,7 +343,7 @@ export function allocateGemsCapped(
  * already ≥ cap, stage 1 is a no-op and stage 2 skips crit entirely — same
  * outcome as `allocateGemsCapped` for the no-priority path.
  *
- * Used only when the user prioritized crc (`crc` weight > 0) and the pool has
+ * Used only when the user prioritized crit rate (`critRate` weight > 0) and the pool has
  * crit gems — gated by the caller so non-crit builds never pay for it.
  */
 export function allocateGemsReachingCap(

@@ -333,7 +333,7 @@ export function createEquipJournalFollower(captureOut: string) {
   const snapshot = join(captureOut, "user_item.json");
   let mark: JournalMark | null = null;
 
-  const mtimeOf = (f: string) => (existsSync(f) ? statSync(f).mtimeMs : null);
+  const mtimeOf = (f: string) => statSync(f, { throwIfNoEntry: false })?.mtimeMs ?? null;
   const load = (): JournalMark => {
     if (mark) return mark;
     try {

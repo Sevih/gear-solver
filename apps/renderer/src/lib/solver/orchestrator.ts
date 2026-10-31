@@ -199,8 +199,8 @@ export class SolverOrchestrator {
   private active = false;
   private mode: SolveMode = "score";
   private topN = 1000;
-  /** Pool sizes — captured from the first worker's first progress event
-   *  (every worker computes the same per-slot pre-filter result). */
+  /** Pool sizes — from the main-thread precompute (`solve()`); a worker's
+   *  first progress event only fills them when no precompute ran. */
   private poolSizes: PoolSizes | undefined;
   private reforgeTickWeights: ReforgeTickWeights | null = null;
   /** Monotonically incremented per `solve()`. Echoed by workers on every
@@ -483,8 +483,8 @@ export class SolverOrchestrator {
       const w = new SolverWorker();
       w.onmessage = (e: MessageEvent<WorkerOutput>) => this.handle(-1, e.data);
       // An estimate crash is non-fatal background noise — drop the pending
-      // callback (the Builder just keeps its previous estimate) and let the
-      // next request recreate the worker if needed.
+      // callback (the Builder just keeps its previous estimate) and keep the
+      // worker: an uncaught error doesn't kill it, the next request reuses it.
       w.onerror = () => { this.pendingEstimate = null; };
       this.estimateWorker = w;
       this.estInitedGame = null;

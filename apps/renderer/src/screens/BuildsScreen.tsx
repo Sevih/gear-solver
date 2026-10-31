@@ -17,11 +17,7 @@ import { GAME_GEAR_GRID, TOKENS, toDesignSlot, type SlotId } from "../design/tok
 import { toUiPiece } from "../design/adapter.js";
 import { presetSignature } from "../lib/presets/presetRows.js";
 import { RankDragHandle, RankInput } from "../design/RankInput.js";
-
-/** Local alias re-exported for parts of BuildsScreen that previously read
- *  `FinalStats` from this module. The single source of truth now lives in
- *  `../lib/composeBuild.ts`. */
-export type { FinalStats } from "../lib/composeBuild.js";
+import { displayNameOf } from "./builder/heroName.js";
 
 /** Per-stat-axis dump spec — pairs the engine stat key with its `*Pct` /
  *  flat bucket name in the aggregated gear maps. EFF/RES use unsuffixed
@@ -387,14 +383,6 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
       {trailing && <div className="ml-auto">{trailing}</div>}
     </div>
   );
-}
-
-/** On-card display name. `Core Fusion ${baseName}` when fused — the in-game
- *  NickName for fusion variants is flavor text, not the variant identifier.
- *  Otherwise prefixes the meta nickname for Mystic Sage / Gnosis / etc. */
-function displayNameOf(c: Character, meta: { nickname: string | null } | null): string {
-  const base = meta?.nickname ? `${meta.nickname} ${c.name ?? ""}`.trim() : (c.name ?? `#${c.charId}`);
-  return c.fusionCharId !== 0 ? `Core Fusion ${base}` : base;
 }
 
 /** Per-(char, stat) lock snapshots (`LockEntry`, `lib/statLocks.ts`) are

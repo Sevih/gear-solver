@@ -1407,7 +1407,7 @@ export const TALISMAN_VARIANTS_KEPT = 3;
 
 /** A build's 6-gear signature: `pieceUids` minus the trailing talisman —
  *  weapon..accessory + EE (fixed per hero anyway). */
-export function variantSignature(b: SolveBuild): string {
+function variantSignature(b: SolveBuild): string {
   return b.pieceUids.slice(0, -1).join("|");
 }
 

@@ -2,7 +2,7 @@
  * Priority-rank editor shared by the Builds cards (hero ranks) and the Presets
  * cards (preset ranks): the positional field and the ⠿ drag handle.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 /** Priority-position editor. Positional & contiguous (rank 1 = highest
  *  priority); typing N moves the item to position N (others shift), empty =
@@ -11,8 +11,10 @@ import { useEffect, useState } from "react";
 export function RankInput({ uid, rank, onSetRank, title }: { uid: string; rank: number | null; onSetRank: (uid: string, pos: number | null) => void; title: string }) {
   const [draft, setDraft] = useState(rank == null ? "" : String(rank));
   // Re-sync when the stored rank changes out from under us (e.g. a shift caused
-  // by ranking another item to this one's number).
-  useEffect(() => { setDraft(rank == null ? "" : String(rank)); }, [rank]);
+  // by ranking another item to this one's number) — during render, not in an
+  // effect, so the stale draft never paints.
+  const [seenRank, setSeenRank] = useState(rank);
+  if (rank !== seenRank) { setSeenRank(rank); setDraft(rank == null ? "" : String(rank)); }
   const commit = () => {
     const t = draft.trim();
     if (t === "") { onSetRank(uid, null); return; }

@@ -873,11 +873,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   );
 }
 
-/** Gems on a Talisman / EE card — the build's gems ONLY (showing the socketed
- *  set AS substats too was just noise). When the solver reallocated, show its
- *  recommendation with a "swap" badge; otherwise show the piece's currently-
- *  socketed gems, marked "current". The displayed stats are computed WITH the
- *  shown gems (SOLVE CP), so they stay consistent. */
+/** Centered empty-state panel (title + subtitle), e.g. before any capture. */
 function Empty({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-24 text-center">

@@ -427,9 +427,10 @@ function writePluginConfig(cfg: string, captureOut: string): void {
   mkdirSync(dirname(cfg), { recursive: true });
   let txt = existsSync(cfg) ? readFileSync(cfg, "utf-8") : "";
   if (/^\s*OutDir\s*=/m.test(txt)) {
-    txt = txt.replace(/^(\s*OutDir\s*=\s*).*$/m, `$1${captureOut}`);
+    // Replacer functions: a `$` in the path must not read as a pattern.
+    txt = txt.replace(/^(\s*OutDir\s*=\s*).*$/m, (_, key: string) => key + captureOut);
   } else if (/^\[Capture\]/m.test(txt)) {
-    txt = txt.replace(/^\[Capture\]\s*$/m, `[Capture]\n\nOutDir = ${captureOut}`);
+    txt = txt.replace(/^\[Capture\]\s*$/m, () => `[Capture]\n\nOutDir = ${captureOut}`);
   } else {
     txt = `## Settings file was created by the Outerpedia Gear Solver app\n## Plugin GUID: ${PLUGIN_GUID}\n\n[Capture]\n\n## Folder where the decoded snapshots are written (set by the Gear Solver app).\n# Setting type: String\nOutDir = ${captureOut}\n`;
   }

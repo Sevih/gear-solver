@@ -53,7 +53,8 @@ by hand (manual import).
   `apps/renderer/src/lib/solver/`. See [solver.md](solver.md) for the solver pipeline + UI
   panels, and [reference.md](reference.md) for the full formula + data-pipeline reference.
 - **apps/desktop** — Electron shell that hosts the renderer. `main.ts` boots a local
-  server (`server.ts`) that serves `data/derived` + the capture output, exposes the
+  server (`server.ts`) that serves the derived data (in prod the writable cache
+  `<userData>/outerpedia-cache/derived`, seeded from the bundled `data/derived`) + the capture output, exposes the
   capture HTTP endpoints (`/api/capture/{status,wipe}` and `/api/steam/*` for the plugin via
   `steam-capture.ts` — there is no Electron IPC/preload, the renderer talks plain HTTP), and accepts a `POST /api/captured/user-item` write-back (the renderer
   rewrites the captured snapshot for equip/unequip edits — the transform itself lives in core,
@@ -102,8 +103,8 @@ RawUserItem (raw.ts)
 Inventory + filters + hero
    └─ apps/renderer/src/lib/solver/orchestrator.ts (main thread, fan-out)
         └─ apps/renderer/src/workers/solver.worker.ts × W (fan-in top-K → merged top-N)
-             └─ apps/renderer/src/lib/solver/engine.ts (pure compute: prepareContext + solveChunk + finalizeBuilds)
-                  ├─ composeBuild.ts (computeFinalStats, mirror in-game CalcFinalStat)
+             └─ apps/renderer/src/lib/solver/engine.ts (pure compute: precomputeContext on the main thread, then solveChunk + finalizeBuilds in the workers)
+                  ├─ composeBuild.ts (computeFinalStats / computeFinalStatsFromPrefix in the hot loop, mirror in-game CalcFinalStat)
                   ├─ solver/cp.ts (calcBattlePower, mirror in-game CalcBattlePower)
                   ├─ solver/ratings.ts (8 cheap ratings + Score)
                   └─ solver/gems.ts (gem sub-solver greedy)

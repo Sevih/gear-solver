@@ -32,7 +32,8 @@ export function HeroSelect({
     if (!q) return heroes;
     return heroes.filter((c) => heroSearchHaystack(c, game).includes(q));
   }, [heroes, game, query]);
-  useEffect(() => { setActiveIdx(0); }, [query, open]);
+  const [seenList, setSeenList] = useState({ query, open });
+  if (seenList.query !== query || seenList.open !== open) { setSeenList({ query, open }); setActiveIdx(0); }
   const display = open ? query : selectedName;
   const pick = (c: Character | undefined) => {
     if (!c) return;

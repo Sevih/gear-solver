@@ -31,3 +31,15 @@ describe("saved builds — gemAllocation migration", () => {
     expect(loadSavedBuilds().h1![0]!.build.gemAllocation).toEqual(gemAllocation);
   });
 });
+
+describe("saved builds — a broken entry", () => {
+  it("drops only that entry, not every hero's builds", () => {
+    store.set(SAVED_BUILDS_KEY, JSON.stringify({
+      h1: [null, saved({ pieceUids: [], finalStats: {}, score: 1 })],
+      h2: [{ ...saved({ pieceUids: [], finalStats: {}, score: 2 }), id: "b2", heroUid: "h2" }],
+    }));
+    const loaded = loadSavedBuilds();
+    expect(loaded.h1!.map((b) => b.id)).toEqual(["b1"]);
+    expect(loaded.h2!.map((b) => b.id)).toEqual(["b2"]);
+  });
+});

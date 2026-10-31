@@ -1,7 +1,7 @@
 /**
  * Builder name prompt — in-app replacement for `window.prompt`.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 /** Minimal modal prompt replacing `window.prompt`. Esc cancels, Enter
  *  submits, click outside cancels. Single text field; submits the trimmed
@@ -15,9 +15,8 @@ export function PromptDialog({
   onClose: () => void;
 }) {
   const [value, setValue] = useState("");
-  useEffect(() => {
-    if (prompt) setValue("");
-  }, [prompt]);
+  const [seenPrompt, setSeenPrompt] = useState(prompt);
+  if (prompt !== seenPrompt) { setSeenPrompt(prompt); if (prompt) setValue(""); }
   if (!prompt) return null;
   const submit = () => {
     prompt.onConfirm(value.trim() || prompt.placeholder);

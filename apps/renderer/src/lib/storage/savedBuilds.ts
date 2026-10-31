@@ -54,7 +54,9 @@ export function loadSavedBuilds(): SavedBuildsMap {
     const out: SavedBuildsMap = {};
     for (const [uid, list] of Object.entries(parsed as Record<string, SavedBuild[]>)) {
       if (!Array.isArray(list)) continue;
-      out[uid] = list.map((b) => migrateSavedBuild(b));
+      // A broken entry is dropped alone — not every hero's builds, which the
+      // next save would then erase from storage.
+      out[uid] = list.flatMap((b) => (b && typeof b === "object" ? [migrateSavedBuild(b)] : []));
     }
     return out;
   } catch {

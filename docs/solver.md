@@ -14,7 +14,7 @@ son pipeline interne, et les choix d'architecture qui le sous-tendent.
 ```
 BuilderScreen.tsx (React, main thread)
   │
-  ├─ useReducer(SolverFilters)   ← 19 actions, 10 panneaux + sidebar/footer contrôlés
+  ├─ useReducer(SolverFilters)   ← 21 actions, 10 panneaux + sidebar/footer contrôlés
   │
   ├─ SolverOrchestrator           ← pool de Web Workers (hardwareConcurrency-1, override gs.solver.workerCount)
   │     │
@@ -156,7 +156,7 @@ n'épingle rien.
 
 ### Phase 4 — Cartesian + set-prune
 Énumération nested loop : `weapon × helmet × armor × gloves × boots × accessory × ooparts`.
-- **Partition** : un slot (le plus grand) est sliced en `chunkCount` parts ; chaque
+- **Partition** : un slot (le plus externe dont le pool fait ≥ 4 × `chunkCount`, sinon le plus grand — `pickPartitionSlot`) est sliced en `chunkCount` parts ; chaque
   worker reçoit sa slice → embarrassingly parallel, aucune comm inter-worker.
 - **Set tracking** : à chaque slot armor, `incSet(armorSetId)` au début de la pièce, `decSet` après l'inner loop.
 - **Mid-tree pruning** : à chaque depth `D` (D armor slots itérés, `4-D` restants), pour chaque set requis (2pc ou 4pc) on vérifie qu'il reste assez de slots pour atteindre le seuil. Sinon, `continue` au prochain frère.
@@ -231,7 +231,7 @@ de filtre pousse son state dans le reducer `SolverFilters` ([builderFilters.ts](
 Picker (combobox searchable) + portrait + 4 boutons d'action.
 - **SOLVE** : lance le mode score (désactivé si pas de héros ou solve en cours).
 - **SOLVE CP** : lance le mode CP.
-- **Cancel** : interrompt la solve (les workers retournent leur heap partiel, l'orchestrator merge ce qu'on a).
+- **Cancel** : interrompt la solve (un worker annulé sort sans rien poster ; l'orchestrator merge les résultats des workers déjà finis).
 - **Reset filters** : `dispatch({type: "resetAll"})` — vide tout le reducer.
 
 **Mémoire de filtres par héros** (session-scoped) : changer de héros **snapshot** les filtres du héros
@@ -425,12 +425,12 @@ Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le hé
 (onglet Presets) y ajoute un patch de filtres (`initialPatch`, voir l'onglet Presets).
 
 ### FilterFooter (fixed en bas)
-- Chips par slot avec **hit/total (%)** — alimentés par `poolSizes` du premier progress event de chaque worker.
+- Chips par slot avec **hit/total (%)** — alimentés par `poolSizes` du précalcul (`precomputeContext`, thread principal).
 - **P** : permutations totales explorées (somme across workers).
 - **S** : permutations qui ont passé tous les filtres (scoring).
 - **Results** : taille du top-N retourné.
 - Indicateur `solving…` (cyan, animé) pendant un run ; une fois fini, **⏱ durée**
-  du dernier solve (wall-clock fan-out→merge, `< 1 s` en ms sinon en s) — l'orchestrator
+  du dernier solve (wall-clock de tout le `solve()`, précalcul compris, `< 1 s` en ms sinon en s) — l'orchestrator
   remonte `durationMs` via `onResult`. Sert à jauger la vitesse du solver d'un coup d'œil.
 - **⚙ N workers** : taille du pool de recherche résolu.
 

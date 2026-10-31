@@ -178,4 +178,13 @@ describe("steamStatus / install under Linux", () => {
     expect(readFileSync(cfg, "utf-8").split("\n")).toContain(`OutDir = Z:${out.replace(/\//g, "\\")}`);
     expect(st.plugin.outDirOk).toBe(true);
   });
+
+  posixOnly("install rewrites an existing OutDir verbatim, even with `$` in the path", async () => {
+    const { cfg, bundled } = setup(400);
+    const out = join(cfg, "..", "..", "..", "cap$&out$1");
+    mkdirSync(out, { recursive: true });
+    writeFileSync(cfg, "[Capture]\nOutDir = C:\\old\n");
+    await installSteamPlugin({ captureOut: out, bundledDll: bundled, scratchDir: join(out, "..", "scratch"), log: () => {} });
+    expect(readFileSync(cfg, "utf-8").split("\n")).toContain(`OutDir = Z:${out.replace(/\//g, "\\")}`);
+  });
 });

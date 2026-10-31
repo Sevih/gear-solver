@@ -125,7 +125,8 @@ export function SettingsModal({
   // The header's only entry point is labeled "Setup", and the modal doubles as
   // the onboarding wizard — so every open lands on the Setup tab (the wizard),
   // not whatever tab was last left. The other panes stay one rail-click away.
-  useEffect(() => { if (open) setTab("setup"); }, [open]);
+  const [seenOpen, setSeenOpen] = useState(open);
+  if (open !== seenOpen) { setSeenOpen(open); if (open) setTab("setup"); }
 
   // Re-probe whenever the modal opens AND the Setup tab is showing (no point
   // hitting the backend when the user is on Solver/Data/etc.).

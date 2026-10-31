@@ -221,11 +221,16 @@ export function applyBackup(value: unknown): ImportResult {
   const groups = mergePresetHeroes(readRaw<Record<string, unknown>>(PRESET_HEROES_KEY), value.presetHeroes ?? {});
   const invPresets = mergeInventoryPresets(readList(INVENTORY_FILTER_PRESETS_KEY), value.inventoryFilterPresets ?? []);
   const locals = mergeLocalPresets(readList(LOCAL_PRESETS_KEY), value.localPresets ?? []);
-  localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(builds.merged));
-  localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets.merged));
-  if (groups.added > 0) localStorage.setItem(PRESET_HEROES_KEY, JSON.stringify(groups.merged));
-  if (invPresets.added > 0) localStorage.setItem(INVENTORY_FILTER_PRESETS_KEY, JSON.stringify(invPresets.merged));
-  if (locals.added > 0) localStorage.setItem(LOCAL_PRESETS_KEY, JSON.stringify(locals.merged));
-  for (const listener of importListeners) listener();
+  // A write failing halfway (quota) still notifies: what was written must be
+  // reloaded by the mounted screens, or their next save would drop it.
+  try {
+    localStorage.setItem(SAVED_BUILDS_KEY, JSON.stringify(builds.merged));
+    localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets.merged));
+    if (groups.added > 0) localStorage.setItem(PRESET_HEROES_KEY, JSON.stringify(groups.merged));
+    if (invPresets.added > 0) localStorage.setItem(INVENTORY_FILTER_PRESETS_KEY, JSON.stringify(invPresets.merged));
+    if (locals.added > 0) localStorage.setItem(LOCAL_PRESETS_KEY, JSON.stringify(locals.merged));
+  } finally {
+    for (const listener of importListeners) listener();
+  }
   return { builds: builds.added, presets: presets.added, presetGroups: groups.added, inventoryPresets: invPresets.added, localPresets: locals.added };
 }

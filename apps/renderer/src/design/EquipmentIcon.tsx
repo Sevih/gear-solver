@@ -87,25 +87,6 @@ const TIER_TEXT_SHADOW = "1px -1px 0 rgba(30,30,30,.78), 1px 1px 0 rgba(0,0,0,.5
 // Vertical Singularity gradient — cyan top → magenta bottom (matches in-game name treatment).
 const ENH_ASCENDED_GRADIENT = "linear-gradient(180deg, #16EBF1 0%, #9D51FF 50%, #E02BCD 100%)";
 
-/** Stroke glyph fallback for each slot, used when the item art is missing. */
-export function SlotGlyph({ slot, className = "h-3 w-3" }: { slot: SlotId | string; className?: string }) {
-  const paths: Record<string, React.ReactNode> = {
-    weapon:    <path d="M3 11 L9 5 M8 2 L11 5 L9 7 L6 4 Z M3 9 L5 11 L3 11 Z" />,
-    helmet:    <path d="M3 6 a3 3 0 0 1 6 0 V9 H8 V7 H4 V9 H3 Z" />,
-    armor:     <path d="M6 1.5 L10 3 V7 C10 9 8 10.4 6 11 C4 10.4 2 9 2 7 V3 Z" />,
-    gloves:    <path d="M3.5 5 V3.2 a0.7 0.7 0 0 1 1.4 0 V5 M4.9 5 V2.6 a0.7 0.7 0 0 1 1.4 0 V5 M6.3 5 V2.8 a0.7 0.7 0 0 1 1.4 0 V5 V8.5 a2 2 0 0 1-4 0 V5.4 a0.7 0.7 0 0 1 1.4 0" />,
-    boots:     <path d="M4 1.5 V7 H9 a1.5 1.5 0 0 1 0 3 H3 V1.5 Z" />,
-    accessory: <path d="M6 2 L8.5 5 L6 10 L3.5 5 Z M3.5 5 H8.5" />,
-    talisman:  <path d="M6 1.5 L7.4 4.4 L10.5 4.8 L8.2 7 L8.8 10 L6 8.5 L3.2 10 L3.8 7 L1.5 4.8 L4.6 4.4 Z" />,
-    exclusive: <path d="M6 1.5 L10 4 V8 L6 10.5 L2 8 V4 Z M6 4.5 L8 6 L6 7.5 L4 6 Z" />,
-  };
-  return (
-    <svg viewBox="0 0 12 12" className={className} fill="none" stroke="currentColor" strokeWidth={1.1} strokeLinejoin="round" strokeLinecap="round">
-      {paths[slot] ?? <circle cx="6" cy="6" r="3" />}
-    </svg>
-  );
-}
-
 /** Striped fallback when the item art file is missing. */
 function ArtFallback({ slot, k }: { slot: string; k: number }) {
   return (
@@ -369,29 +350,6 @@ function SlotMiniImpl({ slot, piece, size = 32 }: { slot: SlotId | string; piece
     >
       <SlotIcon slot={slot} size={Math.round(size * 0.55)} className="opacity-35" />
     </div>
-  );
-}
-
-/** Standalone row of star images. Yellow base, orange for each reforge spent,
- *  Singularity for reforges above `count` (×2 per — mirrors the icon row). */
-export function StarRow({ count = 6, reforge = 0, size = 12 }: { count?: number; reforge?: number; size?: number }) {
-  const srcs = starRowSrcs(count, reforge);
-  const overlap = Math.round(size * 0.3);
-  const width = count > 0 ? size + (count - 1) * (size - overlap) : 0;
-  return (
-    <span className="inline-flex" style={{ width, height: size }}>
-      {srcs.map((src, i) => (
-        <img
-          key={i}
-          src={src}
-          alt=""
-          className="shrink-0 object-contain drop-shadow-sm"
-          loading="lazy"
-          draggable={false}
-          style={{ width: size, height: size, marginLeft: i === 0 ? 0 : -overlap }}
-        />
-      ))}
-    </span>
   );
 }
 

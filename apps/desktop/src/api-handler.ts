@@ -221,7 +221,7 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
     const mtimes: Record<string, number | null> = {};
     for (const name of IMPORTED_SNAPSHOTS) {
       const file = join(captureOut, `${name}.json`);
-      mtimes[name] = existsSync(file) ? statSync(file).mtimeMs : null;
+      mtimes[name] = statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? null;
     }
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({
