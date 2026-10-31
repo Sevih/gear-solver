@@ -12,7 +12,8 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Compact result cards**: each card is now as tall as its own content. Cards no longer stretch to the
+  tallest card of their row (the EE + talisman card was pulling the whole first row down).
 
 ## [1.27.0] — 2026-10-31
 
