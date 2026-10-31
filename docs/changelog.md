@@ -8,6 +8,39 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗂️ Presets : « Expand all » / « Collapse all » dans la barre (G81) (2026-10-31)
+- ✅ **Pourquoi.** Demande de Sevih du 31/10 : sur l'onglet Presets, chaque carte s'ouvrait et se fermait une à une
+  (chevron ▸ de l'en-tête, état local `useState(!row.empty)` de `PresetCard`) ; avec une trentaine de presets, rien ne
+  permettait à l'écran d'agir sur toutes les cartes.
+- ✅ **Modèle.** Nouveau module `apps/renderer/src/lib/presets/cardOpen.ts` (voisin plutôt que `presetRows.ts`, qui
+  reste le modèle des lignes) : `CardOpenCommand` (`{ open, gen }`), `cardOpen(forced, local, defaultOpen)` — le clic
+  propre de la carte s'il date de la génération de la dernière commande (`local.gen === (forced?.gen ?? 0)`), sinon la
+  commande, sinon le défaut (preset vide fermé) —, `forceCards(prev, open)` (commande suivante, génération + 1) et
+  `initialCardCommand()` (aucune commande ; initialiseur paresseux du `useState`, fonction pour qu'un test puisse
+  semer une commande). État dérivé à chaque rendu, sans `useEffect`.
+- ✅ **Écran.** `PresetsScreen.tsx` tient `forced` et le passe à chaque `PresetCard`, du jeu comme locales ; dans la
+  carte, `open = cardOpen(forced, choice, !row.empty)` et le chevron pose `choice = { open: !open, gen: forced?.gen ?? 0 }`
+  (`aria-expanded` inchangé). Une carte rouverte à la main après « Collapse all » reste ouverte ; le « Collapse all »
+  suivant la referme. Dans la barre, après le groupe `Sort` et avant `Clear`, deux boutons texte « Expand all » /
+  « Collapse all » (`h-6`, `text-[11px]`, `text-zinc-400 hover:text-zinc-200`, `title` « Open every preset card
+  (in-game and local) » / « Close every preset card »), qui posent `forceCards(f, true|false)` : toutes les cartes,
+  filtrées ou non. Commentaire d'en-tête de l'écran complété.
+- ✅ **Docs.** `wiki/Using-the-App.md` (puce « Expand all / Collapse all » sous le filtre et le tri de l'onglet
+  Presets) ; `docs/reference.md` (arbre `lib/presets/`, ligne de `PresetsScreen.tsx`, table des tests). Aucun item de
+  `docs/todo.md` ne s'y rapportait.
+- ✅ **Tests.** `apps/renderer/test/presetCardOpen.test.ts` (9) : `cardOpen` (sans commande ni clic → défaut ; commande
+  `open: false` sans clic → fermé ; clic de la même génération gagne ; clic d'une génération passée cède à la nouvelle
+  commande ; clic sans commande, génération 0, gagne sur le défaut), `forceCards` ; puis l'écran entier en
+  `renderToStaticMarkup` sur un preset garni et un vide (monter `PresetsScreen` passe sans peine, `game: null` et un
+  `localStorage` en mémoire) : les deux boutons et leurs `title`, un seul `aria-expanded="true"` sans commande, deux
+  avec `forceCards(null, true)` = `{ open: true, gen: 1 }` (la fonction même des boutons) semée via un mock partiel de
+  `initialCardCommand`, aucun avec Collapse all. Le clic manuel après une commande n'est couvert que par `cardOpen`
+  (un rendu statique ne clique pas). `npm run typecheck` : vert (`tsc --noEmit`, sortie 0) ; `npm test` : renderer
+  `Tests  888 passed (888)` (78 fichiers), desktop 237, core 169 ; `npm run lint` : `✖ 13 problems (0 errors, 13
+  warnings)`, comme avant.
+- ⏳ Sevih : essai à l'œil dans l'app (Expand all, Collapse all, une carte rouverte à la main puis un nouveau Collapse
+  all ; cartes locales comprises).
+
 ### 🏷️ Builder : bonus +15 en libellé court sur la carte compacte (DS DMG+, vs Fire DMG-, grade) (G80) (2026-10-31)
 - ✅ **Pourquoi.** Demande de Sevih du 31/10, suite de G79 : sur la carte compacte, l'option Singularity (le bonus +15,
   effet `source === "singularity"`) porte toujours `name` ET `desc` (`packages/core/src/parse.ts`), donc

@@ -20,6 +20,9 @@
  * Cards come in the in-game editor's order (`presetRows`); the class chips
  * filter them and "Sort: Class" groups them by class (`presetClasses`,
  * `arrangePresets`) — kept for the mount only, like the rest of the screen.
+ * "Expand all" / "Collapse all" open or close every card, in-game and local,
+ * filtered or not; a card toggled by hand since keeps its own state
+ * (`cardOpen`).
  * Each card carries the preset's priority rank (positional field, ⠿ drag in
  * "Sort: Priority") and a lock, on the model of the hero ranks of Builds: App
  * owns both (`gs.presets.rank` / `gs.presets.locked`) and the solver reads them
@@ -64,6 +67,7 @@ import { bestEeGemsFor } from "../../lib/presets/eeGems.js";
 import { presetWorklistFor } from "../../lib/presets/presetWorklist.js";
 import { presetOptimizeNote, presetOptimizePatch } from "../../lib/presets/optimize.js";
 import { presetGameOrder } from "../../lib/presets/presetHolds.js";
+import { cardOpen, forceCards, initialCardCommand, type CardOpenCommand } from "../../lib/presets/cardOpen.js";
 import { loadSeenPresets, persistSeenPresets, toggleLocked, type PresetRank } from "../../lib/storage/presetPriority.js";
 import { fillUnrankedByOrder, moveRankBefore, reorderRank } from "../../lib/storage/rankPriority.js";
 import { fetchRecoForHero } from "../../lib/reco/fetchReco.js";
@@ -152,6 +156,9 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
   }), []);
   const [classFilter, setClassFilter] = useState<ReadonlySet<string>>(() => new Set());
   const [sort, setSort] = useState<PresetSort>("game");
+  // "Expand all" / "Collapse all": the last command, every card (in-game and
+  // local, filtered or not) — a card opened or closed by hand since keeps it.
+  const [forced, setForced] = useState<CardOpenCommand | null>(initialCardCommand);
 
   const rows = useMemo(() => (inventory ? presetRows(inventory) : []), [inventory]);
   const roster = useMemo(() => new Set(inventory?.characters.map((c) => c.uid) ?? []), [inventory]);
@@ -274,6 +281,17 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
             ))}
           </div>
         </div>
+        <div className="inline-flex items-center gap-1">
+          {([[true, "Expand all", "Open every preset card (in-game and local)"], [false, "Collapse all", "Close every preset card"]] as const).map(([open, label, title]) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setForced((f) => forceCards(f, open))}
+              title={title}
+              className="inline-flex h-6 items-center rounded px-2 text-[11px] text-zinc-400 transition-colors hover:text-zinc-200"
+            >{label}</button>
+          ))}
+        </div>
         {classFilter.size > 0 && (
           <button type="button" onClick={() => setClassFilter(new Set())} className="text-[11px] text-cyan-300 hover:text-cyan-200">Clear</button>
         )}
@@ -298,6 +316,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
             roster={inventory.characters}
             stored={stored}
             lossWarnPct={lossWarnPct}
+            forced={forced}
             worklist={{ heroUids: worklistHeroUids, onAdd: onAddToWorklist }}
             onOptimize={onOptimize}
             onOptimizePreset={onOptimizePreset}
@@ -336,6 +355,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
             roster={inventory.characters}
             stored={stored}
             lossWarnPct={lossWarnPct}
+            forced={forced}
             worklist={NO_WORKLIST}
             onOptimize={onOptimize}
             rank={null}
@@ -384,7 +404,7 @@ interface LocalActions {
 }
 
 function PresetCard({
-  row, classes, game, ctx, heroes, roster, stored, lossWarnPct, worklist, onOptimize, onOptimizePreset,
+  row, classes, game, ctx, heroes, roster, stored, lossWarnPct, forced, worklist, onOptimize, onOptimizePreset,
   rank, onSetRank, dragEnabled, onDragStartRank, onDropRank, locked, onToggleLock, onSetReference, onAddAssociated, onRemoveAssociated,
   onCopyLocal, local,
 }: {
@@ -397,6 +417,8 @@ function PresetCard({
   roster: Character[];
   stored: { referenceUid: string | null; associatedUids: string[] };
   lossWarnPct: number;
+  /** The screen's last "Expand all" / "Collapse all" (`cardOpen`). */
+  forced: CardOpenCommand | null;
   worklist: WorklistHook;
   onOptimize?: (heroUid: string) => void;
   onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string, presetNum: number) => void;
@@ -422,7 +444,8 @@ function PresetCard({
   local?: LocalActions;
 }) {
   const { preset, pieces, wearerUids } = row;
-  const [open, setOpen] = useState(!row.empty);
+  const [choice, setChoice] = useState<CardOpenCommand | null>(null);
+  const open = cardOpen(forced, choice, !row.empty);
   const [copied, setCopied] = useState(false);
   // A unique current wearer is proposed as the reference until one is picked
   // (in-game presets only — a local preset keeps the hero it was saved with).
@@ -462,7 +485,7 @@ function PresetCard({
         )}
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setChoice({ open: !open, gen: forced?.gen ?? 0 })}
           className="flex items-center gap-2 text-left"
           aria-expanded={open}
         >

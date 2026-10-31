@@ -124,6 +124,9 @@ the game.
   classes (**Clear** resets them); **Sort: Class** groups the cards by class instead of the
   game's order. A preset's class comes from its class-restricted weapon or accessory, else from
   its reference hero, its wearers or its associated heroes.
+- **Expand all / Collapse all** — next to the sort, open or close every card at once (in-game and
+  local, filtered or not). A card you open or close by hand afterwards keeps it until the next
+  Expand all / Collapse all.
 
 - **Reference** — the hero the preset was built for (solve them in the Builder as usual). If a
   single hero wears the preset, they're proposed by default.
