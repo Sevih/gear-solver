@@ -12,7 +12,12 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Builder › Compact result cards** (Settings › Solver): the compact gear cards under the results are
+  now much shorter and narrower. No item icon (the enhance level, breakthrough and stars sit next to the
+  name), substats two per row as icon + value (level, reforges and Transistone detail on hover), gems as
+  a row of icons, quality and Singularity effects on one line, and a small ⊘ icon with a hover label
+  instead of the full-width "Exclude from solver" button. Four cards fit side by side from 1232 px.
+  Turn the setting off and the cards are exactly as before.
 
 ## [1.23.0] — 2026-10-30
 
