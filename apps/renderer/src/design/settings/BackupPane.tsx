@@ -33,7 +33,7 @@ export function BackupPane({ importInputRef, onStatus }: { importInputRef: { cur
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Side-effect helpers — outcomes go to the App's status bar
+ * Side-effect helpers — outcomes go to the App's status (and journal)
  * ───────────────────────────────────────────────────────────────────────── */
 
 /** Snapshot saved builds + filter presets + preset heroes + local presets and trigger a browser download.

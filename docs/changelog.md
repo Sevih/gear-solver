@@ -8,6 +8,36 @@
 
 ## Items de backlog clôturés (index)
 
+### 📜 Journal et statut dans un onglet « Logs » de Settings, bandeau retiré (G83) (2026-10-31)
+- ✅ **Pourquoi.** Demande de Sevih du 31/10 : le bandeau sous l'en-tête (« Capture plugin installed — … Show log (6) »)
+  et le journal qu'il dépliait servaient surtout au débogage et prenaient une ligne sur tous les écrans.
+- ✅ **Bandeau retiré.** Le bloc `{(status || log.length > 0) && …}` d'`App.tsx` disparaît avec `logOpen` ; l'écran
+  courant reprend la hauteur (commentaire « Fixed height » ajusté). Le pied de Settings garde `status` comme avant.
+- ✅ **Journal unique et borné.** `lib/log/appLog.ts` (pur) : `stampLine(message, at)` → `[HH:MM:SS] message`,
+  `appendBounded(lines, batch, max)` (les `max` dernières, même tableau pour un lot vide), `APP_LOG_MAX = 500`.
+  `pushLog` vide son tampon par frame via `appendBounded` ; `report(message)` fait `setStatus` + `pushLog(stampLine(…))`,
+  et tous les statuts d'App y passent (y compris `onStatus` des panneaux Settings : Data, Backup, Setup) ; `setStatus("")`
+  ne journalise rien. Les lignes d'installation du plugin restent telles quelles (préfixées par le backend), mais
+  l'installation ne vide plus le journal à son début (il garde l'historique de la session, borné) ; « see log. » devient
+  « see Settings › Logs. ». `refreshInventory` rend le message qu'il a journalisé (le suiveur de snapshot l'ignore).
+- ✅ **Toasts.** `announce` = `report` + `notify` avec le même texte : plugin installé / échec / erreur réseau, lancement
+  par Steam demandé ou impossible, import manuel OK / échoué, fin de synchro (`describeDataSync`), synchro de lancement
+  indisponible / en erreur, et « Game data updated · … » (le statut du ré-import). « Syncing game data… » et les statuts
+  de l'import automatique ou du suivi Steam vont au journal seulement.
+- ✅ **Onglet Logs.** `design/settings/LogsPane.tsx` (props `lines`, `onClear`) : en-tête « Logs (n lines) », « Copy »
+  (`navigator.clipboard.writeText`, « Copied » deux secondes), « Clear » (`clearLog`), puis `LogView` (sa zone `max-h`
+  défile) ou « No log lines yet. ». Rail de `SettingsModal` : « Logs » après « Debug », icône `IconLog` (liste), note de
+  pied « Kept for this session only. » ; props `log` et `onClearLog` reçues d'App. Commentaires « status bar » de
+  `SettingsModal.tsx` et `BackupPane.tsx` mis à jour ; `docs/reference.md` (arbre) gagne `lib/log/`. Wiki inchangé
+  (`grep` : aucune page ne cite le bandeau ni « Show log »).
+- ✅ **Tests.** `appLog.test.ts` (format, zéro-padding, minuit ; concaténation sous la borne, `max` dernières au-delà,
+  même tableau pour un lot vide) et `logsPane.test.ts` (rendu statique, 0 et 3 lignes). `grep -n "Show.*log"
+  apps/renderer/src` ne rend plus rien. `npm run typecheck` : `> tsc --noEmit` sans erreur ; `npm test` : `Tests  897
+  passed (897)` (renderer ; core 169, desktop 238) ; `npm run lint` : `✖ 8 problems (0 errors, 8 warnings)`, comme avant.
+- ⏳ À voir par Sevih en jeu : rendu de l'onglet Logs, Copy dans le shell Electron (pas de repli `execCommand`, comme
+  demandé) et les toasts d'une installation du plugin. Hors périmètre, laissé : le commentaire de `BuildsScreen.tsx`
+  (~l. 1079) parle encore d'une « status bar » qui apparaît et disparaît.
+
 ### 🔍 Audit du code : rapport bugs / perf / nettoyage et corrections sûres (G82) (2026-10-31)
 - ✅ **Pourquoi.** Demande de Sevih du 31/10 : passer le code en revue pour les bugs, les lenteurs et le nettoyage,
   sans fonctionnalité nouvelle ; un rapport classé de tout ce qui est trouvé, puis seulement les corrections sûres.

@@ -1,6 +1,6 @@
 /**
  * Settings modal — left-rail tabbed panel (ported from the Claude Design
- * "Settings Redesign" brief). Five sections reachable from a vertical nav:
+ * "Settings Redesign" brief). Six sections reachable from a vertical nav:
  *
  *  - Setup  — the Steam capture plugin checklist: game found / plugin
  *             installed / plugin live. Doubles as the first-launch wizard;
@@ -11,6 +11,8 @@
  *  - Data   — Sync game data · Reset onboarding · Wipe captured (destructive).
  *  - Backup — Export / Import builds & presets (JSON).
  *  - Debug  — developer toggles (stat-lock tooling, solver fan-out logging).
+ *  - Logs   — the app journal (install lines, timestamped status messages):
+ *             Copy · Clear.
  *
  * The nav stays put; the content pane scrolls. The footer is contextual —
  * Re-check lives only in the Setup pane, Close is global.
@@ -26,8 +28,9 @@ import { SteamSetupPane } from "./SteamSetupPane.js";
 import { DataPane } from "./DataPane.js";
 import { BackupPane } from "./BackupPane.js";
 import { DebugPane } from "./DebugPane.js";
+import { LogsPane } from "./LogsPane.js";
 
-type SettingsTab = "setup" | "solver" | "data" | "backup" | "debug";
+type SettingsTab = "setup" | "solver" | "data" | "backup" | "debug" | "logs";
 
 interface Props {
   open: boolean;
@@ -41,12 +44,12 @@ interface Props {
   /** Refresh the inventory after a destructive action (wipe captured). */
   onAfterWipe?: () => void;
   /** "Sync game data" — App's single sync path (syncs + re-imports, no reload;
-   *  it reports the outcome on the status bar itself). */
+   *  it reports the outcome itself — status, journal, toast). */
   onSyncData: () => Promise<DataSyncResult>;
-  /** Report an action's outcome on the App's status bar (no blocking dialogs). */
+  /** Report an action's outcome (status + journal; no blocking dialogs). */
   onStatus: (message: string) => void;
-  /** The status bar's current message — the bar sits under this modal's
-   *  backdrop, so the footer echoes it in place of the tab note. */
+  /** The latest status message — the footer shows it in place of the tab
+   *  note (the full history is in the Logs tab). */
   status: string;
   /** Current state of the developer-only stat-lock toggle (Builds tab). */
   debugStatLocks: boolean;
@@ -65,6 +68,9 @@ interface Props {
   onSteamLaunch: () => void;
   /** An install / capture is streaming — disable the action buttons. */
   steamBusy: boolean;
+  /** The app journal (Logs tab) and its reset. */
+  log: string[];
+  onClearLog: () => void;
 }
 
 /** Per-tab footer note (left side of the contextual footer). */
@@ -74,6 +80,7 @@ const FOOTER_NOTE: Record<SettingsTab, string> = {
   data: "Snapshots are stored locally.",
   backup: "JSON files include builds and presets only.",
   debug: "Developer toggles — off for normal use.",
+  logs: "Kept for this session only.",
 };
 
 const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> = [
@@ -82,12 +89,13 @@ const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> =
   { id: "data",   label: "Data",   icon: <IconDatabase /> },
   { id: "backup", label: "Backup", icon: <IconBackup /> },
   { id: "debug",  label: "Debug",  icon: <IconCode /> },
+  { id: "logs",   label: "Logs",   icon: <IconLog /> },
 ];
 
 export function SettingsModal({
   open, onClose, onReady, onResetOnboarding, onAfterWipe, onSyncData, onStatus, status,
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
-  solver, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy,
+  solver, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy, log, onClearLog,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -110,8 +118,8 @@ export function SettingsModal({
   }
 
   /** Settings → Data → "Sync": App's sync path re-imports on a real sync (no
-   *  window reload, so a running solve survives) and reports the outcome on
-   *  the status bar. */
+   *  window reload, so a running solve survives) and reports the outcome
+   *  itself. */
   async function runDataSync() {
     setSyncing(true);
     try {
@@ -195,6 +203,7 @@ export function SettingsModal({
               {tab === "data"   && <DataPane syncing={syncing} onSync={() => void runDataSync()} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} onStatus={onStatus} />}
               {tab === "backup" && <BackupPane importInputRef={importInputRef} onStatus={onStatus} />}
               {tab === "debug"  && <DebugPane debugStatLocks={debugStatLocks} onToggleDebugStatLocks={onToggleDebugStatLocks} debugSolver={debugSolver} onToggleDebugSolver={onToggleDebugSolver} />}
+              {tab === "logs"   && <LogsPane lines={log} onClear={onClearLog} />}
             </div>
 
             {/* CONTEXTUAL FOOTER */}
@@ -266,6 +275,13 @@ function IconCode() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 8l-4 4 4 4" /><path d="M15 8l4 4-4 4" />
+    </svg>
+  );
+}
+function IconLog() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 6h12" /><path d="M8 12h12" /><path d="M8 18h12" /><path d="M4 6h.01" /><path d="M4 12h.01" /><path d="M4 18h.01" />
     </svg>
   );
 }

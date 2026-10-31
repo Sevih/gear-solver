@@ -8,8 +8,8 @@ import { waitForStartupSync } from "./lib/startupSync.js";
 import { describeDataSync, requestDataSync, type DataSyncResult } from "./lib/dataSync.js";
 import { createSnapshotFollower } from "./lib/snapshotFollower.js";
 import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
-import { LogView } from "./design/LogView.js";
 import { ToastStack, useToasts } from "./design/Toast.js";
+import { APP_LOG_MAX, appendBounded, stampLine } from "./lib/log/appLog.js";
 import { SettingsModal } from "./design/settings/SettingsModal.js";
 import { HomeScreen } from "./screens/home/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
@@ -121,6 +121,8 @@ export function App() {
   const [steam, setSteam] = useState<SteamStatus | null>(null);
   const [gameVersion, setGameVersion] = useState<string | null>(null);
   const [running, setRunning] = useState<"none" | "steam-install">("none");
+  // The app journal (Settings → Logs): plugin install lines + every status
+  // message, timestamped, bounded to APP_LOG_MAX lines.
   const [log, setLog] = useState<string[]>([]);
   // Install-log lines stream in one at a time: buffer them and flush at most
   // once per frame, so a verbose install doesn't re-copy the log per line.
@@ -132,7 +134,7 @@ export function App() {
       logFrame.current = null;
       const batch = logPending.current;
       logPending.current = [];
-      setLog((l) => l.concat(batch));
+      setLog((l) => appendBounded(l, batch, APP_LOG_MAX));
     });
   }, []);
   const clearLog = useCallback(() => {
@@ -142,7 +144,17 @@ export function App() {
     setLog([]);
   }, []);
   useEffect(() => () => { if (logFrame.current != null) cancelAnimationFrame(logFrame.current); }, []);
-  const [logOpen, setLogOpen] = useState(false);
+  // Every status message goes through here: shown in the Settings footer and
+  // kept in the journal. An empty message only clears the status.
+  const report = useCallback((message: string) => {
+    setStatus(message);
+    if (message) pushLog(stampLine(message, new Date()));
+  }, [pushLog]);
+  // Outcomes worth seeing without opening Settings: also a toast, same text.
+  const announce = useCallback((message: string) => {
+    report(message);
+    notify(message);
+  }, [report, notify]);
   // Onboarding wizard — persisted "seen" flag so the modal only auto-opens
   // once per fresh install. The header's gear icon re-opens it on demand.
   // `wizardOpen` is the immediate UI state; `onboardingDone` survives reloads.
@@ -218,7 +230,8 @@ export function App() {
   // every App render (only the toggled tile's `excluded` prop changes).
   const toggleExclude = useCallback((uid: string) => setExcludedPieces((prev) => toggleExcludedPiece(prev, uid)), []);
 
-  async function refreshInventory(label: string) {
+  /** Re-import; resolves to the status message it reported ("" when silent). */
+  async function refreshInventory(label: string): Promise<string> {
     const [r, version] = await Promise.all([autoImport(), loadDataVersion()]);
     // New game data (patch synced in) → prune the stored filters of the set /
     // effect ids it no longer knows, before a Builder mount reads them.
@@ -232,8 +245,14 @@ export function App() {
       // own visual signal (tab badges fill in, tiles render). Only chime
       // when an explicit user action (Reload, Capture OK, Manual import)
       // produced the refresh.
-      setStatus(label === "Auto-import" ? "" : `${label} · ${r.game ? "stats resolved" : "engine-only fallback"}`);
-    } else setStatus(r.game ? "Game data loaded - no capture found." : "No data. Install the capture plugin, then play to the lobby.");
+      if (label === "Auto-import") { setStatus(""); return ""; }
+      const message = `${label} · ${r.game ? "stats resolved" : "engine-only fallback"}`;
+      report(message);
+      return message;
+    }
+    const message = r.game ? "Game data loaded - no capture found." : "No data. Install the capture plugin, then play to the lobby.";
+    report(message);
+    return message;
   }
 
   // Manual "Sync game data" — pulls fresh tables from the outerpedia repo,
@@ -241,10 +260,10 @@ export function App() {
   // may be running in the kept-mounted Builder). The single path behind both
   // the Home quick action and Settings → Data.
   async function syncGameData(): Promise<DataSyncResult> {
-    setStatus("Syncing game data…");
+    report("Syncing game data…");
     const r = await requestDataSync();
     if (r.status === "synced") await refreshInventory("Game data synced");
-    setStatus(describeDataSync(r));
+    announce(describeDataSync(r));
     return r;
   }
 
@@ -287,7 +306,7 @@ export function App() {
   const [follower] = useState(() => createSnapshotFollower({
     getCaptureStatus,
     getSteamStatus,
-    refresh: (label) => refreshRef.current(label),
+    refresh: async (label) => { await refreshRef.current(label); },
     onCaptureStatus: setCapStatus,
     onSteamStatus: setSteam,
   }));
@@ -299,11 +318,11 @@ export function App() {
     let alive = true;
     void waitForStartupSync().then((r) => {
       if (!alive || !r) return;
-      if (r.status === "synced") void refreshRef.current("Game data updated");
-      else if (r.status === "unavailable" || r.status === "error") setStatus(`Game data: ${r.message}`);
+      if (r.status === "synced") void refreshRef.current("Game data updated").then(notify);
+      else if (r.status === "unavailable" || r.status === "error") announce(`Game data: ${r.message}`);
     });
     return () => { alive = false; };
-  }, []);
+  }, [announce, notify]);
   useEffect(() => { void getSteamStatus().then(setSteam); }, []);
   useEffect(() => { void getGameVersion().then(setGameVersion); }, []);
 
@@ -326,16 +345,16 @@ export function App() {
     if (!files) return;
     try {
       const { userItem, userChar, error } = await readManualFiles(Array.from(files));
-      if (error) { setStatus(`Manual import failed — ${error}`); return; }
-      if (!userItem) { setStatus("Manual import: no user_item JSON (ItemList) among the picked files."); return; }
+      if (error) { announce(`Manual import failed — ${error}`); return; }
+      if (!userItem) { announce("Manual import: no user_item JSON (ItemList) among the picked files."); return; }
       setInv(parseFiles(game, userItem, userChar));
       // The picked files carry no gift/archive snapshot: drop the geas/codex
       // levels of whatever capture was loaded before (another account, maybe).
       setUserGeas(null);
       setUserCodex(null);
-      setStatus("Manual import OK");
+      announce("Manual import OK");
     } catch (err) {
-      setStatus(`Manual import failed — ${err instanceof Error ? err.message : String(err)}`);
+      announce(`Manual import failed — ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       // Re-picking the same file must fire onChange again.
       input.value = "";
@@ -343,19 +362,18 @@ export function App() {
   }
 
   /** Copy the BepInEx plugin into the game folder (downloads BepInEx once if
-   *  the game has none), streaming into the log console. The game must be
-   *  closed — the backend refuses otherwise. */
+   *  the game has none), streaming into the journal (Settings → Logs). The
+   *  game must be closed — the backend refuses otherwise. */
   async function runSteamInstall() {
     if (running !== "none") return;
     setRunning("steam-install");
-    clearLog(); setLogOpen(true);
     try {
       const { exitCode } = await streamCapture("/api/steam/install", pushLog);
-      if (exitCode === 0) setStatus("Capture plugin installed — launch OUTERPLANE from Steam and play to the lobby.");
-      else setStatus(`Plugin install failed (exit ${exitCode}) — see log.`);
+      if (exitCode === 0) announce("Capture plugin installed — launch OUTERPLANE from Steam and play to the lobby.");
+      else announce(`Plugin install failed (exit ${exitCode}) — see Settings › Logs.`);
     } catch (err) {
       pushLog(`[client] ${err instanceof Error ? err.message : String(err)}`);
-      setStatus("Network error during plugin install.");
+      announce("Network error during plugin install.");
     } finally {
       setRunning("none");
       void getSteamStatus().then(setSteam);
@@ -364,7 +382,7 @@ export function App() {
 
   async function runSteamLaunch() {
     const ok = await launchSteamGame();
-    setStatus(ok ? "Launching OUTERPLANE through Steam — reach the lobby and the snapshot imports itself." : "Could not ask Steam to launch the game.");
+    announce(ok ? "Launching OUTERPLANE through Steam — reach the lobby and the snapshot imports itself." : "Could not ask Steam to launch the game.");
   }
 
   return (
@@ -417,7 +435,7 @@ export function App() {
         onResetOnboarding={() => { onboardingGate.reset(); setOnboardingDone(false); }}
         onAfterWipe={() => void refreshInventory("Wiped captured data")}
         onSyncData={syncGameData}
-        onStatus={setStatus}
+        onStatus={report}
         status={status}
         debugStatLocks={debugStatLocks}
         onToggleDebugStatLocks={() => setDebugStatLocks((v) => !v)}
@@ -431,30 +449,11 @@ export function App() {
           compactCards, setCompactCards,
           presetLossWarn, setPresetLossWarn,
         }}
+        log={log}
+        onClearLog={clearLog}
       />
 
-      {(status || log.length > 0) && (
-        <div className="border-b border-white/6 bg-black/30 px-6 py-2">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[11px] text-zinc-400">{status}</span>
-            {log.length > 0 && (
-              <button
-                onClick={() => setLogOpen((v) => !v)}
-                className="font-mono text-[10px] text-cyan-300 hover:text-cyan-200"
-              >
-                {logOpen ? "Hide" : "Show"} log ({log.length})
-              </button>
-            )}
-          </div>
-          {logOpen && log.length > 0 && (
-            <div className="mt-2">
-              <LogView lines={log} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Fixed height (the space left under the header and the status bar), not
+      {/* Fixed height (the space left under the header), not
           a min-height: every screen's `h-full` resolves against it, so a screen
           scrolls inside its own `overflow-y-auto` area and keeps its header in
           place — and the Inventory grid's virtualizer windows to the visible

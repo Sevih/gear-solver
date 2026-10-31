@@ -927,6 +927,8 @@ apps/renderer/src/
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
 │   ├── overcap.ts                 ← overcapOf + overcapText (caps CRC 102 / PEN 100 gaspillés, Builds, Presets et tooltip crit du Builder)
+│   ├── log/
+│   │   └── appLog.ts               ← stampLine + appendBounded (journal borné de Settings → Logs, APP_LOG_MAX = 500)
 │   ├── presets/
 │   │   ├── presetRows.ts           ← presets du jeu : pièces, porteurs, pièces absentes / partagées, classe, filtre / tri
 │   │   ├── presetHolds.ts          ← presetHolds + presetBlockedUids (pièces des presets mieux classés / verrouillés hors du pool)
