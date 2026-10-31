@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.25.0] — 2026-10-31
+
 - **Builder › Compact result cards › +15 bonus**: the Singularity bonus of a piece now reads as a short
   label with its grade and value instead of the truncated game name — "S+ DS DMG+ +12%" for damage within
   Dimensional Singularity, "vs Fire DMG-" for damage taken from Fire targets, "DMG+" / "DMG-" for the

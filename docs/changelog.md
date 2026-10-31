@@ -4445,6 +4445,10 @@
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
 
+## [1.25.0] — 2026-10-31
+
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
 ## [1.24.0] — 2026-10-31
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
