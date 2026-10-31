@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.27.0] — 2026-10-31
+
 - **Logs moved to Settings**: the status banner under the header and its "Show log" drop-down are gone.
   Everything they showed now lives in a new **Settings › Logs** tab (timestamped, kept for the session,
   with Copy and Clear), and the results that matter — plugin installed or failed, Steam launched, game
