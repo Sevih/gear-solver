@@ -180,7 +180,7 @@ function SubstatRow({ s, added = 0, transistone = 0 }: { s: UiPiece["subs"][numb
   // Ticks the Transistone potential added to the line's base (its own marker,
   // apart from the reforge split: the base above already includes them).
   const transistoneMark = transistone > 0 && (
-    <span className="shrink-0 text-[10px] text-violet-300" title={`Transistone: base LV ${base - transistone} → ${base}`}>T+{transistone}</span>
+    <span className="shrink-0 text-[10px] text-violet-300" title={`Transistone: base tier ${base - transistone} → ${base}`}>T+{transistone}</span>
   );
   return (
     <div className={cx("flex items-center gap-2 font-mono text-[12px] tabular-nums", isMax ? "text-amber-300" : "text-white")}>
@@ -536,12 +536,15 @@ export function ResultGearDetailBody({ piece, game, equippedChar = null, fromPre
 
 /** Full duplicate of the Inventory tab's `ItemDetail` panel (the left-hand
  *  inspect card): the exact `aside` container, scroll wrapper, equipped-char
- *  portrait (via the body), exclude footer, and empty placeholder — forked so
- *  the SOLVE-results cards look pixel-identical to the inventory card while
- *  staying independently editable. */
+ *  portrait (via the body), "never use" footer, and empty placeholder — forked
+ *  so the SOLVE-results cards look pixel-identical to the inventory card while
+ *  staying independently editable. The empty placeholder is the slot's own
+ *  (`emptyLabel`, e.g. "No weapon in this build", and `emptyHint`), not the
+ *  Inventory's "pick a tile" prompt. */
 export function ResultItemDetail({
   piece, equippedChar, fromPresets, game, excluded, onToggleExclude, addedTicks, transistoneTicks, compact = false,
-}: { piece: UiPiece | null; equippedChar: Character | null; fromPresets?: string[]; game: GameData | null; excluded?: boolean; onToggleExclude?: (uid: string) => void; addedTicks?: number[]; transistoneTicks?: number[]; compact?: boolean }) {
+  emptyLabel = "No piece in this build", emptyHint,
+}: { piece: UiPiece | null; equippedChar: Character | null; fromPresets?: string[]; game: GameData | null; excluded?: boolean; onToggleExclude?: (uid: string) => void; addedTicks?: number[]; transistoneTicks?: number[]; compact?: boolean; emptyLabel?: string; emptyHint?: string }) {
   const width = compact ? "w-56" : "w-80";
   if (!piece) {
     return (
@@ -552,8 +555,8 @@ export function ResultItemDetail({
             <path d="M5 7 H9 M7 5 V9" strokeLinecap="round" />
           </svg>
         </div>
-        <div className="mt-3 text-[12px] font-medium text-white">No item selected</div>
-        <div className="mt-1 text-[11px] leading-snug text-white/70">Click a tile in the grid to inspect its main / substats / equipped character.</div>
+        <div className="mt-3 text-[12px] font-medium text-white">{emptyLabel}</div>
+        {emptyHint && <div className="mt-1 text-[11px] leading-snug text-white/70">{emptyHint}</div>}
       </aside>
     );
   }
@@ -571,7 +574,7 @@ export function ResultItemDetail({
           <button
             type="button"
             onClick={() => onToggleExclude(piece.id)}
-            title="Globally exclude this piece from every solve (e.g. trash rolls). Also via right-click on the tile."
+            title="Never use this piece in any solve (e.g. trash rolls) — the same as a right-click on its tile in the Inventory."
             className={cx(
               "flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors",
               excluded
@@ -579,7 +582,7 @@ export function ResultItemDetail({
                 : "border-white/10 bg-white/3 text-white/80 hover:bg-white/6",
             )}
           >
-            {excluded ? "⊘ Excluded from solver — include" : "Exclude from solver"}
+            {excluded ? "⊘ Never used — click to allow" : "Never use"}
           </button>
         </div>
       )}
@@ -598,12 +601,12 @@ function CardShell({ width, fill, children }: { width: string; fill: boolean; ch
   );
 }
 
-/** Compact card footer with the exclude action. `what` names the piece in the
- *  label when two pieces share the card ("Exclude EE from the solver"). */
+/** Compact card footer with the "never use" action. `what` names the piece in
+ *  the label when two pieces share the card ("Never use EE"). */
 function CompactExcludeFooter({ excluded = false, onClick, what }: { excluded?: boolean; onClick: () => void; what?: string }) {
   const label = what
-    ? (excluded ? `${what} excluded from the solver — click to include` : `Exclude ${what} from the solver`)
-    : (excluded ? "Excluded from solver — click to include" : "Exclude from solver");
+    ? (excluded ? `${what} never used — click to allow` : `Never use ${what}`)
+    : (excluded ? "Never used — click to allow" : "Never use");
   return (
     <div className="shrink-0 border-t border-white/8 px-4 py-1.5">
       <CardActions actions={[{ key: "exclude", icon: EXCLUDE_ICON, label, active: excluded, onClick }]} />

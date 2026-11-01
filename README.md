@@ -75,10 +75,10 @@ Read on. The rest of this README plus [docs/](docs) cover the stack, build, and 
   search with mid-tree set feasibility checks, per-slot top-% prune, greedy gem
   sub-solver with pre-aggregated `{flat, pct}` delta, fixed-size top-K min-heap.
   Two modes: SOLVE (priority-weighted Score) and SOLVE CP (in-game Combat Power).
-- **Library** of saved builds + filter presets per hero (localStorage).
+- **Library** of saved builds + filter sets per hero (localStorage).
 - **Edits** equip assignments locally by rewriting the captured snapshot — `equipItem`/
   `unequipItem` (core) + a `POST /api/captured/user-item` write-back, triggered from the
-  Builder's "Equip build → hero" button (confirmation popup) and the Worklist's per-entry /
+  Builder's "Apply to snapshot → hero" button (confirmation popup) and the Worklist's per-entry /
   Apply-all actions. Changes only touch the local captured snapshot — nothing is ever
   pushed to the game.
 
@@ -196,10 +196,10 @@ See [docs/architecture.md](docs/architecture.md) for the layer split rationale, 
 ## Status
 
 Data capture, parser, stat composer, solver, the Home dashboard, Inventory/Builds/Builder/
-Worklist screens, the tabbed Settings modal, persistence (saved builds + filter presets) and
+Worklist screens, the tabbed Settings modal, persistence (saved builds + filter sets) and
 JSON backup import/export are all live. Session-scoped view state (Inventory/Builds
 sorts+filters reset each launch), Builds advice rules, the equip/unequip captured-JSON rewrite
-methods + write-back endpoint with their trigger UI (Builder "Equip build" + Worklist apply —
+methods + write-back endpoint with their trigger UI (Builder "Apply to snapshot" + Worklist apply —
 local snapshot only), the production build path for `data/` (bundled `extraResources` +
 first-launch seed of the writable cache), packaged releases with auto-update, and a
 `data/derived` version stamp (surfaced in Settings → Data) have landed. Backlog (localStorage

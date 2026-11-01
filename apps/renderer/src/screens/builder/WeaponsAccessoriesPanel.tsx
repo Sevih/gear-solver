@@ -27,7 +27,7 @@ export function WeaponsAccessoriesPanel({
   return (
     <Panel
       title="Weapons, accessories & talismans"
-      hint="Click an effect to cycle off → required → excluded. A talisman advised by Get preset starts preferred: used if you own it, otherwise any talisman. Empty = solver may use every effect."
+      hint="Click an effect to cycle off → required → excluded. A talisman advised by Load reco starts preferred: used if you own it, otherwise any talisman. Empty = solver may use every effect."
       width="w-60"
     >
       <div className="space-y-2">

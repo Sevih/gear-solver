@@ -15,6 +15,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { GameData, GearPiece } from "@gear-solver/core";
 import type { UiPiece } from "../src/design/adapter.js";
 import type { SlotDiff } from "../src/lib/buildDiff.js";
+import type { SolveBuild } from "../src/lib/solver/types.js";
 import { QUALITY_TIERS, qualityShortLabel } from "../src/lib/quality.js";
 
 vi.mock("../src/design/EquipmentIcon.js", async (importOriginal) => ({
@@ -213,11 +214,11 @@ describe("ResultItemDetail — compact card", () => {
     const html = render(piece(), true);
     const buttons = [...html.matchAll(/<button([^>]*)>/g)].map((m) => m[1]!);
     expect(buttons).toHaveLength(1);
-    expect(buttons[0]).toContain('aria-label="Exclude from solver"');
+    expect(buttons[0]).toContain('aria-label="Never use"');
     expect(buttons[0]).toContain('aria-pressed="false"');
-    expect(text(html)).not.toContain("Exclude from solver");
+    expect(text(html)).not.toContain("Never use");
     const excluded = [...render(piece(), true, true).matchAll(/<button([^>]*)>/g)].map((m) => m[1]!);
-    expect(excluded[0]).toContain('aria-label="Excluded from solver — click to include"');
+    expect(excluded[0]).toContain('aria-label="Never used — click to allow"');
     expect(excluded[0]).toContain('aria-pressed="true"');
   });
 });
@@ -229,7 +230,7 @@ describe("ResultItemDetail — non-compact card", () => {
     const button = [...html.matchAll(/<button([^>]*)>(.*?)<\/button>/g)];
     expect(button).toHaveLength(1);
     expect(button[0]![1]).toContain("w-full");
-    expect(text(button[0]![2]!)).toBe("Exclude from solver");
+    expect(text(button[0]![2]!)).toBe("Never use");
   });
 });
 
@@ -286,7 +287,7 @@ describe("ResultPairDetail — compact EE + talisman card", () => {
     expect(text(html)).toContain("EE");
     expect(text(html)).toContain("Charm");
     const labels = [...html.matchAll(/<button[^>]*aria-label="([^"]*)"/g)].map((m) => m[1]);
-    expect(labels).toEqual(["Exclude EE from the solver", "Exclude talisman from the solver"]);
+    expect(labels).toEqual(["Never use EE", "Never use talisman"]);
   });
 
   it("a missing piece shows its empty label, without an action", () => {
@@ -330,6 +331,23 @@ describe("BottomGearBand — compact band", () => {
     expect(renderBand(false).match(/<aside/g)).toHaveLength(8);
   });
 
+  it("an empty card names its slot, never the Inventory's tile prompt", () => {
+    const noWeapon = diff.filter((d) => d.slot !== "weapon" && d.slot !== "exclusive");
+    const band = (build: SolveBuild | null, compact: boolean) => text(renderToStaticMarkup(createElement(BottomGearBand, {
+      build, diff: build ? noWeapon : [], game, reforge: { reforgeMode: "disable", priority: {} }, charsByUid: new Map(),
+      excludedPieceUids: new Set<string>(), onToggleExclude: () => {}, compact,
+    })));
+    const solved = {} as SolveBuild;
+    for (const compact of [false, true]) {
+      expect(band(solved, compact)).toContain("No weapon in this build");
+      expect(band(solved, compact)).toContain("No EE in this build");
+      expect(band(null, compact)).toContain("No boots yet");
+      expect(band(null, compact)).not.toContain("Click a tile");
+      expect(band(null, compact)).not.toContain("No item selected");
+    }
+    expect(band(null, false)).toContain("Solve, then pick a build in the table.");
+  });
+
   const rootClass = (html: string) => /^<div class="([^"]*)"/.exec(html)![1]!.split(" ");
   const asideClasses = (html: string) => [...html.matchAll(/<aside class="([^"]*)"/g)].map((m) => m[1]!.split(" "));
 
@@ -351,7 +369,8 @@ describe("BottomGearBand — compact band", () => {
 
   it("compact empty card keeps its content height, the non-compact one fills", () => {
     const empty = (compact: boolean) => renderToStaticMarkup(createElement(ResultItemDetail, { piece: null, equippedChar: null, game: null, compact }));
-    expect(empty(true)).toContain("No item selected");
+    expect(empty(true)).toContain("No piece in this build");
+    expect(empty(true)).not.toContain("Click a tile");
     expect(asideClasses(empty(true))[0]).not.toContain("h-full");
     expect(asideClasses(empty(false))[0]).toContain("h-full");
   });

@@ -11,7 +11,7 @@ export function BackupPane({ importInputRef, onStatus }: { importInputRef: { cur
       <SectionStrip title="Backup" />
       <DataAction
         label="Export builds & presets"
-        description="Download your saved builds, filter presets, the heroes of your in-game presets and your local presets (Presets tab) as a JSON file (backup / move to another device). Captured gear is not included — re-capture it there."
+        description="Download your saved builds, filter sets, the heroes of your in-game presets and your local presets (Presets tab) as a JSON file (backup / move to another device). Captured gear is not included — re-capture it there."
         actionLabel="Export"
         onClick={() => exportBackupFile(onStatus)}
       />

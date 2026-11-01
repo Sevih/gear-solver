@@ -414,7 +414,7 @@ function InventoryEmpty() {
       </div>
       <h2 className="font-display text-[18px] font-semibold text-white">No capture yet</h2>
       <p className="max-w-sm text-[12.5px] leading-relaxed text-white/85">
-        Install the capture plugin (Setup, top right), then play OUTERPLANE on Steam: your gear and heroes import as soon as the lobby loads <span className="font-mono text-white">/user/item</span>. No Steam? Import your snapshot files by hand below.
+        Install the capture plugin (Settings, top right), then play OUTERPLANE on Steam: your gear and heroes import as soon as the lobby loads <span className="font-mono text-white">/user/item</span>. No Steam? Import your snapshot files by hand below.
       </p>
     </div>
   );

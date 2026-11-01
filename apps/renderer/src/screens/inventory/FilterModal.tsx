@@ -247,10 +247,10 @@ function PresetsRow({
   };
   return (
     <div className="flex items-center gap-2 border-b border-white/8 px-4 py-2">
-      <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/70">Presets</span>
+      <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/70">Filter sets</span>
       <select
         value={selected}
-        aria-label="Filter preset"
+        aria-label="Filter set"
         title={builtin ? SCRAP_CANDIDATES.title : undefined}
         onChange={(e) => setSelected(e.target.value)}
         className={cx(SELECT_CLASS, "max-w-[14rem]")}
@@ -275,14 +275,14 @@ function PresetsRow({
               // Escape leaves the name field, not the modal.
               if (e.key === "Escape") { e.stopPropagation(); setNaming(false); setName(""); }
             }}
-            placeholder="Preset name"
-            aria-label="Preset name"
+            placeholder="Filter set name"
+            aria-label="Filter set name"
             className="w-36 rounded-md border border-white/10 bg-black/30 px-1.5 py-0.5 text-[12px] text-white placeholder:text-white/55 focus:border-cyan-400/40 focus:outline-none"
           />
           <button
             onClick={save}
             disabled={!validName}
-            title={overwrites ? "Overwrites the preset of the same name." : undefined}
+            title={overwrites ? "Overwrites the filter set of the same name." : undefined}
             className={PRESET_BTN_CLASS}
           >
             Save
@@ -409,7 +409,7 @@ export function FilterModal({
           </div>
           <div className="ml-8 grid flex-1 grid-cols-3 items-center gap-x-4">
             <Checkbox label="Singularity only" checked={draft.singularityOnly} tone="violet" onChange={() => setDraft({ ...draft, singularityOnly: !draft.singularityOnly })} />
-            <Checkbox label="Exclude equipped gear" checked={!draft.showEquipped} onChange={() => setDraft({ ...draft, showEquipped: !draft.showEquipped })} />
+            <Checkbox label="Hide equipped" checked={!draft.showEquipped} onChange={() => setDraft({ ...draft, showEquipped: !draft.showEquipped })} />
             <Checkbox label="+0 only" checked={draft.enhanceZero} onChange={() => setDraft({ ...draft, enhanceZero: !draft.enhanceZero })} />
             <Checkbox label="T0 only" checked={draft.breakthroughZero} onChange={() => setDraft({ ...draft, breakthroughZero: !draft.breakthroughZero })} />
             <Checkbox label="Not reforged" checked={draft.notReforged} onChange={() => setDraft({ ...draft, notReforged: !draft.notReforged })} />

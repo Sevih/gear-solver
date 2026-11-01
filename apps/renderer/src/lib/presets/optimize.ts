@@ -4,9 +4,9 @@
  * and up to five priority substats merged from what the outfit already rolls
  * and outerpedia's reco for the hero.
  *
- * Mains come from the reco only (weapon + accessory, as "Get preset" sets
+ * Mains come from the reco only (weapon + accessory, as "Load reco" sets
  * them). Sets stay open: the patch carries no plan (`mergePreset` turns it into
- * one empty plan) — "Get preset" in the Builder remains the way to the full reco.
+ * one empty plan) — "Load reco" in the Builder remains the way to the full reco.
  *
  * Pure: the screen fetches the reco and feeds the outfit.
  */
@@ -74,7 +74,7 @@ export function presetOptimizePatch({ pieces, reco, game, talismanFamily }: Pres
     ? translateRecoBuild(reco.builds[build]!, (id) => (id != null ? game.equipment[String(id)]?.setId ?? null : null), talismanFamily)
     : null;
   if (!fromReco) notes.push("No outerpedia reco: substats from the outfit only.");
-  else if (names.length > 1) notes.push(`Reco build "${build}" (first of ${names.length} — "Get preset" picks another).`);
+  else if (names.length > 1) notes.push(`Reco build "${build}" (first of ${names.length} — "Load reco" picks another).`);
 
   // Outfit: how many pieces roll each priority key (talisman and EE roll none).
   const counts = new Map<string, number>();

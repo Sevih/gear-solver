@@ -45,7 +45,7 @@ export interface FilterState {
    *  this filter the moment any chip is active. */
   classes: Set<string>;
   /** Equipped-piece visibility. `true` (default) shows them; `false` hides
-   *  them — exposed in the modal as an "Exclude equipped gear" checkbox
+   *  them — exposed in the modal as a "Hide equipped" checkbox
    *  (inverted polarity to match the in-game wording). */
   showEquipped: boolean;
   /** "+0 only" — enhance level 0. */
@@ -245,7 +245,7 @@ export function matchesFilters(p: UiPiece, f: FilterState): boolean {
     // filter focused on "show me my class-locked pieces".
     if (!p.classLimit || !f.classes.has(p.classLimit)) return false;
   }
-  // Equipped pieces hidden when the player ticked "Exclude equipped gear"
+  // Equipped pieces hidden when the player ticked "Hide equipped"
   // in the modal — useful when looking for swappable inventory.
   if (!f.showEquipped && p.status === "equipped") return false;
   if (f.enhanceZero && p.enhance !== 0) return false;

@@ -5,7 +5,7 @@
  * pool-build time (engine `allow()`), regardless of which hero is being solved.
  *
  * Durable (localStorage) — the judgment "this piece is junk" outlives a session.
- * Distinct from the per-hero "Exclude equipped" multi-select (which excludes a
+ * Distinct from the per-hero "Don't take from…" multi-select (which excludes a
  * HERO's gear). Toggled from the Inventory (right-click a tile).
  */
 export const EXCLUDED_PIECES_KEY = "gs.solver.excludedPieces";

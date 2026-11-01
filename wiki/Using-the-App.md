@@ -4,7 +4,7 @@ How to drive gear-solver day to day. New here? Start with [Getting Started](Gett
 to import your account first.
 
 The window has six tabs — **Home**, **Inventory**, **Builds**, **Presets**, **Builder**, **Worklist** —
-plus a **Settings** modal (gear icon, top-right) and the capture controls in the header.
+plus a **Settings** modal (the **Settings** button, top-right) and the capture controls in the header.
 
 ---
 
@@ -33,13 +33,13 @@ A dense, searchable table of every gear piece you own.
 - **Sub-tabs**: **All**, **Gear** (the six rolled-substat slots), **Special Gear** (Talisman + EE,
   which carry gems instead of substats).
 - **Filters** (the Filter button, top-right): slot, rarity, star, **quality**, main stat, sub
-  stats (AND/OR), armor set, class-restricted, "exclude equipped gear", and three boxes next to
+  stats (AND/OR), armor set, class-restricted, **Hide equipped**, and three boxes next to
   it: **+0 only**, **T0 only** (no breakthrough) and **Not reforged**. Chips that can't
   match anything in the current view are greyed out so you never zero out the grid by accident.
 - **Reachable quality** (in the Filter modal, right after Quality): the tier a piece would reach
-  if a Transistone raised its best substat line to stage 4 — the "→ N reachable" of the detail
-  panel. Only a 6★ Legendary with four lines has that potential: one line can go up to stage 4,
-  or up to stage 3 when the piece already has a stage-4 line (a 3/3/3/3 can become 4/3/3/3, a
+  if a Transistone raised its best substat line to tier 4 — the "→ N reachable" of the detail
+  panel. Only a 6★ Legendary with four lines has that potential: one line can go up to tier 4,
+  or up to tier 3 when the piece already has a tier-4 line (a 3/3/3/3 can become 4/3/3/3, a
   4/4/3/2 can become 4/4/3/3); a 4/3/3/3 or a 4/4/3/3 has nothing left to gain. Any other piece
   counts at its current tier. A **Good** piece that a reroll would push past 85 % shows under
   **Excellent** here and not under Quality's Excellent. Talismans and EE have no quality score and
@@ -53,11 +53,11 @@ A dense, searchable table of every gear piece you own.
   everything without three lines at 3 (a 3/2/2/1 stays, which "less than 3/3/3/X" would drop). A
   piece with three lines has a 4th line at 0; Talisman and EE (gems, no substats) never pass an
   active Base rolls filter, with or without not.
-- **Presets** (top row of the Filter modal): pick a preset and **Load** it into the modal (adjust,
-  then **Apply**); **Save as…** saves the current filters under a name (1–24 characters; an
-  existing name is overwritten); **Delete** removes one of yours. A preset keeps every filter
+- **Filter sets** (top row of the Filter modal): pick a filter set and **Load** it into the modal
+  (adjust, then **Apply**); **Save as…** saves the current filters under a name (1–24 characters; an
+  existing name is overwritten); **Delete** removes one of yours. A filter set keeps every filter
   except the search and the sub-tab (All / Gear / Special Gear): **Load** leaves your search in
-  place, and a preset holding a slot the current sub-tab doesn't show switches the view to **All**
+  place, and a filter set holding a slot the current sub-tab doesn't show switches the view to **All**
   on Apply. A selected value no piece of the view carries stays in the modal, dimmed, so you can
   remove it. The built-in **Scrap
   candidates** (always first, can't be deleted) shows the unequipped 5★ / 6★ gear at +0, T0, never
@@ -76,16 +76,18 @@ A dense, searchable table of every gear piece you own.
 - **Selecting pieces** (in the Scrap value card): **Select pieces** turns on selection mode, where
   a click on a tile selects or unselects it and shows it in the panel; outside the mode a click only
   shows it, and **Ctrl+click** always selects or unselects. **Select all shown** adds the pieces on
-  screen, **Select excluded** the pieces excluded from the solver, **Clear** empties the selection.
+  screen, **Select never used** the pieces marked **Never use**, **Clear** empties the selection.
   A selected tile carries an amber check in its top-left corner. Leaving the mode keeps the
   selection; it lasts until you clear it or close the app, and a piece that leaves the inventory
   leaves it too.
 - **Click any piece** → the left panel shows the full detail: main stat(s), substats with their
   tick counts (or gems for Talisman/EE), reforge / breakthrough / Singularity state, a
-  **quality score**, and any item / set passives.
+  **quality score**, and any item / set passives. **Never use** under the card (or a right-click
+  on the tile) keeps the piece out of every solve, marked ⊘ on its tile; **Never used — click to
+  allow** brings it back.
 
 > Sorts and filters reset to their defaults each time you relaunch the app — so you always
-> start from a clean view. Filter presets are kept.
+> start from a clean view. Filter sets are kept.
 
 ---
 
@@ -104,7 +106,7 @@ way the game does (validated to match the in-game character sheet).
   Inventory.
 - **Optimize →** — jumps straight to the **Builder** with that hero pre-selected.
 - **Roster filters** — search by name, filter by element / class, sort by **CP** or by
-  **priority rank**. (A lock-state pill also appears if you enable the stat-lock tooling in
+  **Rank**. (A lock-state pill also appears if you enable the stat-lock tooling in
   **Settings → Debug**.)
 - **Notes** — jot a per-hero note (kept across relaunches).
 
@@ -167,7 +169,7 @@ ascended and fully reforged; hover for the cap at the pieces' current investment
 - **Optimize →** — on an associated hero's line: opens the Builder on that hero, like on the
   Builds tab.
 - **Rank and lock** — each preset has a priority **rank**, like the heroes on the Builds tab
-  (1 = most important; type a position, or drag the ⠿ handle with **Sort: Priority**; empty =
+  (1 = most important; type a position, or drag the ⠿ handle with **Sort: Rank**; empty =
   unranked = lowest; new presets get one in the in-game order). **Optimize preset →** never takes
   a piece from a preset ranked above or equal to it (unranked counts as lowest). The 🔒 **Lock**
   button keeps a preset's pieces out of every solve — any hero, any preset — except **Optimize
@@ -236,21 +238,21 @@ results, the bottom band shows the selected build's pieces.
   +10R6: +10 with ≥ 6 reforges done · +10R9: +10 with ≥ 9 reforges · +15R9: +15 with ≥ 9
   reforges (the talisman, which stops at +10, only needs +10; a piece that can't ascend only
   needs +10 and its own reforges — a 5★ at +10 with 5 reforges counts as maxed). Use it to answer "what's my best build with zero further investment?".
-- **Transistone potential** — on a 6★ Legendary with no stage-4 substat, a Transistone can
-  reroll one line up to stage 4 (a 5 % draw per pass, reforges kept); a piece already holding a
-  stage-4 line can't get a second one but can still raise a line to stage 3 (a 3/3/3/3 can become
+- **Transistone potential** — on a 6★ Legendary with no tier-4 substat, a Transistone can
+  reroll one line up to tier 4 (a 5 % draw per pass, reforges kept); a piece already holding a
+  tier-4 line can't get a second one but can still raise a line to tier 3 (a 3/3/3/3 can become
   4/3/3/3, a 4/4/3/2 can become 4/4/3/3). This toggle previews the best case: the hero's
   highest-priority line (else the largest roll) raised that far, marked
   `T+n` on the result cards. Works with or without a reforge mode; ignored under **Maxed only**.
 - **Equipped items** — a three-way control for which gear worn by *other* heroes the solver
   may pull in: **None** (only the hero's own gear + free gear), **≤ Lower** (default — also
-  gear on heroes ranked strictly lower in the Builds priority ranking; with no ranks set this
+  gear on heroes ranked strictly lower in the Builds ranking; with no ranks set this
   degrades to own + free gear), or **All** (any equipped gear). Pieces **reserved by a
   Worklist entry** count as worn by the claiming hero, so solving your next hero respects
   what earlier queued builds already grabbed (under **All**, reservations are ignored like
   equipment is).
 - **Keep current** — lock the slots the hero already has equipped.
-- **Exclude equipped** — drop gear worn by specific heroes you pick.
+- **Don't take from…** — drop gear worn by specific heroes you pick.
 
 ### 4. Read the results
 
@@ -271,13 +273,14 @@ results, the bottom band shows the selected build's pieces.
   gems as icons, one-line quality and effects (the Singularity +15 bonus as grade + short label + value,
   e.g. « S+ DS DMG+ +12% » for DMG within Dimensional Singularity or « vs Fire DMG- » for DMG taken from
   Fire targets; details on hover), the talisman's passive moved to the hover text of its name, the EE
-  and the talisman sharing one card (seven cards, four then three), and a small exclude icon instead of
-  the button.
-- **Equip build** — above the gear band, applies the selected build's pieces to the hero. A
-  confirmation popup spells out how many pieces move (and how many would be taken off other
-  heroes); on confirm it rewrites your captured snapshot and re-imports. Refused while the game
-  runs with the capture plugin loaded (it edits the local snapshot, never the game itself).
-- **+ Worklist** — next to Equip build; queues the selected build's gear changes (and the gems
+  and the talisman sharing one card (seven cards, four then three), and a small **Never use** icon instead
+  of the button. A slot the build leaves empty says so on its card (« No weapon in this build »).
+- **Apply to snapshot** — above the gear band, applies the selected build's pieces to the hero in
+  your captured snapshot. A confirmation popup spells out how many pieces move (and how many would
+  be taken off other heroes); on confirm it rewrites the snapshot and re-imports. Only the local
+  capture changes, never the game itself: equip the pieces in-game yourself. Greyed out while the
+  game runs with the capture plugin loaded (hover it for the reason).
+- **+ Worklist** — next to Apply to snapshot; queues the selected build's gear changes (and the gems
   to socket on its Talisman / EE) onto the **Worklist** tab instead of applying them right away.
   One entry per hero: if the hero is already queued, the button reads **Replace in worklist**
   and the new build replaces the old one.
@@ -290,15 +293,15 @@ results, the bottom band shows the selected build's pieces.
 In the right sidebar (**Library**):
 
 - **Save / Remove build** — bookmark the selected build for this hero. Saving a build also
-  saves the filters that produced it as a **filter preset** under the same name — one action,
+  saves the filters that produced it as a **filter set** under the same name — one action,
   no separate "save preset" step.
 - **Save as local preset…** — type a name (12 characters max) and **Save**: the selected build's
   7 pieces (the EE left out) become a **local preset** on the Presets tab, with this hero as its
   reference. Nothing is sent to the game.
-- **Filter presets** — reload (or remove) a saved set of filters per hero, independently of
+- **Filter sets** — reload (or remove) a saved set of filters per hero, independently of
   the build it was saved with.
 - **Restore** — push a saved build back into the table + gear band.
-- **Get Preset** — import a recommended build from Outerpedia as a starting filter set. Its
+- **Load reco** — import a recommended build from Outerpedia as a starting filter set. Its
   advised talismans are only *preferred*: used if you own one (any star of the same family),
   otherwise any talisman is.
 
@@ -331,7 +334,7 @@ one the cards sit two per row.
 
 ---
 
-## Settings (gear icon)
+## Settings (the Settings button)
 
 A tabbed modal:
 
@@ -342,10 +345,10 @@ A tabbed modal:
 - **Solver** — worker count (Auto = use your CPU; or pin a number), how many results to return,
   results heatmap on/off, compact result cards (shorter gear cards under the Builder's results;
   Inventory and tooltips unchanged), and the Presets tab's loss warning (15 % by default).
-- **Data** — **Sync game data** (refresh the game tables after a patch), reset the onboarding
+- **Data** — **Sync game data** (download the latest game tables after a patch), reset the onboarding
   wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
   (game version of the tables, hash and date — so you can see which snapshot is loaded).
-- **Backup** — **Export / Import** your saved builds, filter presets (Builder and Inventory),
+- **Backup** — **Export / Import** your saved builds, filter sets (Builder and Inventory),
   the heroes of your in-game presets and your local presets (Presets tab) as a JSON file (move
   them to another PC; captured gear isn't included — re-capture it there).
 - **Debug** — developer toggles (safe to ignore).

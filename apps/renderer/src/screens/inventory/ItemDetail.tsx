@@ -43,7 +43,7 @@ export function ItemDetail({
           <button
             type="button"
             onClick={() => onToggleExclude(piece.id)}
-            title="Globally exclude this piece from every solve (e.g. trash rolls). Also via right-click on the tile."
+            title="Never use this piece in any solve (e.g. trash rolls). Also via right-click on the tile."
             className={cx(
               "flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors",
               excluded
@@ -51,7 +51,7 @@ export function ItemDetail({
                 : "border-white/10 bg-white/3 text-white/80 hover:bg-white/6",
             )}
           >
-            {excluded ? "⊘ Excluded from solver — include" : "Exclude from solver"}
+            {excluded ? "⊘ Never used — click to allow" : "Never use"}
           </button>
         </div>
       )}

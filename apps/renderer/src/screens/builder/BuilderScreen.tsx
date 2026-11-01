@@ -107,12 +107,15 @@ interface BuilderScreenProps {
    *  `presetNum` is the preset optimized: the solver's target preset until the
    *  user switches heroes. */
   initialPatch?: { patch: RecoFilterPatch; note: string; presetNum?: number } | null;
-  /** Called after "Equip build" rewrote the captured snapshot, so the parent
-   *  re-imports the inventory (App's `refreshInventory`). */
+  /** Called after "Apply to snapshot" rewrote the captured snapshot, so the
+   *  parent re-imports the inventory (App's `refreshInventory`). */
   onAfterEquip?: () => void;
+  /** Why "Apply to snapshot" can't run right now (the game is open,
+   *  `applyBlockedReason`), or null — greys the button out ahead of the click. */
+  applyBlockedReason?: string | null;
   /** Queue the selected build's per-slot diff onto the cross-hero worklist
    *  (App owns the list; it replaces the hero's entry if there is one).
-   *  Undefined disables the "Add to worklist" button. */
+   *  Undefined disables the "+ Worklist" button. */
   onAddToWorklist?: (entry: WorklistEntry) => void;
   /** Solver-pool override (Settings → Solver): null = auto. Drives the footer
    *  read-out and forces a worker-pool rebuild when it changes. */
@@ -145,7 +148,7 @@ function formatCombos(n: number): string {
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true, compactCards = false }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true, compactCards = false }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // The preset "Optimize preset →" aims at, tied to the hero it opened — set
   // with the patch below, dropped as soon as the user switches heroes.
@@ -279,7 +282,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     [selectedBuild, selectedUid, pieceByUid],
   );
 
-  // ── Equip build ──────────────────────────────────────────────────────────
+  // ── Apply to snapshot ────────────────────────────────────────────────────
   // Apply the selected build's pieces to the selected hero by rewriting the
   // captured snapshot (`equipPieces`), then let App re-import. We surface how
   // many pieces actually move: skip those already on this hero, and count the
@@ -356,7 +359,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     if (!selectedBuild || !selectedUid) return;
     const placeholder = `Build ${(savedBuildsMap[selectedUid]?.length ?? 0) + 1}`;
     setNamePrompt({
-      title: "Save build + filter preset",
+      title: "Save build + filter set",
       placeholder,
       onConfirm: (name) => {
         const finalName = name.trim() || placeholder;
@@ -426,7 +429,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const savedBuildsForHero = selectedUid ? savedBuildsMap[selectedUid] ?? [] : [];
   const presetsForHero = selectedUid ? filterPresetsMap[selectedUid] ?? [] : [];
 
-  // "Get preset" — fetch this hero's outerpedia build reco and overlay it on
+  // "Load reco" — fetch this hero's outerpedia build reco and overlay it on
   // the current filters (mergePreset). Multiple named builds → a small picker.
   const [recoBusy, setRecoBusy] = useState(false);
   const [recoStatus, setRecoStatus] = useState<{ tone: "ok" | "warn" | "error"; text: string } | null>(null);
@@ -688,7 +691,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   }, [inventory, heroClass]);
 
   if (!inventory) {
-    return <Empty title="No capture yet" subtitle="Arm capture and import your roster to use the Builder." />;
+    return <Empty title="No capture yet" subtitle="Install the capture plugin (Settings, top right) and play OUTERPLANE to the lobby: your roster imports by itself, then pick a hero here." />;
   }
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden p-2 pb-9">
@@ -802,6 +805,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
                 </button>
                 <EquipBuildButton
                   disabled={!selectedBuild || !selectedUid || !game || equipPlan.moving === 0}
+                  blockedReason={applyBlockedReason}
                   moving={equipPlan.moving}
                   steal={equipPlan.steal}
                   heroName={selected?.name ?? null}

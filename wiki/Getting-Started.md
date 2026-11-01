@@ -44,8 +44,8 @@ somewhere read-only, the Home update card says so and you download the new AppIm
 
 ## 2. First launch — the setup wizard
 
-On first launch the app opens a **Setup wizard** (you can re-open it anytime from the gear icon
-in the top-right). Follow the checklist:
+On first launch the app opens a **Setup wizard** (you can re-open it anytime from the **Settings**
+button in the top-right). Follow the checklist:
 
 1. **OUTERPLANE installed via Steam** — found automatically.
 2. **Capture plugin installed** — click **Install plugin** (one time; close the game first if it

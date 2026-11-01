@@ -1,38 +1,41 @@
 /**
- * Builder equip button — applies the selected build, with its confirmation.
+ * Builder "Apply to snapshot" button — applies the selected build to the
+ * captured snapshot, with its confirmation.
  */
 import { useCallback, useEffect, useState } from "react";
 import { cx } from "../../design/cx.js";
 import { EQUIP_FAILURE, type EquipOutcome } from "../../equip.js";
 
-/** "Equip build" action — applies the selected build's pieces to the hero
- *  (rewrites the captured snapshot via `equipPieces`). The trigger opens a
- *  confirmation popup (the act mutates the captured account + may take pieces
- *  off other heroes), which owns the busy/failed state. `onEquip` resolves to
- *  why it failed (unreadable snapshot, 409 while the game is open, write error)
- *  → shown inline in the popup so the user can act and retry. Disabled when
- *  nothing moves. */
-export function EquipBuildButton({ disabled, moving, steal, heroName, onEquip }: {
-  disabled: boolean; moving: number; steal: number; heroName: string | null; onEquip: () => Promise<EquipOutcome>;
+/** "Apply to snapshot" action — applies the selected build's pieces to the
+ *  hero in the captured snapshot (`equipPieces`), never in the game. The
+ *  trigger opens a confirmation popup (the act mutates the captured account +
+ *  may take pieces off other heroes), which owns the busy/failed state.
+ *  `onEquip` resolves to why it failed (unreadable snapshot, 409 while the game
+ *  is open, write error) → shown inline in the popup so the user can act and
+ *  retry. Disabled when nothing moves, and greyed out ahead of the click with
+ *  `blockedReason` as its title while the game is open (`applyBlockedReason`). */
+export function EquipBuildButton({ disabled, blockedReason = null, moving, steal, heroName, onEquip }: {
+  disabled: boolean; blockedReason?: string | null; moving: number; steal: number; heroName: string | null; onEquip: () => Promise<EquipOutcome>;
 }) {
   const [open, setOpen] = useState(false);
   // Stable — the popup's Escape listener is keyed on `onClose`.
   const close = useCallback(() => setOpen(false), []);
+  const off = disabled || blockedReason != null;
   return (
     <>
       <button
         type="button"
-        disabled={disabled}
+        disabled={off}
         onClick={() => setOpen(true)}
-        title="Apply this build to the captured account"
+        title={blockedReason ?? "Apply this build to the captured snapshot — the game itself is never touched"}
         className={cx(
           "rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-          disabled
+          off
             ? "cursor-not-allowed border-white/10 bg-white/4 text-zinc-600"
             : "border-cyan-400/35 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20",
         )}
       >
-        Equip build{heroName ? ` → ${heroName}` : ""}
+        Apply to snapshot{heroName ? ` → ${heroName}` : ""}
       </button>
       {open && (
         <EquipConfirm moving={moving} steal={steal} heroName={heroName} onEquip={onEquip} onClose={close} />
@@ -41,7 +44,7 @@ export function EquipBuildButton({ disabled, moving, steal, heroName, onEquip }:
   );
 }
 
-/** Confirmation popup for "Equip build". Spells out how many pieces move and how
+/** Confirmation popup for "Apply to snapshot". Spells out how many pieces move and how
  *  many are taken off other heroes, then commits on confirm. Stays open on
  *  failure (e.g. game open) with an inline error + retry. */
 function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
@@ -64,12 +67,15 @@ function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => { if (!busy) onClose(); }}>
       <div className="w-full max-w-sm rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)]" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1.5 flex items-center justify-between">
-          <h3 className="font-display text-[13px] font-semibold text-white">Equip this build?</h3>
+          <h3 className="font-display text-[13px] font-semibold text-white">Apply this build to the snapshot?</h3>
           <button type="button" onClick={onClose} disabled={busy} className="text-white/65 hover:text-white disabled:opacity-40" aria-label="Close">✕</button>
         </div>
         <p className="text-[11.5px] leading-snug text-white/80">
           Moves <span className="font-semibold text-white">{moving}</span> piece{moving > 1 ? "s" : ""} onto{" "}
-          <span className="font-semibold text-white">{heroName ?? "this hero"}</span> and rewrites your captured account.
+          <span className="font-semibold text-white">{heroName ?? "this hero"}</span> in your captured snapshot.
+        </p>
+        <p className="mt-1.5 text-[11px] leading-snug text-white/65">
+          Only the local capture is rewritten, never the game: equip the pieces in-game yourself.
         </p>
         {steal > 0 && (
           <p className="mt-1.5 text-[11px] leading-snug text-amber-300/90">
@@ -88,7 +94,7 @@ function EquipConfirm({ moving, steal, heroName, onEquip, onClose }: {
           </button>
           <button type="button" onClick={() => void confirm()} disabled={busy}
             className="rounded-md border border-cyan-400/40 bg-cyan-500/15 px-3 py-1.5 text-[11.5px] font-semibold text-cyan-200 hover:bg-cyan-500/25 disabled:opacity-50">
-            {busy ? "Equipping…" : failed ? "Retry" : "Equip"}
+            {busy ? "Applying…" : failed ? "Retry" : "Apply"}
           </button>
         </div>
       </div>

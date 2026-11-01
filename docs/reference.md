@@ -102,7 +102,7 @@ renderer par `loadDataVersion()` ([data.ts](../apps/renderer/src/data.ts)) et af
 lecture seule dans Settings → Data, précédé de `resVersion` (« game 1.11.408 · … », la version
 des tables chargées ; absent d'un cache ancien). Le `hash` ne couvre pas `resVersion` : à
 `hash` égal, la sync réécrit le seul `version.json` quand son corps diffère. Au changement de
-`hash`, `reconcileDataHash` (`lib/storage/dataHash.ts`) élague des presets et des filtres par héros les sets et
+`hash`, `reconcileDataHash` (`lib/storage/dataHash.ts`) élague des filter sets et des filtres par héros les sets et
 effets que la donnée ne connaît plus, et les clés de main (acceptées `mainPicks` ou exclues `mainExcludes`) hors du
 vocabulaire `StatType` du moteur (cf. [data-schema.md](data-schema.md#cycle-de-re-capture-après-patch-jeu)).
 
@@ -233,7 +233,7 @@ Persistance : le **renderer** applique le transform (il a core + la game data ch
 le snapshot complet à `POST /api/captured/user-item` (writer bête : valide `{ ItemList[] }` +
 `writeFileSync` du `user_item.json` capturé, refus 409 si le plugin Steam est actif dans le jeu : l'app
 suit alors seule les déplacements faits en jeu, cf. §1.1). Client :
-[apps/renderer/src/equip.ts](../apps/renderer/src/equip.ts) (`equipPieces` pour l'« Equip build » du
+[apps/renderer/src/equip.ts](../apps/renderer/src/equip.ts) (`equipPieces` pour l'« Apply to snapshot » du
 Builder et l'Apply locally de la Worklist, `equipAssignments` pour son Apply all).
 
 ---

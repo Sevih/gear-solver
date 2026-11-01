@@ -63,7 +63,7 @@ export interface QualityScore {
 
 /** Tooltip of the "→ N reachable" suffix, shared by the detail panels. */
 export const QUALITY_REACHABLE_HELP =
-  "With a Transistone: a 6★ Legendary can reroll one line up to stage 4 (a 5 % draw per pass, one such line per piece); a piece that already has a stage-4 line can still raise one line to stage 3 (4/4/3/2 → 4/4/3/3). Reachable = the current score with the best line raised.";
+  "With a Transistone: a 6★ Legendary can reroll one line up to tier 4 (a 5 % draw per pass, one such line per piece); a piece that already has a tier-4 line can still raise one line to tier 3 (4/4/3/2 → 4/4/3/3). Reachable = the current score with the best line raised.";
 
 /** The one quality rule — sum of every substat tick vs the cap for the piece's
  *  CURRENT investment (base 14 + 1 per spent reforge proc). Null for slots

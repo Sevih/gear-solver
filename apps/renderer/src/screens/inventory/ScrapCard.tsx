@@ -92,7 +92,7 @@ export function ScrapCard({
         </CardButton>
         <CardButton onClick={onSelectShown} title="Add every piece of the current view to the selection">Select all shown</CardButton>
         {onSelectExcluded && (
-          <CardButton onClick={onSelectExcluded} title="Add every piece excluded from the solver to the selection">Select excluded</CardButton>
+          <CardButton onClick={onSelectExcluded} title="Add every never-used piece to the selection">Select never used</CardButton>
         )}
         <CardButton onClick={onClear} disabled={selectedCount === 0} title="Empty the selection">Clear</CardButton>
         <span className="ml-auto text-[10.5px] text-white/70">{selectedCount} selected</span>

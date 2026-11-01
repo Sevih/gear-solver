@@ -24,7 +24,7 @@
  * filtered or not; a card toggled by hand since keeps its own state
  * (`cardOpen`).
  * Each card carries the preset's priority rank (positional field, ⠿ drag in
- * "Sort: Priority") and a lock, on the model of the hero ranks of Builds: App
+ * "Sort: Rank") and a lock, on the model of the hero ranks of Builds: App
  * owns both (`gs.presets.rank` / `gs.presets.locked`) and the solver reads them
  * through `presetHolds` — a locked preset's pieces never enter another solve,
  * and "Optimize preset →" never takes the pieces of a better-ranked preset. A
@@ -120,7 +120,7 @@ interface PresetsScreenProps {
 }
 
 /** Hover help of the rank field on a preset card. */
-const PRESET_RANK_TITLE = "Preset priority rank — 1 = highest (smaller number = more important). Type a position or drag the ⠿ handle (Sort: Priority) to reorder; empty = unranked = lowest. Optimize preset → never takes the pieces of a preset ranked above it.";
+const PRESET_RANK_TITLE = "Rank — 1 = highest (smaller number = more important). Type a position or drag the ⠿ handle (Sort: Rank) to reorder; empty = unranked = lowest. Optimize preset → never takes the pieces of a preset ranked above it.";
 
 /** Same rounding as the Builder's results table. */
 function fmtNum(v: number | null | undefined): string {
@@ -229,7 +229,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
   });
 
   if (!inventory || !ctx) {
-    return <Empty title="No capture yet" subtitle="Arm capture and import your account to see your equipment presets here." />;
+    return <Empty title="No capture yet" subtitle="Install the capture plugin (Settings, top right) and play OUTERPLANE to the lobby: your in-game presets import by themselves." />;
   }
   if (rows.length === 0 && locals.length === 0) {
     return <Empty title="No presets" subtitle="This capture holds no equipment preset. Save one in-game, then reload." />;
@@ -266,7 +266,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
         <div className="inline-flex items-center gap-1.5">
           <span className="font-mono uppercase tracking-wider text-zinc-400">Sort</span>
           <div role="radiogroup" aria-label="Sort presets" className="inline-flex h-7 items-center rounded-md border border-white/7 bg-black/30 p-0.5">
-            {([["game", "In-game", "The order of the in-game preset editor — favorites first"], ["class", "Class", "Grouped by class, in the in-game order within a class"], ["priority", "Priority", "By priority rank (1 first, unranked last) — drag the ⠿ handle to reorder"]] as const).map(([id, label, title]) => (
+            {([["game", "In-game", "The order of the in-game preset editor — favorites first"], ["class", "Class", "Grouped by class, in the in-game order within a class"], ["priority", "Rank", "By rank (1 first, unranked last) — drag the ⠿ handle to reorder"]] as const).map(([id, label, title]) => (
               <button
                 key={id}
                 type="button"
@@ -427,7 +427,7 @@ function PresetCard({
   rank: number | null;
   /** Move a preset (key = num as a string) to 1-based position (null clears). */
   onSetRank: (key: string, pos: number | null) => void;
-  /** Show the drag handle + accept drops (only in "Sort: Priority"). */
+  /** Show the drag handle + accept drops (only in "Sort: Rank"). */
   dragEnabled: boolean;
   onDragStartRank: (key: string) => void;
   onDropRank: (targetKey: string) => void;
@@ -466,7 +466,7 @@ function PresetCard({
         "relative flex flex-col gap-2.5 rounded-xl border bg-bg-elev-2 px-3 py-2.5",
         dragOver ? "border-cyan-400/60 ring-1 ring-cyan-400/40" : locked ? "border-amber-400/45 ring-1 ring-amber-400/20" : "border-white/7",
       )}
-      // Drop target for rank drag-to-reorder (only in "Sort: Priority").
+      // Drop target for rank drag-to-reorder (only in "Sort: Rank").
       onDragOver={dragEnabled ? (e) => { e.preventDefault(); setDragOver(true); } : undefined}
       onDragLeave={dragEnabled ? () => setDragOver(false) : undefined}
       onDrop={dragEnabled ? (e) => { e.preventDefault(); setDragOver(false); onDropRank(key); } : undefined}

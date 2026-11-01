@@ -61,7 +61,7 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect,
       title={[
         piece.name,
         selected && "selected (Ctrl+click to unselect)",
-        excluded && "excluded from the solver (right-click to include)",
+        excluded && "never used (right-click to allow)",
       ].filter(Boolean).join(" — ")}
       className={cx(
         "group relative grid place-items-center rounded-lg border-2 p-0 transition-all",
@@ -83,7 +83,7 @@ const GearTile = memo(function GearTile({ piece, equippedChar, active, onSelect,
       <EquipmentIcon piece={piece.iconPiece} size={92} className={excluded ? "opacity-40" : undefined} />
       {excluded && (
         <span
-          title="Excluded from the solver (right-click to include)"
+          title="Never used (right-click to allow)"
           className="pointer-events-none absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-rose-500/85 text-[10px] font-bold leading-none text-white"
         >
           ⊘

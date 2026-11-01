@@ -40,7 +40,7 @@ export function DataPane({
       </div>
       <DataAction
         label="Sync game data"
-        description="Refresh the raw tables from the local outerpedia checkout and rebuild the derived data (run after a game patch). Auto-runs at launch when the source is newer."
+        description="Fetch the latest game tables published by outerpedia (run after a game patch; a local outerpedia checkout is used when there is one). Auto-runs at launch when they are newer."
         actionLabel={syncing ? "Syncing…" : "Sync"}
         disabled={syncing}
         onClick={onSync}

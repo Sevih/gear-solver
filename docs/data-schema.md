@@ -231,7 +231,7 @@ dans `EquipmentPassive` (`core/gamedata.ts`) : absent, la pièce garde ses mains
 
 Au chargement de la donnée (`refreshInventory`, `App.tsx`), le `hash` de `version.json` est comparé
 au dernier vu (`gs.data.hash`, localStorage) : au changement, `reconcileDataHash`
-(`apps/renderer/src/lib/storage/dataHash.ts`) retire des presets de filtres et des filtres par héros les
+(`apps/renderer/src/lib/storage/dataHash.ts`) retire des filter sets et des filtres par héros les
 ids de set et les clés d'effet que la nouvelle donnée ne connaît plus, sans rien effacer d'autre ; les
 builds sauvés ne sont pas touchés.
 

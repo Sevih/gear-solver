@@ -28,7 +28,7 @@ Stay focused: every feature should serve that sentence. Defer anything that does
 - **M6.5 — Solver polish.** Cancel mid-solve (`MessageChannel` yield), Upg column
   (calculée, triable, filtrable), Exclude-equipped multi-select, reforge simulation
   (`simulateReforges`, projetée jusqu'au bottom band), allocation de gemmes recommandée.
-- **M7 (partiel) — Persistence.** Save/Remove build par héros + Filter presets par héros,
+- **M7 (partiel) — Persistence.** Save/Remove build par héros + Filter sets par héros,
   en **localStorage** (`lib/storage/`). Bouton Optimize → (Builds → Builder).
 - **Desktop Electron.** `apps/desktop` (main + serveur local + capture Steam) —
   fonctionnel en dev.
@@ -58,7 +58,7 @@ Stay focused: every feature should serve that sentence. Defer anything that does
   des caches localStorage au changement de hash (élaguer les SavedBuild aux `pieceUids` disparus).
 - **Édition d'équipement** — méthodes core (`equipItem`/`unequipItem`) + writer
   `POST /api/captured/user-item` + client renderer ✅ **livrés** ; déclencheur UI ✅ **livré**
-  (bouton **« Equip build »** du Builder : popup de confirmation → réécriture atomique
+  (bouton **« Apply to snapshot »** du Builder : popup de confirmation → réécriture atomique
   `equipPieces` → re-import ; + flows Apply locally / Apply all de l'onglet Worklist).
   Reste (optionnel) : un unequip par slot côté Builds.
 - **Production build path** pour `data` (bake derived + snapshot dans le bundle prod).

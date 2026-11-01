@@ -167,7 +167,7 @@ Phantasm Necrosis (`ST_SPEED OAT_RATE −300` on all five tiers) and Briareos's 
 
 When the data loads (`refreshInventory`, `App.tsx`), the `version.json` `hash` is compared to the
 last one seen (`gs.data.hash`, localStorage): on a change, `reconcileDataHash`
-(`apps/renderer/src/lib/storage/dataHash.ts`) removes from the filter presets and the per-hero filters
+(`apps/renderer/src/lib/storage/dataHash.ts`) removes from the filter sets and the per-hero filters
 the set ids and effect keys the new data no longer knows, deleting nothing else; saved builds are
 left untouched.
 

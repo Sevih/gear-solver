@@ -16,7 +16,7 @@ import { displayNameOf, heroSearchHaystack } from "./heroName.js";
 /** UI metadata for the Options "Equipped items" scope (see `EquippedScope`). */
 const EQUIPPED_SCOPES: ReadonlyArray<{ value: EquippedScope; label: string; hint: string }> = [
   { value: "none",  label: "None",    hint: "Only the selected hero's own gear + free (unequipped) gear." },
-  { value: "lower", label: "≤ Lower", hint: "Also gear on heroes ranked strictly lower than this one in Builds (unranked = lowest). Never strips an equal/higher-priority hero." },
+  { value: "lower", label: "≤ Lower", hint: "Also gear on heroes ranked strictly lower than this one in Builds (unranked = lowest). Never strips an equal/higher-ranked hero." },
   { value: "all",   label: "All",     hint: "Any equipped gear, regardless of which hero wears it (legacy)." },
 ];
 
@@ -35,7 +35,7 @@ export function OptionsPanel({
 }) {
   const set = (key: Exclude<keyof SolverOptions, "reforgeMode" | "equippedScope">) => (v: boolean) => dispatch({ type: "setOption", key, value: v });
   return (
-    <Panel title="Options" hint="Pool toggles. Equipped items + Exclude equipped together drive what gear the solver may touch. (Reforged / Maxed-only live as quick toggles in the toolbar.)" width="w-52">
+    <Panel title="Options" hint="Pool toggles. Equipped items + Don't take from… together drive what gear the solver may touch. (The reforge mode, Maxed only and Transistone potential sit in the toolbar.)" width="w-52">
       <div className="space-y-0.5">
         <div className="flex items-center justify-between gap-2 py-0.5">
           <HoverHint className="text-[11px] text-white/80" name="Equipped items" text="Which gear equipped on OTHER heroes the solver may pull in (your own hero's gear is always in). None = own + free only · ≤ Lower = also heroes ranked below this one in Builds (never strips an equal/higher hero) · All = any equipped gear." />
@@ -100,7 +100,7 @@ function ToggleRow({ label, checked, onChange, hint }: { label: string; checked:
   );
 }
 
-/** Combobox-style multi-select for "Exclude equipped" — drops all gear
+/** Combobox-style multi-select for "Don't take from…" — drops all gear
  *  currently equipped on the listed heroes from the solver's pool. Closed
  *  state shows count + clear ✕; open state is a searchable list of heroes
  *  with checkboxes. Reuses the Hero picker haystack (display name +
@@ -137,7 +137,7 @@ function ExcludeHeroesPicker({
         title="Drop gear currently equipped on these heroes from the solver's candidate pool."
       >
         <span className="truncate">
-          {excluded.size === 0 ? "Exclude equipped" : `Excluded: ${excluded.size}`}
+          {excluded.size === 0 ? "Don't take from…" : `Don't take from: ${excluded.size}`}
         </span>
         <span className="text-white/55">▾</span>
       </button>
@@ -147,7 +147,7 @@ function ExcludeHeroesPicker({
           onClick={() => onClear()}
           className="px-1.5 py-1 text-white/65 hover:text-rose-300 focus:outline-none"
           title="Clear all"
-          aria-label="Clear all excluded heroes"
+          aria-label="Clear the heroes not to take from"
         >✕</button>
       )}
       {open && (

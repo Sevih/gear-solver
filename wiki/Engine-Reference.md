@@ -105,7 +105,7 @@ over the content of **every** derived file (name + body, fixed emit order), so i
 `resVersion` ("game 1.11.408 · …", the version of the loaded tables; absent from an old cache).
 The `hash` doesn't cover `resVersion`: at an unchanged `hash`, the sync rewrites version.json
 alone when its body differs. On a `hash`
-change, `reconcileDataHash` (`lib/storage/dataHash.ts`) prunes the filter presets and per-hero
+change, `reconcileDataHash` (`lib/storage/dataHash.ts`) prunes the filter sets and per-hero
 filters of the sets and effects the data no longer knows (cf. [Data Schema](Data-Schema#re-capture-cycle-after-a-game-patch)).
 
 
@@ -236,7 +236,7 @@ for the slot lookup), then POSTs the full rewritten snapshot to `POST /api/captu
 (a dumb writer: validates `{ ItemList[] }` + `writeFileSync`s the captured `user_item.json`, refuses
 with 409 while the Steam plugin is live in a running game: the app then follows in-game moves by
 itself, see §1.1). Client: `apps/renderer/src/equip.ts`
-(`equipPieces` for the Builder's "Equip build" and the Worklist's Apply locally, `equipAssignments`
+(`equipPieces` for the Builder's "Apply to snapshot" and the Worklist's Apply locally, `equipAssignments`
 for its Apply all).
 
 ---

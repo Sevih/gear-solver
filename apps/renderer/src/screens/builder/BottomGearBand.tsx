@@ -3,7 +3,7 @@
  */
 import { useMemo } from "react";
 import type { Character, GameData, GearPiece } from "@gear-solver/core";
-import { GAME_GEAR_GRID, toEngineSlot, type SlotId } from "../../design/tokens.js";
+import { GAME_GEAR_GRID, SLOT_BY, toEngineSlot, type SlotId } from "../../design/tokens.js";
 import { toUiPiece } from "../../design/adapter.js";
 import { ResultItemDetail, ResultPairDetail, type ResultPairCell } from "../../design/ResultGearDetail.js";
 import { projectPieceForReforge } from "../../lib/solver/engine.js";
@@ -107,9 +107,9 @@ export function BottomGearBand({
     const fromPresets = piece ? presetsOf?.(piece.uid) : undefined;
     return { piece: pieceForCard, equippedChar, fromPresets, excluded, addedTicks: entry?.addedTicks, transistoneTicks: entry?.transistoneTicks };
   };
-  const pairCell = (slot: SlotId, emptyLabel: string): ResultPairCell => {
+  const pairCell = (slot: SlotId): ResultPairCell => {
     const c = cardOf(slot);
-    return { ...c, piece: c.piece && game ? toUiPiece(c.piece, game) : null, onToggleExclude, emptyLabel };
+    return { ...c, piece: c.piece && game ? toUiPiece(c.piece, game) : null, onToggleExclude, emptyLabel: emptyLabelOf(slot, build) };
   };
 
   // All 8 pieces (EE and Talisman are full citizens of the solver scope: their
@@ -126,19 +126,29 @@ export function BottomGearBand({
       : "flex shrink-0 flex-wrap gap-2 min-[1616px]:grid min-[1616px]:grid-cols-[repeat(4,max-content)]"}>
       {compact
         ? COMPACT_GEAR_GRID.map((cell) => typeof cell === "string"
-          ? <GearCard key={cell} slot={cell} game={game} onToggleExclude={onToggleExclude} compact {...cardOf(cell)} />
-          : <ResultPairDetail key={cell.join("+")} top={pairCell(cell[0], "No EE")} bottom={pairCell(cell[1], "No talisman")} game={game} compact />)
-        : GAME_GEAR_GRID.map((slot) => <GearCard key={slot} slot={slot} game={game} onToggleExclude={onToggleExclude} {...cardOf(slot)} />)}
+          ? <GearCard key={cell} slot={cell} game={game} onToggleExclude={onToggleExclude} compact emptyLabel={emptyLabelOf(cell, build)} emptyHint={emptyHintOf(build)} {...cardOf(cell)} />
+          : <ResultPairDetail key={cell.join("+")} top={pairCell(cell[0])} bottom={pairCell(cell[1])} game={game} compact />)
+        : GAME_GEAR_GRID.map((slot) => <GearCard key={slot} slot={slot} game={game} onToggleExclude={onToggleExclude} emptyLabel={emptyLabelOf(slot, build)} emptyHint={emptyHintOf(build)} {...cardOf(slot)} />)}
     </div>
   );
 }
+
+/** An empty result card's own state: "No weapon in this build" (EE for the
+ *  exclusive), or "No weapon yet" before any build is selected — with
+ *  `emptyHintOf` saying how to get one. */
+function emptyLabelOf(slot: SlotId, build: SolveBuild | null): string {
+  const noun = slot === "exclusive" ? "EE" : (SLOT_BY[slot]?.label ?? slot).toLowerCase();
+  return build ? `No ${noun} in this build` : `No ${noun} yet`;
+}
+const emptyHintOf = (build: SolveBuild | null): string | undefined =>
+  build ? undefined : "Solve, then pick a build in the table.";
 
 /** A SOLVE-results gear card. Renders the FULL duplicated Inventory inspect
  *  panel (`ResultItemDetail`: same container, scroll wrapper, equipped-char
  *  portrait, exclude footer, empty state) so the results look pixel-identical to
  *  the Inventory tab's left card. The piece (already reforge-projected upstream
  *  in `BottomGearBand`) goes through the same `toUiPiece` adapter. */
-function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleExclude, addedTicks, transistoneTicks, compact }: {
+function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleExclude, addedTicks, transistoneTicks, compact, emptyLabel, emptyHint }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
@@ -156,6 +166,9 @@ function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleEx
   transistoneTicks?: number[];
   /** Compact card (Settings › Solver › Compact result cards). */
   compact?: boolean;
+  /** The card's own empty state when the build has no piece there. */
+  emptyLabel?: string;
+  emptyHint?: string;
 }) {
   // Adapt the (reforge-projected) engine piece through the same adapter the
   // Inventory tab uses, then render the duplicated inspect panel verbatim.
@@ -171,6 +184,8 @@ function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleEx
       addedTicks={addedTicks}
       transistoneTicks={transistoneTicks}
       compact={compact}
+      emptyLabel={emptyLabel}
+      emptyHint={emptyHint}
     />
   );
 }

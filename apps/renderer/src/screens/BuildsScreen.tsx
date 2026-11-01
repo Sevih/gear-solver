@@ -333,7 +333,7 @@ function FilterBar({ f, setF, debug, trailing }: { f: RosterFilters; setF: (next
             role="radio"
             aria-checked={!!f.byRank}
             onClick={() => { if (!f.byRank) setF({ ...f, byRank: true }); }}
-            title="Sort by priority rank (rank 1 first, unranked last, CP as tiebreaker) — set each hero's rank on its card"
+            title="Sort by rank (rank 1 first, unranked last, CP as tiebreaker) — set each hero's rank on its card"
             className={cx(
               "inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] transition-colors",
               f.byRank ? "bg-cyan-500/15 text-cyan-300" : "text-zinc-400 hover:text-zinc-200",
@@ -539,7 +539,7 @@ interface BuildCardProps {
 const NOTE_MAX = 200;
 
 /** Hover help of the rank field on a build card. */
-const HERO_RANK_TITLE = "Priority rank — 1 = highest (smaller number = more important). Type a position or drag the ⠿ handle to reorder; empty = unranked = lowest. Drives the Builder's '≤ lower priority' equipped-items scope.";
+const HERO_RANK_TITLE = "Rank — 1 = highest (smaller number = more important). Type a position or drag the ⠿ handle to reorder; empty = unranked = lowest. Drives the Builder's '≤ Lower' equipped-items scope.";
 
 /** Free-form per-hero note. Capped at NOTE_MAX chars — the textarea hard-stops
  *  via maxLength but we also show a small counter that goes amber past 90%.
@@ -1056,7 +1056,7 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
   }, [composedRoster, heroPriority, onHeroPriorityChange]);
 
   if (!inventory) {
-    return <Empty title="No capture yet" subtitle="Arm capture and import your roster to see equipped builds here." />;
+    return <Empty title="No capture yet" subtitle="Install the capture plugin (Settings, top right) and play OUTERPLANE to the lobby: your heroes and their gear import by themselves." />;
   }
 
   return (

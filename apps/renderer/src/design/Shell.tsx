@@ -221,9 +221,9 @@ export function GsHeader({ active, onTabChange, capture, steam = null, onSetup, 
         <SteamBadge status={steam} />
         <button
           onClick={onSetup}
-          title="Open the setup checklist (Steam, capture plugin)"
+          title="Open Settings (setup checklist, solver, data, backup, debug, logs)"
           className="grid h-7 w-7 place-items-center rounded-md border border-white/8 bg-white/3 text-white transition-colors hover:bg-white/6 active:scale-95"
-          aria-label="Setup"
+          aria-label="Settings"
         >
           {/* Sliders / settings icon — three horizontal lines with adjuster
               knobs. Reads as "configuration" rather than the previous gear

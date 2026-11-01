@@ -78,7 +78,7 @@ const FOOTER_NOTE: Record<SettingsTab, string> = {
   setup: "Setup checks re-run on each open.",
   solver: "Changes are saved and apply on the next solve.",
   data: "Snapshots are stored locally.",
-  backup: "JSON files include builds and presets only.",
+  backup: "JSON files hold saved builds, filter sets, preset heroes and local presets — never the captured gear.",
   debug: "Developer toggles — off for normal use.",
   logs: "Kept for this session only.",
 };
@@ -130,7 +130,7 @@ export function SettingsModal({
   }
   const setupReady = Boolean(steam?.ready);
 
-  // The header's only entry point is labeled "Setup", and the modal doubles as
+  // The header's only entry point is the "Settings" button, and the modal doubles as
   // the onboarding wizard — so every open lands on the Setup tab (the wizard),
   // not whatever tab was last left. The other panes stay one rail-click away.
   const [seenOpen, setSeenOpen] = useState(open);

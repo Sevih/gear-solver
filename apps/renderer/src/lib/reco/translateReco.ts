@@ -1,7 +1,7 @@
 /**
  * Reco → solver-filter translator. Turns one outerpedia recommendation build
  * (the structured shape served by `GET /api/reco/:id`) into a patch the
- * Builder reducer can overlay onto its current filter state ("Get preset").
+ * Builder reducer can overlay onto its current filter state ("Load reco").
  *
  * The API already emits engine-canonical identifiers (itemId = GearPiece.itemId,
  * setId = armorSetId, stat keys = engine keys), so there is NO name/heuristic

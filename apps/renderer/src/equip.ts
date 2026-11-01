@@ -8,11 +8,12 @@
  * (`<capture folder>/user_item.json`). The caller re-imports the inventory
  * afterwards (e.g. `refreshInventory` in App.tsx) to pick the edit up.
  *
- * Wired to the Builder via "Equip build" (applies a solved build's pieces to
+ * Wired to the Builder via "Apply to snapshot" (applies a solved build's pieces to
  * the selected hero in one atomic snapshot rewrite — see `equipPieces`) and to
  * the Worklist's Apply locally / Apply all (`equipPieces`, `equipAssignments`).
  */
 import { equipItem, type GameData, type RawUserItem } from "@gear-solver/core";
+import type { SteamStatus } from "./steam.js";
 
 /** Read the current captured snapshot (served live by the dev middleware /
  *  prod server). Null when no capture is present or the shape is unexpected. */
@@ -41,6 +42,15 @@ export const EQUIP_FAILURE: Record<Exclude<EquipOutcome, "ok">, string> = {
   failed: "Couldn't write the snapshot. Retry in a moment.",
 };
 
+/** Why the Builder's "Apply to snapshot" is greyed out before any click, or
+ *  null when it may run: the plugin is live in a running game — the same signal
+ *  the server refuses the write on (409, `steamPluginLive`), as polled by App's
+ *  Steam status. The 409 after a click stays as the safety net (the poll can
+ *  lag behind a game just launched). */
+export function applyBlockedReason(steam: Pick<SteamStatus, "live"> | null): string | null {
+  return steam?.live ? "The game is open: close it to apply a build to the snapshot (in-game moves already reach the app on their own)." : null;
+}
+
 /** Persist a rewritten snapshot. */
 async function writeUserItem(raw: RawUserItem): Promise<EquipOutcome> {
   try {
@@ -57,7 +67,7 @@ async function writeUserItem(raw: RawUserItem): Promise<EquipOutcome> {
 
 /** Equip several pieces onto `charUid` in ONE snapshot rewrite — fetch once,
  *  fold `equipItem` over each uid, write once (atomic; no per-piece round-trip).
- *  Used by the Builder's "Equip build" to apply a whole solved build. Pieces
+ *  Used by the Builder's "Apply to snapshot" to apply a whole solved build. Pieces
  *  currently on another hero are moved (stolen); same-slot duplicates within the
  *  list resolve in order. Empty/unknown uids are skipped (no-op clones).
  *  Returns "ok" once persisted (the caller should re-import the inventory),

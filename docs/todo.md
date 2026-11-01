@@ -45,7 +45,7 @@
       principe du module exclut ce qui demande de deviner l'intention).
 
 ### Persistence
-- [~] **Equip / Unequip** — Builder « Equip build » et Worklist livrés ; les déplacements faits en jeu suivis en direct
+- [~] **Equip / Unequip** — Builder « Apply to snapshot » et Worklist livrés ; les déplacements faits en jeu suivis en direct
       (journal `item/equip` du plugin 0.2.0, G37). **Reste** : valider G37 en jeu sur le fixe ; (optionnel) un
       déclencheur côté **Builds** (unequip / assignation par slot).
 

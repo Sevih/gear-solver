@@ -3,6 +3,7 @@ import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { autoImport, loadDataVersion, parseFiles, readManualFiles } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
 import { getSteamStatus, launchSteamGame, type SteamStatus } from "./steam.js";
+import { applyBlockedReason } from "./equip.js";
 import { getGameVersion } from "./game-version.js";
 import { waitForStartupSync } from "./lib/startupSync.js";
 import { describeDataSync, requestDataSync, type DataSyncResult } from "./lib/dataSync.js";
@@ -191,7 +192,7 @@ export function App() {
   // Filters the Presets tab's "Optimize preset →" sends along with the hero,
   // cleared with it.
   const [builderPatch, setBuilderPatch] = useState<{ patch: RecoFilterPatch; note: string; presetNum?: number } | null>(null);
-  // Cross-hero gear-change queue — built from the Builder ("Add to worklist"),
+  // Cross-hero gear-change queue — built from the Builder ("+ Worklist"),
   // worked through on the Worklist tab. Owned here so an add in the (kept-mounted)
   // Builder is live on the Worklist tab. Persisted to localStorage on each change.
   const [worklist, setWorklist] = useState<WorklistEntry[]>(() => loadWorklist());
@@ -508,7 +509,7 @@ export function App() {
           {builderMounted && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Equipped build")} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} />
               </ScreenErrorBoundary>
             </div>
           )}

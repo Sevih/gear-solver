@@ -236,7 +236,7 @@ Picker (combobox searchable) + portrait + 4 boutons d'action.
 
 **Mémoire de filtres par héros** (session-scoped) : changer de héros **snapshot** les filtres du héros
 sortant et **restaure** ceux de l'entrant (`heroFilters.ts`, `gs.solver.heroFilters` sessionStorage), au
-lieu de tout resetter — distinct des **Filter presets** nommés/durables. Les *résultats* restent vidés.
+lieu de tout resetter — distinct des **Filter sets** nommés/durables. Les *résultats* restent vidés.
 
 ### Stats
 Snapshot des `FinalStats` du build actuellement équipé sur le héros (col gauche)
@@ -332,7 +332,7 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   (ex. un seul `2pc`) laisse n'importe quelle pièce remplir les slots armor libres (comportement
   legacy). *false* : chaque pièce d'armor doit compléter un set (2pc/4pc) → le solver élague en
   plus les pièces set-less/non-formables du pool et rejette les builds à singleton au leaf.
-- **Exclude equipped** — **câblé** : `ExcludeHeroesPicker` (multi-select) écrit dans
+- **Don't take from…** — **câblé** : `ExcludeHeroesPicker` (multi-select) écrit dans
   `excludedHeroes` via `toggleHeroExcluded` / `clearExcludedHeroes`.
 
 ### Stat filters
@@ -383,12 +383,12 @@ bonus 2pc/4pc atteignable) ne s'affichent pas. Tooltip 3-sections : nom + (N own
 
 ### Weapons, accessories & talismans
 Trois groupes de chips effect-icon (Weapons / Accessories / Talismans), filtrés par class du héros (gated par `classLimit`), clés sur le `setId` de la pièce. Click cycle `off → required → excluded → off`. Tooltip : nom + (N owned) / desc T4 / state.
-Un talisman conseillé par **Get preset** (`Talisman` de `/api/reco`, `translateReco.ts`) arrive, avec toute sa
+Un talisman conseillé par **Load reco** (`Talisman` de `/api/reco`, `translateReco.ts`) arrive, avec toute sa
 famille (les talismans de même `name` dans `equipment.json` : le conseil désigne le 6★, les 4★/5★ ont leur propre
 `setId`, `talismanFamilyKeys`), en état **`preferred`** (contour pointillé, badge `~`) : si au moins une pièce du pool talisman — après tous les filtres
 d'`allow()` — porte l'un des `setId` préférés, le pool est restreint à celles-là ; sinon il reste ouvert, comme sans
 conseil (jamais 0 build à cause d'un talisman préféré, contrairement à `required`). En « keep current », le talisman
-porté reste verrouillé. Un clic le fait passer en `required`. Le statut de Get preset signale quand aucun membre
+porté reste verrouillé. Un clic le fait passer en `required`. Le statut de Load reco signale quand aucun membre
 des familles conseillées n'est possédé.
 
 ### RightSidebar — Library
@@ -396,13 +396,15 @@ Trois sections **câblées** (localStorage, par héros) :
 - **Save / Remove build** — bookmark le build sélectionné (`storage/savedBuilds.ts`).
   Un build sauvé porte aussi son contexte reforge pour reprojeter ses substats à la
   restauration.
-- **Filter presets** — sauve / charge / supprime un snapshot de filtres
+- **Filter sets** — sauve / charge / supprime un snapshot de filtres
   (`storage/filterPresets.ts`, `loadPreset`).
 - **Restore** — repush un build sauvé dans la table + bottom band.
 
 Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
-- **Equip build** — applique les pièces au héros en réécrivant le snapshot capturé
-  (`equipPieces`, popup de confirmation, jamais d'écriture vers le jeu).
+- **Apply to snapshot** — applique les pièces au héros en réécrivant le snapshot capturé
+  (`equipPieces`, popup de confirmation, jamais d'écriture vers le jeu) ; grisé d'avance, la raison en
+  `title`, tant que le plugin tourne dans le jeu (`applyBlockedReason`, `equip.ts`), le refus 409 restant
+  le filet.
 - **+ Worklist** — pousse le **diff par slot** (slots changés only) **et les gemmes à sertir** sur le
   Talisman / EE du build (`gemAllocation` vs `gemSlots` de la pièce du build, `lib/worklist/changes.ts`) sur
   l'onglet **Worklist** (`screens/WorklistScreen.tsx`, storage `lib/storage/worklist.ts`) : une file
@@ -590,11 +592,11 @@ carte de Builds.
 de la tenue, en `required` (le talisman élargi à sa famille par `talismanFamilyKeys`, chaque clé
 `required` — les mêmes effets, pas « preferred ») ; pièce absente de la tenue ou sans `setId` → slot
 ouvert, une note. Sous-stats : au plus 5 clés de priorité, poids = max(reco, tenue) — la reco
-(`fetchRecoForHero`, première build, `SubstatPrio` en 3/2/1 comme « Get preset »), la tenue par le nombre
+(`fetchRecoForHero`, première build, `SubstatPrio` en 3/2/1 comme « Load reco »), la tenue par le nombre
 de pièces (talisman et EE à part) qui portent la clé en sous-stat (4+ → 3, 3 → 2, 2 → 1) ; ordre poids,
 puis présence dans la reco, puis nombre de pièces ; les autres clés hors du patch. Mains : celles de la
-reco pour l'arme et l'accessoire. Sets : aucun plan (`setPlans: []` → un plan vide, sets ouverts ; « Get
-preset » reste là pour la reco complète). Sans reco (404, erreur, hors ligne) : la tenue seule. Le
+reco pour l'arme et l'accessoire. Sets : aucun plan (`setPlans: []` → un plan vide, sets ouverts ; « Load
+reco » reste là pour la reco complète). Sans reco (404, erreur, hors ligne) : la tenue seule. Le
 Builder reçoit le patch avec `initialHeroUid` (`initialPatch`) et le fusionne après avoir chargé les
 filtres du héros — jamais sur ceux du héros sortant ; la ligne de statut dit « Optimizing preset #<num>
 <name> — same weapon / accessory / talisman effects required, N priority substats from the outfit +

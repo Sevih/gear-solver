@@ -193,7 +193,7 @@ export function HomeScreen({
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <Num className="text-[28px] font-bold text-violet-300">{library.presets}</Num>
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">filter presets</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">filter sets</span>
                 </div>
               </div>
               <ActBtn tone="violet" className="mt-auto w-full text-center" onClick={onOpenBuilder}>Open Builder →</ActBtn>
@@ -413,7 +413,7 @@ export function HomeScreen({
 
               <div className="mt-auto flex gap-2">
                 <Stat label="Ascended" value={stats.ascended} gradient />
-                <Stat label="+15 maxed" value={stats.maxed} />
+                <Stat label="Singularity" value={stats.maxed} />
                 <Stat label="Locked" value={stats.locked} />
               </div>
             </Card>

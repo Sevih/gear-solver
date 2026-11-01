@@ -62,12 +62,12 @@ export function RightSidebar({
 }) {
   return (
     <aside className="flex w-full shrink-0 flex-col gap-2">
-      <Panel title="Library" hint="Get preset pulls the outerpedia build reco for this hero (mains / sets / effects / substat priority). Save build also saves its filter preset under the same name. Per-hero, persisted in localStorage." width="w-full">
+      <Panel title="Library" hint="Load reco pulls the outerpedia build reco for this hero (mains / sets / effects / substat priority). Save build also saves its filter set under the same name. Per-hero, persisted in localStorage." width="w-full">
         <div className="grid grid-cols-1 gap-1">
           <ActionButton tone="primary" disabled={!canGetPreset || recoBusy} onClick={onGetPreset}>
-            {recoBusy ? "Fetching…" : "Get preset"}
+            {recoBusy ? "Loading reco…" : "Load reco"}
           </ActionButton>
-          <ActionButton disabled={!canSave} onClick={onSaveBuild}>Save build + filter preset</ActionButton>
+          <ActionButton disabled={!canSave} onClick={onSaveBuild}>Save build + filter set</ActionButton>
           {onSaveLocalPreset && <SaveLocalPreset canSave={canSave} onSave={onSaveLocalPreset} />}
         </div>
         {recoStatus && (
@@ -103,9 +103,9 @@ export function RightSidebar({
         )}
       </Panel>
 
-      <Panel title="Filter presets" hint="Load a saved filter set into the panels. Useful to switch between e.g. 'CHC build' and 'tank build' without re-clicking every chip." width="w-full">
+      <Panel title="Filter sets" hint="Load a saved filter set into the panels. Useful to switch between e.g. 'CHC build' and 'tank build' without re-clicking every chip." width="w-full">
         {presets.length === 0 ? (
-          <div className="text-[10.5px] italic text-white/65">No presets for this hero.</div>
+          <div className="text-[10.5px] italic text-white/65">No filter sets for this hero.</div>
         ) : (
           <ul className="flex flex-col gap-0.5">
             {presets.map((p) => (

@@ -33,10 +33,10 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
   search, mid-tree set feasibility checks, per-slot top-% prune, greedy gem sub-solver,
   fixed-size top-K min-heap. Two modes: SOLVE (priority-weighted Score) and SOLVE CP
   (in-game Combat Power). → [Solver](Solver)
-- **Library** of saved builds + filter presets per hero (localStorage).
+- **Library** of saved builds + filter sets per hero (localStorage).
 - **Edits** equip assignments locally by rewriting the captured snapshot — `equipItem`/
   `unequipItem` (core) + a `POST /api/captured/user-item` write-back, triggered from the
-  Builder's "Equip build → hero" button and the Worklist's apply actions. Changes only touch
+  Builder's "Apply to snapshot → hero" button and the Worklist's apply actions. Changes only touch
   the local captured snapshot — nothing is ever pushed to the game. →
   [Engine Reference](Engine-Reference)
 

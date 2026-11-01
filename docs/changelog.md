@@ -8,6 +8,65 @@
 
 ## Items de backlog clôturés (index)
 
+### 🏷️ Vocabulaire unifié et textes corrigés, sans rien déplacer (U1, G89) (2026-11-01)
+- ✅ **Pourquoi.** Premier lot de la refonte décidée le 01/11 (U1 de `docs/ux-audit-2026-11-01.md`) : un mot par
+  notion (glossaire 5.c) et les textes faux relevés par l'audit, sans déplacer aucun écran, contrôle ni réglage ; les
+  onglets gardent leurs noms (renommage = U11).
+- ✅ **Glossaire appliqué** (libellés, infobulles, `aria-label`, titres, états vides de `apps/renderer/src`) :
+  « Exclude from solver » → **Never use** / **Never used — click to allow** (`screens/inventory/ItemDetail.tsx`, cartes
+  de résultat et compactes de `design/ResultGearDetail.tsx`, « Never use EE » / « Never use talisman » sur la carte
+  double, infobulle et badge ⊘ de `VirtualGearGrid.tsx`, « Select never used » de `ScrapCard.tsx`) ; « Exclude
+  equipped gear » → **Hide equipped** (`FilterModal.tsx`) ; « Exclude equipped » des Options → **Don't take from…**
+  (« Don't take from: N », `OptionsPanel.tsx`) ; « Get preset » / « Fetching… » → **Load reco** / « Loading reco… » et
+  l'aide de la Library (`RightSidebar.tsx`, aide des talismans de `WeaponsAccessoriesPanel.tsx`, note de
+  `lib/presets/optimize.ts`) ; « filter preset(s) » et l'en-tête « Presets » du modal de filtre → **Filter set(s)**
+  (`FilterModal.tsx`, panneau et bouton « Save build + filter set » du Builder, compteur de Home, description
+  d'Export) ; « Priority rank » / « Preset priority rank » / tri « Priority » → **Rank** (`BuildsScreen.tsx`,
+  `PresetsScreen.tsx` ; l'identifiant interne du tri, `"priority"`, ne change pas) ; « +15 maxed » → **Singularity**
+  (Home) ; « stage » / « level » du palier de base → **tier** (infobulle Transistone de la barre d'outils,
+  `QUALITY_REACHABLE_HELP`, « base tier » du marqueur T+n). Les « LV n » des lignes de sous-stat restent : ils
+  comptent tous les ticks (base + reforges), pas le palier de base.
+- ✅ **Cartes de résultat vides.** Plus de « No item selected / Click a tile in the grid… » recopié de l'Inventory :
+  chaque carte vide dit son slot, « No weapon in this build » (« No EE », « No talisman » dans la carte double), ou
+  « No weapon yet » + « Solve, then pick a build in the table. » tant qu'aucun build n'est choisi
+  (`BottomGearBand.tsx`, props `emptyLabel` / `emptyHint` de `ResultItemDetail`). L'Inventory garde son invite.
+- ✅ **Equip build → Apply to snapshot (D8).** Bouton « Apply to snapshot → ‹héros› », dialogue « Apply this build to
+  the snapshot? » qui dit en une phrase que seule la capture locale est réécrite, jamais le jeu, bouton « Apply » /
+  « Applying… », relecture « Applied to snapshot » (`EquipBuildButton.tsx`, `App.tsx`). **Grisé d'avance** quand le
+  jeu tourne : `applyBlockedReason(steam)` (`equip.ts`, pur) lit `steam.live`, le signal même du refus 409 du serveur
+  (`steamPluginLive`, `api-handler.ts`), passé par App au Builder (`applyBlockedReason`) ; la raison est le `title`
+  du bouton. Le refus après clic reste comme filet (le statut Steam est sondé, il peut retarder).
+- ✅ **Textes faux ou périmés.** Les trois écrans vides « Arm capture and import… » (Builds, Presets, Builder) disent
+  la phrase vraie : installer le plugin (Settings, en haut à droite), jouer jusqu'au lobby, l'import se fait seul ;
+  l'état vide de la Worklist cite « + Worklist » (et celui de Presets) ; l'aide d'Options cite le mode de reforge,
+  Maxed only et Transistone potential au lieu des « Reforged / Maxed-only » disparus ; le pied du Builder renvoie à
+  « Settings › Solver › Worker threads » et « Settings › Debug › Solver fan-out logging » au lieu des clés brutes ;
+  le bouton de l'en-tête s'appelle **Settings** (`aria-label`, infobulle qui liste les six panneaux, `Shell.tsx` ;
+  l'invite vide de l'Inventory suit) — le panneau Setup garde son nom ; la note de pied Backup dit « saved builds,
+  filter sets, preset heroes and local presets — never the captured gear » ; Sync game data décrit le téléchargement
+  des tables publiées par outerpedia (le checkout local n'étant que le cas de développement).
+- ✅ **Docs.** `wiki/Using-the-App.md` (chaque libellé renommé, Never use et le clic droit enfin documentés,
+  « Settings » au lieu de l'icône d'engrenage, tier, Apply to snapshot grisé), `wiki/Getting-Started.md`,
+  `wiki/FAQ.md`, `wiki/Home.md`, `README.md`, `docs/solver.md` et `wiki/Solver.md`, `docs/reference.md` et
+  `wiki/Engine-Reference.md`, `docs/roadmap.md` et `wiki/Roadmap.md`, `docs/data-schema.md` et `wiki/Data-Schema.md`.
+- ✅ **Tests.** `apps/renderer/test/compactCard.test.ts` attend les nouveaux libellés (« Never use », « Never used —
+  click to allow », « Never use EE » / « Never use talisman », « No piece in this build ») et un nouveau cas vérifie
+  l'état vide par slot, avec et sans build, compact ou non ; nouveau `apps/renderer/test/applyToSnapshot.test.ts` :
+  le helper pur `applyBlockedReason` (bloqué si `live`, libre si fermé ou avant le premier sondage) et le rendu
+  statique du bouton (libellé, `disabled` et raison en `title` quand le jeu tourne).
+- ✅ **Vérification.** `grep -rn "Exclude from solver\|Exclude equipped\|Get preset\|filter preset\|Priority rank\|Arm
+  capture\|Add to worklist\|Equip build\|override via gs\." apps/renderer/src wiki` ne renvoie plus que 12 lignes de
+  commentaire de code, qui parlent du type `FilterPreset` et de ses clés de stockage (aucune clé `gs.*` renommée) ;
+  la même recherche élargie (« Excluded from (the )?solver », « Get [Pp]reset », « [Ff]ilter preset », « Sort:
+  Priority », « Equip this build », « Equipped build », « Enable gs\. », « +15 maxed », « gear icon », « Select
+  excluded »), lignes de commentaire exclues, est **vide**. `npm run typecheck` vert (dernière ligne `> tsc
+  --noEmit`) ; `npm test` : `Tests  169 passed (169)` (core), `Tests  238 passed (238)` (desktop), `Tests  925
+  passed (925)` (renderer) ; `npm run lint` : `✖ 8 problems (0 errors, 8 warnings)`, comme avant.
+- ⏳ Sevih : lancer l'app pour voir les libellés en place, et le grisé de « Apply to snapshot » jeu ouvert. Laissé
+  hors du lot, à trancher : « Apply locally » / « Apply all » de la Worklist (le glossaire bannit « Apply locally »
+  mais U1 ne les nommait pas, et ils restent actifs jeu ouvert) ; le statut d'Import de Backup (« Imported N builds and
+  M presets », un texte qui cite un résultat) ; « No item selected » de l'Inventory, gardé comme demandé.
+
 ### 🧭 Audit UX : répartition des écrans, parcours et savoir dupliqué, rapport sans code (G88) (2026-11-01)
 - ✅ **Pourquoi.** Demande de Sevih du 01/11 : « objectivement c'est le bazar, on ne sait pas par où prendre le truc,
   même moi je galère à l'utiliser efficacement », et « il y a probablement pas mal de connaissance dupliquée ». Avant

@@ -90,7 +90,7 @@ export function changeKey(c: WorklistChange): string {
 
 export type WorklistMode = SolveMode | "preset";
 
-/** A queued build's diff — one per hero: a new "Add to worklist" for the same
+/** A queued build's diff — one per hero: a new "+ Worklist" for the same
  *  hero replaces it (`upsertWorklistEntry`). */
 export interface WorklistEntry {
   id: string;

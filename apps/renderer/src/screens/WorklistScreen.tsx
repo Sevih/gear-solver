@@ -107,8 +107,9 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
         <h2 className="font-display text-[15px] font-semibold text-white/85">Worklist is empty</h2>
         <p className="max-w-md text-[12px] leading-relaxed text-white/55">
           Optimize a hero in the <span className="text-cyan-200">Builder</span>, pick a build, then
-          press <span className="text-cyan-200">Add to worklist</span>. Queued gear changes land
-          here as a checklist you can work through in-game.
+          press <span className="text-cyan-200">+ Worklist</span> (also on each hero line of the
+          <span className="text-cyan-200"> Presets</span> tab). Queued gear changes land here as a
+          checklist you can work through in-game.
         </p>
       </div>
     );

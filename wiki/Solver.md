@@ -321,7 +321,7 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   requirement (e.g. a single `2pc`) lets any gear fill the free armor slots (legacy
   behavior). *false*: every armor piece must complete a 2pc/4pc → the solver also prunes
   set-less / non-formable pieces from the pool and rejects singleton builds at the leaf.
-- **Exclude equipped** — **wired**: `ExcludeHeroesPicker` (multi-select) writes into
+- **Don't take from…** — **wired**: `ExcludeHeroesPicker` (multi-select) writes into
   `excludedHeroes` via `toggleHeroExcluded` / `clearExcludedHeroes`.
 
 ### Stat filters
@@ -371,12 +371,12 @@ reachable 2pc/4pc bonus) are not shown. 3-section tooltip: name + (N owned) / 2p
 
 ### Weapons, accessories & talismans
 Three groups of effect-icon chips (Weapons / Accessories / Talismans), filtered by the hero's class (gated by `classLimit`), keyed on the piece's `setId`. Click cycles `off → required → excluded → off`. Tooltip: name + (N owned) / T4 desc / state.
-A talisman advised by **Get preset** (`Talisman` from `/api/reco`, `translateReco.ts`) arrives, with its whole
+A talisman advised by **Load reco** (`Talisman` from `/api/reco`, `translateReco.ts`) arrives, with its whole
 family (the talismans sharing its `name` in `equipment.json`: the advice names the 6★, the 4★/5★ carry their own
 `setId`, `talismanFamilyKeys`), as **`preferred`** (dashed outline, `~` badge): if at least one piece of the talisman pool — after every `allow()`
 filter — carries one of the preferred `setId`s, the pool is narrowed to those; otherwise it stays open, as without
 advice (never 0 builds because of a preferred talisman, unlike `required`). Under "keep current" the worn talisman
-stays locked. A click turns it into `required`. The Get preset status says when no member of the advised families
+stays locked. A click turns it into `required`. The Load reco status says when no member of the advised families
 is owned.
 
 ### RightSidebar — Library
@@ -384,7 +384,7 @@ Three **wired** sections (localStorage, per hero):
 - **Save / Remove build** — bookmarks the selected build (`storage/savedBuilds.ts`).
   A saved build also carries its reforge context to re-project its substats on
   restore.
-- **Filter presets** — saves / loads / deletes a filter snapshot
+- **Filter sets** — saves / loads / deletes a filter snapshot
   (`storage/filterPresets.ts`, `loadPreset`).
 - **Restore** — re-pushes a saved build into the table + bottom band.
 
@@ -552,10 +552,10 @@ associated hero's line: opens the Builder on the hero, like a Builds card.
 talisman, `required` (the talisman widened to its family by `talismanFamilyKeys`, every key `required` —
 the same effects, not "preferred"); a piece missing from the outfit or without a `setId` → slot left open,
 a note. Substats: at most 5 priority keys, weight = max(reco, outfit) — the reco (`fetchRecoForHero`,
-first build, `SubstatPrio` as 3/2/1 like "Get preset"), the outfit by the number of pieces (talisman and EE
+first build, `SubstatPrio` as 3/2/1 like "Load reco"), the outfit by the number of pieces (talisman and EE
 aside) rolling the key as a substat (4+ → 3, 3 → 2, 2 → 1); ordered by weight, then presence in the reco,
 then piece count; other keys left out of the patch. Mains: the reco's for the weapon and accessory. Sets: no
-plan (`setPlans: []` → one empty plan, sets open; "Get preset" remains the way to the full reco). Without
+plan (`setPlans: []` → one empty plan, sets open; "Load reco" remains the way to the full reco). Without
 a reco (404, error, offline): the outfit alone. The Builder receives the patch with `initialHeroUid`
 (`initialPatch`) and merges it once the hero's filters are loaded — never onto the outgoing hero's; the
 status line says "Optimizing preset #<num> <name> — same weapon / accessory / talisman effects required, N
