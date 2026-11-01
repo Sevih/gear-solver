@@ -6,7 +6,7 @@ import { createToastStore, ToastStack, TOAST_TTL_MS } from "../src/design/Toast.
 import { EQUIP_FAILURE, equipAssignments, equipPieces } from "../src/equip.js";
 import type { SlotDiff } from "../src/lib/buildDiff.js";
 import { worklistChangesFor, worklistTarget } from "../src/lib/worklist/changes.js";
-import { WorklistScreen } from "../src/screens/WorklistScreen.js";
+import { RESERVATION_NOTE, WorklistScreen } from "../src/screens/WorklistScreen.js";
 import { changeState, planWorklist } from "../src/lib/worklist/plan.js";
 import {
   appliedNotice,
@@ -336,6 +336,42 @@ describe("gone pieces — eaten, sold or dissolved in-game", () => {
     expect(html).toContain("0 of 1 to do");
     expect(html).not.toContain("all applied");
     expect(html).toMatch(/<input type="checkbox" disabled=""/);
+  });
+});
+
+describe("links out and reservations", () => {
+  // P is worn by Ame (h9), F lies free in the inventory; the card is h1's.
+  const inventory = {
+    gear: [piece("P", "weapon", 2, { owner: "h9" }), piece("F", "helmet", 2)].map((g) => ({ ...g, subs: [] })),
+    characters: [{ uid: "h9", charId: 7, name: "Ame" }],
+  } as unknown as Inventory;
+  const list = [entry("a", "h1", [change("weapon", "P"), change("helmet", "F")])];
+  const render = (worklist: WorklistEntry[], links: { onOptimize?: (uid: string) => void; onShowPiece?: (uid: string) => void } = {}) =>
+    text(renderToStaticMarkup(createElement(WorklistScreen, {
+      inventory, game: GAME, equipped: equippedByHero(inventory), worklist, onChange: () => {}, onAfterApply: () => {}, ...links,
+    })));
+  const text = (html: string) => html.replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
+  const links = { onOptimize: () => {}, onShowPiece: () => {} };
+
+  it("says what the queue reserves, only when it holds something", () => {
+    expect(render(list)).toContain(RESERVATION_NOTE);
+    expect(render([])).not.toContain(RESERVATION_NOTE);
+    expect(render([])).toContain("Worklist is empty");
+  });
+
+  it("the card's hero, the wearer and \"in Inventory\" are buttons", () => {
+    const html = render(list, links);
+    expect(html).toMatch(/<button type="button" aria-label="Optimize Hero h1 →"[^>]*>.*Optimize →/);
+    expect(html).toMatch(/<button type="button" aria-label="Optimize Ame →"[^>]*>.*on Ame<\/span><\/button>/);
+    expect(html).toMatch(/<button type="button" aria-label="Show Sword in the Inventory"[^>]*>in Inventory<\/button>/);
+  });
+
+  it("without the links the same lines stay plain text", () => {
+    const html = render(list);
+    expect(html).not.toContain("aria-label=\"Optimize");
+    expect(html).not.toContain("aria-label=\"Show");
+    expect(html).toContain("on Ame");
+    expect(html).toContain("in Inventory");
   });
 });
 

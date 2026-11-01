@@ -413,7 +413,12 @@ Three **wired** sections (localStorage, per hero):
 
 Equip / Unequip **to the game** remain absent (they require a non-existent game API).
 The **Optimize →** button lives on the Builds tab side (opens the Builder on the hero); **Optimize preset →**
-(Presets tab) adds a filter patch to it (`initialPatch`, see the Presets tab).
+(Presets tab) adds a filter patch to it (`initialPatch`, see the Presets tab). The same links lead back to
+the Builder from the Worklist (a card's hero portrait and name, a line's "on ‹hero›" = the piece's current
+wearer) and from the Inventory's piece card (the wearer's portrait, "Optimize wearer →"): `App.tsx`'s
+`optimizeHero`, no patch. A Worklist line's "in Inventory" opens the Inventory on the piece
+(`InventoryDrill.pieceUid`). The Worklist says at the top of the list what it reserves
+(`RESERVATION_NOTE`, the `worklistClaims` behavior).
 
 ### FilterFooter (pinned at the bottom)
 - Per-slot chips with **hit/total (%)** — fed by the `poolSizes` of the first progress event of each worker.

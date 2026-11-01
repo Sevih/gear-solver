@@ -443,7 +443,12 @@ Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
 
 Equip / Unequip **vers le jeu** restent absents (nécessitent une API jeu inexistante).
 Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le héros) ; **Optimize preset →**
-(onglet Presets) y ajoute un patch de filtres (`initialPatch`, voir l'onglet Presets).
+(onglet Presets) y ajoute un patch de filtres (`initialPatch`, voir l'onglet Presets). Les mêmes liens
+ramènent au Builder depuis la Worklist (portrait et nom du héros d'une carte, « on ‹héros› » d'une ligne =
+le porteur actuel de la pièce) et depuis la carte de pièce de l'Inventory (portrait du porteur, « Optimize
+wearer → ») : `optimizeHero` d'`App.tsx`, sans patch. « in Inventory » d'une ligne de Worklist ouvre
+l'Inventory sur la pièce (`InventoryDrill.pieceUid`). La Worklist dit en tête de liste ce qu'elle réserve
+(`RESERVATION_NOTE`, le comportement de `worklistClaims` ci-dessus).
 
 ### FilterFooter (fixed en bas)
 - Chips par slot avec **hit/total (%)** — alimentés par `poolSizes` du précalcul (`precomputeContext`, thread principal).

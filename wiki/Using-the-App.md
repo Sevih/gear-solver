@@ -85,7 +85,9 @@ A dense, searchable table of every gear piece you own.
   tick counts (or gems for Talisman/EE), reforge / breakthrough / Singularity state, a
   **quality score**, and any item / set passives. **Never use** under the card (or a right-click
   on the tile) keeps the piece out of every solve, marked ⊘ on its tile; **Never used — click to
-  allow** brings it back.
+  allow** brings it back. **Optimize wearer →**, next to it, opens the **Builder** on the hero
+  wearing the piece (greyed out on a free piece); a click on the wearer's portrait in the card
+  does the same.
 
 > Sorts and filters reset to their defaults each time you relaunch the app — so you always
 > start from a clean view. Filter sets are kept.
@@ -329,6 +331,16 @@ lives (which hero wears it, or Inventory) — and one line per gem to socket on 
 under its piece (gem, stat, and the gem it replaces). The tab uses the whole window: on a wide
 one the cards sit two per row.
 
+- **Queued pieces are reserved** — a line above the cards says so. Until a piece line shows as
+  **applied** (the snapshot has the piece on the hero) or you remove the card, the Builder treats
+  the piece as already worn by the card's hero, so solving your next hero respects what earlier
+  queued builds grabbed: under **Equipped items ≤ Lower** only a higher-ranked hero can take it,
+  under **None** nobody else, under **All** reservations are ignored. Ticking a line doesn't lift
+  its reservation; gem lines and pieces gone from the inventory reserve nothing.
+- **Links** — a card's hero (portrait and name, **Optimize →**) opens the **Builder** on that
+  hero; on a line, **on ‹hero›** opens it on the hero wearing the piece now, and **in Inventory**
+  opens the **Inventory** with the piece shown in the detail panel (the view is kept when it
+  shows the piece, reset to All without filters when it hides it).
 - **Work through it in-game** — tick each line off as you equip it for real; on your next
   capture (or as soon as the app sees the move, with the game open), changes that are done are
   pruned automatically and a notice in the bottom-right corner says so.

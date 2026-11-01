@@ -14,6 +14,11 @@
  * from the inventory (eaten as fodder, sold or dissolved in-game) reads as
  * gone (amber). A line's name and main are read from the current snapshot too
  * (`worklistTarget`), the copies stored at queue time only once it's gone.
+ *
+ * Links out: a card's hero opens the Builder on that hero ("Optimize →"), a
+ * line's "on ‹hero›" opens it on the piece's current wearer, and "in
+ * Inventory" shows the piece in the Inventory tab. A line above the cards says
+ * what the queue reserves for the solver (`worklistClaims` in App).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Character, GameData, GearPiece, Inventory } from "@gear-solver/core";
@@ -36,7 +41,20 @@ interface WorklistScreenProps {
   onChange: (next: WorklistEntry[]) => void;
   /** Re-import the inventory after a local apply rewrote the snapshot. */
   onAfterApply: () => void;
+  /** Open the Builder on a hero — a card's hero, or a piece's current wearer.
+   *  Without it, those names stay plain text. */
+  onOptimize?: (heroUid: string) => void;
+  /** Show a free piece in the Inventory tab. Without it, "in Inventory" stays
+   *  plain text. */
+  onShowPiece?: (pieceUid: string) => void;
 }
+
+/** What the queue reserves, worded after `worklistClaims` (App feeds it to
+ *  every solve): an unapplied piece line counts as worn by its hero, so the
+ *  Builder's "Equipped items" scope decides who may still take it; gem lines
+ *  and gone pieces reserve nothing. */
+export const RESERVATION_NOTE =
+  "Queued pieces are reserved: the Builder treats each one as already worn by its queued hero until the snapshot shows the change applied or you remove the entry. Under Equipped items ≤ Lower only a higher-ranked hero can take it; All ignores reservations. Gems reserve nothing.";
 
 /** False once the component unmounted — an apply can outlive a tab switch,
  *  and its local state must not be set after that. */
@@ -49,7 +67,7 @@ function useMountedRef() {
   return mounted;
 }
 
-export function WorklistScreen({ inventory, game, equipped, worklist, onChange, onAfterApply }: WorklistScreenProps) {
+export function WorklistScreen({ inventory, game, equipped, worklist, onChange, onAfterApply, onOptimize, onShowPiece }: WorklistScreenProps) {
   const [applyingAll, setApplyingAll] = useState(false);
   const [applyAllError, setApplyAllError] = useState<string | null>(null);
   const mounted = useMountedRef();
@@ -163,6 +181,12 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
         </div>
       )}
 
+      {/* What the queue holds back from the next solves. */}
+      <div className="flex items-start gap-2 rounded-md border border-cyan-400/15 bg-cyan-500/5 px-3 py-2 text-[11px] leading-relaxed text-white/70">
+        <span aria-hidden className="shrink-0 text-cyan-300">ⓘ</span>
+        <span>{RESERVATION_NOTE}</span>
+      </div>
+
       {/* Two columns on a wide window, each card at its own height. */}
       <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
         {worklist.map((entry) => (
@@ -181,6 +205,8 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
             onChange={onChange}
             worklist={worklist}
             onAfterApply={onAfterApply}
+            onOptimize={onOptimize}
+            onShowPiece={onShowPiece}
           />
         ))}
       </div>
@@ -189,7 +215,7 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
 }
 
 function WorklistCard({
-  entry, game, equippedOnHero, invUids, contended, gemSlots, pieceByUid, charByUid, step, cyclic, worklist, onChange, onAfterApply,
+  entry, game, equippedOnHero, invUids, contended, gemSlots, pieceByUid, charByUid, step, cyclic, worklist, onChange, onAfterApply, onOptimize, onShowPiece,
 }: {
   entry: WorklistEntry;
   game: GameData | null;
@@ -210,6 +236,8 @@ function WorklistCard({
   worklist: WorklistEntry[];
   onChange: (next: WorklistEntry[]) => void;
   onAfterApply: () => void;
+  onOptimize?: (heroUid: string) => void;
+  onShowPiece?: (pieceUid: string) => void;
 }) {
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -283,16 +311,33 @@ function WorklistCard({
             {step}
           </span>
         ) : null}
-        <CharacterPortrait charId={entry.charId} name={entry.heroName} size={32} className="rounded-md" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-display text-[13.5px] font-semibold text-white">{entry.heroName}</div>
-          <div className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-white/50">
-            <span className="uppercase tracking-wider">{entry.mode === "cp" ? "CP" : entry.mode === "preset" ? "Preset" : "Score"}</span>
-            <span>·</span>
-            <span>{allApplied ? "all applied" : `${remaining} of ${entry.changes.length} to do`}</span>
-            {entry.cp != null && <><span>·</span><span>CP {entry.cp.toLocaleString()}</span></>}
-          </div>
-        </div>
+        {onOptimize ? (
+          // Portrait + name: "Optimize →", the Builder on this hero.
+          <button
+            type="button"
+            onClick={() => onOptimize(entry.heroUid)}
+            aria-label={`Optimize ${entry.heroName} →`}
+            title={`Optimize → — open the Builder on ${entry.heroName}`}
+            className="group flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left"
+          >
+            <CharacterPortrait charId={entry.charId} name={entry.heroName} size={32} className="rounded-md" />
+            <span className="block min-w-0 flex-1">
+              <span className="flex items-baseline gap-1.5">
+                <span className="truncate font-display text-[13.5px] font-semibold text-white group-hover:text-cyan-100">{entry.heroName}</span>
+                <span className="shrink-0 text-[10px] text-cyan-300/60 group-hover:text-cyan-200">Optimize →</span>
+              </span>
+              <CardStatus entry={entry} allApplied={allApplied} remaining={remaining} />
+            </span>
+          </button>
+        ) : (
+          <>
+            <CharacterPortrait charId={entry.charId} name={entry.heroName} size={32} className="rounded-md" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-display text-[13.5px] font-semibold text-white">{entry.heroName}</div>
+              <CardStatus entry={entry} allApplied={allApplied} remaining={remaining} />
+            </div>
+          </>
+        )}
         {hasConflict && (
           <span title="Another queued build wants one of these pieces too — a piece is a single copy, so only one hero can wear it."
             className="shrink-0 rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-200">
@@ -380,15 +425,42 @@ function WorklistCard({
                   {target.main.value}{target.main.percent ? "%" : ""}
                 </div>
               )}
-              {/* Where the item currently lives + what it replaces on the hero. */}
+              {/* Where the item currently lives + what it replaces on the hero.
+               *  The links are buttons inside the line's label: a click on
+               *  them doesn't tick the checkbox (interactive content). */}
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-white/55">
                 {owner ? (
-                  <span className="flex items-center gap-1">
-                    <CharacterPortrait charId={owner.charId} name={owner.name ?? undefined} size={14} className="rounded-sm" />
-                    <span className="text-white/70">on {owner.name ?? `#${owner.charId}`}</span>
-                  </span>
+                  onOptimize ? (
+                    <button
+                      type="button"
+                      onClick={() => onOptimize(owner.uid)}
+                      aria-label={`Optimize ${owner.name ?? `#${owner.charId}`} →`}
+                      title={`Optimize → — open the Builder on ${owner.name ?? `#${owner.charId}`}, who wears this piece now`}
+                      className="flex items-center gap-1 text-white/70 hover:text-cyan-200"
+                    >
+                      <CharacterPortrait charId={owner.charId} name={owner.name ?? undefined} size={14} className="rounded-sm" />
+                      <span className="underline decoration-white/20 underline-offset-2">on {owner.name ?? `#${owner.charId}`}</span>
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <CharacterPortrait charId={owner.charId} name={owner.name ?? undefined} size={14} className="rounded-sm" />
+                      <span className="text-white/70">on {owner.name ?? `#${owner.charId}`}</span>
+                    </span>
+                  )
                 ) : hasPiece ? (
-                  <span className="text-white/50">in Inventory</span>
+                  onShowPiece ? (
+                    <button
+                      type="button"
+                      onClick={() => onShowPiece(c.toUid)}
+                      aria-label={`Show ${target.name} in the Inventory`}
+                      title="Show this piece in the Inventory tab"
+                      className="text-white/50 underline decoration-white/20 underline-offset-2 hover:text-cyan-200"
+                    >
+                      in Inventory
+                    </button>
+                  ) : (
+                    <span className="text-white/50">in Inventory</span>
+                  )
                 ) : null}
                 {c.fromName && (
                   <span className="text-white/35">· replaces <span className="line-through">{c.fromName}</span></span>
@@ -425,6 +497,18 @@ function WorklistCard({
         {applyError && <span className="text-[11px] text-rose-300">{applyError}</span>}
       </div>
     </div>
+  );
+}
+
+/** A card's status line — mode · progress · CP. */
+function CardStatus({ entry, allApplied, remaining }: { entry: WorklistEntry; allApplied: boolean; remaining: number }) {
+  return (
+    <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-white/50">
+      <span className="uppercase tracking-wider">{entry.mode === "cp" ? "CP" : entry.mode === "preset" ? "Preset" : "Score"}</span>
+      <span>·</span>
+      <span>{allApplied ? "all applied" : `${remaining} of ${entry.changes.length} to do`}</span>
+      {entry.cp != null && <><span>·</span><span>CP {entry.cp.toLocaleString()}</span></>}
+    </span>
   );
 }
 

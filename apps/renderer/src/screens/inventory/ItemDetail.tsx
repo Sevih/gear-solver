@@ -16,8 +16,17 @@ import { GearDetailBody } from "../../design/GearDetail.js";
  *  populated state shows the full main / sub / equipped char / set / brk
  *  breakdown that used to live in the right-side `GearDrawer`. */
 export function ItemDetail({
-  piece, equippedChar, game, excluded, onToggleExclude,
-}: { piece: UiPiece | null; equippedChar: Character | null; game: GameData | null; excluded?: boolean; onToggleExclude?: (uid: string) => void }) {
+  piece, equippedChar, game, excluded, onToggleExclude, onOptimizeWearer,
+}: {
+  piece: UiPiece | null;
+  equippedChar: Character | null;
+  game: GameData | null;
+  excluded?: boolean;
+  onToggleExclude?: (uid: string) => void;
+  /** Open the Builder on the piece's wearer — the portrait in the card and
+   *  "Optimize wearer →" next to "Never use" (greyed out on a free piece). */
+  onOptimizeWearer?: (heroUid: string) => void;
+}) {
   if (!piece) {
     return (
       <aside className="flex h-full w-80 shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/6 bg-white/[0.012] px-6 py-8 text-center">
@@ -36,23 +45,44 @@ export function ItemDetail({
   return (
     <aside className="flex h-full w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-white/8 bg-bg-elev-1">
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <GearDetailBody piece={piece} game={game} equippedChar={equippedChar} />
+        <GearDetailBody piece={piece} game={game} equippedChar={equippedChar} onOptimizeWearer={onOptimizeWearer} />
       </div>
-      {onToggleExclude && (
-        <div className="shrink-0 border-t border-white/8 px-4 py-2.5">
-          <button
-            type="button"
-            onClick={() => onToggleExclude(piece.id)}
-            title="Never use this piece in any solve (e.g. trash rolls). Also via right-click on the tile."
-            className={cx(
-              "flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors",
-              excluded
-                ? "border-rose-400/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
-                : "border-white/10 bg-white/3 text-white/80 hover:bg-white/6",
-            )}
-          >
-            {excluded ? "⊘ Never used — click to allow" : "Never use"}
-          </button>
+      {(onToggleExclude || onOptimizeWearer) && (
+        <div className="flex shrink-0 gap-2 border-t border-white/8 px-4 py-2.5">
+          {onToggleExclude && (
+            <button
+              type="button"
+              onClick={() => onToggleExclude(piece.id)}
+              title="Never use this piece in any solve (e.g. trash rolls). Also via right-click on the tile."
+              className={cx(
+                "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors",
+                excluded
+                  ? "border-rose-400/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
+                  : "border-white/10 bg-white/3 text-white/80 hover:bg-white/6",
+              )}
+            >
+              {excluded ? "⊘ Never used — click to allow" : "Never use"}
+            </button>
+          )}
+          {onOptimizeWearer && (
+            <button
+              type="button"
+              onClick={() => equippedChar && onOptimizeWearer(equippedChar.uid)}
+              disabled={!equippedChar}
+              aria-label={equippedChar ? `Optimize wearer → (${equippedChar.name ?? `#${equippedChar.charId}`})` : "Optimize wearer →"}
+              title={equippedChar
+                ? `Open the Builder on ${equippedChar.name ?? `#${equippedChar.charId}`}, who wears this piece.`
+                : "Nobody wears this piece."}
+              className={cx(
+                "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors",
+                equippedChar
+                  ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25"
+                  : "cursor-not-allowed border-white/6 bg-white/2 text-white/45",
+              )}
+            >
+              Optimize wearer →
+            </button>
+          )}
         </div>
       )}
     </aside>

@@ -231,9 +231,14 @@ export function App() {
   // Pending (not-yet-applied) gear changes across all queued builds — the
   // Worklist tab badge.
   const worklistRemaining = useMemo(() => remainingChangeCount(worklist, inv, equipped), [worklist, inv, equipped]);
-  // Pending Inventory drill-down from a Home dashboard click — set + switch to
-  // the Inventory tab, consumed (and cleared) by InventoryScreen on apply.
+  // Pending Inventory drill-down from a Home dashboard click (or a Worklist
+  // "in Inventory" piece) — set + switch to the Inventory tab, consumed (and
+  // cleared) by InventoryScreen on apply.
   const [invDrill, setInvDrill] = useState<InventoryDrill | null>(null);
+  // The links back from the Worklist and the Inventory's piece card: the
+  // Builder on a hero (no preset patch), or the Inventory showing a piece.
+  const optimizeHero = useCallback((uid: string) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Builder"); }, [setTab]);
+  const showPiece = useCallback((uid: string) => { setInvDrill({ pieceUid: uid }); setTab("Inventory"); }, [setTab]);
   // Account-global "never use" piece UIDs — edited in Inventory (right-click),
   // consumed by the Builder's solver. Owned here so an Inventory edit is live
   // for the (kept-mounted) Builder. Durable (localStorage).
@@ -498,7 +503,7 @@ export function App() {
               </ScreenErrorBoundary>
             </div>
           )}
-          {tab === "Inventory" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} drill={invDrill} onDrillConsumed={() => setInvDrill(null)} excludedPieces={excludedPieces} onToggleExclude={toggleExclude} /></ScreenErrorBoundary>}
+          {tab === "Inventory" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} drill={invDrill} onDrillConsumed={() => setInvDrill(null)} excludedPieces={excludedPieces} onToggleExclude={toggleExclude} onOptimizeWearer={optimizeHero} /></ScreenErrorBoundary>}
           {tab === "Worklist" && (
             <div className="h-full overflow-y-auto">
               <ScreenErrorBoundary>
@@ -509,6 +514,8 @@ export function App() {
                   worklist={worklist}
                   onChange={setWorklist}
                   onAfterApply={() => { quietReconcile.current = true; void refreshInventory("Applied worklist change"); }}
+                  onOptimize={optimizeHero}
+                  onShowPiece={showPiece}
                 />
               </ScreenErrorBoundary>
             </div>

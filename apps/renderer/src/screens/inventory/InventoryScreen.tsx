@@ -22,11 +22,15 @@ const SELECTION_CODEC = jsonStringSet();
 /** A drill-down request from the Home dashboard — clicking a quality tier /
  *  slot / armor set there opens the Inventory pre-filtered to exactly that
  *  facet (filters reset first, so the result is the clean subset the number
- *  represented). One facet at a time. */
+ *  represented). One facet at a time. Or, from the Worklist, `pieceUid`: show
+ *  that piece in the detail panel — the view is left as it is when the piece
+ *  is visible in it, reset to the defaults (All, no filter) when the current
+ *  tab or filters hide it. */
 export interface InventoryDrill {
   quality?: QualityTier;
   slot?: SlotId;
   armorSet?: string;
+  pieceUid?: string;
 }
 
 export interface InventoryScreenProps {
@@ -41,9 +45,12 @@ export interface InventoryScreenProps {
    *  (useCallback) so the memoized `GearTile`s don't re-render on every change. */
   excludedPieces?: Set<string>;
   onToggleExclude?: (uid: string) => void;
+  /** Open the Builder on the shown piece's wearer (the card's portrait and
+   *  "Optimize wearer →"). */
+  onOptimizeWearer?: (heroUid: string) => void;
 }
 
-export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed, excludedPieces, onToggleExclude }: InventoryScreenProps) {
+export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed, excludedPieces, onToggleExclude, onOptimizeWearer }: InventoryScreenProps) {
   // Session-scoped view state — filters / sort / sub-tab survive remounting on
   // a tab swap (sessionStorage) but reset to their defaults on the next app
   // launch, so each session starts from a clean inventory view rather than last
@@ -84,9 +91,24 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
 
   // Consume a Home drill-down: replace the filters with the single requested
   // facet (so the grid shows exactly the subset the clicked number counted),
-  // reset to the "all" tab, drop any selection, then clear the request.
+  // reset to the "all" tab, drop any selection, then clear the request. A
+  // piece drill (Worklist) shows the piece instead, touching the view only
+  // when it hides the piece; an unknown uid (no inventory yet, piece gone)
+  // changes nothing.
   useEffect(() => {
     if (!drill) return;
+    if (drill.pieceUid) {
+      const p = ui.find((x) => x.id === drill.pieceUid);
+      if (p) {
+        if (!(matchesTab(p, tab) && matchesFilters(p, f))) {
+          setF(emptyFilters());
+          setTabState("all");
+        }
+        setSelectedId(p.id);
+      }
+      onDrillConsumed?.();
+      return;
+    }
     const next = emptyFilters();
     if (drill.quality) next.quality = new Set([drill.quality]);
     if (drill.slot) next.slots = new Set([drill.slot]);
@@ -95,7 +117,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
     setTabState("all");
     setSelectedId(null);
     onDrillConsumed?.();
-  }, [drill, setF, setTabState, setSelectedId, onDrillConsumed]);
+  }, [drill, ui, tab, f, setF, setTabState, setSelectedId, onDrillConsumed]);
 
   // Apply from the filter modal. A loaded filter preset may carry a slot the
   // current tab doesn't show (saved on another tab): the view switches to
@@ -351,6 +373,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
             game={game}
             excluded={selected ? (excludedPieces?.has(selected.id) ?? false) : false}
             onToggleExclude={onToggleExclude}
+            onOptimizeWearer={onOptimizeWearer}
           />
         </div>
         {scrapCard && (

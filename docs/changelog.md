@@ -8,6 +8,60 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔗 Liens retour entre écrans : Worklist et carte de pièce vers le Builder et l'Inventory, réservations dites par la Worklist (U7, G95) (2026-11-01)
+- ✅ **Pourquoi.** Septième lot de la refonte (U7 de `docs/ux-audit-2026-11-01.md`, raison 8 du diagnostic « Les écrans
+  ne se renvoient pas l'un à l'autre », observations Inventory et Worklist de 1.2) : ni l'Inventory ni la Worklist
+  n'avaient de lien sortant (portraits, « on ‹héros› » et « in Inventory » en texte), et les réservations de la
+  Worklist pesaient sur les solves sans que l'écran le dise.
+- ✅ **Worklist** (`screens/WorklistScreen.tsx`). Le portrait et le nom du héros d'une carte forment un bouton
+  « Optimize → » (`aria-label` « Optimize ‹héros› → », mention « Optimize → » visible à côté du nom ; la ligne de
+  statut passe dans `CardStatus`, partagée avec la version sans lien) ; « on ‹héros› » d'une ligne de pièce ouvre le
+  Builder sur CE héros, le porteur actuel ; « in Inventory » ouvre l'Inventory avec la pièce affichée (`aria-label`
+  « Show ‹pièce› in the Inventory »). Ces liens sont des boutons dans le `<label>` de la ligne : un clic dessus ne
+  coche pas la case (contenu interactif). Nouvelles props optionnelles `onOptimize(heroUid)` et
+  `onShowPiece(pieceUid)` ; sans elles, le texte d'avant (les rendus existants des tests n'ont pas bougé).
+- ✅ **Réservations dites.** Une ligne ⓘ en tête de liste dès que la file n'est pas vide (`RESERVATION_NOTE`,
+  exportée) : « Queued pieces are reserved: the Builder treats each one as already worn by its queued hero until the
+  snapshot shows the change applied or you remove the entry. Under Equipped items ≤ Lower only a higher-ranked hero
+  can take it; All ignores reservations. Gems reserve nothing. » Écart assumé avec le texte proposé par le lot (« the
+  Optimizer won't give them to another hero until the change is done or removed ») pour coller à `worklistClaims` :
+  sous ≤ Lower un héros mieux classé peut prendre la pièce, sous All la réservation est ignorée, une case cochée ne
+  lève rien (seul le snapshot compte) et les lignes de gemme ne réservent rien. « Builder » plutôt qu'« Optimizer » :
+  c'est le nom actuel de l'onglet, le renommage est U11. `worklistClaims` inchangé.
+- ✅ **Carte de pièce.** `design/GearDetail.tsx` : `GearDetailBody` reçoit `onOptimizeWearer(heroUid)` ; avec elle, le
+  portrait du porteur devient un bouton « Optimize ‹héros› → » (anneau cyan au survol), jamais en `inTooltip` (Builds,
+  Presets : pas de bouton). `screens/inventory/ItemDetail.tsx` : « Optimize wearer → » à côté de « Never use » (les
+  deux se partagent le pied de carte), grisé avec le titre « Nobody wears this piece. » sur une pièce libre.
+  `InventoryScreen` reçoit et transmet `onOptimizeWearer`. Les cartes du Builder n'ont rien : `ResultGearDetailBody`
+  (`design/ResultGearDetail.tsx`) est un fork qui ne partage pas ce bloc, le lot ne le demandait que dans ce cas.
+- ✅ **Drill étendu.** `InventoryDrill` gagne `pieceUid` : `InventoryScreen` le consomme en posant `selectedId` (gardé
+  en session depuis U5) ; la vue (onglet, filtres, recherche) est laissée telle quelle si la pièce y est visible, et
+  remise au défaut (All, aucun filtre) si l'onglet ou les filtres courants la masquent. Un uid inconnu (pièce partie)
+  est consommé sans rien toucher. `App.tsx` : `optimizeHero` (`setBuilderHero` + `setBuilderPatch(null)` + Builder,
+  comme le câblage de Presets) et `showPiece` (`setInvDrill({ pieceUid })` + Inventory), branchés sur la Worklist et
+  l'Inventory ; Builds et Presets gardent leur câblage.
+- ✅ **Tests.** `apps/renderer/test/worklist.test.ts` (37 → 40) : ligne de réservation présente file non vide, absente
+  sur la file vide ; boutons « Optimize Hero h1 → », « Optimize Ame → » (porteur) et « Show Sword in the Inventory »
+  avec leurs `aria-label` ; texte simple sans les callbacks. `apps/renderer/test/gearDetailWearer.test.ts` (nouveau,
+  6) : `GearDetailBody` avec et sans `onOptimizeWearer`, en `inTooltip` (pas de bouton), sans porteur ; `ItemDetail`
+  (bouton actif, grisé sur pièce libre, absent sans le lien). `apps/renderer/test/inventoryScreen.test.ts` (7 → 11) :
+  drill `pieceUid` sur une pièce visible (vue intacte, `gs.inv.selected` posé), masquée (vue remise au défaut),
+  inconnue (vue intacte, rien d'affiché), et `onOptimizeWearer` transmis à `ItemDetail`.
+- ✅ **Docs.** `wiki/Using-the-App.md` (Inventory : « Optimize wearer → » et le portrait ; Worklist : la réservation
+  expliquée dans la section même, scopes compris, et les liens) ; `docs/solver.md` / `wiki/Solver.md` (les nouveaux
+  chemins vers le Builder et l'Inventory à côté d'« Optimize → ») ; `docs/reference.md` / `wiki/Engine-Reference.md`
+  (ligne `worklist.test.ts` 37 → 40, ligne `gearDetailWearer.test.ts`). `docs/todo.md` n'avait pas d'item lié.
+- ✅ **Vérification.** `npm run typecheck` vert (dernière ligne `> tsc --noEmit`) ; `npm test` : `Tests  169 passed
+  (169)` (core), `Tests  238 passed (238)` (desktop), `Tests  1011 passed (1011)` (renderer) ; `npm run lint` : `✖ 7
+  problems (0 errors, 7 warnings)`, comme avant.
+- ⏳ **Hors périmètre, noté** : la grille de l'Inventory ne défile pas jusqu'à la tuile affichée par un drill (seul le
+  panneau de détail la montre) ; la maquette WORKLIST de 5.b menait le portrait vers Heroes, le lot l'envoie au
+  Builder (« Optimize → »), c'est ce qui est livré.
+- ⏳ **À voir par Sevih dans l'app** : Worklist → clic sur le héros d'une carte, sur « on ‹héros› » (Builder sur le
+  porteur, la case de la ligne ne se coche pas) et sur « in Inventory » (pièce affichée, filtres gardés ou remis à
+  zéro selon le cas) ; Inventory → portrait du porteur et « Optimize wearer → », grisé sur une pièce libre ; la
+  ligne ⓘ en tête de Worklist.
+
 ### 🧭 Premier résultat guidé : priorité par défaut depuis la reco outerpedia, bandeau « No priority » hors popover, mode CP sans menu (U6, G94) (2026-11-01)
 - ✅ **Pourquoi.** Sixième lot de la refonte (U6 de `docs/ux-audit-2026-11-01.md`, raison 3 du diagnostic « Le premier
   résultat dépend d'un réglage caché », arbitrage D3) : le mode par défaut, Score, classait au hasard sans priorité

@@ -1,4 +1,4 @@
-// InventoryScreen's effects (drill from Home, auto-prune of the pills), its
+// InventoryScreen's effects (drill from Home or from the Worklist, auto-prune of the pills), its
 // Apply handler and its session-kept selection, run through a minimal hooks runtime: Vitest runs in the
 // `node` environment (no DOM), so `react` is mocked with state / memo / effect
 // slots, the component is called as a plain function and the effects of a
@@ -149,6 +149,46 @@ describe("InventoryScreen — drill from Home", () => {
     const current = find<ModalProps>(tree, FilterModal).props.current;
     expect(current.quality).toEqual(new Set([helmetTier]));
     expect(current.slots.size).toBe(0);
+  });
+});
+
+describe("InventoryScreen — piece drill from the Worklist", () => {
+  const drillTo = (uid: string) => {
+    let drill: { pieceUid: string } | null = { pieceUid: uid };
+    const tree = runtime.render(() => InventoryScreen({ inventory, game: null, drill, onDrillConsumed: () => { drill = null; } }));
+    expect(drill).toBeNull();
+    return tree;
+  };
+
+  it("a visible piece is shown, the tab and filters left alone", () => {
+    seedSession("gear", { ...emptyFilters(), slots: new Set(["helmet"]) });
+    const tree = drillTo("1");
+    expect(find<DetailProps>(tree, ItemDetail).props.piece?.id).toBe("1");
+    expect(find<SlotBarProps>(tree, SlotBar).props.tab).toBe("gear");
+    expect(find<ModalProps>(tree, FilterModal).props.current.slots).toEqual(new Set(["helmet"]));
+    expect(session.get("gs.inv.selected")).toBe(JSON.stringify("1"));
+  });
+
+  it("a piece the view hides resets the view to its defaults", () => {
+    seedSession("gear", { ...emptyFilters(), slots: new Set(["helmet"]) });
+    const tree = drillTo("2");
+    expect(find<DetailProps>(tree, ItemDetail).props.piece?.id).toBe("2");
+    expect(find<SlotBarProps>(tree, SlotBar).props.tab).toBe("all");
+    expect(find<ModalProps>(tree, FilterModal).props.current.slots.size).toBe(0);
+  });
+
+  it("an unknown piece is consumed without touching the view", () => {
+    seedSession("gear", { ...emptyFilters(), slots: new Set(["helmet"]) });
+    const tree = drillTo("gone");
+    expect(find<DetailProps>(tree, ItemDetail).props.piece).toBeNull();
+    expect(find<SlotBarProps>(tree, SlotBar).props.tab).toBe("gear");
+    expect(find<ModalProps>(tree, FilterModal).props.current.slots).toEqual(new Set(["helmet"]));
+  });
+
+  it("hands the wearer link to the piece card", () => {
+    const onOptimizeWearer = () => {};
+    const tree = runtime.render(() => InventoryScreen({ inventory, game: null, onOptimizeWearer }));
+    expect(find<DetailProps>(tree, ItemDetail).props.onOptimizeWearer).toBe(onOptimizeWearer);
   });
 });
 

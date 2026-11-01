@@ -146,9 +146,12 @@ export interface GearDetailBodyProps {
    *  host a hoverable nested tooltip — the set rows' "combat" pill expands
    *  inline instead (`SetCombatBadge` `expanded`). */
   inTooltip?: boolean;
+  /** Open the Builder on the wearer — the portrait becomes an "Optimize
+   *  ‹hero› →" button (never inside a tooltip, which can't be clicked). */
+  onOptimizeWearer?: (heroUid: string) => void;
 }
 
-export function GearDetailBody({ piece, game, equippedChar = null, inTooltip = false }: GearDetailBodyProps) {
+export function GearDetailBody({ piece, game, equippedChar = null, inTooltip = false, onOptimizeWearer }: GearDetailBodyProps) {
   const slot = piece.slot ? SLOTS.find((s) => s.id === piece.slot) : null;
   const rarity = RARITY[piece.rarity];
   // 2-pc / 4-pc bonuses live only on armor pieces (armorSetId); don't fall back
@@ -180,7 +183,19 @@ export function GearDetailBody({ piece, game, equippedChar = null, inTooltip = f
             <span className="text-white">{classLine}</span>
           </div>
         </div>
-        {equippedChar && <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={36} />}
+        {equippedChar && (onOptimizeWearer && !inTooltip ? (
+          <button
+            type="button"
+            onClick={() => onOptimizeWearer(equippedChar.uid)}
+            aria-label={`Optimize ${equippedChar.name ?? `#${equippedChar.charId}`} →`}
+            title={`Optimize ${equippedChar.name ?? `#${equippedChar.charId}`} → — open the Builder on the hero wearing this piece`}
+            className="shrink-0 rounded-md ring-cyan-400/60 transition-shadow hover:ring-2"
+          >
+            <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={36} />
+          </button>
+        ) : (
+          <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={36} />
+        ))}
       </div>
 
       {/* main rolls */}
