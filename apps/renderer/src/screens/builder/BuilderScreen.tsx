@@ -51,7 +51,8 @@ import { onBackupImported } from "../../lib/storage/transfer.js";
 import { onDataPruned, pruneFilters } from "../../lib/storage/dataHash.js";
 import { migrateReforge, REFORGE_MODES } from "./reforge.js";
 import type { SelectedComposition } from "./composition.js";
-import { displayNameOf } from "./heroName.js";
+import { displayNameOf } from "../../lib/heroes/heroName.js";
+import { heroListOrder } from "../../lib/heroes/heroListOrder.js";
 import { armorSetCatalogFromInventory, effectCatalogFromInventory, mainStatCatalogFromInventory, type MainStatEntry } from "./catalogs.js";
 import { MAIN_STAT_SLOTS } from "./statColumns.js";
 import { BuilderToolbar } from "./BuilderToolbar.js";
@@ -253,6 +254,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     if (inventory) for (const c of inventory.characters) m.set(c.uid, c);
     return m;
   }, [inventory]);
+
+  // Hero picker order (toolbar and "Don't take from…"): rank, then capture —
+  // the Builder holds no CP for the whole roster.
+  const pickerHeroes = useMemo(() => heroListOrder(inventory?.characters ?? [], { rank: heroPriority }), [inventory, heroPriority]);
 
   const selected = useMemo<Character | null>(() => {
     if (!inventory) return null;
@@ -773,7 +778,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden p-2 pb-9">
       <BuilderToolbar
-        heroes={inventory.characters}
+        heroes={pickerHeroes}
         game={game}
         selectedUid={selectedUid}
         onSelect={setSelectedUid}

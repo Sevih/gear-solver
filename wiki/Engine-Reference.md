@@ -860,6 +860,7 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/priorityBanner.test.ts` | 9 tests — static render of the Builder toolbar (a Score \| CP segment then a single "Solve", no ▾ menu nor "Solve CP", the current mode's segment pressed, "Loading reco…" disabled, Cancel while solving, the banner under the hero row with the popovers closed) and of `PriorityBanner` (no priority: Load reco / Set priority / Use CP; no reco: Set priority / Use CP; CP mode without Use CP; the reco's priority: Edit / Clear) |
 | `apps/renderer/test/gearDetailWearer.test.ts` | 6 tests — static render of the piece card: the wearer's portrait as an "Optimize ‹hero› →" button with `onOptimizeWearer`, a plain portrait without it and in a tooltip (`inTooltip`), nothing without a wearer; `ItemDetail`: "Optimize wearer →" next to "Never use", greyed out on a free piece, absent without the link |
 | `apps/renderer/test/headerU8.test.ts` | 9 tests — one header (U8): `captureBadge` (each Steam state → label and tone, one vocabulary, never "Steam ·"; `title` with the game folder and the live plugin's version), `updateBadge` ("vX ready" once downloaded, "vX available" while downloading or by hand, nothing when up to date / checking / offline), `dataVersionLabel` (game version · hash · build date, no game version on an older stamp, "—" without a stamp); static render of `GsHeader` (one capture pill, update badge present or absent), of `SystemHealthCard` (the state in the pill's words, "Open Setup", no Install / Update / Launch nor Reload) and of Home's empty state (points to the header button and Setup, no action button) |
+| `apps/renderer/test/heroPicker.test.ts` | 12 tests — one hero picker (U10a): static render of `HeroPicker` in `single` (the picked hero's displayed name, closed; open, one row per hero with a portrait, a Core Fusion hero's fused portrait, the picked one `aria-selected`) and in `multi` (label, "N selected" and ✕ only once something is ticked; open, checkboxes ticked for the picked heroes, portraits); `heroSearchHaystack` / `heroMatches` (a fused hero found under its displayed name and its base sheet's nickname, "fusion", empty query, no data); `heroListOrder` (rank then CP then capture, unranked after ranked, no CP after those with one, stable ties, CP only, input left untouched) |
 | `apps/renderer/test/presetOptimize.test.ts` | 9 tests — "Optimize preset →": `presetOptimizePatch` (the weapon's, accessory's and talisman's effects `required`, the talisman widened to its family; a piece missing or without an effect → slot left open and a note; substats from the outfit alone 4+/3/2 pieces → 3/2/1, talisman and EE aside; merged with the reco, max of the weights, reco first then piece count, cut at 5; empty outfit without a reco → no priority; mains from the reco only, empty `setPlans`; merged by `mergePreset`: bands kept, sets open); `presetOptimizeNote` (with and without a reco) |
 | `apps/renderer/test/presetsOvercap.test.ts` | 9 tests — wasted caps: `overcapOf` (the rule shared by Builds / Presets: nothing under the caps, nothing at 102 crit exactly nor at 100 PEN, raw crit 142 with `critRate` bounded at 100 → 40 wasted and the Builds text, fallback on `critRate` without the raw sum, PEN 120 → 20, two axes crit first); `presetOvercap` (warning tone from `OVERCAP_WARN_PTS`, no evaluation → nothing, the proposed EE gems' share vs as socketed) |
 | `apps/renderer/test/critCell.test.ts` | 7 tests — raw crit past 100 in the Builder: `critCellParts` (raw 142 → `{ shown: 100, over: 42 }`, 100 exactly and under the bound → `over` 0, rounded to 0.1, fallback on `critRate` without the raw sum); `critCellTitle` (142 → 40 wasted over the 102 tolerance, 101.5 → within the buffer, nothing under 100); `computeColumnRanges` (crit heatmap range read on the raw sum: 80 → 142) |
@@ -927,6 +928,9 @@ apps/renderer/src/
 │   ├── overcap.ts                 ← overcapOf + overcapText (wasted CRC 102 / PEN 100 caps, Builds, Presets and the Builder's crit tooltip)
 │   ├── heroPriority/
 │   │   └── weights.ts              ← hasPriority + effectivePriority + priorityOf (a hero's priority weights, one source: Builder, Presets, solver)
+│   ├── heroes/
+│   │   ├── heroName.ts             ← displayNameOf + heroSearchHaystack + heroMatches (the displayed name and search of every hero list, fused sheet included)
+│   │   └── heroListOrder.ts        ← heroListOrder (the one sort of hero lists: rank, CP, capture order)
 │   ├── presets/
 │   │   ├── presetRows.ts           ← in-game presets: pieces, wearers, missing / shared pieces, class, filter / sort
 │   │   ├── presetHolds.ts          ← presetHolds + presetBlockedUids (pieces of better-ranked / locked presets out of the pool)
@@ -957,6 +961,8 @@ apps/renderer/src/
 │       └── cp.ts                   ← calcBattlePower + makeCpEvaluator
 ├── workers/
 │   └── solver.worker.ts            ← IPC adapter, MessageChannel yield
+├── design/
+│   └── HeroPicker.tsx              ← the one hero picker, `single` / `multi` (Builder, Don't take from…, Presets Reference / Associated)
 └── screens/
     ├── inventory/                  ← InventoryScreen.tsx (gear table) + filters.ts, FilterModal, VirtualGearGrid, ItemDetail…
     ├── BuildsScreen.tsx            ← per-hero current build cards (uses calcBattlePower)

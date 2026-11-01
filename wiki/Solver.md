@@ -344,7 +344,8 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   requirement (e.g. a single `2pc`) lets any gear fill the free armor slots (legacy
   behavior). *false*: every armor piece must complete a 2pc/4pc → the solver also prunes
   set-less / non-formable pieces from the pool and rejects singleton builds at the leaf.
-- **Don't take from…** — **wired**: `ExcludeHeroesPicker` (multi-select) writes into
+- **Don't take from…** — **wired**: `HeroPicker` in `mode="multi"` (`design/HeroPicker.tsx`, the same
+  picker as the hero's, with portraits, ↑/↓ + Enter to tick, "N selected") writes into
   `excludedHeroes` via `toggleHeroExcluded` / `clearExcludedHeroes`.
 
 ### Stat filters

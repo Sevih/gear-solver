@@ -118,8 +118,10 @@ way the game does (validated to match the in-game character sheet).
 - **Inspect a piece** — hover an equipped piece to see the same full detail panel as the
   Inventory.
 - **Optimize →** — jumps straight to the **Builder** with that hero pre-selected.
-- **Roster filters** — search by name, filter by element / class, sort by **CP** or by
-  **Rank**. (A lock-state pill also appears if you enable the stat-lock tooling in
+- **Roster filters** — search by name (the same search as every hero picker: the name shown,
+  nickname, base name or id; "fusion" finds the Core Fusion heroes), filter by element / class,
+  sort by **CP** or by **Rank** (rank 1 first, unranked last, then CP; ties keep the capture
+  order). (A lock-state pill also appears if you enable the stat-lock tooling in
   **Settings → Debug**.)
 - **Notes** — jot a per-hero note (kept across relaunches).
 
@@ -213,6 +215,10 @@ results, the bottom band shows the selected build's pieces.
 
 ### 1. Pick a hero, pick a mode
 
+- **Hero** — type in the search box (name shown, nickname, base name or id; "fusion" finds the
+  Core Fusion heroes), ↑/↓ then Enter or a click to pick. The list follows your hero **Rank**
+  (rank 1 first, unranked last, then capture order) — the same list, search and order as in
+  **Don't take from…** and the Presets tab's **Reference** / **Associated** pickers.
 - **Score | CP** — pick the mode next to the **Solve** button (picking doesn't start a solve);
   **Solve** runs the mode shown.
   - **Score** maximizes a **Score** weighted by the substat priorities you set. Use it when you
@@ -276,7 +282,8 @@ results, the bottom band shows the selected build's pieces.
   what earlier queued builds already grabbed (under **All**, reservations are ignored like
   equipment is).
 - **Keep current** — lock the slots the hero already has equipped.
-- **Don't take from…** — drop gear worn by specific heroes you pick.
+- **Don't take from…** — drop gear worn by specific heroes you tick (same hero list and search as
+  the hero picker; the button shows how many are ticked, ✕ clears them).
 
 ### 4. Read the results
 

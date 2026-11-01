@@ -8,6 +8,60 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧭 Un seul sélecteur de héros : `HeroPicker` simple / multiple, recherche et ordre des héros partagés (U10a, G98) (2026-11-01)
+- ✅ **Pourquoi.** Dixième lot de la refonte, première moitié (U10 (a) de `docs/ux-audit-2026-11-01.md`, section 3.4
+  « Les sélecteurs de héros »). Quatre façons de chercher ou choisir un héros : `HeroSelect` (combobox à portraits,
+  clavier, Builder et Presets), `ExcludeHeroesPicker` des Options (cases à cocher, sans portrait, Échap seul), la
+  recherche du roster de Builds (qui recopiait sa chaîne de recherche) et `heroName.ts`, dont `heroSearchHaystack`
+  lisait la fiche de base alors que l'affichage passe par `effectiveCharacter` : un héros fusionné ne se trouvait pas
+  sous son nom affiché. Ordre des listes : capture dans Builder et Presets, CP ou rang dans Builds — le même héros
+  n'était pas au même endroit selon l'écran.
+- ✅ **`HeroPicker`.** `apps/renderer/src/design/HeroPicker.tsx` (nouveau) : `mode="single"` reprend `HeroSelect`
+  (champ de recherche, liste à portraits, `value` / `onChange(uid | null)`) ; `mode="multi"` reprend
+  `ExcludeHeroesPicker` (bouton + ✕ « Clear all », liste à cases) avec `values: ReadonlySet<string>` / `onToggle(uid)`,
+  `label`, `title`, `onClear` et le compteur optionnel `showCount` (« N selected » sur le bouton). Les deux modes
+  partagent la recherche, la ligne (`HeroRow` : portrait — le fusionné pour un Core Fusion —, nom affiché ; case à
+  cocher devant en multi) et les touches (`usePickerList` : ↓ ouvre, ↑/↓ déplacent, Entrée choisit en single et
+  coche en multi sans fermer, Échap ferme) ; le multi gagne donc portraits et clavier. Les id de liste et d'option
+  viennent de `useId` (l'ancien `hero-listbox` fixe se répétait sur chaque carte de Presets). `defaultOpen` ouvre au
+  montage (rendus statiques). `HeroSelect.tsx` et `ExcludeHeroesPicker` supprimés ; `BuilderToolbar`, `OptionsPanel`
+  (« Don't take from… », `showCount`) et les deux sélecteurs de `PresetsScreen` (Reference, Associated) passent par
+  `HeroPicker`. Seul écart visuel, demandé : le bouton des Options dit « Don't take from… » puis « N selected » au
+  lieu de « Don't take from: N », et ses lignes ont un portrait.
+- ✅ **Recherche.** `heroName.ts` déménage en `apps/renderer/src/lib/heroes/heroName.ts` ; `heroSearchHaystack` lit
+  `effectiveCharacter(c, game.characters).def` comme l'affichage, plus le surnom de la fiche de base, le nom brut et les
+  deux charId (origine et fusion) : un fusionné se cherche sous son nom affiché ET sous son nom de base. Nouveau
+  `heroMatches(c, game, query)` (requête rognée, insensible à la casse, vide = tout). `BuildsScreen` l'appelle au lieu
+  de recopier `core fusion + nickname + name + charId` ; son champ « Search hero… » reste un champ qui filtre les
+  cartes. La recherche de Builds trouve donc en plus le nom affiché complet et le surnom fusionné.
+- ✅ **Ordre.** `apps/renderer/src/lib/heroes/heroListOrder.ts` (nouveau) : `heroListOrder(heroes, { rank, cp })` —
+  rang croissant (`rankOrder`, sans rang après les rangés), puis CP décroissant (sans CP après), puis ordre d'entrée,
+  qui est l'ordre de capture (`inventory.characters`) chez tous les appelants ; tri explicite par index, entrée non
+  modifiée. Ce que chaque écran passe : **Builder** (barre d'outils et « Don't take from… », `pickerHeroes` de
+  `BuilderScreen`) le rang d'App (`heroPriority`), pas de CP (l'écran n'en a pas pour tout le roster) → rang puis
+  capture ; **Presets** idem, `PresetsScreen` reçoit désormais `heroPriority` d'App (prop nouvelle) → rang puis
+  capture, pour Reference et Associated ; **Builds** garde ses deux tris affichés par la même fonction : « Rank » =
+  `{ rank: heroPriority, cp: bp }`, « CP » = `{ cp: bp }`. Changement voulu à la marge : à CP égal (ou sans CP
+  calculé), Builds départageait par nombre de pièces puis étoiles ; c'est maintenant l'ordre de capture.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (« Don't take from… » = `HeroPicker` multi),
+  `wiki/Using-the-App.md` (recherche et ordre du roster Builds, puce « Hero » du Builder, « Don't take from… »),
+  `docs/reference.md` / `wiki/Engine-Reference.md` (arbre : `lib/heroes/`, `design/HeroPicker.tsx` ; ligne de test).
+  Aucun item de `docs/todo.md` ne s'y rapportait.
+- ✅ **Tests.** `apps/renderer/test/heroPicker.test.ts` (12) : rendu statique de `HeroPicker` en `single` (nom affiché,
+  lignes à portraits, fusionné compris, choisi `aria-selected`) et `multi` (« 1 selected » et ✕ seulement si coché,
+  cases cochées, portraits) ; `heroSearchHaystack` / `heroMatches` (fusionné trouvé sous « Radiant » affiché et
+  « Mystic » de base, « fusion », requête vide, sans données) ; `heroListOrder` (rang > CP > capture, sans rang
+  après, sans CP après, égalités stables, CP seul, entrée intacte). `presetCardOpen.test.ts` passe `heroPriority`.
+  Aucun test existant ne couvrait la recherche de Builds : elle passe par `heroMatches`, couvert ici.
+  `grep -rn "HeroSelect\|ExcludeHeroesPicker" apps/renderer/src` vide. `npm run typecheck` : `> tsc --noEmit` sans
+  erreur ; `npm test` : `Tests  1049 passed (1049)` (renderer ; core 169, desktop 238) ; `npm run lint` :
+  `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ⏳ **Sevih.** À l'œil sur la build : Builder (liste dans l'ordre des rangs, ↑/↓ + Entrée), « Don't take from… »
+  (portraits, Entrée coche, compteur), Presets Reference / Associated (même ordre), recherche Builds d'un Core
+  Fusion par son surnom fusionné. Hors périmètre relevé : `design/HeroPicker.tsx` importe
+  `screens/builder/useClickOutside.ts` (seul import de `design/` vers `screens/`) — le hook pourrait passer dans
+  `hooks/` ; carte de pièce unique = U10b.
+
 ### 💾 Sauvegarde complète : registre des clés `gs.*`, bundle v2 avec fusion par forme, liste de ce qui part (U9, G97) (2026-11-01)
 - ✅ **Pourquoi.** Neuvième lot de la refonte (U9 de `docs/ux-audit-2026-11-01.md`, section 3.9 « Les clés gs.* »,
   ligne 5.d, arbitrage D7 : « La sauvegarde emporte tout sauf la capture ; la liste exportée est affichée »). La

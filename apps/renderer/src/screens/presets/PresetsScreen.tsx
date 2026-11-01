@@ -89,8 +89,10 @@ import {
 } from "../../lib/storage/localPresets.js";
 import type { HeroFiltersMap } from "../../lib/storage/heroFilters.js";
 import { priorityOf } from "../../lib/heroPriority/weights.js";
-import { HeroSelect } from "../builder/HeroSelect.js";
-import { displayNameOf } from "../builder/heroName.js";
+import { HeroPicker } from "../../design/HeroPicker.js";
+import { displayNameOf } from "../../lib/heroes/heroName.js";
+import { heroListOrder } from "../../lib/heroes/heroListOrder.js";
+import type { HeroPriority } from "../../lib/storage/heroPriority.js";
 
 interface PresetsScreenProps {
   inventory: Inventory | null;
@@ -110,6 +112,9 @@ interface PresetsScreenProps {
   /** Builder filters kept per hero (App-owned, written by the Builder at every
    *  change) — the hero's priority is read from them first (`priorityOf`). */
   heroFilters: HeroFiltersMap;
+  /** App's hero ranks — order of the Reference / Associated pickers
+   *  (`heroListOrder`: rank, then capture). */
+  heroPriority: HeroPriority;
   /** Preset priority ranks (preset num → unique rank, App-owned) and App's
    *  setter (functional updates supported). */
   presetRank: PresetRank;
@@ -144,7 +149,7 @@ interface HeroView {
 const CLASS_ORDER = CLASSES.map((c) => c.id);
 const classLabel = (id: string): string | null => CLASSES.find((c) => c.id === id)?.label ?? null;
 
-export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, worklistClaims, heroFilters, presetRank, onPresetRankChange, presetLocked, onPresetLockedChange, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
+export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, worklistClaims, heroFilters, heroPriority, presetRank, onPresetRankChange, presetLocked, onPresetLockedChange, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
   // Read once per mount — the screen remounts on every tab switch, so a build
   // saved in the Builder is picked up on the way back. The Builder's kept
   // filters come live from App (`heroFilters`).
@@ -173,6 +178,9 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
 
   const rows = useMemo(() => (inventory ? presetRows(inventory) : []), [inventory]);
   const roster = useMemo(() => new Set(inventory?.characters.map((c) => c.uid) ?? []), [inventory]);
+  // Hero picker order (Reference / Associated): rank, then capture — the
+  // screen holds no CP for the whole roster.
+  const pickerHeroes = useMemo(() => heroListOrder(inventory?.characters ?? [], { rank: heroPriority }), [inventory, heroPriority]);
   const heroes = useMemo(() => {
     const m = new Map<string, HeroView>();
     for (const c of inventory?.characters ?? []) {
@@ -311,7 +319,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
             game={game}
             ctx={ctx}
             heroes={heroes}
-            roster={inventory.characters}
+            roster={pickerHeroes}
             stored={stored}
             lossWarnPct={lossWarnPct}
             forced={forced}
@@ -352,7 +360,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
             game={game}
             ctx={ctx}
             heroes={heroes}
-            roster={inventory.characters}
+            roster={pickerHeroes}
             stored={stored}
             lossWarnPct={lossWarnPct}
             forced={forced}
@@ -468,7 +476,7 @@ function PresetCard({
 
   return (
     // No backdrop-filter on the card: it would make it a stacking context, and
-    // the HeroSelect list (z-30) would then slide under the next card.
+    // the HeroPicker list (z-30) would then slide under the next card.
     <section
       className={cx(
         "relative flex flex-col gap-2.5 rounded-xl border bg-bg-elev-2 px-3 py-2.5",
@@ -579,7 +587,7 @@ function PresetCard({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="w-20 text-[11px] uppercase tracking-wider text-zinc-400">Reference</span>
                   <div className="w-56">
-                    <HeroSelect heroes={roster} game={game} value={referenceUid} onChange={onSetReference} />
+                    <HeroPicker mode="single" heroes={roster} game={game} value={referenceUid} onChange={onSetReference} />
                   </div>
                   {suggested && <span className="text-[11.5px] italic text-zinc-400">current wearer</span>}
                   {stored.referenceUid && (
@@ -593,7 +601,7 @@ function PresetCard({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="w-20 text-[11px] uppercase tracking-wider text-zinc-400">Associated</span>
                   <div className="w-56">
-                    <HeroSelect heroes={candidates} game={game} value={null} onChange={(uid) => { if (uid) onAddAssociated(uid); }} />
+                    <HeroPicker mode="single" heroes={candidates} game={game} value={null} onChange={(uid) => { if (uid) onAddAssociated(uid); }} />
                   </div>
                   {associatedUids.length === 0 && <span className="text-[11.5px] italic text-zinc-400">Add the heroes who will share this outfit</span>}
                 </div>
@@ -811,7 +819,7 @@ function HeroLine({
   onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string, presetNum: number) => void;
   reference?: boolean;
   /** The hero's name is already shown right above (the in-game card's
-   *  Reference HeroSelect): portrait only. */
+   *  Reference HeroPicker): portrait only. */
   nameAbove?: boolean;
   onRemove?: () => void;
 }) {

@@ -1,17 +1,16 @@
 /**
- * Builder options panel — pool / steal toggles and the exclude-heroes picker.
+ * Builder options panel — pool / steal toggles and the "Don't take from…"
+ * hero picker.
  */
-import { useMemo, useState, type Dispatch } from "react";
+import type { Dispatch } from "react";
 import type { GameData, Inventory } from "@gear-solver/core";
-import { effectiveCharacter } from "@gear-solver/core";
 import { cx } from "../../design/cx.js";
+import { HeroPicker } from "../../design/HeroPicker.js";
 import { HoverHint } from "../../design/HoverHint.js";
 import type { EquippedScope } from "../../lib/solver/types.js";
 import type { SolverAction, SolverOptions } from "../../lib/solver/builderFilters.js";
 import { QUALITY_TIERS, QUALITY_LABEL, type QualityTier } from "../../lib/quality.js";
 import { Panel } from "./Panel.js";
-import { useClickOutside } from "./useClickOutside.js";
-import { displayNameOf, heroSearchHaystack } from "./heroName.js";
 
 /** UI metadata for the Options "Equipped items" scope (see `EquippedScope`). */
 const EQUIPPED_SCOPES: ReadonlyArray<{ value: EquippedScope; label: string; hint: string }> = [
@@ -21,7 +20,7 @@ const EQUIPPED_SCOPES: ReadonlyArray<{ value: EquippedScope; label: string; hint
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Options panel — pool / steal toggles + exclude-heroes multi-pill
+ * Options panel — pool / steal toggles + "Don't take from…" hero picker
  * ───────────────────────────────────────────────────────────────────────── */
 export function OptionsPanel({
   options, minQuality, excludedHeroes, heroes, game, dispatch,
@@ -74,8 +73,14 @@ export function OptionsPanel({
         </select>
       </label>
       <div className="mt-2">
-        <ExcludeHeroesPicker
-          excluded={excludedHeroes}
+        {/* "Don't take from…" — drops all gear currently equipped on the
+         *  ticked heroes from the solver's pool. */}
+        <HeroPicker
+          mode="multi"
+          label="Don't take from…"
+          title="Drop gear currently equipped on these heroes from the solver's candidate pool."
+          showCount
+          values={excludedHeroes}
           heroes={heroes}
           game={game}
           onToggle={(uid) => dispatch({ type: "toggleHeroExcluded", uid })}
@@ -97,93 +102,5 @@ function ToggleRow({ label, checked, onChange, hint }: { label: string; checked:
       />
       <span className="truncate text-[11px] text-white">{label}</span>
     </label>
-  );
-}
-
-/** Combobox-style multi-select for "Don't take from…" — drops all gear
- *  currently equipped on the listed heroes from the solver's pool. Closed
- *  state shows count + clear ✕; open state is a searchable list of heroes
- *  with checkboxes. Reuses the Hero picker haystack (display name +
- *  nickname + charId + 'core fusion' tag). */
-function ExcludeHeroesPicker({
-  excluded, heroes, game, onToggle, onClear,
-}: {
-  excluded: ReadonlySet<string>;
-  heroes: Inventory["characters"];
-  game: GameData | null;
-  onToggle: (uid: string) => void;
-  onClear: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const wrapRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return heroes;
-    return heroes.filter((c) => heroSearchHaystack(c, game).includes(q));
-  }, [heroes, game, query]);
-  return (
-    // Two sibling buttons inside a flex wrapper instead of a nested
-    // <span role="button"> inside the toggle <button> — the previous shape
-    // was invalid HTML and not keyboard-reachable for the clear action.
-    <div
-      ref={wrapRef}
-      className="relative flex w-full items-center gap-0 rounded-md border border-white/8 bg-black/30 text-[11px] text-white/70 hover:bg-white/6"
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex flex-1 items-center justify-between gap-1.5 px-2 py-1 text-left focus:outline-none"
-        title="Drop gear currently equipped on these heroes from the solver's candidate pool."
-      >
-        <span className="truncate">
-          {excluded.size === 0 ? "Don't take from…" : `Don't take from: ${excluded.size}`}
-        </span>
-        <span className="text-white/55">▾</span>
-      </button>
-      {excluded.size > 0 && (
-        <button
-          type="button"
-          onClick={() => onClear()}
-          className="px-1.5 py-1 text-white/65 hover:text-rose-300 focus:outline-none"
-          title="Clear all"
-          aria-label="Clear the heroes not to take from"
-        >✕</button>
-      )}
-      {open && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-72 flex-col overflow-hidden rounded-md border border-white/10 bg-zinc-900 shadow-lg">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
-            autoFocus
-            placeholder="Search hero…"
-            className="shrink-0 border-b border-white/8 bg-black/30 px-2 py-1 text-[11px] text-white placeholder:text-white/55 focus:outline-none"
-          />
-          <ul className="min-h-0 flex-1 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <li className="px-2 py-2 text-[11px] italic text-white/65">No hero matches</li>
-            ) : filtered.map((c) => {
-              const meta = effectiveCharacter(c, game?.characters).def;
-              const checked = excluded.has(c.uid);
-              return (
-                <li key={c.uid}>
-                  <label className="flex cursor-pointer items-center gap-2 px-2 py-1 hover:bg-white/6">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => onToggle(c.uid)}
-                      className="h-3.5 w-3.5 shrink-0 accent-cyan-400"
-                    />
-                    <span className="truncate text-[11.5px] text-white">{displayNameOf(c, meta)}</span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
   );
 }

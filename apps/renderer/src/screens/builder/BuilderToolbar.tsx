@@ -12,8 +12,8 @@ import type { ReforgeMode } from "../../lib/solver/engine.js";
 import type { SolveMode } from "../../lib/solver/types.js";
 import type { SolverAction, SolverFilters } from "../../lib/solver/builderFilters.js";
 import type { ArmorSetEntry, EffectEntry, MainStatEntry } from "./catalogs.js";
-import { displayNameOf } from "./heroName.js";
-import { HeroSelect } from "./HeroSelect.js";
+import { displayNameOf } from "../../lib/heroes/heroName.js";
+import { HeroPicker } from "../../design/HeroPicker.js";
 import { OptionsPanel } from "./OptionsPanel.js";
 import { StatFiltersPanel } from "./StatFiltersPanel.js";
 import { RatingFiltersPanel } from "./RatingFiltersPanel.js";
@@ -122,7 +122,7 @@ export function BuilderToolbar({
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-dashed border-white/12 bg-black/20 text-[14px] text-white/30">?</div>
         )}
         <div className="w-52 shrink-0">
-          <HeroSelect heroes={heroes} game={game} value={selectedUid} onChange={onSelect} />
+          <HeroPicker mode="single" heroes={heroes} game={game} value={selectedUid} onChange={onSelect} />
         </div>
         <SolveModeControl value={solveMode} onChange={setSolveMode} disabled={solving || recoLoading} />
         <SolveButton solving={solving} canSolve={canSolve} loading={recoLoading} onSolve={() => onSolve(solveMode)} onCancelSolve={onCancelSolve} />

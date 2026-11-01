@@ -351,7 +351,8 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   (ex. un seul `2pc`) laisse n'importe quelle pièce remplir les slots armor libres (comportement
   legacy). *false* : chaque pièce d'armor doit compléter un set (2pc/4pc) → le solver élague en
   plus les pièces set-less/non-formables du pool et rejette les builds à singleton au leaf.
-- **Don't take from…** — **câblé** : `ExcludeHeroesPicker` (multi-select) écrit dans
+- **Don't take from…** — **câblé** : `HeroPicker` en `mode="multi"` (`design/HeroPicker.tsx`, le même
+  sélecteur que celui du héros, avec portraits, ↑/↓ + Entrée pour cocher, « N selected ») écrit dans
   `excludedHeroes` via `toggleHeroExcluded` / `clearExcludedHeroes`.
 
 ### Stat filters

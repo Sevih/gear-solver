@@ -169,7 +169,7 @@ describe("buildGemPool", () => {
   });
 
   it("selected hero is exempt from excludedHeroes — own gems always kept", () => {
-    // The ExcludeHeroesPicker lists every character (including the selected
+    // The "Don't take from…" HeroPicker lists every character (including the selected
     // hero), so the user can tick himself. The gear pool's `allow()` exempts
     // him; the gem pool must mirror that or the solver becomes inconsistent.
     const mine = { ...talismanWithGems([15001, 15004]), uid: "t-mine", equippedBy: "hero-a" };

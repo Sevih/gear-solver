@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, CharacterDef, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
-import { moveRankBefore, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
+import { moveRankBefore, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
 import { composeCharStats, effectiveCharacter, expToLevel, gameRulesOf } from "@gear-solver/core";
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap, type SheetStatKey } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
@@ -17,7 +17,8 @@ import { GAME_GEAR_GRID, TOKENS, toDesignSlot, type SlotId } from "../design/tok
 import { toUiPiece } from "../design/adapter.js";
 import { presetSignature } from "../lib/presets/presetRows.js";
 import { RankDragHandle, RankInput } from "../design/RankInput.js";
-import { displayNameOf } from "./builder/heroName.js";
+import { displayNameOf, heroMatches } from "../lib/heroes/heroName.js";
+import { heroListOrder } from "../lib/heroes/heroListOrder.js";
 
 /** Per-stat-axis dump spec — pairs the engine stat key with its `*Pct` /
  *  flat bucket name in the aggregated gear maps. EFF/RES use unsuffixed
@@ -995,44 +996,33 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
   // never re-touches the compose pipeline above.
   const roster = useMemo<ComposedEntry[]>(() => {
     if (composedRoster.length === 0) return [];
-    const q = filters.query.trim().toLowerCase();
-    return composedRoster
-      .filter((entry) => {
-        const { char, meta, stats } = entry;
-        if (filters.elements.size > 0 && (!meta?.element || !filters.elements.has(meta.element))) return false;
-        if (filters.classes.size > 0 && (!meta?.cls || !filters.classes.has(meta.cls))) return false;
-        if (q) {
-          // Searching "core" or "fusion" matches fused chars via the literal prefix.
-          const fusionTag = char.fusionCharId !== 0 ? "core fusion" : "";
-          const hay = `${fusionTag} ${meta?.nickname ?? ""} ${char.name ?? ""} ${char.charId}`.toLowerCase();
-          if (!hay.includes(q)) return false;
-        }
-        if (!debug || filters.locks === "all") return true;
-        const lockedSnap = lockedStats[char.uid]?.stats;
-        const lockedKs = lockedSnap ? Object.keys(lockedSnap) as SheetStatKey[] : [];
-        if (filters.locks === "locked") return lockedKs.length > 0;
-        // "drift": at least one locked stat whose live value drifted
-        if (!stats || lockedKs.length === 0) return false;
-        return lockedKs.some((k) => round1(stats[k] - (lockedSnap![k] ?? 0)) !== 0);
-      })
-      .sort((a, b) => {
-        // Rank sort (opt-in): rank 1 first → higher numbers → unranked (+∞)
-        // last, CP-desc as the tiebreaker. Otherwise CP desc as primary —
-        // heroes with no resolved BP (missing game data / TransStar row) sink.
-        if (filters.byRank) {
-          const ar = rankOrder(heroPriority, a.char.uid);
-          const br = rankOrder(heroPriority, b.char.uid);
-          if (ar !== br) return ar - br; // ascending: rank 1 first, unranked last
-        }
-        const ap = a.bp ?? -Infinity;
-        const bp_ = b.bp ?? -Infinity;
-        if (bp_ !== ap) return bp_ - ap;
-        return (b.count - a.count) || (b.char.stars - a.char.stars);
-      });
+    const shown = composedRoster.filter((entry) => {
+      const { char, meta, stats } = entry;
+      if (filters.elements.size > 0 && (!meta?.element || !filters.elements.has(meta.element))) return false;
+      if (filters.classes.size > 0 && (!meta?.cls || !filters.classes.has(meta.cls))) return false;
+      // The one hero search (`heroSearchHaystack`): displayed name, base
+      // name, charIds, and "core" / "fusion" for fused chars.
+      if (!heroMatches(char, game, filters.query)) return false;
+      if (!debug || filters.locks === "all") return true;
+      const lockedSnap = lockedStats[char.uid]?.stats;
+      const lockedKs = lockedSnap ? Object.keys(lockedSnap) as SheetStatKey[] : [];
+      if (filters.locks === "locked") return lockedKs.length > 0;
+      // "drift": at least one locked stat whose live value drifted
+      if (!stats || lockedKs.length === 0) return false;
+      return lockedKs.some((k) => round1(stats[k] - (lockedSnap![k] ?? 0)) !== 0);
+    });
+    // The one hero order (`heroListOrder`): rank sort (opt-in) puts rank 1
+    // first and unranked last, then CP desc — heroes with no resolved BP
+    // (missing game data / TransStar row) sink — then capture order.
+    const byUid = new Map(shown.map((e) => [e.char.uid, e] as const));
+    return heroListOrder(shown.map((e) => e.char), {
+      rank: filters.byRank ? heroPriority : null,
+      cp: (uid) => byUid.get(uid)?.bp,
+    }).map((c) => byUid.get(c.uid)!);
     // `lockedStats` is read in the filter but intentionally gated via `locksDep`
     // so an "all"-filter lock toggle doesn't recompute — see locksDep above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [composedRoster, filters, locksDep, debug, heroPriority]);
+  }, [composedRoster, filters, locksDep, debug, heroPriority, game]);
 
   // Heroes in the current (filtered) view with at least one piece equipped —
   // matches the tab badge's semantics (App counts distinct equipped chars).
