@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EquipmentDef, EquipmentTable, ItemsTable } from "@gear-solver/core";
 import { scrapValue, type ScrapPiece } from "../src/lib/inventory/scrapValue.js";
-import { addAll, materialRows, pruneSelection, scrapScope, toggleSelection } from "../src/lib/inventory/scrapCard.js";
+import { addAll, materialRows, pruneSelection, pruneShown, scrapScope, toggleSelection } from "../src/lib/inventory/scrapCard.js";
 
 type P = { id: string; name: string };
 const a: P = { id: "a", name: "A" };
@@ -84,5 +84,13 @@ describe("selection updates", () => {
     expect(s0).toEqual(new Set(["a", "gone"]));
     expect(s1).toEqual(new Set(["a"]));
     expect(pruneSelection(s1, byId)).toBe(s1);
+  });
+});
+
+describe("pruneShown", () => {
+  it("keeps a piece still in the inventory, drops one that left, keeps none", () => {
+    expect(pruneShown("a", byId)).toBe("a");
+    expect(pruneShown("gone", byId)).toBeNull();
+    expect(pruneShown(null, byId)).toBeNull();
   });
 });

@@ -8,6 +8,70 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗂️ États de vue gardés au changement d'onglet : sélection et pièce de l'Inventory, filtres, tri et cartes de Presets, vue de Home (U5, G93) (2026-11-01)
+- ✅ **Pourquoi.** Cinquième lot de la refonte (U5 de `docs/ux-audit-2026-11-01.md`, §5.d, lignes « perdu au
+  changement d'onglet » de 1.2 et 1.4, raison 4 du diagnostic) : trois modèles de persistance pour des choses
+  semblables. La sélection Scrap, son mode et la pièce affichée de l'Inventory, les chips de classe, le tri, « Expand
+  all / Collapse all » et l'ouverture de chaque carte de Presets, la vue « Gear breakdown » de Home étaient des
+  `useState` : tout mourait à chaque changement d'onglet (le manuel promettait pourtant « until you clear it or close
+  the app »), quand les filtres de l'Inventory et de Builds tenaient déjà la session. Convention appliquée : un état de
+  **vue** survit au changement d'onglet (sessionStorage), pas au relancement.
+- ✅ **Hook réutilisé : `useSessionState`** (`apps/renderer/src/hooks/usePersistedState.ts`), celui de
+  `gs.inv.filters.v3`, `gs.inv.tab` et `gs.builds.filters`. Deux codecs y rejoignent `jsonWithSets` :
+  `jsonStringSet()` (un `Set<string>` en liste JSON, entrées non-chaînes écartées, non-liste refusée) et
+  `jsonOneOf(values)` (valeur hors liste refusée). Un refus fait retomber le hook sur son défaut, comme une valeur
+  empoisonnée aujourd'hui : une option renommée plus tard ne casse pas l'écran.
+- ✅ **Inventory** (`screens/inventory/InventoryScreen.tsx`). `selectedId` → `gs.inv.selected`, `selection` →
+  `gs.inv.selection` (liste d'uids, `jsonStringSet`), `selectMode` → `gs.inv.selectMode`. L'élagage en cours de
+  rendu (`prunedFor`) part désormais de `null` : il tourne aussi au **premier** rendu avec un inventaire, si bien
+  qu'une pièce vendue ou dissoute depuis la dernière visite quitte la sélection et la carte ; il élague aussi la pièce
+  affichée (`pruneShown`, nouveau dans `lib/inventory/scrapCard.ts`). Il ne tourne pas sans inventaire (`inventory`
+  null, ex. rechargement du renderer avant l'import) pour ne pas vider la sélection gardée sur une liste vide.
+  « Clear » vide toujours la sélection, le drill depuis Home vide toujours la pièce affichée.
+- ✅ **Presets** (`screens/presets/PresetsScreen.tsx`, `lib/presets/cardOpen.ts`). `classFilter` →
+  `gs.presets.classFilter` (liste), `sort` → `gs.presets.sort` (`jsonOneOf` game / class / priority), `forced` →
+  `gs.presets.forced` (`FORCED_CODEC` : `open` booléen, `gen` entier ≥ 1, sinon aucune commande ; défaut toujours
+  `initialCardCommand`), choix par carte → `gs.presets.open` (`CHOICES_CODEC`, map clé → booléen, num pour une carte
+  du jeu, id pour une locale ; valeur non booléenne écartée, non-objet lu comme aucun clic). Le `useState` `choice`
+  de `PresetCard` remonte dans l'écran (props `choice` + `onChoose`). Pour garder une map de booléens sans toucher à
+  `cardOpen`, « Expand all / Collapse all » vide la map en posant la commande : tout clic gardé est donc fait sous la
+  commande gardée, et `cardChoice(choices, key, forced)` le tamponne de sa génération (`forced.gen`, 0 sans
+  commande) avant `cardOpen`, qui reste la règle pure et arbitre comme avant (un clic plus vieux qu'une commande
+  était déjà ignoré, il est maintenant effacé). Une carte sans choix gardé s'ouvre comme aujourd'hui (fermée si vide).
+- ✅ **Home** (`screens/home/HomeScreen.tsx`). `gearView` → `gs.home.gearView` (`jsonOneOf` overview / class / sets
+  / ooparts, type `GearView`).
+- ✅ **Clés de session seulement** : rien n'entre dans la sauvegarde (`transfer.ts`) ni dans l'élagage
+  (`dataHash.ts`) ; le registre de U9 les listera.
+- ✅ **Tests.** `apps/renderer/test/sessionViewState.test.ts` (nouveau, 6) : `jsonStringSet`, `jsonOneOf`, et un test
+  de source montrant que les trois écrans lisent ces sept états par `useSessionState` sous leur clé.
+  `presetCardOpen.test.ts` (9 → 17) : `FORCED_CODEC` aller-retour avec sa génération et `cardOpen` qui arbitre comme
+  avant, valeurs malformées → aucune commande ; `CHOICES_CODEC` aller-retour (nums et id local) et lecture tolérante ;
+  `cardChoice` ; rendu statique relu de sessionStorage (Collapse all puis la carte vide ouverte à la main → elle seule
+  ouverte ; chip et tri « Rank » relus ; tri inconnu → In-game) ; le `beforeEach` stube désormais `sessionStorage`.
+  `inventoryScreen.test.ts` (+3, runtime de hooks existant) : sélection, mode et pièce affichée relus, uids vendus
+  écartés et réécrits ; pièce encore là toujours affichée ; sélection stockée non-liste → vide. `scrapCard.test.ts`
+  (+1) : `pruneShown`.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (« État du composant, perdu au changement d'onglet » de Presets
+  remplacé par les quatre clés de session) ; `wiki/Using-the-App.md` (sélection Scrap, son mode et la pièce affichée
+  gardés au changement d'onglet ; vue de Home gardée ; chips, tri et cartes ouvertes de Presets gardés jusqu'au
+  relancement) ; `docs/reference.md` (ligne `presetCardOpen` 9 → 17, ligne `sessionViewState`, arbre `cardOpen.ts`) et
+  `wiki/Engine-Reference.md` (ligne `sessionViewState`). `docs/todo.md` n'avait pas d'item lié.
+- ✅ **Vérification.** `npm run typecheck` vert (dernière ligne `> tsc --noEmit`) ; `npm test` : `Tests  169 passed
+  (169)` (core), `Tests  238 passed (238)` (desktop), `Tests  977 passed (977)` (renderer) ; `npm run lint` : `✖ 7
+  problems (0 errors, 7 warnings)`, un de moins qu'avant : l'avertissement `set-state-in-effect` de
+  `InventoryScreen.tsx` (le `setSelectedId(null)` du drill) disparaît parce que le setter vient désormais d'un hook
+  maison que la règle ne suit pas, le code de l'effet est inchangé. Aucun changement visuel.
+- ⏳ **À tester par Sevih (app lancée).** Inventory : sélectionner des pièces en mode sélection, cliquer une pièce,
+  aller dans un autre onglet et revenir → sélection, mode et pièce toujours là ; vendre une pièce sélectionnée en jeu
+  puis revenir après la capture → elle n'y est plus. Presets : cocher une classe, trier par Rank, Collapse all puis
+  ouvrir une carte, changer d'onglet et revenir → identique ; relancer l'app → tout revient aux défauts. Home : choisir
+  « Talisman », changer d'onglet, revenir → toujours Talisman.
+- ⏳ **Laissé.** L'audit (§5.d, U5 de 5.e) plaçait la sélection Inventory dans un état d'App ; le lot a retenu
+  sessionStorage, comme les filtres voisins. Les clés de carte disparues (preset supprimé, local effacé) restent dans
+  `gs.presets.open` jusqu'au relancement, sans effet. `wiki/Engine-Reference.md` n'a toujours pas de ligne
+  `presetCardOpen` (manque antérieur, hors lot) ; `wiki/Roadmap.md` « Session-scoped view state » ne cite que
+  Inventory et Builds.
+
 ### ⚖️ Une seule source pour les poids de priorité d'un héros, filtres gardés entre les lancements, lus en direct par Presets (U4, G92) (2026-11-01)
 - ✅ **Pourquoi.** Quatrième lot de la refonte (U4 de `docs/ux-audit-2026-11-01.md`, §3.1, ligne `gs.solver.heroFilters`
   de §3.9, arbitrage D4) : `gs.solver.heroFilters` vivait en sessionStorage (perdu à chaque lancement), n'était écrit

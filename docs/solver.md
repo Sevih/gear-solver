@@ -549,7 +549,9 @@ associés ; sinon elle est inconnue. Un filtre garde une carte dont l'une des cl
 les cartes vides ou de classe inconnue ; « Class » trie par la première classe dans l'ordre des chips
 (cochées seulement quand un filtre est actif), inconnues à la fin, l'ordre du jeu dans une classe
 (`arrangePresets`). L'icône de classe s'affiche à côté du nom ; la pastille ajoute « · K shown » quand
-des cartes sont masquées. État du composant, perdu au changement d'onglet.
+des cartes sont masquées. Les chips, le tri, le dernier « Expand all / Collapse all » et l'ouverture de
+chaque carte sont un état de vue : gardés au changement d'onglet (sessionStorage, `gs.presets.classFilter`,
+`gs.presets.sort`, `gs.presets.forced`, `gs.presets.open`), pas au relancement.
 
 Un preset = la tenue d'**un perso de référence**, portée telle quelle par des **persos associés** qui se
 règlent par les gemmes de leur propre EE. Les groupes se font à la main (sélecteur de héros ; un porteur

@@ -19,7 +19,8 @@ Your landing screen. At a glance:
   **Class** (per class, the unique weapon/accessory effects you own as chips — hover for name + effect),
   **All sets** (the full set catalog, owned-first; unowned are dimmed with a red `0`), and **Talisman**
   (a talisman × main-stat cross-tab — each talisman framed like in the Inventory, cells are a heatmap of
-  how many you own with that main stat, with row/column totals).
+  how many you own with that main stat, with row/column totals). The view you picked stays when
+  you switch tabs, back to Overview on the next launch.
 - **Library** — your saved builds.
 - **Update center** — checks for app updates inline; when one is ready, an **Install** button
   appears (no native pop-ups).
@@ -78,8 +79,8 @@ A dense, searchable table of every gear piece you own.
   shows it, and **Ctrl+click** always selects or unselects. **Select all shown** adds the pieces on
   screen, **Select never used** the pieces marked **Never use**, **Clear** empties the selection.
   A selected tile carries an amber check in its top-left corner. Leaving the mode keeps the
-  selection; it lasts until you clear it or close the app, and a piece that leaves the inventory
-  leaves it too.
+  selection; it lasts until you clear it or close the app (switching tabs keeps it, the mode and
+  the piece shown too), and a piece that leaves the inventory leaves it too.
 - **Click any piece** → the left panel shows the full detail: main stat(s), substats with their
   tick counts (or gems for Talisman/EE), reforge / breakthrough / Singularity state, a
   **quality score**, and any item / set passives. **Never use** under the card (or a right-click
@@ -134,7 +135,8 @@ ascended and fully reforged; hover for the cap at the pieces' current investment
   its reference hero, its wearers or its associated heroes.
 - **Expand all / Collapse all** — next to the sort, open or close every card at once (in-game and
   local, filtered or not). A card you open or close by hand afterwards keeps it until the next
-  Expand all / Collapse all.
+  Expand all / Collapse all. The chips, the sort and the open cards stay when you switch tabs, and
+  reset on the next launch.
 
 - **Reference** — the hero the preset was built for (solve them in the Builder as usual). If a
   single hero wears the preset, they're proposed by default.

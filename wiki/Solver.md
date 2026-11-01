@@ -516,7 +516,9 @@ else from the reference hero, the wearers, then the associated heroes; otherwise
 keeps a card with one of its classes ticked and hides empty or unknown-class cards; "Class" sorts by the
 card's first class in chip order (only the ticked ones while filtering), unknown last, the game's order
 within a class (`arrangePresets`). The class icon shows next to the name; the pill adds "· K shown" when
-cards are hidden. Component state, lost on a tab switch.
+cards are hidden. The chips, the sort, the last "Expand all / Collapse all" and each card's open state are
+view state: kept across a tab switch (sessionStorage, `gs.presets.classFilter`, `gs.presets.sort`,
+`gs.presets.forced`, `gs.presets.open`), not across a relaunch.
 
 A preset = the outfit of **one reference hero**, worn as-is by **associated heroes** who tune themselves
 through their own EE gems. Groups are made by hand (hero picker; a unique current wearer is proposed as the

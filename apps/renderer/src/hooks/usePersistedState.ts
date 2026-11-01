@@ -112,3 +112,30 @@ export function jsonWithSets<T>(setFields: (keyof T & string)[]): PersistedCodec
     },
   };
 }
+
+/** Codec for a `Set<string>` stored as a JSON list. Tolerant: a stored value
+ *  that isn't a list throws (→ the hook's default), non-string entries are
+ *  dropped. */
+export function jsonStringSet(): PersistedCodec<Set<string>> {
+  return {
+    serialize: (v) => JSON.stringify([...v]),
+    deserialize: (raw) => {
+      const arr: unknown = JSON.parse(raw);
+      if (!Array.isArray(arr)) throw new Error("not a list");
+      return new Set(arr.filter((x): x is string => typeof x === "string"));
+    },
+  };
+}
+
+/** Codec for one of a closed list of strings: a stored value outside `values`
+ *  (a renamed or removed option) throws, so the hook falls back to its
+ *  default. */
+export function jsonOneOf<T extends string>(values: readonly T[]): PersistedCodec<T> {
+  return {
+    deserialize: (raw) => {
+      const v: unknown = JSON.parse(raw);
+      if (!values.includes(v as T)) throw new Error("unknown value");
+      return v as T;
+    },
+  };
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
-import { useSessionState } from "../../hooks/usePersistedState.js";
+import { jsonStringSet, useSessionState } from "../../hooks/usePersistedState.js";
 import type { DesignRarity, SlotId } from "../../design/tokens.js";
 import { toUiPiece, type UiPiece } from "../../design/adapter.js";
 import type { QualityTier } from "../../lib/quality.js";
@@ -12,7 +12,10 @@ import { FilterButton, FilterModal } from "./FilterModal.js";
 import { VirtualGearGrid } from "./VirtualGearGrid.js";
 import { ScrapCard } from "./ScrapCard.js";
 import { hasScrapFields, scrapValue } from "../../lib/inventory/scrapValue.js";
-import { addAll, materialRows, pruneSelection, scrapScope, toggleSelection } from "../../lib/inventory/scrapCard.js";
+import { addAll, materialRows, pruneSelection, pruneShown, scrapScope, toggleSelection } from "../../lib/inventory/scrapCard.js";
+
+// The Scrap value card's selection, kept for the session as a list of uids.
+const SELECTION_CODEC = jsonStringSet();
 
 // ── screen ──────────────────────────────────────────────────────────────
 
@@ -44,15 +47,16 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // Session-scoped view state — filters / sort / sub-tab survive remounting on
   // a tab swap (sessionStorage) but reset to their defaults on the next app
   // launch, so each session starts from a clean inventory view rather than last
-  // session's leftover sort+filters. `selectedId` and the Scrap value card's
-  // selection (+ its mode) stay fully ephemeral.
+  // session's leftover sort+filters. The piece shown (`selectedId`) and the
+  // Scrap value card's selection (+ its mode) too: the pieces no longer in the
+  // inventory are dropped on the first render (below).
   const [f, setF] = useSessionState<FilterState>(FILTERS_STORAGE_KEY, emptyFilters, FILTER_CODEC);
   const [tab, setTabState] = useSessionState<InvTab>("gs.inv.tab", "all");
   const [sort, setSort] = useSessionState<SortKey>("gs.inv.sort", "enhance");
   const [dir, setDir] = useSessionState<"asc" | "desc">("gs.inv.dir", "desc");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selection, setSelection] = useState<Set<string>>(() => new Set());
-  const [selectMode, setSelectMode] = useState(false);
+  const [selectedId, setSelectedId] = useSessionState<string | null>("gs.inv.selected", null);
+  const [selection, setSelection] = useSessionState<Set<string>>("gs.inv.selection", () => new Set(), SELECTION_CODEC);
+  const [selectMode, setSelectMode] = useSessionState("gs.inv.selectMode", false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
 
   const ui = useMemo<UiPiece[]>(() => (inventory ? inventory.gear.map((g) => toUiPiece(g, game)) : []), [inventory, game]);
@@ -91,7 +95,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
     setTabState("all");
     setSelectedId(null);
     onDrillConsumed?.();
-  }, [drill, setF, setTabState, onDrillConsumed]);
+  }, [drill, setF, setTabState, setSelectedId, onDrillConsumed]);
 
   // Apply from the filter modal. A loaded filter preset may carry a slot the
   // current tab doesn't show (saved on another tab): the view switches to
@@ -258,14 +262,17 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   }, [ui]);
   const selected = selectedId ? uiById.get(selectedId) ?? null : null;
 
-  // The card's selection loses the pieces that left the inventory (sold,
-  // dissolved, new capture), like the filters' auto-prune — adjusted during
-  // render when the inventory changes rather than in an effect, so the card
-  // never prices a stale id for one frame.
-  const [prunedFor, setPrunedFor] = useState(uiById);
-  if (prunedFor !== uiById) {
+  // The card's selection and the piece shown lose the pieces that left the
+  // inventory (sold, dissolved, new capture), like the filters' auto-prune —
+  // adjusted during render when the inventory changes rather than in an
+  // effect, so the card never prices a stale id for one frame. Also on the
+  // first render with an inventory: what the session kept from the last visit
+  // may name pieces sold since.
+  const [prunedFor, setPrunedFor] = useState<Map<string, UiPiece> | null>(null);
+  if (inventory && prunedFor !== uiById) {
     setPrunedFor(uiById);
     setSelection((prev) => pruneSelection(prev, uiById));
+    setSelectedId((cur) => pruneShown(cur, uiById));
   }
 
   const filterCount = activeFilterCount(f);
@@ -294,17 +301,17 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
     } else {
       setSelectedId((cur) => (cur === id ? null : id));
     }
-  }, [selectMode]);
+  }, [selectMode, setSelection, setSelectedId]);
   const onToggleSelect = useCallback((id: string) => {
     setSelection((prev) => toggleSelection(prev, id));
-  }, []);
+  }, [setSelection]);
   const onSelectShown = useCallback(() => {
     setSelection((prev) => addAll(prev, filtered.map((p) => p.id)));
-  }, [filtered]);
+  }, [filtered, setSelection]);
   const onSelectExcluded = useCallback(() => {
     if (!excludedPieces) return;
     setSelection((prev) => addAll(prev, [...excludedPieces].filter((id) => uiById.has(id))));
-  }, [excludedPieces, uiById]);
+  }, [excludedPieces, uiById, setSelection]);
 
   function toggleSort(k: FixedSortKey) {
     if (sort === k) setDir(dir === "desc" ? "asc" : "desc");

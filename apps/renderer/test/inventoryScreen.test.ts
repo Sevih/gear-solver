@@ -1,9 +1,10 @@
-// InventoryScreen's effects (drill from Home, auto-prune of the pills) and its
-// Apply handler, run through a minimal hooks runtime: Vitest runs in the
+// InventoryScreen's effects (drill from Home, auto-prune of the pills), its
+// Apply handler and its session-kept selection, run through a minimal hooks runtime: Vitest runs in the
 // `node` environment (no DOM), so `react` is mocked with state / memo / effect
 // slots, the component is called as a plain function and the effects of a
 // render run in declaration order after it, like a React commit. The returned
-// tree is only read for the props handed to SlotBar and FilterModal.
+// tree is only read for the props handed to SlotBar, FilterModal and
+// ItemDetail.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import type { GearPiece, GearSlot, Inventory } from "@gear-solver/core";
@@ -83,6 +84,7 @@ vi.mock("react-dom", async (importOriginal) => ({
 const { InventoryScreen } = await import("../src/screens/inventory/InventoryScreen.js");
 const { SlotBar } = await import("../src/screens/inventory/InventoryTabs.js");
 const { FilterModal } = await import("../src/screens/inventory/FilterModal.js");
+const { ItemDetail } = await import("../src/screens/inventory/ItemDetail.js");
 
 // Map-backed Storage stubs — the screen's view state lives in sessionStorage,
 // the filter presets in localStorage.
@@ -129,6 +131,7 @@ const find = <P>(tree: unknown, type: unknown) => {
 };
 type SlotBarProps = Parameters<typeof SlotBar>[0];
 type ModalProps = Parameters<typeof FilterModal>[0];
+type DetailProps = Parameters<typeof ItemDetail>[0];
 
 function seedSession(tab: string, f: FilterState) {
   session.set("gs.inv.tab", JSON.stringify(tab));
@@ -170,6 +173,31 @@ describe("InventoryScreen — filter preset outside the tab", () => {
     find<ModalProps>(tree, FilterModal).props.onApply({ ...emptyFilters(), slots: new Set(["helmet"]) });
     tree = runtime.render(screen);
     expect(find<SlotBarProps>(tree, SlotBar).props.tab).toBe("gear");
+  });
+});
+
+describe("InventoryScreen — selection kept for the session", () => {
+  it("reads the piece shown, the selection and its mode back, without the pieces sold since", () => {
+    session.set("gs.inv.selected", JSON.stringify("gone"));
+    session.set("gs.inv.selection", JSON.stringify(["1", "gone"]));
+    session.set("gs.inv.selectMode", "true");
+    const tree = runtime.render(() => InventoryScreen({ inventory, game: null }));
+    expect(find<DetailProps>(tree, ItemDetail).props.piece).toBeNull();
+    expect(session.get("gs.inv.selected")).toBe("null");
+    expect(JSON.parse(session.get("gs.inv.selection")!)).toEqual(["1"]);
+    expect(session.get("gs.inv.selectMode")).toBe("true");
+  });
+
+  it("a piece still in the inventory stays shown", () => {
+    session.set("gs.inv.selected", JSON.stringify("1"));
+    const tree = runtime.render(() => InventoryScreen({ inventory, game: null }));
+    expect(find<DetailProps>(tree, ItemDetail).props.piece?.id).toBe("1");
+  });
+
+  it("a stored selection that isn't a list reads as empty", () => {
+    session.set("gs.inv.selection", JSON.stringify({ 1: true }));
+    runtime.render(() => InventoryScreen({ inventory, game: null }));
+    expect(session.get("gs.inv.selection")).toBe("[]");
   });
 });
 

@@ -20,6 +20,7 @@ import type { GameData, Inventory } from "@gear-solver/core";
 import type { CaptureStatus } from "../../capture.js";
 import { describeSteam, type SteamStatus } from "../../steam.js";
 import { cx } from "../../design/cx.js";
+import { jsonOneOf, useSessionState } from "../../hooks/usePersistedState.js";
 import type { InventoryDrill } from "../inventory/InventoryScreen.js";
 import { loadSavedBuilds } from "../../lib/storage/savedBuilds.js";
 import { loadFilterPresets } from "../../lib/storage/filterPresets.js";
@@ -49,6 +50,9 @@ function relTime(ms: number | null): { rel: string; abs: string } | null {
   const abs = new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   return { rel, abs };
 }
+
+type GearView = "overview" | "class" | "sets" | "ooparts";
+const GEAR_VIEW_CODEC = jsonOneOf<GearView>(["overview", "class", "sets", "ooparts"]);
 
 // ── screen ───────────────────────────────────────────────────────────────
 export interface HomeScreenProps {
@@ -96,9 +100,10 @@ export function HomeScreen({
   const onCheck = () => { setUpdate((u) => ({ ...u, state: "checking", error: null })); void checkForUpdate(); };
   const onInstall = () => { void installUpdate(); };
 
-  // Gear breakdown view — overview (by slot + top sets), class matrix, or the
-  // full owned-set list. Local UI state, resets each session.
-  const [gearView, setGearView] = useState<"overview" | "class" | "sets" | "ooparts">("overview");
+  // Gear breakdown view — overview (by slot + top sets), class matrix, the
+  // full owned-set list or the talismans. View state: kept across a tab switch
+  // (sessionStorage), back to the overview on the next launch.
+  const [gearView, setGearView] = useSessionState<GearView>("gs.home.gearView", "overview", GEAR_VIEW_CODEC);
 
   const stats = useMemo(() => (inventory ? computeStats(inventory, game) : null), [inventory, game]);
   // Library counts (saved builds + filter presets) live in localStorage. Read

@@ -1,9 +1,10 @@
 /**
  * Model of the Inventory's Scrap value card: which pieces it prices (the
  * player's selection, else the filtered view), the material rows it shows,
- * and the pure updates of the selection. The selection is an ephemeral
- * `Set` of piece ids owned by the screen; every update returns a new `Set`
- * (or the same one when nothing changed) so React sees the change.
+ * and the pure updates of the selection. The selection is a `Set` of piece
+ * ids owned by the screen and kept for the session (`gs.inv.selection`);
+ * every update returns a new `Set` (or the same one when nothing changed) so
+ * React sees the change.
  */
 import type { ItemsTable } from "@gear-solver/core";
 import type { ScrapValue } from "./scrapValue.js";
@@ -75,4 +76,9 @@ export function pruneSelection(selection: Set<string>, alive: { has(id: string):
     next.delete(id);
   }
   return next ?? selection;
+}
+
+/** The piece shown in the detail panel, null once it left the inventory. */
+export function pruneShown(id: string | null, alive: { has(id: string): boolean }): string | null {
+  return id != null && !alive.has(id) ? null : id;
 }

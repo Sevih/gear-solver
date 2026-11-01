@@ -1,15 +1,18 @@
 /**
  * Presets tab, "Expand all" / "Collapse all" — `cardOpen` (a card's own click
  * under the latest command wins, a newer command overrides older clicks, else
- * the card's default) and `forceCards` (the buttons' next command); then the
- * screen rendered server-side on two presets (one filled, one empty), without
- * a command and with the "Expand all" one seeded through `initialCardCommand`.
+ * the card's default) and `forceCards` (the buttons' next command); the
+ * session codecs of the command and of the cards' clicks (`cardChoice`); then
+ * the screen rendered server-side on two presets (one filled, one empty),
+ * without a command, with the "Expand all" one seeded through
+ * `initialCardCommand`, and with its view state read back from sessionStorage
+ * (`useSessionState`).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Character, GearPiece, Inventory, Preset } from "@gear-solver/core";
-import { cardOpen, forceCards, type CardOpenCommand } from "../src/lib/presets/cardOpen.js";
+import { cardChoice, cardOpen, CHOICES_CODEC, forceCards, FORCED_CODEC, type CardOpenCommand } from "../src/lib/presets/cardOpen.js";
 
 // The screen's starting command, swapped per test (null = the real one).
 const seed = vi.hoisted(() => ({ command: null as CardOpenCommand | null }));
@@ -51,6 +54,42 @@ describe("cardOpen", () => {
   });
 });
 
+describe("session codecs", () => {
+  it("gs.presets.forced round-trips with its generation", () => {
+    const cmd = forceCards(forceCards(null, true), false);
+    const read = FORCED_CODEC.deserialize!(JSON.stringify(cmd));
+    expect(read).toEqual({ open: false, gen: 2 });
+    // A click made under it still wins, one made under the first command doesn't.
+    expect(cardOpen(read, { open: true, gen: 2 }, false)).toBe(true);
+    expect(cardOpen(read, { open: true, gen: 1 }, false)).toBe(false);
+  });
+
+  it("gs.presets.forced reads a malformed value as no command", () => {
+    for (const raw of ["null", "42", '"x"', '{"open":true}', '{"open":"yes","gen":1}', '{"open":true,"gen":0}', '{"open":true,"gen":1.5}']) {
+      expect(FORCED_CODEC.deserialize!(raw)).toBeNull();
+    }
+  });
+
+  it("gs.presets.open round-trips, in-game nums and local ids alike", () => {
+    const choices = { "3": true, "7": false, "0b6f-local": true };
+    expect(CHOICES_CODEC.deserialize!(JSON.stringify(choices))).toEqual(choices);
+  });
+
+  it("gs.presets.open drops what isn't a boolean, reads a non-object as no click", () => {
+    expect(CHOICES_CODEC.deserialize!('{"1":true,"2":"open","3":1,"4":null,"5":false}')).toEqual({ "1": true, "5": false });
+    for (const raw of ["null", "[true]", "true", '"x"']) expect(CHOICES_CODEC.deserialize!(raw)).toEqual({});
+  });
+
+  it("cardChoice stamps a kept click with the current command, none without a click", () => {
+    const forced = forceCards(null, false);
+    expect(cardChoice({ "1": true }, "1", forced)).toEqual({ open: true, gen: 1 });
+    expect(cardChoice({ "1": true }, "1", null)).toEqual({ open: true, gen: 0 });
+    expect(cardChoice({ "1": true }, "2", forced)).toBeNull();
+    // Under "Collapse all", the card opened by hand since stays open.
+    expect(cardOpen(forced, cardChoice({ "1": true }, "1", forced), true)).toBe(true);
+  });
+});
+
 describe("PresetsScreen, Expand all", () => {
   const piece = (slot: GearPiece["slot"], uid: string): GearPiece => ({
     uid, itemId: 1, slot, setId: null, armorSetId: null, rarity: "unique", star: 6, name: uid, classLimit: null,
@@ -70,14 +109,17 @@ describe("PresetsScreen, Expand all", () => {
   }));
   const expanded = (html: string) => html.split('aria-expanded="true"').length - 1;
 
+  const session = new Map<string, string>();
   beforeEach(() => {
     seed.command = null;
-    const store = new Map<string, string>();
-    (globalThis as { localStorage?: Storage }).localStorage = {
+    const stub = (store: Map<string, string>) => ({
       getItem: (k: string) => store.get(k) ?? null,
       setItem: (k: string, v: string) => void store.set(k, String(v)),
       removeItem: (k: string) => void store.delete(k),
-    } as Storage;
+    }) as Storage;
+    (globalThis as { localStorage?: Storage }).localStorage = stub(new Map());
+    session.clear();
+    (globalThis as { sessionStorage?: Storage }).sessionStorage = stub(session);
   });
 
   it("shows both buttons; without a command only the filled preset is open", () => {
@@ -97,5 +139,29 @@ describe("PresetsScreen, Expand all", () => {
   it("after Collapse all, none is open", () => {
     seed.command = forceCards(null, false);
     expect(expanded(render())).toBe(0);
+  });
+
+  it("reads the last command and the cards toggled since back from the session", () => {
+    session.set("gs.presets.forced", JSON.stringify(forceCards(null, false)));
+    session.set("gs.presets.open", JSON.stringify({ "2": true }));
+    const html = render();
+    // Collapse all, then the empty preset 2 opened by hand: only it is open.
+    expect(expanded(html)).toBe(1);
+    expect(html.indexOf('aria-expanded="true"')).toBeGreaterThan(html.indexOf(">P1<"));
+  });
+
+  it("reads the class chips and the sort back from the session", () => {
+    session.set("gs.presets.classFilter", JSON.stringify(["CCT_ATTACKER"]));
+    session.set("gs.presets.sort", JSON.stringify("priority"));
+    const html = render();
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toMatch(/aria-checked="true"[^>]*>Rank</);
+    // Neither preset has a known class: both hidden by the chip.
+    expect(html).toContain("No preset of the selected classes.");
+  });
+
+  it("a sort the screen no longer knows reads as the in-game order", () => {
+    session.set("gs.presets.sort", JSON.stringify("weight"));
+    expect(render()).toMatch(/aria-checked="true"[^>]*>In-game</);
   });
 });
