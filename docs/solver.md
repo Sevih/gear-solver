@@ -516,14 +516,18 @@ Arme, EE, Tête, Torse / Accessoire, Talisman, Gants, Bottes ; `PRESET_SLOTS` ga
 worklist, tests), seule la grille d'affichage change, et une pièce de slot inconnu suit la grille. La case EE
 montre l'EE que porte aujourd'hui le héros de référence de la carte (`referenceUid`, ou le porteur unique
 proposé, `eeOf`), atténuée, tooltip « EE isn't part of a preset — each hero keeps their own » ; sans
-référence (ou sans EE), une case vide en pointillé. Sous la grille, trois lignes (`lib/presets/presetQuality.ts`) :
+référence (ou sans EE), une case vide en pointillé. Sous chaque tuile, l'icône et la valeur de la main
+qui renseigne selon le slot (`presetTileMain`, `lib/presets/presetQuality.ts`) : sur l'arme la première main
+qui n'est pas l'ATK plat que portent toutes les armes (rien sinon), sur l'accessoire et le talisman leur
+première main, rien sur tête, torse, gants, bottes et EE ; le survol liste toutes les mains, et le nom du
+set reste sous les armures. Entre la grille et les lignes de héros, une colonne de trois lignes :
 **Quality** `X / 138`, somme des ticks des six pièces arme, accessoire, tête, torse, gants, bottes
 (`gearPieceQuality`) contre le cap fixe 6 × 23 (pièce ascendée + reforgée à fond), le cap de l'investissement
 actuel dans le tooltip ; **Offensive** `S / A`, les grades du roll +15 (Singularity, `singularityGrade`) de
 l'arme et de l'accessoire ; **Defensive** `A / B / C / S`, ceux de tête, torse, gants, bottes — classés par
 slot, un « – » par pièce non ascendée ou absente, chaque lettre à la couleur du jeu. Au-delà de 1280 px (`xl`), une carte ouverte passe en
-deux colonnes : la grille à gauche (largeur fixe), les lignes Reference / Associated à droite ; en dessous,
-empilées. Les métriques d'une ligne de héros ont une largeur minimale (alignées d'une ligne à l'autre) et
+colonnes : la grille à gauche (largeur fixe), la colonne qualité, puis les lignes Reference / Associated à
+droite ; en dessous, empilées dans cet ordre. Les métriques d'une ligne de héros ont une largeur minimale (alignées d'une ligne à l'autre) et
 s'étalent sur la place disponible. L'onglet Worklist n'a plus de largeur maximale : en-tête de transaction
 pleine largeur, puis les cartes en grille à deux colonnes au-delà de 1280 px, chacune à sa hauteur.
 
@@ -549,7 +553,11 @@ roster ignoré à la lecture ; le blob entre dans l'export / import de sauvegard
 héros ici gardant les siens). Pour la référence et chaque associé, `evaluatePresetFor`
 (`lib/presets/evaluate.ts`) compose le héros avec les pièces du preset + **son** EE actuelle par
 `computeFinalStats`, puis `computeCheapRatings` (facteurs de skill du héros) et `computeScore` avec sa
-priorité ; la carte montre Score, Dmg et DmgS.
+priorité ; la carte montre Score, Dmg et DmgS, chacun avec son infobulle (somme des stats finales pondérée
+par la priorité du Builder ; coup le plus fort contre DEF 2000, crit et PEN compris ; Dmg × SPD au facteur
+moyen de la rotation). Sur une carte de preset du jeu, la ligne de la référence ne montre que le portrait :
+son nom est déjà dans le sélecteur Reference juste au-dessus (une carte de preset local, sans sélecteur,
+le garde).
 
 **Gemmes d'EE par héros.** Le Talisman et ses gemmes font partie du preset (partagés, jamais réglés par
 héros) ; ce que chaque héros règle, ce sont les gemmes de **son** EE. `bestEeGemsFor`

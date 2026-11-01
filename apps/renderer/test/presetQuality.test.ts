@@ -1,8 +1,10 @@
 // Preset quality (six pieces' ticks vs 6 × 23) and +15 grades by slot — the
-// summary lines under a preset card's pieces (lib/presets/presetQuality.ts).
+// summary lines of a preset card — and the main stat under each tile
+// (lib/presets/presetQuality.ts).
 import { describe, expect, it } from "vitest";
 import type { GearPiece, GearSlot, RolledStat } from "@gear-solver/core";
-import { PRESET_QUALITY_MAX, presetQuality, presetRolls } from "../src/lib/presets/presetQuality.js";
+import type { UiMainStat } from "../src/design/adapter.js";
+import { PRESET_QUALITY_MAX, presetQuality, presetRolls, presetTileMain } from "../src/lib/presets/presetQuality.js";
 import type { PresetPiece } from "../src/lib/presets/presetRows.js";
 
 const sub = (ticks: number): RolledStat => ({ stat: "atkPct", value: 4 * ticks, percent: true, ticks, reforgeTicks: 0 });
@@ -78,5 +80,33 @@ describe("presetRolls", () => {
     const { defensive } = presetRolls(rows);
     expect(defensive[0]).toEqual({ slot: "helmet", grade: null, color: null, name: null });
     expect(defensive[3]).toEqual({ slot: "boots", grade: null, color: null, name: null });
+  });
+});
+
+describe("presetTileMain", () => {
+  const m = (stat: string, value: string, percent: boolean): UiMainStat => ({ label: `${stat} ${value}`, stat, value, percent, name: null });
+  const flatAtk = m("atk", "1380", false);
+  const atkPct = m("atkPct", "69%", true);
+  const crit = m("critRate", "40%", true);
+
+  it("shows a weapon's second main, not the flat ATK every weapon carries", () => {
+    expect(presetTileMain("weapon", [flatAtk, atkPct])).toBe(atkPct);
+  });
+
+  it("shows nothing on a weapon with the flat ATK only", () => {
+    expect(presetTileMain("weapon", [flatAtk])).toBeNull();
+    expect(presetTileMain("weapon", [])).toBeNull();
+  });
+
+  it("shows the first main of an accessory or a talisman", () => {
+    expect(presetTileMain("accessory", [crit, atkPct])).toBe(crit);
+    expect(presetTileMain("ooparts", [atkPct, crit])).toBe(atkPct);
+    expect(presetTileMain("accessory", [])).toBeNull();
+  });
+
+  it("shows nothing on the four armor pieces or the EE, even with mains", () => {
+    for (const slot of ["helmet", "armor", "gloves", "boots", "exclusive"] as const) {
+      expect(presetTileMain(slot, [flatAtk, atkPct])).toBeNull();
+    }
   });
 });

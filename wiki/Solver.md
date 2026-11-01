@@ -482,13 +482,17 @@ Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots; `PRESET_SLOTS` k
 worklist, tests), only the display grid changes, and a piece of unknown slot follows the grid. The EE cell
 shows the EE the card's reference hero wears today (`referenceUid`, or the proposed unique wearer, `eeOf`),
 dimmed, tooltip "EE isn't part of a preset — each hero keeps their own"; without a reference (or an EE), an
-empty dashed cell. Under the grid, three lines (`lib/presets/presetQuality.ts`): **Quality** `X / 138`, the
+empty dashed cell. Under each tile, the icon and value of the main that tells something for its slot
+(`presetTileMain`, `lib/presets/presetQuality.ts`): on the weapon the first main that isn't the flat ATK
+every weapon carries (nothing otherwise), on the accessory and the talisman their first main, nothing on
+helmet, armor, gloves, boots and EE; hovering lists every main, and the set name stays under the armor
+pieces. Between the grid and the hero lines, a column of three lines: **Quality** `X / 138`, the
 rolled ticks of the six pieces weapon, accessory, helmet, armor, gloves, boots (`gearPieceQuality`) against a
 fixed 6 × 23 cap (ascended + fully reforged), the cap for the current investment in the tooltip;
 **Offensive** `S / A`, the +15 (Singularity) roll grades of the weapon and accessory (`singularityGrade`);
 **Defensive** `A / B / C / S`, those of helmet, armor, gloves, boots — by slot, a "–" for a piece that isn't
-ascended or is absent, each letter in the game's color. Past 1280 px (`xl`), an open card goes two-column: the grid on the left (fixed width), the
-Reference / Associated lines on the right; below that, stacked. A hero line's metrics have a minimum width
+ascended or is absent, each letter in the game's color. Past 1280 px (`xl`), an open card goes into columns: the grid on the left (fixed width), the
+quality column, then the Reference / Associated lines on the right; below that, stacked in that order. A hero line's metrics have a minimum width
 (aligned from one line to the next) and spread over the room available. The Worklist tab has no maximum
 width anymore: the transaction header full width, then the cards on a two-column grid past 1280 px, each at
 its own height.
@@ -513,7 +517,11 @@ reference), stored app-local in `gs.presetHeroes` (`lib/storage/presetHeroes.ts`
 export / import, a preset that already has heroes here keeping its own). For the reference and each
 associated hero, `evaluatePresetFor` (`lib/presets/evaluate.ts`) composes the hero with the preset's pieces
 + **their own** current EE through `computeFinalStats`, then `computeCheapRatings` (the hero's skill
-factors) and `computeScore` with their priority; the card shows Score, Dmg and DmgS.
+factors) and `computeScore` with their priority; the card shows Score, Dmg and DmgS, each with its tooltip
+(the final stats weighted by the Builder priority; the strongest hit vs DEF 2000, crit and PEN included;
+Dmg × SPD at the rotation's average factor). On an in-game preset's card the reference's line shows the
+portrait only: the name is already in the Reference picker right above (a local preset's card, without a
+picker, keeps it).
 
 **EE gems per hero.** The Talisman and its gems are part of the preset (shared, never tuned per hero); what
 each hero tunes is the gems of **their own** EE. `bestEeGemsFor` (`lib/presets/eeGems.ts`) picks them like

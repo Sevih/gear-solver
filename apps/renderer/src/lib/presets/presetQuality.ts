@@ -11,9 +11,12 @@
  * accessory roll DMG Increase options (offensive), the four armor pieces
  * Reduced DMG Taken ones (defensive) — graded by `singularityGrade`.
  *
+ * Tile main: the main stat shown under a piece's tile (`presetTileMain`).
+ *
  * Pure: no React, no storage.
  */
 import { DEFAULT_RULES, type GearPiece, type GearSlot } from "@gear-solver/core";
+import type { UiMainStat } from "../../design/adapter.js";
 import { singularityGrade } from "../../design/ResultGearDetail.js";
 import { gearPieceQuality } from "../quality.js";
 import type { PresetPiece } from "./presetRows.js";
@@ -83,4 +86,14 @@ export function presetRolls(pieces: readonly PresetPiece[]): { offensive: Preset
     offensive: OFFENSIVE_SLOTS.map((s) => rollOf(s, bySlot.get(s))),
     defensive: DEFENSIVE_SLOTS.map((s) => rollOf(s, bySlot.get(s))),
   };
+}
+
+/** The main stat worth showing under a preset tile, by slot: on a weapon the
+ *  first main that isn't the flat ATK every weapon carries (null when there's
+ *  none); on an accessory or a talisman their first main; nothing on the four
+ *  armor pieces or the EE (their mains tell nothing). */
+export function presetTileMain(slot: GearSlot, mains: readonly UiMainStat[]): UiMainStat | null {
+  if (slot === "weapon") return mains.find((m) => !(m.stat === "atk" && !m.percent)) ?? null;
+  if (slot === "accessory" || slot === "ooparts") return mains[0] ?? null;
+  return null;
 }

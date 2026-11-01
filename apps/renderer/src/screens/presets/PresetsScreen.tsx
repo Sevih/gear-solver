@@ -46,14 +46,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, GameData, GearPiece, GearSlot, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { effectiveCharacter } from "@gear-solver/core";
-import { CharacterPortrait, SlotMini } from "../../design/EquipmentIcon.js";
+import { CharacterPortrait, SlotMini, StatIcon } from "../../design/EquipmentIcon.js";
 import { GearDetailBody } from "../../design/GearDetail.js";
 import { RichTooltip } from "../../design/RichTooltip.js";
 import { Pill } from "../../design/Chips.js";
 import { CyanButton } from "../../design/Shell.js";
 import { cx } from "../../design/cx.js";
 import { RankDragHandle, RankInput } from "../../design/RankInput.js";
-import { toUiPiece } from "../../design/adapter.js";
+import { toUiPiece, type UiMainStat } from "../../design/adapter.js";
 import { GAME_GEAR_GRID, toDesignSlot, toEngineSlot } from "../../design/tokens.js";
 import {
   arrangePresets, localPresetRows, presetClasses, presetRows, type PresetPiece, type PresetRow, type PresetSort,
@@ -67,7 +67,7 @@ import { bestEeGemsFor } from "../../lib/presets/eeGems.js";
 import { presetWorklistFor } from "../../lib/presets/presetWorklist.js";
 import { presetOptimizeNote, presetOptimizePatch } from "../../lib/presets/optimize.js";
 import { presetGameOrder } from "../../lib/presets/presetHolds.js";
-import { presetQuality, presetRolls, type PresetRoll } from "../../lib/presets/presetQuality.js";
+import { presetQuality, presetRolls, presetTileMain, type PresetRoll } from "../../lib/presets/presetQuality.js";
 import { cardOpen, forceCards, initialCardCommand, type CardOpenCommand } from "../../lib/presets/cardOpen.js";
 import { loadSeenPresets, persistSeenPresets, toggleLocked, type PresetRank } from "../../lib/storage/presetPriority.js";
 import { fillUnrankedByOrder, moveRankBefore, reorderRank } from "../../lib/storage/rankPriority.js";
@@ -556,6 +556,7 @@ function PresetCard({
 
           <div className="flex flex-col gap-2.5 xl:flex-row xl:items-start xl:gap-4">
             <PresetPieces pieces={pieces} game={game} ee={referenceUid ? eeOf(referenceUid, ctx) : null} />
+            <PresetSummary pieces={pieces} />
 
             {local ? (
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -577,7 +578,7 @@ function PresetCard({
                     <button type="button" onClick={() => onSetReference(null)} className="text-[11px] text-cyan-300 hover:text-cyan-200">Clear</button>
                   )}
                 </div>
-                {referenceUid && <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} onOptimizePreset={onOptimizePreset} reference />}
+                {referenceUid && <HeroLine uid={referenceUid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} onOptimizePreset={onOptimizePreset} reference nameAbove />}
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -662,9 +663,9 @@ const EE_NOTE = "EE isn't part of a preset — each hero keeps their own";
 /** The preset's pieces on the game's 4 × 2 grid, the existing tile + hover
  *  detail per piece, flagged when missing from the inventory or shared with
  *  another preset; `ee` (the reference hero's) dimmed in the EE cell. Pieces
- *  of unknown slot follow the grid. Under them, the preset's quality out of
- *  6 × 23 and the +15 grades of its offensive / defensive pieces
- *  (`presetQuality`, `presetRolls`). */
+ *  of unknown slot follow the grid. Under each tile, the icon + value of the
+ *  main stat that tells something for its slot (`presetTileMain`), then the
+ *  set name for an armor piece. */
 function PresetPieces({ pieces, game, ee }: { pieces: PresetPiece[]; game: GameData | null; ee: GearPiece | null }) {
   const bySlot = new Map(pieces.filter((p) => p.slot).map((p) => [p.slot!, p]));
   const unknown = pieces.filter((p) => !p.slot);
@@ -681,7 +682,7 @@ function PresetPieces({ pieces, game, ee }: { pieces: PresetPiece[]; game: GameD
             <Badge tone="amber" title={`Shared with ${p.sharedWith.map((r) => `#${r.num} ${r.name}`).join(", ")}`}>shared</Badge>
           )}
         </div>
-        {ui?.main[0] && <span className="max-w-16 truncate text-[11px] text-white/80" title={ui.main.map((m) => m.label).join(" · ")}>{ui.main[0].label}</span>}
+        {ui && <TileMain mains={ui.main} slot={p?.slot ?? null} />}
         {set && <span className="max-w-16 truncate text-[9.5px] text-zinc-400" title={set}>{set}</span>}
       </div>
     );
@@ -698,7 +699,6 @@ function PresetPieces({ pieces, game, ee }: { pieces: PresetPiece[]; game: GameD
             content={<div className="flex flex-col gap-1.5"><span className="text-[11px] italic text-zinc-300">{EE_NOTE}</span><GearDetailBody piece={ui} game={game} inTooltip /></div>}
           >{tile}</RichTooltip>
         ) : <div title={EE_NOTE}>{tile}</div>}
-        {ui?.main[0] && <span className="max-w-16 truncate text-[11px] text-white/80" title={ui.main.map((m) => m.label).join(" · ")}>{ui.main[0].label}</span>}
       </div>
     );
   };
@@ -712,8 +712,20 @@ function PresetPieces({ pieces, game, ee }: { pieces: PresetPiece[]; game: GameD
           {unknown.map((p) => cell(p.uid, "weapon", p))}
         </div>
       )}
-      <PresetSummary pieces={pieces} />
     </div>
+  );
+}
+
+/** Icon + value of the tile's telling main stat (`presetTileMain`); nothing
+ *  when the slot shows none. The title lists every main. */
+function TileMain({ mains, slot }: { mains: readonly UiMainStat[]; slot: GearSlot | null }) {
+  const m = slot ? presetTileMain(slot, mains) : null;
+  if (!m) return null;
+  return (
+    <span className="flex max-w-16 items-center gap-0.5 text-[11px] text-white/80" title={mains.map((x) => x.label).join(" · ")}>
+      <StatIcon stat={m.stat} size={14} className="shrink-0" title={null} />
+      <span className="truncate font-mono tabular-nums">{m.value}</span>
+    </span>
   );
 }
 
@@ -738,12 +750,13 @@ function RollGrades({ rolls }: { rolls: PresetRoll[] }) {
 }
 
 /** Quality of the preset out of 6 × 23, then the +15 grades of its weapon /
- *  accessory and of its four armor pieces. */
+ *  accessory and of its four armor pieces (`presetQuality`, `presetRolls`) —
+ *  a column between the pieces and the hero lines. */
 function PresetSummary({ pieces }: { pieces: PresetPiece[] }) {
   const q = presetQuality(pieces);
   const rolls = presetRolls(pieces);
   return (
-    <div className="flex w-max flex-col gap-0.5">
+    <div className="flex w-max shrink-0 flex-col gap-0.5">
       <Metric
         label="Quality"
         value={q.counted === 0 ? "—" : `${q.current} / ${q.max}`}
@@ -767,13 +780,18 @@ function Badge({ tone, title, children }: { tone: "rose" | "amber"; title: strin
   );
 }
 
+/** Hover help of a hero line's metrics. */
+const SCORE_TITLE = "Sum of the final stats weighted by this hero's Builder priority (the Builder's own score). \"—\" when no priority is set.";
+const DMG_TITLE = "Expected damage of the strongest skill hit vs a DEF 2000 target, crit-weighted, PEN included.";
+const DMGS_TITLE = "Dmg × SPD at the rotation's average factor per turn.";
+
 /** One hero of the preset — the EE gems proposed for them, the preset's score
  *  (with those gems) and offensive ratings on them; for an associated hero,
  *  the loss against their best known outfit; a badge per capped stat the
  *  outfit overshoots (orange line from `OVERCAP_WARN_PTS` of waste); "+ Worklist" for both, then
  *  "Optimize preset →" for the reference hero, "Optimize →" for the others. */
 function HeroLine({
-  uid, row, ctx, heroes, lossWarnPct, worklist, onOptimize, onOptimizePreset, reference = false, onRemove,
+  uid, row, ctx, heroes, lossWarnPct, worklist, onOptimize, onOptimizePreset, reference = false, nameAbove = false, onRemove,
 }: {
   uid: string;
   row: PresetRow;
@@ -784,6 +802,9 @@ function HeroLine({
   onOptimize?: (heroUid: string) => void;
   onOptimizePreset?: (heroUid: string, patch: RecoFilterPatch, note: string, presetNum: number) => void;
   reference?: boolean;
+  /** The hero's name is already shown right above (the in-game card's
+   *  Reference HeroSelect): portrait only. */
+  nameAbove?: boolean;
   onRemove?: () => void;
 }) {
   const h = heroes.get(uid);
@@ -845,18 +866,18 @@ function HeroLine({
       "flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border px-2 py-1.5",
       warn || overcap.some((o) => o.warn) ? "border-orange-400/50 bg-orange-500/10" : "border-white/6 bg-black/20",
     )}>
-      <div className="flex w-56 items-center gap-2">
+      <div className={cx("flex items-center gap-2", !nameAbove && "w-56")}>
         <CharacterPortrait charId={h.displayCharId} name={h.name} cls={h.cls} element={h.element} size={32} />
-        <span className="truncate text-[12px] text-white">{h.name}</span>
+        {!nameAbove && <span className="truncate text-[12px] text-white">{h.name}</span>}
       </div>
       {!evalPreset ? (
         <span className="text-[11px] italic text-zinc-400">Stats unavailable for this hero (missing game data).</span>
       ) : (
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-6 gap-y-1">
-          <Metric label="Score" value={evalPreset.score == null ? "—" : fmtNum(evalPreset.score)} />
+          <Metric label="Score" value={evalPreset.score == null ? "—" : fmtNum(evalPreset.score)} title={SCORE_TITLE} />
           {socketedScore && <span className="font-mono text-[11.5px] tabular-nums text-zinc-400" title="Score with the EE gems as socketed today">({socketedScore} as socketed)</span>}
-          <Metric label="Dmg" value={fmtNum(evalPreset.ratings.dmg)} />
-          <Metric label="DmgS" value={fmtNum(evalPreset.ratings.dmgs)} />
+          <Metric label="Dmg" value={fmtNum(evalPreset.ratings.dmg)} title={DMG_TITLE} />
+          <Metric label="DmgS" value={fmtNum(evalPreset.ratings.dmgs)} title={DMGS_TITLE} />
           {evalPreset.score == null ? (
             <span className="text-[11px] text-zinc-300">no priority set for {h.name} — set one in the Builder</span>
           ) : !reference && (
@@ -932,10 +953,11 @@ function ClassIcon({ label }: { label: string }) {
   );
 }
 
-/** Fixed minimum width so the metrics line up from one hero line to the next. */
+/** Fixed minimum width so the metrics line up from one hero line to the next;
+ *  `title` = hover help (help cursor). */
 function Metric({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
   return (
-    <span title={title} className="flex min-w-24 items-baseline gap-1 font-mono text-[11.5px] tabular-nums">
+    <span title={title} className={cx("flex min-w-24 items-baseline gap-1 font-mono text-[11.5px] tabular-nums", title && "cursor-help")}>
       <span className="text-[9px] uppercase tracking-wider text-zinc-400">{label}</span>
       <span className="text-white">{value}</span>
     </span>

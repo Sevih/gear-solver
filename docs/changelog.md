@@ -8,6 +8,39 @@
 
 ## Items de backlog clôturés (index)
 
+### 🏷️ Carte de preset : icône + valeur sous les tuiles, colonne qualité entre tuiles et Reference, infobulles Score / Dmg / DmgS (G87) (2026-11-01)
+- ✅ **Pourquoi.** Retour de Sevih du 01/11 sur la carte de preset après G86 : le label texte sous chaque tuile
+  (« ATK 1380 ») n'apprend rien sur l'arme (toutes ont l'ATK plat en première main) ni sur les armures et l'EE ; le
+  bloc Quality / Offensive / Defensive allongeait la colonne des pièces ; le nom du héros de référence apparaissait
+  deux fois (sélecteur Reference + ligne) ; Score / Dmg / DmgS n'étaient expliqués nulle part.
+- ✅ **Règle.** `presetTileMain(slot, mains)` dans `apps/renderer/src/lib/presets/presetQuality.ts` (pure) : arme →
+  la première main qui n'est pas `stat === "atk"` sans `percent` (null s'il n'y en a pas), accessoire et talisman
+  (`ooparts`) → leur première main, tête / torse / gants / bottes / EE → null même avec des mains. Le paramètre est
+  typé `GearSlot`, qui contient déjà `"exclusive"` (le `GearSlot | "exclusive"` du lot serait redondant).
+- ✅ **Carte.** `PresetsScreen.tsx` : sous chaque tuile, `TileMain` rend `StatIcon` 14 px + `value` en `text-[11px]`
+  (`title` = tous les labels joints par « · »), à la place du label ; la case EE perd sa ligne de main, le nom du set
+  reste sous les armures. Une pièce de slot inconnu (rangée du bas) n'a plus de ligne de main, la règle étant par slot.
+  `PresetSummary` sort de `PresetPieces` et devient une colonne `shrink-0` entre la grille et la colonne Reference /
+  Associated dans le même `xl:flex-row` (empilée entre les deux sous xl), contenu et `title` inchangés. `HeroLine`
+  prend `nameAbove` : posé seulement sur la ligne de référence d'une carte de preset du jeu, il retire le nom et le
+  `w-56` (le bloc se réduit au portrait) ; la carte d'un preset local n'a pas de `HeroSelect` au-dessus de sa
+  référence, elle garde donc le nom (sinon il n'apparaîtrait nulle part) — écart volontaire au texte du lot, qui
+  supposait le sélecteur partout. Les associés gardent portrait + nom, la phrase « no priority set for ‹héros› » ne
+  bouge pas. `Metric` (qui avait déjà un `title?` depuis G86) ajoute `cursor-help` quand un `title` est posé ; Score,
+  Dmg et DmgS reçoivent les trois textes du lot (`SCORE_TITLE`, `DMG_TITLE`, `DMGS_TITLE`).
+- ✅ **Docs.** `docs/solver.md` et `wiki/Solver.md` (ligne sous les tuiles, colonne qualité, infobulles, portrait seul
+  sur la référence), `wiki/Using-the-App.md` (ligne sous les tuiles, infobulles). Aucun item de `docs/todo.md` ne s'y
+  rapportait.
+- ✅ **Tests.** `apps/renderer/test/presetQuality.test.ts` (+4 cas `presetTileMain`) : arme ATK plat + ATK% → l'ATK% ;
+  arme ATK plat seul (ou sans main) → null ; accessoire et talisman → première main ; helmet / armor / gloves / boots /
+  exclusive → null avec des mains. Le point 3 (nom retiré sur la référence) est vérifié par lecture du rendu de
+  `HeroLine` et de ses trois appels (seul celui de la référence d'une carte du jeu passe `nameAbove`), sans test de
+  rendu statique. `npm run typecheck` vert (dernière ligne `> tsc --noEmit`) ; `npm test` : `Tests  169 passed (169)`
+  (core), `Tests  238 passed (238)` (desktop), `Tests  919 passed (919)` (renderer) ; `npm run lint` :
+  `✖ 8 problems (0 errors, 8 warnings)`, comme avant.
+- ⏳ Coup d'œil de Sevih sur une carte réelle (icônes sous les tuiles, colonne qualité entre tuiles et Reference en xl
+  et empilée en dessous, portrait seul sur la référence).
+
 ### 🎖️ Qualité du preset sur 138 et grades du +15 offensif / défensif sur la carte de preset (G86) (2026-11-01)
 - ✅ **Pourquoi.** Demande de Sevih du 01/11 : chaque pièce a déjà une qualité sur 23 ; la carte d'un preset doit
   montrer la qualité du preset sur 6 × 23 = 138 et les grades du roll +15 (Singularity) des pièces offensives (arme,
