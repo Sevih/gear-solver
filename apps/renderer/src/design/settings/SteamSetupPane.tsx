@@ -5,6 +5,9 @@
 import { useState } from "react";
 import { cx } from "../cx.js";
 import { uninstallSteamPlugin, type SteamStatus } from "../../steam.js";
+import type { DataVersion } from "../../data.js";
+import { useDataVersion } from "../../hooks/useDataVersion.js";
+import { dataVersionLabel } from "../../lib/dataVersion.js";
 import { SectionStrip } from "./SettingsControls.js";
 import { useMountedRef, useConfirmClick } from "./useConfirmClick.js";
 
@@ -12,12 +15,12 @@ import { useMountedRef, useConfirmClick } from "./useConfirmClick.js";
  * Panes
  * ───────────────────────────────────────────────────────────────────────── */
 
-/** Header note of the Steam pane: the installed build, then the client
- *  outerpedia last read ("build 123 · reference v1.4.18 (build 25744766)"). */
-function steamBuildNote(s: SteamStatus | null): string | null {
-  if (!s) return null;
-  const reference = `reference v${s.reference.version} (build ${s.reference.buildId})`;
-  return s.buildId ? `build ${s.buildId} · ${reference}` : reference;
+/** Header note of the Steam pane: the installed build, then the loaded game
+ *  data in the one format Settings › Data uses too ("build 123 · data game
+ *  1.11.503 · 49a39d2e9dd6 · built …"). */
+function steamBuildNote(s: SteamStatus | null, data: DataVersion | null): string | null {
+  const dataNote = `data ${dataVersionLabel(data)}`;
+  return s?.buildId ? `build ${s.buildId} · ${dataNote}` : dataNote;
 }
 
 /** Capture setup wizard: three checks, the first two gate "ready" (the plugin
@@ -29,6 +32,7 @@ export function SteamSetupPane({ steam, loading, busy, onInstall, onLaunch, onPr
   onStatus: (message: string) => void;
 }) {
   const s = steam;
+  const dataVersion = useDataVersion();
   const installedOk = Boolean(s?.installed);
   const pluginOk = Boolean(s?.ready);
   const liveOk = Boolean(s?.live);
@@ -57,7 +61,7 @@ export function SteamSetupPane({ steam, loading, busy, onInstall, onLaunch, onPr
 
   return (
     <div className="flex flex-col gap-3.5">
-      <SectionStrip title="Capture setup · Steam" note={steamBuildNote(s)} />
+      <SectionStrip title="Capture setup · Steam" note={steamBuildNote(s, dataVersion)} />
       {s?.buildDiffers && (
         <p className="rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11.5px] text-amber-200">
           This game build differs from the client outerpedia last read (v{s.reference.version}, build {s.reference.buildId}).

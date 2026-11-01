@@ -4,32 +4,33 @@
  *
  *  1. Update center — a state-driven inline card (up-to-date / checking /
  *     downloading% / downloaded→Install / offline→Retry) that replaces the two
- *     old native dialogs. Auto-download happens in the main process; this card
- *     polls `/api/update/status` and surfaces the one action that's left:
- *     "Install new version".
+ *     old native dialogs. Auto-download happens in the main process; App polls
+ *     `/api/update/status` (hooks/useAppUpdate.ts) and this card surfaces the
+ *     one action that's left: "Install new version".
  *  2. Dashboard — a calm, scannable read of the captured account: identity
  *     (snapshot + library + capture health + updates) up top, the gear-quality
  *     distribution as the hero stat, then roster/gear breakdowns below.
  *
  * All numbers are derived from the already-loaded `inventory` + `game` (no new
- * fetches beyond the update poll). When nothing is captured yet, the dashboard
- * collapses to a single Capture CTA; the update card still shows.
+ * fetches). When nothing is captured yet, the dashboard collapses to the
+ * capture hint; the update card still shows.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { GameData, Inventory } from "@gear-solver/core";
 import type { CaptureStatus } from "../../capture.js";
-import { describeSteam, type SteamStatus } from "../../steam.js";
+import type { SteamStatus } from "../../steam.js";
 import { cx } from "../../design/cx.js";
 import { jsonOneOf, useSessionState } from "../../hooks/usePersistedState.js";
 import type { InventoryDrill } from "../inventory/InventoryScreen.js";
 import { loadSavedBuilds } from "../../lib/storage/savedBuilds.js";
 import { loadFilterPresets } from "../../lib/storage/filterPresets.js";
-import { checkForUpdate, getUpdateStatus, installUpdate, type UpdateStatus } from "../../lib/update.js";
+import type { UpdateStatus } from "../../lib/update.js";
 import { computeStats } from "../../lib/homeStats.js";
 import { UpdateCard } from "./UpdateCard.js";
 import { EmptyDashboard } from "./EmptyDashboard.js";
+import { SystemHealthCard } from "./SystemHealthCard.js";
 import { Card, SubLabel, SectionLabel, Num, Segmented, InfoTip, ActBtn, BarRow, Stat } from "./HomePrimitives.js";
-import { IC_SNAPSHOT, IC_HEALTH, IC_QUALITY, IC_ROSTER, IC_GEAR, IC_LIBRARY, IC_ELEMENT, IC_CLASS, IC_SLOT, IC_SETS } from "./HomeIcons.js";
+import { IC_SNAPSHOT, IC_QUALITY, IC_ROSTER, IC_GEAR, IC_LIBRARY, IC_ELEMENT, IC_CLASS, IC_SLOT, IC_SETS } from "./HomeIcons.js";
 import { ExportRosterButton } from "./ExportRosterButton.js";
 import { SlotHead, ClassEffectRow, EffectChipView } from "./ClassEffectRow.js";
 import { OopartsTable } from "./OopartsTable.js";
@@ -61,11 +62,14 @@ export interface HomeScreenProps {
   capStatus: CaptureStatus | null;
   /** The Steam capture plugin's last status poll. */
   steam: SteamStatus | null;
-  appVersion: string;
+  /** App update status, polled by App (hooks/useAppUpdate.ts). */
+  update: UpdateStatus;
+  onCheckUpdate: () => void;
+  onInstallUpdate: () => void;
   busy: boolean;
-  onSteamInstall: () => void;
-  onSteamLaunch: () => void;
-  onReload: () => void;
+  /** Opens Settings on Setup — where, with the header, the plugin install
+   *  and game launch buttons live. */
+  onOpenSetup: () => void;
   onSyncData: () => void;
   onOpenBuilder: () => void;
   /** Drill into the Inventory tab pre-filtered to a clicked facet (quality
@@ -74,31 +78,9 @@ export interface HomeScreenProps {
 }
 
 export function HomeScreen({
-  inventory, game, capStatus, steam, appVersion, busy,
-  onSteamInstall, onSteamLaunch, onReload, onSyncData, onOpenBuilder, onDrill,
+  inventory, game, capStatus, steam, update, onCheckUpdate, onInstallUpdate, busy,
+  onOpenSetup, onSyncData, onOpenBuilder, onDrill,
 }: HomeScreenProps) {
-  // Poll the update status. Faster while a download is in flight so the % bar
-  // animates; idle states tick slowly. Seeded with a static "up to date" using
-  // the build-time app version so the card never flashes empty.
-  const [update, setUpdate] = useState<UpdateStatus>({
-    state: "uptodate", version: null, progress: 0, error: null, appVersion, dataSha: null,
-  });
-  useEffect(() => {
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = async () => {
-      const s = await getUpdateStatus();
-      if (!alive) return;
-      if (s) setUpdate(s);
-      const delay = (s?.state === "downloading" || s?.state === "checking") ? 1000 : 4000;
-      timer = setTimeout(tick, delay);
-    };
-    void tick();
-    return () => { alive = false; clearTimeout(timer); };
-  }, []);
-
-  const onCheck = () => { setUpdate((u) => ({ ...u, state: "checking", error: null })); void checkForUpdate(); };
-  const onInstall = () => { void installUpdate(); };
 
   // Gear breakdown view — overview (by slot + top sets), class matrix, the
   // full owned-set list or the talismans. View state: kept across a tab switch
@@ -117,25 +99,15 @@ export function HomeScreen({
   // "Live" = the plugin is loaded in a running game.
   const live = Boolean(steam?.live);
   const lastCap = relTime(capStatus?.userItemMtime ?? null);
-  const steamD = describeSteam(steam);
-  const healthReady = Boolean(steam?.ready);
-  const healthTitle = steam?.live ? "Capture plugin live" : steam?.ready ? "Plugin ready · launch the game" : steam?.installed ? "Capture plugin needed" : "OUTERPLANE not found in Steam";
-  const healthLine = steam?.gameDir ?? steamD.text;
-  // Primary action mirrors the header: install → launch → (live) reload.
-  const steamAction: { label: string; onClick: () => void } | null =
-    !steam || !steam.installed ? null
-    : !steam.ready ? { label: busy ? "Installing…" : steam.plugin.present ? "Update plugin" : "Install plugin", onClick: onSteamInstall }
-    : !steam.gameRunning ? { label: "Launch game", onClick: onSteamLaunch }
-    : { label: "Reload", onClick: onReload };
 
   return (
     <div className="mx-auto flex w-full flex-col gap-3.5 px-3.5 py-3.5" style={{ maxWidth: 1480 }}>
       {!stats ? (
         <>
           <div className="max-w-md">
-            <UpdateCard status={update} onCheck={onCheck} onInstall={onInstall} />
+            <UpdateCard status={update} onCheck={onCheckUpdate} onInstall={onInstallUpdate} />
           </div>
-          <EmptyDashboard steam={steam} busy={busy} onSteamInstall={onSteamInstall} onSteamLaunch={onSteamLaunch} />
+          <EmptyDashboard steam={steam} onOpenSetup={onOpenSetup} />
         </>
       ) : (
         <>
@@ -204,24 +176,11 @@ export function HomeScreen({
               <ActBtn tone="violet" className="mt-auto w-full text-center" onClick={onOpenBuilder}>Open Builder →</ActBtn>
             </Card>
 
-            <Card className="flex min-w-0 flex-[1.1] flex-col gap-3">
-              <SectionLabel icon={IC_HEALTH} tint={healthReady ? "#34d399" : "#fbbf24"}>System health</SectionLabel>
-              <div className="flex items-center gap-2.5">
-                <span className={cx("h-2.5 w-2.5 shrink-0 rounded-full", healthReady ? "bg-emerald-400 shadow-[0_0_8px_#34d399]" : "bg-amber-400 shadow-[0_0_8px_#fbbf24]")} />
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[13px] font-semibold text-white">{healthTitle}</span>
-                  <Num className="truncate text-[10.5px] text-zinc-400" >{healthLine}</Num>
-                </div>
-              </div>
-              <div className="mt-auto flex gap-2">
-                <ActBtn className="flex-1" onClick={onSyncData} disabled={busy}>Sync game data</ActBtn>
-                {steamAction && <ActBtn tone="cyan" className="flex-1" onClick={steamAction.onClick} disabled={busy}>{steamAction.label}</ActBtn>}
-              </div>
-            </Card>
+            <SystemHealthCard steam={steam} busy={busy} onSyncData={onSyncData} onOpenSetup={onOpenSetup} />
 
             {/* updates — compact column, no longer a full-width banner */}
             <div className="flex min-w-0 flex-[1.2]">
-              <UpdateCard status={update} onCheck={onCheck} onInstall={onInstall} />
+              <UpdateCard status={update} onCheck={onCheckUpdate} onInstall={onInstallUpdate} />
             </div>
           </div>
 

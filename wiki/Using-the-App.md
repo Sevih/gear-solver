@@ -4,7 +4,12 @@ How to drive gear-solver day to day. New here? Start with [Getting Started](Gett
 to import your account first.
 
 The window has six tabs — **Home**, **Inventory**, **Builds**, **Presets**, **Builder**, **Worklist** —
-plus a **Settings** modal (the **Settings** button, top-right) and the capture controls in the header.
+plus a **Settings** modal (the **Settings** button, top-right) and the capture controls in the header:
+one **capture pill** (Checking… · Steam not found · Plugin needed · Plugin update available · Game closed ·
+Waiting for game · Live — hover it for the detail and the game folder), next to it the one button that
+unblocks you (**Install plugin** / **Update plugin** / **Launch game**, the same as in Settings → Setup)
+and **Reload**. When an app update is waiting, a **vX ready** (or **vX available**) badge shows in the
+header whatever the tab; click it to open the update card on Home.
 
 ---
 
@@ -22,8 +27,13 @@ Your landing screen. At a glance:
   how many you own with that main stat, with row/column totals). The view you picked stays when
   you switch tabs, back to Overview on the next launch.
 - **Library** — your saved builds.
-- **Update center** — checks for app updates inline; when one is ready, an **Install** button
-  appears (no native pop-ups).
+- **System health** — the capture state in the header pill's words, **Sync game data**, and
+  **Open Setup** (Settings on the Setup pane). Installing the plugin and launching the game are done
+  from the header button or from Setup; before your first capture, Home says which step is next and
+  points to them.
+- **Update center** — app updates (checked in the background whatever the tab); when one is ready,
+  an **Install new version** button appears (no native pop-ups). Its footer shows the app version;
+  the game-data version is in **Settings → Data**.
 
 ---
 
@@ -365,8 +375,8 @@ setup check has passed).
 
 - **Setup** — the capture plugin checklist (game found in Steam · plugin installed · plugin
   loaded in the game), with Install / Update / Remove plugin and Launch game. The header shows
-  your game build next to the client outerpedia last read, with a warning line when they differ
-  (informational: capture still works).
+  your game build next to the loaded game-data version (same format as in Data), with a warning line
+  when your build differs from the client outerpedia last read (informational: capture still works).
 - **Solver** — under *Solver tuning* (applies on the next solve): worker count (Auto = use your CPU;
   or pin a number), how many results to return and, under *Show advanced*, the per-worker depth;
   under *Display* (applies at once): results heatmap on/off, compact result cards (shorter gear
@@ -385,8 +395,8 @@ setup check has passed).
 
 ## Keeping things up to date
 
-- **App updates** — the **Home** tab's update center checks automatically; click **Install** when
-  one is downloaded. On Linux the AppImage needs to sit in a folder you can write to; otherwise the
+- **App updates** — checked automatically; a **vX ready** badge appears in the header once one is
+  downloaded, whatever the tab. Click it (or go to **Home**) and click **Install new version**. On Linux the AppImage needs to sit in a folder you can write to; otherwise the
   card reads **Manual** with the reason, and you download the new AppImage by hand.
 - **Game data** — after an OUTERPLANE patch, the app refreshes its game tables on launch. You can
   also force it from **Settings → Data → Sync game data**, then re-capture your account.

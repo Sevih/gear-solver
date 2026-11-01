@@ -1,8 +1,8 @@
 /**
  * Settings → Data — game data sync, onboarding reset and captured-data wipe.
  */
-import { useEffect, useState } from "react";
-import { loadDataVersion, type DataVersion } from "../../data.js";
+import { useDataVersion } from "../../hooks/useDataVersion.js";
+import { dataVersionLabel } from "../../lib/dataVersion.js";
 import { useConfirmClick } from "./useConfirmClick.js";
 import { SectionStrip, DataAction } from "./SettingsControls.js";
 
@@ -19,24 +19,13 @@ export function DataPane({
   // Read-only stamp of the loaded derived-data snapshot (data/derived/version.json,
   // written by build.mjs). Fetched once on open; absent on data built before the
   // stamp existed → renders an em-dash.
-  const [version, setVersion] = useState<DataVersion | null>(null);
-  useEffect(() => {
-    let alive = true;
-    void loadDataVersion().then((v) => { if (alive) setVersion(v); });
-    return () => { alive = false; };
-  }, []);
+  const version = useDataVersion();
   return (
     <div className="flex flex-col gap-3">
       <SectionStrip title="Data" />
       <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2 text-[11px]">
         <span className="text-white/50">Game data version</span>{" "}
-        {version
-          ? <>
-              {version.resVersion && <span className="text-white/40">game {version.resVersion} · </span>}
-              <span className="font-mono text-white/85">{version.hash}</span>
-              <span className="text-white/40"> · built {new Date(version.builtAt).toLocaleString()}</span>
-            </>
-          : <span className="text-white/40">—</span>}
+        <span className={version ? "font-mono text-white/85" : "text-white/40"}>{dataVersionLabel(version)}</span>
       </div>
       <DataAction
         label="Sync game data"

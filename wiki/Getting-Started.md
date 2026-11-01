@@ -49,8 +49,10 @@ button in the top-right). Follow the checklist:
 
 1. **OUTERPLANE installed via Steam** — found automatically.
 2. **Capture plugin installed** — click **Install plugin** (one time; close the game first if it
-   was already running without the plugin, then restart it).
-3. **Game running with the plugin loaded** — launch the game (the wizard has a button for it).
+   was already running without the plugin, then restart it). The same button sits in the header,
+   top-right, next to the capture pill.
+3. **Game running with the plugin loaded** — launch the game (**Launch game**, in the wizard or in
+   the header).
 
 When the checks are green, you're ready to import.
 
@@ -65,13 +67,13 @@ Importing reads your gear + heroes straight from the game.
 1. Launch OUTERPLANE from Steam (with the plugin installed).
 2. **Play through to the lobby** (the main town screen). The plugin writes your account +
    inventory as the game loads them and gear-solver **imports on its own** within a few
-   seconds — no button to press. The header pill reads **Live** while the game runs.
+   seconds — no button to press. The header's capture pill reads **Live** while the game runs.
 3. For the extra stats (codex + geas), open the in-game **Hero Archive (Codex)** and
    **Gift / Geas** screens once — they import as soon as they load.
 
 Re-importing later = just play again: every lobby load refreshes the snapshot (new gear,
 an enhanced piece, a leveled hero…). The app also auto-imports the most recent capture on
-launch, and **Reload** (top of the window) re-reads it on demand.
+launch, and **Reload** (the round-arrow icon, top-right of the window) re-reads it on demand.
 
 ---
 

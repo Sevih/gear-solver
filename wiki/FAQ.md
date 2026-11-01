@@ -26,7 +26,7 @@ a plugin the running game has already loaded. Quit OUTERPLANE, click Install aga
 A first install while the game runs *without* any plugin yet is fine — just restart the game
 afterwards so it loads.
 
-**The header says "game up, plugin not loaded" / nothing imports.**
+**The header pill stays on "Waiting for game" / nothing imports.**
 The game was started before the plugin was installed (or BepInEx isn't loading). Restart the
 game. If it persists, look at `BepInEx/LogOutput.log` in the game folder — it should list
 *Gear Solver Capture* and "hooked CWebManager…"; an antivirus quarantining `winhttp.dll` in

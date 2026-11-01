@@ -89,15 +89,11 @@ export function UpdateCard({ status, onCheck, onInstall }: {
         <button onClick={onCheck} className="w-full rounded-lg border border-white/10 bg-zinc-900 py-2 text-[12px] font-semibold text-zinc-400 hover:bg-zinc-800">Check again</button>
       ) : null}
 
-      {/* version metadata (always) */}
+      {/* app version (always) — the game data version is Settings › Data's */}
       <div className="flex items-center justify-between border-t border-white/7 pt-2.5">
         <div className="flex flex-col gap-px">
           <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-white/65">App</span>
           <Num className="text-[11.5px] font-semibold text-zinc-300">v{status.appVersion}</Num>
-        </div>
-        <div className="flex flex-col items-end gap-px">
-          <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-white/65">Game data</span>
-          <Num className="text-[11.5px] font-semibold text-zinc-400">{status.dataSha ?? "—"}</Num>
         </div>
       </div>
       {status.state === "downloaded" && <span className="-mt-1 text-center text-[9.5px] text-zinc-400">Installing restarts the app</span>}

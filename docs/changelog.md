@@ -8,6 +8,70 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧢 En-tête unique : une pastille de capture, l'action plugin / jeu dans l'en-tête et Setup seulement, badge de mise à jour partout, une version des données (U8, G96) (2026-11-01)
+- ✅ **Pourquoi.** Huitième lot de la refonte (U8 de `docs/ux-audit-2026-11-01.md`, raison 5 du diagnostic « La même
+  action à deux, trois ou quatre endroits, avec des mots différents », observations de 1.1, parcours 2.d « Mise à jour
+  de l'app », paragraphe « En-tête » de la variante A) : l'en-tête disait l'état de capture deux fois (`SteamBadge`
+  « Steam · plugin not installed » et la pastille « Plugin needed »), « Install / Update plugin / Launch game »
+  existait à quatre endroits, « Reload » à deux, la carte de mise à jour n'interrogeait le serveur que Home affiché,
+  et quatre « versions de données » ne montraient pas la même valeur.
+- ✅ **Une pastille, un vocabulaire.** `steam.ts` : `describeSteam` (texte « Steam · … ») remplacé par le helper pur
+  `captureBadge(steam)` → `{ label, tone, title }` : Checking… / Steam not found / Plugin needed / Plugin update
+  available / Game closed / Waiting for game / Live, ton `live` / `warn` / `idle` ; le `title` porte le détail
+  (plugin absent, pointé ailleurs, BepInEx manquant, version du plugin vivant) suivi du dossier du jeu. Écart assumé
+  avec la signature du lot (`captureBadge(steam, capture)`) : rien de l'état du dossier de capture n'entrait dans le
+  libellé, un second argument aurait été inutilisé. `design/Shell.tsx` : `SteamBadge` supprimé (et la prop `steam` de
+  `GsHeader`), `CaptureControls` rend la pastille depuis `captureBadge`, le bouton d'action et l'icône Reload restent
+  côte à côte (chemins `onInstall`, `onLaunch`, reload inchangés).
+- ✅ **L'action dans l'en-tête et Setup seulement.** Home › System health extrait dans
+  `screens/home/SystemHealthCard.tsx` : « Capture · ‹libellé de la pastille› », le `title` en ligne de détail,
+  « Sync game data » (inchangé, reste jusqu'à U13) et « Open Setup » à la place du bouton Install / Update / Launch /
+  Reload. L'état vide (`EmptyDashboard.tsx`) n'a plus de bouton d'action : « Capture · ‹libellé› », la prochaine
+  étape en une phrase qui renvoie au bouton en haut à droite, à côté de la pastille (ou au Manual fallback sans
+  Steam), et un lien « Step by step in Settings › Setup ». `HomeScreen` perd `onSteamInstall`, `onSteamLaunch`,
+  `onReload` et `appVersion`, gagne `onOpenSetup`. Ouvrir Settings sur un panneau : prop `openOn` de
+  `SettingsModal` (appliquée à l'ouverture, après onboarding ; avant, Setup comme avant) ; `App.tsx` passe par
+  `openSettings(pane)`, le bouton Settings de l'en-tête rouvre toujours le dernier panneau. `grep -rn "SteamBadge"
+  apps/renderer/src` est vide ; `grep -rn "Install plugin\|Launch game" apps/renderer/src` ne rend plus que
+  `Shell.tsx` et `SteamSetupPane.tsx`.
+- ✅ **Mise à jour remontée dans App.** `hooks/useAppUpdate.ts` porte l'état et l'interrogation de
+  `/api/update/status` (même logique qu'avant : 4 s au repos, 1 s pendant un téléchargement ou une vérification ;
+  « Check again » / « Retry » et « Install new version » inchangés), vivante quel que soit l'onglet ; `HomeScreen`
+  et `UpdateCard` lisent l'état en props. Helper pur `updateBadge(status)` (`lib/update.ts`) : « vX ready » une fois
+  téléchargée (cyan), « vX available » pendant le téléchargement (neutre) ou en mise à jour manuelle (ambre), rien
+  à jour, en vérification, hors ligne ou sans version connue. L'en-tête l'affiche à gauche du bouton Settings ; un
+  clic ouvre Home, où la carte reste jusqu'à U13. Aucune vérification GitHub de plus : seul le relevé local de l'état
+  tourne désormais hors de Home.
+- ✅ **Une version des données.** Helper pur `dataVersionLabel(version)` (`lib/dataVersion.ts`) : « game 1.11.503 ·
+  49a39d2e9dd6 · built ‹date locale› » (le format de Settings › Data ; sans version du jeu sur un vieux tampon, « — »
+  sans tampon), lu par `hooks/useDataVersion.ts` (chargement unique, l'effet qui vivait dans `DataPane`). Settings ›
+  Data l'affiche d'un bloc (en mono) ; Settings › Setup dit « build ‹installé› · data ‹même libellé› » au lieu de
+  « reference vX (build N) » (l'avertissement `buildDiffers` nomme toujours le client de référence quand il diffère).
+  Le pied d'`UpdateCard` ne montre plus que « App vX » : le sha du commit outerpedia (`dataSha`) quitte l'UI mais
+  reste dans le type `UpdateStatus` (l'API desktop n'est pas touchée). L'en-tête garde « vX · game Y ».
+- ✅ **Tests.** `apps/renderer/test/headerU8.test.ts` (nouveau, 9) : `captureBadge` (chaque état → libellé et ton,
+  jamais « Steam · » ; `title` avec le dossier et la version du plugin), `updateBadge` (ready / available / rien),
+  `dataVersionLabel` ; rendu statique de `GsHeader` (une seule pastille, « Install plugin », badge présent en ready
+  et available, absent à jour), de `SystemHealthCard` (libellé de la pastille, « Open Setup », ni Install / Update /
+  Launch ni Reload) et de l'état vide (renvoi à l'en-tête et à Setup, un seul bouton, le lien).
+- ✅ **Docs.** `wiki/Using-the-App.md` (en-tête : la pastille et ses états, le bouton d'action, le badge de mise à
+  jour ; Home : System health et « Open Setup », plus de bouton d'installation, « Install new version », la version
+  des données renvoyée à Data ; Settings › Setup : build et version des données ; mises à jour : le badge) ;
+  `wiki/Getting-Started.md` (le même bouton dans l'en-tête et dans Setup, Reload = l'icône en haut à droite) ;
+  `wiki/FAQ.md` (« Waiting for game » au lieu de « game up, plugin not loaded ») ; `docs/reference.md` /
+  `wiki/Engine-Reference.md` (ligne `headerU8.test.ts`). `docs/solver.md` / `wiki/Solver.md` ne décrivent pas
+  l'en-tête ; `docs/todo.md` n'avait pas d'item lié.
+- ✅ **Vérification.** `npm run typecheck` vert (dernière ligne `> tsc --noEmit`) ; `npm test` : `Tests  169 passed
+  (169)` (core), `Tests  238 passed (238)` (desktop), `Tests  1020 passed (1020)` (renderer) ; `npm run lint` : `✖ 7
+  problems (0 errors, 7 warnings)`, comme avant.
+- ⏳ **Hors périmètre, noté** : la pastille Live / Idle d'Account snapshot sur Home redit encore l'état de capture
+  (Home se dissout en U13) ; « Steam not found » (libellé du lot) veut dire « OUTERPLANE introuvable dans Steam »,
+  l'infobulle le précise.
+- ⏳ **À voir par Sevih dans l'app** : la pastille dans chaque état (survol : détail et dossier) à côté du bouton
+  d'action ; Home › System health → « Open Setup » ouvre Settings sur Setup ; Home vide sans bouton ; le badge
+  « vX ready » visible depuis un autre onglet que Home au prochain téléchargement, clic → Home ; Settings › Data et
+  Setup affichent la même version des données.
+
 ### 🔗 Liens retour entre écrans : Worklist et carte de pièce vers le Builder et l'Inventory, réservations dites par la Worklist (U7, G95) (2026-11-01)
 - ✅ **Pourquoi.** Septième lot de la refonte (U7 de `docs/ux-audit-2026-11-01.md`, raison 8 du diagnostic « Les écrans
   ne se renvoient pas l'un à l'autre », observations Inventory et Worklist de 1.2) : ni l'Inventory ni la Worklist

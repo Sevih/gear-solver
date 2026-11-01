@@ -86,18 +86,29 @@ export async function uninstallSteamPlugin(removeBepinex = false): Promise<Steam
   }
 }
 
-/** One-line human summary of the Steam source state, shared by the header
- *  pill, the Home health card and the setup wizard so they never disagree. */
-export function describeSteam(s: SteamStatus | null): { tone: "ready" | "warn" | "missing" | "live"; text: string } {
-  if (!s) return { tone: "missing", text: "Steam · checking…" };
-  if (!s.installed) return { tone: "missing", text: "Steam · OUTERPLANE not found" };
+/** The capture pill: one vocabulary for the header pill and Home's System
+ *  health card, so they never disagree. `label` is the short state, `title`
+ *  the detail (what is wrong or live, the plugin version, the game folder). */
+export interface CaptureBadge {
+  label: string;
+  /** live = plugin loaded in a running game; warn = something to do or to
+   *  wait for; idle = nothing to do here (checking, not found, game closed). */
+  tone: "live" | "warn" | "idle";
+  title: string;
+}
+
+export function captureBadge(s: SteamStatus | null): CaptureBadge {
+  if (!s) return { label: "Checking…", tone: "idle", title: "Probing the Steam library…" };
+  if (!s.installed) return { label: "Steam not found", tone: "idle", title: "OUTERPLANE isn't installed through Steam on this PC — install it from Steam, or import your snapshot files manually" };
+  const at = (detail: string) => (s.gameDir ? `${detail} · ${s.gameDir}` : detail);
   if (!s.ready) {
-    if (!s.plugin.present) return { tone: "warn", text: "Steam · plugin not installed" };
-    if (!s.plugin.upToDate) return { tone: "warn", text: "Steam · plugin update available" };
-    if (!s.plugin.outDirOk) return { tone: "warn", text: "Steam · plugin points elsewhere" };
-    return { tone: "warn", text: "Steam · BepInEx missing" };
+    if (s.plugin.present && !s.plugin.upToDate) return { label: "Plugin update available", tone: "warn", title: at("Installed plugin differs from the bundled one") };
+    const why = !s.plugin.present ? "Capture plugin not installed"
+      : !s.plugin.outDirOk ? `Plugin writes to ${s.plugin.outDir ?? "its default folder"}, not ours`
+      : "BepInEx runtime missing";
+    return { label: "Plugin needed", tone: "warn", title: at(why) };
   }
-  if (s.live) return { tone: "live", text: "Steam · plugin live" };
-  if (s.gameRunning) return { tone: "warn", text: "Steam · game up, plugin not loaded" };
-  return { tone: "ready", text: "Steam · ready, game not running" };
+  if (s.live) return { label: "Live", tone: "live", title: at(`Plugin${s.heartbeat?.version ? ` v${s.heartbeat.version}` : ""} live in the running game`) };
+  if (s.gameRunning) return { label: "Waiting for game", tone: "warn", title: at("Game running, no plugin heartbeat yet — restart the game if it stays like this") };
+  return { label: "Game closed", tone: "idle", title: at("Plugin ready — launch the game to capture") };
 }

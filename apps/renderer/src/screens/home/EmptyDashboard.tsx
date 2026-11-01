@@ -1,23 +1,24 @@
 /**
- * Home empty state — the capture CTA shown before anything is captured.
+ * Home empty state — what to do before anything is captured. No button of its
+ * own: the plugin install / game launch button is the header's (and Setup's).
  */
-import type { SteamStatus } from "../../steam.js";
-import { cx } from "../../design/cx.js";
+import { captureBadge, type SteamStatus } from "../../steam.js";
 
 // ── empty state ──────────────────────────────────────────────────────────
-/** Capture CTA: the plugin needs installing once, then the game launched. */
-export function EmptyDashboard({ steam, busy, onSteamInstall, onSteamLaunch }: {
-  steam: SteamStatus | null; busy: boolean;
-  onSteamInstall: () => void; onSteamLaunch: () => void;
+/** The next step, in the header pill's words: the plugin needs installing
+ *  once, then the game launched. */
+export function EmptyDashboard({ steam, onOpenSetup }: {
+  steam: SteamStatus | null; onOpenSetup: () => void;
 }) {
   const s = steam;
-  const cta: { label: string; onClick?: () => void } =
-    !s ? { label: "Checking Steam…" }
-    : !s.installed ? { label: "OUTERPLANE not found in Steam" }
-    : !s.ready ? { label: busy ? "Installing…" : s.plugin.present ? "Update the capture plugin" : "Install the capture plugin", onClick: busy ? undefined : onSteamInstall }
-    : !s.gameRunning ? { label: "Launch OUTERPLANE", onClick: onSteamLaunch }
-    : s.live ? { label: "Waiting for the lobby…" }
-    : { label: "Restart the game to load the plugin" };
+  const badge = captureBadge(s);
+  const next =
+    !s ? "Looking for OUTERPLANE in your Steam library…"
+    : !s.installed ? "OUTERPLANE wasn't found in Steam. Install it from Steam, or import your snapshot files with the Manual fallback at the bottom of the window."
+    : !s.ready ? `Use the ${s.plugin.present ? "update" : "install"} button at the top right, next to the capture pill, to put the capture plugin in the game folder (game closed).`
+    : !s.gameRunning ? "Start the game with the button at the top right, next to the capture pill, then play to the lobby."
+    : s.live ? "Reach the lobby: the snapshot imports itself."
+    : "The game is running without the plugin: restart it to load the plugin.";
   return (
     <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-white/8 px-10 py-16 text-center" style={{ background: "#161618" }}>
       <div className="mb-5 grid h-16 w-16 place-items-center rounded-2xl border border-cyan-400/25 bg-cyan-400/8">
@@ -29,18 +30,13 @@ export function EmptyDashboard({ steam, busy, onSteamInstall, onSteamLaunch }: {
       <p className="mb-6 max-w-105 text-[13px] leading-relaxed text-zinc-400">
         Play OUTERPLANE on Steam with the capture plugin installed and this home fills in on its own — heroes, gear quality, breakdowns and your saved build library.
       </p>
-      <button
-        onClick={cta.onClick}
-        disabled={!cta.onClick}
-        className={cx(
-          "rounded-[10px] px-6.5 py-3 text-[13px] font-bold tracking-tight",
-          cta.onClick
-            ? "bg-linear-to-b from-cyan-400 to-cyan-500 text-cyan-950 shadow-[0_0_0_1px_rgba(34,211,238,0.45),0_8px_22px_-8px_rgba(34,211,238,0.7)] hover:brightness-105"
-            : "cursor-default border border-white/10 bg-white/4 text-zinc-400",
-        )}
-      >
-        {cta.label}
-      </button>
+      <div className="flex max-w-105 flex-col items-center gap-2 rounded-[10px] border border-white/10 bg-white/4 px-5 py-3" title={badge.title}>
+        <span className="text-[13px] font-bold tracking-tight text-white">Capture · {badge.label}</span>
+        <span className="text-[12px] leading-relaxed text-zinc-400">{next}</span>
+        <button onClick={onOpenSetup} className="text-[12px] font-semibold text-cyan-300 underline-offset-2 hover:underline">
+          Step by step in Settings › Setup
+        </button>
+      </div>
       <div className="mt-6 flex items-center gap-2.5 font-mono text-[11px] text-zinc-400">
         <span>install plugin</span><span className="text-zinc-400">→</span><span>launch game</span><span className="text-zinc-400">→</span><span>reach the lobby</span>
       </div>

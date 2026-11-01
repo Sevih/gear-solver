@@ -42,6 +42,8 @@ interface Props {
   /** `gs.onboarding.done` — until then every open lands on Setup (the
    *  wizard) instead of the last pane visited. */
   onboardingDone: boolean;
+  /** Pane to open on, overriding the last pane visited (Home's "Open Setup"). */
+  openOn?: SettingsPane | null;
   /** Fired the first time the wizard observes a ready=true result so App.tsx
    *  can flip the onboarding-done flag and skip future auto-pop-ups. */
   onReady?: () => void;
@@ -100,7 +102,7 @@ const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> =
 ];
 
 export function SettingsModal({
-  open, onClose, onboardingDone, onReady, onResetOnboarding, onAfterWipe, onSyncData, onStatus, status,
+  open, onClose, onboardingDone, openOn = null, onReady, onResetOnboarding, onAfterWipe, onSyncData, onStatus, status,
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
   solver, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy, log, onClearLog,
 }: Props) {
@@ -139,9 +141,14 @@ export function SettingsModal({
 
   // The modal doubles as the onboarding wizard: until onboarding is done every
   // open (the first-launch auto-open included, hence `seenOpen` starting
-  // closed) lands on Setup. After that it reopens on the last pane visited.
+  // closed) lands on Setup. After that it reopens on the last pane visited,
+  // unless the opener asks for a pane (`openOn`).
   const [seenOpen, setSeenOpen] = useState(false);
-  if (open !== seenOpen) { setSeenOpen(open); if (open && !onboardingDone) setTab("setup"); }
+  if (open !== seenOpen) {
+    setSeenOpen(open);
+    if (open && !onboardingDone) setTab("setup");
+    else if (open && openOn) setTab(openOn);
+  }
 
   // Escape closes the modal. A nested dialog that handles its own Escape
   // stops it (`stopPropagation` / `preventDefault`) so only that dialog closes.

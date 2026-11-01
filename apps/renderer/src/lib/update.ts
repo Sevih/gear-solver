@@ -4,7 +4,8 @@
  * static "up to date" payload by the Vite dev middleware so the Home tab
  * renders the update card identically under `npm run dev`.
  *
- * The Home tab polls `getUpdateStatus()` on an interval and renders the inline
+ * App polls `getUpdateStatus()` on an interval (hooks/useAppUpdate.ts, whatever
+ * the tab): the header shows `updateBadge()` and the Home tab renders the inline
  * update card. `checkForUpdate()` backs the "Check again" / "Retry" buttons;
  * `installUpdate()` backs "Install new version" (the main process then quits
  * and applies the downloaded build).
@@ -24,7 +25,8 @@ export interface UpdateStatus {
   error: string | null;
   /** Running app version (e.g. "0.5.0"). */
   appVersion: string;
-  /** Short game-data SHA, or null when unresolved ("main"). */
+  /** Short SHA of the outerpedia commit the data came from, or null when
+   *  unresolved ("main"). Not shown: Settings › Data says the data version. */
   dataSha: string | null;
 }
 
@@ -48,4 +50,15 @@ export async function checkForUpdate(): Promise<void> {
  *  this request typically never resolves (the app is torn down mid-flight). */
 export async function installUpdate(): Promise<void> {
   try { await fetch("/api/update/install", { method: "POST" }); } catch { /* app is quitting */ }
+}
+
+/** Header badge for a pending update: "vX ready" once downloaded, "vX
+ *  available" while it downloads or when it must be installed by hand. Null
+ *  when up to date, checking, offline, or with no known new version. */
+export function updateBadge(s: UpdateStatus | null): { label: string; tone: "ready" | "pending" | "manual" } | null {
+  if (!s?.version) return null;
+  if (s.state === "downloaded") return { label: `v${s.version} ready`, tone: "ready" };
+  if (s.state === "downloading") return { label: `v${s.version} available`, tone: "pending" };
+  if (s.state === "manual") return { label: `v${s.version} available`, tone: "manual" };
+  return null;
 }

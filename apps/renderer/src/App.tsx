@@ -12,6 +12,9 @@ import { GsHeader, PageBackground, type Tab } from "./design/Shell.js";
 import { ToastStack, useToasts } from "./design/Toast.js";
 import { APP_LOG_MAX, appendBounded, stampLine } from "./lib/log/appLog.js";
 import { SettingsModal } from "./design/settings/SettingsModal.js";
+import type { SettingsPane } from "./lib/settings.js";
+import { updateBadge } from "./lib/update.js";
+import { useAppUpdate } from "./hooks/useAppUpdate.js";
 import { HomeScreen } from "./screens/home/HomeScreen.js";
 import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
@@ -169,6 +172,13 @@ export function App() {
   // `wizardOpen` is the immediate UI state; `onboardingDone` survives reloads.
   const [onboardingDone, setOnboardingDone] = usePersistedState<boolean>("gs.onboarding.done", false);
   const [wizardOpen, setWizardOpen] = useState(!onboardingDone);
+  // The pane a given opener asks for (Home's "Open Setup"); null = the last
+  // pane visited.
+  const [settingsOpenOn, setSettingsOpenOn] = useState<SettingsPane | null>(null);
+  const openSettings = (pane: SettingsPane | null) => { setSettingsOpenOn(pane); setWizardOpen(true); };
+  // App update status, polled whatever the tab: the header badge and Home's
+  // update card both read it.
+  const appUpdate = useAppUpdate(APP_VERSION);
   // A reset holds until relaunch — a ready probe on reopening Settings must
   // not undo it (see lib/onboarding.ts).
   const onboardingGate = useRef(createOnboardingGate()).current;
@@ -432,13 +442,15 @@ export function App() {
           },
           busy: running !== "none",
         }}
-        steam={steam}
-        onSetup={() => setWizardOpen(true)}
+        update={updateBadge(appUpdate.update)}
+        onOpenUpdate={() => setTab("Home")}
+        onSetup={() => openSettings(null)}
       />
 
       <SettingsModal
         open={wizardOpen}
         onboardingDone={onboardingDone}
+        openOn={settingsOpenOn}
         onClose={() => setWizardOpen(false)}
         onReady={() => {
           if (onboardingGate.acceptsReady()) setOnboardingDone(true);
@@ -491,11 +503,11 @@ export function App() {
                   game={game}
                   capStatus={capStatus}
                   steam={steam}
-                  appVersion={APP_VERSION}
+                  update={appUpdate.update}
+                  onCheckUpdate={appUpdate.check}
+                  onInstallUpdate={appUpdate.install}
                   busy={running !== "none"}
-                  onSteamInstall={() => void runSteamInstall()}
-                  onSteamLaunch={() => void runSteamLaunch()}
-                  onReload={() => void refreshInventory("Reloaded inventory")}
+                  onOpenSetup={() => openSettings("setup")}
                   onSyncData={() => void syncGameData()}
                   onOpenBuilder={() => setTab("Builder")}
                   onDrill={(d) => { setInvDrill(d); setTab("Inventory"); }}
