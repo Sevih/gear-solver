@@ -8,7 +8,11 @@
  *
  * The comparison point is the hero's best KNOWN outfit: their most recent
  * saved build, else their current gear — scored with the SAME current
- * priority, so the loss compares like with like.
+ * priority, so the loss compares like with like. Real rolls on both sides: a
+ * saved build is recomposed from its pieces as captured (actual rolls and
+ * enhance, never its stored stats, projected to the reforge target or
+ * Transistone by the solve), with the gems it allocated; a saved build one of
+ * whose pieces left the inventory no longer counts (`bestKnownFor`).
  *
  * Pure: the screen builds the context (`heroBases` composes each hero once).
  */
@@ -73,10 +77,10 @@ function rate(hero: HeroBase, finalStats: FinalStats): PresetEval {
 /** Compose `pieces` for the hero in inventory order — the order the Builds
  *  tab composes equipped gear in, so a preset identical to the hero's gear
  *  gives the very same stats (the in-game truncations are order-sensitive).
- *  `eeGems` swaps the EE's socketed gems (`eeGemOverride`). */
-function composeFor(hero: HeroBase, uids: ReadonlySet<string>, ctx: PresetEvalContext, eeGems?: readonly number[]): FinalStats {
+ *  `gems` swaps the socketed gems of the slots it lists (`gemAllocationOverride`). */
+function composeFor(hero: HeroBase, uids: ReadonlySet<string>, ctx: PresetEvalContext, gems?: GemAllocationPick): FinalStats {
   const pieces = ctx.inventory.gear.filter((g) => uids.has(g.uid));
-  const override = eeGems && ctx.game ? eeGemOverride(pieces, eeGems, ctx.game) : undefined;
+  const override = gems && ctx.game ? gemAllocationOverride(pieces, gems, ctx.game) : undefined;
   return computeFinalStats(hero.baseline, hero.scaling, pieces, ctx.game, override);
 }
 
@@ -85,22 +89,38 @@ export function eeOf(heroUid: string, ctx: PresetEvalContext): GearPiece | null 
   return ctx.inventory.gear.find((g) => g.slot === "exclusive" && g.equippedBy === heroUid) ?? null;
 }
 
-/** The gem override that puts `eeGems` (OptionIDs, 0 = empty) on the EE. The
+/** Gems per gem-bearing slot (OptionIDs, 0 = empty) — a `SolveBuild.gemAllocation`,
+ *  or one slot of it. A slot left out keeps the gems socketed on its piece. */
+export interface GemAllocationPick {
+  talisman?: readonly number[];
+  ee?: readonly number[];
+}
+
+/** The gem override that puts `alloc`'s gems on the Talisman and the EE. The
  *  composer's override skips the subs of BOTH gem-bearing slots (the solver
- *  re-allocates the two), so the Talisman's own subs — its socketed gems, part
- *  of the preset — are folded back in. Same buckets as `allocateGems`' delta. */
-export function eeGemOverride(pieces: readonly GearPiece[], eeGems: readonly number[], game: GameData): GemOverride {
+ *  re-allocates the two), so a slot `alloc` leaves out has its piece's own subs
+ *  — its socketed gems — folded back in. Same buckets as `allocateGems`' delta. */
+export function gemAllocationOverride(pieces: readonly GearPiece[], alloc: GemAllocationPick, game: GameData): GemOverride {
   const out: GemOverride = { flat: {}, pct: {} };
   const add = (stat: string, value: number, percent: boolean) => {
     const bucket = percent ? out.pct : out.flat;
     bucket[stat] = (bucket[stat] ?? 0) + value;
   };
-  for (const p of pieces) if (p.slot === "ooparts") for (const s of p.subs) add(s.stat, s.value, s.percent);
-  for (const id of eeGems) {
+  for (const p of pieces) {
+    const kept = p.slot === "ooparts" ? !alloc.talisman : p.slot === "exclusive" ? !alloc.ee : false;
+    if (kept) for (const s of p.subs) add(s.stat, s.value, s.percent);
+  }
+  for (const id of [...(alloc.talisman ?? []), ...(alloc.ee ?? [])]) {
     const r = id ? resolveStat(id, 1, game.options) : null;
     if (r) add(r.stat, r.value, r.percent);
   }
   return out;
+}
+
+/** The gem override that puts `eeGems` (OptionIDs, 0 = empty) on the EE, the
+ *  Talisman's socketed gems — part of the preset — kept. */
+export function eeGemOverride(pieces: readonly GearPiece[], eeGems: readonly number[], game: GameData): GemOverride {
+  return gemAllocationOverride(pieces, { ee: eeGems }, game);
 }
 
 /** The hero wearing the preset's pieces + their own current EE — with its gems
@@ -117,17 +137,29 @@ export function evaluatePresetFor(
   const uids = new Set(presetPieces.filter((p) => p.slot !== "exclusive").map((p) => p.uid));
   const ee = eeOf(heroUid, ctx);
   if (ee) uids.add(ee.uid);
-  return rate(hero, composeFor(hero, uids, ctx, ee && eeGems ? eeGems : undefined));
+  return rate(hero, composeFor(hero, uids, ctx, ee && eeGems ? { ee: eeGems } : undefined));
 }
 
-/** The hero's best known outfit: their most recent saved build (its stored
- *  final stats, re-rated and re-scored with the CURRENT priority), else their
- *  current gear. */
+/** The hero's best known outfit, in real rolls like the preset it is weighed
+ *  against: their most recent saved build RECOMPOSED from its pieces as
+ *  captured today (its stored `finalStats` are projected — reforge target,
+ *  Transistone — so never read), with the gems it allocated on the Talisman
+ *  and the EE, re-rated and re-scored with the CURRENT priority. A saved build
+ *  whose pieces aren't all in the inventory any more (sold, dissolved) no
+ *  longer counts: the current gear is, as without a saved build. */
 export function bestKnownFor(heroUid: string, ctx: PresetEvalContext): BestKnown | null {
   const hero = ctx.heroes.get(heroUid);
   if (!hero) return null;
-  const latest = latestSavedBuild(ctx.savedBuilds, heroUid);
-  if (latest?.build?.finalStats) return { ...rate(hero, latest.build.finalStats), source: "saved" };
+  const build = latestSavedBuild(ctx.savedBuilds, heroUid)?.build;
+  const savedUids = new Set(build?.pieceUids ?? []);
+  const owned = ctx.inventory.gear.filter((g) => savedUids.has(g.uid)).length;
+  if (build && savedUids.size > 0 && owned === savedUids.size) {
+    // An allocation without a gem is a solve that kept the socketed gems
+    // (no gem scored, or a build saved before allocations were stored).
+    const alloc = build.gemAllocation;
+    const allocated = [...(alloc?.talisman ?? []), ...(alloc?.ee ?? [])].some((id) => id);
+    return { ...rate(hero, composeFor(hero, savedUids, ctx, allocated ? alloc : undefined)), source: "saved" };
+  }
   const uids = new Set(ctx.inventory.gear.filter((g) => g.equippedBy === heroUid).map((g) => g.uid));
   return { ...rate(hero, composeFor(hero, uids, ctx)), source: "current" };
 }

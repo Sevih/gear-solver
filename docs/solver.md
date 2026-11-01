@@ -345,7 +345,9 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   (`buildGemPool`) suit la même règle.
   Les **presets du jeu** s'y ajoutent, quel que soit le scope (`presetHolds`, cf. reference.md §1.6) :
   les pièces d'un preset **verrouillé** ne sortent jamais, sauf pour « Optimize preset → » sur ce preset ;
-  « Optimize preset → » ne prend pas les pièces d'un preset de rang égal ou meilleur. L'Optimizer le dit
+  « Optimize preset → » ne prend pas les pièces d'un preset de rang égal ou meilleur. Les pièces
+  seulement : les gemmes du Talisman d'un preset verrouillé ou mieux classé restent dans le gem pool (un
+  verrou retient des pièces, pas des gemmes ; elles se changent librement). L'Optimizer le dit
   dans la Library (« Optimizing preset ‹nom› (rank N) — … », perdu au changement de héros) et les gear
   cards nomment le preset d'où vient une pièce (« from preset ‹nom› »).
 - **Keep current** — verrouille les slots déjà équipés à leur pièce actuelle.
@@ -601,7 +603,8 @@ héros) ; ce que chaque héros règle, ce sont les gemmes de **son** EE. `bestEe
 de l'EE du héros et à celles des Talismans / EE que personne ne porte (jamais celles des pièces du preset,
 même libres, ni d'une pièce portée par un autre héros, ni d'une pièce libre que la Worklist réserve à un
 autre héros — `worklistClaims`, la même valeur que l'Optimizer et Heroes —, ni du Talisman du héros, qui
-part quand le preset arrive), `scoreGemPool` avec la priorité du héros (remplissage par gain de `dmg` sur la tenue,
+part quand le preset arrive ; le verrou ou le rang d'un autre preset n'y joue pas, comme dans l'Optimizer :
+les gemmes du Talisman libre d'un preset verrouillé sont proposées), `scoreGemPool` avec la priorité du héros (remplissage par gain de `dmg` sur la tenue,
 `gemDmgGains`), `allocateGemsCapped` sur les seuls emplacements de l'EE (`gemSlotsOf`, CHC sans les gemmes
 d'EE pour le plafond). Une gemme déjà sertie garde son emplacement (`alignToSockets`, le moins de lignes de
 Worklist) et un emplacement laissé vide garde sa gemme (le jeu n'en retire pas seul). Pas de proposition
@@ -644,7 +647,13 @@ poids passe à la source suivante (`hasPriority`, le seul prédicat « au moins 
 ligne dit « priority from saved build » dans le second cas. Un héros sans build sauvegardée ni priorité
 dans l'Optimizer n'a pas de score.
 Un associé est comparé à sa **meilleure tenue connue** (`bestKnownFor` : sa build sauvegardée la plus
-récente, re-notée avec la priorité **courante**, sinon son équipement actuel) : `loss = 1 − score(preset) /
+récente, re-notée avec la priorité **courante**, sinon son équipement actuel), **en jets réels des deux
+côtés** : la build sauvegardée est recomposée depuis ses pièces (`build.pieceUids`) telles que capturées
+aujourd'hui (jets et enhance réels — jamais ses `finalStats` stockées, projetées en +10R6 / +15R9 /
+Transistone par le solve), avec les gemmes qu'elle avait allouées au Talisman et à l'EE
+(`gemAllocationOverride` ; une allocation sans gemme garde les gemmes serties, comme le solve) ; si une de
+ses pièces a quitté l'inventaire (vendue, dissoute), elle ne compte plus et la comparaison se fait à
+l'équipement actuel (« vs current gear »). `loss = 1 − score(preset) /
 score(best)`, affichée en % « vs saved build » / « vs current gear » ; au-delà du seuil (15 % par défaut,
 réglé par le stepper en tête de l'écran Presets, `gs.solver.presetLossWarn`) la ligne passe en orange avec « <Nom> loses 23 % vs their
 saved build ». Sans priorité : « no priority set for <Nom> — set one in the Optimizer », pas de score. Rien
@@ -666,7 +675,7 @@ qu'il vient des gemmes d'EE proposées.
 
 ## 5. Gems — sous-solver greedy
 
-**Pool** : multiset des `gemSlots[]` non-nuls des Talismans + EE **éligibles** de l'inventaire (les gems sont swappables in-game). L'éligibilité (`buildGemPool`) reflète la règle des pools de pièces : gear du héros courant toujours inclus ; gear équipé sur un autre héros gated par `equippedScope` (`none`/`lower`/`all`) ; héros exclus jamais comptés. Sans ce gate, le solver proposerait des gems qui exigent de déséquiper le Talisman/EE d'un héros hors périmètre.
+**Pool** : multiset des `gemSlots[]` non-nuls des Talismans + EE **éligibles** de l'inventaire (les gems sont swappables in-game). L'éligibilité (`buildGemPool`) reflète la règle des pools de pièces : gear du héros courant toujours inclus ; gear équipé sur un autre héros gated par `equippedScope` (`none`/`lower`/`all`) ; héros exclus jamais comptés. Les presets du jeu, eux, n'y jouent pas : les gemmes du Talisman d'un preset verrouillé ou mieux classé restent dans le pool (un verrou retient des pièces, pas des gemmes). Sans ce gate, le solver proposerait des gems qui exigent de déséquiper le Talisman/EE d'un héros hors périmètre.
 
 **Scoring** : pour chaque gem, `score = priority × (value / ROLL_NORMS)`. Normalisé pour la comparaison cross-stat. Triés desc. **En SOLVE CP sans priorité utilisateur**, la « priority » passée n'est pas vide mais les **poids CP** (`cpStatWeights` : ΔCP d'un bump ROLL_NORM de chaque stat, évalué au build courant). Sinon (rank par `value/norm` brut), l'allocateur préférait des gemmes dmg-reduce/flat (grosse magnitude, ~0 CP) aux gemmes atk/crit/pen → un solve CP pouvait rendre **moins** de CP que le build équipé. Une stat déjà à son cap CP (ex. CRC ~100 %) reçoit un poids ~0. Ces poids sont linéaires (un bump par stat, l'ATK % pesé sur un bump d'ATK plat) : ils ordonnent le pool, mais l'allocation SOLVE CP elle-même passe par le CP marginal (ci-dessous).
 

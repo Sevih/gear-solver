@@ -338,7 +338,9 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   (`buildGemPool`) follows the same rule.
   The **in-game presets** stack on top, whatever the scope (`presetHolds`, see Engine Reference
   §1.6): a **locked** preset's pieces never come out, except for "Optimize preset →" on that
-  preset; "Optimize preset →" never takes the pieces of a preset ranked equal or better. The
+  preset; "Optimize preset →" never takes the pieces of a preset ranked equal or better. Pieces only:
+  the gems of a locked or better-ranked preset's Talisman stay in the gem pool (a lock holds pieces,
+  not gems; they change freely). The
   Optimizer says so in the Library ("Optimizing preset ‹name› (rank N) — …", dropped when you switch
   heroes) and the gear cards name the preset a piece comes from ("from preset ‹name›").
 - **Keep current** — locks the already-equipped slots to their current piece.
@@ -566,7 +568,8 @@ each hero tunes is the gems of **their own** EE. `bestEeGemsFor` (`lib/presets/e
 the engine does, pieces fixed: `buildGemPool` restricted to the gems of the hero's EE and those of the
 Talismans / EEs nobody wears (never the preset's pieces, even free, nor a piece another hero wears, nor a
 free piece the Worklist reserves for another hero — `worklistClaims`, the same value as the Optimizer and
-Heroes —, nor the hero's own Talisman, which comes off when the preset goes on), `scoreGemPool` with the hero's priority
+Heroes —, nor the hero's own Talisman, which comes off when the preset goes on; another preset's lock or
+rank plays no part, as in the Optimizer: the gems of a locked preset's free Talisman are on offer), `scoreGemPool` with the hero's priority
 (fillers by `dmg` gain on the outfit, `gemDmgGains`), `allocateGemsCapped` on the EE's slots alone
 (`gemSlotsOf`, CHC without the EE gems for the cap). A gem already socketed keeps its socket
 (`alignToSockets`, the fewest Worklist lines) and a socket the pick leaves empty keeps its gem (the game
@@ -605,7 +608,12 @@ and read live from App: a weight changed in the Optimizer counts at the next ren
 of the hero's most recent saved build, then nothing; a priority without any weight falls through to the next
 source (`hasPriority`, the one "at least one non-zero weight" predicate). The line says "priority from saved
 build" in the second case. A hero with no saved build and no priority in the Optimizer has no score. An associated hero is compared to their **best known outfit** (`bestKnownFor`:
-their most recent saved build, re-scored with the **current** priority, else their current gear):
+their most recent saved build, re-scored with the **current** priority, else their current gear), **in real
+rolls on both sides**: the saved build is recomposed from its pieces (`build.pieceUids`) as captured today
+(actual rolls and enhance — never its stored `finalStats`, projected to +10R6 / +15R9 / Transistone by the
+solve), with the gems it allocated on the Talisman and the EE (`gemAllocationOverride`; an allocation without
+a gem keeps the socketed gems, as the solve did); if one of its pieces left the inventory (sold, dissolved),
+it no longer counts and the comparison is against the current gear ("vs current gear"):
 `loss = 1 − score(preset) / score(best)`, shown in % "vs saved build" / "vs current gear"; past the
 threshold (15 % by default, set by the stepper at the top of the Presets screen,
 `gs.solver.presetLossWarn`) the line turns orange with
@@ -627,7 +635,7 @@ badge's tooltip says it comes from the proposed EE gems.
 
 ## 5. Gems — greedy sub-solver
 
-**Pool**: multiset of the non-null `gemSlots[]` of the **eligible** Talismans + EE in the inventory (gems are swappable in-game). Eligibility (`buildGemPool`) mirrors the piece-pool rule: the current hero's gear is always in; gear equipped on another hero is gated by `equippedScope` (`none`/`lower`/`all`); gear on an excluded hero is never counted. Without this gate, the solver would propose gems that require unequipping the Talisman/EE of an out-of-scope hero.
+**Pool**: multiset of the non-null `gemSlots[]` of the **eligible** Talismans + EE in the inventory (gems are swappable in-game). Eligibility (`buildGemPool`) mirrors the piece-pool rule: the current hero's gear is always in; gear equipped on another hero is gated by `equippedScope` (`none`/`lower`/`all`); gear on an excluded hero is never counted. The in-game presets play no part: the gems of a locked or better-ranked preset's Talisman stay in the pool (a lock holds pieces, not gems). Without this gate, the solver would propose gems that require unequipping the Talisman/EE of an out-of-scope hero.
 
 **Scoring**: for each gem, `score = priority × (value / ROLL_NORMS)`. Normalized to allow cross-stat comparison. Sorted desc. **In SOLVE CP without a user priority**, the "priority" passed is not empty but the **CP weights** (`cpStatWeights`: ΔCP of a ROLL_NORM-sized bump of each stat, evaluated at the current build). Otherwise (raw `value/norm` ranking), the allocator preferred dmg-reduce/flat gems (big magnitude, ~0 CP) over atk/crit/pen gems → a CP solve could return **less** CP than the equipped build. A stat already at its CP cap (e.g. CRC ~100%) gets a ~0 weight. These weights are linear (one bump per stat, ATK% weighed on a flat ATK bump): they order the pool, but the SOLVE CP allocation itself goes by marginal CP (below).
 

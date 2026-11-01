@@ -4,7 +4,8 @@
 // a preset of rank N never takes the pieces of a preset not strictly lower
 // priority; without a target preset only the locks count. Then the same rule
 // through `precomputeContext` (`allow()`) on the real contract, stacked with
-// `excludedPieceUids` and `worklistClaims`, and through the gem pool.
+// `excludedPieceUids` and `worklistClaims` — and never in the gem pool: a
+// locked preset's Talisman gems stay on offer (a lock holds pieces, not gems).
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, Inventory, Preset, StatType } from "@gear-solver/core";
@@ -171,11 +172,33 @@ describe("allow() with presetHolds", () => {
   });
 });
 
-describe("gem pool with presetBlocked", () => {
-  it("leaves the gems of a blocked preset's Talisman on it", () => {
+describe("gem pool ignores preset locks", () => {
+  it("the gems of a locked preset's Talisman are in the pool — a lock holds pieces, not gems", () => {
     const inv = { gear: [talisman("tl", null, [15001]), talisman("tf", null, [15004])], characters: [], presets: [] } as unknown as Inventory;
     const opts = { heroUid: "H", equippedScope: "all" as const, heroPriority: {}, excludedHeroes: new Set<string>() };
-    expect([...buildGemPool(inv, { ...opts, presetBlocked: new Set(["tl"]) }).keys()]).toEqual([15004]);
     expect([...buildGemPool(inv, opts).keys()].sort()).toEqual([15001, 15004]);
+  });
+  it("through the engine: the locked preset's Talisman leaves the piece pool, its gems stay scored", () => {
+    const gear = [talisman("tl", null, [15001]), talisman("tf", null, [15004])];
+    const presets = [preset(2, ["tl"])];
+    expect(talismanPool(gear, presets, { locked: [2], targetPresetNum: null })).toEqual(["tf"]);
+    const hero = {
+      uid: "H", charId: 2000001, name: "H", stars: 9, locked: false, exp: 1e12, levelMaxStep: 0, trustExp: 0,
+      skills: { first: 5, second: 5, ultimate: 5, chainPassive: 5 }, fusionCharId: 0, fusionLevel: 0,
+    };
+    const inventory = { characters: [hero], gear, presets } as unknown as Inventory;
+    const ctx = precomputeContext({
+      type: "solve", solveId: 1, mode: "score", heroUid: "H", game: GAME, inventory,
+      userGeasLevels: null, userCodexLevel: null, heroPriority: {}, userSkills: hero.skills,
+      topK: 10, chunkIndex: 0, chunkCount: 1,
+      filters: {
+        options: { onlyMaxed: false, reforgeMode: "disable", equippedScope: "all", keepCurrent: false, allowBrokenSets: true },
+        excludedHeroes: [], statFilters: {}, ratingFilters: {}, priority: { atk: 1 }, topPct: 100, mainPicks: {},
+        setPlans: [], excludedSets: [], weaponEffectPicks: {}, accessoryEffectPicks: {}, minQuality: null,
+      },
+      presetHolds: presetHolds(inventory, {}, [2]),
+      targetPresetNum: null,
+    });
+    expect(ctx.scoredGems.map((g) => g.id).sort()).toEqual([15001, 15004]);
   });
 });

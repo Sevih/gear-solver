@@ -8,6 +8,72 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚖️ Perte des presets en jets réels des deux côtés, verrou de preset sans effet sur le pool de gemmes (D11, D12, G104) (2026-11-02)
+- ✅ **Pourquoi.** Arbitrages D11 et D12 de `docs/ux-audit-2026-11-01.md` (section 6, table « Arbitrages de Sevih » ;
+  section 3.2, « La perte de Presets compare des pommes et des oranges » ; section 3.5, ligne « Pool : Talisman d'un
+  preset verrouillé ou mieux classé »). D11 : `bestKnownFor` lisait `latest.build.finalStats`, des stats projetées
+  par le solve en +10R6 / +15R9 / Transistone, alors que le preset est composé sur les pièces telles que capturées :
+  un preset identique au build sauvé affichait une perte positive. D12, **écart au rapport** (qui proposait d'aligner
+  Presets sur l'Optimizer) : les gemmes se changent librement, verrou ou non, donc le statut verrouillé (ou mieux
+  classé) d'un preset n'a plus aucun effet sur le pool de gemmes, ni dans l'Optimizer ni dans Presets. Deux
+  changements de résultat voulus.
+- ✅ **D11, règle nouvelle.** `lib/presets/evaluate.ts` : `bestKnownFor` recompose le build sauvé le plus récent
+  depuis `build.pieceUids` → les pièces de `ctx.inventory.gear` (jets et enhance réels, ordre d'inventaire comme
+  `composeFor`), avec, quand `ctx.game` existe, les gemmes que ce build avait allouées (`build.gemAllocation`,
+  Talisman et EE) ; re-noté avec la priorité courante, `source: "saved"`. Une allocation sans aucune gemme (tout à 0,
+  ou `[]` des builds sauvés avant le stockage de l'allocation) est un solve qui a gardé les gemmes serties
+  (`allocateGems` rend un delta `null`, le moteur compose alors sans override) : pas d'override, gemmes serties.
+  **Repli** : si une pièce du build sauvé n'est plus dans l'inventaire (vendue, dissoute) ou si le build n'a pas de
+  pièces, il ne compte plus : équipement porté, `source: "current"`, comme sans build sauvé. Nouvelle aide
+  `gemAllocationOverride(pieces, alloc, game)` (type `GemAllocationPick`, `talisman?` / `ee?`) : chaque gemme par
+  `resolveStat(id, 1, game.options)`, 0 = vide, et un slot que `alloc` omet garde les subs serties de sa pièce ;
+  `eeGemOverride` s'écrit avec elle (`{ ee: eeGems }`, Talisman gardé) et `composeFor` prend désormais un
+  `GemAllocationPick` au lieu des seules gemmes d'EE. En-tête du module et commentaire de `bestKnownFor` réécrits.
+- ✅ **D11, écran.** `screens/presets/PresetsScreen.tsx` : la phrase d'en-tête dit « in real rolls on both sides: a
+  saved build is recomposed from its pieces as captured, with the gems it allocated » ; la perte (« vs saved
+  build » / « vs current gear ») porte un `title` commun (`lossTitle`) sur ses deux variantes, la ligne orange
+  comprise (elle n'en avait pas), qui dit la règle et, côté « current gear », « no saved build, or one of its pieces
+  is no longer in your inventory ». `SCORE_TITLE` ne parle pas du build sauvé : inchangé.
+- ✅ **D12, règle nouvelle.** `lib/solver/gems.ts` : `GemPoolOptions.presetBlocked` supprimé, `buildGemPool` n'en
+  tient plus compte (le `continue` sur `presetBlocked` disparaît) ; commentaire : les gemmes d'un Talisman qu'un
+  preset verrouillé ou mieux classé garde restent dans le pool, un verrou retient des pièces, pas des gemmes.
+  `lib/solver/engine.ts` : `buildGemPool` appelé sans `presetBlocked`, bloc « Gem pool eligibility » réécrit ;
+  `presetBlocked` reste lu par `allow()` pour le pool de pièces (inchangé). `lib/presets/presetHolds.ts` (en-tête
+  et `presetBlockedUids` : pool de pièces seulement), `lib/solver/types.ts` (`presetHolds` : « every piece pool
+  (never the gem pool) »), `lib/presets/eeGems.ts` : aucune logique changée (il n'écartait déjà pas ces gemmes),
+  l'en-tête dit que c'est voulu.
+- ✅ **Tests, assertions changées une à une.** `presets.test.ts`, bloc « bestKnownFor » (29 → 31 tests) : les builds
+  sauvés n'avaient pas de pièces (`pieceUids: []`) et l'on attendait l'ATK stockée (`finalStats.atk` 4000) — c'est
+  l'arbitrage D11 qui change l'assertion : « takes the most recent saved build… » attend maintenant
+  `compose(["w1", "eeB"])` alors que les `finalStats` stockées sont fausses (ATK ×10) ; « re-scores the saved
+  build… » attend `computeScore` des stats recomposées ; nouveaux : les gemmes de `gemAllocation.ee` posées sur l'EE
+  (jeu factice d'une option ATK plate), une pièce absente (`sold`) → `source: "current"`. `presetHolds.test.ts`
+  (17 → 18) : le bloc « gem pool with presetBlocked » (qui attendait `[15004]` sans la gemme du Talisman bloqué
+  `tl`) devient « gem pool ignores preset locks » — arbitrage D12 : les gemmes de `tl` sont dans le pool sans
+  option, et par l'engine (`precomputeContext`, preset 2 verrouillé) `tl` sort du pool de Talismans mais ses gemmes
+  restent dans `scoredGems`. Aucun autre test n'affirmait l'exclusion (cherché : `presetBlocked` dans
+  `apps/renderer/test/`, tests d'engine posant `presetHolds` verrouillé). `presetsGems.test.ts` (`source: "saved"`
+  de `priorityOf`) inchangé : c'est la priorité, pas les stats. Nouveau `presetLossRealRolls.test.ts` (6 tests) :
+  (a) preset fait des pièces du build sauvé → perte 0 (± 1e-9) malgré des `finalStats` fausses, (b) arme plus faible
+  → perte positive, (c) pièce du build sauvé absente → `source: "current"`, gemmes allouées qui remplacent les
+  serties et allocation vide qui les garde, (d) `gemAllocationOverride` sur Talisman + EE (buckets, slot omis =
+  serties, `eeGemOverride` = le cas EE seul), (e) `buildGemPool` avec `presetBlocked` sous `@ts-expect-error`
+  (l'option n'existe plus dans le type) garde la gemme du Talisman verrouillé.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` : perte en jets réels des deux côtés, build sauvé recomposé avec
+  ses gemmes, repli si une pièce manque ; presets verrouillés « pièces seulement » ; gemmes d'EE de Presets (le
+  verrou d'un autre preset n'y joue pas) ; section 5. Gems (les presets du jeu ne gatent pas le pool).
+  `wiki/Using-the-App.md` (Scores, Rank and lock). `docs/reference.md` / `wiki/Engine-Reference.md` (§1.6, §2.7,
+  table des tests). Rien dans `docs/todo.md` ne s'y rapportait.
+- ✅ **Vérification.** `npm run typecheck` : `> tsc --noEmit` (sans erreur) ; `npm test` : `Tests  1098 passed (1098)`
+  (renderer, 98 fichiers ; core 169, desktop 238) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, le compte
+  d'avant.
+- ⏳ **Sevih.** Sur une vraie capture : un héros dont le build sauvé est équipé tel quel doit afficher ~0 % « vs saved
+  build » sur un preset de ces pièces (avant : une perte positive en +10R6 / +15R9) ; un build sauvé dont une pièce
+  a été vendue passe en « vs current gear ». Dans l'Optimizer, un solve peut maintenant proposer une gemme posée sur
+  le Talisman d'un preset verrouillé. Hors périmètre, laissé tel quel : portée `equippedScope: "none"` de
+  `bestEeGemsFor`, `noFill`, gain « filler » pesé sur la tenue (reste de la section 3.5), `isProjected` / libellé
+  ΔCP (section 3.15).
+
 ### 🔁 Mode de reforge et Transistone par défaut dans Settings › Solver, surcharge par héros, une seule migration `useReforged` (D5, G103) (2026-11-01)
 - ✅ **Pourquoi.** Arbitrage D5 de `docs/ux-audit-2026-11-01.md` (« Mode de reforge et Transistone : défaut global dans
   Settings › Solver (+10R6), surcharge par héros gardée avec ses filtres » ; ligne « Mode de reforge, Transistone » de la

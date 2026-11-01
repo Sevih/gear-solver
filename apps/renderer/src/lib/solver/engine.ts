@@ -822,9 +822,11 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // Gem pool eligibility mirrors `allow()` for pieces: gear on other heroes
   // honors the same equipped scope (own + free always in; "lower" only takes
   // gems off strictly-lower-priority heroes; "none" excludes all others) and
-  // excluded heroes, and leaves the gems of a Talisman an in-game preset keeps
-  // out (`presetBlocked`). Otherwise the solver could recommend gems that require
+  // excluded heroes. Otherwise the solver could recommend gems that require
   // unequipping a Talisman/EE on a hero the user just opted out of / outranks.
+  // The in-game presets don't gate it: the gems of a Talisman a locked or
+  // better-ranked preset keeps stay on offer — a lock holds pieces, not gems
+  // (`presetBlocked` gates the piece pool only, in `allow()`).
   //
   // Once the priority is served, the slots it leaves free take the zero-score
   // gems by the `dmg` gain they bring the hero (`gemDmgGains`, weighed once on
@@ -835,7 +837,6 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     heroPriority,
     excludedHeroes: excludedSet,
     worklistClaims,
-    presetBlocked,
   });
   const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
   // SOLVE CP without a priority: the reference composition the gems are weighed

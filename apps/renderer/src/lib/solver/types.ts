@@ -142,7 +142,7 @@ export interface SolveRequest {
    *  the scope/rank would let B strip A anyway). Absent = no claims. */
   worklistClaims?: Record<string, string>;
   /** In-game presets' pieces with their ranks and locks (`presetHolds`). A
-   *  piece of a locked preset is out of every pool but that preset's own
+   *  piece of a locked preset is out of every piece pool (never the gem pool) but that preset's own
    *  solve; with `targetPresetNum` set, so are the pieces of every preset not
    *  STRICTLY lower priority than the target (`presetBlockedUids`). Stacks
    *  with the rules above. Absent = no preset rule. */

@@ -11,7 +11,8 @@
  * hero picked by hand) only (a) applies. A piece held by several presets: the
  * most restrictive wins — locked by one is enough, else the best-ranked holder
  * other than Q counts. Stacks with the other pool rules (`equippedScope`, hero
- * ranks, `excludedPieceUids`, `worklistClaims`), which are unchanged.
+ * ranks, `excludedPieceUids`, `worklistClaims`), which are unchanged. Pieces
+ * only: the gem pool ignores the presets (`buildGemPool`).
  *
  * Pure: the table is plain JSON (it rides in the solve request to the workers).
  */
@@ -52,7 +53,9 @@ function blocks(holds: PresetHolds, locked: ReadonlySet<number>, holder: number,
 }
 
 /** Piece uids a solve aimed at `targetNum` (null = no target preset) may not
- *  take — built once per solve, checked in `allow()` and the gem pool. */
+ *  take — built once per solve, checked in `allow()`. The piece pool only: the
+ *  gems socketed on a held Talisman stay in the gem pool (a lock holds pieces,
+ *  not gems). */
 export function presetBlockedUids(holds: PresetHolds | undefined, targetNum: number | null | undefined): Set<string> {
   const out = new Set<string>();
   if (!holds) return out;

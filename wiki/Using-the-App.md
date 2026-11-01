@@ -186,7 +186,10 @@ ascended and fully reforged; hover for the cap at the pieces' current investment
   hero's priority and the EE gems proposed for them — the score with the gems as socketed today
   is shown in brackets when it differs), **Dmg** and **DmgS** — hover each for what it measures. An associated hero also shows how
   much they lose versus their own best known build — their latest **saved build**, or their
-  current gear without one. Past the threshold (15 % by default, set with the **−/+** stepper in the
+  current gear without one. Both sides are scored on their real rolls: the saved build is rebuilt
+  from its pieces as they are in your capture today (not the projected stats it was solved with),
+  with the gems it allocated; if one of its pieces is gone (sold, dissolved), the current gear is
+  the comparison instead. Past the threshold (15 % by default, set with the **−/+** stepper in the
   sentence at the top of the Presets screen, 5 to 50 % by steps of 5) the line
   turns orange: "Ame loses 23 % vs their saved build". The priority is the one set in the Optimizer
   for that hero — kept across relaunches, and a weight you change there counts here right away —
@@ -212,7 +215,9 @@ ascended and fully reforged; hover for the cap at the pieces' current investment
   unranked = lowest; new presets get one in the in-game order as soon as a capture is imported). **Optimize preset →** never takes
   a piece from a preset ranked above or equal to it (unranked counts as lowest). The 🔒 **Lock**
   button keeps a preset's pieces out of every solve — any hero, any preset — except **Optimize
-  preset →** on that preset itself; a locked card has an amber outline. In the Optimizer, the
+  preset →** on that preset itself; a locked card has an amber outline. A lock holds pieces, not
+  gems: the gems on a locked (or higher-ranked) preset's Talisman can still be proposed, in the
+  Optimizer as in the EE gems here. In the Optimizer, the
   Library says which preset is being optimized, and a proposed piece that sits in another preset
   says **from preset ‹name›** on its card.
 - **Warnings** — a piece no longer in your inventory, or a piece that sits in **two** presets

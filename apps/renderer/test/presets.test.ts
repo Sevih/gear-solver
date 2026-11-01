@@ -5,7 +5,8 @@
  * Heroes are hand-built `HeroBase`s (plain baseline/scaling, no compose).
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Character, GearPiece, Inventory, Preset, RolledStat, StatScaling } from "@gear-solver/core";
+import type { Character, GameData, GearPiece, Inventory, Preset, RolledStat, StatScaling } from "@gear-solver/core";
+import { resolveStat } from "@gear-solver/core";
 import { arrangePresets, presetClasses, presetRows, presetSignature, type PresetRow } from "../src/lib/presets/presetRows.js";
 import { bestKnownFor, evaluatePresetFor, presetLoss, type HeroBase, type PresetEvalContext } from "../src/lib/presets/evaluate.js";
 import { effectivePriority } from "../src/lib/heroPriority/weights.js";
@@ -236,25 +237,52 @@ describe("evaluatePresetFor", () => {
 });
 
 describe("bestKnownFor", () => {
-  const stats = compose(["w2", "eeB"]);
-  const saved = (id: string, createdAt: number, atkValue: number): SavedBuild => ({
-    id, name: id, heroUid: "B", mode: "score", createdAt,
-    build: { pieceUids: [], gemAllocation: { talisman: [], ee: [] }, finalStats: { ...stats, atk: atkValue }, ratings: {} as SavedBuild["build"]["ratings"], score: 12345, cp: null, upg: 0 },
-    reforge: { reforgeMode: "disable", priority: { hp: 3 } },
-  });
+  // Stored stats deliberately wrong (ATK ×10): a saved build is recomposed from
+  // its pieces as captured, never read from `finalStats` (projected by the solve).
+  const saved = (id: string, createdAt: number, pieceUids: string[], ee: number[] = []): SavedBuild => {
+    const stats = compose(pieceUids);
+    return {
+      id, name: id, heroUid: "B", mode: "score", createdAt,
+      build: { pieceUids, gemAllocation: { talisman: [], ee }, finalStats: { ...stats, atk: stats.atk * 10 }, ratings: {} as SavedBuild["build"]["ratings"], score: 12345, cp: null, upg: 0 },
+      reforge: { reforgeMode: "disable", priority: { hp: 3 } },
+    };
+  };
 
-  it("takes the most recent saved build over the current gear", () => {
-    const ctx = ctxWith([base("B")], { B: [saved("old", 1, 9000), saved("new", 2, 4000)] });
+  it("takes the most recent saved build over the current gear, recomposed from its pieces", () => {
+    const ctx = ctxWith([base("B")], { B: [saved("old", 1, ["w2", "eeB"]), saved("new", 2, ["w1", "eeB"])] });
     const best = bestKnownFor("B", ctx)!;
     expect(best.source).toBe("saved");
-    expect(best.finalStats.atk).toBe(4000);
+    expect(best.finalStats).toEqual(compose(["w1", "eeB"]));
   });
 
   it("re-scores the saved build with the CURRENT priority, not the saved one", () => {
-    const ctx = ctxWith([base("B")], { B: [saved("new", 2, 4000)] });
+    const ctx = ctxWith([base("B")], { B: [saved("new", 2, ["w1", "eeB"])] });
     const best = bestKnownFor("B", ctx)!;
-    expect(best.score).toBe(computeScore({ ...stats, atk: 4000 }, PRIORITY));
+    expect(best.score).toBe(computeScore(compose(["w1", "eeB"]), PRIORITY));
     expect(best.score).not.toBe(12345);
+  });
+
+  it("puts the gems the saved build allocated on its EE", () => {
+    const options = { 9001: { st: "ST_ATK", ap: "OAT_ADD", v: 40 } };
+    const game = { options, sets: {} } as unknown as GameData;
+    const ctx = { ...ctxWith([base("B")], { B: [saved("new", 2, ["w1", "eeB"], [9001, 9001, 0])] }), game };
+    const gem = resolveStat(9001, 1, game.options)!;
+    const withGems = GEAR.filter((g) => g.uid === "w1" || g.uid === "eeB")
+      .map((g) => (g.uid === "eeB" ? { ...g, subs: [{ ...gem, source: "option" }, { ...gem, source: "option" }] as RolledStat[] } : g));
+    const best = bestKnownFor("B", ctx)!;
+    expect(best.source).toBe("saved");
+    expect(best.finalStats).toEqual(computeFinalStats(BASELINE, SCALING, withGems, game));
+    expect(best.finalStats.atk).toBeGreaterThan(compose(["w1", "eeB"]).atk);
+  });
+
+  it("a saved build with a piece no longer in the inventory falls back to the current gear", () => {
+    const best = bestKnownFor("B", ctxWith([base("B")], { B: [saved("new", 2, ["w1", "eeB"])] }))!;
+    expect(best.source).toBe("saved");
+    const gone = saved("gone", 3, ["w1", "eeB"]);
+    gone.build.pieceUids = ["w1", "sold", "eeB"];
+    const fallback = bestKnownFor("B", ctxWith([base("B")], { B: [saved("new", 2, ["w1", "eeB"]), gone] }))!;
+    expect(fallback.source).toBe("current");
+    expect(fallback.finalStats).toEqual(compose(GEAR.filter((g) => g.equippedBy === "B").map((g) => g.uid)));
   });
 
   it("falls back to the current gear without a saved build", () => {

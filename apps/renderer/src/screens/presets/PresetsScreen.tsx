@@ -251,7 +251,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
         <span className="font-mono uppercase tracking-wider text-zinc-400">Presets</span>
         <span className="text-zinc-400">
           A preset is one reference hero's outfit, worn as-is by its associated heroes (each keeps their own EE).
-          Scores use the priority each hero has in the Optimizer (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a{" "}
+          Scores use the priority each hero has in the Optimizer (else their latest saved build's) with the EE gems proposed for them, in real rolls on both sides: a saved build is recomposed from its pieces as captured, with the gems it allocated; a line turns orange past a{" "}
           <span className="inline-flex align-middle" title={`${SETTINGS.presetLossWarn.help} ${settingRange("presetLossWarn")}`}>
             <Stepper
               value={lossWarnPct}
@@ -890,6 +890,11 @@ function HeroLine({
   const lossPct = loss != null ? Math.round(loss * 100) : null;
   const warn = lossPct != null && lossPct > lossWarnPct;
   const vs = best?.source === "saved" ? "saved build" : "current gear";
+  const lossTitle = `Best known: score ${fmtNum(best?.score)} (${vs}), in real rolls on both sides — ${
+    best?.source === "saved"
+      ? "the saved build recomposed from its pieces as captured, with the gems it allocated"
+      : "no saved build, or one of its pieces is no longer in your inventory"
+  }`;
   return (
     <div className={cx(
       "flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border px-2 py-1.5",
@@ -913,9 +918,9 @@ function HeroLine({
             lossPct == null ? (
               <span className="text-[11px] text-zinc-400">no score to compare against</span>
             ) : warn ? (
-              <span className="text-[11.5px] font-medium text-orange-200">{h.name} loses {lossPct} % vs their {vs}</span>
+              <span className="text-[11.5px] font-medium text-orange-200" title={lossTitle}>{h.name} loses {lossPct} % vs their {vs}</span>
             ) : (
-              <span className="font-mono text-[11px] tabular-nums text-zinc-300" title={`Best known: score ${fmtNum(best?.score)} (${vs})`}>
+              <span className="font-mono text-[11px] tabular-nums text-zinc-300" title={lossTitle}>
                 {lossPct > 0 ? `−${lossPct}` : `+${-lossPct}`} % vs {vs}
               </span>
             )

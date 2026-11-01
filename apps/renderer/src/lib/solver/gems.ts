@@ -38,10 +38,9 @@ export interface GemPoolOptions {
    *  counts as equipped on the claiming hero — same owner override as the piece
    *  pool, so gems sitting on a reserved piece aren't proposed to another hero. */
   worklistClaims?: Record<string, string>;
-  /** Pieces the in-game presets keep out of this solve (`presetBlockedUids`) —
-   *  the gems of a locked or better-ranked preset's Talisman stay on it, as
-   *  the piece itself stays out of the piece pool. Absent = none. */
-  presetBlocked?: ReadonlySet<string>;
+  // No preset rule here: the gems of a Talisman a locked or better-ranked
+  // in-game preset keeps stay in the pool — a lock holds pieces, not gems
+  // (`presetBlockedUids` gates the piece pool only).
 }
 
 /** Multiset of OptionIDs the player can re-socket. Pool = union of every
@@ -54,7 +53,6 @@ export function buildGemPool(inv: Inventory, opts: GemPoolOptions): Map<number, 
   const pool = new Map<number, number>();
   for (const g of inv.gear) {
     if (g.slot !== "ooparts" && g.slot !== "exclusive") continue;
-    if (opts.presetBlocked?.has(g.uid)) continue;
     // Owned by another hero — physically equipped or worklist-claimed — gated
     // like the piece pool. Selected hero is exempt (the user might tick
     // himself; that shouldn't drop his own gems).

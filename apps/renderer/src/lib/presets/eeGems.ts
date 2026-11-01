@@ -9,6 +9,9 @@
  * Talisman / EE nobody wears — never the preset's Talisman (shared with every
  * hero of the preset), a piece another hero wears, nor a free piece the
  * worklist reserves for another hero (`ctx.worklistClaims`, like the Builder).
+ * Whatever the in-game presets hold is no rule here, on purpose: a locked
+ * preset's Talisman gems are on offer like any free piece's — a lock holds
+ * pieces, not gems.
  *
  * Pure: the screen feeds it the same context as `evaluatePresetFor`.
  */
