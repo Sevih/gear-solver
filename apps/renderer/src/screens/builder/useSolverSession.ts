@@ -11,7 +11,7 @@ import type { PoolSizes, SolveBuild, SolveEmptyCause, SolveMode } from "../../li
 import type { HeroPriority } from "../../lib/storage/heroPriority.js";
 import type { PresetHolds } from "../../lib/presets/presetHolds.js";
 import { buildSolveFilters, type MinMax, type SolverFilters } from "../../lib/solver/builderFilters.js";
-import type { ReforgeContext } from "./reforge.js";
+import type { ReforgeContext } from "../../lib/solver/reforge.js";
 import { ZERO_SOLVE_COUNTS, createSolveCountsStore } from "./solveCounts.js";
 
 /** Client-side equivalent of the solver's stat/rating band check — used by the

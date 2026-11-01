@@ -283,7 +283,8 @@ changement de héros / niveau / awakening :
 
 ### Options
 Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
-- **Reforge** (`reforgeMode`, **4 états**, **câblé**, **défaut +10R6**) — projette chaque pièce
+- **Reforge** (`reforgeMode`, **4 états**, **câblé**, **défaut +10R6**, réglable dans Settings › Solver —
+  `gs.solver.reforgeMode`, +10R6 à l'installation ; le choix fait pour un héros reste avec ses filtres) — projette chaque pièce
   du pool vers un plafond endgame **avant** le prune par budget de combos (phase 3) (`projectPieceForReforge`). Défaut
   `classic` (+10R6) car c'est la norme endgame ; `Off` noterait le gear capturé (+0/+9), trompeur.
   Libellés = enhancement + nombre de reforges (R) :
@@ -321,7 +322,8 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   enhance seul, +10 au plus (son plafond) ; l'EE du héros n'est jamais filtré. (Remplace l'ancien cut plat `enhanceLevel < 15`,
   aveugle au mode.)
 - **Transistone potential** (`rerollPotential`, toggle de la toolbar à côté de Maxed only, **défaut
-  off**) — projette le potentiel de reroll Transistone (`lib/solver/reroll.ts`, règle lue dans le
+  off**, réglable dans Settings › Solver — `gs.solver.rerollPotential`, off à l'installation ; le choix
+  fait pour un héros reste avec ses filtres) — projette le potentiel de reroll Transistone (`lib/solver/reroll.ts`, règle lue dans le
   client en tête du module) : une 6★ Légendaire à 4 sous-stats **sans ligne au palier 4** monte UNE
   ligne jusqu'au palier de base 4 (+1 à +3 ticks, reforges conservées, valeur plafonnée à LV6) ; une
   pièce qui a **déjà** une ligne au palier 4 n'en reçoit pas de deuxième mais monte une ligne jusqu'au

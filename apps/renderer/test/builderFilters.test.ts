@@ -92,7 +92,7 @@ describe("solverFiltersReducer — resetAll / loadPreset", () => {
       excludedHeroes: new Set(["h1"]),
       statFilters: { atk: { min: 1000 } },
     };
-    expect(solverFiltersReducer(dirty, { type: "resetAll" })).toBe(INITIAL_FILTERS);
+    expect(solverFiltersReducer(dirty, { type: "resetAll", to: INITIAL_FILTERS })).toBe(INITIAL_FILTERS);
   });
 
   it("loadPreset replaces the whole state", () => {

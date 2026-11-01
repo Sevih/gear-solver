@@ -278,7 +278,8 @@ hero / level / awakening change:
 
 ### Options
 The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select:
-- **Reforge** (`reforgeMode`, **4 states**, **wired**, **default +10R6**) — projects each piece of
+- **Reforge** (`reforgeMode`, **4 states**, **wired**, **default +10R6**, set in Settings › Solver —
+  `gs.solver.reforgeMode`, +10R6 on install; a hero's own choice stays with its filters) — projects each piece of
   the pool to an endgame ceiling **before** the combo-budget prune (phase 3) (`projectPieceForReforge`). Labels =
   enhancement + reforge count (R):
   - **Off**: gear as captured.
@@ -315,7 +316,8 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   only, +10 at most (its ceiling); the hero's own EE is never filtered. (Replaces the old mode-blind flat
   `enhanceLevel < 15` cut.)
 - **Transistone potential** (`rerollPotential`, toolbar toggle next to Maxed only, **default
-  off**) — projects the Transistone reroll potential (`lib/solver/reroll.ts`, the rule read from the
+  off**, set in Settings › Solver — `gs.solver.rerollPotential`, off on install; a hero's own choice
+  stays with its filters) — projects the Transistone reroll potential (`lib/solver/reroll.ts`, the rule read from the
   client at the top of the module): a 6★ Legendary with 4 substats and **no stage-4 line** raises ONE
   line to base stage 4 (+1 to +3 ticks, reforges kept, value capped at LV6). The line: the hero's
   highest-priority substat (never a negative priority), without a priority or on a tie the largest

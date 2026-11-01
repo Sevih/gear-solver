@@ -172,6 +172,8 @@ function recordingSolver(): { solver: SolverSettings; calls: Record<string, unkn
     workerCount: 4, setWorkerCount: rec("workerCount"),
     topN: 200, setTopN: rec("topN"),
     topK: 300, setTopK: rec("topK"),
+    reforgeMode: "ascended", setReforgeMode: rec("reforgeMode"),
+    rerollPotential: true, setRerollPotential: rec("rerollPotential"),
   } as SolverSettings;
   return { solver, calls };
 }
@@ -192,13 +194,13 @@ describe("Reset solver settings to defaults", () => {
   it("resetSettings puts every listed setting back to its default", () => {
     const calls: Record<string, unknown> = {};
     resetSettings(SOLVER_PANE_SETTINGS, (name, value) => { calls[name] = value; });
-    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000 });
+    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000, reforgeMode: "classic", rerollPotential: false });
   });
 
   it("the pane's reset (resetSolverSettings) calls every setter of the pane", () => {
     const { solver, calls } = recordingSolver();
     resetSolverSettings(solver);
-    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000 });
+    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000, reforgeMode: "classic", rerollPotential: false });
   });
 });
 

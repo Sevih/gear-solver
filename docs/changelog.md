@@ -8,6 +8,68 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔁 Mode de reforge et Transistone par défaut dans Settings › Solver, surcharge par héros, une seule migration `useReforged` (D5, G103) (2026-11-01)
+- ✅ **Pourquoi.** Arbitrage D5 de `docs/ux-audit-2026-11-01.md` (« Mode de reforge et Transistone : défaut global dans
+  Settings › Solver (+10R6), surcharge par héros gardée avec ses filtres » ; ligne « Mode de reforge, Transistone » de la
+  table 5.d, lignes « Reforge mode » et « Transistone potential » de la table 3.7) et section 3.13 (la règle
+  `useReforged` → `reforgeMode` écrite deux fois). Le défaut était figé dans `INITIAL_FILTERS` (`classic`, `false`) :
+  viser un autre plafond voulait dire le recliquer pour chaque nouveau héros.
+- ✅ **Registre.** `lib/settings.ts` : `reforgeMode` (clé `gs.solver.reforgeMode`, `kind: "choice"`, choix `disable` /
+  `classic` / `ascended10` / `ascended` = le type `ReforgeMode`, défaut `classic`, « Default reforge mode ») et
+  `rerollPotential` (clé `gs.solver.rerollPotential`, `kind: "bool"`, défaut `false`, « Transistone potential by
+  default »), `appliesNextSolve: false` tous deux (ils ne jouent qu'à l'ouverture d'un héros sans filtres gardés) ;
+  l'aide dit que le choix fait pour un héros reste avec ses filtres et que changer le défaut ne touche ni les héros qui
+  ont déjà des filtres ni le héros ouvert. `SOLVER_PANE_SETTINGS` = workers, topN, topK, `reforgeMode`,
+  `rerollPotential` : le Reset du panneau les remet à +10R6 / off. `lib/storage/keys.ts` : libellé « Solver settings »
+  pour les deux, ils entrent dans la sauvegarde par `settingKeys()`.
+- ✅ **Une seule liste des modes, une seule migration.** `screens/builder/reforge.ts` → `lib/solver/reforge.ts`
+  (`git mv` ; imports suivis dans `BuilderToolbar.tsx`, `BuilderScreen.tsx`, `BottomGearBand.tsx`,
+  `useSolverSession.ts` — `savedBuilds.ts` ne l'importait pas). Il exporte `legacyReforgeMode(o)` (`reforgeMode`, sinon
+  `useReforged ? "classic" : "disable"`), utilisée par `migrateReforge` et par le chargeur de
+  `lib/storage/filterPresets.ts`, dont la copie disparaît.
+- ✅ **Settings › Solver.** `design/settings/SolverPane.tsx` : sous le bloc Per-worker depth, bandeau « Hero defaults »
+  (note « for a hero's first solve »), Default reforge mode en quatre `SegButton` Off / +10R6 / +10R9 / +15R9
+  (`REFORGE_MODES`, `hint` en `title` — `SegButton` gagne une prop `title` optionnelle dans `SettingsControls.tsx`) et
+  Transistone potential by default en `Switch`, chacun avec l'aide du registre. `SolverSettings` gagne `reforgeMode` /
+  `setReforgeMode` et `rerollPotential` / `setRerollPotential` (`settersOf` suit) ; `App.tsx` les possède par
+  `useSetting` et les passe dans `solver={{…}}` et au Builder ; en-têtes de `SolverPane.tsx` et `SettingsModal.tsx`
+  mis à jour.
+- ✅ **Surcharge par héros.** `lib/solver/builderFilters.ts` : `filterDefaults(reforgeMode, rerollPotential)` =
+  `INITIAL_FILTERS` avec ces deux options remplacées ; `INITIAL_FILTERS` reste exporté avec `classic` / `false` ;
+  l'action `resetAll` prend les défauts en charge utile (`{ type: "resetAll"; to: SolverFilters }`). `BuilderScreen`
+  reçoit `defaultReforgeMode` / `defaultRerollPotential` (défauts du registre si absents) ; `startFiltersFor` passe
+  `filterDefaults(…)` à `filtersForHero`, qui les sert à un héros sans filtres gardés (un héros qui en a garde les
+  siens). Les défauts sont lus par une ref synchronisée dans le `useLayoutEffect` existant, donc seulement au changement
+  de héros : le héros ouvert ne bouge pas quand on change le réglage. `BuilderToolbar.tsx` : le libellé « Reforge » porte
+  le `title` « Default for a hero's first solve: <mode> — Settings › Solver », le toggle Transistone finit son
+  infobulle par la même phrase (on / off), et « reset filters » revient à ces défauts.
+- ✅ **Textes et manuel.** `wiki/Using-the-App.md` (puces **Reforge** et **Transistone potential** de l'Optimizer : le
+  défaut du premier solve d'un héros se règle dans Settings › Solver, +10R6 / off à l'installation ; puce **Solver** de
+  Settings : les deux réglages « Hero defaults », le Reset qui remet les cinq), `wiki/Solver.md` / `docs/solver.md`
+  (blocs Reforge et Transistone : réglables dans Settings › Solver, clés, défauts à l'installation),
+  `wiki/Engine-Reference.md` / `docs/reference.md` (arbre : `lib/solver/reforge.ts`, `filterDefaults` ; table des
+  tests : `reforgeDefaults.test.ts`, Reset à cinq réglages). `docs/architecture.md` / `wiki/Architecture.md` ne citaient
+  pas `reforge.ts` ; `docs/todo.md` n'avait aucun item sur ce point, inchangé.
+- ✅ **Tests.** `apps/renderer/test/reforgeDefaults.test.ts` (nouveau, 9 tests) : clés `gs.solver.reforgeMode` /
+  `gs.solver.rerollPotential`, défauts `classic` / `false`, choix = `REFORGE_MODES` ; `clampSetting("reforgeMode",
+  "nope")` → `classic`, `parseSetting("reforgeMode", '"ascended"')` → `ascended` ; `resetSettings(SOLVER_PANE_SETTINGS,
+  …)` rend cinq valeurs dont `classic` / `false` ; `legacyReforgeMode` (`{ useReforged: true }` → `classic`, `{}` →
+  `disable`, `{ reforgeMode: "ascended10", useReforged: true }` → `ascended10`) ; `filterDefaults` ne change que les
+  deux options ; `filtersForHero` sans filtres gardés rend les défauts passés (`ascended`, Transistone on, avec ou sans
+  priorité de repli), avec filtres gardés ceux du héros ; `resetAll` rend les défauts donnés ; rendu statique de
+  `SolverPane` : « Hero defaults », Off / +10R6 / +10R9 / +15R9, « Transistone potential by default ». Ajustés sans
+  changer ce qu'ils affirment : `settings.test.ts` et `settingsPanes.test.ts` (Reset à cinq réglages),
+  `builderFilters.test.ts` (`resetAll` avec `to: INITIAL_FILTERS`), `transfer.test.ts` (les deux clés dans la fixture
+  de toutes les clés sauvegardées). `filterPresets.test.ts`, `heroFilters.test.ts`, `reforgeProjection.test.ts`,
+  `keys.test.ts` verts. `npm run typecheck` : `> tsc --noEmit` sans erreur ; `npm test` : `Tests  1089 passed (1089)`
+  (renderer ; core 169, desktop 238) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ⏳ **Sevih.** Sur la build : Settings › Solver montre « Hero defaults » sous Per-worker depth (largeur des quatre
+  boutons à regarder) ; passer le défaut à +15R9 et Transistone on, puis ouvrir un héros jamais réglé (il s'ouvre ainsi)
+  et un héros déjà réglé (il garde le sien) ; le héros ouvert ne change pas ; « reset filters » revient aux défauts ;
+  Reset solver settings remet +10R6 / off ; infobulles du libellé Reforge et du toggle Transistone. Laissé hors lot :
+  `migrateSavedBuild` (`lib/storage/savedBuilds.ts`) garde `useReforged` en place jusqu'au Restore (section 3.13 :
+  migrer dès le chargement), « Maxed only » reste par héros sans défaut global ; restent D11, D12, D14, U14.
+
 ### 🧭 Home dissous dans Gear (Overview / Pieces / Scrap), atterrissage Heroes, état vide de première installation sur Heroes et Gear (U13, G102) (2026-11-01)
 - ✅ **Pourquoi.** Treizième lot de la refonte (U13 de `docs/ux-audit-2026-11-01.md`, bloc GEAR et ligne « HEROES
   (atterrissage) » de la section 5.b, tableau « 1. Home » de la section 1.1, parcours 2.a, ligne « Onglet ouvert » de la

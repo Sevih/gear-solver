@@ -1,17 +1,20 @@
 /**
  * Settings › Solver — worker-pool size, result count and per-worker depth,
- * all read at the next solve (`appliesNextSolve`). Keys, defaults, bounds and
- * texts come from `lib/settings.ts`; the settings applied at once live in
- * Settings › Display (`DisplayPane.tsx`).
+ * all read at the next solve (`appliesNextSolve`), then the hero defaults: the
+ * reforge mode and Transistone potential a hero with no kept filters opens on
+ * in the Optimizer (a hero's own choice stays with its filters). Keys,
+ * defaults, bounds and texts come from `lib/settings.ts`; the settings applied
+ * at once live in Settings › Display (`DisplayPane.tsx`).
  */
 import { useState } from "react";
 import { cx } from "../cx.js";
 import { resolveWorkerCount } from "../../lib/solver/orchestrator.js";
+import { REFORGE_MODES } from "../../lib/solver/reforge.js";
 import {
   SETTINGS, SOLVER_PANE_SETTINGS, availableCores, clampSetting, resetSettings,
   type SettingValues, type SolverPaneSetting,
 } from "../../lib/settings.js";
-import { SectionStrip, Divider, SegButton, Stepper, HelpText, stepBy, type Setter } from "./SettingsControls.js";
+import { SectionStrip, Divider, SegButton, Stepper, Switch, HelpText, stepBy, type Setter } from "./SettingsControls.js";
 
 /** Solver tuning settings — owned by App (persisted), edited here. Value
  *  meanings: `SettingValues` in lib/settings.ts. */
@@ -22,6 +25,10 @@ export interface SolverSettings {
   setTopN: Setter<"topN">;
   topK: number;
   setTopK: Setter<"topK">;
+  reforgeMode: SettingValues["reforgeMode"];
+  setReforgeMode: Setter<"reforgeMode">;
+  rerollPotential: boolean;
+  setRerollPotential: Setter<"rerollPotential">;
 }
 
 /** Each setting of the pane → its setter, for the registry-driven Reset. */
@@ -30,6 +37,8 @@ function settersOf(solver: SolverSettings): { [N in SolverPaneSetting]: Setter<N
     workerCount: solver.setWorkerCount,
     topN: solver.setTopN,
     topK: solver.setTopK,
+    reforgeMode: solver.setReforgeMode,
+    rerollPotential: solver.setRerollPotential,
   };
 }
 
@@ -136,6 +145,36 @@ export function SolverPane({
             />
           </div>
         )}
+      </div>
+
+      <SectionStrip title="Hero defaults" note="for a hero's first solve" />
+
+      {/* Default reforge mode */}
+      <div className="flex items-start justify-between gap-4.5">
+        <div className="flex max-w-82.5 flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-white">{SETTINGS.reforgeMode.label}</span>
+          <span className="text-[11.5px] leading-snug text-zinc-400">
+            <HelpText name="reforgeMode" />
+          </span>
+        </div>
+        <div className="flex shrink-0 overflow-hidden rounded-md border border-white/12">
+          {REFORGE_MODES.map((m, i) => (
+            <SegButton key={m.value} label={m.label} title={m.hint} on={solver.reforgeMode === m.value} onClick={() => solver.setReforgeMode(m.value)} divided={i > 0} />
+          ))}
+        </div>
+      </div>
+
+      <Divider />
+
+      {/* Transistone potential by default */}
+      <div className="flex items-start justify-between gap-4.5">
+        <div className="flex max-w-82.5 flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-white">{SETTINGS.rerollPotential.label}</span>
+          <span className="text-[11.5px] leading-snug text-zinc-400">
+            <HelpText name="rerollPotential" />
+          </span>
+        </div>
+        <Switch checked={solver.rerollPotential} onToggle={() => solver.setRerollPotential((v) => !v)} />
       </div>
 
       <div className="flex justify-end">

@@ -21,11 +21,12 @@ import { SLOT_BY } from "../../design/tokens.js";
 import { dmgSkillInfo } from "../../lib/dmgSkill.js";
 import { computeFinalStats } from "../../lib/composeBuild.js";
 import { calcBattlePower } from "../../lib/solver/cp.js";
+import type { ReforgeMode } from "../../lib/solver/engine.js";
 import type { SolveMode } from "../../lib/solver/types.js";
 import type { HeroPriority } from "../../lib/storage/heroPriority.js";
 import { presetHoldersOf, type PresetHolds } from "../../lib/presets/presetHolds.js";
 import {
-  INITIAL_FILTERS, solverFiltersReducer, type SolverFilters,
+  filterDefaults, solverFiltersReducer, type SolverFilters,
 } from "../../lib/solver/builderFilters.js";
 import { talismanFamilyKeys, translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../../lib/reco/translateReco.js";
 import { fetchRecoForHero } from "../../lib/reco/fetchReco.js";
@@ -48,7 +49,7 @@ import {
 import { addLocalPreset, wireUidsFromBuild } from "../../lib/storage/localPresets.js";
 import { onBackupImported } from "../../lib/storage/transfer.js";
 import { onDataPruned, pruneFilters } from "../../lib/storage/dataHash.js";
-import { migrateReforge, REFORGE_MODES } from "./reforge.js";
+import { migrateReforge, REFORGE_MODES } from "../../lib/solver/reforge.js";
 import type { SelectedComposition } from "./composition.js";
 import { displayNameOf } from "../../lib/heroes/heroName.js";
 import { heroListOrder } from "../../lib/heroes/heroListOrder.js";
@@ -144,6 +145,11 @@ interface BuilderScreenProps {
   /** Show a toast (App's `notify`) — SOLVE says when it fell back to Combat
    *  Power for want of a priority and a reco. */
   onNotify?: (text: string) => void;
+  /** Reforge mode and Transistone potential a hero with no kept filters opens
+   *  on (Settings › Solver, `gs.solver.reforgeMode` / `.rerollPotential`); a
+   *  hero's own choice stays with its filters. */
+  defaultReforgeMode?: ReforgeMode;
+  defaultRerollPotential?: boolean;
 }
 
 /** Cartesian size (∏ per-slot pools) above which the Builder warns the solve
@@ -161,17 +167,18 @@ function formatCombos(n: number): string {
   return String(n);
 }
 
-/** Filters a hero opens on: their kept set, else the defaults with the hero's
+/** Filters a hero opens on: their kept set, else the defaults (the reforge
+ *  mode and Transistone potential of Settings › Solver) with the hero's
  *  `priorityOf` (their latest saved build's priority, if any — the one the
  *  Presets tab scores them with), so both tabs give the hero the same score. */
-function startFiltersFor(uid: string | null, map: HeroFiltersMap, savedBuilds: SavedBuildsMap): SolverFilters {
-  return filtersForHero(map, uid, INITIAL_FILTERS, uid ? priorityOf(uid, { heroFilters: map, savedBuilds })?.priority : null);
+function startFiltersFor(uid: string | null, map: HeroFiltersMap, savedBuilds: SavedBuildsMap, defaults: SolverFilters): SolverFilters {
+  return filtersForHero(map, uid, defaults, uid ? priorityOf(uid, { heroFilters: map, savedBuilds })?.priority : null);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), resultRows = settingDefault("resultRows"), onResultRowsChange, onNotify }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), resultRows = settingDefault("resultRows"), onResultRowsChange, onNotify, defaultReforgeMode = settingDefault("reforgeMode"), defaultRerollPotential = settingDefault("rerollPotential") }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // The preset "Optimize preset →" aims at, tied to the hero it opened — set
   // with the patch below, dropped as soon as the user switches heroes.
@@ -195,8 +202,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // their changes.
   const heroFiltersRef = useRef<HeroFiltersMap>(heroFilters);
   const savedBuildsRef = useRef(savedBuildsMap);
+  // The hero defaults (Settings › Solver), read at a hero change only —
+  // changing them leaves the open hero's filters as they are.
+  const defaultsRef = useRef(filterDefaults(defaultReforgeMode, defaultRerollPotential));
   const [filters, dispatch] = useReducer(solverFiltersReducer, initialHeroUid ?? null,
-    (uid: string | null) => startFiltersFor(uid, heroFilters, savedBuildsMap));
+    (uid: string | null) => startFiltersFor(uid, heroFilters, savedBuildsMap, filterDefaults(defaultReforgeMode, defaultRerollPotential)));
   const filtersRef = useRef(filters);
   const loadedFiltersRef = useRef(filters);
   const prevHeroRef = useRef(selectedUid);
@@ -205,12 +215,16 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const selectedUidRef = useRef(selectedUid);
   // Synced after the commit, not during render. Layout effects of a commit all
   // run before its passive effects, so the hero-change effect below reads the
-  // map and saved builds of that commit.
+  // map, saved builds and hero defaults of that commit.
   useLayoutEffect(() => {
     filtersRef.current = filters;
     selectedUidRef.current = selectedUid;
     heroFiltersRef.current = heroFilters;
     savedBuildsRef.current = savedBuildsMap;
+    const d = defaultsRef.current.options;
+    if (d.reforgeMode !== defaultReforgeMode || d.rerollPotential !== defaultRerollPotential) {
+      defaultsRef.current = filterDefaults(defaultReforgeMode, defaultRerollPotential);
+    }
   });
   /** Transient "Added ✓" / "Replaced ✓" confirmation on the Add-to-worklist
    *  button. */
@@ -539,7 +553,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   useEffect(() => {
     if (prevHeroRef.current === selectedUid) return;
     orchestratorRef.current?.cancel();
-    const start = startFiltersFor(selectedUid, heroFiltersRef.current, savedBuildsRef.current);
+    const start = startFiltersFor(selectedUid, heroFiltersRef.current, savedBuildsRef.current, defaultsRef.current);
     loadedFiltersRef.current = start;
     dispatch({ type: "loadPreset", filters: start });
     const pending = pendingPatchRef.current;
@@ -793,6 +807,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         mainStatCatalogs={mainStatCatalogs}
         filters={filters}
         dispatch={dispatch}
+        defaultReforgeMode={defaultReforgeMode}
+        defaultRerollPotential={defaultRerollPotential}
         solving={solving}
         canSolve={selectedUid != null}
         solveMode={solveMode}

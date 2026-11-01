@@ -10,7 +10,7 @@ import { cx } from "../../design/cx.js";
 import type { DmgSkillInfo } from "../../lib/dmgSkill.js";
 import type { ReforgeMode } from "../../lib/solver/engine.js";
 import type { SolveMode } from "../../lib/solver/types.js";
-import type { SolverAction, SolverFilters } from "../../lib/solver/builderFilters.js";
+import { filterDefaults, type SolverAction, type SolverFilters } from "../../lib/solver/builderFilters.js";
 import type { ArmorSetEntry, EffectEntry, MainStatEntry } from "./catalogs.js";
 import { displayNameOf } from "../../lib/heroes/heroName.js";
 import { HeroPicker } from "../../design/HeroPicker.js";
@@ -22,8 +22,9 @@ import { AccessoryMainStatsPanel } from "./AccessoryMainStatsPanel.js";
 import { SetsPanel } from "./SetsPanel.js";
 import { WeaponsAccessoriesPanel } from "./WeaponsAccessoriesPanel.js";
 import { useClickOutside } from "./useClickOutside.js";
-import { REFORGE_MODES } from "./reforge.js";
+import { REFORGE_MODES } from "../../lib/solver/reforge.js";
 import { PriorityBanner, type PriorityBannerState } from "./PriorityBanner.js";
+import { settingDefault } from "../../lib/settings.js";
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Builder toolbar — Direction B (toolbar + popovers). A slim top bar carries
@@ -36,6 +37,7 @@ export function BuilderToolbar({
   heroes, game, selectedUid, onSelect,
   armorSets, weaponEffects, accessoryEffects, talismanEffects, mainStatCatalogs,
   filters, dispatch,
+  defaultReforgeMode = settingDefault("reforgeMode"), defaultRerollPotential = settingDefault("rerollPotential"),
   solving, canSolve, solveMode, setSolveMode, onSolve, onCancelSolve, recoLoading,
   priorityBanner, onLoadReco, onUseCp,
   canFilter, filterActive, onFilter, onClearFilter, dmgSkill,
@@ -53,6 +55,11 @@ export function BuilderToolbar({
   mainStatCatalogs: Record<string, MainStatEntry[]>;
   filters: SolverFilters;
   dispatch: Dispatch<SolverAction>;
+  /** Reforge mode and Transistone potential of a hero's first solve
+   *  (Settings › Solver) — named in the tooltips, and what « reset filters »
+   *  goes back to. */
+  defaultReforgeMode?: ReforgeMode;
+  defaultRerollPotential?: boolean;
   solving: boolean;
   canSolve: boolean;
   /** SOLVE mode (Score | CP control) — lifted so the parent's cartesian
@@ -169,7 +176,7 @@ export function BuilderToolbar({
 
       {/* Row 2 — reforge mode, the quick toggle, and the filter popovers. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        <ReforgeModeControl value={filters.options.reforgeMode} dispatch={dispatch} />
+        <ReforgeModeControl value={filters.options.reforgeMode} defaultMode={defaultReforgeMode} dispatch={dispatch} />
         <ToolbarToggle
           label="Maxed only"
           on={filters.options.onlyMaxed}
@@ -180,7 +187,7 @@ export function BuilderToolbar({
           label="Transistone potential"
           on={filters.options.rerollPotential ?? false}
           onClick={() => dispatch({ type: "setOption", key: "rerollPotential", value: !(filters.options.rerollPotential ?? false) })}
-          title="Project the best eligible substat line up to tier 4 — a 6★ Legendary without a tier-4 line can reroll one line to tier 4 by Transistone (a 5 % draw per pass; reforge ticks are kept); one that already has a tier-4 line can still raise one line to tier 3. The line: the hero's highest-priority substat, else the largest roll. Works with or without a reforge mode; ignored under Maxed only (no extrapolation)."
+          title={`Project the best eligible substat line up to tier 4 — a 6★ Legendary without a tier-4 line can reroll one line to tier 4 by Transistone (a 5 % draw per pass; reforge ticks are kept); one that already has a tier-4 line can still raise one line to tier 3. The line: the hero's highest-priority substat, else the largest roll. Works with or without a reforge mode; ignored under Maxed only (no extrapolation). Default for a hero's first solve: ${defaultRerollPotential ? "on" : "off"} — Settings › Solver.`}
         />
         <ToolbarDivider />
         <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
@@ -214,7 +221,7 @@ export function BuilderToolbar({
         </PopoverButton>
         <button
           type="button"
-          onClick={() => dispatch({ type: "resetAll" })}
+          onClick={() => dispatch({ type: "resetAll", to: filterDefaults(defaultReforgeMode, defaultRerollPotential) })}
           className="ml-auto shrink-0 text-[11px] text-white/70 underline-offset-2 hover:text-white/80 hover:underline"
         >
           reset filters
@@ -298,11 +305,13 @@ function ToolbarDivider() {
 /** Reforge-mode segmented control — Off / +10R6 / +10R9 / +15R9. Replaces the
  *  old binary "Reforged" toggle: each chip projects pool pieces to a different
  *  endgame ceiling (see REFORGE_MODES). The active chip is highlighted; the
- *  whole strip carries a label so it reads as one control. */
-function ReforgeModeControl({ value, dispatch }: { value: ReforgeMode; dispatch: Dispatch<SolverAction> }) {
+ *  whole strip carries a label so it reads as one control; the label's tooltip
+ *  names the default set in Settings › Solver. */
+function ReforgeModeControl({ value, defaultMode, dispatch }: { value: ReforgeMode; defaultMode: ReforgeMode; dispatch: Dispatch<SolverAction> }) {
+  const defaultLabel = REFORGE_MODES.find((m) => m.value === defaultMode)?.label ?? defaultMode;
   return (
     <div className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/4 pl-2.5 pr-1">
-      <span className="text-[11px] text-white/70">Reforge</span>
+      <span className="text-[11px] text-white/70" title={`Default for a hero's first solve: ${defaultLabel} — Settings › Solver`}>Reforge</span>
       <div className="flex items-center gap-0.5">
         {REFORGE_MODES.map((m) => {
           const on = value === m.value;

@@ -1,8 +1,10 @@
 /**
- * Builder reforge context — the mode + priority a result set was solved with,
- * its legacy migration and the toolbar's mode list.
+ * Reforge modes — the context a result set was solved with (mode + priority),
+ * the one migration of the legacy `useReforged` boolean (saved builds and
+ * filter presets both go through `legacyReforgeMode`) and the mode list the
+ * Optimizer toolbar and Settings › Solver show.
  */
-import type { ReforgeMode, ReforgeTickWeights } from "../../lib/solver/engine.js";
+import type { ReforgeMode, ReforgeTickWeights } from "./engine.js";
 
 /** Reforge context carried alongside a result set — the mode + priority the
  *  build was solved with, so the bottom gear band can re-project the same
@@ -18,18 +20,22 @@ export interface ReforgeContext {
   rerollPotential?: boolean;
 }
 
-/** Migrate a persisted reforge context (saved builds) to the current shape.
- *  Pre-reforge-modes builds stored a `useReforged` boolean → map true to
- *  "classic" (the only projection that existed then), false/absent to
- *  "disable". */
-export function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number>; tickWeights?: ReforgeTickWeights | null; rerollPotential?: boolean } | undefined): ReforgeContext {
-  if (!r) return { reforgeMode: "disable", priority: {} };
-  const reforgeMode = r.reforgeMode ?? (r.useReforged ? "classic" : "disable");
-  return { reforgeMode, priority: r.priority, tickWeights: r.tickWeights ?? null, rerollPotential: r.rerollPotential ?? false };
+/** The reforge mode of a stored shape that may predate the modes: its
+ *  `reforgeMode`, else the legacy `useReforged` boolean — true → "classic"
+ *  (the only projection that existed then), false/absent → "disable". */
+export function legacyReforgeMode(o: { reforgeMode?: ReforgeMode; useReforged?: boolean }): ReforgeMode {
+  return o.reforgeMode ?? (o.useReforged ? "classic" : "disable");
 }
 
-/** UI metadata for the reforge-mode segmented control — order = cycle order,
- *  label = chip text, hint = tooltip. */
+/** Migrate a persisted reforge context (saved builds) to the current shape
+ *  (`legacyReforgeMode`). */
+export function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number>; tickWeights?: ReforgeTickWeights | null; rerollPotential?: boolean } | undefined): ReforgeContext {
+  if (!r) return { reforgeMode: "disable", priority: {} };
+  return { reforgeMode: legacyReforgeMode(r), priority: r.priority, tickWeights: r.tickWeights ?? null, rerollPotential: r.rerollPotential ?? false };
+}
+
+/** UI metadata for the reforge-mode segmented controls (Optimizer toolbar,
+ *  Settings › Solver) — order = cycle order, label = chip text, hint = tooltip. */
 export const REFORGE_MODES: ReadonlyArray<{ value: ReforgeMode; label: string; hint: string }> = [
   { value: "disable",    label: "Off",    hint: "Reforge preview off — score gear exactly as captured." },
   { value: "classic",    label: "+10R6",  hint: "+10, not ascended (6 reforge ticks). Main stats re-scaled, substats max-rolled by priority. Each piece stops at its own ceiling: a piece under 6★ gets only its own number of reforges." },

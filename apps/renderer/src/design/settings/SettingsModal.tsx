@@ -9,7 +9,9 @@
  *                     data version · Sync game data · Wipe captured
  *                     (destructive).
  *  - Solver         — worker-pool size, result count (topN), per-worker depth
- *                     (topK, advanced): read at the next solve.
+ *                     (topK, advanced): read at the next solve · hero
+ *                     defaults: reforge mode and Transistone potential of a
+ *                     hero's first solve.
  *  - Display        — results heatmap, compact result cards, result rows:
  *                     applied at once.
  *  - Backup         — Export / Import backup (JSON).

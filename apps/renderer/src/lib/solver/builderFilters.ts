@@ -170,6 +170,13 @@ export const INITIAL_FILTERS: SolverFilters = {
   minQuality: null,
 };
 
+/** The filters a hero with none kept opens on (and « reset filters » goes back
+ *  to): `INITIAL_FILTERS` with the reforge mode and Transistone potential set
+ *  in Settings › Solver (`gs.solver.reforgeMode` / `gs.solver.rerollPotential`). */
+export function filterDefaults(reforgeMode: ReforgeMode, rerollPotential: boolean): SolverFilters {
+  return { ...INITIAL_FILTERS, options: { ...INITIAL_FILTERS.options, reforgeMode, rerollPotential } };
+}
+
 export type SolverAction =
   | { type: "setOption"; key: Exclude<keyof SolverOptions, "reforgeMode" | "equippedScope">; value: boolean }
   | { type: "setReforgeMode"; value: ReforgeMode }
@@ -194,7 +201,8 @@ export type SolverAction =
   | { type: "toggleExcludedSet"; setId: string }
   | { type: "cycleEffectPick"; group: "weapon" | "accessory" | "talisman"; key: string }
   | { type: "clearPriority" }
-  | { type: "resetAll" }
+  /** Back to the hero defaults (`filterDefaults`). */
+  | { type: "resetAll"; to: SolverFilters }
   /** Replace the entire filter state — used to apply a saved preset.
    *  Keeps the reducer as the single mutation point so React batches
    *  the rerender as a single update. */
@@ -322,7 +330,7 @@ export function solverFiltersReducer(state: SolverFilters, action: SolverAction)
     case "clearPriority":
       return { ...state, priority: {} };
     case "resetAll":
-      return INITIAL_FILTERS;
+      return action.to;
     case "loadPreset":
       return action.filters;
     case "mergePreset": {

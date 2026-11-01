@@ -284,7 +284,9 @@ results, the bottom band shows the selected build's pieces.
   Singularity passive) / **+15R9** (preview at +15 fully ascended — 9 ticks plus the
   Singularity passive). Lets you compare builds as if the gear were maxed — each piece up to
   its own ceiling: a piece under 6★, or a 6★ that isn't Unique, stops at +10 with its own
-  number of reforges and no Singularity passive, whatever the mode.
+  number of reforges and no Singularity passive, whatever the mode. The default for a hero's
+  first solve is set in **Settings › Solver**, **+10R6** out of the box; the mode you pick for a
+  hero stays with its filters.
 - **Maxed only** — no extrapolation: only pieces **already at their own ceiling in the reforge
   mode (or better)**, scored on their real rolls (no projection). Off: any piece as-is ·
   +10R6: +10 with ≥ 6 reforges done · +10R9: +10 with ≥ 9 reforges · +15R9: +15 with ≥ 9
@@ -296,6 +298,8 @@ results, the bottom band shows the selected build's pieces.
   4/3/3/3, a 4/4/3/2 can become 4/4/3/3). This toggle previews the best case: the hero's
   highest-priority line (else the largest roll) raised that far, marked
   `T+n` on the result cards. Works with or without a reforge mode; ignored under **Maxed only**.
+  The default for a hero's first solve is set in **Settings › Solver**, off out of the box; the
+  choice you make for a hero stays with its filters.
 - **Equipped items** — a three-way control for which gear worn by *other* heroes the solver
   may pull in: **None** (only the hero's own gear + free gear), **≤ Lower** (default — also
   gear on heroes ranked strictly lower in the Heroes ranking; every new hero gets a default
@@ -420,7 +424,11 @@ visited (on **Setup** until the first setup check has passed).
   (with the game closed).
 - **Solver** — what the next solve reads (*Solver tuning · applies next solve*): worker count
   (Auto = use your CPU; or pin a number), how many results to return and, under *Show advanced*,
-  the per-worker depth. **Reset solver settings to defaults** puts these three back.
+  the per-worker depth. Then the *Hero defaults* (*for a hero's first solve*): **Default reforge
+  mode** (Off / +10R6 / +10R9 / +15R9, +10R6 out of the box) and **Transistone potential by
+  default** (off out of the box) — what a hero with no filters of their own opens on in the
+  Optimizer; a hero who already has filters, and the hero open, keep theirs. **Reset solver
+  settings to defaults** puts these five back (+10R6, Transistone off).
 - **Display** — applied at once: results heatmap on/off, compact result cards (shorter gear cards
   under the Optimizer's results; Gear and tooltips unchanged) and **Result rows**, the height of the
   Optimizer's results table (5 to 15 rows, 12 by default — the height slider above the table sets

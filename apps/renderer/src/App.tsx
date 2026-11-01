@@ -205,6 +205,11 @@ export function App() {
   // before merge (advanced — too low drops good builds).
   const [solverTopN, setSolverTopN] = useSetting("topN");
   const [solverTopK, setSolverTopK] = useSetting("topK");
+  // Hero defaults: the reforge mode and Transistone potential a hero with no
+  // kept filters opens on in the Optimizer (a hero's own choice stays with its
+  // filters).
+  const [defaultReforgeMode, setDefaultReforgeMode] = useSetting("reforgeMode");
+  const [defaultRerollPotential, setDefaultRerollPotential] = useSetting("rerollPotential");
   // Display (edited in Settings › Display, consumed by the Builder): heatmap =
   // results-table column shading; compactCards = shorter gear cards under the
   // results; resultRows = the results table's height, also set by its slider.
@@ -492,6 +497,8 @@ export function App() {
           workerCount, setWorkerCount,
           topN: solverTopN, setTopN: setSolverTopN,
           topK: solverTopK, setTopK: setSolverTopK,
+          reforgeMode: defaultReforgeMode, setReforgeMode: setDefaultReforgeMode,
+          rerollPotential: defaultRerollPotential, setRerollPotential: setDefaultRerollPotential,
         }}
         display={{
           heatmap, setHeatmap,
@@ -558,7 +565,7 @@ export function App() {
           {builderMounted && (
             <div className="h-full" style={{ display: tab === "Optimizer" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} heroFilters={heroFilters} onHeroFiltersChange={setHeroFilters} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} resultRows={resultRows} onResultRowsChange={setResultRows} onNotify={notify} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} heroFilters={heroFilters} onHeroFiltersChange={setHeroFilters} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} resultRows={resultRows} onResultRowsChange={setResultRows} onNotify={notify} defaultReforgeMode={defaultReforgeMode} defaultRerollPotential={defaultRerollPotential} />
               </ScreenErrorBoundary>
             </div>
           )}

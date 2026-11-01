@@ -57,6 +57,8 @@ const EVERY_KEY: Record<string, unknown> = {
   "gs.solver.workerCount": 1,
   "gs.solver.topN": 500,
   "gs.solver.topK": 2000,
+  "gs.solver.reforgeMode": "ascended",
+  "gs.solver.rerollPotential": true,
   "gs.builder.heatmap": false,
   "gs.builder.compactCards": true,
   "gs.solver.presetLossWarn": 20,

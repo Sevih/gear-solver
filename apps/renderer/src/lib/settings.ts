@@ -15,6 +15,7 @@
  * Pure module: no React, no DOM beyond a guarded `localStorage` /
  * `navigator` read.
  */
+import type { ReforgeMode } from "./solver/engine.js";
 
 /** Settings modal panes, rail order. */
 export const SETTINGS_PANES = ["setup", "data", "solver", "display", "backup", "advanced"] as const;
@@ -37,6 +38,10 @@ export interface SettingValues {
   topN: number;
   /** Per-worker heap depth before merge (advanced — too low loses recall). */
   topK: number;
+  /** Reforge mode a hero opens on in the Optimizer until set on its toolbar. */
+  reforgeMode: ReforgeMode;
+  /** Transistone potential a hero opens on in the Optimizer, likewise. */
+  rerollPotential: boolean;
   /** Results-table column heatmap on/off. */
   heatmap: boolean;
   /** Builder: compact gear cards under the results. */
@@ -114,6 +119,23 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
     helpEmphasis: "Too low silently drops good builds",
     appliesNextSolve: true,
   },
+  reforgeMode: {
+    key: "gs.solver.reforgeMode",
+    default: "classic",
+    kind: "choice",
+    choices: ["disable", "classic", "ascended10", "ascended"],
+    label: "Default reforge mode",
+    help: "The reforge mode a hero opens on in the Optimizer until you change it on its toolbar. The mode picked for a hero stays with its filters: changing this default leaves heroes that already have filters, and the hero open, as they are.",
+    appliesNextSolve: false,
+  },
+  rerollPotential: {
+    key: "gs.solver.rerollPotential",
+    default: false,
+    kind: "bool",
+    label: "Transistone potential by default",
+    help: "Whether a hero opens in the Optimizer with Transistone potential on, until you change it on its toolbar. The choice made for a hero stays with its filters: changing this default leaves heroes that already have filters, and the hero open, as they are.",
+    appliesNextSolve: false,
+  },
   heatmap: {
     key: "gs.builder.heatmap",
     default: true,
@@ -180,8 +202,9 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
 };
 
 /** The settings Settings › Solver shows — and resets with « Reset solver
- *  settings to defaults ». */
-export const SOLVER_PANE_SETTINGS = ["workerCount", "topN", "topK"] as const;
+ *  settings to defaults »: the solver tuning, then the hero defaults
+ *  (reforge mode, Transistone potential). */
+export const SOLVER_PANE_SETTINGS = ["workerCount", "topN", "topK", "reforgeMode", "rerollPotential"] as const;
 export type SolverPaneSetting = (typeof SOLVER_PANE_SETTINGS)[number];
 
 /** The settings Settings › Display shows — and resets with « Reset display

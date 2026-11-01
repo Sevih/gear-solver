@@ -8,6 +8,8 @@
  * non-JSON-safe field; we round-trip via array.
  */
 import type { SolverFilters } from "../solver/builderFilters.js";
+import type { ReforgeMode } from "../solver/engine.js";
+import { legacyReforgeMode } from "../solver/reforge.js";
 import { setPicksToPlans } from "../solver/setPlans.js";
 import { renameLegacyStatKeys } from "../statRegistry.js";
 
@@ -103,10 +105,9 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
         rerollPotential: f.options?.rerollPotential ?? false,
         equippedScope: f.options?.equippedScope
           ?? ((f.options as { includeEquippedOnOthers?: boolean })?.includeEquippedOnOthers === false ? "none" : "all"),
-        // `reforgeMode` replaced the `useReforged` boolean (true → "classic").
+        // `reforgeMode` replaced the `useReforged` boolean (`legacyReforgeMode`).
         // Left undefined, the Builder's gear band indexes REFORGE_PLANS[undefined].
-        reforgeMode: f.options?.reforgeMode
-          ?? ((f.options as { useReforged?: boolean })?.useReforged ? "classic" : "disable"),
+        reforgeMode: legacyReforgeMode((f.options ?? {}) as { reforgeMode?: ReforgeMode; useReforged?: boolean }),
       },
     },
   };

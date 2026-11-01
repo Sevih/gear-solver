@@ -41,11 +41,12 @@ export function Divider() {
   return <div className="h-px bg-white/6" />;
 }
 
-export function SegButton({ label, on, onClick, divided }: { label: string; on: boolean; onClick: () => void; divided?: boolean }) {
+export function SegButton({ label, on, onClick, divided, title }: { label: string; on: boolean; onClick: () => void; divided?: boolean; title?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={title}
       className={cx(
         "px-3.5 py-1.5 text-[11px] font-semibold transition-colors",
         divided && "border-l border-white/12",

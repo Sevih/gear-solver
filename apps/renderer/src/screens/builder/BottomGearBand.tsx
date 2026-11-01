@@ -10,7 +10,7 @@ import { projectPieceForReforge } from "../../lib/solver/engine.js";
 import { rerollPotential } from "../../lib/solver/reroll.js";
 import type { SolveBuild } from "../../lib/solver/types.js";
 import type { SlotDiff } from "../../lib/buildDiff.js";
-import type { ReforgeContext } from "./reforge.js";
+import type { ReforgeContext } from "../../lib/solver/reforge.js";
 
 /** Compact band order: `GAME_GEAR_GRID` with the EE and the talisman sharing
  *  one card (EE on top) in the EE's place — seven cells, 4 + 3. */
