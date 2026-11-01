@@ -2,7 +2,7 @@
 
 *Mirror of `docs/solver.md` (translated to English) — see the repo for the authoritative source.*
 
-This doc describes the **gear-solver** (Builder tab), its UI panels,
+This doc describes the **gear-solver** (Optimizer tab), its UI panels,
 its internal pipeline, and the architectural choices behind it.
 
 > General repo architecture: [Architecture](Architecture).
@@ -146,7 +146,7 @@ raise Top% or require the set.
 **c) SOLVE (Score) without priority** — `magnitudeScoreOf` (raw roll magnitude):
 no objective (the score would be 0 everywhere), but the product **must** stay
 bounded (else full cartesian) → we keep the fullest-rolled pieces per slot. The
-Builder's Solve button no longer leads here (the reco's priority, else CP, § 4 Hero);
+Optimizer's Solve button no longer leads here (the reco's priority, else CP, § 4 Hero);
 the branch remains the pre-solve estimate's and the engine's when called without weights.
 
 Required-set protection: for each `req-2pc`/`req-4pc` set not already represented
@@ -247,7 +247,7 @@ Picker (searchable combobox) + portrait + a **Score | CP** segmented control + a
 - **Reset filters**: `dispatch({type: "resetAll"})` — clears the entire reducer.
 
 **Per-hero filter memory** (durable): every change of the open hero's filters is written to
-`gs.solver.heroFilters` (`heroFilters.ts`, localStorage, owned by App and passed to the Builder and Presets),
+`gs.solver.heroFilters` (`heroFilters.ts`, localStorage, owned by App and passed to the Optimizer and Presets),
 and opening a hero **restores** their kept set instead of resetting everything — on a hero switch as on a
 relaunch; distinct from the named **Filter sets**. A hero without a kept set starts from the defaults with the
 priority of `priorityOf` (`lib/heroPriority/weights.ts`: their most recent saved build's, if they have one),
@@ -325,7 +325,7 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   ceiling: in-game stage 4 is a 5 % draw.
 - **Equipped items** (`equippedScope`, **3 states**, **default ≤ Lower**) — which pieces
   equipped on **other** heroes the solver may pull. Default `lower`: only heroes of
-  **strictly lower** priority (auto-ranked by CP on import, by App, without opening Builds:
+  **strictly lower** priority (auto-ranked by CP on import, by App, without opening Heroes:
   `useRankDefaults`; compared via `isLowerPriority`) → never
   strips an equal/higher hero. Without a ranking it degrades to own+free (`isLowerPriority`
   ∞>∞ = false). `None` = own + free, `All` = any equipped piece (the old default, silent
@@ -337,7 +337,7 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   The **in-game presets** stack on top, whatever the scope (`presetHolds`, see Engine Reference
   §1.6): a **locked** preset's pieces never come out, except for "Optimize preset →" on that
   preset; "Optimize preset →" never takes the pieces of a preset ranked equal or better. The
-  Builder says so in the Library ("Optimizing preset ‹name› (rank N) — …", dropped when you switch
+  Optimizer says so in the Library ("Optimizing preset ‹name› (rank N) — …", dropped when you switch
   heroes) and the gear cards name the preset a piece comes from ("from preset ‹name›").
 - **Keep current** — locks the already-equipped slots to their current piece.
 - **Allow broken sets** (`allowBrokenSets`, default **true**) — *true*: a partial set
@@ -413,11 +413,11 @@ Three **wired** sections (localStorage, per hero):
 - **Restore** — re-pushes a saved build into the table + bottom band.
 
 Equip / Unequip **to the game** remain absent (they require a non-existent game API).
-The **Optimize →** button lives on the Builds tab side (opens the Builder on the hero); **Optimize preset →**
+The **Optimize →** button lives on the Heroes tab side (opens the Optimizer on the hero); **Optimize preset →**
 (Presets tab) adds a filter patch to it (`initialPatch`, see the Presets tab). The same links lead back to
-the Builder from the Worklist (a card's hero portrait and name, a line's "on ‹hero›" = the piece's current
-wearer) and from the Inventory's piece card (the wearer's portrait, "Optimize wearer →"): `App.tsx`'s
-`optimizeHero`, no patch. A Worklist line's "in Inventory" opens the Inventory on the piece
+the Optimizer from the Worklist (a card's hero portrait and name, a line's "on ‹hero›" = the piece's current
+wearer) and from the Gear tab's piece card (the wearer's portrait, "Optimize wearer →"): `App.tsx`'s
+`optimizeHero`, no patch. A Worklist line's "in Gear" opens Gear on the piece
 (`InventoryDrill.pieceUid`). The Worklist says at the top of the list what it reserves
 (`RESERVATION_NOTE`, the `worklistClaims` behavior).
 
@@ -454,15 +454,15 @@ Swaps column (cell and sort) and the "+ Worklist" entry's `upg` read the same li
 
 ### BottomGearBand
 8 cards (compact mirror of the inventory) — one per slot, in the game's equipment screen order
-(`GAME_GEAR_GRID`, shared with Builds and Presets): a 4 × 2 grid Weapon | EE | Helmet | Armor / Accessory |
+(`GAME_GEAR_GRID`, shared with Heroes and Presets): a 4 × 2 grid Weapon | EE | Helmet | Armor / Accessory |
 Talisman | Gloves | Boots from a 1616 px window (four `w-80` cards beside the `w-72` column), otherwise the
 same order wraps. Each card shows name,
-enhance level, slot icon, main stat, subs (with ticks). It is the Inventory's piece card
+enhance level, slot icon, main stat, subs (with ticks). It is the Gear tab's piece card
 (`design/GearCard.tsx`: `GearCardPanel` around `GearCardBody`, `effects="none"`): the same rarity / slot
 line, the same Quality block (title, help on hover, bar), the same « Active Effect at +15 Enhancement »;
 the weapon / accessory passive and the set bonuses are not on it (the « Effects » card under the stats
 panel shows them), the EE shows only its image and gems, and the projection marks its ticks (cyan `+n`,
-violet `T+n`) on a substat column as wide as the Inventory's. In addition:
+violet `T+n`) on a substat column as wide as Gear's. In addition:
 - **Compact mode** (Settings › Solver › Compact result cards, `gs.builder.compactCards`, off by default):
   `w-56` cards — the grid then starts at 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, the EE and the talisman
   in ONE card (`ResultPairDetail`: EE on top, talisman below, a rule between them, each with its own exclude
@@ -478,7 +478,7 @@ violet `T+n`) on a substat column as wide as the Inventory's. In addition:
   + value, `S+ DS DMG+ +12%`, via `singularityShortLabel` / `singularityGrade`; or a short name); the
   talisman's multi-tier passive not rendered, its text (visible tiers, active first, joined by « · ») in the
   name's `title`; footer = a
-  row of action icons (`CardActions`, today exclude / include). Inventory and tooltips (the same
+  row of action icons (`CardActions`, today exclude / include). Gear and tooltips (the same
   `GearCardBody`, never compact) untouched.
 - **Talisman / EE**: the gem allocation recommended by the build (stat + value,
   **swap** badge if it differs from the socketed gems).
@@ -501,11 +501,11 @@ violet `T+n`) on a substat column as wide as the Inventory's. In addition:
 Em-dash when no build is selected.
 
 ### Presets tab
-A tab between Builds and Builder (`screens/presets/PresetsScreen.tsx`), one card per in-game equipment
+A tab between Optimizer and Worklist (`screens/presets/PresetsScreen.tsx`), one card per in-game equipment
 preset (`Inventory.presets`, up to 30): number, name, favorite ★, the 7 pieces (weapon, accessory, helmet,
 armor, gloves, boots, talisman — the EE is **never** part of it, the EE slot of `ItemUIDList` is skipped)
 with the inventory's tile and hover detail, and the **current wearers**: heroes whose gear, EE aside, is
-exactly the preset (`presetSignature`, the same rule as the preset name on the Builds cards). The model is
+exactly the preset (`presetSignature`, the same rule as the preset name on the Heroes cards). The model is
 pure and tested (`lib/presets/presetRows.ts` → `presetRows(inventory)`): a piece missing from the inventory
 (slot taken from its wire position) and a piece held by **two** presets ("shared with <preset>" — two
 presets may play the same fight) are flagged on the tile and in a banner. An empty preset is listed
@@ -554,7 +554,7 @@ export / import, a preset that already has heroes here keeping its own). For the
 associated hero, `evaluatePresetFor` (`lib/presets/evaluate.ts`) composes the hero with the preset's pieces
 + **their own** current EE through `computeFinalStats`, then `computeCheapRatings` (the hero's skill
 factors) and `computeScore` with their priority; the card shows Score, Dmg and DmgS, each with its tooltip
-(the final stats weighted by the Builder priority; the strongest hit vs DEF 2000, crit and PEN included;
+(the final stats weighted by the Optimizer priority; the strongest hit vs DEF 2000, crit and PEN included;
 Dmg × SPD at the rotation's average factor). On an in-game preset's card the reference's line shows the
 portrait only: the name is already in the Reference picker right above (a local preset's card, without a
 picker, keeps it).
@@ -563,8 +563,8 @@ picker, keeps it).
 each hero tunes is the gems of **their own** EE. `bestEeGemsFor` (`lib/presets/eeGems.ts`) picks them like
 the engine does, pieces fixed: `buildGemPool` restricted to the gems of the hero's EE and those of the
 Talismans / EEs nobody wears (never the preset's pieces, even free, nor a piece another hero wears, nor a
-free piece the Worklist reserves for another hero — `worklistClaims`, the same value as the Builder and
-Builds —, nor the hero's own Talisman, which comes off when the preset goes on), `scoreGemPool` with the hero's priority
+free piece the Worklist reserves for another hero — `worklistClaims`, the same value as the Optimizer and
+Heroes —, nor the hero's own Talisman, which comes off when the preset goes on), `scoreGemPool` with the hero's priority
 (fillers by `dmg` gain on the outfit, `gemDmgGains`), `allocateGemsCapped` on the EE's slots alone
 (`gemSlotsOf`, CHC without the EE gems for the cap). A gem already socketed keeps its socket
 (`alignToSockets`, the fewest Worklist lines) and a socket the pick leaves empty keeps its gem (the game
@@ -575,14 +575,14 @@ Talisman's are put back in); the line shows "EE gems: <list>", the score and the
 and in brackets the score as socketed when it differs.
 
 **+ Worklist**, on the reference's line and each associated hero's: the hero's entry (`presetWorklistFor`,
-`lib/presets/presetWorklist.ts`) = the preset's pieces they don't wear (`diffBuildVsLoadout`, the Builder's
+`lib/presets/presetWorklist.ts`) = the preset's pieces they don't wear (`diffBuildVsLoadout`, the Optimizer's
 rule) + the gem lines of their EE (`worklistChangesFor`, `gemAllocation = { talisman: [], ee }`),
 `mode: "preset"` ("Preset" on the Worklist card, no CP); `upsertWorklistEntry` replaces the hero's entry,
 toast "Added to / Replaced in worklist — <Name>". A piece missing from the inventory is left out, and the
 toast says so. The button is greyed out when there is nothing to change. **Optimize →**, next to it on an
-associated hero's line: opens the Builder on the hero, like a Builds card.
+associated hero's line: opens the Optimizer on the hero, like a Heroes card.
 
-**Optimize preset →**, on the reference's line: opens the Builder on the hero with a filter patch
+**Optimize preset →**, on the reference's line: opens the Optimizer on the hero with a filter patch
 (`presetOptimizePatch`, `lib/presets/optimize.ts`, pure) overlaid on their remembered filters by
 `mergePreset` (bands and options kept). Effects: the `setId` of the outfit's weapon, accessory and
 talisman, `required` (the talisman widened to its family by `talismanFamilyKeys`, every key `required` —
@@ -592,26 +592,26 @@ first build, `SubstatPrio` as 3/2/1 like "Load reco"), the outfit by the number 
 aside) rolling the key as a substat (4+ → 3, 3 → 2, 2 → 1); ordered by weight, then presence in the reco,
 then piece count; other keys left out of the patch. Mains: the reco's for the weapon and accessory. Sets: no
 plan (`setPlans: []` → one empty plan, sets open; "Load reco" remains the way to the full reco). Without
-a reco (404, error, offline): the outfit alone. The Builder receives the patch with `initialHeroUid`
+a reco (404, error, offline): the outfit alone. The Optimizer receives the patch with `initialHeroUid`
 (`initialPatch`) and merges it once the hero's filters are loaded — never onto the outgoing hero's; the
 status line says "Optimizing preset #<num> <name> — same weapon / accessory / talisman effects required, N
 priority substats from the outfit + outerpedia's "<build>" reco." (or "from the outfit", then the notes).
 
-**Priority.** `priorityOf` (`lib/heroPriority/weights.ts`, the same source as the Builder) reads, in order,
-the priority the Builder keeps for the hero (`gs.solver.heroFilters`, localStorage, written at every change
-and read live from App: a weight changed in the Builder counts at the next render), then `reforge.priority`
+**Priority.** `priorityOf` (`lib/heroPriority/weights.ts`, the same source as the Optimizer) reads, in order,
+the priority the Optimizer keeps for the hero (`gs.solver.heroFilters`, localStorage, written at every change
+and read live from App: a weight changed in the Optimizer counts at the next render), then `reforge.priority`
 of the hero's most recent saved build, then nothing; a priority without any weight falls through to the next
 source (`hasPriority`, the one "at least one non-zero weight" predicate). The line says "priority from saved
-build" in the second case. A hero with no saved build and no priority in the Builder has no score. An associated hero is compared to their **best known outfit** (`bestKnownFor`:
+build" in the second case. A hero with no saved build and no priority in the Optimizer has no score. An associated hero is compared to their **best known outfit** (`bestKnownFor`:
 their most recent saved build, re-scored with the **current** priority, else their current gear):
 `loss = 1 − score(preset) / score(best)`, shown in % "vs saved build" / "vs current gear"; past the
 threshold (15 % by default, Settings → Solver, `gs.solver.presetLossWarn`) the line turns orange with
 "<Name> loses 23 % vs their saved build". Without a priority: "no priority set for <Name> — set one in the
-Builder", no score. Nothing is written to the game.
+Optimizer", no score. Nothing is written to the game.
 
 **Overcap.** The sheet bounds `critRate` at 100 (`computeFinalStats`) and keeps the raw sum in
 `critRateUncapped`; `pen` isn't bounded. The wasted-cap rule lives in `lib/overcap.ts` (pure, shared with
-`buildAdvice`'s rule 4 and the Builder's crit tooltip, `critCellTitle`): `overcapOf(finalStats)` → `{ key, label, value, cap, waste }` per axis over its cap —
+`buildAdvice`'s rule 4 and the Optimizer's crit tooltip, `critCellTitle`): `overcapOf(finalStats)` → `{ key, label, value, cap, waste }` per axis over its cap —
 crit read on `critRateUncapped ?? critRate` against 102 (a buffer against crit resistance), penetration
 against 100, `waste = round1(value − cap)` kept when > 0; `overcapText` writes "Crit rate 142% — 40% wasted
 over the 102% cap". `presetOvercap(evalPreset, asSocketed)` (`lib/presets/evaluate.ts`) applies it to the
@@ -772,9 +772,9 @@ apps/renderer/src/
 │   └── solver.worker.ts          ← thin adapter IPC ↔ engine
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
-│   ├── overcap.ts                 ← overcapOf + overcapText (wasted CRC 102 / PEN 100 caps, Builds and Presets)
+│   ├── overcap.ts                 ← overcapOf + overcapText (wasted CRC 102 / PEN 100 caps, Heroes and Presets)
 │   ├── heroPriority/
-│   │   └── weights.ts              ← hasPriority + effectivePriority + priorityOf: a hero's priority, one source (Builder, Presets, solver)
+│   │   └── weights.ts              ← hasPriority + effectivePriority + priorityOf: a hero's priority, one source (Optimizer, Presets, solver)
 │   ├── presets/
 │   │   ├── presetRows.ts           ← in-game presets: pieces, wearers (presetSignature), missing / shared pieces, class, filter / sort
 │   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetOvercap (Presets tab)
@@ -788,7 +788,7 @@ apps/renderer/src/
 │   │   └── filterPresets.ts        ← per-hero filter snapshots (localStorage)
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
-│       ├── builderFilters.ts       ← SolverFilters + Builder reducer + INITIAL_FILTERS + buildSolveFilters
+│       ├── builderFilters.ts       ← SolverFilters + Optimizer reducer + INITIAL_FILTERS + buildSolveFilters
 │       ├── orchestrator.ts         ← Web Worker pool, fan-out/fan-in, top-N merge
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + simulateReforges
 │       ├── setPlans.ts             ← setsFeasible + armorSetWhitelist + allSetsComplete (set OR-of-AND model)
@@ -816,13 +816,13 @@ Bonus:
 ## 10. How to test end-to-end
 
 1. Launch the app (`npm run dev`).
-2. Builder tab → choose an equipped hero.
+2. Optimizer tab → choose an equipped hero.
 3. Click **SOLVE** with no filter/priority → the table should fill, P/S increment.
 4. Click a row → the bottom band shows the 8 pieces.
 5. Set `Crc min = 90` then re-SOLVE → all returned builds satisfy the bound.
 6. Enable `Sharp 4pc required` → the builds' helmet/armor/gloves/boots are all Sharp.
 7. **Regression comparison**: SOLVE with empty priority + Top 100% + Keep current + **Reforge Off**
    (the default +10R6 projects to +10 → would not match the card) → the top-1 must have the same
-   `FinalStats` as the card of the same hero in the Builds tab (modulo gem reallocation, which in
+   `FinalStats` as the card of the same hero in the Heroes tab (modulo gem reallocation, which in
    empty-priority mode falls back on the current gems, so ✓ strict equivalence is expected).
 8. SOLVE CP → the top-1 must have the highest CP displayed. Compare against a separate brute-force solve on a small slice.

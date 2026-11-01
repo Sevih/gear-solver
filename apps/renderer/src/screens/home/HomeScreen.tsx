@@ -173,7 +173,7 @@ export function HomeScreen({
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">filter sets</span>
                 </div>
               </div>
-              <ActBtn tone="violet" className="mt-auto w-full text-center" onClick={onOpenBuilder}>Open Builder →</ActBtn>
+              <ActBtn tone="violet" className="mt-auto w-full text-center" onClick={onOpenBuilder}>Open Optimizer →</ActBtn>
             </Card>
 
             <SystemHealthCard steam={steam} busy={busy} onSyncData={onSyncData} onOpenSetup={onOpenSetup} />
@@ -210,7 +210,7 @@ export function HomeScreen({
                   type="button"
                   disabled={!onDrill || t.count === 0}
                   onClick={() => onDrill?.({ quality: t.tier })}
-                  title={onDrill ? `${t.hint}\n\nClick to see these ${t.label} pieces in the Inventory` : t.hint}
+                  title={onDrill ? `${t.hint}\n\nClick to see these ${t.label} pieces in Gear` : t.hint}
                   className={cx(
                     "-mx-1.5 flex flex-col gap-1 rounded-lg px-1.5 py-1 text-left transition-colors",
                     onDrill && t.count > 0 ? "cursor-pointer hover:bg-white/5" : "cursor-help",
@@ -289,7 +289,7 @@ export function HomeScreen({
                           type="button"
                           disabled={!onDrill || s.count === 0}
                           onClick={() => onDrill?.({ slot: s.id })}
-                          title={onDrill ? `Show ${s.label} in the Inventory` : undefined}
+                          title={onDrill ? `Show ${s.label} in Gear` : undefined}
                           className={cx(
                             "flex items-center justify-between gap-1.5 border-b border-white/5 pb-1.5 text-left transition-colors",
                             onDrill && s.count > 0 ? "cursor-pointer hover:border-white/20" : "",
@@ -310,7 +310,7 @@ export function HomeScreen({
                         type="button"
                         disabled={!onDrill}
                         onClick={() => onDrill?.({ armorSet: se.id })}
-                        title={onDrill ? `Show ${se.name} pieces in the Inventory` : se.name}
+                        title={onDrill ? `Show ${se.name} pieces in Gear` : se.name}
                         className={cx(
                           "-mx-1 flex items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors",
                           onDrill ? "cursor-pointer hover:bg-white/5" : "",

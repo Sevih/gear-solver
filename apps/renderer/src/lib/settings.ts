@@ -123,7 +123,7 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
     default: false,
     kind: "bool",
     label: "Compact result cards",
-    help: "Shorter, narrower gear cards under the results: no item icon (enhance, breakthrough, stars by the name), set names instead of item names, icon + value stats with substats two per row, gems as icons, one-line quality and effects, details on hover. Inventory and tooltips unchanged.",
+    help: "Shorter, narrower gear cards under the results: no item icon (enhance, breakthrough, stars by the name), set names instead of item names, icon + value stats with substats two per row, gems as icons, one-line quality and effects, details on hover. Gear and tooltips unchanged.",
     appliesNextSolve: false,
   },
   presetLossWarn: {
@@ -149,8 +149,8 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
     key: "gs.debug.statLocks",
     default: false,
     kind: "bool",
-    label: "Stat lock & drift tooling (Builds)",
-    help: "Reveal the per-stat lock buttons, drift indicators and copy-dump button on Builds cards. Used for stat-formula regression work — off by default.",
+    label: "Stat lock & drift tooling (Heroes)",
+    help: "Reveal the per-stat lock buttons, drift indicators and copy-dump button on Heroes cards. Used for stat-formula regression work — off by default.",
   },
   settingsPane: {
     key: "gs.settings.pane",

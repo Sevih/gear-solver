@@ -246,7 +246,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
         <span className="font-mono uppercase tracking-wider text-zinc-400">Presets</span>
         <span className="text-zinc-400">
           A preset is one reference hero's outfit, worn as-is by its associated heroes (each keeps their own EE).
-          Scores use the priority each hero has in the Builder (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a {lossWarnPct} % loss.
+          Scores use the priority each hero has in the Optimizer (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a {lossWarnPct} % loss.
         </span>
         <div className="flex gap-1">
           {CLASSES.map((cl) => {
@@ -348,7 +348,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
           <span className="text-zinc-400">Kept in GS only — nothing is sent to the game, and they keep no piece away from a solve.</span>
         </div>
         {locals.length === 0 ? (
-          <span className="text-[11.5px] italic text-zinc-400">No local preset yet — save one from a Builder result (Save as local preset…) or copy an in-game preset.</span>
+          <span className="text-[11.5px] italic text-zinc-400">No local preset yet — save one from an Optimizer result (Save as local preset…) or copy an in-game preset.</span>
         ) : localShown.length === 0 && (
           <span className="text-[11.5px] italic text-zinc-400">No local preset of the selected classes.</span>
         )}
@@ -797,7 +797,7 @@ function Badge({ tone, title, children }: { tone: "rose" | "amber"; title: strin
 }
 
 /** Hover help of a hero line's metrics. */
-const SCORE_TITLE = "Sum of the final stats weighted by this hero's Builder priority (the Builder's own score). \"—\" when no priority is set.";
+const SCORE_TITLE = "Sum of the final stats weighted by this hero's Optimizer priority (the Optimizer's own score). \"—\" when no priority is set.";
 const DMG_TITLE = "Expected damage of the strongest skill hit vs a DEF 2000 target, crit-weighted, PEN included.";
 const DMGS_TITLE = "Dmg × SPD at the rotation's average factor per turn.";
 
@@ -895,7 +895,7 @@ function HeroLine({
           <Metric label="Dmg" value={fmtNum(evalPreset.ratings.dmg)} title={DMG_TITLE} />
           <Metric label="DmgS" value={fmtNum(evalPreset.ratings.dmgs)} title={DMGS_TITLE} />
           {evalPreset.score == null ? (
-            <span className="text-[11px] text-zinc-300">no priority set for {h.name} — set one in the Builder</span>
+            <span className="text-[11px] text-zinc-300">no priority set for {h.name} — set one in the Optimizer</span>
           ) : !reference && (
             lossPct == null ? (
               <span className="text-[11px] text-zinc-400">no score to compare against</span>
@@ -907,7 +907,7 @@ function HeroLine({
               </span>
             )
           )}
-          {fromSaved && <span className="text-[11.5px] italic text-zinc-400" title="No Builder priority kept for this hero — scored with the priority their most recent saved build was solved with">priority from saved build</span>}
+          {fromSaved && <span className="text-[11.5px] italic text-zinc-400" title="No Optimizer priority kept for this hero — scored with the priority their most recent saved build was solved with">priority from saved build</span>}
           {overcap.map((o) => (
             <span
               key={o.key}

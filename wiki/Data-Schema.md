@@ -150,7 +150,7 @@ signed, ‰ for a rate; absent on `BT_IMMUNE`). The client puts them in
 `m_ItemSetBuffTempletList`, off the sheet: **display only**, never read by the sheet nor
 the CP (Fortification, Revenge, Patience, Pulverization, Immunity, Swiftness, Weakness,
 Augmentation). Typed `SetCombatEffect`, optional in `SetLevel` (`core/gamedata.ts`): an
-older cache lacks it. The app shows it as a "combat" pill after the prose (Builder
+older cache lacks it. The app shows it as a "combat" pill after the prose (Optimizer
 Effects panel, piece detail), worded by `combatEffectLines`
 (`renderer/src/lib/setCombatEffects.ts`); `wornSetRows` reads on it the combat-effect 4pc
 of the `ignoreLowSet` rule (`p4_desc` as fallback without the field).

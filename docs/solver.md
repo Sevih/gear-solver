@@ -1,6 +1,6 @@
 # Solver — fonctionnement & UI
 
-Ce doc décrit le **gear-solver** (onglet Builder), ses panneaux d'interface,
+Ce doc décrit le **gear-solver** (onglet Optimizer), ses panneaux d'interface,
 son pipeline interne, et les choix d'architecture qui le sous-tendent.
 
 > Architecture générale du repo : [architecture.md](architecture.md).
@@ -87,7 +87,7 @@ Pour chaque slot ∈ {weapon, helmet, armor, gloves, boots, accessory, ooparts} 
 filtre les pièces de l'inventaire :
 - `g.slot === slot`
 - exclu selon `equippedScope` (`none`/`lower`/`all`) si équipé sur un **autre** héros — `lower` gate via `isLowerPriority(heroPriority, …)` (cf. § Options, Equipped items). Le « propriétaire » est le **claim worklist s'il existe, sinon `equippedBy`** : une pièce réservée par le build en attente d'un autre héros (`worklistClaims`, uid → héros réclamant, changes non appliqués seulement) est traitée comme équipée sur lui — le scope + rank s'appliquent aux réservations comme au gear réel
-- exclu si `g.uid ∈ excludedPieceUids` (exclusion **globale** account-wide, clic-droit Inventory — vérifié en premier)
+- exclu si `g.uid ∈ excludedPieceUids` (exclusion **globale** account-wide, clic-droit Gear — vérifié en premier)
 - exclu si `g.equippedBy ∈ excludedHeroes` (idem via le propriétaire effectif)
 - exclu si sous le **plancher « Maxed only »** (`meetsMaxedFloor`) : le toggle = **zéro extrapolation** — le plafond de chaque pièce dans le mode reforge (`pieceReforgePlan`, celui de la projection) devient son plancher d'investissement (pièces **déjà** à leur plafond ou mieux, notées sur leurs vrais rolls, projection sautée). Off → aucun gate ; 6★ `unique` : +10R6 → enhance ≥ 10 & reforges ≥ 6 ; +10R9 → ≥ 10 & ≥ 9 ; +15R9 → ≥ 15 & ≥ 9 ; pièce qui ne s'élève pas (sous 6★, ou 6★ non `unique`) : +10 & son propre budget (son étoile, 6 pour une 6★) quel que soit le mode ; pièce sans étoile (absente du contrat) : plancher du mode. Talisman : plancher enhance seul (pas de reforge sur gemmes), borné à son plafond +10 (`enhance.maxEnhanceLevel` : pas de singularité, un plancher +15 vidait le pool)
 - exclu si `classLimit` ≠ classe du héros
@@ -145,7 +145,7 @@ set peut être sous-classé ; monter le Top% ou exiger le set.
 **c) SOLVE (Score) sans priorité** — `magnitudeScoreOf` (magnitude brute des rolls) :
 pas d'objectif (le score serait 0 partout), mais le produit **doit** rester borné
 (sinon cartésien complet) → on garde les pièces les mieux rollées par slot. Le
-bouton Solve du Builder n'y mène plus (priorité de la reco, sinon CP, § 4 Hero) ;
+bouton Solve de l'Optimizer n'y mène plus (priorité de la reco, sinon CP, § 4 Hero) ;
 la branche reste celle de l'estimation pré-solve et du moteur appelé sans poids.
 
 Protection des sets requis : pour chaque set `req-2pc`/`req-4pc` non représenté
@@ -250,7 +250,7 @@ Picker (combobox searchable) + portrait + contrôle segmenté **Score | CP** + b
 - **Reset filters** : `dispatch({type: "resetAll"})` — vide tout le reducer.
 
 **Mémoire de filtres par héros** (durable) : chaque changement des filtres du héros ouvert est écrit dans
-`gs.solver.heroFilters` (`heroFilters.ts`, localStorage, possédé par App et passé au Builder et à Presets),
+`gs.solver.heroFilters` (`heroFilters.ts`, localStorage, possédé par App et passé à l'Optimizer et à Presets),
 et ouvrir un héros **restaure** son jeu gardé au lieu de tout resetter — au changement de héros comme
 au relancement ; distinct des **Filter sets** nommés. Un héros sans jeu gardé part des défauts avec la
 priorité de `priorityOf` (`lib/heroPriority/weights.ts` : celle de sa build sauvegardée la plus récente,
@@ -333,7 +333,7 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   la ligne (`T+n`, titre « Transistone »). C'est un plafond : en jeu le palier 4 est un tirage à 5 %.
 - **Equipped items** (`equippedScope`, **défaut ≤ Lower**) — quelles pièces équipées sur
   d'**autres** héros le solver peut piocher. Défaut `lower` : seulement les héros **strictement
-  moins** prioritaires (auto-rangés par CP à l'import, par App, sans ouvrir Builds :
+  moins** prioritaires (auto-rangés par CP à l'import, par App, sans ouvrir Heroes :
   `useRankDefaults`) → ne déshabille jamais un héros
   égal/supérieur. Sans ranking, dégrade en own+free (`isLowerPriority` ∞>∞ = false). `None` = own
   + free, `All` = n'importe quelle pièce équipée (l'ancien défaut, vol silencieux possible).
@@ -343,7 +343,7 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   (`buildGemPool`) suit la même règle.
   Les **presets du jeu** s'y ajoutent, quel que soit le scope (`presetHolds`, cf. reference.md §1.6) :
   les pièces d'un preset **verrouillé** ne sortent jamais, sauf pour « Optimize preset → » sur ce preset ;
-  « Optimize preset → » ne prend pas les pièces d'un preset de rang égal ou meilleur. Le Builder le dit
+  « Optimize preset → » ne prend pas les pièces d'un preset de rang égal ou meilleur. L'Optimizer le dit
   dans la Library (« Optimizing preset ‹nom› (rank N) — … », perdu au changement de héros) et les gear
   cards nomment le preset d'où vient une pièce (« from preset ‹nom› »).
 - **Keep current** — verrouille les slots déjà équipés à leur pièce actuelle.
@@ -443,12 +443,12 @@ Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
   changements faits + entrées vidées, un toast le dit). Désactivé quand rien ne change (ni pièce ni gemme).
 
 Equip / Unequip **vers le jeu** restent absents (nécessitent une API jeu inexistante).
-Le bouton **Optimize →** vit côté onglet Builds (ouvre le Builder sur le héros) ; **Optimize preset →**
+Le bouton **Optimize →** vit côté onglet Heroes (ouvre l'Optimizer sur le héros) ; **Optimize preset →**
 (onglet Presets) y ajoute un patch de filtres (`initialPatch`, voir l'onglet Presets). Les mêmes liens
-ramènent au Builder depuis la Worklist (portrait et nom du héros d'une carte, « on ‹héros› » d'une ligne =
-le porteur actuel de la pièce) et depuis la carte de pièce de l'Inventory (portrait du porteur, « Optimize
-wearer → ») : `optimizeHero` d'`App.tsx`, sans patch. « in Inventory » d'une ligne de Worklist ouvre
-l'Inventory sur la pièce (`InventoryDrill.pieceUid`). La Worklist dit en tête de liste ce qu'elle réserve
+ramènent à l'Optimizer depuis la Worklist (portrait et nom du héros d'une carte, « on ‹héros› » d'une ligne =
+le porteur actuel de la pièce) et depuis la carte de pièce de Gear (portrait du porteur, « Optimize
+wearer → ») : `optimizeHero` d'`App.tsx`, sans patch. « in Gear » d'une ligne de Worklist ouvre
+Gear sur la pièce (`InventoryDrill.pieceUid`). La Worklist dit en tête de liste ce qu'elle réserve
 (`RESERVATION_NOTE`, le comportement de `worklistClaims` ci-dessus).
 
 ### FilterFooter (fixed en bas)
@@ -487,7 +487,7 @@ Swaps (cellule et tri) et l'`upg` de l'entrée « + Worklist » lisent le même 
 
 ### BottomGearBand
 8 cartes (mirror compact de l'inventaire) — une par slot, dans l'ordre de l'écran d'équipement du jeu
-(`GAME_GEAR_GRID`, partagé avec Builds et Presets) : grille 4 × 2 Arme | EE | Tête | Torse / Accessoire |
+(`GAME_GEAR_GRID`, partagé avec Heroes et Presets) : grille 4 × 2 Arme | EE | Tête | Torse / Accessoire |
 Talisman | Gants | Bottes dès 1616 px de fenêtre (quatre cartes `w-80` à côté de la colonne `w-72`), sinon
 le même ordre passe à la ligne. Chaque carte montre nom,
 enhance level, icône slot, main stat, subs (avec ticks). C'est la carte de pièce de l'Inventaire
@@ -533,11 +533,11 @@ violet) sur une colonne de sous-stats aussi large que celle de l'Inventaire. En 
 Em-dash quand aucun build n'est sélectionné.
 
 ### Onglet Presets
-Onglet entre Builds et Builder (`screens/presets/PresetsScreen.tsx`), une carte par preset d'équipement du
+Onglet entre Optimizer et Worklist (`screens/presets/PresetsScreen.tsx`), une carte par preset d'équipement du
 jeu (`Inventory.presets`, jusqu'à 30) : numéro, nom, favori ★, les 7 pièces (weapon, accessory, helmet,
 armor, gloves, boots, talisman — l'EE n'en fait **jamais** partie, le slot EE de `ItemUIDList` est ignoré)
 avec la tuile et le détail au survol de l'inventaire, et les **porteurs actuels** : héros dont l'équipement
-hors EE est exactement le preset (`presetSignature`, la même règle que le nom de preset des cartes Builds).
+hors EE est exactement le preset (`presetSignature`, la même règle que le nom de preset des cartes Heroes).
 Le modèle est pur et testé (`lib/presets/presetRows.ts` → `presetRows(inventory)`) : pièce absente de
 l'inventaire (slot repris de la position sur le fil) et pièce présente dans **deux** presets (« shared with
 <preset> » — deux presets peuvent jouer le même combat) sont marquées sur la tuile et dans un bandeau. Un
@@ -588,7 +588,7 @@ héros ici gardant les siens). Pour la référence et chaque associé, `evaluate
 (`lib/presets/evaluate.ts`) compose le héros avec les pièces du preset + **son** EE actuelle par
 `computeFinalStats`, puis `computeCheapRatings` (facteurs de skill du héros) et `computeScore` avec sa
 priorité ; la carte montre Score, Dmg et DmgS, chacun avec son infobulle (somme des stats finales pondérée
-par la priorité du Builder ; coup le plus fort contre DEF 2000, crit et PEN compris ; Dmg × SPD au facteur
+par la priorité de l'Optimizer ; coup le plus fort contre DEF 2000, crit et PEN compris ; Dmg × SPD au facteur
 moyen de la rotation). Sur une carte de preset du jeu, la ligne de la référence ne montre que le portrait :
 son nom est déjà dans le sélecteur Reference juste au-dessus (une carte de preset local, sans sélecteur,
 le garde).
@@ -598,7 +598,7 @@ héros) ; ce que chaque héros règle, ce sont les gemmes de **son** EE. `bestEe
 (`lib/presets/eeGems.ts`) les choisit comme le moteur, pièces fixées : `buildGemPool` restreint aux gemmes
 de l'EE du héros et à celles des Talismans / EE que personne ne porte (jamais celles des pièces du preset,
 même libres, ni d'une pièce portée par un autre héros, ni d'une pièce libre que la Worklist réserve à un
-autre héros — `worklistClaims`, la même valeur que le Builder et Builds —, ni du Talisman du héros, qui
+autre héros — `worklistClaims`, la même valeur que l'Optimizer et Heroes —, ni du Talisman du héros, qui
 part quand le preset arrive), `scoreGemPool` avec la priorité du héros (remplissage par gain de `dmg` sur la tenue,
 `gemDmgGains`), `allocateGemsCapped` sur les seuls emplacements de l'EE (`gemSlotsOf`, CHC sans les gemmes
 d'EE pour le plafond). Une gemme déjà sertie garde son emplacement (`alignToSockets`, le moins de lignes de
@@ -611,14 +611,14 @@ parenthèses le score tel que serti quand il diffère.
 
 **+ Worklist**, sur la ligne de la référence et de chaque associé : l'entrée du héros
 (`presetWorklistFor`, `lib/presets/presetWorklist.ts`) = les pièces du preset qu'il ne porte pas
-(`diffBuildVsLoadout`, la règle du Builder) + les lignes de gemmes de son EE (`worklistChangesFor`,
+(`diffBuildVsLoadout`, la règle de l'Optimizer) + les lignes de gemmes de son EE (`worklistChangesFor`,
 `gemAllocation = { talisman: [], ee }`), `mode: "preset"` (« Preset » sur la carte de la Worklist, sans
 CP) ; `upsertWorklistEntry` remplace l'entrée du héros, toast « Added to / Replaced in worklist — <Nom> ».
 Une pièce absente de l'inventaire est exclue, et le toast le dit. Bouton grisé quand il n'y a rien à
-changer. **Optimize →**, à côté, sur la ligne d'un associé : ouvre le Builder sur le héros, comme une
-carte de Builds.
+changer. **Optimize →**, à côté, sur la ligne d'un associé : ouvre l'Optimizer sur le héros, comme une
+carte de Heroes.
 
-**Optimize preset →**, sur la ligne de la référence : ouvre le Builder sur le héros avec un patch de filtres
+**Optimize preset →**, sur la ligne de la référence : ouvre l'Optimizer sur le héros avec un patch de filtres
 (`presetOptimizePatch`, `lib/presets/optimize.ts`, pur) superposé à ses filtres mémorisés par
 `mergePreset` (bornes et options gardées). Effets : le `setId` de l'arme, de l'accessoire et du talisman
 de la tenue, en `required` (le talisman élargi à sa famille par `talismanFamilyKeys`, chaque clé
@@ -628,29 +628,29 @@ ouvert, une note. Sous-stats : au plus 5 clés de priorité, poids = max(reco, t
 de pièces (talisman et EE à part) qui portent la clé en sous-stat (4+ → 3, 3 → 2, 2 → 1) ; ordre poids,
 puis présence dans la reco, puis nombre de pièces ; les autres clés hors du patch. Mains : celles de la
 reco pour l'arme et l'accessoire. Sets : aucun plan (`setPlans: []` → un plan vide, sets ouverts ; « Load
-reco » reste là pour la reco complète). Sans reco (404, erreur, hors ligne) : la tenue seule. Le
-Builder reçoit le patch avec `initialHeroUid` (`initialPatch`) et le fusionne après avoir chargé les
+reco » reste là pour la reco complète). Sans reco (404, erreur, hors ligne) : la tenue seule. L'Optimizer
+reçoit le patch avec `initialHeroUid` (`initialPatch`) et le fusionne après avoir chargé les
 filtres du héros — jamais sur ceux du héros sortant ; la ligne de statut dit « Optimizing preset #<num>
 <name> — same weapon / accessory / talisman effects required, N priority substats from the outfit +
 outerpedia's "<build>" reco. » (ou « from the outfit », suivi des notes).
 
-**Priorité.** `priorityOf` (`lib/heroPriority/weights.ts`, la même source que le Builder) lit, dans
-l'ordre, la priorité gardée par le Builder pour le héros (`gs.solver.heroFilters`, localStorage, écrite à
-chaque changement et lue en direct depuis App : un poids changé dans le Builder compte au rendu suivant),
+**Priorité.** `priorityOf` (`lib/heroPriority/weights.ts`, la même source que l'Optimizer) lit, dans
+l'ordre, la priorité gardée par l'Optimizer pour le héros (`gs.solver.heroFilters`, localStorage, écrite à
+chaque changement et lue en direct depuis App : un poids changé dans l'Optimizer compte au rendu suivant),
 puis `reforge.priority` de la build sauvegardée la plus récente du héros, puis rien ; une priorité sans
 poids passe à la source suivante (`hasPriority`, le seul prédicat « au moins un poids non nul »). La
 ligne dit « priority from saved build » dans le second cas. Un héros sans build sauvegardée ni priorité
-dans le Builder n'a pas de score.
+dans l'Optimizer n'a pas de score.
 Un associé est comparé à sa **meilleure tenue connue** (`bestKnownFor` : sa build sauvegardée la plus
 récente, re-notée avec la priorité **courante**, sinon son équipement actuel) : `loss = 1 − score(preset) /
 score(best)`, affichée en % « vs saved build » / « vs current gear » ; au-delà du seuil (15 % par défaut,
 Settings → Solver, `gs.solver.presetLossWarn`) la ligne passe en orange avec « <Nom> loses 23 % vs their
-saved build ». Sans priorité : « no priority set for <Nom> — set one in the Builder », pas de score. Rien
+saved build ». Sans priorité : « no priority set for <Nom> — set one in the Optimizer », pas de score. Rien
 n'est écrit vers le jeu.
 
 **Overcap.** La feuille borne `critRate` à 100 (`computeFinalStats`) et garde la somme brute dans
 `critRateUncapped` ; `pen` n'est pas borné. La règle des caps gaspillés vit dans `lib/overcap.ts` (pure,
-partagée avec la règle 4 de `buildAdvice` et le tooltip crit du Builder, `critCellTitle`) : `overcapOf(finalStats)` → `{ key, label, value, cap, waste }`
+partagée avec la règle 4 de `buildAdvice` et le tooltip crit de l'Optimizer, `critCellTitle`) : `overcapOf(finalStats)` → `{ key, label, value, cap, waste }`
 par axe en dépassement — crit lu sur `critRateUncapped ?? critRate` contre 102 (tolérance contre la
 résistance aux critiques), pénétration contre 100, `waste = round1(value − cap)` gardé si > 0 ;
 `overcapText` écrit « Crit rate 142% — 40% wasted over the 102% cap ». `presetOvercap(evalPreset,
@@ -862,9 +862,9 @@ apps/renderer/src/
 │   └── solver.worker.ts          ← thin adapter IPC ↔ engine
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
-│   ├── overcap.ts                 ← overcapOf + overcapText (caps CRC 102 / PEN 100 gaspillés, Builds et Presets)
+│   ├── overcap.ts                 ← overcapOf + overcapText (caps CRC 102 / PEN 100 gaspillés, Heroes et Presets)
 │   ├── heroPriority/
-│   │   └── weights.ts              ← hasPriority + effectivePriority + priorityOf : la priorité d'un héros, une source (Builder, Presets, solveur)
+│   │   └── weights.ts              ← hasPriority + effectivePriority + priorityOf : la priorité d'un héros, une source (Optimizer, Presets, solveur)
 │   ├── presets/
 │   │   ├── presetRows.ts           ← presets du jeu : pièces, porteurs (presetSignature), pièces absentes / partagées, classe, filtre / tri
 │   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetOvercap (onglet Presets)
@@ -878,7 +878,7 @@ apps/renderer/src/
 │   │   └── filterPresets.ts        ← snapshots de filtres par héros (localStorage)
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
-│       ├── builderFilters.ts       ← SolverFilters + reducer du Builder + INITIAL_FILTERS + buildSolveFilters
+│       ├── builderFilters.ts       ← SolverFilters + reducer de l'Optimizer + INITIAL_FILTERS + buildSolveFilters
 │       ├── orchestrator.ts         ← pool de Web Workers, fan-out/fan-in, top-N merge
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + simulateReforges
 │       ├── gems.ts                 ← buildGemPool + scoreGemPool + allocateGems + allocateGemsByCp
@@ -905,13 +905,13 @@ Bonus :
 ## 10. Comment tester end-to-end
 
 1. Lancer l'app (`npm run dev`).
-2. Onglet Builder → choisir un héros équipé.
+2. Onglet Optimizer → choisir un héros équipé.
 3. Cliquer **SOLVE** sans aucun filtre/priority → la table doit se remplir, P/S incrémentent.
 4. Cliquer une ligne → bottom band affiche les 8 pièces.
 5. Mettre `Crc min = 90` puis re-SOLVE → tous les builds retournés satisfont la borne.
 6. Activer `Sharp 4pc required` → helmet/armor/gloves/boots des builds sont tous Sharp.
 7. **Comparaison régression** : SOLVE avec priority vide + Top 100% + Keep current + **Reforge Off**
    (le défaut +10R6 projette à +10 → ne matcherait pas la card) → le top-1 doit avoir les mêmes
-   `FinalStats` que la card du même héros dans l'onglet Builds (à la réallocation gems près, qui en
+   `FinalStats` que la card du même héros dans l'onglet Heroes (à la réallocation gems près, qui en
    mode priority vide est fallback sur les gems actuels donc ✓ équivalence stricte attendue).
 8. SOLVE CP → top-1 doit avoir le plus gros CP affiché. Comparer à un solve brute-force séparé sur petite slice.

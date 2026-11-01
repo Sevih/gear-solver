@@ -71,7 +71,7 @@ describe("transfer — backup v2 round-trip", () => {
 
   it("exports every backed-up key under its key and imports them all back", () => {
     for (const [k, v] of Object.entries(EVERY_KEY)) store.set(k, JSON.stringify(v));
-    store.set("gs.tab", JSON.stringify("Builder"));
+    store.set("gs.tab", JSON.stringify("Optimizer"));
     store.set("gs.priority.seen", JSON.stringify(["h1"]));
     const bundle = buildBackup(12345);
     expect(bundle).toMatchObject({ kind: "gear-solver-backup", version: 2, exportedAt: 12345 });
@@ -139,7 +139,7 @@ describe("transfer — merge rules", () => {
     expect(writes).toEqual([]);
   });
 
-  it("Inventory filter sets: the stored entry wins on id or name, unreadable entries count 0", () => {
+  it("Gear filter sets: the stored entry wins on id or name, unreadable entries count 0", () => {
     store.set(INV_KEY, JSON.stringify([invPreset("a", "A")]));
     const res = applyBackup(v2({ [INV_KEY]: [
       invPreset("a", "other"), invPreset("z", "A"), invPreset("b", "B"),
@@ -220,7 +220,7 @@ describe("transfer — merge rules", () => {
 
 describe("transfer — reading a file", () => {
   it("ignores a key it doesn't back up, without error", () => {
-    const res = applyBackup(v2({ "gs.unknown": { a: 1 }, "gs.tab": "Builder", "gs.data.hash": "abc", [SAVED_KEY]: { h1: [{ id: "b1" }] } }));
+    const res = applyBackup(v2({ "gs.unknown": { a: 1 }, "gs.tab": "Optimizer", "gs.data.hash": "abc", [SAVED_KEY]: { h1: [{ id: "b1" }] } }));
     expect(res[SAVED_KEY]).toBe(1);
     expect(store.has("gs.unknown")).toBe(false);
     expect(store.has("gs.tab")).toBe(false);

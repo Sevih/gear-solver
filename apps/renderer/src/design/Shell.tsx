@@ -107,21 +107,33 @@ export function CaptureControls({ steam, onReload, busy = false }: CaptureContro
   );
 }
 
-export type Tab = "Home" | "Inventory" | "Builds" | "Presets" | "Builder" | "Worklist";
-const TABS: Tab[] = ["Home", "Inventory", "Builds", "Presets", "Builder", "Worklist"];
+export type Tab = "Home" | "Heroes" | "Optimizer" | "Presets" | "Worklist" | "Gear";
+const TABS: Tab[] = ["Home", "Heroes", "Optimizer", "Presets", "Worklist", "Gear"];
+
+/** Labels `gs.tab` held before the tabs were renamed — an install updated
+ *  from them reopens on the same screen. */
+const LEGACY_TABS = new Map<string, Tab>([["Builds", "Heroes"], ["Builder", "Optimizer"], ["Inventory", "Gear"]]);
+
+/** The tab a stored `gs.tab` value names: a current tab as is, a former
+ *  label as its new name, anything else Home. */
+export function parseTab(raw: unknown): Tab {
+  if (typeof raw !== "string") return "Home";
+  if ((TABS as string[]).includes(raw)) return raw as Tab;
+  return LEGACY_TABS.get(raw) ?? "Home";
+}
 
 /** Per-tab activity counts. Renders next to the tab label as a mini pill so
- *  the page-level "Inventory · 1450 pieces" header can disappear without
+ *  the page-level "Gear · 1450 pieces" header can disappear without
  *  the user losing the at-a-glance summary. Use `null` to hide a tab's
- *  badge (e.g. "Builder" has no natural count today). */
+ *  badge (e.g. "Optimizer" has no natural count today). */
 export interface TabCounts {
   Home: number | null;
-  Inventory: number | null;
-  Builds: number | null;
+  Heroes: number | null;
+  Optimizer: number | null;
   Presets: number | null;
-  Builder: number | null;
   /** Pending (not-yet-applied) gear changes queued in the worklist. */
   Worklist: number | null;
+  Gear: number | null;
 }
 
 /** A pending app update, as `updateBadge()` describes it (lib/update.ts). */

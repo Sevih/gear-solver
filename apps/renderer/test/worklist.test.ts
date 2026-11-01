@@ -359,11 +359,11 @@ describe("links out and reservations", () => {
     expect(render([])).toContain("Worklist is empty");
   });
 
-  it("the card's hero, the wearer and \"in Inventory\" are buttons", () => {
+  it("the card's hero, the wearer and \"in Gear\" are buttons", () => {
     const html = render(list, links);
     expect(html).toMatch(/<button type="button" aria-label="Optimize Hero h1 →"[^>]*>.*Optimize →/);
     expect(html).toMatch(/<button type="button" aria-label="Optimize Ame →"[^>]*>.*on Ame<\/span><\/button>/);
-    expect(html).toMatch(/<button type="button" aria-label="Show Sword in the Inventory"[^>]*>in Inventory<\/button>/);
+    expect(html).toMatch(/<button type="button" aria-label="Show Sword in Gear"[^>]*>in Gear<\/button>/);
   });
 
   it("without the links the same lines stay plain text", () => {
@@ -371,7 +371,7 @@ describe("links out and reservations", () => {
     expect(html).not.toContain("aria-label=\"Optimize");
     expect(html).not.toContain("aria-label=\"Show");
     expect(html).toContain("on Ame");
-    expect(html).toContain("in Inventory");
+    expect(html).toContain("in Gear");
   });
 });
 

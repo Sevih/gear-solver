@@ -36,18 +36,18 @@ by hand (manual import).
   in `apps/renderer/src/lib/solver/`, not in core.)
 - **apps/renderer** — Vite + React. Loads the JSON, drives the engine, renders results.
   Screens: **Home** (account dashboard + gear-quality distribution + update center,
-  `screens/home/`, its numbers computed by the pure `lib/homeStats.ts`), **Inventory** (table +
-  per-piece detail, `screens/inventory/`), **Builds** (equipped/composed roster + Optimize→),
+  `screens/home/`, its numbers computed by the pure `lib/homeStats.ts`), **Gear** (table +
+  per-piece detail, `screens/inventory/`), **Heroes** (equipped/composed roster + Optimize→),
   **Presets** (the in-game equipment presets — wearers, a reference hero and its associated
   heroes, the preset scored on each with the EE gems proposed for them, "+ Worklist" per hero;
   under them the local presets kept in GS only (`lib/storage/localPresets.ts`);
   nothing written to the game, `screens/presets/` over the pure `lib/presets/`),
-  **Builder** (the solver — `screens/builder/`: one module per panel, the solve state in the
-  `useSolverSession` hook), **Worklist** (cross-hero queue of gear changes — the Builder's
+  **Optimizer** (the solver — `screens/builder/`: one module per panel, the solve state in the
+  `useSolverSession` hook), **Worklist** (cross-hero queue of gear changes — the Optimizer's
   "+ Worklist" pushes a build's per-slot diff here as a checklist, `equipPieces` applies it
   locally), plus a tabbed **Settings** modal (`design/settings/`, one pane per file). The piece
-  card (`design/GearCard.tsx`) is shared by the Inventory, the Builds / Presets hover tooltips and the
-  Builder's result cards.
+  card (`design/GearCard.tsx`) is shared by Gear, the Heroes / Presets hover tooltips and the
+  Optimizer's result cards.
   Heavy solves fan out across a **pool of Web Workers** (size = `hardwareConcurrency - 1`,
   override `gs.solver.workerCount` clamped to the core count, hard cap 64 — one rule,
   `clampWorkerCount`) that import the pure engine modules in

@@ -54,7 +54,7 @@ interface WorklistScreenProps {
  *  Builder's "Equipped items" scope decides who may still take it; gem lines
  *  and gone pieces reserve nothing. */
 export const RESERVATION_NOTE =
-  "Queued pieces are reserved: the Builder treats each one as already worn by its queued hero until the snapshot shows the change applied or you remove the entry. Under Equipped items ≤ Lower only a higher-ranked hero can take it; All ignores reservations. Gems reserve nothing.";
+  "Queued pieces are reserved: the Optimizer treats each one as already worn by its queued hero until the snapshot shows the change applied or you remove the entry. Under Equipped items ≤ Lower only a higher-ranked hero can take it; All ignores reservations. Gems reserve nothing.";
 
 /** False once the component unmounted — an apply can outlive a tab switch,
  *  and its local state must not be set after that. */
@@ -124,7 +124,7 @@ export function WorklistScreen({ inventory, game, equipped, worklist, onChange, 
       <div className="flex flex-col items-center justify-center gap-2 px-6 py-24 text-center">
         <h2 className="font-display text-[15px] font-semibold text-white/85">Worklist is empty</h2>
         <p className="max-w-md text-[12px] leading-relaxed text-white/55">
-          Optimize a hero in the <span className="text-cyan-200">Builder</span>, pick a build, then
+          Optimize a hero in the <span className="text-cyan-200">Optimizer</span>, pick a build, then
           press <span className="text-cyan-200">+ Worklist</span> (also on each hero line of the
           <span className="text-cyan-200"> Presets</span> tab). Queued gear changes land here as a
           checklist you can work through in-game.
@@ -317,7 +317,7 @@ function WorklistCard({
             type="button"
             onClick={() => onOptimize(entry.heroUid)}
             aria-label={`Optimize ${entry.heroName} →`}
-            title={`Optimize → — open the Builder on ${entry.heroName}`}
+            title={`Optimize → — open the Optimizer on ${entry.heroName}`}
             className="group flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left"
           >
             <CharacterPortrait charId={entry.charId} name={entry.heroName} size={32} className="rounded-md" />
@@ -435,7 +435,7 @@ function WorklistCard({
                       type="button"
                       onClick={() => onOptimize(owner.uid)}
                       aria-label={`Optimize ${owner.name ?? `#${owner.charId}`} →`}
-                      title={`Optimize → — open the Builder on ${owner.name ?? `#${owner.charId}`}, who wears this piece now`}
+                      title={`Optimize → — open the Optimizer on ${owner.name ?? `#${owner.charId}`}, who wears this piece now`}
                       className="flex items-center gap-1 text-white/70 hover:text-cyan-200"
                     >
                       <CharacterPortrait charId={owner.charId} name={owner.name ?? undefined} size={14} className="rounded-sm" />
@@ -452,14 +452,14 @@ function WorklistCard({
                     <button
                       type="button"
                       onClick={() => onShowPiece(c.toUid)}
-                      aria-label={`Show ${target.name} in the Inventory`}
-                      title="Show this piece in the Inventory tab"
+                      aria-label={`Show ${target.name} in Gear`}
+                      title="Show this piece in the Gear tab"
                       className="text-white/50 underline decoration-white/20 underline-offset-2 hover:text-cyan-200"
                     >
-                      in Inventory
+                      in Gear
                     </button>
                   ) : (
-                    <span className="text-white/50">in Inventory</span>
+                    <span className="text-white/50">in Gear</span>
                   )
                 ) : null}
                 {c.fromName && (

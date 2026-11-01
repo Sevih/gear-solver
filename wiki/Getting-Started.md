@@ -79,7 +79,7 @@ launch, and **Reload** (the round-arrow icon, top-right of the window) re-reads 
 
 ## 4. Next steps
 
-- Browse what you own and read each piece → **[Using the App → Inventory](Using-the-App#inventory--browse-your-gear)**
-- See your heroes' current stats + suggestions → **[Using the App → Builds](Using-the-App#builds--your-heroes)**
-- Find the best gear for a hero → **[Using the App → Builder](Using-the-App#builder--optimize-a-hero)**
+- Browse what you own and read each piece → **[Using the App → Gear](Using-the-App#gear--browse-your-pieces)**
+- See your heroes' current stats + suggestions → **[Using the App → Heroes](Using-the-App#heroes--your-roster)**
+- Find the best gear for a hero → **[Using the App → Optimizer](Using-the-App#optimizer--optimize-a-hero)**
 - Something not working? → **[FAQ & Troubleshooting](FAQ)**

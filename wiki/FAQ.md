@@ -57,9 +57,9 @@ data**, then **re-capture** your account. The loaded snapshot's version is shown
 
 ---
 
-## Using the Builder
+## Using the Optimizer
 
-**The Builder returns "no builds".**
+**The Optimizer returns "no builds".**
 Your rules are too strict for your inventory. Common causes:
 - A **set requirement** you can't physically complete (not enough pieces of that set).
 - **Stat filters** set too high (e.g. Speed ≥ 250 when nothing reaches it).
@@ -87,7 +87,7 @@ Swaps = a small change you can equip in a few moves; high Swaps = a bigger reshu
 - Use **CP** when you just want the highest in-game Combat Power.
 
 **Can the app equip gear onto my heroes for me?**
-Locally, yes: the Builder's **Apply to snapshot** button applies the selected build to your captured
+Locally, yes: the Optimizer's **Apply to snapshot** button applies the selected build to your captured
 snapshot (after a confirmation popup; greyed out while the game is open), and the **Worklist** tab has **Apply locally** /
 **Apply all** for queued changes. What it *can't* do is push changes into the actual game —
 there's no game API for that, so these only edit the local snapshot (and only while the game is

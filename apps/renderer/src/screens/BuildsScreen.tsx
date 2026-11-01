@@ -540,7 +540,7 @@ interface BuildCardProps {
 const NOTE_MAX = 200;
 
 /** Hover help of the rank field on a build card. */
-const HERO_RANK_TITLE = "Rank — 1 = highest (smaller number = more important). Type a position or drag the ⠿ handle to reorder; empty = unranked = lowest. Drives the Builder's '≤ Lower' equipped-items scope.";
+const HERO_RANK_TITLE = "Rank — 1 = highest (smaller number = more important). Type a position or drag the ⠿ handle to reorder; empty = unranked = lowest. Drives the Optimizer's '≤ Lower' equipped-items scope.";
 
 /** Free-form per-hero note. Capped at NOTE_MAX chars — the textarea hard-stops
  *  via maxLength but we also show a small counter that goes amber past 90%.

@@ -40,14 +40,14 @@
       (COOP/COEP) · **Object pool** `FinalStats`/`CheapRatings`.
 
 ### 🟡/⚪ UX-cohérence & nits
-- [~] 🟡 **`Advices` (tab Builds)** — 4pc dispo en inventaire et basse qualité livrés, `inventoryPieces` + `dmgStat`
+- [~] 🟡 **`Advices` (tab Heroes)** — 4pc dispo en inventaire et basse qualité livrés, `inventoryPieces` + `dmgStat`
       passés dans `AdviceInput`. **Reste** : la règle main off-scaling vs `meta.dmgStat` — décision de Sevih (le
       principe du module exclut ce qui demande de deviner l'intention).
 
 ### Persistence
-- [~] **Equip / Unequip** — Builder « Apply to snapshot » et Worklist livrés ; les déplacements faits en jeu suivis en direct
+- [~] **Equip / Unequip** — Optimizer « Apply to snapshot » et Worklist livrés ; les déplacements faits en jeu suivis en direct
       (journal `item/equip` du plugin 0.2.0, G37). **Reste** : valider G37 en jeu sur le fixe ; (optionnel) un
-      déclencheur côté **Builds** (unequip / assignation par slot).
+      déclencheur côté **Heroes** (unequip / assignation par slot).
 
 ### Externe — vérifs sur la version installée
 - [~] 🟢 **Capture no-root** — livrée par la source Steam (plugin BepInEx, validé en jeu le 2026-09-05). **Reste** :
@@ -73,6 +73,6 @@
 
 ---
 
-> ✅ **À NE PAS toucher (Inventory)** : virtualisation par lignes + reflow `ResizeObserver`, indexation
+> ✅ **À NE PAS toucher (Gear)** : virtualisation par lignes + reflow `ResizeObserver`, indexation
 > `charsByUid` en `Map`, auto-prune des chips indisponibles, `memo` sur `GearTile` (callback stable),
 > re-seed du draft à l'ouverture de la modal.

@@ -36,7 +36,7 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
 - **Library** of saved builds + filter sets per hero (localStorage).
 - **Edits** equip assignments locally by rewriting the captured snapshot — `equipItem`/
   `unequipItem` (core) + a `POST /api/captured/user-item` write-back, triggered from the
-  Builder's "Apply to snapshot → hero" button and the Worklist's apply actions. Changes only touch
+  Optimizer's "Apply to snapshot → hero" button and the Worklist's apply actions. Changes only touch
   the local captured snapshot — nothing is ever pushed to the game. →
   [Engine Reference](Engine-Reference)
 
@@ -47,8 +47,8 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
 | Page | What's in it |
 |------|--------------|
 | [Getting Started](Getting-Started) | Prerequisites, first-launch wizard, importing your account (capture) |
-| [Using the App](Using-the-App) | The six tabs (Home / Inventory / Builds / Presets / Builder / Worklist), optimizing a hero, settings, updates |
-| [FAQ & Troubleshooting](FAQ) | Capture issues, post-patch fixes, Builder tips, backups |
+| [Using the App](Using-the-App) | The six tabs (Home / Heroes / Optimizer / Presets / Worklist / Gear), optimizing a hero, settings, updates |
+| [FAQ & Troubleshooting](FAQ) | Capture issues, post-patch fixes, Optimizer tips, backups |
 
 **🔧 Internals (dev)**
 

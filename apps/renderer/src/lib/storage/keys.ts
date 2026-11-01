@@ -120,7 +120,7 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   // ── What the user made: backed up ──────────────────────────────────────
   { key: SAVED_BUILDS_KEY, store: "local", backup: true, prune: false, label: "Saved builds", owner: "lib/storage/savedBuilds.ts", merge: { shape: "heroLists" }, summary: "count" },
   { key: FILTER_PRESETS_KEY, store: "local", backup: true, prune: true, label: "Filter sets", owner: "lib/storage/filterPresets.ts", merge: { shape: "heroLists", accept: isReadableFilterPreset }, summary: "count" },
-  { key: INVENTORY_FILTER_PRESETS_KEY, store: "local", backup: true, prune: false, label: "Inventory filter sets", owner: "lib/storage/inventoryFilterPresets.ts", merge: { shape: "list", id: "id", keep: "stored", uniqueName: true, accept: isReadableInventoryPreset }, summary: "count" },
+  { key: INVENTORY_FILTER_PRESETS_KEY, store: "local", backup: true, prune: false, label: "Gear filter sets", owner: "lib/storage/inventoryFilterPresets.ts", merge: { shape: "list", id: "id", keep: "stored", uniqueName: true, accept: isReadableInventoryPreset }, summary: "count" },
   { key: LOCAL_PRESETS_KEY, store: "local", backup: true, prune: false, label: "Local presets", owner: "lib/storage/localPresets.ts", merge: { shape: "list", id: "id", keep: "stored", accept: isReadableLocalPreset }, summary: "count" },
   { key: PRESET_HEROES_KEY, store: "local", backup: true, prune: false, label: "Preset heroes", owner: "lib/storage/presetHeroes.ts", merge: { shape: "map", accept: holdsHeroes, keepStored: holdsHeroes }, summary: "paren" },
   { key: HERO_FILTERS_KEY, store: "local", backup: true, prune: true, label: "Hero filters", owner: "lib/storage/heroFilters.ts", merge: { shape: "map", accept: isRecord }, summary: "label" },
@@ -130,9 +130,9 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   { key: EXCLUDED_PIECES_KEY, store: "local", backup: true, prune: false, label: "Never-use pieces", owner: "lib/storage/excludedPieces.ts", merge: { shape: "set", accept: (uid) => typeof uid === "string" }, summary: "paren" },
   { key: WORKLIST_KEY, store: "local", backup: true, prune: false, label: "Worklist", owner: "lib/storage/worklist.ts", merge: { shape: "list", id: "heroUid", keep: "imported", accept: isReadableWorklistEntry }, summary: "paren" },
   { key: "gs.builds.notes", store: "local", backup: true, prune: false, label: "Hero notes", owner: "screens/BuildsScreen.tsx", merge: { shape: "map", accept: (note) => typeof note === "string" && note !== "" }, summary: "label" },
-  { key: "gs.builder.cols", store: "local", backup: true, prune: false, label: "Builder layout", owner: "screens/builder/ResultsTable.tsx", merge: { shape: "map", accept: (shown) => typeof shown === "boolean" }, summary: "label" },
+  { key: "gs.builder.cols", store: "local", backup: true, prune: false, label: "Optimizer layout", owner: "screens/builder/ResultsTable.tsx", merge: { shape: "map", accept: (shown) => typeof shown === "boolean" }, summary: "label" },
   // The slider's range (5–15, `ResultsTable.tsx`).
-  { key: "gs.builder.resultRows", store: "local", backup: true, prune: false, label: "Builder layout", owner: "screens/builder/BuilderScreen.tsx", merge: { shape: "value", normalize: (n) => (typeof n === "number" && Number.isFinite(n) ? Math.max(5, Math.min(15, Math.round(n))) : undefined) }, summary: "label" },
+  { key: "gs.builder.resultRows", store: "local", backup: true, prune: false, label: "Optimizer layout", owner: "screens/builder/BuilderScreen.tsx", merge: { shape: "value", normalize: (n) => (typeof n === "number" && Number.isFinite(n) ? Math.max(5, Math.min(15, Math.round(n))) : undefined) }, summary: "label" },
   ...settingKeys(),
   // ── The app's own state: localStorage, never backed up ─────────────────
   // The tab the app reopens on — where this install left off.
@@ -148,14 +148,14 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   appState(HERO_PRIORITY_SEEN_KEY, "Heroes offered a rank", "lib/storage/heroPriority.ts"),
   appState(PRESET_SEEN_KEY, "Presets offered a rank", "lib/storage/presetPriority.ts"),
   // ── Session view state ─────────────────────────────────────────────────
-  session(FILTERS_STORAGE_KEY, "Inventory filters", "screens/inventory/filters.ts"),
-  session("gs.inv.tab", "Inventory tab", "screens/inventory/InventoryScreen.tsx"),
-  session("gs.inv.sort", "Inventory sort", "screens/inventory/InventoryScreen.tsx"),
-  session("gs.inv.dir", "Inventory sort direction", "screens/inventory/InventoryScreen.tsx"),
-  session("gs.inv.selected", "Inventory piece shown", "screens/inventory/InventoryScreen.tsx"),
-  session("gs.inv.selection", "Inventory selection", "screens/inventory/InventoryScreen.tsx"),
-  session("gs.inv.selectMode", "Inventory select mode", "screens/inventory/InventoryScreen.tsx"),
-  session("gs.builds.filters", "Builds filters", "screens/BuildsScreen.tsx"),
+  session(FILTERS_STORAGE_KEY, "Gear filters", "screens/inventory/filters.ts"),
+  session("gs.inv.tab", "Gear tab", "screens/inventory/InventoryScreen.tsx"),
+  session("gs.inv.sort", "Gear sort", "screens/inventory/InventoryScreen.tsx"),
+  session("gs.inv.dir", "Gear sort direction", "screens/inventory/InventoryScreen.tsx"),
+  session("gs.inv.selected", "Gear piece shown", "screens/inventory/InventoryScreen.tsx"),
+  session("gs.inv.selection", "Gear selection", "screens/inventory/InventoryScreen.tsx"),
+  session("gs.inv.selectMode", "Gear select mode", "screens/inventory/InventoryScreen.tsx"),
+  session("gs.builds.filters", "Heroes filters", "screens/BuildsScreen.tsx"),
   session("gs.home.gearView", "Home gear view", "screens/home/HomeScreen.tsx"),
   session("gs.presets.classFilter", "Presets class filter", "screens/presets/PresetsScreen.tsx"),
   session("gs.presets.sort", "Presets sort", "screens/presets/PresetsScreen.tsx"),

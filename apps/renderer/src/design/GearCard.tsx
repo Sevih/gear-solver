@@ -278,7 +278,7 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
             type="button"
             onClick={() => onOptimizeWearer(equippedChar.uid)}
             aria-label={`Optimize ${equippedChar.name ?? `#${equippedChar.charId}`} →`}
-            title={`Optimize ${equippedChar.name ?? `#${equippedChar.charId}`} → — open the Builder on the hero wearing this piece`}
+            title={`Optimize ${equippedChar.name ?? `#${equippedChar.charId}`} → — open the Optimizer on the hero wearing this piece`}
             className="shrink-0 rounded-md ring-cyan-400/60 transition-shadow hover:ring-2"
           >
             <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={36} />
@@ -570,7 +570,7 @@ const EXCLUDE_ICON = (
 export function GearCardPanel({
   piece, equippedChar, game, fromPresets, excluded, onToggleExclude, onOptimizeWearer, projection, effects, compact = false,
   emptyLabel = "No piece in this build", emptyHint,
-  excludeHint = "Never use this piece in any solve (e.g. trash rolls) — the same as a right-click on its tile in the Inventory.",
+  excludeHint = "Never use this piece in any solve (e.g. trash rolls) — the same as a right-click on its tile in Gear.",
 }: {
   piece: UiPiece | null;
   equippedChar: Character | null;
@@ -639,7 +639,7 @@ export function GearCardPanel({
               disabled={!equippedChar}
               aria-label={equippedChar ? `Optimize wearer → (${equippedChar.name ?? `#${equippedChar.charId}`})` : "Optimize wearer →"}
               title={equippedChar
-                ? `Open the Builder on ${equippedChar.name ?? `#${equippedChar.charId}`}, who wears this piece.`
+                ? `Open the Optimizer on ${equippedChar.name ?? `#${equippedChar.charId}`}, who wears this piece.`
                 : "Nobody wears this piece."}
               className={cx(
                 "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors",

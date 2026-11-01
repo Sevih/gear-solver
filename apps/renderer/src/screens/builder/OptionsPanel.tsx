@@ -15,7 +15,7 @@ import { Panel } from "./Panel.js";
 /** UI metadata for the Options "Equipped items" scope (see `EquippedScope`). */
 const EQUIPPED_SCOPES: ReadonlyArray<{ value: EquippedScope; label: string; hint: string }> = [
   { value: "none",  label: "None",    hint: "Only the selected hero's own gear + free (unequipped) gear." },
-  { value: "lower", label: "≤ Lower", hint: "Also gear on heroes ranked strictly lower than this one in Builds (unranked = lowest). Never strips an equal/higher-ranked hero." },
+  { value: "lower", label: "≤ Lower", hint: "Also gear on heroes ranked strictly lower than this one in Heroes (unranked = lowest). Never strips an equal/higher-ranked hero." },
   { value: "all",   label: "All",     hint: "Any equipped gear, regardless of which hero wears it (legacy)." },
 ];
 
@@ -37,7 +37,7 @@ export function OptionsPanel({
     <Panel title="Options" hint="Pool toggles. Equipped items + Don't take from… together drive what gear the solver may touch. (The reforge mode, Maxed only and Transistone potential sit in the toolbar.)" width="w-52">
       <div className="space-y-0.5">
         <div className="flex items-center justify-between gap-2 py-0.5">
-          <HoverHint className="text-[11px] text-white/80" name="Equipped items" text="Which gear equipped on OTHER heroes the solver may pull in (your own hero's gear is always in). None = own + free only · ≤ Lower = also heroes ranked below this one in Builds (never strips an equal/higher hero) · All = any equipped gear." />
+          <HoverHint className="text-[11px] text-white/80" name="Equipped items" text="Which gear equipped on OTHER heroes the solver may pull in (your own hero's gear is always in). None = own + free only · ≤ Lower = also heroes ranked below this one in Heroes (never strips an equal/higher hero) · All = any equipped gear." />
           <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-white/10 bg-white/4 p-0.5">
             {EQUIPPED_SCOPES.map((s) => {
               const on = (options.equippedScope ?? "lower") === s.value;

@@ -215,7 +215,7 @@ pas, `wornSetRows` (`core/set-level.ts`) retombe alors sur l'ancienne règle (cf
 ni par la CP (Fortification, Revenge, Patience, Pulverization, Immunity, Swiftness,
 Weakness, Augmentation). Typé `SetCombatEffect` et optionnel dans `SetLevel`
 (`core/gamedata.ts`) : un cache d'avant ne l'a pas. L'app le montre en pastille
-« combat » après la prose (panneau Effects du Builder, détail de pièce), libellé par
+« combat » après la prose (panneau Effects de l'Optimizer, détail de pièce), libellé par
 `combatEffectLines` (`renderer/src/lib/setCombatEffects.ts`) ; `wornSetRows` y lit le
 4pc d'effet de combat de la règle `ignoreLowSet` (`p4_desc` en repli sans le champ).
 

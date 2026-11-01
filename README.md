@@ -78,7 +78,7 @@ Read on. The rest of this README plus [docs/](docs) cover the stack, build, and 
 - **Library** of saved builds + filter sets per hero (localStorage).
 - **Edits** equip assignments locally by rewriting the captured snapshot — `equipItem`/
   `unequipItem` (core) + a `POST /api/captured/user-item` write-back, triggered from the
-  Builder's "Apply to snapshot → hero" button (confirmation popup) and the Worklist's per-entry /
+  Optimizer's "Apply to snapshot → hero" button (confirmation popup) and the Worklist's per-entry /
   Apply-all actions. Changes only touch the local captured snapshot — nothing is ever
   pushed to the game.
 
@@ -166,7 +166,7 @@ The core suite covers the inventory parser and the equip/unequip captured-JSON r
 delta aggregation (incl. the incremental prefix-bucket equivalence), gem-override equivalence
 in `aggregateGearBuckets`, the 8 cheap ratings (+ damage-stat scaling, no-crit) + Score
 normalization, reforge simulation, set-plan feasibility + armor-set whitelist, sub-tick & damage
-value panels, Builds advice rules, reco→filter translation, the top-K min-heap, worker-count
+value panels, Heroes advice rules, reco→filter translation, the top-K min-heap, worker-count
 resolution, JSON backup round-trip, and the engine↔user stat key mapping.
 
 ---
@@ -195,11 +195,11 @@ See [docs/architecture.md](docs/architecture.md) for the layer split rationale, 
 
 ## Status
 
-Data capture, parser, stat composer, solver, the Home dashboard, Inventory/Builds/Builder/
-Worklist screens, the tabbed Settings modal, persistence (saved builds + filter sets) and
-JSON backup import/export are all live. Session-scoped view state (Inventory/Builds
-sorts+filters reset each launch), Builds advice rules, the equip/unequip captured-JSON rewrite
-methods + write-back endpoint with their trigger UI (Builder "Apply to snapshot" + Worklist apply —
+Data capture, parser, stat composer, solver, the Home dashboard, Heroes/Optimizer/Presets/
+Worklist/Gear screens, the tabbed Settings modal, persistence (saved builds + filter sets) and
+JSON backup import/export are all live. Session-scoped view state (Gear/Heroes
+sorts+filters reset each launch), Heroes advice rules, the equip/unequip captured-JSON rewrite
+methods + write-back endpoint with their trigger UI (Optimizer "Apply to snapshot" + Worklist apply —
 local snapshot only), the production build path for `data/` (bundled `extraResources` +
 first-launch seed of the writable cache), packaged releases with auto-update, and a
 `data/derived` version stamp (surfaced in Settings → Data) have landed. Backlog (localStorage

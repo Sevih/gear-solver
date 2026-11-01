@@ -8,6 +8,53 @@
 
 ## Items de backlog clôturés (index)
 
+### 🏷️ Onglets renommés : Heroes, Optimizer, Gear, dans l'ordre cible ; `gs.tab` migré (U11, G100) (2026-11-01)
+- ✅ **Pourquoi.** Onzième lot de la refonte (U11 de `docs/ux-audit-2026-11-01.md`, arbitrage D6, variante A de la
+  section 5.a, glossaire 5.c) : « Builds » désignait l'onglet des héros alors que le glossaire réserve « build » au
+  résultat du solveur, « Builder » et « Inventory » ne disaient pas la tâche. Table : Builds → **Heroes**, Builder →
+  **Optimizer**, Inventory → **Gear** ; `gs.tab` se migre à la lecture, dans `parseTab` (`design/Shell.tsx`), codec de
+  `usePersistedState("gs.tab", …)` dans `App.tsx`.
+- ✅ **Onglets.** `design/Shell.tsx` : `Tab` = `"Home" | "Heroes" | "Optimizer" | "Presets" | "Worklist" | "Gear"`,
+  `TABS` dans cet ordre (Home reste premier jusqu'à U13, le reste est l'ordre de la variante A), `TabCounts` suit sans
+  changer de sens (Heroes = héros équipés, Gear = pièces, Worklist = changements restants). Les valeurs du type restent
+  les libellés affichés et la valeur rangée dans `gs.tab`.
+- ✅ **Migration de `gs.tab`.** `parseTab(raw: unknown): Tab` : `"Builds"` → `"Heroes"`, `"Builder"` → `"Optimizer"`,
+  `"Inventory"` → `"Gear"` (une `Map`, donc `"toString"` ne tombe pas sur le prototype), une valeur du nouveau type
+  inchangée, tout le reste → `"Home"`. `App.tsx` le passe en `deserialize` (`TAB_CODEC`) : une installation mise à jour
+  rouvre l'onglet qu'elle avait laissé, sous son nouveau nom. `lib/storage/keys.ts` garde la clé et son libellé « Open
+  tab », qui ne citait pas d'onglet.
+- ✅ **Textes de l'interface.** Chaque occurrence de `grep -rnwE "Builder|Inventory|Builds" apps/renderer/src` jugée :
+  aides et liens « open the Optimizer on … » (`design/GearCard.tsx`, `screens/WorklistScreen.tsx`), « in Gear » /
+  « Show … in Gear » de la Worklist, « Open Optimizer → » et les drills « … in Gear » de Home, la portée « ≤ Lower »
+  (« ranked … in Heroes », `screens/builder/OptionsPanel.tsx`), l'aide du rang de `screens/BuildsScreen.tsx`, les
+  cinq textes de Presets qui citaient la priorité « du Builder », l'aide de « Compact result cards » et le libellé
+  « Stat lock & drift tooling (Heroes) » (`lib/settings.ts`), les libellés de la liste de sauvegarde
+  (`lib/storage/keys.ts` : « Gear filter sets », « Optimizer layout », « Gear filters / tab / sort… », « Heroes
+  filters »). Laissés : « Builds returned to the table » (`screens/builder/FilterFooter.tsx`, des résultats du solveur,
+  glossaire 5.c), « Solver », « Optimize → », et tout identifiant, nom de fichier, de composant, de type (`Inventory` du
+  core), clé `gs.*` ou commentaire. Restent 330 occurrences, toutes de ces sortes (plus les trois anciennes valeurs de
+  `LEGACY_TABS`). Aucun fichier renommé.
+- ✅ **Manuel et docs.** Noms seulement (la réécriture est U14) : `wiki/Using-the-App.md` (liste des six onglets dans
+  le nouvel ordre, titres « Gear — browse your pieces », « Heroes — your roster », « Optimizer — optimize a hero », et
+  la prose), les ancres de `wiki/Getting-Started.md` qui y mènent, `wiki/Home.md`, `wiki/FAQ.md` (« Using the
+  Optimizer »), `README.md`, `wiki/Solver.md` / `docs/solver.md` (dont « un onglet entre Optimizer et Worklist » pour
+  Presets, l'ancien « entre Builds et Builder » devenu faux), `wiki/Architecture.md` / `docs/architecture.md`,
+  `wiki/Engine-Reference.md` / `docs/reference.md` (prose, arbre, table des tests avec la ligne de `tabs.test.ts`),
+  `wiki/Data-Schema.md` / `docs/data-schema.md`, et `docs/todo.md` (trois items qui nommaient Builds / Builder, et
+  l'encadré « À NE PAS toucher (Gear) »). Laissés tels quels car datés : `docs/roadmap.md` / `wiki/Roadmap.md`
+  (jalons livrés), `docs/STATUS.md`, `docs/release-notes.md`, les briefs de `docs/design/`, les audits.
+- ✅ **Tests.** `apps/renderer/test/tabs.test.ts` (nouveau, 5 tests) : `parseTab` (les trois anciennes valeurs → les
+  nouvelles, chaque valeur nouvelle inchangée, `null` / `"Debug"` / `42` / `"toString"` → `"Home"`) ; rendu statique de
+  `GsHeader` : les six libellés dans l'ordre Home, Heroes, Optimizer, Presets, Worklist, Gear, et aucun de « Builds »,
+  « Builder », « Inventory » dans son HTML. Ajustés sans changer ce qu'ils affirment : `headerU8.test.ts` (les clés de
+  `TabCounts`), `worklist.test.ts` (« in Gear »), `transfer.test.ts` (la valeur de `gs.tab` qui ne part pas). `npm run
+  typecheck` : `> tsc --noEmit` sans erreur ; `npm test` : `Tests  1064 passed (1064)` (renderer ; core 169, desktop
+  238) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ⏳ **Sevih.** Sur la build : après la mise à jour, l'app rouvre l'onglet laissé sous son nouveau nom (Builder →
+  Optimizer, par exemple) ; ordre des onglets Home, Heroes, Optimizer, Presets, Worklist, Gear ; Settings › Backup
+  liste « Gear filter sets », « Optimizer layout ». Le menu Electron (D14), les sous-onglets de Gear et la dissolution
+  de Home (U13) restent à faire.
+
 ### 🃏 Une seule carte de pièce : `GearCard` pour Inventory, les infobulles Builds / Presets et les résultats du Builder (U10b, G99) (2026-11-01)
 - ✅ **Pourquoi.** Dixième lot de la refonte, seconde moitié (U10 (b) de `docs/ux-audit-2026-11-01.md`, section 3.3
   « La carte de pièce »). Deux corps de carte : `design/GearDetail.tsx` (`GearDetailBody` : Inventory, infobulles de

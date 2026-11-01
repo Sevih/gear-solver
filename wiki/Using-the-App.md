@@ -3,7 +3,7 @@
 How to drive gear-solver day to day. New here? Start with [Getting Started](Getting-Started)
 to import your account first.
 
-The window has six tabs — **Home**, **Inventory**, **Builds**, **Presets**, **Builder**, **Worklist** —
+The window has six tabs — **Home**, **Heroes**, **Optimizer**, **Presets**, **Worklist**, **Gear** —
 plus a **Settings** modal (the **Settings** button, top-right) and the capture controls in the header:
 one **capture pill** (Checking… · Steam not found · Plugin needed · Plugin update available · Game closed ·
 Waiting for game · Live — hover it for the detail and the game folder), next to it the one button that
@@ -19,11 +19,11 @@ Your landing screen. At a glance:
 
 - **Account snapshot** — heroes owned, gear count, and other quick totals.
 - **Gear quality distribution** — how much of your gear is Perfect / Excellent / Good /
-  Decent / Poor, by tier (same colors as the Inventory quality filter).
+  Decent / Poor, by tier (same colors as the Gear quality filter).
 - **Gear breakdown** — a toggle with four views: **Overview** (count by slot + your top armor sets),
   **Class** (per class, the unique weapon/accessory effects you own as chips — hover for name + effect),
   **All sets** (the full set catalog, owned-first; unowned are dimmed with a red `0`), and **Talisman**
-  (a talisman × main-stat cross-tab — each talisman framed like in the Inventory, cells are a heatmap of
+  (a talisman × main-stat cross-tab — each talisman framed like in Gear, cells are a heatmap of
   how many you own with that main stat, with row/column totals). The view you picked stays when
   you switch tabs, back to Overview on the next launch.
 - **Library** — your saved builds.
@@ -37,7 +37,7 @@ Your landing screen. At a glance:
 
 ---
 
-## Inventory — browse your gear
+## Gear — browse your pieces
 
 A dense, searchable table of every gear piece you own.
 
@@ -95,7 +95,7 @@ A dense, searchable table of every gear piece you own.
   tick counts (or gems for Talisman/EE), reforge / breakthrough / Singularity state, a
   **quality score**, and any item / set passives. **Never use** under the card (or a right-click
   on the tile) keeps the piece out of every solve, marked ⊘ on its tile; **Never used — click to
-  allow** brings it back. **Optimize wearer →**, next to it, opens the **Builder** on the hero
+  allow** brings it back. **Optimize wearer →**, next to it, opens the **Optimizer** on the hero
   wearing the piece (greyed out on a free piece); a click on the wearer's portrait in the card
   does the same.
 
@@ -104,7 +104,7 @@ A dense, searchable table of every gear piece you own.
 
 ---
 
-## Builds — your heroes
+## Heroes — your roster
 
 One card per **equipped** hero, showing their **composed final stats** — computed exactly the
 way the game does (validated to match the in-game character sheet).
@@ -113,11 +113,11 @@ way the game does (validated to match the in-game character sheet).
   3/4 of a set (one piece away from the 4-pc — and when a free piece of that set for the missing
   slot sits in your inventory, not reserved in the Worklist for another hero, it says so),
   **wasted caps** (crit rate or penetration over 100%), **empty gem slots** on the Talisman / EE, **upgrade headroom** (pieces with unused
-  reforges, 6★ pieces not yet ascended) and **poor-quality** pieces (the Inventory's quality
+  reforges, 6★ pieces not yet ascended) and **poor-quality** pieces (Gear's quality
   tier).
-- **Inspect a piece** — hover an equipped piece to see the same full detail panel as the
-  Inventory.
-- **Optimize →** — jumps straight to the **Builder** with that hero pre-selected.
+- **Inspect a piece** — hover an equipped piece to see the same full detail panel as
+  Gear.
+- **Optimize →** — jumps straight to the **Optimizer** with that hero pre-selected.
 - **Roster filters** — search by name (the same search as every hero picker: the name shown,
   nickname, base name or id; "fusion" finds the Core Fusion heroes), filter by element / class,
   sort by **CP** or by **Rank** (rank 1 first, unranked last, then CP; ties keep the capture
@@ -152,7 +152,7 @@ ascended and fully reforged; hover for the cap at the pieces' current investment
   Expand all / Collapse all. The chips, the sort and the open cards stay when you switch tabs, and
   reset on the next launch.
 
-- **Reference** — the hero the preset was built for (solve them in the Builder as usual). If a
+- **Reference** — the hero the preset was built for (solve them in the Optimizer as usual). If a
   single hero wears the preset, they're proposed by default.
 - **Associated** — the heroes you plan to share the outfit with (add with the picker, remove
   with ✕). They wear it as-is and adjust through their own EE gems.
@@ -165,39 +165,39 @@ ascended and fully reforged; hover for the cap at the pieces' current investment
   is shown in brackets when it differs), **Dmg** and **DmgS** — hover each for what it measures. An associated hero also shows how
   much they lose versus their own best known build — their latest **saved build**, or their
   current gear without one. Past the threshold (15 % by default, **Settings → Solver**) the line
-  turns orange: "Ame loses 23 % vs their saved build". The priority is the one set in the Builder
+  turns orange: "Ame loses 23 % vs their saved build". The priority is the one set in the Optimizer
   for that hero — kept across relaunches, and a weight you change there counts here right away —
   else the one the hero's latest saved build was solved with ("priority from saved build"); a hero
-  with neither gets no score — open them in the Builder and set one.
+  with neither gets no score — open them in the Optimizer and set one.
 - **Overcap** — when the outfit pushes a hero's **crit rate** past 102 % or their **penetration**
-  past 100 %, the line shows a badge, the same as on the Builds tab: "Crit rate 142% — 40% wasted
+  past 100 %, the line shows a badge, the same as on the Heroes tab: "Crit rate 142% — 40% wasted
   over the 102% cap". From 10 points wasted the line turns orange; below, the badge alone. The
   badge's tooltip says when the proposed EE gems add to it.
 - **+ Worklist** — on each hero's line: queues the preset's pieces that hero doesn't wear yet
   and the EE gems to socket as that hero's **Worklist** entry (replacing their previous one). A
   piece no longer in your inventory is left out, and the toast says so.
-- **Optimize preset →** — on the reference hero's line: opens the Builder on that hero with the
+- **Optimize preset →** — on the reference hero's line: opens the Optimizer on that hero with the
   outfit's weapon, accessory and talisman effects **required**, and up to five priority substats
   taken from what the outfit already rolls and from Outerpedia's recommendation for the hero
   (its weapon and accessory main stats too). Sets are left open, and your stat bands and options
-  stay as they were. The Builder's status line says where the substats come from; offline, or
+  stay as they were. The Optimizer's status line says where the substats come from; offline, or
   without a recommendation, they come from the outfit alone.
-- **Optimize →** — on an associated hero's line: opens the Builder on that hero, like on the
-  Builds tab.
-- **Rank and lock** — each preset has a priority **rank**, like the heroes on the Builds tab
+- **Optimize →** — on an associated hero's line: opens the Optimizer on that hero, like on the
+  Heroes tab.
+- **Rank and lock** — each preset has a priority **rank**, like the heroes on the Heroes tab
   (1 = most important; type a position, or drag the ⠿ handle with **Sort: Rank**; empty =
   unranked = lowest; new presets get one in the in-game order as soon as a capture is imported). **Optimize preset →** never takes
   a piece from a preset ranked above or equal to it (unranked counts as lowest). The 🔒 **Lock**
   button keeps a preset's pieces out of every solve — any hero, any preset — except **Optimize
-  preset →** on that preset itself; a locked card has an amber outline. In the Builder, the
+  preset →** on that preset itself; a locked card has an amber outline. In the Optimizer, the
   Library says which preset is being optimized, and a proposed piece that sits in another preset
   says **from preset ‹name›** on its card.
 - **Warnings** — a piece no longer in your inventory, or a piece that sits in **two** presets
   (two presets can't be worn in the same fight), is marked on the piece and in the card's banner.
   Empty presets are listed collapsed.
 - **Local presets** — presets kept in GS only, to prepare an outfit without touching the game:
-  a name (12 characters, the in-game limit) and the 7 pieces, no EE. Make one from a Builder
-  result (**Save as local preset…**, the Builder's hero as its reference) or with **Copy as local
+  a name (12 characters, the in-game limit) and the 7 pieces, no EE. Make one from an Optimizer
+  result (**Save as local preset…**, the Optimizer's hero as its reference) or with **Copy as local
   preset** on an in-game card (same pieces, the hero shown as reference, the name cut to 12
   characters). They're listed under the in-game presets, most recent first, on the same card
   with a **Local** badge: the pieces (a missing one is marked), the reference hero's line with
@@ -207,7 +207,7 @@ ascended and fully reforged; hover for the cap at the pieces' current investment
 
 ---
 
-## Builder — optimize a hero
+## Optimizer — optimize a hero
 
 The heart of the app: pick a hero and it searches *your* inventory for the best gear
 combinations. Layout is dense (Fribbels-style) — top panels set the rules, the table shows
@@ -275,8 +275,8 @@ results, the bottom band shows the selected build's pieces.
   `T+n` on the result cards. Works with or without a reforge mode; ignored under **Maxed only**.
 - **Equipped items** — a three-way control for which gear worn by *other* heroes the solver
   may pull in: **None** (only the hero's own gear + free gear), **≤ Lower** (default — also
-  gear on heroes ranked strictly lower in the Builds ranking; every new hero gets a default
-  rank by CP as soon as a capture is imported, without opening Builds; with no ranks set this
+  gear on heroes ranked strictly lower in the Heroes ranking; every new hero gets a default
+  rank by CP as soon as a capture is imported, without opening Heroes; with no ranks set this
   degrades to own + free gear), or **All** (any equipped gear). Pieces **reserved by a
   Worklist entry** count as worn by the claiming hero, so solving your next hero respects
   what earlier queued builds already grabbed (under **All**, reservations are ignored like
@@ -298,7 +298,7 @@ results, the bottom band shows the selected build's pieces.
 - **Click a row** → the **bottom gear band** shows the 8 pieces of that build, laid out like the
   game's equipment screen (Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots), including the
   **recommended gem allocation** (with a "swap" badge if it differs from what's socketed) and,
-  if a Reforge mode is on, the **projected** max-roll stats. Each card is the Inventory's piece card
+  if a Reforge mode is on, the **projected** max-roll stats. Each card is the Gear tab's piece card
   (rarity and slot, quality with its help and bar, the Singularity +15 effect), without the weapon /
   accessory passive and the set bonuses, which the **Effects** card under the stats lists for the whole
   build. **Settings › Solver › Compact result
@@ -343,23 +343,23 @@ In the right sidebar (**Library**):
 
 ## Worklist — queued gear changes
 
-A cross-hero to-do list of gear swaps, fed from the Builder's **+ Worklist** button (and the
+A cross-hero to-do list of gear swaps, fed from the Optimizer's **+ Worklist** button (and the
 Presets tab's, labeled **Preset** on the card). Each
 queued build becomes a card for its hero (one card per hero — a newer build replaces it), with
 one checkable line per changed slot — the target piece's image, stats, and where it currently
-lives (which hero wears it, or Inventory) — and one line per gem to socket on the Talisman / EE,
+lives (which hero wears it, or Gear) — and one line per gem to socket on the Talisman / EE,
 under its piece (gem, stat, and the gem it replaces). The tab uses the whole window: on a wide
 one the cards sit two per row.
 
 - **Queued pieces are reserved** — a line above the cards says so. Until a piece line shows as
-  **applied** (the snapshot has the piece on the hero) or you remove the card, the Builder treats
+  **applied** (the snapshot has the piece on the hero) or you remove the card, the Optimizer treats
   the piece as already worn by the card's hero, so solving your next hero respects what earlier
   queued builds grabbed: under **Equipped items ≤ Lower** only a higher-ranked hero can take it,
   under **None** nobody else, under **All** reservations are ignored. Ticking a line doesn't lift
   its reservation; gem lines and pieces gone from the inventory reserve nothing.
-- **Links** — a card's hero (portrait and name, **Optimize →**) opens the **Builder** on that
-  hero; on a line, **on ‹hero›** opens it on the hero wearing the piece now, and **in Inventory**
-  opens the **Inventory** with the piece shown in the detail panel (the view is kept when it
+- **Links** — a card's hero (portrait and name, **Optimize →**) opens the **Optimizer** on that
+  hero; on a line, **on ‹hero›** opens it on the hero wearing the piece now, and **in Gear**
+  opens **Gear** with the piece shown in the detail panel (the view is kept when it
   shows the piece, reset to All without filters when it hides it).
 - **Work through it in-game** — tick each line off as you equip it for real; on your next
   capture (or as soon as the app sees the move, with the game open), changes that are done are
@@ -390,16 +390,16 @@ setup check has passed).
 - **Solver** — under *Solver tuning* (applies on the next solve): worker count (Auto = use your CPU;
   or pin a number), how many results to return and, under *Show advanced*, the per-worker depth;
   under *Display* (applies at once): results heatmap on/off, compact result cards (shorter gear
-  cards under the Builder's results; Inventory and tooltips unchanged), and the Presets tab's loss
+  cards under the Optimizer's results; Gear and tooltips unchanged), and the Presets tab's loss
   warning (15 % by default). **Reset solver settings to defaults** puts all of them back, compact
   cards included.
 - **Data** — **Sync game data** (download the latest game tables after a patch), reset the onboarding
   wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
   (game version of the tables, hash and date — so you can see which snapshot is loaded).
 - **Backup** — **Export backup / Import backup**: one JSON file with everything you set up in the
-  app — saved builds, filter sets (Builder and Inventory), local presets, the heroes of your in-game
+  app — saved builds, filter sets (Optimizer and Gear), local presets, the heroes of your in-game
   presets, hero and preset ranks, locked presets, never-use pieces, the worklist, hero notes, the
-  last filters per hero, the Builder layout and your Solver / Debug settings. The list is shown
+  last filters per hero, the Optimizer layout and your Solver / Debug settings. The list is shown
   under the Export button. Never the captured gear: that comes from the game (re-capture it on the
   other PC). Import merges: builds and presets already present are kept; ranks, worklist entries,
   notes and settings from the file replace yours (settings held within their bounds). A file
