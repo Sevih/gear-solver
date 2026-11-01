@@ -12,7 +12,14 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- **Preset quality and +15 grades**: each preset card now shows its **Quality** out of 138 (the six
+  pieces' rolled substat ticks, 23 per piece when ascended and fully reforged — hover for the cap at
+  the pieces' current investment), the **Offensive** +15 roll grades of its weapon and accessory, and
+  the **Defensive** ones of its four armor pieces, in the game's colors.
+- **Preset card tidied**: under each tile, the icon and value of the main stat that matters (the
+  weapon's second main, the accessory's and talisman's main; nothing under the armor pieces and the
+  EE), the quality lines sit between the pieces and the heroes, the reference hero's name is no longer
+  shown twice, and Score / Dmg / DmgS explain themselves on hover.
 
 ## [1.27.1] — 2026-10-31
 
