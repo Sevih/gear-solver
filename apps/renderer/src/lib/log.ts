@@ -14,18 +14,19 @@
  * worker stays silent. Capture / desktop run in the Electron main process and
  * log through their own Node channel.
  */
+import { readSetting } from "./settings.js";
+
 export type DebugFlag = "solver" | "statLocks";
 
-/** True when `gs.debug.<flag>` is set to a truthy string. `usePersistedState`
- *  stores booleans as JSON (`"true"`/`"false"`); a hand-set `"1"` works too. */
+/** `gs.debug.<flag>` ↔ its `lib/settings.ts` entry. */
+const FLAG_SETTING = { solver: "debugSolver", statLocks: "debugStatLocks" } as const;
+
+/** True when `gs.debug.<flag>` is on — read through `readSetting`, the same
+ *  declaration (and tolerant parse) as the Settings → Debug toggle.
+ *  `usePersistedState` stores booleans as JSON (`"true"`/`"false"`); a hand-set
+ *  `"1"` works too. No localStorage (worker, privacy mode) → debug off. */
 export function debugEnabled(flag: DebugFlag): boolean {
-  try {
-    const v = localStorage.getItem(`gs.debug.${flag}`);
-    return v === "true" || v === "1";
-  } catch {
-    // No localStorage (SSR / worker / privacy mode) → debug off.
-    return false;
-  }
+  return readSetting(FLAG_SETTING[flag]);
 }
 
 /** `console.log` tagged + coloured by flag, but only when that flag is on. */

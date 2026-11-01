@@ -1,33 +1,69 @@
 /**
  * Settings → Solver — worker-pool size, result count, per-worker depth, the
  * results heatmap, compact result cards and the Presets tab's loss warning.
+ * Keys, defaults, bounds and texts come from `lib/settings.ts`; the settings
+ * read at the next solve (`appliesNextSolve`) sit under « applies next
+ * solve », the others (applied at once) in their own group.
  */
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { cx } from "../cx.js";
-import { availableCores, clampWorkerCount, resolveWorkerCount } from "../../lib/solver/orchestrator.js";
+import { resolveWorkerCount } from "../../lib/solver/orchestrator.js";
+import {
+  SETTINGS, SOLVER_PANE_SETTINGS, availableCores, clampSetting, resetSettings, settingRange,
+  type SettingName, type SettingValues, type SolverPaneSetting,
+} from "../../lib/settings.js";
 import { SectionStrip, Divider, SegButton, Stepper, Switch } from "./SettingsControls.js";
-import { DEFAULT_PRESET_LOSS_WARN } from "../../lib/storage/presetHeroes.js";
 
-/** Solver tuning settings — owned by App (persisted), edited here. */
+type Setter<N extends SettingName> = Dispatch<SetStateAction<SettingValues[N]>>;
+
+/** Solver tuning settings — owned by App (persisted), edited here. Value
+ *  meanings: `SettingValues` in lib/settings.ts. */
 export interface SolverSettings {
-  /** null = auto (hardwareConcurrency − 1); a number pins the pool size. */
-  workerCount: number | null;
-  setWorkerCount: Dispatch<SetStateAction<number | null>>;
-  /** Ranked builds returned to the results table. */
+  workerCount: SettingValues["workerCount"];
+  setWorkerCount: Setter<"workerCount">;
   topN: number;
-  setTopN: Dispatch<SetStateAction<number>>;
-  /** Per-worker heap depth before merge (advanced — too low loses recall). */
+  setTopN: Setter<"topN">;
   topK: number;
-  setTopK: Dispatch<SetStateAction<number>>;
-  /** Results-table column heatmap on/off. */
+  setTopK: Setter<"topK">;
   heatmap: boolean;
-  setHeatmap: Dispatch<SetStateAction<boolean>>;
-  /** Builder: compact gear cards under the results. */
+  setHeatmap: Setter<"heatmap">;
   compactCards: boolean;
-  setCompactCards: Dispatch<SetStateAction<boolean>>;
-  /** Presets tab: loss (percent) past which an associated hero is flagged. */
+  setCompactCards: Setter<"compactCards">;
   presetLossWarn: number;
-  setPresetLossWarn: Dispatch<SetStateAction<number>>;
+  setPresetLossWarn: Setter<"presetLossWarn">;
+}
+
+/** Each setting of the pane → its setter, for the registry-driven Reset. */
+function settersOf(solver: SolverSettings): { [N in SolverPaneSetting]: Setter<N> } {
+  return {
+    workerCount: solver.setWorkerCount,
+    topN: solver.setTopN,
+    topK: solver.setTopK,
+    heatmap: solver.setHeatmap,
+    compactCards: solver.setCompactCards,
+    presetLossWarn: solver.setPresetLossWarn,
+  };
+}
+
+/** « Reset solver settings to defaults »: every setting of the pane back to
+ *  its registry default (compact cards included). */
+export function resetSolverSettings(solver: SolverSettings): void {
+  const setters = settersOf(solver);
+  resetSettings(SOLVER_PANE_SETTINGS, (name, value) => (setters[name] as (v: typeof value) => void)(value));
+}
+
+/** One step of a stepper, held in the setting's bounds. */
+function stepBy(name: "topN" | "topK" | "presetLossWarn", dir: 1 | -1) {
+  return (v: number) => clampSetting(name, v + dir * SETTINGS[name].step);
+}
+
+/** Help line of a setting: its text, the bold warning if any, the range. */
+function HelpText({ name, range = false }: { name: SettingName; range?: boolean }) {
+  const { help, helpEmphasis } = SETTINGS[name];
+  const tail = range ? ` ${settingRange(name)}` : "";
+  if (!helpEmphasis || !help.includes(helpEmphasis)) return <>{help}{tail}</>;
+  const [before, after] = help.split(helpEmphasis);
+  return <>{before}<b className="font-semibold text-amber-300">{helpEmphasis}</b>{after}{tail}</>;
 }
 
 export function SolverPane({
@@ -45,7 +81,7 @@ export function SolverPane({
   const [manualBuf, setManualBuf] = useState(() => solver.workerCount ?? autoEffective);
   const manualVal = solver.workerCount ?? manualBuf;
   const setManualWorkers = (v: number) => {
-    const clamped = clampWorkerCount(v, cores);
+    const clamped = clampSetting("workerCount", v) ?? autoEffective;
     setManualBuf(clamped);
     solver.setWorkerCount(clamped);
   };
@@ -57,9 +93,9 @@ export function SolverPane({
       {/* Worker threads */}
       <div className="flex items-start justify-between gap-4.5">
         <div className="flex max-w-82.5 flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-white">Worker threads</span>
+          <span className="text-[13px] font-medium text-white">{SETTINGS.workerCount.label}</span>
           <span className="text-[11.5px] leading-snug text-zinc-400">
-            More workers = faster solve, hotter and louder CPU. Takes effect on the next solve.
+            <HelpText name="workerCount" />
           </span>
           <span className="mt-0.5 font-mono text-[11px] text-cyan-300">
             {isAuto ? `Auto · ${autoEffective} of ${cores} cores` : `Manual · ${manualVal} of ${cores} cores`}
@@ -84,55 +120,16 @@ export function SolverPane({
       {/* Result count (topN) */}
       <div className="flex items-start justify-between gap-4.5">
         <div className="flex max-w-82.5 flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-white">Result count</span>
+          <span className="text-[13px] font-medium text-white">{SETTINGS.topN.label}</span>
           <span className="text-[11.5px] leading-snug text-zinc-400">
-            How many ranked builds the results table keeps. Range 10–5000.
+            <HelpText name="topN" range />
           </span>
         </div>
         <Stepper
           value={solver.topN}
           wide
-          onDec={() => solver.setTopN((v) => Math.max(10, v - 100))}
-          onInc={() => solver.setTopN((v) => Math.min(5000, v + 100))}
-        />
-      </div>
-
-      <Divider />
-
-      {/* Heatmap */}
-      <div className="flex items-center justify-between gap-4.5">
-        <div className="flex max-w-90 flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-white">Results heatmap</span>
-          <span className="text-[11.5px] leading-snug text-zinc-400">Emerald→rose column shading on the results table.</span>
-        </div>
-        <Switch checked={solver.heatmap} onToggle={() => solver.setHeatmap((v) => !v)} />
-      </div>
-
-      <Divider />
-
-      {/* Compact result cards */}
-      <div className="flex items-center justify-between gap-4.5">
-        <div className="flex max-w-90 flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-white">Compact result cards</span>
-          <span className="text-[11.5px] leading-snug text-zinc-400">Shorter, narrower gear cards under the results: no item icon (enhance, breakthrough, stars by the name), set names instead of item names, icon + value stats with substats two per row, gems as icons, one-line quality and effects, details on hover. Inventory and tooltips unchanged.</span>
-        </div>
-        <Switch checked={solver.compactCards} onToggle={() => solver.setCompactCards((v) => !v)} />
-      </div>
-
-      <Divider />
-
-      {/* Presets loss warning */}
-      <div className="flex items-start justify-between gap-4.5">
-        <div className="flex max-w-82.5 flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-white">Preset loss warning</span>
-          <span className="text-[11.5px] leading-snug text-zinc-400">
-            Presets tab: an associated hero losing more than this share of their own build's score is flagged. Range 5–50 %.
-          </span>
-        </div>
-        <Stepper
-          value={solver.presetLossWarn}
-          onDec={() => solver.setPresetLossWarn((v) => Math.max(5, v - 5))}
-          onInc={() => solver.setPresetLossWarn((v) => Math.min(50, v + 5))}
+          onDec={() => solver.setTopN(stepBy("topN", -1))}
+          onInc={() => solver.setTopN(stepBy("topN", 1))}
         />
       </div>
 
@@ -150,32 +147,68 @@ export function SolverPane({
           <div className="flex items-start justify-between gap-4.5 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2.5">
             <div className="flex max-w-82.5 flex-col gap-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-[13px] font-medium text-white">Per-worker depth</span>
+                <span className="text-[13px] font-medium text-white">{SETTINGS.topK.label}</span>
                 <span className="rounded bg-amber-500/16 px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.08em] text-amber-300">advanced</span>
               </div>
               <span className="text-[11.5px] leading-snug text-zinc-400">
-                Heap each worker keeps before the merge. <b className="font-semibold text-amber-300">Too low silently drops good builds</b> — leave at default unless you know why. Range 100–5000.
+                <HelpText name="topK" range />
               </span>
             </div>
             <Stepper
               value={solver.topK}
               wide
-              onDec={() => solver.setTopK((v) => Math.max(100, v - 100))}
-              onInc={() => solver.setTopK((v) => Math.min(5000, v + 100))}
+              onDec={() => solver.setTopK(stepBy("topK", -1))}
+              onInc={() => solver.setTopK(stepBy("topK", 1))}
             />
           </div>
         )}
+      </div>
+
+      {/* Applied at once — no « applies next solve » here. */}
+      <SectionStrip title="Display" />
+
+      {/* Heatmap */}
+      <div className="flex items-center justify-between gap-4.5">
+        <div className="flex max-w-90 flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-white">{SETTINGS.heatmap.label}</span>
+          <span className="text-[11.5px] leading-snug text-zinc-400"><HelpText name="heatmap" /></span>
+        </div>
+        <Switch checked={solver.heatmap} onToggle={() => solver.setHeatmap((v) => !v)} />
+      </div>
+
+      <Divider />
+
+      {/* Compact result cards */}
+      <div className="flex items-center justify-between gap-4.5">
+        <div className="flex max-w-90 flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-white">{SETTINGS.compactCards.label}</span>
+          <span className="text-[11.5px] leading-snug text-zinc-400"><HelpText name="compactCards" /></span>
+        </div>
+        <Switch checked={solver.compactCards} onToggle={() => solver.setCompactCards((v) => !v)} />
+      </div>
+
+      <Divider />
+
+      {/* Presets loss warning */}
+      <div className="flex items-start justify-between gap-4.5">
+        <div className="flex max-w-82.5 flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-white">{SETTINGS.presetLossWarn.label}</span>
+          <span className="text-[11.5px] leading-snug text-zinc-400">
+            <HelpText name="presetLossWarn" range />
+          </span>
+        </div>
+        <Stepper
+          value={solver.presetLossWarn}
+          onDec={() => solver.setPresetLossWarn(stepBy("presetLossWarn", -1))}
+          onInc={() => solver.setPresetLossWarn(stepBy("presetLossWarn", 1))}
+        />
       </div>
 
       <div className="flex justify-end">
         <button
           type="button"
           onClick={() => {
-            solver.setWorkerCount(null);
-            solver.setTopN(1000);
-            solver.setTopK(1000);
-            solver.setHeatmap(true);
-            solver.setPresetLossWarn(DEFAULT_PRESET_LOSS_WARN);
+            resetSolverSettings(solver);
             setManualBuf(autoEffective);
           }}
           className="text-[11px] text-zinc-400 underline underline-offset-2 hover:text-zinc-300"

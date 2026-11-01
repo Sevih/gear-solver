@@ -17,7 +17,7 @@ import { usePersistedState } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
 import { PRESET_LOCKED_KEY, PRESET_RANK_KEY, type PresetRank } from "./lib/storage/presetPriority.js";
 import { presetHolds } from "./lib/presets/presetHolds.js";
-import { DEFAULT_PRESET_LOSS_WARN } from "./lib/storage/presetHeroes.js";
+import { useSetting } from "./hooks/useSetting.js";
 import { appliedNotice, equippedByHero, goneNotice, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, upsertWorklistEntry, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
@@ -167,24 +167,25 @@ export function App() {
   // Off by default — the stat-lock / drift / copy-dump tooling on the Builds
   // tab is a regression-debug aid for stat-formula work, not a normal user
   // feature. Toggling on in Settings reveals the lock buttons + drift badges.
-  const [debugStatLocks, setDebugStatLocks] = usePersistedState<boolean>("gs.debug.statLocks", false);
+  const [debugStatLocks, setDebugStatLocks] = useSetting("debugStatLocks");
   // Mirrors `gs.debug.solver` read by lib/log.ts — flips the orchestrator's
   // fan-out / merge / duration logging on. Persisted so it survives reloads
   // while profiling a slow solve.
-  const [debugSolver, setDebugSolver] = usePersistedState<boolean>("gs.debug.solver", false);
+  const [debugSolver, setDebugSolver] = useSetting("debugSolver");
   // Solver tuning (edited in Settings → Solver, consumed by the Builder).
+  // Keys, defaults and bounds are declared once in lib/settings.ts.
   // workerCount: null = auto (hardwareConcurrency − 1); a number pins the pool
   // size. Shares `gs.solver.workerCount` with the non-React `resolveWorkerCount`.
-  const [workerCount, setWorkerCount] = usePersistedState<number | null>("gs.solver.workerCount", null);
+  const [workerCount, setWorkerCount] = useSetting("workerCount");
   // topN = ranked builds returned to the table; topK = per-worker heap depth
   // before merge (advanced — too low drops good builds). Heatmap = results-table
   // column shading; compactCards = shorter gear cards under the results.
-  const [solverTopN, setSolverTopN] = usePersistedState<number>("gs.solver.topN", 1000);
-  const [solverTopK, setSolverTopK] = usePersistedState<number>("gs.solver.topK", 1000);
-  const [heatmap, setHeatmap] = usePersistedState<boolean>("gs.builder.heatmap", true);
-  const [compactCards, setCompactCards] = usePersistedState<boolean>("gs.builder.compactCards", false);
+  const [solverTopN, setSolverTopN] = useSetting("topN");
+  const [solverTopK, setSolverTopK] = useSetting("topK");
+  const [heatmap, setHeatmap] = useSetting("heatmap");
+  const [compactCards, setCompactCards] = useSetting("compactCards");
   // Presets tab: loss (percent) past which an associated hero's line turns orange.
-  const [presetLossWarn, setPresetLossWarn] = usePersistedState<number>("gs.solver.presetLossWarn", DEFAULT_PRESET_LOSS_WARN);
+  const [presetLossWarn, setPresetLossWarn] = useSetting("presetLossWarn");
   // Hero to preselect when the Builder tab opens — set by the Builds tab's
   // "Optimize →" button, consumed (and cleared) by BuilderScreen on mount so
   // a later normal visit to the Builder doesn't re-preselect a stale hero.
@@ -421,6 +422,7 @@ export function App() {
 
       <SettingsModal
         open={wizardOpen}
+        onboardingDone={onboardingDone}
         onClose={() => setWizardOpen(false)}
         onReady={() => {
           if (onboardingGate.acceptsReady()) setOnboardingDone(true);

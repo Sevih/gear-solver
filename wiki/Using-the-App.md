@@ -336,15 +336,19 @@ one the cards sit two per row.
 
 ## Settings (the Settings button)
 
-A tabbed modal:
+A tabbed modal. **Esc** closes it; it reopens on the last pane you visited (on **Setup** until the first
+setup check has passed).
 
 - **Setup** — the capture plugin checklist (game found in Steam · plugin installed · plugin
   loaded in the game), with Install / Update / Remove plugin and Launch game. The header shows
   your game build next to the client outerpedia last read, with a warning line when they differ
   (informational: capture still works).
-- **Solver** — worker count (Auto = use your CPU; or pin a number), how many results to return,
-  results heatmap on/off, compact result cards (shorter gear cards under the Builder's results;
-  Inventory and tooltips unchanged), and the Presets tab's loss warning (15 % by default).
+- **Solver** — under *Solver tuning* (applies on the next solve): worker count (Auto = use your CPU;
+  or pin a number), how many results to return and, under *Show advanced*, the per-worker depth;
+  under *Display* (applies at once): results heatmap on/off, compact result cards (shorter gear
+  cards under the Builder's results; Inventory and tooltips unchanged), and the Presets tab's loss
+  warning (15 % by default). **Reset solver settings to defaults** puts all of them back, compact
+  cards included.
 - **Data** — **Sync game data** (download the latest game tables after a patch), reset the onboarding
   wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
   (game version of the tables, hash and date — so you can see which snapshot is loaded).

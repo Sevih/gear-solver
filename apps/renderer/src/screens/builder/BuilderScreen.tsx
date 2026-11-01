@@ -65,6 +65,7 @@ import { RecoBuildPicker } from "./RecoBuildPicker.js";
 import { FilterFooter } from "./FilterFooter.js";
 import { PromptDialog } from "./PromptDialog.js";
 import { useSolverSession } from "./useSolverSession.js";
+import { settingDefault } from "../../lib/settings.js";
 
 interface BuilderScreenProps {
   inventory: Inventory | null;
@@ -120,13 +121,13 @@ interface BuilderScreenProps {
   /** Solver-pool override (Settings → Solver): null = auto. Drives the footer
    *  read-out and forces a worker-pool rebuild when it changes. */
   workerCount?: number | null;
-  /** Ranked builds returned by a solve (Settings → Solver, default 1000). */
+  /** Ranked builds returned by a solve (Settings → Solver; defaults in lib/settings.ts). */
   topN?: number;
-  /** Per-worker heap depth before merge (Settings → Solver, default 1000). */
+  /** Per-worker heap depth before merge (Settings → Solver). */
   topK?: number;
-  /** Results-table column heatmap on/off (Settings → Solver, default on). */
+  /** Results-table column heatmap on/off (Settings → Solver). */
   heatmap?: boolean;
-  /** Compact gear cards under the results (Settings → Solver, default off). */
+  /** Compact gear cards under the results (Settings → Solver). */
   compactCards?: boolean;
 }
 
@@ -148,7 +149,7 @@ function formatCombos(n: number): string {
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = null, topN = 1000, topK = 1000, heatmap = true, compactCards = false }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards") }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // The preset "Optimize preset →" aims at, tied to the hero it opened — set
   // with the patch below, dropped as soon as the user switches heroes.

@@ -1,6 +1,7 @@
 /**
- * Settings → Debug — developer toggles.
+ * Settings → Debug — developer toggles (texts in lib/settings.ts).
  */
+import { SETTINGS } from "../../lib/settings.js";
 import { SectionStrip, Switch } from "./SettingsControls.js";
 
 export function DebugPane({
@@ -15,14 +16,14 @@ export function DebugPane({
     <div className="flex flex-col gap-3">
       <SectionStrip title="Debug" />
       <ToggleAction
-        label="Stat lock & drift tooling (Builds)"
-        description="Reveal the per-stat lock buttons, drift indicators and copy-dump button on Builds cards. Used for stat-formula regression work — off by default."
+        label={SETTINGS.debugStatLocks.label}
+        description={SETTINGS.debugStatLocks.help}
         checked={debugStatLocks}
         onToggle={onToggleDebugStatLocks}
       />
       <ToggleAction
-        label="Solver fan-out logging"
-        description="Log the solver's fan-out (pool sizes, chunk count, workers) and per-solve merge/duration to the devtools console. Useful when profiling a slow solve — off by default."
+        label={SETTINGS.debugSolver.label}
+        description={SETTINGS.debugSolver.help}
         checked={debugSolver}
         onToggle={onToggleDebugSolver}
       />

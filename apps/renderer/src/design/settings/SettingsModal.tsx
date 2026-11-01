@@ -15,9 +15,13 @@
  *             Copy · Clear.
  *
  * The nav stays put; the content pane scrolls. The footer is contextual —
- * Re-check lives only in the Setup pane, Close is global.
+ * Re-check lives only in the Setup pane, Close is global. Escape closes the
+ * modal; it reopens on the last pane visited (`gs.settings.pane`), on Setup
+ * until onboarding is done.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useSetting } from "../../hooks/useSetting.js";
+import type { SettingsPane } from "../../lib/settings.js";
 import { cx } from "../cx.js";
 import { Spinner } from "../Shell.js";
 import type { DataSyncResult } from "../../lib/dataSync.js";
@@ -30,11 +34,14 @@ import { BackupPane } from "./BackupPane.js";
 import { DebugPane } from "./DebugPane.js";
 import { LogsPane } from "./LogsPane.js";
 
-type SettingsTab = "setup" | "solver" | "data" | "backup" | "debug" | "logs";
+type SettingsTab = SettingsPane;
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** `gs.onboarding.done` — until then every open lands on Setup (the
+   *  wizard) instead of the last pane visited. */
+  onboardingDone: boolean;
   /** Fired the first time the wizard observes a ready=true result so App.tsx
    *  can flip the onboarding-done flag and skip future auto-pop-ups. */
   onReady?: () => void;
@@ -93,13 +100,13 @@ const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> =
 ];
 
 export function SettingsModal({
-  open, onClose, onReady, onResetOnboarding, onAfterWipe, onSyncData, onStatus, status,
+  open, onClose, onboardingDone, onReady, onResetOnboarding, onAfterWipe, onSyncData, onStatus, status,
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
   solver, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy, log, onClearLog,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [tab, setTab] = useState<SettingsTab>("setup");
+  const [tab, setTab] = useSetting("settingsPane");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const mounted = useMountedRef();
@@ -130,11 +137,20 @@ export function SettingsModal({
   }
   const setupReady = Boolean(steam?.ready);
 
-  // The header's only entry point is the "Settings" button, and the modal doubles as
-  // the onboarding wizard — so every open lands on the Setup tab (the wizard),
-  // not whatever tab was last left. The other panes stay one rail-click away.
-  const [seenOpen, setSeenOpen] = useState(open);
-  if (open !== seenOpen) { setSeenOpen(open); if (open) setTab("setup"); }
+  // The modal doubles as the onboarding wizard: until onboarding is done every
+  // open (the first-launch auto-open included, hence `seenOpen` starting
+  // closed) lands on Setup. After that it reopens on the last pane visited.
+  const [seenOpen, setSeenOpen] = useState(false);
+  if (open !== seenOpen) { setSeenOpen(open); if (open && !onboardingDone) setTab("setup"); }
+
+  // Escape closes the modal. A nested dialog that handles its own Escape
+  // stops it (`stopPropagation` / `preventDefault`) so only that dialog closes.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   // Re-probe whenever the modal opens AND the Setup tab is showing (no point
   // hitting the backend when the user is on Solver/Data/etc.).

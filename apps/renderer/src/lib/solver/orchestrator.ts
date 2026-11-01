@@ -11,6 +11,7 @@
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import SolverWorker from "../../workers/solver.worker.ts?worker";
 import { debug, debugEnabled } from "../log.js";
+import { availableCores, readSetting, settingDefault, WORKER_COUNT_CEILING } from "../settings.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
 import type { PresetHolds } from "../presets/presetHolds.js";
 import { collapseTalismanVariants, compareBuilds, precomputeContext, TALISMAN_VARIANTS_KEPT, type ReforgeTickWeights } from "./engine.js";
@@ -72,25 +73,13 @@ export interface SolveDebugInfo {
   perWorker: Array<{ w: number; perm: number; searched: number }>;
 }
 
-/** localStorage key for a manual worker-count override (the future Settings
- *  panel writes here; read once at pool creation). */
-const WORKER_COUNT_KEY = "gs.solver.workerCount";
-
-/** Hard ceiling so a pathological override or an absurd core count can't spawn
- *  thousands of workers. */
-const WORKER_COUNT_CEILING = 64;
-
 /** The one worker-count rule, shared by the Settings input and
- *  `resolveWorkerCount`: [1, min(cores, ceiling)]. More workers than logical
- *  cores only adds contention. `cores` defaults to `hardwareConcurrency` (4
- *  when unavailable). */
+ *  `resolveWorkerCount`: [1, min(cores, ceiling)] — the bounds of the
+ *  `workerCount` entry of `lib/settings.ts`. More workers than logical cores
+ *  only adds contention. `cores` defaults to `hardwareConcurrency` (4 when
+ *  unavailable). */
 export function clampWorkerCount(n: number, cores: number = availableCores()): number {
   return Math.max(1, Math.min(n, cores, WORKER_COUNT_CEILING));
-}
-
-/** Logical core count, 4 when the browser does not say. */
-export function availableCores(): number {
-  return (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
 }
 
 /** Resolve how many solver workers to spawn. Default = `hardwareConcurrency - 1`
@@ -100,27 +89,14 @@ export function availableCores(): number {
  *
  *  `override` lets a React caller pass the live setting value directly (for a
  *  reactive read-out) instead of going through localStorage: pass `undefined`
- *  (default) to read the persisted `gs.solver.workerCount`, a number to force a
- *  manual count, or `null` to force the auto default. The non-React orchestrator
- *  always uses the localStorage path. */
+ *  (default) to read the persisted `gs.solver.workerCount` (`readSetting`), a
+ *  number to force a manual count, or `null` to force the auto default. The
+ *  non-React orchestrator always uses the localStorage path. */
 export function resolveWorkerCount(override?: number | null): number {
   const cores = availableCores();
-  const ov = override !== undefined ? override : readWorkerCountOverride();
-  if (ov != null && Number.isFinite(ov) && ov >= 1) return clampWorkerCount(ov, cores);
+  const ov = override !== undefined ? override : readSetting("workerCount");
+  if (ov != null && Number.isFinite(ov) && ov >= 1) return clampWorkerCount(Math.trunc(ov), cores);
   return clampWorkerCount(cores - 1, cores);
-}
-
-/** Read the persisted manual worker-count override, or null when unset/auto. */
-function readWorkerCountOverride(): number | null {
-  try {
-    const raw = localStorage.getItem(WORKER_COUNT_KEY);
-    if (!raw) return null;
-    const n = parseInt(raw, 10);
-    return Number.isFinite(n) ? n : null;
-  } catch {
-    // localStorage can throw in locked-down contexts — fall back to the default.
-    return null;
-  }
 }
 
 export interface OrchestratorCallbacks {
@@ -174,9 +150,9 @@ export interface SolveArgs {
   targetPresetNum?: number | null;
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
-  /** Per-worker local top-K (orchestrator merges → returns top-N). Default 1000. */
+  /** Per-worker local top-K (orchestrator merges → returns top-N). Default: `settingDefault("topK")`. */
   topK?: number;
-  /** Final ranked list size returned to the UI. Default 1000. */
+  /** Final ranked list size returned to the UI. Default: `settingDefault("topN")`. */
   topN?: number;
 }
 
@@ -198,7 +174,7 @@ export class SolverOrchestrator {
   private activeChunks = 0;
   private active = false;
   private mode: SolveMode = "score";
-  private topN = 1000;
+  private topN = settingDefault("topN");
   /** Pool sizes — from the main-thread precompute (`solve()`); a worker's
    *  first progress event only fills them when no precompute ran. */
   private poolSizes: PoolSizes | undefined;
@@ -301,14 +277,14 @@ export class SolverOrchestrator {
     // build can be a real chunk of the wait on a big inventory).
     this.startedAt = performance.now();
     this.mode = args.mode;
-    this.topN = args.topN ?? 1000;
+    this.topN = args.topN ?? settingDefault("topN");
     this.buf = [];
     this.brokenSetsRejected = 0;
     this.workersDone = 0;
     this.poolSizes = undefined;
     this.reforgeTickWeights = null;
     this.stats = this.workers.map(() => ({ permutations: 0, searched: 0 }));
-    const topK = args.topK ?? 1000;
+    const topK = args.topK ?? settingDefault("topK");
     // Build the precompute ONCE on the main thread — broadcast to every
     // worker via `precomputed`. Without this, each worker repeats the same
     // composeCharStats + per-slot filter + simulateReforges + combo-budget prune +

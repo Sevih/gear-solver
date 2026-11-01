@@ -19,10 +19,6 @@ export interface PresetHeroes {
 export const PRESET_HEROES_KEY = "gs.presetHeroes";
 const KEY = PRESET_HEROES_KEY;
 
-/** Default loss (percent) past which an associated hero's line turns orange —
- *  the `gs.solver.presetLossWarn` setting (Settings → Solver). */
-export const DEFAULT_PRESET_LOSS_WARN = 15;
-
 /** Preset number (as a string key) → its heroes. */
 export type PresetHeroesMap = Record<string, PresetHeroes>;
 

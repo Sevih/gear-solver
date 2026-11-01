@@ -8,6 +8,66 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚙️ Registre des réglages, Reset complet, bandeau juste, Échap et dernier panneau de Settings (U2, G90) (2026-11-01)
+- ✅ **Pourquoi.** Deuxième lot de la refonte (U2 de `docs/ux-audit-2026-11-01.md`, §3.7 et « Deux lecteurs » du §3.9) :
+  les défauts de `topN`, `topK`, `heatmap`, `compactCards` étaient écrits trois fois (`App.tsx`, défauts de props de
+  `BuilderScreen.tsx`, Reset de `SolverPane.tsx`), `gs.solver.workerCount` et `gs.debug.solver` lus à la fois par
+  l'état React et par une lecture brute de localStorage (`lib/solver/orchestrator.ts`, `lib/log.ts`), le Reset
+  oubliait `compactCards`, le bandeau « applies next solve » coiffait aussi la heatmap et les cartes compactes, et
+  Settings ne se fermait pas par Échap ni ne rouvrait le panneau quitté. Aucun réglage ne change de panneau (U12),
+  aucune clé `gs.*` n'est renommée.
+- ✅ **Registre `apps/renderer/src/lib/settings.ts`** (pur) : une déclaration par réglage (`SETTINGS`) — `workerCount`
+  (`gs.solver.workerCount`, `null` = auto, bornes 1 à min(cœurs, 64)), `topN` (1000, 10–5000, pas 100), `topK` (1000,
+  100–5000, pas 100), `heatmap` (`gs.builder.heatmap`, vrai), `compactCards` (faux), `presetLossWarn` (15, 5–50 %, pas
+  5), `debugSolver`, `debugStatLocks` (faux) et `settingsPane` (`gs.settings.pane`, `"setup"`, hors sauvegarde
+  comme tous les autres) — avec clé, défaut, bornes / pas, libellé, aide (textes actuels des panneaux, la mise en
+  gras de « Too low silently drops good builds » via `helpEmphasis`) et `appliesNextSolve` (vrai pour workers, topN,
+  topK). Helpers : `settingDefault`, `clampSetting` (arrondi au pas puis bornes ; `null` reste auto ; panneau inconnu
+  → Setup), `parseSetting` / `readSetting` (défaut si absent, illisible, d'un autre type ou localStorage
+  inaccessible, valeur stockée telle quelle sinon ; un `"1"` posé à la main vaut vrai, comme le tolérait `log.ts`),
+  `settingRange` (la ligne « Range 10–5000. »), `resetSettings`. `availableCores` et le plafond de 64 y vivent ;
+  `clampWorkerCount` reste dans l'orchestrateur (même règle, mêmes tests).
+- ✅ **Deux lecteurs, une déclaration.** Côté React, nouveau `hooks/useSetting.ts` (`usePersistedState` avec la clé,
+  le défaut et `parseSetting` du registre) pour les huit états d'`App.tsx` et le panneau du modal ; hors React,
+  `resolveWorkerCount` lit `readSetting("workerCount")` (un nombre fractionnaire est tronqué comme le faisait
+  `parseInt`) et `debugEnabled` de `lib/log.ts` lit `readSetting("debugSolver" | "debugStatLocks")`. Les défauts de
+  props de `BuilderScreen.tsx` et le repli `topN` / `topK` de l'orchestrateur passent par `settingDefault` ;
+  `DEFAULT_PRESET_LOSS_WARN` quitte `lib/storage/presetHeroes.ts`. `SolverPane.tsx` et `DebugPane.tsx` tirent
+  libellés, aides, bornes et pas du registre (steppers par `clampSetting` : depuis le plancher de 10, « + » mène
+  désormais à 100 et non 110).
+- ✅ **Reset complet.** « Reset solver settings to defaults » appelle `resetSolverSettings`, qui passe
+  `SOLVER_PANE_SETTINGS` à `resetSettings` : les six réglages du panneau reviennent au défaut du registre,
+  `compactCards` et `presetLossWarn` compris (une table de setters typée oblige à en fournir un par réglage listé).
+- ✅ **Bandeau juste.** « Solver tuning · applies next solve » ne coiffe plus que Worker threads, Result count et le
+  dépliant « Show advanced » (Per-worker depth), remonté juste sous Result count pour rester sous son bandeau ;
+  Results heatmap, Compact result cards et Preset loss warning suivent sous un bandeau « Display » sans mention, dans
+  le même ordre entre eux. Même panneau pour tous.
+- ✅ **Settings : Échap et dernier panneau.** `SettingsModal.tsx` ferme le modal sur Échap (écouteur posé tant qu'il
+  est ouvert ; un dialogue imbriqué qui traite son Échap l'arrête par `stopPropagation` / `preventDefault` — il n'y
+  en a aucun aujourd'hui) ; le panneau actif est `useSetting("settingsPane")`, rouvert tel quel, sauf tant que
+  `gs.onboarding.done` est faux (nouvelle prop `onboardingDone` passée par `App.tsx`) : chaque ouverture, y compris
+  l'ouverture automatique du premier lancement, atterrit alors sur Setup comme avant.
+- ✅ **Docs.** `wiki/Using-the-App.md` (Échap, dernier panneau, deux groupes du panneau Solver, Reset complet),
+  `docs/reference.md` et `wiki/Engine-Reference.md` (ligne du nouveau test, `readSetting` dans celle de
+  `workerCount.test.ts`, toggle `gs.debug.statLocks` déclaré dans le registre). `docs/todo.md` n'avait pas d'item lié.
+- ✅ **Tests.** Nouveau `apps/renderer/test/settings.test.ts` (18 tests) : clés uniques `gs.*`, défaut, libellé et aide
+  pour chaque réglage, défauts actuels, `appliesNextSolve` limité à workers / topN / topK ; `clampSetting` (bornes,
+  arrondi au pas, workers bornés par les cœurs et 64, `null` gardé, panneau inconnu) ; `readSetting` (défaut sur
+  absent, invalide, localStorage qui lève ; valeur stockée sinon ; `debugEnabled` le suit), localStorage stubé ; le
+  Reset par le **helper pur** `resetSettings` et par `resetSolverSettings` du panneau (setters enregistreurs) remet
+  `compactCards` à faux ; **rendu statique** de `SolverPane` (une seule mention « applies next solve », les trois
+  réglages du solveur entre elle et « Display », les trois autres après, plages et gras) et de `SettingsModal`
+  (panneau stocké rouvert onboarding fait, Setup sinon). `workerCount.test.ts` passe inchangé.
+- ✅ **Vérification.** `grep -rn "localStorage.getItem(\"gs\.solver\|localStorage.getItem(\"gs\.debug" apps/renderer/src/lib`
+  ne rend rien, et aucune clé de ces réglages n'est plus écrite hors `lib/settings.ts` dans `apps/renderer/src`.
+  `npm run typecheck` vert (dernière ligne `> tsc --noEmit`) ; `npm test` : `Tests  169 passed (169)` (core), `Tests
+  238 passed (238)` (desktop), `Tests  943 passed (943)` (renderer) ; `npm run lint` : `✖ 8 problems (0 errors, 8
+  warnings)`, comme avant.
+- ⏳ Sevih : lancer l'app pour voir les deux groupes du panneau Solver (le dépliant avancé remonté sous Result count),
+  Échap, et la réouverture sur le dernier panneau. Laissé hors du lot : la note de pied du panneau Solver (« Changes
+  are saved and apply on the next solve. », `SettingsModal.tsx`) dit encore « next solve » pour tout le panneau ; deux
+  commentaires de `ResultsTable.tsx` citent « topN=1000 » en prose.
+
 ### 🏷️ Vocabulaire unifié et textes corrigés, sans rien déplacer (U1, G89) (2026-11-01)
 - ✅ **Pourquoi.** Premier lot de la refonte décidée le 01/11 (U1 de `docs/ux-audit-2026-11-01.md`) : un mot par
   notion (glossaire 5.c) et les textes faux relevés par l'audit, sans déplacer aucun écran, contrôle ni réglage ; les
