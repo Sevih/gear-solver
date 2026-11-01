@@ -42,6 +42,7 @@ import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./
 import { allSetsComplete, armorSetWhitelist, planSetIds, setsFeasible } from "./setPlans.js";
 import { gearPieceQualityTier, QUALITY_TIERS, type QualityTier } from "../quality.js";
 import { applyRerollPotential } from "./reroll.js";
+import { hasPriority } from "../heroPriority/weights.js";
 
 /** Map engine GearSlot → design SlotId used by the BuilderScreen's
  *  mainPicks / effect chip maps. Only `ooparts` differs (UI calls it
@@ -574,7 +575,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     ultimate: req.userSkills.ultimate,
     chainPassive: req.userSkills.chainPassive,
   };
-  const hasPriority = Object.values(filters.priority).some((v) => v !== 0);
+  const prioritized = hasPriority(filters.priority);
 
   // Reforge simulation — if the user toggled "Use reforged stats", clone
   // each piece with its remaining reforge attempts greedily allocated to
@@ -607,7 +608,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   let reforgeWeights: ReforgeTickWeights | null = null;
   const reroll = filters.options.rerollPotential ?? false;
   if ((reforgeMode !== "disable" || reroll) && !filters.options.onlyMaxed) {
-    if (reforgeMode !== "disable" && !hasPriority) {
+    if (reforgeMode !== "disable" && !prioritized) {
       const equippedNow = inv.gear.filter((g) => g.equippedBy === heroUid);
       reforgeWeights = reforgeTickWeights(
         composed.noGearStats, composed.scaling, equippedNow, game,
@@ -675,7 +676,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       const cur = equipped.find((g) => g.slot === slot);
       return cur ? new Set([cur.uid]) : undefined;
     };
-    if (hasPriority) {
+    if (prioritized) {
       // Explicit substat priority (SOLVE or SOLVE CP) — rank each slot by the
       // per-roll priority score. The build score is largely additive over
       // per-piece scores, so the highest-scoring pieces per slot make the best
@@ -839,7 +840,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
   // SOLVE CP without a priority: the reference composition the gems are weighed
   // on (the equipped build, its CP evaluator and Talisman).
-  const cpRef = !hasPriority && req.mode === "cp"
+  const cpRef = !prioritized && req.mode === "cp"
     ? {
         cpEval: makeCpEvaluator({ showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused }),
         talisman: equipped.find((g) => g.slot === "ooparts") ?? null,
@@ -1011,13 +1012,13 @@ export function simulateReforges(
   const maxReforges = maxReforgesOverride ?? maxReforgesOf(piece, piece.ascended, rules);
   const remaining = Math.max(0, maxReforges - piece.reforgeCount);
   if (remaining === 0 || piece.subs.length === 0) return piece;
-  const hasPriority = Object.values(priority).some((v) => v !== 0);
+  const prioritized = hasPriority(priority);
   const subs: RolledStat[] = piece.subs.map((s) => ({ ...s }));
   // Pre-compute per-sub scoring data; mutated in the loop as ticks accumulate.
   const meta = subs.map((s) => {
     const perTick = (s.ticks && s.ticks > 0) ? s.value / s.ticks : s.value;
     const norm = ROLL_NORMS[s.stat] ?? 100;
-    const w = hasPriority
+    const w = prioritized
       ? priority[STAT_TO_PRIORITY[s.stat] ?? s.stat] ?? 0
       : tickWeights
         ? tickWeights[reforgeTickKey(s.stat, s.percent)] ?? 0
@@ -1645,7 +1646,7 @@ export async function solveChunk(
   // with an empty allocation ("keep the piece's gems"). SOLVE CP without a
   // priority keeps its CP allocation and gets only the socketed fallback.
   const hasMinSpec = statFilterSpecs.some((sp) => sp.min > -Infinity);
-  const serveMinsByAlloc = !(mode === "cp" && !Object.values(filters.priority).some((v) => v !== 0));
+  const serveMinsByAlloc = !(mode === "cp" && !hasPriority(filters.priority));
   const gemGain = (g: ScoredGem): number => rollGainOnSheet(scaling, STAT_TO_PRIORITY[g.stat] ?? g.stat, g.value, g.percent);
   // Memo of the serving allocations — a trie of integer keys: the variant and
   // pre-gem CHC (`capAllocCache`'s key), then one level per missed minimum

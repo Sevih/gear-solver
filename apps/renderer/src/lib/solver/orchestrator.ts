@@ -14,6 +14,7 @@ import { debug, debugEnabled } from "../log.js";
 import { availableCores, readSetting, settingDefault, WORKER_COUNT_CEILING } from "../settings.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
 import type { PresetHolds } from "../presets/presetHolds.js";
+import { hasPriority } from "../heroPriority/weights.js";
 import { collapseTalismanVariants, compareBuilds, precomputeContext, TALISMAN_VARIANTS_KEPT, type ReforgeTickWeights } from "./engine.js";
 import type {
   EquippedScope,
@@ -358,7 +359,7 @@ export class SolverOrchestrator {
       ? {
           hero: args.heroUid, mode: args.mode,
           topPct: args.filters.topPct,
-          hasPriority: Object.values(args.filters.priority).some((v) => v !== 0),
+          hasPriority: hasPriority(args.filters.priority),
           equippedScope: args.filters.options.equippedScope ?? "all",
           workers: this.workers.length, chunks: chunkCount, maxPoolHit,
           poolSizes: this.poolSizes, precomputeMs,

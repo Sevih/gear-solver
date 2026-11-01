@@ -67,8 +67,8 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      **Câblé end-to-end** : cancel mid-solve (`MessageChannel` yield), colonne Upg
      (calculée, triable, filtrable), Exclude-equipped multi-select, simulation de reforge,
      allocation de gemmes recommandée, Save/Remove build + Filter presets par héros
-     (localStorage) + **mémoire auto des filtres par héros** (session-scoped : snapshot au switch de
-     héros, restauré au retour), bouton Optimize → depuis l'onglet Builds. **Reste monté entre onglets**
+     (localStorage) + **mémoire auto des filtres par héros** (localStorage depuis U4 : écrite à
+     chaque changement, restaurée au retour et au relancement), bouton Optimize → depuis l'onglet Builds. **Reste monté entre onglets**
      (`display:none`) → résultats / filtres / héros conservés + solve qui tourne en fond.
      Deux encadrés d'aide par héros : *Sub tick value* (rentabilité flat vs % d'un tick de sub,
      `lib/subValue.ts`) et *Damage / +1%* (gain de dégâts pour +1% des stats de scaling /

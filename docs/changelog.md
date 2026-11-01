@@ -8,6 +8,62 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚖️ Une seule source pour les poids de priorité d'un héros, filtres gardés entre les lancements, lus en direct par Presets (U4, G92) (2026-11-01)
+- ✅ **Pourquoi.** Quatrième lot de la refonte (U4 de `docs/ux-audit-2026-11-01.md`, §3.1, ligne `gs.solver.heroFilters`
+  de §3.9, arbitrage D4) : `gs.solver.heroFilters` vivait en sessionStorage (perdu à chaque lancement), n'était écrit
+  par le Builder qu'**au changement de héros** (`snapshotOnHeroSwitch`) et relu **une fois** par Presets au montage.
+  Résultat : le héros ouvert dans le Builder était noté par Presets avec d'anciens poids ; un héros ouvert pour la
+  première fois avait « Score 0 » dans le Builder quand Presets le notait avec son dernier build sauvé ; tout se
+  perdait au relancement. Le prédicat « au moins un poids non nul » était recopié sept fois.
+- ✅ **Module pur `apps/renderer/src/lib/heroPriority/weights.ts`.** `hasPriority(priority)` (le seul prédicat, il
+  remplace les copies de `engine.ts` ×3, `orchestrator.ts`, `reroll.ts`, `SubstatPriorityPanel.tsx` et
+  `evaluate.ts` ; les variables locales homonymes deviennent `prioritized`), `effectivePriority` (déménagée
+  d'`evaluate.ts`), `latestSavedBuild` (idem, lue aussi par `bestKnownFor`) et `priorityOf(uid, { heroFilters,
+  savedBuilds })` → `{ priority, source: "filters" | "saved" } | null` : filtres gardés du héros s'ils portent un
+  poids, sinon `reforge.priority` du build sauvé le plus récent, sinon null. `presetPriorityOf` disparaît ; la source
+  `"session"` devient `"filters"` (`PrioritySource`, `PriorityPick` déménagent avec).
+- ✅ **Filtres durables, possédés par App.** `lib/storage/heroFilters.ts` lit et écrit `gs.solver.heroFilters` en
+  **localStorage** (même clé, même sérialisation ; une valeur restée en sessionStorage est ignorée, pas migrée).
+  `App.tsx` tient la map (`useState(loadHeroFilters)` + `persistHeroFilters` en effet, comme les rangs) et la recharge
+  sur `onDataPruned` ; elle est passée au Builder (`heroFilters` + `onHeroFiltersChange`) et à Presets
+  (`heroFilters`). Le Builder écrit l'entrée du héros ouvert **à chaque changement** de ses filtres (nouvel effet
+  déclaré avant l'effet de changement de héros, pour que les filtres sortants ne soient jamais écrits sous le héros
+  entrant), **sans debounce** : une mise à jour d'état d'App par changement, la persistance dans l'effet d'App. Un
+  jeu tout juste chargé n'est écrit qu'à son premier changement (`loadedFiltersRef`), si bien qu'un héros seulement
+  ouvert garde « priority from saved build » dans Presets. `snapshotOnHeroSwitch` disparaît au profit de
+  `withHeroFilters(map, uid, live)` ; le rechargement de la map dans le `onDataPruned` du Builder aussi (App s'en
+  charge, le Builder élague toujours ses filtres vivants).
+- ✅ **Même héros, même score.** À l'ouverture d'un héros **sans** filtres gardés (y compris le héros initial
+  d'« Optimize → »), le Builder part des défauts avec la priorité de `priorityOf` (celle du dernier build sauvé s'il
+  y en a un) au lieu d'une priorité vide : `filtersForHero` prend un `fallbackPriority`, appelé par la fonction
+  `startFiltersFor` de `BuilderScreen.tsx`. Presets note par `priorityOf(uid, { heroFilters, savedBuilds })` sur la
+  prop : un poids changé dans le Builder compte au rendu suivant, sans remonter l'onglet. Textes de Presets corrigés
+  (« … in the Builder this session » → « … in the Builder », titre de « priority from saved build » sans « this
+  session »).
+- ✅ **Tests.** Nouveau `apps/renderer/test/weights.test.ts` (6 tests : `hasPriority` / `effectivePriority` vide,
+  absente, que des zéros, un poids ; `priorityOf` filtres avec poids → `"filters"`, filtres sans poids ou absents +
+  build sauvé → le plus récent, `"saved"`, rien → null). `heroFilters.test.ts` réécrit (6 tests : aller-retour en
+  localStorage stubé, rien en sessionStorage, valeur de sessionStorage ignorée ; ouverture sur le jeu gardé, repli
+  sur les défauts, défauts + priorité de repli sans toucher aux défauts ; `withHeroFilters`). Le test de
+  `presetPriorityOf` (`presetsGems.test.ts`) passe par `priorityOf` ; `dataHash.test.ts` lit et écrit la map en
+  localStorage ; `presets.test.ts` importe `effectivePriority` du nouveau module ; `presetCardOpen.test.ts` passe
+  `heroFilters: {}`. `grep -rn "some((v) => v !== 0)" apps/renderer/src` ne rend plus que `lib/heroPriority/weights.ts`.
+- ✅ **Docs.** `docs/solver.md` et `wiki/Solver.md` (mémoire par héros durable, ajoutée côté wiki qui ne l'avait pas ;
+  paragraphe « Priority » de Presets ; arbre `heroPriority/weights.ts`, `storage/heroFilters.ts`),
+  `wiki/Using-the-App.md` (priorité gardée entre les lancements, vue tout de suite), `docs/reference.md` et
+  `wiki/Engine-Reference.md` (arbre, ligne du nouveau test, ligne `presetsGems`), `docs/STATUS.md` (« session-scoped »
+  corrigé). `docs/todo.md` n'avait pas d'item lié.
+- ✅ **Vérification.** `npm run typecheck` vert (dernière ligne `> tsc --noEmit`) ; `npm test` : `Tests  169 passed
+  (169)` (core), `Tests  238 passed (238)` (desktop), `Tests  959 passed (959)` (renderer) ; `npm run lint` : `✖ 8
+  problems (0 errors, 8 warnings)`, comme avant (mêmes fichiers).
+- ⏳ **À tester par Sevih (app lancée).** Régler des poids sur un héros, aller dans Presets sans changer de héros : le
+  score suit ; relancer l'app : le héros rouvre avec ses filtres ; ouvrir un héros jamais réglé mais avec un build
+  sauvé : la priorité du build est là dans le Builder et Presets donne le même score.
+- ⏳ **Laissé.** Un héros dont les filtres gardés ont une priorité **vide** (poids tous retirés à la main) rouvre
+  ainsi dans le Builder alors que Presets le note avec son build sauvé, comme le veut le lot (repli seulement sans
+  filtres gardés). `gs.solver.heroFilters` reste hors sauvegarde (U9) ; la reco outerpedia comme priorité par défaut
+  est U6.
+
 ### 🏅 Rangs par défaut des héros et des presets posés par App à chaque import, plus par les écrans (U3, G91) (2026-11-01)
 - ✅ **Pourquoi.** Troisième lot de la refonte (U3 de `docs/ux-audit-2026-11-01.md`, §3.14, arbitrage D13) : le rang
   par défaut d'un héros (CP décroissant) n'était posé que par un effet de `screens/BuildsScreen.tsx` au montage de

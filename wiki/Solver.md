@@ -231,6 +231,13 @@ Picker (searchable combobox) + portrait + 4 action buttons.
 - **Cancel**: interrupts the solve (workers return their partial heap, the orchestrator merges what we have).
 - **Reset filters**: `dispatch({type: "resetAll"})` — clears the entire reducer.
 
+**Per-hero filter memory** (durable): every change of the open hero's filters is written to
+`gs.solver.heroFilters` (`heroFilters.ts`, localStorage, owned by App and passed to the Builder and Presets),
+and opening a hero **restores** their kept set instead of resetting everything — on a hero switch as on a
+relaunch; distinct from the named **Filter sets**. A hero without a kept set starts from the defaults with the
+priority of `priorityOf` (`lib/heroPriority/weights.ts`: their most recent saved build's, if they have one),
+the one Presets scores them with. The *results* are still cleared.
+
 ### Stats
 Snapshot of the `FinalStats` of the build currently equipped on the hero (left column)
 vs the build selected in the table (right column, em-dash as long as no row
@@ -562,13 +569,12 @@ a reco (404, error, offline): the outfit alone. The Builder receives the patch w
 status line says "Optimizing preset #<num> <name> — same weapon / accessory / talisman effects required, N
 priority substats from the outfit + outerpedia's "<build>" reco." (or "from the outfit", then the notes).
 
-**Priority.** `presetPriorityOf` reads, in order, the Builder priority of the session
-(`gs.solver.heroFilters`, sessionStorage: kept over a window reload, gone at each launch; written when the
-Builder switches from one hero to another, so the hero open in the Builder counts with the set they had when
-last left, or not at all), then `reforge.priority`
+**Priority.** `priorityOf` (`lib/heroPriority/weights.ts`, the same source as the Builder) reads, in order,
+the priority the Builder keeps for the hero (`gs.solver.heroFilters`, localStorage, written at every change
+and read live from App: a weight changed in the Builder counts at the next render), then `reforge.priority`
 of the hero's most recent saved build, then nothing; a priority without any weight falls through to the next
-source. The line says "priority from saved build" in the second case. A hero with no saved build and no
-priority left in the Builder since launch has no score. An associated hero is compared to their **best known outfit** (`bestKnownFor`:
+source (`hasPriority`, the one "at least one non-zero weight" predicate). The line says "priority from saved
+build" in the second case. A hero with no saved build and no priority in the Builder has no score. An associated hero is compared to their **best known outfit** (`bestKnownFor`:
 their most recent saved build, re-scored with the **current** priority, else their current gear):
 `loss = 1 − score(preset) / score(best)`, shown in % "vs saved build" / "vs current gear"; past the
 threshold (15 % by default, Settings → Solver, `gs.solver.presetLossWarn`) the line turns orange with
@@ -739,15 +745,18 @@ apps/renderer/src/
 ├── lib/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
 │   ├── overcap.ts                 ← overcapOf + overcapText (wasted CRC 102 / PEN 100 caps, Builds and Presets)
+│   ├── heroPriority/
+│   │   └── weights.ts              ← hasPriority + effectivePriority + priorityOf: a hero's priority, one source (Builder, Presets, solver)
 │   ├── presets/
 │   │   ├── presetRows.ts           ← in-game presets: pieces, wearers (presetSignature), missing / shared pieces, class, filter / sort
-│   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetPriorityOf + presetOvercap (Presets tab)
+│   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetOvercap (Presets tab)
 │   │   ├── eeGems.ts               ← bestEeGemsFor: EE gems per hero, the preset's pieces fixed
 │   │   ├── presetWorklist.ts       ← presetWorklistFor: the Worklist entry of one hero of the preset
 │   │   └── optimize.ts             ← presetOptimizePatch + presetOptimizeNote: "Optimize preset →" (effects required, priority substats)
 │   ├── storage/
 │   │   ├── savedBuilds.ts          ← per-hero build bookmarks (localStorage)
 │   │   ├── presetHeroes.ts         ← reference + associated heroes per preset (localStorage)
+│   │   ├── heroFilters.ts          ← filters kept per hero (localStorage, written at every change)
 │   │   └── filterPresets.ts        ← per-hero filter snapshots (localStorage)
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters

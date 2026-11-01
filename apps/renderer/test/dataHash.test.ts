@@ -19,14 +19,10 @@ function stubStorage(): { store: Map<string, string>; storage: Storage } {
   return { store, storage };
 }
 let local: Map<string, string>;
-let session: Map<string, string>;
 beforeEach(() => {
   const l = stubStorage();
-  const s = stubStorage();
   local = l.store;
-  session = s.store;
   (globalThis as { localStorage?: Storage }).localStorage = l.storage;
-  (globalThis as { sessionStorage?: Storage }).sessionStorage = s.storage;
 });
 
 /** Data with armor sets 1 and 2, and the effects "3001" (weapon) and
@@ -97,18 +93,18 @@ function seed(hash: string | null) {
   local.set(FILTER_PRESETS_KEY, JSON.stringify({
     h1: [{ id: "p1", name: "speed", heroUid: "h1", createdAt: 0, filters: { ...TUNED, excludedHeroes: ["h2"] } }],
   }));
-  session.set(HERO_FILTERS_KEY, JSON.stringify({ h1: { ...TUNED, excludedHeroes: [] } }));
+  local.set(HERO_FILTERS_KEY, JSON.stringify({ h1: { ...TUNED, excludedHeroes: [] } }));
 }
 
 describe("reconcileDataHash", () => {
   it("first time: stores the hash, touches nothing", () => {
     seed(null);
     const presets = local.get(FILTER_PRESETS_KEY);
-    const heroFilters = session.get(HERO_FILTERS_KEY);
+    const heroFilters = local.get(HERO_FILTERS_KEY);
     expect(reconcileDataHash("h-new", GAME)).toBe("first");
     expect(local.get(DATA_HASH_KEY)).toBe("h-new");
     expect(local.get(FILTER_PRESETS_KEY)).toBe(presets);
-    expect(session.get(HERO_FILTERS_KEY)).toBe(heroFilters);
+    expect(local.get(HERO_FILTERS_KEY)).toBe(heroFilters);
   });
 
   it("same hash: nothing", () => {

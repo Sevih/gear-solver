@@ -18,7 +18,8 @@ import { computeFinalStats, type FinalStats, type FinalStatsBaseline, type GemOv
 import { computeCheapRatings, computeScore, type CheapRatings } from "../solver/ratings.js";
 import { dmgSkillInfo } from "../dmgSkill.js";
 import { overcapOf, type Overcap } from "../overcap.js";
-import type { SavedBuild, SavedBuildsMap } from "../storage/savedBuilds.js";
+import type { SavedBuildsMap } from "../storage/savedBuilds.js";
+import { effectivePriority, latestSavedBuild, type PriorityPick, type PrioritySource } from "../heroPriority/weights.js";
 
 /** What the evaluation needs of one hero, composed once per screen render. */
 export interface HeroBase {
@@ -33,18 +34,9 @@ export interface HeroBase {
   turnFactor: number;
   /** The hero's Builder priority; null when none is set (no score then). */
   priority: Record<string, number> | null;
-  /** Where `priority` comes from — the Builder's session filters (stored when
-   *  the Builder switches away from the hero), or the most recent saved build
-   *  when none is stored. */
+  /** Where `priority` comes from — the Builder's kept filters for the hero,
+   *  or their most recent saved build (`priorityOf`). */
   prioritySource?: PrioritySource;
-}
-
-export type PrioritySource = "session" | "saved";
-
-/** A priority and where it was found (`heroBases`' `priorityOf`). */
-export interface PriorityPick {
-  priority: Record<string, number>;
-  source: PrioritySource;
 }
 
 export interface PresetEvalContext {
@@ -68,11 +60,6 @@ export interface PresetEval {
 export interface BestKnown extends PresetEval {
   /** "saved" = the most recent saved build, "current" = the equipped gear. */
   source: "saved" | "current";
-}
-
-/** A priority counts when at least one stat carries a non-zero weight. */
-export function effectivePriority(p: Record<string, number> | null | undefined): Record<string, number> | null {
-  return p && Object.values(p).some((w) => w !== 0) ? p : null;
 }
 
 function rate(hero: HeroBase, finalStats: FinalStats): PresetEval {
@@ -181,7 +168,8 @@ export function presetOvercap(shown: PresetEval | null, socketed: PresetEval | n
 
 /** Compose every roster hero once (no gear) — same inputs as the Builds tab
  *  and the Builder. `priorityOf` returns the hero's priority and its source
- *  (`presetPriorityOf`). Heroes missing game data are left out. */
+ *  (`heroPriority/weights.ts`' `priorityOf`). Heroes missing game data are
+ *  left out. */
 export function heroBases(
   inventory: Inventory,
   game: GameData | null,
@@ -199,30 +187,6 @@ export function heroBases(
     out.set(c.uid, { ...base, priority, ...(priority && pick ? { prioritySource: pick.source } : {}) });
   }
   return out;
-}
-
-/** The priority the Presets tab scores a hero with: the Builder's filters of
- *  this session (`gs.solver.heroFilters`, sessionStorage — kept over a window
- *  reload, gone at each launch; written when the Builder switches away from a
- *  hero, so the hero open in the Builder has their previous set, if any), else
- *  the priority the hero's most recent saved build was solved with
- *  (`reforge.priority`), else null. A priority without any weight doesn't
- *  count, the next source is read. */
-export function presetPriorityOf(
-  sessionPriority: (uid: string) => Record<string, number> | null | undefined,
-  savedBuilds: SavedBuildsMap,
-): (uid: string) => PriorityPick | null {
-  return (uid) => {
-    const session = effectivePriority(sessionPriority(uid));
-    if (session) return { priority: session, source: "session" };
-    const latest = latestSavedBuild(savedBuilds, uid);
-    const saved = effectivePriority(latest?.reforge?.priority);
-    return saved ? { priority: saved, source: "saved" } : null;
-  };
-}
-
-function latestSavedBuild(savedBuilds: SavedBuildsMap, uid: string): SavedBuild | null {
-  return (savedBuilds[uid] ?? []).reduce<SavedBuild | null>((best, b) => (!best || b.createdAt > best.createdAt ? b : best), null);
 }
 
 function heroBase(c: Character, game: GameData, userGeasLevels: UserGeasLevels | null, userCodexLevel: number | null): Omit<HeroBase, "priority"> | null {

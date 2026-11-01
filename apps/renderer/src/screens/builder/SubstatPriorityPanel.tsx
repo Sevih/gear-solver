@@ -6,6 +6,7 @@ import { StatIcon } from "../../design/EquipmentIcon.js";
 import type { SolverAction } from "../../lib/solver/builderFilters.js";
 import { Panel } from "./Panel.js";
 import { SOLVER_STATS } from "./statColumns.js";
+import { hasPriority } from "../../lib/heroPriority/weights.js";
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Substat priority panel — per-stat -1..3 + Top % slider
@@ -22,7 +23,7 @@ export function SubstatPriorityPanel({
   // magnitude (SOLVE, Score) — the latter has no objective, so its results are
   // arbitrary. Surface that so a user lowering Top % with no priorities set
   // knows what the slider is pruning by.
-  const hasPriority = Object.values(priority).some((v) => v !== 0);
+  const prioritized = hasPriority(priority);
   return (
     <Panel
       title="Substat priority"
@@ -62,7 +63,7 @@ export function SubstatPriorityPanel({
         />
         <span className="w-7 text-right font-mono text-[11px] tabular-nums text-white">{topPct}</span>
       </div>
-      {topPct < 100 && !hasPriority && (
+      {topPct < 100 && !prioritized && (
         <div className="mt-1 text-[10px] leading-snug text-amber-300/80">
           SOLVE CP ranks each slot by a CP proxy. SOLVE (Score) without a priority
           keeps the fullest-rolled pieces, which is arbitrary: set a priority above.

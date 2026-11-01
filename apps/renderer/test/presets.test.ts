@@ -7,7 +7,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Character, GearPiece, Inventory, Preset, RolledStat, StatScaling } from "@gear-solver/core";
 import { arrangePresets, presetClasses, presetRows, presetSignature, type PresetRow } from "../src/lib/presets/presetRows.js";
-import { bestKnownFor, effectivePriority, evaluatePresetFor, presetLoss, type HeroBase, type PresetEvalContext } from "../src/lib/presets/evaluate.js";
+import { bestKnownFor, evaluatePresetFor, presetLoss, type HeroBase, type PresetEvalContext } from "../src/lib/presets/evaluate.js";
+import { effectivePriority } from "../src/lib/heroPriority/weights.js";
 import { computeFinalStats, type FinalStatsBaseline, type ScalingMap } from "../src/lib/composeBuild.js";
 import { computeScore } from "../src/lib/solver/ratings.js";
 import {

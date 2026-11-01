@@ -1,14 +1,16 @@
 /**
- * Per-hero filter memory — auto-snapshots the BuilderScreen's `SolverFilters`
- * when you switch away from a hero, and restores them when you come back, so a
- * working session doesn't lose "what did I set for this hero again?".
+ * Per-hero filter memory — the BuilderScreen's `SolverFilters` of each hero,
+ * written at every change of the open hero's filters and restored when the
+ * Builder opens that hero again, so "what did I set for this hero again?"
+ * survives a hero switch AND a relaunch.
  *
- * Distinct from `filterPresets.ts`: those are NAMED, durable, manual bookmarks;
- * this is the implicit last-used set per hero, SESSION-SCOPED (sessionStorage)
- * so each app launch starts clean — matching the Inventory/Builds view-state
- * convention. Only `excludedHeroes` (a Set) needs JSON conversion; everything
- * else in `SolverFilters` is already JSON-safe. No legacy migration: snapshots
- * are written by the current code within the same session.
+ * Distinct from `filterPresets.ts`: those are NAMED, manual bookmarks; this is
+ * the implicit last-used set per hero, in localStorage. App owns the map (state
+ * + persistence) and hands it to the Builder, which writes it, and to the
+ * Presets tab, which reads the hero's priority from it (`heroPriority/
+ * weights.ts`). Only `excludedHeroes` (a Set) needs JSON conversion; everything
+ * else in `SolverFilters` is already JSON-safe. A map left in sessionStorage by
+ * an older version is ignored, not migrated.
  */
 import type { SolverFilters } from "../solver/builderFilters.js";
 
@@ -29,7 +31,7 @@ function deserialize(s: SerializedFilters): SolverFilters {
 
 export function loadHeroFilters(): HeroFiltersMap {
   try {
-    const raw = sessionStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object") return {};
@@ -47,9 +49,9 @@ export function persistHeroFilters(map: HeroFiltersMap): void {
   try {
     const out: Record<string, SerializedFilters> = {};
     for (const [uid, f] of Object.entries(map)) out[uid] = serialize(f);
-    sessionStorage.setItem(KEY, JSON.stringify(out));
+    localStorage.setItem(KEY, JSON.stringify(out));
   } catch {
-    // Quota / locked-down context — skip; next snapshot retries.
+    // Quota / locked-down context — skip; the next change retries.
   }
 }
 
@@ -61,24 +63,23 @@ export function cloneFilters(f: SolverFilters): SolverFilters {
   return { ...f, excludedHeroes: new Set(f.excludedHeroes), mainExcludes: f.mainExcludes ?? {} };
 }
 
-/** Starting filters for the Builder: the remembered set of the hero it opens on
- *  (Optimize →, or a reload mid-session), else `defaults`. Lazy-init of the
- *  filters reducer — the hero-switch effect never runs for the initial hero. */
-export function filtersForHero(map: HeroFiltersMap, uid: string | null, defaults: SolverFilters): SolverFilters {
+/** Starting filters for a hero the Builder opens: their remembered set, else
+ *  `defaults` with `fallbackPriority` (the hero's `priorityOf` — the priority
+ *  of their latest saved build, if any) instead of the empty one, so the
+ *  Builder scores a hero first opened as the Presets tab does. */
+export function filtersForHero(
+  map: HeroFiltersMap,
+  uid: string | null,
+  defaults: SolverFilters,
+  fallbackPriority?: Record<string, number> | null,
+): SolverFilters {
   const saved = uid ? map[uid] : undefined;
-  return saved ? cloneFilters(saved) : defaults;
+  if (saved) return cloneFilters(saved);
+  return fallbackPriority ? { ...cloneFilters(defaults), priority: { ...fallbackPriority } } : defaults;
 }
 
-/** Hero switch: the map with the OUTGOING hero's live filters snapshotted, or
- *  null when the hero did not actually change (initial mount, StrictMode's
- *  effect re-run) — snapshotting then would store the defaults over that
- *  hero's remembered set. */
-export function snapshotOnHeroSwitch(
-  map: HeroFiltersMap,
-  prevUid: string | null,
-  nextUid: string | null,
-  live: SolverFilters,
-): HeroFiltersMap | null {
-  if (prevUid === nextUid) return null;
-  return prevUid ? { ...map, [prevUid]: cloneFilters(live) } : map;
+/** The map with `uid`'s entry set to (a clone of) the live filters — the
+ *  Builder's write at each change of the open hero's filters. */
+export function withHeroFilters(map: HeroFiltersMap, uid: string, live: SolverFilters): HeroFiltersMap {
+  return { ...map, [uid]: cloneFilters(live) };
 }

@@ -44,6 +44,7 @@
 import type { GameData, GearPiece, RolledStat } from "@gear-solver/core";
 import { DEFAULT_RULES, gameRulesOf } from "@gear-solver/core";
 import { ROLL_NORMS, STAT_TO_PRIORITY } from "../statRegistry.js";
+import { hasPriority } from "../heroPriority/weights.js";
 
 /** Base stage a Transistone can bring one line to (base level 3 + 1) — on
  *  a piece without a stage-4 line; one stage lower on a piece that has one. */
@@ -101,7 +102,7 @@ export function rerollMaxGain(piece: GearPiece, maxTicksPerSub?: number): number
 export function rerollPotential(piece: GearPiece, game: GameData | null, pick: RerollPick): RerollPotential | null {
   const gains = rerollGains(piece, (game ? gameRulesOf(game) : DEFAULT_RULES).reforge.maxTicksPerSub);
   if (!gains) return null;
-  const hasPriority = Object.values(pick.priority).some((v) => v !== 0);
+  const prioritized = hasPriority(pick.priority);
   let best: RerollPotential | null = null;
   let bestW = -Infinity;
   let bestN = -Infinity;
@@ -109,7 +110,7 @@ export function rerollPotential(piece: GearPiece, game: GameData | null, pick: R
     const s = piece.subs[i]!;
     const gain = gains[i]!;
     if (gain <= 0) continue;
-    const w = hasPriority ? pick.priority[STAT_TO_PRIORITY[s.stat] ?? s.stat] ?? 0 : 0;
+    const w = prioritized ? pick.priority[STAT_TO_PRIORITY[s.stat] ?? s.stat] ?? 0 : 0;
     if (w < 0) continue;
     const n = s.value / (ROLL_NORMS[s.stat] ?? 100);
     if (w > bestW || (w === bestW && n > bestN)) {

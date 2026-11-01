@@ -40,9 +40,9 @@
  * for the solver (`presetHolds` reads the in-game presets only).
  *
  * Nothing is written to the game: the groups are local (`gs.presetHeroes`).
- * The priority is the Builder's of this session — as the Builder last left the
- * hero (`snapshotOnHeroSwitch`) — else the one of the hero's most recent saved
- * build (`presetPriorityOf`).
+ * The priority is the one the Builder keeps for the hero (App's `heroFilters`,
+ * live: a weight changed in the Builder shows here at the next render), else
+ * the one of the hero's most recent saved build (`priorityOf`).
  */
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, GameData, GearPiece, GearSlot, Inventory, UserGeasLevels } from "@gear-solver/core";
@@ -61,7 +61,7 @@ import {
 } from "../../lib/presets/presetRows.js";
 import { CLASSES } from "../../lib/homeStats.js";
 import {
-  bestKnownFor, eeOf, evaluatePresetFor, heroBases, presetLoss, presetOvercap, presetPriorityOf, type PresetEvalContext,
+  bestKnownFor, eeOf, evaluatePresetFor, heroBases, presetLoss, presetOvercap, type PresetEvalContext,
 } from "../../lib/presets/evaluate.js";
 import { overcapText } from "../../lib/overcap.js";
 import { bestEeGemsFor } from "../../lib/presets/eeGems.js";
@@ -85,8 +85,8 @@ import {
   addLocalPreset, LOCAL_PRESET_NAME_MAX, loadLocalPresets, localCopyOf, removeLocalPreset, renameLocalPreset, validLocalPresetName,
   type LocalPreset,
 } from "../../lib/storage/localPresets.js";
-import { filtersForHero, loadHeroFilters } from "../../lib/storage/heroFilters.js";
-import { INITIAL_FILTERS } from "../../lib/solver/builderFilters.js";
+import type { HeroFiltersMap } from "../../lib/storage/heroFilters.js";
+import { priorityOf } from "../../lib/heroPriority/weights.js";
 import { HeroSelect } from "../builder/HeroSelect.js";
 import { displayNameOf } from "../builder/heroName.js";
 
@@ -105,6 +105,9 @@ interface PresetsScreenProps {
    *  `solverWorklistClaims`, as Builder / Builds get it) — the EE gem pool
    *  leaves a free piece reserved for another hero out. */
   worklistClaims?: Readonly<Record<string, string>>;
+  /** Builder filters kept per hero (App-owned, written by the Builder at every
+   *  change) — the hero's priority is read from them first (`priorityOf`). */
+  heroFilters: HeroFiltersMap;
   /** Preset priority ranks (preset num → unique rank, App-owned) and App's
    *  setter (functional updates supported). */
   presetRank: PresetRank;
@@ -139,12 +142,11 @@ interface HeroView {
 const CLASS_ORDER = CLASSES.map((c) => c.id);
 const classLabel = (id: string): string | null => CLASSES.find((c) => c.id === id)?.label ?? null;
 
-export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, worklistClaims, presetRank, onPresetRankChange, presetLocked, onPresetLockedChange, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
+export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, worklistClaims, heroFilters, presetRank, onPresetRankChange, presetLocked, onPresetLockedChange, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
   // Read once per mount — the screen remounts on every tab switch, so a build
-  // saved in the Builder is picked up on the way back; a Builder priority once
-  // the Builder has switched away from that hero (it's stored on the switch).
+  // saved in the Builder is picked up on the way back. The Builder's kept
+  // filters come live from App (`heroFilters`).
   const [savedBuilds] = useState(loadSavedBuilds);
-  const [heroFilters] = useState(loadHeroFilters);
   const [presetHeroes, setPresetHeroes] = useState<PresetHeroesMap>(loadPresetHeroes);
   useEffect(() => { persistPresetHeroes(presetHeroes); }, [presetHeroes]);
   // A backup imported while the tab is open (Settings modal) — reload, or the
@@ -173,10 +175,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
   }, [inventory, game]);
   const ctx = useMemo<PresetEvalContext | null>(() => {
     if (!inventory) return null;
-    const bases = heroBases(inventory, game, userGeasLevels, userCodexLevel, presetPriorityOf(
-      (uid) => (heroFilters[uid] ? filtersForHero(heroFilters, uid, INITIAL_FILTERS).priority : null),
-      savedBuilds,
-    ));
+    const bases = heroBases(inventory, game, userGeasLevels, userCodexLevel, (uid) => priorityOf(uid, { heroFilters, savedBuilds }));
     return { inventory, game, heroes: bases, savedBuilds, worklistClaims };
   }, [inventory, game, userGeasLevels, userCodexLevel, heroFilters, savedBuilds, worklistClaims]);
   const cards = useMemo(() => rows.map((row) => {
@@ -231,7 +230,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
         <span className="font-mono uppercase tracking-wider text-zinc-400">Presets</span>
         <span className="text-zinc-400">
           A preset is one reference hero's outfit, worn as-is by its associated heroes (each keeps their own EE).
-          Scores use the priority each hero was last left with in the Builder this session (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a {lossWarnPct} % loss.
+          Scores use the priority each hero has in the Builder (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a {lossWarnPct} % loss.
         </span>
         <div className="flex gap-1">
           {CLASSES.map((cl) => {
@@ -881,7 +880,7 @@ function HeroLine({
               </span>
             )
           )}
-          {fromSaved && <span className="text-[11.5px] italic text-zinc-400" title="No Builder priority kept this session (the Builder keeps a hero's priority when you switch to another hero) — scored with the priority their most recent saved build was solved with">priority from saved build</span>}
+          {fromSaved && <span className="text-[11.5px] italic text-zinc-400" title="No Builder priority kept for this hero — scored with the priority their most recent saved build was solved with">priority from saved build</span>}
           {overcap.map((o) => (
             <span
               key={o.key}

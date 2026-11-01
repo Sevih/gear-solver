@@ -22,7 +22,8 @@ import { useRankDefaults } from "./hooks/useRankDefaults.js";
 import { appliedNotice, equippedByHero, goneNotice, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, upsertWorklistEntry, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
-import { reconcileDataHash } from "./lib/storage/dataHash.js";
+import { onDataPruned, reconcileDataHash } from "./lib/storage/dataHash.js";
+import { loadHeroFilters, persistHeroFilters, type HeroFiltersMap } from "./lib/storage/heroFilters.js";
 import { createOnboardingGate } from "./lib/onboarding.js";
 import type { RecoFilterPatch } from "./lib/reco/translateReco.js";
 
@@ -113,6 +114,12 @@ export function App() {
   // preset →" also keeps out those of the better-ranked presets).
   const [presetRank, setPresetRank] = usePersistedState<PresetRank>(PRESET_RANK_KEY, {});
   const [presetLocked, setPresetLocked] = usePersistedState<number[]>(PRESET_LOCKED_KEY, []);
+  // Builder filters kept per hero — written by the Builder at every change of
+  // the open hero's filters, read live by Presets for the hero's priority.
+  // Reloaded when a data patch pruned them on disk (`reconcileDataHash`).
+  const [heroFilters, setHeroFilters] = useState<HeroFiltersMap>(loadHeroFilters);
+  useEffect(() => { persistHeroFilters(heroFilters); }, [heroFilters]);
+  useEffect(() => onDataPruned(() => setHeroFilters(loadHeroFilters())), []);
   const [status, setStatus] = useState("");
   // Floating notices for what changes out of sight (see design/Toast.tsx).
   const { toasts, notify, dismiss: dismissToast } = useToasts();
@@ -506,7 +513,7 @@ export function App() {
               </ScreenErrorBoundary>
             </div>
           )}
-          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} worklistHeroUids={worklistHeroUids} worklistClaims={solverWorklistClaims} presetRank={presetRank} onPresetRankChange={setPresetRank} presetLocked={presetLocked} onPresetLockedChange={setPresetLocked} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Builder"); }} onOptimizePreset={(uid, patch, note, presetNum) => { setBuilderHero(uid); setBuilderPatch({ patch, note, presetNum }); setTab("Builder"); }} /></ScreenErrorBoundary>}
+          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} worklistHeroUids={worklistHeroUids} worklistClaims={solverWorklistClaims} heroFilters={heroFilters} presetRank={presetRank} onPresetRankChange={setPresetRank} presetLocked={presetLocked} onPresetLockedChange={setPresetLocked} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Builder"); }} onOptimizePreset={(uid, patch, note, presetNum) => { setBuilderHero(uid); setBuilderPatch({ patch, note, presetNum }); setTab("Builder"); }} /></ScreenErrorBoundary>}
           {tab === "Builds" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Builder"); }} worklistClaims={solverWorklistClaims} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a
@@ -515,7 +522,7 @@ export function App() {
           {builderMounted && (
             <div className="h-full" style={{ display: tab === "Builder" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} heroFilters={heroFilters} onHeroFiltersChange={setHeroFilters} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} />
               </ScreenErrorBoundary>
             </div>
           )}

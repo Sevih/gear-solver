@@ -2,14 +2,16 @@
 // Presets tab, the tuning side — the EE gems proposed to each hero of a preset
 // (`bestEeGemsFor`, pieces fixed, on the real gem table of `data/derived/`),
 // the worklist entry "+ Worklist" queues (`presetWorklistFor`), the priority
-// that survives a relaunch (`presetPriorityOf`) and `gs.presetHeroes` in the
+// that survives a relaunch (`priorityOf`) and `gs.presetHeroes` in the
 // backup (`buildBackup` / `applyBackup`).
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Character, GameData, GearPiece, Inventory, Preset, RolledStat, StatScaling } from "@gear-solver/core";
 import { resolveStat } from "@gear-solver/core";
 import { alignToSockets, bestEeGemsFor } from "../src/lib/presets/eeGems.js";
-import { evaluatePresetFor, presetPriorityOf, type HeroBase, type PresetEvalContext } from "../src/lib/presets/evaluate.js";
+import { evaluatePresetFor, type HeroBase, type PresetEvalContext } from "../src/lib/presets/evaluate.js";
+import { priorityOf } from "../src/lib/heroPriority/weights.js";
+import { INITIAL_FILTERS } from "../src/lib/solver/builderFilters.js";
 import { presetRows } from "../src/lib/presets/presetRows.js";
 import { presetWorklistFor } from "../src/lib/presets/presetWorklist.js";
 import type { FinalStatsBaseline, ScalingMap } from "../src/lib/composeBuild.js";
@@ -186,18 +188,18 @@ describe("presetWorklistFor", () => {
   });
 });
 
-describe("presetPriorityOf", () => {
+describe("priorityOf (Presets)", () => {
   const saved = (id: string, createdAt: number, priority: Record<string, number>): SavedBuild => ({
     id, name: id, heroUid: "B", mode: "score", createdAt,
     build: {} as SavedBuild["build"], reforge: { reforgeMode: "disable", priority },
   });
   const builds = { B: [saved("old", 1, { hp: 1 }), saved("new", 2, { def: 2 })] };
 
-  it("session first, then the most recent saved build, then null", () => {
-    const session: Record<string, Record<string, number>> = { A: { atk: 3 }, B: { atk: 0 } };
-    const of = presetPriorityOf((uid) => session[uid], builds);
-    expect(of("A")).toEqual({ priority: { atk: 3 }, source: "session" });
-    // B's session priority carries no weight — the saved build's is read.
+  it("kept Builder filters first, then the most recent saved build, then null", () => {
+    const heroFilters = { A: { ...INITIAL_FILTERS, priority: { atk: 3 } }, B: { ...INITIAL_FILTERS, priority: { atk: 0 } } };
+    const of = (uid: string) => priorityOf(uid, { heroFilters, savedBuilds: builds });
+    expect(of("A")).toEqual({ priority: { atk: 3 }, source: "filters" });
+    // B's kept priority carries no weight — the saved build's is read.
     expect(of("B")).toEqual({ priority: { def: 2 }, source: "saved" });
     expect(of("C")).toBeNull();
   });

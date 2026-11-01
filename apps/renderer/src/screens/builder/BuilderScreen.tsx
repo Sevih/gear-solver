@@ -13,7 +13,7 @@
  *   └────────────────────────────────────────────────────┘
  *
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, effectiveCharacter, expToLevel, gameRulesOf } from "@gear-solver/core";
 import { cx } from "../../design/cx.js";
@@ -25,14 +25,15 @@ import type { SolveMode } from "../../lib/solver/types.js";
 import type { HeroPriority } from "../../lib/storage/heroPriority.js";
 import { presetHoldersOf, type PresetHolds } from "../../lib/presets/presetHolds.js";
 import {
-  INITIAL_FILTERS, solverFiltersReducer,
+  INITIAL_FILTERS, solverFiltersReducer, type SolverFilters,
 } from "../../lib/solver/builderFilters.js";
 import { talismanFamilyKeys, translateRecoBuild, type RecoFilterPatch, type StructuredCharacterReco, type StructuredRecoBuild } from "../../lib/reco/translateReco.js";
 import { fetchRecoForHero } from "../../lib/reco/fetchReco.js";
 import { equipPieces, type EquipOutcome } from "../../equip.js";
 import type { WorklistEntry } from "../../lib/storage/worklist.js";
 import { worklistChangesFor } from "../../lib/worklist/changes.js";
-import { loadHeroFilters, persistHeroFilters, cloneFilters, filtersForHero, snapshotOnHeroSwitch, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
+import { filtersForHero, withHeroFilters, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
+import { priorityOf } from "../../lib/heroPriority/weights.js";
 import { usePersistedState } from "../../hooks/usePersistedState.js";
 import { deltaCpLabel } from "../../lib/deltaCp.js";
 import { diffBuildVsLoadout } from "../../lib/buildDiff.js";
@@ -77,6 +78,11 @@ interface BuilderScreenProps {
   /** Account-global hero priority ranks (owned by App, edited in Builds) — fed
    *  to the solver for the "Equipped items → ≤ lower priority" scope. */
   heroPriority: HeroPriority;
+  /** Filters kept per hero (owned by App, `gs.solver.heroFilters`) — restored
+   *  when the Builder opens a hero; the open hero's entry is rewritten through
+   *  `onHeroFiltersChange` at every change of its filters. */
+  heroFilters: HeroFiltersMap;
+  onHeroFiltersChange: Dispatch<SetStateAction<HeroFiltersMap>>;
   /** Account-global "never use" piece UIDs (owned by App, edited in Inventory)
    *  — dropped from every slot pool before the cartesian. */
   excludedPieceUids?: Set<string>;
@@ -146,10 +152,17 @@ function formatCombos(n: number): string {
   return String(n);
 }
 
+/** Filters a hero opens on: their kept set, else the defaults with the hero's
+ *  `priorityOf` (their latest saved build's priority, if any — the one the
+ *  Presets tab scores them with), so both tabs give the hero the same score. */
+function startFiltersFor(uid: string | null, map: HeroFiltersMap, savedBuilds: SavedBuildsMap): SolverFilters {
+  return filtersForHero(map, uid, INITIAL_FILTERS, uid ? priorityOf(uid, { heroFilters: map, savedBuilds })?.priority : null);
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards") }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards") }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // The preset "Optimize preset →" aims at, tied to the hero it opened — set
   // with the patch below, dropped as soon as the user switches heroes.
@@ -159,38 +172,40 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // stays visible instead of the table greedily eating all vertical space.
   // Persisted so the user's preferred split survives reloads.
   const [resultRows, setResultRows] = usePersistedState<number>("gs.builder.resultRows", 12);
-  // Per-hero filter memory (session-scoped). `filtersRef` mirrors the live
-  // filters so the hero-change effect can snapshot the OUTGOING hero without
-  // depending on `filters` (which would re-fire it on every edit). `prevHeroRef`
-  // tracks whose filters are currently loaded; `heroFiltersRef` is the map.
-  // The map is read from sessionStorage ONCE (lazy state init — a plain
-  // `useRef(loadHeroFilters())` re-parsed it on every render); the reducer
-  // starts on the initial hero's remembered set.
-  const [initialHeroFilters] = useState<HeroFiltersMap>(loadHeroFilters);
-  const heroFiltersRef = useRef<HeroFiltersMap>(initialHeroFilters);
-  const [filters, dispatch] = useReducer(solverFiltersReducer, initialHeroUid ?? null,
-    (uid: string | null) => filtersForHero(initialHeroFilters, uid, INITIAL_FILTERS));
-  const filtersRef = useRef(filters);
-  const prevHeroRef = useRef(selectedUid);
-  // Live selection for async callbacks — their closure keeps the hero they
-  // started on (see `getPreset`).
-  const selectedUidRef = useRef(selectedUid);
-  // Synced after the commit, not during render. Layout effects of a commit all
-  // run before its passive effects, so the hero-change effect below still reads
-  // the filters of the render that changed the hero (the OUTGOING hero's set).
-  useLayoutEffect(() => {
-    filtersRef.current = filters;
-    selectedUidRef.current = selectedUid;
-  });
-  /** Transient "Added ✓" / "Replaced ✓" confirmation on the Add-to-worklist
-   *  button. */
-  const [worklistAdded, setWorklistAdded] = useState<"added" | "replaced" | null>(null);
-
   // Persistence — loaded once on mount, mutated via the add/remove helpers
   // and re-persisted explicitly (vs hooking into a useEffect that fires
   // on every render, which would re-write the blob on hero switch etc.).
   const [savedBuildsMap, setSavedBuildsMap] = useState<SavedBuildsMap>(() => loadSavedBuilds());
   const [filterPresetsMap, setFilterPresetsMap] = useState<FilterPresetsMap>(() => loadFilterPresets());
+  // Per-hero filter memory (App's `heroFilters`, durable — see
+  // `startFiltersFor`). `prevHeroRef` tracks whose filters are currently
+  // loaded and `loadedFiltersRef` the set they were loaded with (not written
+  // back until changed); `heroFiltersRef` and `savedBuildsRef` mirror the map
+  // and the saved builds for the hero-change effect, which mustn't re-fire on
+  // their changes.
+  const heroFiltersRef = useRef<HeroFiltersMap>(heroFilters);
+  const savedBuildsRef = useRef(savedBuildsMap);
+  const [filters, dispatch] = useReducer(solverFiltersReducer, initialHeroUid ?? null,
+    (uid: string | null) => startFiltersFor(uid, heroFilters, savedBuildsMap));
+  const filtersRef = useRef(filters);
+  const loadedFiltersRef = useRef(filters);
+  const prevHeroRef = useRef(selectedUid);
+  // Live selection for async callbacks — their closure keeps the hero they
+  // started on (see `getPreset`).
+  const selectedUidRef = useRef(selectedUid);
+  // Synced after the commit, not during render. Layout effects of a commit all
+  // run before its passive effects, so the hero-change effect below reads the
+  // map and saved builds of that commit.
+  useLayoutEffect(() => {
+    filtersRef.current = filters;
+    selectedUidRef.current = selectedUid;
+    heroFiltersRef.current = heroFilters;
+    savedBuildsRef.current = savedBuildsMap;
+  });
+  /** Transient "Added ✓" / "Replaced ✓" confirmation on the Add-to-worklist
+   *  button. */
+  const [worklistAdded, setWorklistAdded] = useState<"added" | "replaced" | null>(null);
+
   // A backup import (Settings) writes localStorage behind this mounted screen:
   // reload both maps, or the next persist would overwrite the imported entries.
   useEffect(() => onBackupImported(() => {
@@ -198,12 +213,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setFilterPresetsMap(loadFilterPresets());
   }), []);
   // A data patch pruned the stored filters behind this mounted screen: reload
-  // the presets and the per-hero map (already pruned on disk), and prune the
-  // live filters too — a hero switch would otherwise write the dead refs back.
-  // Solve results are left as they are.
+  // the presets (already pruned on disk; App reloads the per-hero map), and
+  // prune the live filters too — the next write would otherwise put the dead
+  // refs back. Solve results are left as they are.
   useEffect(() => onDataPruned((known) => {
     setFilterPresetsMap(loadFilterPresets());
-    heroFiltersRef.current = loadHeroFilters();
     const pruned = pruneFilters(filtersRef.current, known);
     if (pruned !== filtersRef.current) dispatch({ type: "loadPreset", filters: pruned });
   }), []);
@@ -487,24 +501,32 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     [presetHolds, targetPresetNum, presetNames],
   );
 
-  // Switching heroes: RESULTS are a clean slate (per-hero, stale otherwise), but
-  // FILTERS are remembered per hero (session-scoped) — snapshot the outgoing
-  // hero's set, restore the incoming hero's (or defaults if first time), so
-  // returning to a hero brings back "what did I set here again?". Cancel any
-  // in-flight solve first so its async `onResult` can't repopulate the table for
-  // the wrong hero. No-op while the hero is unchanged — the initial mount and
-  // StrictMode's re-run (the reducer already holds the initial hero's set).
+  // Every change of the open hero's filters is written to App's per-hero map
+  // (persisted there), so Presets reads it live and a relaunch keeps it.
+  // Declared BEFORE the hero-change effect: on the commit that switches heroes
+  // `prevHeroRef` still names the outgoing hero, so the outgoing filters are
+  // never written under the incoming hero. A set just loaded (kept, or the
+  // defaults with `priorityOf`) is written at its first change only, so a hero
+  // merely opened keeps reading their saved build's priority in Presets.
   useEffect(() => {
-    const prev = prevHeroRef.current;
-    const snapshot = snapshotOnHeroSwitch(heroFiltersRef.current, prev, selectedUid, filtersRef.current);
-    if (!snapshot) return;
+    if (!selectedUid || prevHeroRef.current !== selectedUid || filters === loadedFiltersRef.current) return;
+    onHeroFiltersChange((m) => withHeroFilters(m, selectedUid, filters));
+  }, [filters, selectedUid, onHeroFiltersChange]);
+
+  // Switching heroes: RESULTS are a clean slate (per-hero, stale otherwise), but
+  // FILTERS are remembered per hero (kept by App, written at every change) —
+  // restore the incoming hero's set (else the defaults with their
+  // `priorityOf`), so returning to a hero brings back "what did I set here
+  // again?". Cancel any in-flight solve first so its async `onResult` can't
+  // repopulate the table for the wrong hero. No-op while the hero is unchanged
+  // — the initial mount and StrictMode's re-run (the reducer already holds the
+  // initial hero's set).
+  useEffect(() => {
+    if (prevHeroRef.current === selectedUid) return;
     orchestratorRef.current?.cancel();
-    if (prev) {
-      heroFiltersRef.current = snapshot;
-      persistHeroFilters(snapshot);
-    }
-    const saved = selectedUid ? heroFiltersRef.current[selectedUid] : undefined;
-    dispatch(saved ? { type: "loadPreset", filters: cloneFilters(saved) } : { type: "resetAll" });
+    const start = startFiltersFor(selectedUid, heroFiltersRef.current, savedBuildsRef.current);
+    loadedFiltersRef.current = start;
+    dispatch({ type: "loadPreset", filters: start });
     const pending = pendingPatchRef.current;
     if (pending && pending.uid === selectedUid) dispatch({ type: "mergePreset", patch: pending.patch });
     pendingPatchRef.current = null;
