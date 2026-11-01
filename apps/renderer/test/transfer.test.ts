@@ -1,16 +1,22 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { applyBackup, buildBackup, onBackupImported } from "../src/lib/storage/transfer.js";
+import { BACKUP_KEYS, backupLabels } from "../src/lib/storage/keys.js";
 import { addSavedBuild, loadSavedBuilds, persistSavedBuilds, type SavedBuild } from "../src/lib/storage/savedBuilds.js";
+import { BackupPane, importSummary } from "../src/design/settings/BackupPane.js";
 
 // Minimal localStorage shim — the transfer module is the only storage code
 // exercised here and it only needs get/set. Vitest runs in the `node`
 // environment (no DOM), so we install a Map-backed stub on globalThis.
 const store = new Map<string, string>();
+const writes: string[] = [];
 beforeEach(() => {
   store.clear();
+  writes.length = 0;
   (globalThis as { localStorage?: Storage }).localStorage = {
     getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => void store.set(k, String(v)),
+    setItem: (k: string, v: string) => { writes.push(k); store.set(k, String(v)); },
     removeItem: (k: string) => void store.delete(k),
     clear: () => store.clear(),
     key: () => null,
@@ -20,71 +26,224 @@ beforeEach(() => {
 
 const SAVED_KEY = "gs.solver.savedBuilds";
 const PRESETS_KEY = "gs.solver.filterPresets";
+const INV_KEY = "gs.inv.filterPresets";
+const LOCAL_KEY = "gs.presets.local";
+const WIRE = ["w", "a", "h", "b", "g", "s", "0", "t"];
+const builderPreset = (id: string) => ({ id, name: id, heroUid: "h1", createdAt: 0, filters: { excludedHeroes: [] } });
+const invPreset = (id: string, name: string) => ({ id, name, filters: "{}", createdAt: 0 });
+const localPreset = (id: string, name: string) => ({ id, name, itemUids: WIRE, heroUid: null, createdAt: 0 });
+const worklistEntry = (heroUid: string, id = `w-${heroUid}`) =>
+  ({ id, heroUid, heroName: heroUid, charId: 1, mode: "score", cp: null, upg: 0, changes: [], createdAt: 0 });
+const v1 = (over: object = {}) => ({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: {}, ...over });
+const v2 = (over: object = {}) => ({ kind: "gear-solver-backup", version: 2, exportedAt: 0, ...over });
+const stored = (key: string) => JSON.parse(store.get(key)!) as unknown;
 
-describe("transfer — backup round-trip", () => {
-  it("buildBackup snapshots both blobs verbatim", () => {
-    store.set(SAVED_KEY, JSON.stringify({ h1: [{ id: "b1" }] }));
-    store.set(PRESETS_KEY, JSON.stringify({ h1: [{ id: "p1", filters: { excludedHeroes: ["x"] } }] }));
+/** A value for every backed-up key, each one its loader reads. */
+const EVERY_KEY: Record<string, unknown> = {
+  [SAVED_KEY]: { h1: [{ id: "b1" }] },
+  [PRESETS_KEY]: { h1: [builderPreset("p1")] },
+  [INV_KEY]: [invPreset("i1", "Mine")],
+  [LOCAL_KEY]: [localPreset("l1", "Local")],
+  "gs.presetHeroes": { 1: { referenceUid: "h1", associatedUids: ["h2"] } },
+  "gs.solver.heroFilters": { h1: { priority: { atkPct: 1 }, excludedHeroes: [] } },
+  "gs.priority.rank": { h1: 1, h2: 2 },
+  "gs.presets.rank": { 1: 1 },
+  "gs.presets.locked": [1],
+  "gs.solver.excludedPieces": ["junk"],
+  "gs.worklist": [worklistEntry("h1")],
+  "gs.builds.notes": { h1: "speed tune" },
+  "gs.builder.cols": { score: false },
+  "gs.builder.resultRows": 8,
+  "gs.solver.workerCount": 1,
+  "gs.solver.topN": 500,
+  "gs.solver.topK": 2000,
+  "gs.builder.heatmap": false,
+  "gs.builder.compactCards": true,
+  "gs.solver.presetLossWarn": 20,
+  "gs.debug.solver": true,
+  "gs.debug.statLocks": true,
+};
+
+describe("transfer — backup v2 round-trip", () => {
+  it("the fixture covers every backed-up key", () => {
+    expect(Object.keys(EVERY_KEY).sort()).toEqual(BACKUP_KEYS.map((s) => s.key).sort());
+  });
+
+  it("exports every backed-up key under its key and imports them all back", () => {
+    for (const [k, v] of Object.entries(EVERY_KEY)) store.set(k, JSON.stringify(v));
+    store.set("gs.tab", JSON.stringify("Builder"));
+    store.set("gs.priority.seen", JSON.stringify(["h1"]));
     const bundle = buildBackup(12345);
-    expect(bundle.kind).toBe("gear-solver-backup");
-    expect(bundle.version).toBe(1);
-    expect(bundle.exportedAt).toBe(12345);
-    expect(bundle.savedBuilds).toEqual({ h1: [{ id: "b1" }] });
-    // Preset Set fields stay in serialized array form — no Set conversion.
-    expect(bundle.filterPresets.h1?.[0]).toMatchObject({ id: "p1", filters: { excludedHeroes: ["x"] } });
+    expect(bundle).toMatchObject({ kind: "gear-solver-backup", version: 2, exportedAt: 12345 });
+    for (const [k, v] of Object.entries(EVERY_KEY)) expect(bundle[k], k).toEqual(v);
+    // The app's own state stays home.
+    expect(bundle["gs.tab"]).toBeUndefined();
+    expect(bundle["gs.priority.seen"]).toBeUndefined();
+
+    store.clear();
+    const res = applyBackup(JSON.parse(JSON.stringify(bundle)));
+    for (const [k, v] of Object.entries(EVERY_KEY)) {
+      expect(stored(k), k).toEqual(v);
+      expect(res[k], k).toBeGreaterThan(0);
+    }
   });
 
-  it("buildBackup yields empty maps when nothing is stored", () => {
+  it("leaves out a key never written; importing the same file again changes and writes nothing", () => {
+    store.set(SAVED_KEY, JSON.stringify(EVERY_KEY[SAVED_KEY]));
     const bundle = buildBackup(0);
-    expect(bundle.savedBuilds).toEqual({});
-    expect(bundle.filterPresets).toEqual({});
+    expect(Object.keys(bundle).filter((k) => k.startsWith("gs."))).toEqual([SAVED_KEY]);
+    const res = applyBackup(bundle);
+    expect(Object.values(res).every((n) => n === 0)).toBe(true);
+    expect(writes).toEqual([]);
   });
 });
 
-describe("transfer — applyBackup merge", () => {
-  it("adds only entries whose id is not already present", () => {
-    store.set(SAVED_KEY, JSON.stringify({ h1: [{ id: "b1" }] }));
-    const bundle = {
-      kind: "gear-solver-backup",
-      version: 1,
-      exportedAt: 0,
-      savedBuilds: { h1: [{ id: "b1" }, { id: "b2" }], h2: [{ id: "b3" }] },
-      filterPresets: {},
-    };
-    const res = applyBackup(bundle);
-    expect(res.builds).toBe(2); // b2 (new in h1) + b3 (new hero h2); b1 deduped
-    const stored = JSON.parse(store.get(SAVED_KEY)!);
-    expect(stored.h1.map((b: { id: string }) => b.id)).toEqual(["b1", "b2"]);
-    expect(stored.h2.map((b: { id: string }) => b.id)).toEqual(["b3"]);
+describe("transfer — a v1 file (five blocks)", () => {
+  it("imports each block under its key", () => {
+    const res = applyBackup(v1({
+      savedBuilds: { h1: [{ id: "b1" }] },
+      filterPresets: { h1: [builderPreset("p1")] },
+      presetHeroes: { 2: { referenceUid: "h1", associatedUids: [] } },
+      inventoryFilterPresets: [invPreset("i1", "A")],
+      localPresets: [localPreset("l1", "L")],
+    }));
+    expect(res).toMatchObject({ [SAVED_KEY]: 1, [PRESETS_KEY]: 1, "gs.presetHeroes": 1, [INV_KEY]: 1, [LOCAL_KEY]: 1, "gs.worklist": 0 });
+    expect(stored(SAVED_KEY)).toEqual({ h1: [{ id: "b1" }] });
+    expect(stored("gs.presetHeroes")).toEqual({ 2: { referenceUid: "h1", associatedUids: [] } });
+    expect(stored(LOCAL_KEY)).toEqual([localPreset("l1", "L")]);
   });
 
-  it("keeps the existing entry on id collision (incoming skipped)", () => {
+  it("a v1 file without the optional blocks imports none of them", () => {
+    const res = applyBackup(v1());
+    expect(res[INV_KEY]).toBe(0);
+    expect(res[LOCAL_KEY]).toBe(0);
+    expect(writes).toEqual([]);
+  });
+});
+
+describe("transfer — merge rules", () => {
+  it("per-hero lists: adds only the ids not stored, the stored entry wins", () => {
     store.set(SAVED_KEY, JSON.stringify({ h1: [{ id: "b1", name: "original" }] }));
-    const bundle = buildBackup(0);
-    bundle.savedBuilds = { h1: [{ id: "b1", name: "incoming" } as { id: string }] };
-    const res = applyBackup(bundle);
-    expect(res.builds).toBe(0);
-    const stored = JSON.parse(store.get(SAVED_KEY)!);
-    expect(stored.h1[0].name).toBe("original");
+    const res = applyBackup(v2({ [SAVED_KEY]: { h1: [{ id: "b1", name: "incoming" }, { id: "b2" }], h2: [{ id: "b3" }] } }));
+    expect(res[SAVED_KEY]).toBe(2);
+    expect(stored(SAVED_KEY)).toEqual({ h1: [{ id: "b1", name: "original" }, { id: "b2" }], h2: [{ id: "b3" }] });
+  });
+
+  it("per-hero lists: an entry the loader rejects counts 0 and writes nothing", () => {
+    store.set(PRESETS_KEY, JSON.stringify({}));
+    const res = applyBackup(v1({ filterPresets: { h1: [{ id: "p1", name: "broken" }, builderPreset("p2")] } }));
+    expect(res[PRESETS_KEY]).toBe(1);
+    expect((stored(PRESETS_KEY) as Record<string, Array<{ id: string }>>).h1!.map((p) => p.id)).toEqual(["p2"]);
+    writes.length = 0;
+    expect(applyBackup(v1({ filterPresets: { h1: [{ id: "p3", name: "broken" }] } }))[PRESETS_KEY]).toBe(0);
+    expect(writes).toEqual([]);
+  });
+
+  it("Inventory filter sets: the stored entry wins on id or name, unreadable entries count 0", () => {
+    store.set(INV_KEY, JSON.stringify([invPreset("a", "A")]));
+    const res = applyBackup(v2({ [INV_KEY]: [
+      invPreset("a", "other"), invPreset("z", "A"), invPreset("b", "B"),
+      { id: "c", name: "", filters: "{}", createdAt: 0 }, { id: "d", name: "bad json", filters: "{", createdAt: 0 },
+      { id: "f", name: "Scrap candidates", filters: "{}", createdAt: 0 },
+    ] }));
+    expect(res[INV_KEY]).toBe(1);
+    expect((stored(INV_KEY) as Array<{ id: string }>).map((e) => e.id)).toEqual(["a", "b"]);
+  });
+
+  it("local presets: the stored entry wins on id, an entry the loader rejects counts 0", () => {
+    store.set(LOCAL_KEY, JSON.stringify([localPreset("a", "Mine")]));
+    const res = applyBackup(v2({ [LOCAL_KEY]: [localPreset("a", "Theirs"), localPreset("b", "B"), localPreset("long", "x".repeat(13)), { ...localPreset("short", "S"), itemUids: ["w"] }] }));
+    expect(res[LOCAL_KEY]).toBe(1);
+    expect((stored(LOCAL_KEY) as Array<{ id: string; name: string }>).map((e) => [e.id, e.name])).toEqual([["a", "Mine"], ["b", "B"]]);
+  });
+
+  it("preset heroes: a stored preset with heroes is kept, an empty one is replaced", () => {
+    store.set("gs.presetHeroes", JSON.stringify({ 1: { referenceUid: "C", associatedUids: [] }, 3: { referenceUid: null, associatedUids: [] } }));
+    const res = applyBackup(v2({ "gs.presetHeroes": { 1: { referenceUid: "A", associatedUids: [] }, 3: { referenceUid: "B", associatedUids: [] } } }));
+    expect(res["gs.presetHeroes"]).toBe(1);
+    expect(stored("gs.presetHeroes")).toEqual({ 1: { referenceUid: "C", associatedUids: [] }, 3: { referenceUid: "B", associatedUids: [] } });
+  });
+
+  it.each([
+    ["gs.builds.notes", { h1: "mine", h2: "kept" }, { h1: "theirs", h3: "new", h4: 7 }, { h1: "theirs", h2: "kept", h3: "new" }],
+    ["gs.solver.heroFilters", { h1: { topPct: 1 }, h2: { topPct: 2 } }, { h1: { topPct: 9 }, h3: { topPct: 3 }, h4: "x" }, { h1: { topPct: 9 }, h2: { topPct: 2 }, h3: { topPct: 3 } }],
+    ["gs.builder.cols", { score: false, atk: true }, { score: true, cp: false, hp: "no" }, { score: true, atk: true, cp: false }],
+  ])("map by id (%s): the imported entry replaces the stored one of the same key, the others stay", (key, before, incoming, after) => {
+    store.set(key, JSON.stringify(before));
+    const res = applyBackup(v2({ [key]: incoming }));
+    expect(res[key]).toBe(2);
+    expect(stored(key)).toEqual(after);
+  });
+
+  it("ranks: the imported rank replaces, then every rank is renumbered 1..N (an imported key first on a tie)", () => {
+    store.set("gs.priority.rank", JSON.stringify({ a: 1, b: 2, c: 3 }));
+    const res = applyBackup(v2({ "gs.priority.rank": { d: 1, b: 3, e: 0, f: 1.5 } }));
+    expect(res["gs.priority.rank"]).toBe(2);
+    expect(stored("gs.priority.rank")).toEqual({ d: 1, a: 2, b: 3, c: 4 });
+  });
+
+  it.each([
+    ["gs.solver.excludedPieces", ["p1"], ["p1", "p2", 3, "p2"], ["p1", "p2"]],
+    ["gs.presets.locked", [1, 4], [4, 2, "3", 2.5], [1, 4, 2]],
+  ])("id lists (%s): union", (key, before, incoming, after) => {
+    store.set(key, JSON.stringify(before));
+    const res = applyBackup(v2({ [key]: incoming }));
+    expect(res[key]).toBe(1);
+    expect(stored(key)).toEqual(after);
+  });
+
+  it("worklist: the imported entry replaces the same hero's in place, the others stay, a new hero is appended", () => {
+    store.set("gs.worklist", JSON.stringify([worklistEntry("h1", "old"), worklistEntry("h2")]));
+    const res = applyBackup(v2({ "gs.worklist": [worklistEntry("h1", "new"), worklistEntry("h3"), { heroUid: "h4" }] }));
+    expect(res["gs.worklist"]).toBe(2);
+    expect((stored("gs.worklist") as Array<{ id: string }>).map((e) => e.id)).toEqual(["new", "w-h2", "w-h3"]);
+  });
+
+  it("settings: the imported value replaces, held within the setting's bounds; a value of the wrong type is ignored", () => {
+    store.set("gs.solver.topN", "1000");
+    store.set("gs.builder.heatmap", "true");
+    const res = applyBackup(v2({
+      "gs.solver.topN": 99999,
+      "gs.solver.presetLossWarn": 2,
+      "gs.builder.heatmap": "no",
+      "gs.solver.workerCount": null,
+      "gs.builder.resultRows": 40,
+    }));
+    expect(stored("gs.solver.topN")).toBe(5000);
+    expect(stored("gs.solver.presetLossWarn")).toBe(5);
+    expect(res["gs.builder.heatmap"]).toBe(0);
+    expect(stored("gs.builder.heatmap")).toBe(true);
+    expect(stored("gs.solver.workerCount")).toBeNull();
+    expect(stored("gs.builder.resultRows")).toBe(15);
   });
 });
 
-describe("transfer — validation", () => {
+describe("transfer — reading a file", () => {
+  it("ignores a key it doesn't back up, without error", () => {
+    const res = applyBackup(v2({ "gs.unknown": { a: 1 }, "gs.tab": "Builder", "gs.data.hash": "abc", [SAVED_KEY]: { h1: [{ id: "b1" }] } }));
+    expect(res[SAVED_KEY]).toBe(1);
+    expect(store.has("gs.unknown")).toBe(false);
+    expect(store.has("gs.tab")).toBe(false);
+    expect(store.has("gs.data.hash")).toBe(false);
+  });
+
   it("rejects a non-backup object", () => {
     expect(() => applyBackup({ foo: 1 })).toThrow(/wrong kind/i);
   });
   it("rejects an unsupported version", () => {
-    expect(() => applyBackup({ kind: "gear-solver-backup", version: 99, savedBuilds: {}, filterPresets: {} }))
-      .toThrow(/version/i);
+    expect(() => applyBackup({ kind: "gear-solver-backup", version: 99, savedBuilds: {}, filterPresets: {} })).toThrow(/version/i);
   });
-  it("rejects a bundle missing its maps", () => {
+  it("rejects a v1 bundle missing its maps, or with a malformed block", () => {
     expect(() => applyBackup({ kind: "gear-solver-backup", version: 1 })).toThrow(/savedBuilds/i);
+    expect(() => applyBackup(v1({ localPresets: {} }))).toThrow(/localPresets/);
+  });
+  it("rejects a v2 key in the wrong container, before writing anything", () => {
+    expect(() => applyBackup(v2({ [SAVED_KEY]: { h1: [{ id: "b1" }] }, "gs.worklist": {} }))).toThrow(/gs\.worklist/);
+    expect(writes).toEqual([]);
   });
 });
 
 describe("transfer — a mounted screen keeps the imported entries", () => {
-  const bundle = (savedBuilds: Record<string, Array<{ id: string }>>) =>
-    ({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds, filterPresets: {} });
   const build = (id: string) => ({ id, name: id, heroUid: "h1", mode: "score", createdAt: 0, build: {} }) as unknown as SavedBuild;
 
   it("reloads its in-memory map after an import, so its next save doesn't drop them", () => {
@@ -93,14 +252,14 @@ describe("transfer — a mounted screen keeps the imported entries", () => {
     let memory = loadSavedBuilds();
     const off = onBackupImported(() => { memory = loadSavedBuilds(); });
 
-    applyBackup(bundle({ h1: [{ id: "imported" }] }));
+    applyBackup(v1({ savedBuilds: { h1: [{ id: "imported" }] } }));
     // The user then saves a new build in the (still mounted) Builder.
     memory = addSavedBuild(memory, build("b2"));
     persistSavedBuilds(memory);
     off();
 
-    const stored = JSON.parse(store.get(SAVED_KEY)!);
-    expect(stored.h1.map((b: { id: string }) => b.id).sort()).toEqual(["b1", "b2", "imported"]);
+    const saved = stored(SAVED_KEY) as Record<string, Array<{ id: string }>>;
+    expect(saved.h1!.map((b) => b.id).sort()).toEqual(["b1", "b2", "imported"]);
   });
 
   it("still notifies when a write fails halfway (quota), then rethrows", () => {
@@ -111,106 +270,38 @@ describe("transfer — a mounted screen keeps the imported entries", () => {
       if (k === PRESETS_KEY) throw new Error("QuotaExceededError");
       setItem(k, v);
     };
-    expect(() => applyBackup(bundle({ h1: [{ id: "imported" }] }))).toThrow(/Quota/);
+    expect(() => applyBackup(v1({ savedBuilds: { h1: [{ id: "imported" }] }, filterPresets: { h1: [builderPreset("p1")] } }))).toThrow(/Quota/);
     off();
     // The builds were written: a mounted screen must reload them.
-    expect(JSON.parse(store.get(SAVED_KEY)!).h1).toHaveLength(1);
+    expect((stored(SAVED_KEY) as Record<string, unknown[]>).h1).toHaveLength(1);
     expect(calls).toBe(1);
   });
 
   it("stops notifying after unsubscribe", () => {
     let calls = 0;
     const off = onBackupImported(() => { calls++; });
-    applyBackup(bundle({}));
+    applyBackup(v1());
     off();
-    applyBackup(bundle({}));
+    applyBackup(v1());
     expect(calls).toBe(1);
   });
 });
 
-describe("transfer — Inventory filter presets", () => {
-  const INV_KEY = "gs.inv.filterPresets";
-  const entry = (id: string, name: string) => ({ id, name, filters: "{}", createdAt: 0 });
-
-  it("exports the list, imports the new entries, the local one wins on id or name", () => {
-    store.set(INV_KEY, JSON.stringify([entry("a", "A")]));
-    expect(buildBackup(0).inventoryFilterPresets).toEqual([entry("a", "A")]);
-    const res = applyBackup({
-      kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: {},
-      inventoryFilterPresets: [entry("a", "other"), entry("z", "A"), entry("b", "B")],
-    });
-    expect(res.inventoryPresets).toBe(1);
-    expect(JSON.parse(store.get(INV_KEY)!).map((e: { id: string }) => e.id)).toEqual(["a", "b"]);
+describe("Settings › Backup", () => {
+  it("lists what the export carries under the Export button, and never the captured gear", () => {
+    const html = renderToStaticMarkup(createElement(BackupPane, { importInputRef: { current: null }, onStatus: () => {} }));
+    expect(html).toContain("Export backup");
+    expect(html).toContain("Import backup");
+    expect(html).toContain(backupLabels().join(" · "));
+    expect(html).toContain("Never the captured gear: that comes from the game.");
+    expect(html).not.toContain("builds &amp; presets");
   });
 
-  it("a backup without the field imports none", () => {
-    const res = applyBackup({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: {} });
-    expect(res.inventoryPresets).toBe(0);
-    expect(store.has(INV_KEY)).toBe(false);
-  });
-});
-
-describe("transfer — entries the loaders reject", () => {
-  const bundle = (over: object) => ({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: {}, ...over });
-
-  it("a Builder preset without filters counts 0 and writes nothing", () => {
-    const res = applyBackup(bundle({ filterPresets: { h1: [{ id: "p1", name: "broken" }] } }));
-    expect(res.presets).toBe(0);
-    expect(JSON.parse(store.get(PRESETS_KEY)!)).toEqual({});
-  });
-
-  it("a readable Builder preset next to a broken one counts 1", () => {
-    const good = { id: "p2", name: "ok", heroUid: "h1", createdAt: 0, filters: { excludedHeroes: [] } };
-    const res = applyBackup(bundle({ filterPresets: { h1: [{ id: "p1", name: "broken" }, good] } }));
-    expect(res.presets).toBe(1);
-    expect(JSON.parse(store.get(PRESETS_KEY)!).h1.map((p: { id: string }) => p.id)).toEqual(["p2"]);
-  });
-
-  it("an Inventory preset with an invalid name or unreadable filters counts 0", () => {
-    const INV_KEY = "gs.inv.filterPresets";
-    const res = applyBackup(bundle({ inventoryFilterPresets: [
-      { id: "a", name: "", filters: "{}", createdAt: 0 },
-      { id: "b", name: "x".repeat(25), filters: "{}", createdAt: 0 },
-      { id: "c", name: "no filters", createdAt: 0 },
-      { id: "d", name: "bad json", filters: "{", createdAt: 0 },
-      { id: "e", name: "array", filters: "[]", createdAt: 0 },
-      { id: "f", name: "Scrap candidates", filters: "{}", createdAt: 0 },
-    ] }));
-    expect(res.inventoryPresets).toBe(0);
-    expect(store.has(INV_KEY)).toBe(false);
-  });
-});
-
-describe("transfer — local presets", () => {
-  const LOCAL_KEY = "gs.presets.local";
-  const WIRE = ["w", "a", "h", "b", "g", "s", "0", "t"];
-  const entry = (id: string, name: string) => ({ id, name, itemUids: WIRE, heroUid: null, createdAt: 0 });
-  const bundle = (over: object) => ({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: {}, ...over });
-
-  it("exports the list, imports the new ids, the local entry wins on id", () => {
-    store.set(LOCAL_KEY, JSON.stringify([entry("a", "Mine")]));
-    expect(buildBackup(0).localPresets).toEqual([entry("a", "Mine")]);
-    const res = applyBackup(bundle({ localPresets: [entry("a", "Theirs"), entry("b", "B")] }));
-    expect(res.localPresets).toBe(1);
-    const stored = JSON.parse(store.get(LOCAL_KEY)!);
-    expect(stored.map((e: { id: string; name: string }) => [e.id, e.name])).toEqual([["a", "Mine"], ["b", "B"]]);
-  });
-
-  it("counts only the entries the loader reads; a backup without the field imports none", () => {
-    const res = applyBackup(bundle({ localPresets: [
-      entry("long", "x".repeat(13)),
-      { ...entry("short", "Short"), itemUids: ["w"] },
-      { name: "No id", itemUids: WIRE, heroUid: null, createdAt: 0 },
-      entry("ok", "Ok"),
-    ] }));
-    expect(res.localPresets).toBe(1);
-    expect(JSON.parse(store.get(LOCAL_KEY)!).map((e: { id: string }) => e.id)).toEqual(["ok"]);
-    store.clear();
-    expect(applyBackup(bundle({})).localPresets).toBe(0);
-    expect(store.has(LOCAL_KEY)).toBe(false);
-  });
-
-  it("rejects a malformed list", () => {
-    expect(() => applyBackup(bundle({ localPresets: {} }))).toThrow(/localPresets/);
+  it("cites the import counts by label", () => {
+    expect(importSummary({ [SAVED_KEY]: 12, [PRESETS_KEY]: 3, "gs.priority.rank": 5, "gs.worklist": 4 }))
+      .toBe("Imported: 12 saved builds · 3 filter sets · hero ranks · worklist (4)");
+    expect(importSummary({ [SAVED_KEY]: 1, "gs.solver.topN": 1, "gs.builder.heatmap": 1 }))
+      .toBe("Imported: 1 saved build · solver settings");
+    expect(importSummary({ [SAVED_KEY]: 0 })).toMatch(/^Nothing new to import/);
   });
 });

@@ -14,12 +14,32 @@
  * The initial value is only used when nothing's stored under `key` (first
  * visit) or when deserialization throws (storage poisoned by a stale schema —
  * we fall back to defaults rather than crash the screen).
+ *
+ * A localStorage value is read again after a backup import
+ * (`onBackupImported`), which may have written its key behind the mounted
+ * component: the next write would otherwise put the pre-import value back.
  */
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { onBackupImported } from "../lib/storage/importSignal.js";
 
 export interface PersistedCodec<T> {
   serialize?: (v: T) => string;
   deserialize?: (raw: string) => T;
+}
+
+/** The value stored under `key`, else `initial` (nothing stored, or a value
+ *  the codec refuses). */
+function readStorage<T>(store: Storage, key: string, initial: T | (() => T), codec?: PersistedCodec<T>): T {
+  try {
+    const raw = store.getItem(key);
+    if (raw != null) {
+      const des = codec?.deserialize ?? (JSON.parse as (s: string) => T);
+      return des(raw);
+    }
+  } catch {
+    // fall through to defaults — keeps the screen mounting on stale schemas
+  }
+  return typeof initial === "function" ? (initial as () => T)() : initial;
 }
 
 // Shared implementation parameterized by the Storage backend. `pick` is read
@@ -30,6 +50,7 @@ function useStorageState<T>(
   key: string,
   initial: T | (() => T),
   codec?: PersistedCodec<T>,
+  reloadOnImport = false,
 ): [T, Dispatch<SetStateAction<T>>] {
   // Hold the codec in a ref so callers can inline `{serialize, deserialize}`
   // each render without triggering the persist effect on every render.
@@ -37,18 +58,14 @@ function useStorageState<T>(
   useEffect(() => { codecRef.current = codec; });
   const [store] = useState(pick);
 
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const raw = store.getItem(key);
-      if (raw != null) {
-        const des = codec?.deserialize ?? (JSON.parse as (s: string) => T);
-        return des(raw);
-      }
-    } catch {
-      // fall through to defaults — keeps the screen mounting on stale schemas
-    }
-    return typeof initial === "function" ? (initial as () => T)() : initial;
-  });
+  const initialRef = useRef(initial);
+  useEffect(() => { initialRef.current = initial; });
+
+  const [value, setValue] = useState<T>(() => readStorage(store, key, initial, codec));
+  useEffect(() => {
+    if (!reloadOnImport) return;
+    return onBackupImported(() => setValue(readStorage(store, key, initialRef.current, codecRef.current)));
+  }, [store, key, reloadOnImport]);
 
   useEffect(() => {
     try {
@@ -68,7 +85,7 @@ export function usePersistedState<T>(
   initial: T | (() => T),
   codec?: PersistedCodec<T>,
 ): [T, Dispatch<SetStateAction<T>>] {
-  return useStorageState(() => localStorage, key, initial, codec);
+  return useStorageState(() => localStorage, key, initial, codec, true);
 }
 
 /** Survives remounts within a session but resets on the next launch — backed

@@ -1,7 +1,9 @@
 /**
- * Settings → Backup — export / import of builds & presets (JSON).
+ * Settings → Backup — export / import of everything the user set up (JSON):
+ * the keys `lib/storage/keys.ts` marks `backup: true`, listed under Export.
  */
-import { applyBackup, buildBackup } from "../../lib/storage/transfer.js";
+import { applyBackup, buildBackup, type ImportResult } from "../../lib/storage/transfer.js";
+import { BACKUP_KEYS, backupLabels } from "../../lib/storage/keys.js";
 import { localDateStamp } from "../../lib/dateStamp.js";
 import { SectionStrip, DataAction } from "./SettingsControls.js";
 
@@ -9,15 +11,21 @@ export function BackupPane({ importInputRef, onStatus }: { importInputRef: { cur
   return (
     <div className="flex flex-col gap-3">
       <SectionStrip title="Backup" />
+      <div className="flex flex-col gap-1.5">
+        <DataAction
+          label="Export backup"
+          description="Download everything you set up in the app as a JSON file (backup / move to another device)."
+          actionLabel="Export"
+          onClick={() => exportBackupFile(onStatus)}
+        />
+        <div className="px-3 text-[11px] leading-snug text-zinc-500">
+          <div className="text-zinc-400">{backupLabels().join(" · ")}</div>
+          <div>Never the captured gear: that comes from the game.</div>
+        </div>
+      </div>
       <DataAction
-        label="Export builds & presets"
-        description="Download your saved builds, filter sets, the heroes of your in-game presets and your local presets (Presets tab) as a JSON file (backup / move to another device). Captured gear is not included — re-capture it there."
-        actionLabel="Export"
-        onClick={() => exportBackupFile(onStatus)}
-      />
-      <DataAction
-        label="Import builds & presets"
-        description="Merge a previously exported JSON file into your current builds & presets (entries already present are kept)."
+        label="Import backup"
+        description="Merge an exported JSON file, old ones included, into what is here: builds and presets already present are kept; ranks, worklist entries, notes and settings from the file replace yours."
         actionLabel="Import"
         onClick={() => importInputRef.current?.click()}
       />
@@ -32,11 +40,29 @@ export function BackupPane({ importInputRef, onStatus }: { importInputRef: { cur
   );
 }
 
+/** « Imported: 12 saved builds · 3 filter sets · hero ranks · worklist (4) » —
+ *  what an import took, by registry label (keys sharing a label add up), each
+ *  cited as its `summary` says. */
+export function importSummary(result: ImportResult): string {
+  const byLabel = new Map<string, { summary: (typeof BACKUP_KEYS)[number]["summary"]; count: number }>();
+  for (const { key, label, summary } of BACKUP_KEYS) {
+    const n = result[key] ?? 0;
+    if (n > 0) byLabel.set(label, { summary, count: (byLabel.get(label)?.count ?? 0) + n });
+  }
+  if (byLabel.size === 0) return "Nothing new to import — everything in this file is already here.";
+  const parts = [...byLabel].map(([label, { summary, count }]) => {
+    const word = label.charAt(0).toLowerCase() + label.slice(1);
+    if (summary === "count") return `${count} ${count === 1 ? word.replace(/s$/, "") : word}`;
+    return summary === "paren" ? `${word} (${count})` : word;
+  });
+  return `Imported: ${parts.join(" · ")}`;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
  * Side-effect helpers — outcomes go to the App's status (and journal)
  * ───────────────────────────────────────────────────────────────────────── */
 
-/** Snapshot saved builds + filter presets + preset heroes + local presets and trigger a browser download.
+/** Snapshot every backed-up key and trigger a browser download.
  *  Filename carries the date so multiple backups don't collide. */
 function exportBackupFile(onStatus: (message: string) => void): void {
   try {
@@ -58,24 +84,14 @@ function exportBackupFile(onStatus: (message: string) => void): void {
   }
 }
 
-/** Read a user-picked JSON file, merge it into localStorage, and report the
- *  count. Always clears the input (via `done`) so re-picking the same file
+/** Read a user-picked JSON file, merge it into localStorage, and report what
+ *  it took. Always clears the input (via `done`) so re-picking the same file
  *  fires `onChange` again. */
 async function importBackupFile(file: File | null, onStatus: (message: string) => void, done: () => void): Promise<void> {
   if (!file) return;
   try {
     const parsed = JSON.parse(await file.text()) as unknown;
-    const result = applyBackup(parsed);
-    const { builds, presetGroups, localPresets } = result;
-    // Builder and Inventory filter presets read as one "presets" count.
-    const presets = result.presets + result.inventoryPresets;
-    if (builds === 0 && presets === 0 && presetGroups === 0 && localPresets === 0) {
-      onStatus("Nothing new to import — every build and preset in this file is already present.");
-    } else {
-      const groups = presetGroups > 0 ? `, heroes of ${presetGroups} in-game preset${presetGroups === 1 ? "" : "s"}` : "";
-      const locals = localPresets > 0 ? `, ${localPresets} local preset${localPresets === 1 ? "" : "s"}` : "";
-      onStatus(`Imported ${builds} build${builds === 1 ? "" : "s"} and ${presets} preset${presets === 1 ? "" : "s"}${groups}${locals}.`);
-    }
+    onStatus(importSummary(applyBackup(parsed)));
   } catch (err) {
     onStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
   } finally {

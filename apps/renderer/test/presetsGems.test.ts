@@ -218,15 +218,15 @@ describe("gs.presetHeroes in the backup", () => {
   it("round-trips, a local preset entry winning over the imported one", () => {
     store.set(PRESET_HEROES_KEY, JSON.stringify({ 1: { referenceUid: "A", associatedUids: ["B"] } }));
     const bundle = buildBackup(0);
-    expect(bundle.presetHeroes).toEqual({ 1: { referenceUid: "A", associatedUids: ["B"] } });
+    expect(bundle[PRESET_HEROES_KEY]).toEqual({ 1: { referenceUid: "A", associatedUids: ["B"] } });
 
     store.set(PRESET_HEROES_KEY, JSON.stringify({
       1: { referenceUid: "C", associatedUids: [] },
       3: { referenceUid: null, associatedUids: [] },
     }));
-    bundle.presetHeroes = { ...bundle.presetHeroes, 2: { referenceUid: null, associatedUids: ["C"] }, 3: { referenceUid: "B", associatedUids: [] } };
+    bundle[PRESET_HEROES_KEY] = { ...(bundle[PRESET_HEROES_KEY] as object), 2: { referenceUid: null, associatedUids: ["C"] }, 3: { referenceUid: "B", associatedUids: [] } };
     const res = applyBackup(bundle);
-    expect(res.presetGroups).toBe(2);
+    expect(res[PRESET_HEROES_KEY]).toBe(2);
     expect(JSON.parse(store.get(PRESET_HEROES_KEY)!)).toEqual({
       1: { referenceUid: "C", associatedUids: [] }, // local kept
       2: { referenceUid: null, associatedUids: ["C"] }, // new preset
@@ -236,7 +236,7 @@ describe("gs.presetHeroes in the backup", () => {
 
   it("a backup made before the field imports without it", () => {
     const res = applyBackup({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: {} });
-    expect(res.presetGroups).toBe(0);
+    expect(res[PRESET_HEROES_KEY]).toBe(0);
     expect(store.has(PRESET_HEROES_KEY)).toBe(false);
   });
 });

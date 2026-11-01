@@ -8,6 +8,80 @@
 
 ## Items de backlog clôturés (index)
 
+### 💾 Sauvegarde complète : registre des clés `gs.*`, bundle v2 avec fusion par forme, liste de ce qui part (U9, G97) (2026-11-01)
+- ✅ **Pourquoi.** Neuvième lot de la refonte (U9 de `docs/ux-audit-2026-11-01.md`, section 3.9 « Les clés gs.* »,
+  ligne 5.d, arbitrage D7 : « La sauvegarde emporte tout sauf la capture ; la liste exportée est affichée »). La
+  sauvegarde n'emportait que cinq blocs (builds, filter sets, filtres Inventory, preset heroes, presets locaux) :
+  rangs, verrous, notes, pièces « never use », worklist et réglages restaient sur le poste, alors que « Export
+  builds & presets » laissait croire que les presets étaient couverts ; `transfer.ts` et `dataHash.ts` listaient
+  leurs clés à la main.
+- ✅ **Registre.** `apps/renderer/src/lib/storage/keys.ts` (nouveau) : une entrée par clé `gs.*` (41 dont 22 sauvegardées, relevées par
+  `grep -rn '"gs\.' apps/renderer/src`, U2 à U8 compris) — clé, stock `local` / `session`, `backup`, `prune`, libellé
+  court, module propriétaire, et pour une clé sauvegardée sa règle de fusion (`merge`) et la façon dont le statut
+  d'import la cite (`summary`). Les clés des modules de stockage viennent de leurs constantes, les réglages de
+  `SETTINGS` (`lib/settings.ts`, composé, aucune clé redéclarée ; libellés groupés « Solver settings » / « Debug
+  toggles »). Règle D7 : toute clé localStorage est `backup: true` sauf `gs.tab` et `gs.settings.pane` (où cette
+  installation s'est arrêtée), `gs.onboarding.done` (le Setup plugin / capture est par machine), `gs.data.hash`
+  (importé, il sauterait l'élagage dont les filtres importés peuvent avoir besoin) et `gs.priority.seen` /
+  `gs.presets.seen` (réparation des rangs par défaut pour le roster de ce poste ; les rangs, eux, partent), chaque
+  exception justifiée en commentaire ; les 13 clés de session sont `backup: false`. `gs.data.hash` reste écrit en
+  toutes lettres dans `dataHash.ts` et le registre (`dataHash.ts` lit le registre, l'importer depuis le registre
+  ferait un cycle) : le test de source tient les deux. `BACKUP_KEYS`, `PRUNED_KEYS`, `backupLabels()` exportés.
+- ✅ **Bundle v2.** `transfer.ts` réécrit : `{ kind, version: 2, exportedAt, ‹clé›: ‹JSON stocké› … }`, une entrée par
+  clé `backup: true` qui a une valeur ; `buildBackup` itère sur le registre. `applyBackup` lit un fichier v2 et un
+  fichier v1 (ses cinq blocs lus sous leurs clés, mêmes contrôles et messages qu'avant) ; une clé que le registre ne
+  sauvegarde pas (inconnue, `gs.tab`, `gs.data.hash`…) est ignorée sans erreur ; une clé sauvegardée dans le mauvais
+  conteneur (objet / liste) lève avant toute écriture. Règles de fusion écrites une fois par forme : listes par héros
+  (`heroLists`, saved builds et filter sets : l'id déjà là gagne, règle actuelle), liste par identifiant (`list` :
+  filtres Inventory sur id ou nom et presets locaux, l'existant gagne comme avant ; worklist par `heroUid`, l'entrée
+  importée remplace celle du même héros à sa place, un nouveau héros s'ajoute en fin), map par identifiant (`map` :
+  l'entrée importée remplace celle de même clé, les autres restent — filtres par héros, notes, colonnes du Builder ;
+  preset heroes garde l'entrée locale qui a des héros, règle actuelle ; les rangs héros / presets sont ensuite
+  renumérotés 1..N dans l'ordre des rangs, une clé importée d'abord à égalité, parce qu'un rang est unique et qu'une
+  fusion brute en aurait doublé), listes d'identifiants (`set` : pièces « never use », presets verrouillés, union),
+  valeur (`value` : réglages lus par `parseSetting` puis bornés par `clampSetting`, un mauvais type ignoré ; hauteur
+  des résultats bornée à 5–15 comme le curseur). Chaque règle refuse ce que le chargeur de la clé sauterait
+  (`isReadable*`, nouveau `isReadableWorklistEntry` exporté de `worklist.ts` et repris par `loadWorklist`).
+  `ImportResult` = entrées ajoutées ou changées par clé ; seule une clé changée est écrite (réimporter le même
+  fichier n'écrit rien). Le signal passe dans `lib/storage/importSignal.ts` (`onBackupImported`, ré-exporté par
+  `transfer.ts`, toujours émis même si une écriture échoue à mi-chemin) ; `usePersistedState` relit sa clé
+  localStorage à chaque import (rangs, verrous, notes, colonnes, hauteur, réglages), `App.tsx` recharge filtres par
+  héros, worklist et pièces exclues : sans cela, l'écriture suivante d'un état en mémoire remettait la valeur
+  d'avant l'import.
+- ✅ **Élagage.** `dataHash.ts` : `PRUNERS` (un élagueur par clé) appliqué aux `PRUNED_KEYS` du registre
+  (`gs.solver.filterPresets`, `gs.solver.heroFilters`), même comportement. `gs.inv.filterPresets` reste non élagué :
+  pas trivial, ses filtres sont sérialisés dans un autre format (`FILTER_CODEC` d'Inventory) et ses `armorSets` ne
+  passent pas par `pruneFilters`.
+- ✅ **Settings › Backup.** `BackupPane.tsx` : « Export backup » / « Import backup » ; sous Export, la liste de ce qui
+  part (libellés du registre, une fois chacun, séparés par « · ») et « Never the captured gear: that comes from the
+  game. » ; le statut d'import cite les comptes par libellé via `importSummary` (« Imported: 12 saved builds · 3
+  filter sets · hero ranks · worklist (4) », « Nothing new to import — … » sinon). Note de pied du modal
+  (`SettingsModal.tsx`) : « One JSON file holds everything you set up here — builds, filter sets, ranks, worklist,
+  notes, settings — never the captured gear. » Commentaire d'en-tête de `lib/settings.ts` corrigé (il disait
+  qu'aucun réglage n'était sauvegardé) ; rien d'autre n'y change.
+- ✅ **Tests.** `apps/renderer/test/keys.test.ts` (nouveau, 7) : clés uniques, chaque littéral `"gs.` du code (hors
+  tests et registre) dans le registre et réciproquement, module propriétaire existant, réglages composés depuis
+  `SETTINGS`, exceptions `backup: false` limitées à la liste D7, aucune clé de session sauvegardée, chaque clé élaguée
+  a son élagueur, libellés uniques. `transfer.test.ts` réécrit (28) : aller-retour export → import d'un localStorage
+  stubé qui porte toutes les clés `backup: true` (fixture tenue à jour par un test), état de l'app laissé sur place,
+  réimport sans écriture ; fichier v1 fabriqué (cinq blocs) ; chaque règle de fusion ; clé inconnue ignorée ;
+  réglage hors bornes borné, mauvais type ignoré ; validations ; écran monté rechargé (et quota à mi-chemin) ; rendu
+  statique de `BackupPane` avec la liste, `importSummary`. `presetsGems.test.ts` (bloc `gs.presetHeroes`) lit le
+  bundle et le résultat par clé. `npm run typecheck` : dernière ligne `> tsc --noEmit` (renderer, sans erreur) ;
+  `npm test` : `Tests  1037 passed (1037)` (renderer ; core 169, desktop 238) ; `npm run lint` : `✖ 7 problems (0
+  errors, 7 warnings)`, comme avant.
+- ✅ **Docs.** `wiki/Using-the-App.md` (Settings › Backup : ce qui part, la liste sous Export, la fusion, un vieux
+  fichier s'importe toujours) ; `docs/reference.md` / `wiki/Engine-Reference.md` (élagage par le registre, arbre
+  `lib/storage/` avec `keys.ts`, `transfer.ts`, `importSignal.ts`, lignes de tests `transfer` et `keys`).
+  `docs/todo.md` : aucun item ne s'y rapportait.
+- ⏳ **À tester sur le fixe.** Exporter depuis le build privé, regarder la liste sous Export et le fichier (une
+  entrée `gs.*` par clé), l'importer sur une installation vierge puis sur celle d'origine (« Nothing new… ») ;
+  importer un ancien fichier v1 ; vérifier qu'après un import Builds (rangs, notes), Presets (verrous), Worklist,
+  l'Inventory (pièces « never use ») et Settings › Solver montrent les valeurs importées sans relance.
+- ⏳ **Laissé.** Les filtres importés d'un poste aux données plus anciennes ne sont élagués qu'au prochain
+  changement de hash (comme avant ce lot pour les filter sets) ; un élagage à l'import serait un lot à part.
+  `gs.inv.filterPresets` toujours non élagué (voir plus haut).
+
 ### 🧢 En-tête unique : une pastille de capture, l'action plugin / jeu dans l'en-tête et Setup seulement, badge de mise à jour partout, une version des données (U8, G96) (2026-11-01)
 - ✅ **Pourquoi.** Huitième lot de la refonte (U8 de `docs/ux-audit-2026-11-01.md`, raison 5 du diagnostic « La même
   action à deux, trois ou quatre endroits, avec des mots différents », observations de 1.1, parcours 2.d « Mise à jour

@@ -13,8 +13,9 @@
  */
 import type { GameData, StatType } from "@gear-solver/core";
 import type { SolverFilters } from "../solver/builderFilters.js";
-import { loadFilterPresets, persistFilterPresets, type FilterPresetsMap } from "./filterPresets.js";
-import { loadHeroFilters, persistHeroFilters, type HeroFiltersMap } from "./heroFilters.js";
+import { FILTER_PRESETS_KEY, loadFilterPresets, persistFilterPresets, type FilterPresetsMap } from "./filterPresets.js";
+import { HERO_FILTERS_KEY, loadHeroFilters, persistHeroFilters, type HeroFiltersMap } from "./heroFilters.js";
+import { PRUNED_KEYS } from "./keys.js";
 
 export const DATA_HASH_KEY = "gs.data.hash";
 
@@ -121,6 +122,22 @@ export function pruneHeroFilters(map: HeroFiltersMap, known: KnownRefs): HeroFil
   return changed ? out : map;
 }
 
+/** How each key the registry marks `prune: true` (`keys.ts`) is pruned: load,
+ *  prune, write back only when something was dead. `test/keys.test.ts` checks
+ *  that every pruned key has one. */
+export const PRUNERS: Readonly<Record<string, (known: KnownRefs) => void>> = {
+  [FILTER_PRESETS_KEY]: (known) => {
+    const presets = loadFilterPresets();
+    const pruned = prunePresets(presets, known);
+    if (pruned !== presets) persistFilterPresets(pruned);
+  },
+  [HERO_FILTERS_KEY]: (known) => {
+    const heroFilters = loadHeroFilters();
+    const pruned = pruneHeroFilters(heroFilters, known);
+    if (pruned !== heroFilters) persistHeroFilters(pruned);
+  },
+};
+
 export type DataHashOutcome = "first" | "same" | "pruned" | "skipped";
 
 /** Screens that hold the filters in memory (the Builder stays mounted, hidden,
@@ -138,10 +155,10 @@ export function onDataPruned(listener: (known: KnownRefs) => void): () => void {
 
 /**
  * Startup / post-sync hook: first sight of a hash stores it, the same hash does
- * nothing, a new hash prunes the stored presets and per-hero filters, then
- * stores it. "skipped" = storage unreadable, or data that knows no set or no
- * effect (a broken load must not prune everything) — the hash is not stored,
- * so the next good load retries.
+ * nothing, a new hash prunes the keys the registry marks `prune: true` (the
+ * stored presets and per-hero filters), then stores it. "skipped" = storage
+ * unreadable, or data that knows no set or no effect (a broken load must not
+ * prune everything) — the hash is not stored, so the next good load retries.
  */
 export function reconcileDataHash(hash: string, game: GameData): DataHashOutcome {
   let stored: string | null;
@@ -156,12 +173,7 @@ export function reconcileDataHash(hash: string, game: GameData): DataHashOutcome
   if (stored != null) {
     known = knownRefs(game);
     if (known.sets.size === 0 || known.effects.size === 0) return "skipped";
-    const presets = loadFilterPresets();
-    const prunedPresets = prunePresets(presets, known);
-    if (prunedPresets !== presets) persistFilterPresets(prunedPresets);
-    const heroFilters = loadHeroFilters();
-    const prunedHeroFilters = pruneHeroFilters(heroFilters, known);
-    if (prunedHeroFilters !== heroFilters) persistHeroFilters(prunedHeroFilters);
+    for (const key of PRUNED_KEYS) PRUNERS[key]?.(known);
     outcome = "pruned";
   }
   try {

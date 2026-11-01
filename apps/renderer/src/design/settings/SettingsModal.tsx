@@ -9,7 +9,7 @@
  *             advanced), results heatmap, compact result cards. Edits
  *             persisted settings owned by App.
  *  - Data   — Sync game data · Reset onboarding · Wipe captured (destructive).
- *  - Backup — Export / Import builds & presets (JSON).
+ *  - Backup — Export / Import backup (JSON).
  *  - Debug  — developer toggles (stat-lock tooling, solver fan-out logging).
  *  - Logs   — the app journal (install lines, timestamped status messages):
  *             Copy · Clear.
@@ -87,7 +87,7 @@ const FOOTER_NOTE: Record<SettingsTab, string> = {
   setup: "Setup checks re-run on each open.",
   solver: "Changes are saved and apply on the next solve.",
   data: "Snapshots are stored locally.",
-  backup: "JSON files hold saved builds, filter sets, preset heroes and local presets — never the captured gear.",
+  backup: "One JSON file holds everything you set up here — builds, filter sets, ranks, worklist, notes, settings — never the captured gear.",
   debug: "Developer toggles — off for normal use.",
   logs: "Kept for this session only.",
 };

@@ -27,6 +27,7 @@ import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
 import { onDataPruned, reconcileDataHash } from "./lib/storage/dataHash.js";
 import { loadHeroFilters, persistHeroFilters, type HeroFiltersMap } from "./lib/storage/heroFilters.js";
+import { onBackupImported } from "./lib/storage/transfer.js";
 import { createOnboardingGate } from "./lib/onboarding.js";
 import type { RecoFilterPatch } from "./lib/reco/translateReco.js";
 
@@ -257,6 +258,14 @@ export function App() {
   // Stable identity so the memoized Inventory GearTiles don't all re-render on
   // every App render (only the toggled tile's `excluded` prop changes).
   const toggleExclude = useCallback((uid: string) => setExcludedPieces((prev) => toggleExcludedPiece(prev, uid)), []);
+  // A backup import (Settings) writes localStorage behind these maps: reload
+  // them, or the next persist would put the pre-import values back (the
+  // `usePersistedState` keys reload themselves).
+  useEffect(() => onBackupImported(() => {
+    setHeroFilters(loadHeroFilters());
+    setWorklist(loadWorklist());
+    setExcludedPieces(loadExcludedPieces());
+  }), []);
 
   /** Re-import; resolves to the status message it reported ("" when silent). */
   async function refreshInventory(label: string): Promise<string> {

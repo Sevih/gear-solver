@@ -10,7 +10,7 @@
  * Both parse the stored value with `parseSetting`, so a hand-edited or stale
  * value falls back to the same default on both sides.
  *
- * None of these keys is part of the backup (`lib/storage/transfer.ts`).
+ * All but the last pane visited are part of the backup (`lib/storage/keys.ts`).
  * Pure module: no React, no DOM beyond a guarded `localStorage` /
  * `navigator` read.
  */

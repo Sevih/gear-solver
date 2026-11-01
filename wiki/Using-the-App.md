@@ -386,9 +386,14 @@ setup check has passed).
 - **Data** — **Sync game data** (download the latest game tables after a patch), reset the onboarding
   wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
   (game version of the tables, hash and date — so you can see which snapshot is loaded).
-- **Backup** — **Export / Import** your saved builds, filter sets (Builder and Inventory),
-  the heroes of your in-game presets and your local presets (Presets tab) as a JSON file (move
-  them to another PC; captured gear isn't included — re-capture it there).
+- **Backup** — **Export backup / Import backup**: one JSON file with everything you set up in the
+  app — saved builds, filter sets (Builder and Inventory), local presets, the heroes of your in-game
+  presets, hero and preset ranks, locked presets, never-use pieces, the worklist, hero notes, the
+  last filters per hero, the Builder layout and your Solver / Debug settings. The list is shown
+  under the Export button. Never the captured gear: that comes from the game (re-capture it on the
+  other PC). Import merges: builds and presets already present are kept; ranks, worklist entries,
+  notes and settings from the file replace yours (settings held within their bounds). A file
+  exported by an older version (builds & presets only) still imports.
 - **Debug** — developer toggles (safe to ignore).
 
 ---

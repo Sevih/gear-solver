@@ -105,8 +105,8 @@ over the content of **every** derived file (name + body, fixed emit order), so i
 `resVersion` ("game 1.11.408 · …", the version of the loaded tables; absent from an old cache).
 The `hash` doesn't cover `resVersion`: at an unchanged `hash`, the sync rewrites version.json
 alone when its body differs. On a `hash`
-change, `reconcileDataHash` (`lib/storage/dataHash.ts`) prunes the filter sets and per-hero
-filters of the sets and effects the data no longer knows (cf. [Data Schema](Data-Schema#re-capture-cycle-after-a-game-patch)).
+change, `reconcileDataHash` (`lib/storage/dataHash.ts`) prunes the keys the `lib/storage/keys.ts`
+registry marks `prune: true` (the filter sets and per-hero filters) of the sets and effects the data no longer knows (cf. [Data Schema](Data-Schema#re-capture-cycle-after-a-game-patch)).
 
 
 ### 1.3 Parse (`packages/core/src/parse.ts`)
@@ -833,7 +833,8 @@ Builds tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/gemsCapped.test.ts` | 16 tests — `allocateGemsCapped`: parity without crit gem, accept up to CHC 100 (overshoot ≤102), stop exactly at 100, total skip at cap, talisman/EE split, null delta if nothing useful, score ≤0 never taken |
 | `apps/renderer/test/workerCount.test.ts` | 12 tests — `resolveWorkerCount`: default `hardwareConcurrency-1`, override `gs.solver.workerCount` (read by `readSetting`) brought back to the core count, clamp ≥1, hard ceiling 64; `clampWorkerCount` (the rule shared with Settings) |
 | `apps/renderer/test/settings.test.ts` | 18 tests — `lib/settings.ts` registry (one declaration per setting of Settings › Solver and › Debug, plus `gs.settings.pane`): unique keys and current defaults, `appliesNextSolve` flag (workers, topN, topK only); `clampSetting` (bounds, rounding to the step, workers bounded by the cores and 64); `readSetting` (default when absent, invalid or localStorage unavailable, stored value otherwise; read by `lib/log.ts`); Settings › Solver Reset through the registry, compact cards included; static render: « applies next solve » only heads the solver settings, Settings reopens on the last pane except before onboarding is done |
-| `apps/renderer/test/transfer.test.ts`   | 8 tests — backup round-trip (snapshot fidelity, empty maps), import merge (dedup by `id`, collision keeps the existing), replace (overwrite), bundle validation (kind/version/maps) |
+| `apps/renderer/test/transfer.test.ts`   | 28 tests — backup v2: export → import round-trip of a localStorage holding every `backup: true` key (the app's own state stays home), a key never written left out, re-importing the same file writes nothing; v1 file (five blocks under their keys, optional blocks absent); each merge rule (per-hero lists: the stored entry wins; Inventory filter sets on id or name; local presets; preset heroes; maps by id: the imported entry replaces — notes, per-hero filters, columns; ranks renumbered 1..N; id lists merged as a union; worklist by hero; settings bounded, wrong type ignored); unknown key ignored; validation (kind, version, v1 blocks, v2 container before any write); mounted screen reloaded after import (also when a write fails halfway); static render of Settings › Backup (what leaves, never the capture) and import status by label |
+| `apps/renderer/test/keys.test.ts`       | 7 tests — `lib/storage/keys.ts` registry: unique keys, every `"gs.` literal of the code in the registry and back, owner module exists, settings composed from `SETTINGS`, `backup: false` localStorage exceptions limited to `gs.tab`, `gs.onboarding.done`, `gs.settings.pane`, `gs.data.hash`, `gs.*.seen` and no session key backed up, pruned keys = filter sets + per-hero filters, each with its pruner, list labels unique |
 | `apps/renderer/test/solveChunk.test.ts` | 4 tests — end-to-end `solveChunk` (hand-built `SolveContext`): **mid-tree set prune** (req-4pc → 1 scored combo vs 16 brute-force; infeasible → 0), **solver↔Builds 0-diff**, **chunk partition equivalence** (union of N chunks = single-chunk run, no combo lost or duplicated) |
 | `apps/renderer/test/solveChunkCritCap.test.ts` | 3 tests — `solveChunk` crit-cap path (`critRate` priority + crit gems): each build gets `allocateGemsReachingCap`'s gems for its pre-gem CHC, sheet + CP = independent recompose, default allocation kept (same object) when the delta is equal, below / on / above the cap, 4- and 5-slot talismans; union of 2 chunks = single chunk |
 | `apps/renderer/test/orchestratorFlow.test.ts` | 10 tests — `SolverOrchestrator` with a fake `Worker` (`vi.mock` of the `?worker` import): one `onResult` once every dispatched chunk answered (fewer chunks than workers included), stale output of a superseded solve dropped (`solveId`), `cancel`, `onerror` crash (during a solve / idle), estimate (stale response dropped, `null` on a failed precompute, crash without a banner, superseded by a solve) |
@@ -934,6 +935,9 @@ apps/renderer/src/
 │   │   ├── presetWorklist.ts       ← presetWorklistFor (the Worklist entry of one hero of the preset)
 │   │   └── optimize.ts             ← presetOptimizePatch + presetOptimizeNote ("Optimize preset →": effects required, priority substats)
 │   ├── storage/
+│   │   ├── keys.ts                 ← `gs.*` key registry: store, backup, prune, label, owner, import merge rule
+│   │   ├── transfer.ts             ← backup v2 (buildBackup / applyBackup, a v1 file still imports)
+│   │   ├── importSignal.ts         ← onBackupImported (screens and usePersistedState reload after an import)
 │   │   ├── savedBuilds.ts          ← localStorage per-hero saved builds
 │   │   ├── presetHeroes.ts         ← localStorage reference + associated heroes per preset
 │   │   ├── localPresets.ts         ← localStorage local presets (kept in GS, never sent to the game)

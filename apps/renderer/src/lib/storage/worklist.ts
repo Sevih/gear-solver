@@ -115,6 +115,12 @@ export interface WorklistEntry {
 export const WORKLIST_KEY = "gs.worklist";
 const KEY = WORKLIST_KEY;
 
+/** Whether `loadWorklist` would keep this stored entry (shape guard only) —
+ *  `applyBackup` merges and counts only those. */
+export function isReadableWorklistEntry(entry: unknown): boolean {
+  return !!entry && typeof entry === "object" && typeof (entry as WorklistEntry).heroUid === "string" && Array.isArray((entry as WorklistEntry).changes);
+}
+
 export function loadWorklist(): WorklistEntry[] {
   try {
     const raw = localStorage.getItem(KEY);
@@ -127,7 +133,7 @@ export function loadWorklist(): WorklistEntry[] {
     // first (the list is newest-first), as `upsertWorklistEntry` would have.
     const heroes = new Set<string>();
     return parsed.filter((e): e is WorklistEntry => {
-      if (!e || typeof e !== "object" || typeof (e as WorklistEntry).heroUid !== "string" || !Array.isArray((e as WorklistEntry).changes)) return false;
+      if (!isReadableWorklistEntry(e)) return false;
       if (heroes.has((e as WorklistEntry).heroUid)) return false;
       heroes.add((e as WorklistEntry).heroUid);
       return true;
