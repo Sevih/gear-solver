@@ -8,6 +8,69 @@
 
 ## Items de backlog clôturés (index)
 
+### 🃏 Une seule carte de pièce : `GearCard` pour Inventory, les infobulles Builds / Presets et les résultats du Builder (U10b, G99) (2026-11-01)
+- ✅ **Pourquoi.** Dixième lot de la refonte, seconde moitié (U10 (b) de `docs/ux-audit-2026-11-01.md`, section 3.3
+  « La carte de pièce »). Deux corps de carte : `design/GearDetail.tsx` (`GearDetailBody` : Inventory, infobulles de
+  Builds et de Presets) et `design/ResultGearDetail.tsx` (`ResultGearDetailBody`, `ResultItemDetail` : Builder), ce
+  dernier annoncé « byte-for-byte identical » alors qu'ils avaient divergé : sous-stats sur `w-22` contre `w-30`,
+  qualité sans titre, sans aide ni barre dans le Builder, titre +15 retiré et dégradé vertical, pas de ligne rareté /
+  slot, portrait carré ou rond. `statLong`, `GemPanel`, `QUALITY_TONE`, le texte d'aide de la qualité, le panneau, son
+  état vide et son bouton d'exclusion existaient deux fois.
+- ✅ **`GearCardBody`.** `apps/renderer/src/design/GearCard.tsx` (nouveau) remplace les deux corps. Props : `piece`,
+  `game`, `equippedChar`, `onOptimizeWearer?` (bouton « Optimize ‹héros› → » sur le portrait, portrait seul sans lui
+  ou dans une infobulle), `fromPresets?`, `projection?: { addedTicks, transistoneTicks }`, `effects: "card" | "none"`,
+  `compact?`, et `inTooltip?` gardé pour les infobulles (pastille « combat » des sets dépliée). Non compact, partout
+  le rendu d'Inventory : cadenas « Locked in-game », nom sur une ligne avec « - [Singularity] » et dégradé horizontal,
+  icône 80 px + ligne rareté / slot / « ‹Classe› Exclusive » + une seule ligne du porteur (portrait carré 36 px),
+  mains, sous-stats, bloc Qualité (titre « Quality » avec `HoverHint`, score / max, « → N reachable », palier,
+  barre), « Active Effect at +15 Enhancement ». Une seule ligne de sous-stat (`SubstatRow`) sur `w-30`, la plus large
+  des deux : sans projection elle vaut `LV n (base + reforges)`, avec, le split `base + actuel + projeté` (projeté en
+  cyan) et la marque violette `T+n`. `effects="card"` met sur la carte le passif d'arme / d'accessoire, les bonus de
+  set 2 / 4 pièces et le passif multi-paliers en cartouches titrés, comme Inventory ; `effects="none"` (Builder) les
+  laisse à `BuildEffectsPanel`, garde le passif du talisman en lignes simples et l'EE en image + gemmes, comme le
+  Builder jusqu'ici. `compact` est le corps compact d'avant, repris tel quel (`CompactBody`). Le Builder non compact
+  gagne donc, comme demandé, le titre, l'aide et la barre de qualité, la ligne rareté / slot, le titre +15, le
+  dégradé horizontal et le portrait carré dans la ligne de l'icône (au lieu du rond en haut à droite) ; Inventory
+  gagne la colonne `w-30` ; rien d'autre ne bouge.
+- ✅ **`GearCardPanel`.** Remplace `ResultItemDetail` et le corps d'`ItemDetail` : conteneur (`CardShell`), défilement,
+  état vide (`emptyLabel` / `emptyHint`), pied « Never use » (bouton plein, ou icône `CardActions` en compact) et
+  « Optimize wearer → » à côté quand `onOptimizeWearer` est passé. `screens/inventory/ItemDetail.tsx` devient une
+  enveloppe qui passe ses textes d'aujourd'hui (« No item selected », « Click a tile in the grid… », l'aide
+  d'exclusion « Also via right-click on the tile. ») ; le Builder garde les siens (« No weapon in this build »,
+  « Solve, then pick a build in the table. », l'aide « the same as a right-click on its tile in the Inventory »,
+  défaut de `excludeHint`). `ResultPairDetail`, `ResultPairCell`, `CardShell`, `CardActions` déménagent dans
+  `GearCard.tsx` tels quels.
+- ✅ **Aides pures.** `apps/renderer/src/design/gearCardText.ts` (nouveau), une seule fois : `statLong`,
+  `pickSetLevel`, `QUALITY_TONE`, `QUALITY_HELP`, `compactName`, `compactEffect`, `compactSubTitle`, `compactSubTone`,
+  `compactPassiveTitle` (et `visiblePassiveTiers`), `singularityGrade`, `singularityShortLabel`.
+  `lib/presets/presetQuality.ts` et `screens/inventory/FilterModal.tsx` importent de là. `GearDetail.tsx` et
+  `ResultGearDetail.tsx` supprimés. Appelants : Inventory (`effects="card"`, `onOptimizeWearer`), infobulles de
+  `BuildsScreen.tsx` et `PresetsScreen.tsx` (`effects="card"`, `inTooltip`, portrait seul), `BottomGearBand.tsx`
+  (`effects="none"`, `projection`, `fromPresets`, compact ou non). Commentaire de `lib/solver/engine.ts` qui citait les
+  deux fichiers remis à jour.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (BottomGearBand : la carte d'Inventory, ce qu'elle ne montre pas),
+  `wiki/Using-the-App.md` (cartes de la bande du bas), `docs/architecture.md` / `wiki/Architecture.md` (carte de pièce
+  partagée), `docs/STATUS.md` (« Gear cards résultat »), `docs/reference.md` / `wiki/Engine-Reference.md` (arbre
+  `design/`, ligne de test). Aucun item de `docs/todo.md` ne s'y rapportait.
+- ✅ **Tests.** `apps/renderer/test/gearCard.test.ts` (10) : rendu statique de `GearCardBody` — la même pièce non
+  projetée (cadenas, Singularity) rendue pour Inventory et pour le Builder donne le même balisage, projection nulle
+  comprise ; avec un porteur, seule sa ligne diffère (bouton d'un côté, portrait de l'autre) ; ligne rareté / slot,
+  cadenas, dégradé horizontal, titre +15, `w-30` et jamais `w-22` des deux côtés ; bloc Qualité (titre, déclencheur
+  d'aide, score, reachable, palier, barre) des deux côtés ; `effects="card"` rend le passif et les bonus de set,
+  `effects="none"` ni l'un ni les autres, et l'EE sans ses mains ; projection : `+ 1` cyan et `T+1`, sans elle
+  `LV n (base + reforges)` ; `compact` : ce qu'attend `compactCard.test.ts`. `compactCard`, `compactName`,
+  `gearDetailSetLevel`, `gearDetailWearer` passent avec leurs imports déplacés (et les props `projection` / `effects`
+  de la nouvelle signature), sans changer ce qu'ils affirment. `grep -rn "GearDetailBody\|ResultGearDetailBody\|ResultItemDetail\|design/GearDetail.js\|design/ResultGearDetail.js" apps/renderer/src apps/renderer/test`
+  vide. `npm run typecheck` : `> tsc --noEmit` sans erreur ; `npm test` : `Tests  1059 passed (1059)` (renderer ;
+  core 169, desktop 238) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ⏳ **Sevih.** À l'œil sur la build : Builder non compact (bloc Qualité avec barre, ligne rareté / slot, portrait
+  carré, colonne de sous-stats, hauteur des huit cartes à 1616 px), Inventory (colonne `w-30` sur un `LV 6 (4 + 2)`),
+  infobulles Builds / Presets inchangées, cartes compactes inchangées. Hors périmètre relevé : le `GearCard` local de
+  `BottomGearBand.tsx` porte le nom du nouveau fichier (enveloppe adaptateur → `GearCardPanel`, à renommer à
+  l'occasion) ; « No item selected » d'Inventory reste, alors que le glossaire 5.c bannit « item » ; `docs/roadmap.md`
+  / `wiki/Roadmap.md` citent encore `GearDetail.tsx` au titre de l'historique ; `GearTileWithHover` (tuiles Builds /
+  Presets, verrou) de la section 3.3 reste à faire.
+
 ### 🧭 Un seul sélecteur de héros : `HeroPicker` simple / multiple, recherche et ordre des héros partagés (U10a, G98) (2026-11-01)
 - ✅ **Pourquoi.** Dixième lot de la refonte, première moitié (U10 (a) de `docs/ux-audit-2026-11-01.md`, section 3.4
   « Les sélecteurs de héros »). Quatre façons de chercher ou choisir un héros : `HeroSelect` (combobox à portraits,

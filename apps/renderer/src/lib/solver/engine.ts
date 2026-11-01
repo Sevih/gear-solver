@@ -223,7 +223,7 @@ function addProjectedSingularity(piece: GearPiece): GearPiece {
     // Rich-text desc with the colored grade letter, verbatim from the top-grade
     // option in singularity-options.json (DMG+ id 300126 / DMG- id 310066, both
     // grade "S+") so the projected passive renders with the same colored grade
-    // letter as a real rolled one (GearDetail / ResultGearDetail render `desc`).
+    // letter as a real rolled one (the piece card, `GearCard`, renders `desc`).
     desc: isDmgUp
       ? '<color=#ff00ff>S+</color> DMG dealt to targets increases by <color=#0D99DA>50%</color>'
       : '<color=#ff00ff>S+</color> DMG taken from targets decreases by <color=#0D99DA>25%</color>',

@@ -17,7 +17,7 @@
  */
 import { DEFAULT_RULES, type GearPiece, type GearSlot } from "@gear-solver/core";
 import type { UiMainStat } from "../../design/adapter.js";
-import { singularityGrade } from "../../design/ResultGearDetail.js";
+import { singularityGrade } from "../../design/gearCardText.js";
 import { gearPieceQuality } from "../quality.js";
 import type { PresetPiece } from "./presetRows.js";
 

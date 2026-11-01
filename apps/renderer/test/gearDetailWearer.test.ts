@@ -1,5 +1,5 @@
 // The piece card's link to the wearer's Builder: the portrait in
-// `GearDetailBody` becomes an "Optimize ‹hero› →" button when the card gets
+// `GearCardBody` becomes an "Optimize ‹hero› →" button when the card gets
 // `onOptimizeWearer` (never inside a tooltip), and the Inventory's
 // `ItemDetail` adds "Optimize wearer →" next to "Never use", greyed out on a
 // free piece. Rendered server-side, the equipment icon mocked to a marker.
@@ -14,7 +14,7 @@ vi.mock("../src/design/EquipmentIcon.js", async (importOriginal) => ({
   EquipmentIcon: () => createElement("i", { "data-equipment-icon": "" }),
 }));
 
-const { GearDetailBody } = await import("../src/design/GearDetail.js");
+const { GearCardBody } = await import("../src/design/GearCard.js");
 const { ItemDetail } = await import("../src/screens/inventory/ItemDetail.js");
 
 const piece = {
@@ -30,11 +30,11 @@ const piece = {
 const ame = { uid: "h9", charId: 7, name: "Ame" } as unknown as Character;
 
 const body = (props: { equippedChar?: Character | null; inTooltip?: boolean; onOptimizeWearer?: (uid: string) => void }) =>
-  renderToStaticMarkup(createElement(GearDetailBody, { piece, game: null, ...props })).replace(/&#x27;/g, "'");
+  renderToStaticMarkup(createElement(GearCardBody, { piece, game: null, effects: "card", ...props })).replace(/&#x27;/g, "'");
 const detail = (equippedChar: Character | null, onOptimizeWearer?: (uid: string) => void) =>
   renderToStaticMarkup(createElement(ItemDetail, { piece, equippedChar, game: null, onToggleExclude: () => {}, onOptimizeWearer }));
 
-describe("GearDetailBody — wearer portrait", () => {
+describe("GearCardBody — wearer portrait", () => {
   it("is a button with the link", () => {
     expect(body({ equippedChar: ame, onOptimizeWearer: () => {} }))
       .toMatch(/<button type="button" aria-label="Optimize Ame →"[^>]*><img src="\/img\/characters\/faceicon\/FI_7.webp"/);

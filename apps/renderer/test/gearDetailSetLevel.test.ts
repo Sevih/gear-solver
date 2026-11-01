@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GameData, SetDef } from "@gear-solver/core";
-import { pickSetLevel } from "../src/design/GearDetail.js";
+import { pickSetLevel } from "../src/design/gearCardText.js";
 import setsJson from "../../../data/derived/sets.json";
 
 // The gear detail's set tier follows the contract's per-piece level

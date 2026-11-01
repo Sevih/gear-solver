@@ -298,7 +298,10 @@ results, the bottom band shows the selected build's pieces.
 - **Click a row** → the **bottom gear band** shows the 8 pieces of that build, laid out like the
   game's equipment screen (Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots), including the
   **recommended gem allocation** (with a "swap" badge if it differs from what's socketed) and,
-  if a Reforge mode is on, the **projected** max-roll stats. **Settings › Solver › Compact result
+  if a Reforge mode is on, the **projected** max-roll stats. Each card is the Inventory's piece card
+  (rarity and slot, quality with its help and bar, the Singularity +15 effect), without the weapon /
+  accessory passive and the set bonuses, which the **Effects** card under the stats lists for the whole
+  build. **Settings › Solver › Compact result
   cards** shortens them: no item icon (enhance, breakthrough and stars next to the name), set names
   instead of item names (« EE » for the exclusive), icon + value stats with the substats two per row,
   gems as icons, one-line quality and effects (the Singularity +15 bonus as grade + short label + value,

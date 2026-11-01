@@ -11,7 +11,7 @@ import { jsonWithSets, usePersistedState, useSessionState } from "../hooks/usePe
 import { CyanButton } from "../design/Shell.js";
 import { CharacterPortrait, SlotMini, StatIcon } from "../design/EquipmentIcon.js";
 import { RichTooltip } from "../design/RichTooltip.js";
-import { GearDetailBody } from "../design/GearDetail.js";
+import { GearCardBody } from "../design/GearCard.js";
 import { Pill } from "../design/Chips.js";
 import { GAME_GEAR_GRID, TOKENS, toDesignSlot, type SlotId } from "../design/tokens.js";
 import { toUiPiece } from "../design/adapter.js";
@@ -735,7 +735,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
             // Filled slots become inspectable on hover (main/subs/gems), the way
             // the Inventory tab lets you click a tile. Empty slots stay inert.
             return p
-              ? <RichTooltip key={id} placement="right" className="cursor-help" content={<GearDetailBody piece={p} game={game} inTooltip />}>{mini}</RichTooltip>
+              ? <RichTooltip key={id} placement="right" className="cursor-help" content={<GearCardBody piece={p} game={game} effects="card" inTooltip />}>{mini}</RichTooltip>
               : <span key={id}>{mini}</span>;
           })}
         </div>

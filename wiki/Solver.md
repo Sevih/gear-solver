@@ -457,7 +457,12 @@ Swaps column (cell and sort) and the "+ Worklist" entry's `upg` read the same li
 (`GAME_GEAR_GRID`, shared with Builds and Presets): a 4 × 2 grid Weapon | EE | Helmet | Armor / Accessory |
 Talisman | Gloves | Boots from a 1616 px window (four `w-80` cards beside the `w-72` column), otherwise the
 same order wraps. Each card shows name,
-enhance level, slot icon, main stat, subs (with ticks). In addition:
+enhance level, slot icon, main stat, subs (with ticks). It is the Inventory's piece card
+(`design/GearCard.tsx`: `GearCardPanel` around `GearCardBody`, `effects="none"`): the same rarity / slot
+line, the same Quality block (title, help on hover, bar), the same « Active Effect at +15 Enhancement »;
+the weapon / accessory passive and the set bonuses are not on it (the « Effects » card under the stats
+panel shows them), the EE shows only its image and gems, and the projection marks its ticks (cyan `+n`,
+violet `T+n`) on a substat column as wide as the Inventory's. In addition:
 - **Compact mode** (Settings › Solver › Compact result cards, `gs.builder.compactCards`, off by default):
   `w-56` cards — the grid then starts at 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, the EE and the talisman
   in ONE card (`ResultPairDetail`: EE on top, talisman below, a rule between them, each with its own exclude
@@ -473,8 +478,8 @@ enhance level, slot icon, main stat, subs (with ticks). In addition:
   + value, `S+ DS DMG+ +12%`, via `singularityShortLabel` / `singularityGrade`; or a short name); the
   talisman's multi-tier passive not rendered, its text (visible tiers, active first, joined by « · ») in the
   name's `title`; footer = a
-  row of action icons (`CardActions`, today exclude / include). Inventory and tooltips (`GearDetailBody`)
-  untouched.
+  row of action icons (`CardActions`, today exclude / include). Inventory and tooltips (the same
+  `GearCardBody`, never compact) untouched.
 - **Talisman / EE**: the gem allocation recommended by the build (stat + value,
   **swap** badge if it differs from the socketed gems).
 - **Projected stats**: if the Reforge mode ≠ Off, the displayed main + subs are the projection

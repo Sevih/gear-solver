@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import type { GameData } from "@gear-solver/core";
 import type { UiPiece } from "../src/design/adapter.js";
-import { compactName } from "../src/design/ResultGearDetail.js";
+import { compactName } from "../src/design/gearCardText.js";
 
 const game = { sets: { "1": { name: "Attack Set", desc: null, levels: [] } } } as unknown as GameData;
 

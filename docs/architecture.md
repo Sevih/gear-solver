@@ -45,8 +45,9 @@ by hand (manual import).
   **Builder** (the solver — `screens/builder/`: one module per panel, the solve state in the
   `useSolverSession` hook), **Worklist** (cross-hero queue of gear changes — the Builder's
   "+ Worklist" pushes a build's per-slot diff here as a checklist, `equipPieces` applies it
-  locally), plus a tabbed **Settings** modal (`design/settings/`, one pane per file). The gear
-  detail panel (`design/GearDetail.tsx`) is shared between Inventory and the Builds hover tooltip.
+  locally), plus a tabbed **Settings** modal (`design/settings/`, one pane per file). The piece
+  card (`design/GearCard.tsx`) is shared by the Inventory, the Builds / Presets hover tooltips and the
+  Builder's result cards.
   Heavy solves fan out across a **pool of Web Workers** (size = `hardwareConcurrency - 1`,
   override `gs.solver.workerCount` clamped to the core count, hard cap 64 — one rule,
   `clampWorkerCount`) that import the pure engine modules in

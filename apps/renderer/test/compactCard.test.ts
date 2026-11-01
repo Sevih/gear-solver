@@ -23,7 +23,8 @@ vi.mock("../src/design/EquipmentIcon.js", async (importOriginal) => ({
   EquipmentIcon: () => createElement("i", { "data-equipment-icon": "" }),
 }));
 
-const { ResultItemDetail, ResultPairDetail, compactEffect, compactPassiveTitle, compactSubTitle, compactSubTone, singularityGrade, singularityShortLabel } = await import("../src/design/ResultGearDetail.js");
+const { GearCardPanel, ResultPairDetail } = await import("../src/design/GearCard.js");
+const { compactEffect, compactPassiveTitle, compactSubTitle, compactSubTone, singularityGrade, singularityShortLabel } = await import("../src/design/gearCardText.js");
 const { BottomGearBand, COMPACT_GEAR_GRID } = await import("../src/screens/builder/BottomGearBand.js");
 
 const effect = (over: Partial<UiPiece["effects"][number]>): UiPiece["effects"][number] =>
@@ -48,9 +49,9 @@ const piece = (over: Partial<UiPiece> = {}): UiPiece => ({
 } as UiPiece);
 
 function render(p: UiPiece, compact: boolean, excluded = false): string {
-  return renderToStaticMarkup(createElement(ResultItemDetail, {
+  return renderToStaticMarkup(createElement(GearCardPanel, {
     piece: p, equippedChar: null, game: null, excluded, onToggleExclude: () => {},
-    addedTicks: [1, 0, 0, 0], transistoneTicks: [1, 0, 0, 0], compact,
+    projection: { addedTicks: [1, 0, 0, 0], transistoneTicks: [1, 0, 0, 0] }, effects: "none", compact,
   }));
 }
 
@@ -156,7 +157,7 @@ describe("compact substat cell", () => {
   });
 });
 
-describe("ResultItemDetail — compact card", () => {
+describe("GearCardPanel — compact card", () => {
   it("no equipment icon; the header carries enhance, breakthrough and stars", () => {
     const html = render(piece(), true);
     expect(html).not.toContain("data-equipment-icon");
@@ -223,7 +224,7 @@ describe("ResultItemDetail — compact card", () => {
   });
 });
 
-describe("ResultItemDetail — non-compact card", () => {
+describe("GearCardPanel — non-compact card", () => {
   it("keeps the equipment icon and the full-width exclude button", () => {
     const html = render(piece(), false);
     expect(html).toContain("data-equipment-icon");
@@ -368,7 +369,7 @@ describe("BottomGearBand — compact band", () => {
   });
 
   it("compact empty card keeps its content height, the non-compact one fills", () => {
-    const empty = (compact: boolean) => renderToStaticMarkup(createElement(ResultItemDetail, { piece: null, equippedChar: null, game: null, compact }));
+    const empty = (compact: boolean) => renderToStaticMarkup(createElement(GearCardPanel, { piece: null, equippedChar: null, game: null, effects: "none", compact }));
     expect(empty(true)).toContain("No piece in this build");
     expect(empty(true)).not.toContain("Click a tile");
     expect(asideClasses(empty(true))[0]).not.toContain("h-full");

@@ -490,7 +490,12 @@ Swaps (cellule et tri) et l'`upg` de l'entrée « + Worklist » lisent le même 
 (`GAME_GEAR_GRID`, partagé avec Builds et Presets) : grille 4 × 2 Arme | EE | Tête | Torse / Accessoire |
 Talisman | Gants | Bottes dès 1616 px de fenêtre (quatre cartes `w-80` à côté de la colonne `w-72`), sinon
 le même ordre passe à la ligne. Chaque carte montre nom,
-enhance level, icône slot, main stat, subs (avec ticks). En plus :
+enhance level, icône slot, main stat, subs (avec ticks). C'est la carte de pièce de l'Inventaire
+(`design/GearCard.tsx` : `GearCardPanel` autour de `GearCardBody`, `effects="none"`) : même ligne rareté /
+slot, même bloc Qualité (titre, aide au survol, barre), même « Active Effect at +15 Enhancement » ; le passif
+d'arme / d'accessoire et les bonus de set n'y sont pas (la carte « Effects » sous le panneau des stats les
+montre), l'EE n'y montre que son image et ses gemmes, et la projection marque ses ticks (`+n` cyan, `T+n`
+violet) sur une colonne de sous-stats aussi large que celle de l'Inventaire. En plus :
 - **Mode compact** (Settings › Solver › Compact result cards, `gs.builder.compactCards`, éteint par défaut) :
   cartes `w-56` — la grille démarre alors à 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, l'EE et le talisman
   dans UNE carte (`ResultPairDetail` : EE en haut, talisman en bas, un filet entre les deux, chacun son action
@@ -505,7 +510,7 @@ enhance level, icône slot, main stat, subs (avec ticks). En plus :
   signée ; le bonus +15 en grade coloré + icône + libellé court + valeur, `S+ DS DMG+ +12%`, par
   `singularityShortLabel` / `singularityGrade` ; ou nom court) ; passif multi-paliers du talisman non rendu,
   son texte (paliers visibles, actifs d'abord, séparés par « · ») dans le `title` du nom ; pied = rangée d'icônes d'action (`CardActions`, aujourd'hui exclure / inclure).
-  L'Inventaire et les tooltips (`GearDetailBody`) ne bougent pas.
+  L'Inventaire et les tooltips (le même `GearCardBody`, jamais compact) ne bougent pas.
 - **Talisman / EE** : l'allocation de gemmes recommandée par le build (stat + valeur,
   badge **swap** si elle diffère des gemmes socketées).
 - **Stats projetées** : si le mode Reforge ≠ Off, main + subs affichés sont la projection

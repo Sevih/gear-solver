@@ -8,7 +8,7 @@ import { cx } from "../../design/cx.js";
 import { StatIcon } from "../../design/EquipmentIcon.js";
 import { RARITY, STAT, type DesignRarity } from "../../design/tokens.js";
 import { QUALITY_REACHABLE_HELP, QUALITY_TIERS, type QualityTier } from "../../lib/quality.js";
-import { QUALITY_TONE } from "../../design/GearDetail.js";
+import { QUALITY_TONE } from "../../design/gearCardText.js";
 import { GEAR_STATS, emptyFilters, type BaseRollsFilter, type FilterState } from "./filters.js";
 import {
   PRESET_NAME_MAX, SCRAP_CANDIDATES, deleteInventoryFilterPreset, loadInventoryFilterPresets,

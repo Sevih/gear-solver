@@ -49,7 +49,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Dispa
 import type { Character, GameData, GearPiece, GearSlot, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { effectiveCharacter } from "@gear-solver/core";
 import { CharacterPortrait, SlotMini, StatIcon } from "../../design/EquipmentIcon.js";
-import { GearDetailBody } from "../../design/GearDetail.js";
+import { GearCardBody } from "../../design/GearCard.js";
 import { RichTooltip } from "../../design/RichTooltip.js";
 import { Pill } from "../../design/Chips.js";
 import { CyanButton } from "../../design/Shell.js";
@@ -692,7 +692,7 @@ function PresetPieces({ pieces, game, ee }: { pieces: PresetPiece[]; game: GameD
     return (
       <div key={key} className="flex w-16 flex-col items-center gap-0.5">
         <div className={cx("relative rounded-lg", p?.missing && "ring-1 ring-rose-400/60", p && p.sharedWith.length > 0 && "ring-1 ring-amber-400/60")}>
-          {ui ? <RichTooltip placement="right" className="cursor-help" content={<GearDetailBody piece={ui} game={game} inTooltip />}>{tile}</RichTooltip> : tile}
+          {ui ? <RichTooltip placement="right" className="cursor-help" content={<GearCardBody piece={ui} game={game} effects="card" inTooltip />}>{tile}</RichTooltip> : tile}
           {p?.missing && <Badge tone="rose" title="This piece is no longer in your inventory">missing</Badge>}
           {p && !p.missing && p.sharedWith.length > 0 && (
             <Badge tone="amber" title={`Shared with ${p.sharedWith.map((r) => `#${r.num} ${r.name}`).join(", ")}`}>shared</Badge>
@@ -712,7 +712,7 @@ function PresetPieces({ pieces, game, ee }: { pieces: PresetPiece[]; game: GameD
           <RichTooltip
             placement="right"
             className="cursor-help"
-            content={<div className="flex flex-col gap-1.5"><span className="text-[11px] italic text-zinc-300">{EE_NOTE}</span><GearDetailBody piece={ui} game={game} inTooltip /></div>}
+            content={<div className="flex flex-col gap-1.5"><span className="text-[11px] italic text-zinc-300">{EE_NOTE}</span><GearCardBody piece={ui} game={game} effects="card" inTooltip /></div>}
           >{tile}</RichTooltip>
         ) : <div title={EE_NOTE}>{tile}</div>}
       </div>

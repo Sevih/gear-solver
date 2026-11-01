@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import type { Character, GameData, GearPiece } from "@gear-solver/core";
 import { GAME_GEAR_GRID, SLOT_BY, toEngineSlot, type SlotId } from "../../design/tokens.js";
 import { toUiPiece } from "../../design/adapter.js";
-import { ResultItemDetail, ResultPairDetail, type ResultPairCell } from "../../design/ResultGearDetail.js";
+import { GearCardPanel, ResultPairDetail, type ResultPairCell } from "../../design/GearCard.js";
 import { projectPieceForReforge } from "../../lib/solver/engine.js";
 import { rerollPotential } from "../../lib/solver/reroll.js";
 import type { SolveBuild } from "../../lib/solver/types.js";
@@ -143,11 +143,11 @@ function emptyLabelOf(slot: SlotId, build: SolveBuild | null): string {
 const emptyHintOf = (build: SolveBuild | null): string | undefined =>
   build ? undefined : "Solve, then pick a build in the table.";
 
-/** A SOLVE-results gear card. Renders the FULL duplicated Inventory inspect
- *  panel (`ResultItemDetail`: same container, scroll wrapper, equipped-char
- *  portrait, exclude footer, empty state) so the results look pixel-identical to
- *  the Inventory tab's left card. The piece (already reforge-projected upstream
- *  in `BottomGearBand`) goes through the same `toUiPiece` adapter. */
+/** A SOLVE-results gear card: the Inventory's piece panel (`GearCardPanel`:
+ *  same container, scroll wrapper, body, exclude footer, empty state), its
+ *  effects left to `BuildEffectsPanel` and the projection's ticks marked. The
+ *  piece (already reforge-projected upstream in `BottomGearBand`) goes through
+ *  the same `toUiPiece` adapter. */
 function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleExclude, addedTicks, transistoneTicks, compact, emptyLabel, emptyHint }: {
   slot: SlotId;
   piece: GearPiece | null;
@@ -171,18 +171,18 @@ function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleEx
   emptyHint?: string;
 }) {
   // Adapt the (reforge-projected) engine piece through the same adapter the
-  // Inventory tab uses, then render the duplicated inspect panel verbatim.
+  // Inventory tab uses, then render the shared piece panel.
   const ui = piece && game ? toUiPiece(piece, game) : null;
   return (
-    <ResultItemDetail
+    <GearCardPanel
       piece={ui}
       equippedChar={equippedChar ?? null}
       fromPresets={fromPresets}
       game={game}
       excluded={excluded}
       onToggleExclude={onToggleExclude}
-      addedTicks={addedTicks}
-      transistoneTicks={transistoneTicks}
+      projection={{ addedTicks: addedTicks ?? [], transistoneTicks: transistoneTicks ?? [] }}
+      effects="none"
       compact={compact}
       emptyLabel={emptyLabel}
       emptyHint={emptyHint}
