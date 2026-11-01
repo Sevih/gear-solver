@@ -516,7 +516,12 @@ Arme, EE, Tête, Torse / Accessoire, Talisman, Gants, Bottes ; `PRESET_SLOTS` ga
 worklist, tests), seule la grille d'affichage change, et une pièce de slot inconnu suit la grille. La case EE
 montre l'EE que porte aujourd'hui le héros de référence de la carte (`referenceUid`, ou le porteur unique
 proposé, `eeOf`), atténuée, tooltip « EE isn't part of a preset — each hero keeps their own » ; sans
-référence (ou sans EE), une case vide en pointillé. Au-delà de 1280 px (`xl`), une carte ouverte passe en
+référence (ou sans EE), une case vide en pointillé. Sous la grille, trois lignes (`lib/presets/presetQuality.ts`) :
+**Quality** `X / 138`, somme des ticks des six pièces arme, accessoire, tête, torse, gants, bottes
+(`gearPieceQuality`) contre le cap fixe 6 × 23 (pièce ascendée + reforgée à fond), le cap de l'investissement
+actuel dans le tooltip ; **Offensive** `S / A`, les grades du roll +15 (Singularity, `singularityGrade`) de
+l'arme et de l'accessoire ; **Defensive** `A / B / C / S`, ceux de tête, torse, gants, bottes — classés par
+slot, un « – » par pièce non ascendée ou absente, chaque lettre à la couleur du jeu. Au-delà de 1280 px (`xl`), une carte ouverte passe en
 deux colonnes : la grille à gauche (largeur fixe), les lignes Reference / Associated à droite ; en dessous,
 empilées. Les métriques d'une ligne de héros ont une largeur minimale (alignées d'une ligne à l'autre) et
 s'étalent sur la place disponible. L'onglet Worklist n'a plus de largeur maximale : en-tête de transaction

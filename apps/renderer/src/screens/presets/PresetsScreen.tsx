@@ -43,7 +43,7 @@
  * hero (`snapshotOnHeroSwitch`) — else the one of the hero's most recent saved
  * build (`presetPriorityOf`).
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, GameData, GearPiece, GearSlot, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { effectiveCharacter } from "@gear-solver/core";
 import { CharacterPortrait, SlotMini } from "../../design/EquipmentIcon.js";
@@ -67,6 +67,7 @@ import { bestEeGemsFor } from "../../lib/presets/eeGems.js";
 import { presetWorklistFor } from "../../lib/presets/presetWorklist.js";
 import { presetOptimizeNote, presetOptimizePatch } from "../../lib/presets/optimize.js";
 import { presetGameOrder } from "../../lib/presets/presetHolds.js";
+import { presetQuality, presetRolls, type PresetRoll } from "../../lib/presets/presetQuality.js";
 import { cardOpen, forceCards, initialCardCommand, type CardOpenCommand } from "../../lib/presets/cardOpen.js";
 import { loadSeenPresets, persistSeenPresets, toggleLocked, type PresetRank } from "../../lib/storage/presetPriority.js";
 import { fillUnrankedByOrder, moveRankBefore, reorderRank } from "../../lib/storage/rankPriority.js";
@@ -661,7 +662,9 @@ const EE_NOTE = "EE isn't part of a preset — each hero keeps their own";
 /** The preset's pieces on the game's 4 × 2 grid, the existing tile + hover
  *  detail per piece, flagged when missing from the inventory or shared with
  *  another preset; `ee` (the reference hero's) dimmed in the EE cell. Pieces
- *  of unknown slot follow the grid. */
+ *  of unknown slot follow the grid. Under them, the preset's quality out of
+ *  6 × 23 and the +15 grades of its offensive / defensive pieces
+ *  (`presetQuality`, `presetRolls`). */
 function PresetPieces({ pieces, game, ee }: { pieces: PresetPiece[]; game: GameData | null; ee: GearPiece | null }) {
   const bySlot = new Map(pieces.filter((p) => p.slot).map((p) => [p.slot!, p]));
   const unknown = pieces.filter((p) => !p.slot);
@@ -709,6 +712,45 @@ function PresetPieces({ pieces, game, ee }: { pieces: PresetPiece[]; game: GameD
           {unknown.map((p) => cell(p.uid, "weapon", p))}
         </div>
       )}
+      <PresetSummary pieces={pieces} />
+    </div>
+  );
+}
+
+const slotLabel = (slot: GearSlot): string => slot.charAt(0).toUpperCase() + slot.slice(1);
+
+/** One letter per slot ("–" without a +15 roll), colored like the game's
+ *  grade; the title names each slot's option. */
+function RollGrades({ rolls }: { rolls: PresetRoll[] }) {
+  const title = rolls
+    .map((r) => (r.grade ? `${slotLabel(r.slot)} ${r.grade}${r.name ? ` (${r.name})` : ""}` : `${slotLabel(r.slot)}: no +15 roll`))
+    .join(" · ");
+  return (
+    <span title={title}>
+      {rolls.map((r, i) => (
+        <Fragment key={r.slot}>
+          {i > 0 && " / "}
+          <span style={r.color ? { color: r.color } : undefined}>{r.grade ?? "–"}</span>
+        </Fragment>
+      ))}
+    </span>
+  );
+}
+
+/** Quality of the preset out of 6 × 23, then the +15 grades of its weapon /
+ *  accessory and of its four armor pieces. */
+function PresetSummary({ pieces }: { pieces: PresetPiece[] }) {
+  const q = presetQuality(pieces);
+  const rolls = presetRolls(pieces);
+  return (
+    <div className="flex w-max flex-col gap-0.5">
+      <Metric
+        label="Quality"
+        value={q.counted === 0 ? "—" : `${q.current} / ${q.max}`}
+        title={`Sum of the six pieces' rolled ticks vs 6 × 23 (ascended + fully reforged). Cap for the current investment: ${q.investedMax}.`}
+      />
+      <Metric label="Offensive" value={<RollGrades rolls={rolls.offensive} />} />
+      <Metric label="Defensive" value={<RollGrades rolls={rolls.defensive} />} />
     </div>
   );
 }
@@ -891,9 +933,9 @@ function ClassIcon({ label }: { label: string }) {
 }
 
 /** Fixed minimum width so the metrics line up from one hero line to the next. */
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, title }: { label: string; value: ReactNode; title?: string }) {
   return (
-    <span className="flex min-w-24 items-baseline gap-1 font-mono text-[11.5px] tabular-nums">
+    <span title={title} className="flex min-w-24 items-baseline gap-1 font-mono text-[11.5px] tabular-nums">
       <span className="text-[9px] uppercase tracking-wider text-zinc-400">{label}</span>
       <span className="text-white">{value}</span>
     </span>

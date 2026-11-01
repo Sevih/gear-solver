@@ -8,6 +8,40 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎖️ Qualité du preset sur 138 et grades du +15 offensif / défensif sur la carte de preset (G86) (2026-11-01)
+- ✅ **Pourquoi.** Demande de Sevih du 01/11 : chaque pièce a déjà une qualité sur 23 ; la carte d'un preset doit
+  montrer la qualité du preset sur 6 × 23 = 138 et les grades du roll +15 (Singularity) des pièces offensives (arme,
+  accessoire) et défensives (tête, torse, gants, bottes), en trois lignes.
+- ✅ **Modèle.** Nouveau module pur `apps/renderer/src/lib/presets/presetQuality.ts`. `presetQuality(pieces)` somme
+  les `current` de `gearPieceQuality` (`lib/quality.ts`, inchangé) sur les six slots arme, accessoire, tête, torse,
+  gants, bottes — pièce manquante ou slot vide = 0, talisman / EE / slot inconnu jamais comptés — et rend
+  `{ current, max, investedMax, counted }` : `max` = `PRESET_QUALITY_MAX`, calculé (6 slots × (14 + reforges d'un 6★
+  + bonus d'ascension, lus dans `DEFAULT_RULES.reforge`) = 138), dénominateur FIXE pour que deux presets se comparent
+  sur la même échelle ; `investedMax` = somme des `max` des pièces notées (le cap de l'investissement actuel) ;
+  `counted` = pièces notées. `presetRolls(pieces)` rend `offensive` = [weapon, accessory] et `defensive` = [helmet,
+  armor, gloves, boots], une entrée par slot même sans pièce, avec `grade` / `color` tirés par `singularityGrade`
+  (`design/ResultGearDetail.tsx`) de la desc de l'entrée `source: "singularity"` de `piece.main`, et son `name` ; tout
+  à null pour une pièce non ascendée ou un slot absent. Le classement offensif / défensif se fait par slot, pas par nom
+  d'option.
+- ✅ **Carte.** `PresetsScreen.tsx` : `PresetPieces` rend sous la grille (même colonne, `w-max`) un `PresetSummary` de
+  trois `Metric` — « Quality » `X / 138` (« — » sans pièce notée ; title « Sum of the six pieces' rolled ticks vs
+  6 × 23 (ascended + fully reforged). Cap for the current investment: Y. »), « Offensive » `S / A` et « Defensive »
+  `A / B / C / S` (`RollGrades` : un « – » par pièce sans grade, chaque lettre colorée en style inline comme le grade
+  compact ; title « Weapon S (‹option›) · Accessory: no +15 roll »). `Metric` accepte désormais une valeur `ReactNode`
+  et un `title` optionnel (les métriques des lignes de héros ne changent pas). Les presets locaux ont les mêmes lignes ;
+  un preset vide reste replié, les lignes ne se rendent que carte ouverte.
+- ✅ **Docs.** `docs/solver.md` et `wiki/Solver.md` (disposition de l'onglet Presets), `wiki/Using-the-App.md` (une
+  phrase sur les trois lignes). Aucun item de `docs/todo.md` ne s'y rapportait.
+- ✅ **Tests.** `apps/renderer/test/presetQuality.test.ts` (7 cas) : `PRESET_QUALITY_MAX` = 138 ; six pièces fabriquées
+  (ticks et reforges connus) → `current`, `investedMax`, `counted` attendus ; un slot manquant et un slot vide comptent
+  0 ; un talisman et une EE glissés dans la liste ne changent rien ; `presetRolls` : ordre des slots, grade et couleur
+  d'une desc `<color=#ff0>S+</color> …`, `name` repris, null pour une pièce non ascendée et pour un slot absent.
+  Typecheck des trois workspaces vert (dernière ligne `> tsc -p . --noEmit && tsc -p tsconfig.test.json`) ; tests :
+  `Tests  169 passed (169)` (core), `Tests  915 passed (915)` (renderer), `Tests  238 passed (238)` (desktop) ;
+  `eslint .` : `✖ 8 problems (0 errors, 8 warnings)`, comme avant. Les commandes ont été lancées par workspace : le
+  `package.json` racine du working tree n'exposait pas les scripts au moment de la vérification.
+- ⏳ Coup d'œil de Sevih sur une carte réelle (alignement des trois lignes sous la grille, couleurs des grades).
+
 ### 📏 Cartes compactes à la hauteur de leur contenu, sans étirement de rangée (G85) (2026-10-31)
 - ✅ **Pourquoi.** Retour de Sevih du 31/10 après G84 : en compact, les cartes de la bande étaient beaucoup trop
   hautes. La bande (`flex-wrap`, puis grille à partir de 1232 px) gardait `align-items` / `align-content` à stretch

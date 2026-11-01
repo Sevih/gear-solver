@@ -482,7 +482,12 @@ Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots; `PRESET_SLOTS` k
 worklist, tests), only the display grid changes, and a piece of unknown slot follows the grid. The EE cell
 shows the EE the card's reference hero wears today (`referenceUid`, or the proposed unique wearer, `eeOf`),
 dimmed, tooltip "EE isn't part of a preset — each hero keeps their own"; without a reference (or an EE), an
-empty dashed cell. Past 1280 px (`xl`), an open card goes two-column: the grid on the left (fixed width), the
+empty dashed cell. Under the grid, three lines (`lib/presets/presetQuality.ts`): **Quality** `X / 138`, the
+rolled ticks of the six pieces weapon, accessory, helmet, armor, gloves, boots (`gearPieceQuality`) against a
+fixed 6 × 23 cap (ascended + fully reforged), the cap for the current investment in the tooltip;
+**Offensive** `S / A`, the +15 (Singularity) roll grades of the weapon and accessory (`singularityGrade`);
+**Defensive** `A / B / C / S`, those of helmet, armor, gloves, boots — by slot, a "–" for a piece that isn't
+ascended or is absent, each letter in the game's color. Past 1280 px (`xl`), an open card goes two-column: the grid on the left (fixed width), the
 Reference / Associated lines on the right; below that, stacked. A hero line's metrics have a minimum width
 (aligned from one line to the next) and spread over the room available. The Worklist tab has no maximum
 width anymore: the transaction header full width, then the cards on a two-column grid past 1280 px, each at

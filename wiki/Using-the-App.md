@@ -117,8 +117,11 @@ One card per equipment preset saved in-game, in the **same order as the game's p
 the game's equipment screen — Weapon, EE, Helmet, Armor / Accessory, Talisman, Gloves, Boots — and
 the heroes **currently wearing** it (gear identical to the preset, EE aside). The EE is never part
 of a preset — each hero keeps their own: its cell shows the reference hero's EE, dimmed. On a wide
-window an open card shows the pieces on the left and the heroes on the right. Nothing is sent to
-the game.
+window an open card shows the pieces on the left and the heroes on the right. Under the pieces,
+three lines: **Quality** (the six pieces' rolled substat ticks out of 6 × 23 = 138, each piece
+ascended and fully reforged; hover for the cap at the pieces' current investment), **Offensive**
+(the +15 roll grade of the weapon / accessory) and **Defensive** (helmet / armor / gloves / boots),
+"–" for a piece without a +15 roll. Nothing is sent to the game.
 
 - **Class filter and sort** — the class chips at the top show only the presets of the ticked
   classes (**Clear** resets them); **Sort: Class** groups the cards by class instead of the
