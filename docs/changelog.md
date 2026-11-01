@@ -8,6 +8,33 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧭 Audit UX : répartition des écrans, parcours et savoir dupliqué, rapport sans code (G88) (2026-11-01)
+- ✅ **Pourquoi.** Demande de Sevih du 01/11 : « objectivement c'est le bazar, on ne sait pas par où prendre le truc,
+  même moi je galère à l'utiliser efficacement », et « il y a probablement pas mal de connaissance dupliquée ». Avant
+  toute refonte, un audit : nouveau `docs/ux-audit-2026-11-01.md`, **aucune** ligne de code ni de doc existante
+  modifiée (ni `wiki/`, ni `docs/solver.md`) ; l'audit code G82 (`docs/audit-2026-10-31.md`) est cité, pas refait.
+- ✅ **Méthode.** Lecture du manuel (`wiki/Using-the-App.md`, `wiki/Getting-Started.md`), de `docs/architecture.md`,
+  `docs/solver.md` § 4, `App.tsx`, `screens/**`, `design/**` (Settings et Shell compris), `lib/storage/*`,
+  `docs/todo.md` et G82 ; application non lancée (ce qui dépend d'Electron est marqué « à confirmer »). Chaque
+  affirmation renvoie à un `fichier:ligne` ou au manuel ; un échantillon a été recontrôlé à la rédaction.
+- ✅ **Contenu.** (1) Inventaire : **43 tableaux, 469 lignes**, couvrant les **6 onglets sur 6** (Home, Inventory,
+  Builds, Presets, Builder, Worklist) et les **6 panneaux de Settings sur 6** (Setup, Solver, Data, Backup, Debug,
+  Logs), plus modales, toasts et dialogues, avec pour chaque contrôle son usage (« Quand »), son accès et sa
+  persistance. (2) Quatre parcours chiffrés en onglets et en clics (installation, session, presets partagés,
+  entretien). (3) Seize cas de savoir dupliqué, dont « preset » qui nomme cinq choses, « priority » poids ou rang, les
+  poids du Builder écrits seulement au changement de héros et relus par Presets au montage, les rangs par défaut posés
+  seulement à l'ouverture de Builds, la perte de Presets qui compare un build projeté à des jets réels, et un registre
+  des 32 clés `gs.*`. (4) Huit raisons du « par où prendre le truc ». (5) Navigation cible à cinq onglets par tâche
+  (Heroes, Optimizer, Presets, Worklist, Gear ; Home dissous dans Gear), recommandée, et une variante conservatrice à
+  six onglets renommés ; maquettes ASCII, glossaire, carte des états, **quatorze lots** U1 à U14 ordonnés (les cinq
+  premiers ne déplacent aucun écran). (6) **Quatorze décisions** avec une recommandation chacune.
+- ✅ **Vérification.** Aucun code touché ; `npm run typecheck` vert (dernière ligne `> tsc --noEmit`) ; `npm test` :
+  `Tests  169 passed (169)` (core), `Tests  238 passed (238)` (desktop), `Tests  919 passed (919)` (renderer) ;
+  `npm run lint` : `✖ 8 problems (0 errors, 8 warnings)`, comme avant. Aucun item de `docs/todo.md` n'est clos par ce
+  lot.
+- ⏳ Sevih : répondre aux décisions D1 à D14 de la section 6 (surtout D2 variante A ou B, D3 Solve CP sans poids, D4
+  poids persistants, D7 sauvegarde complète), corriger la colonne « Quand » là où ton usage diffère, puis lancer U1.
+
 ### 🏷️ Carte de preset : icône + valeur sous les tuiles, colonne qualité entre tuiles et Reference, infobulles Score / Dmg / DmgS (G87) (2026-11-01)
 - ✅ **Pourquoi.** Retour de Sevih du 01/11 sur la carte de preset après G86 : le label texte sous chaque tuile
   (« ATK 1380 ») n'apprend rien sur l'arme (toutes ont l'ATK plat en première main) ni sur les armures et l'EE ; le
