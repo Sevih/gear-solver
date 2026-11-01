@@ -73,6 +73,6 @@
 
 ---
 
-> ✅ **À NE PAS toucher (Gear)** : virtualisation par lignes + reflow `ResizeObserver`, indexation
+> ✅ **À NE PAS toucher (Gear › Pieces et › Scrap, `InventoryScreen`)** : virtualisation par lignes + reflow `ResizeObserver`, indexation
 > `charsByUid` en `Map`, auto-prune des chips indisponibles, `memo` sur `GearTile` (callback stable),
 > re-seed du draft à l'ouverture de la modal.

@@ -567,7 +567,7 @@ pleine largeur, puis les cartes en grille à deux colonnes au-delà de 1280 px, 
 `comparePresets` (core, `parse.ts`) reproduit le `CEquipPresetData.SortPreset` du client — type croissant
 (les presets Master League après les autres), favoris d'abord, puis l'ordre du joueur
 (`Preset.sortOrder`, lu dans `PresetOrderList` par `Num`, 0 sans entrée) décroissant, puis `num`. Le
-`#num` reste affiché. La barre du haut porte les cinq chips de classe (`CLASSES` de `lib/homeStats.ts`,
+`#num` reste affiché. La barre du haut porte les cinq chips de classe (`CLASSES` de `lib/gear/overviewStats.ts`,
 multi-sélection), un sélecteur « Sort: In-game · Class » et « Clear ». La classe d'un preset
 (`presetClasses`) vient de ses pièces (arme ou accessoire restreint à une classe, `GearPiece.classLimit` ;
 deux classes différentes sont gardées toutes deux), à défaut du héros de référence, des porteurs, puis des

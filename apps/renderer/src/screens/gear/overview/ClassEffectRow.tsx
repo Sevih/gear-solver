@@ -1,9 +1,9 @@
 /**
- * Home class gear rows — owned weapon / accessory effects per class.
+ * Gear › Overview class gear rows — owned weapon / accessory effects per class.
  */
-import { cx } from "../../design/cx.js";
-import { SLOT_BY, type SlotId } from "../../design/tokens.js";
-import type { EffectChip, ClassGearRow } from "../../lib/homeStats.js";
+import { cx } from "../../../design/cx.js";
+import { SLOT_BY, type SlotId } from "../../../design/tokens.js";
+import type { EffectChip, ClassGearRow } from "../../../lib/gear/overviewStats.js";
 
 // ── class effect row (owned weapon / accessory effects per class) ────────
 // Weapons and accessories sit in two columns; the inventory tab icon heads

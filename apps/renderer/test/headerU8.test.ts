@@ -3,8 +3,8 @@
  * pending-update badge (`updateBadge`), the one data-version format
  * (`dataVersionLabel`), and — rendered server-side — the header with one
  * capture pill and the update badge only when there is something to install,
- * Home › System health without install / launch / reload buttons, and Home's
- * empty state without a button of its own.
+ * and the first-capture steps (Heroes and Gear without a capture) without a
+ * button of their own.
  */
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
@@ -13,8 +13,7 @@ import { captureBadge, type SteamStatus } from "../src/steam.js";
 import { updateBadge, type UpdateStatus } from "../src/lib/update.js";
 import { dataVersionLabel } from "../src/lib/dataVersion.js";
 import { GsHeader, type HeaderUpdate } from "../src/design/Shell.js";
-import { SystemHealthCard } from "../src/screens/home/SystemHealthCard.js";
-import { EmptyDashboard } from "../src/screens/home/EmptyDashboard.js";
+import { FirstCapture } from "../src/screens/FirstCapture.js";
 
 const noop = () => {};
 const DIR = "C:/Steam/steamapps/common/OUTERPLANE";
@@ -95,8 +94,8 @@ describe("dataVersionLabel", () => {
 
 function header(status: SteamStatus | null, upd: HeaderUpdate | null = null) {
   return renderToStaticMarkup(createElement(GsHeader, {
-    active: "Home", onTabChange: noop, onSetup: noop, version: "1.28.0", gameVersion: "1.11.503",
-    counts: { Home: null, Heroes: null, Optimizer: null, Presets: null, Worklist: null, Gear: null },
+    active: "Heroes", onTabChange: noop, onSetup: noop, version: "1.28.0", gameVersion: "1.11.503",
+    counts: { Heroes: null, Optimizer: null, Presets: null, Worklist: null, Gear: null },
     capture: { steam: { status, onInstall: noop, onLaunch: noop }, onReload: noop },
     update: upd, onOpenUpdate: noop,
   }));
@@ -123,23 +122,9 @@ describe("GsHeader", () => {
   });
 });
 
-describe("Home › System health", () => {
-  const render = (s: SteamStatus | null) => renderToStaticMarkup(createElement(SystemHealthCard, { steam: s, busy: false, onSyncData: noop, onOpenSetup: noop }));
-
-  it("says the state in the pill's words and links to Setup instead of acting", () => {
-    for (const s of [steam({ ready: false }, { present: false, upToDate: false }), steam(), steam({ gameRunning: true, live: true })]) {
-      const html = render(s);
-      expect(html).toContain(captureBadge(s).label);
-      expect(html).toContain("Open Setup");
-      expect(html).toContain("Sync game data");
-      expect(html).not.toMatch(/Install plugin|Update plugin|Launch game|>Reload</);
-    }
-  });
-});
-
-describe("Home empty state", () => {
+describe("First-capture steps", () => {
   it("points to the header button and Setup, no button of its own", () => {
-    const html = renderToStaticMarkup(createElement(EmptyDashboard, { steam: steam({ ready: false }, { present: false, upToDate: false }), onOpenSetup: noop }));
+    const html = renderToStaticMarkup(createElement(FirstCapture, { steam: steam({ ready: false }, { present: false, upToDate: false }), onOpenSetup: noop }));
     expect(html).toContain("top right");
     expect(html).toContain("Settings › Setup");
     expect(html).not.toMatch(/Install plugin|Launch game|Install the capture plugin|Launch OUTERPLANE/);

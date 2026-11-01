@@ -1,12 +1,12 @@
 /**
- * Home roster export — the hero-tracker export button.
+ * Gear › Overview roster export — the hero-tracker export button.
  */
 import { useEffect, useState } from "react";
 import type { GameData, Inventory } from "@gear-solver/core";
-import { cx } from "../../design/cx.js";
-import { buildHeroTrackerExport } from "../../lib/heroTracker.js";
-import { localDateStamp } from "../../lib/dateStamp.js";
-import { IC_EXPORT } from "./HomeIcons.js";
+import { cx } from "../../../design/cx.js";
+import { buildHeroTrackerExport } from "../../../lib/heroTracker.js";
+import { localDateStamp } from "../../../lib/dateStamp.js";
+import { IC_EXPORT } from "./OverviewIcons.js";
 
 /** "Export" affordance in the Roster header — writes the captured progression
  *  (levels, skills, affinity, transcend, EE, core fusion) as an

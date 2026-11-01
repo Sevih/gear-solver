@@ -55,7 +55,9 @@ button in the top-right). Follow the checklist:
 3. **Game running with the plugin loaded** — launch the game (**Launch game**, in the wizard or in
    the header).
 
-When the checks are green, you're ready to import.
+When the checks are green, click **Re-check** once more if needed, then **Close**: you land on the
+**Heroes** tab, which shows the capture steps until your first snapshot imports, then fills in on
+its own (as does **Gear**).
 
 ---
 

@@ -1,11 +1,12 @@
 /**
- * Home dashboard stats — every number the Home tab shows, derived from the
+ * Gear › Overview stats — every number the Overview view shows (snapshot
+ * line, quality distribution, roster, gear breakdown), derived from the
  * loaded inventory + game data. Pure (no React); `computeStats` is covered by
- * `test/homeSets.test.ts`.
+ * `test/overviewSets.test.ts`.
  */
 import type { GameData, Inventory } from "@gear-solver/core";
-import { SLOTS, STAT, toDesignSlot, type SlotId } from "../design/tokens.js";
-import { gearPieceQualityTier, QUALITY_COLOR, type QualityTier } from "./quality.js";
+import { SLOTS, STAT, toDesignSlot, type SlotId } from "../../design/tokens.js";
+import { gearPieceQualityTier, QUALITY_COLOR, type QualityTier } from "../quality.js";
 
 // ── breakdown vocab (raw CET_/CCT_ enums we already get from game data) ─────
 // Element colors match the design brief; class bars are a neutral gray.
@@ -44,7 +45,7 @@ const SET_COLORS = ["#ff6b6b", "#4dabf7", "#fbbf24", "#51cf66", "#c4b5fd", "#22d
 // Each key resolves a label + icon via the STAT tokens.
 const TALISMAN_STATS = ["atkPct", "hpPct", "defPct", "critRate", "critDmg", "dmgUp", "dmgReduce", "eff", "effRes"] as const;
 
-export interface HomeStats {
+export interface OverviewStats {
   heroes: number;
   gear: number;
   totalGraded: number;
@@ -99,8 +100,8 @@ function stripTags(s: string): string {
   return s.replace(/<\/?color[^>]*>/g, "");
 }
 
-/** Read by the Home screen; exported for `homeSets.test.ts` too. */
-export function computeStats(inv: Inventory, game: GameData | null): HomeStats {
+/** Read by Gear › Overview; exported for `overviewSets.test.ts` too. */
+export function computeStats(inv: Inventory, game: GameData | null): OverviewStats {
   const heroes = inv.characters.length;
   const gear = inv.gear.length;
 

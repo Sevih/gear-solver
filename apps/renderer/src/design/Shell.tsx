@@ -107,19 +107,21 @@ export function CaptureControls({ steam, onReload, busy = false }: CaptureContro
   );
 }
 
-export type Tab = "Home" | "Heroes" | "Optimizer" | "Presets" | "Worklist" | "Gear";
-const TABS: Tab[] = ["Home", "Heroes", "Optimizer", "Presets", "Worklist", "Gear"];
+export type Tab = "Heroes" | "Optimizer" | "Presets" | "Worklist" | "Gear";
+const TABS: Tab[] = ["Heroes", "Optimizer", "Presets", "Worklist", "Gear"];
 
-/** Labels `gs.tab` held before the tabs were renamed — an install updated
- *  from them reopens on the same screen. */
-const LEGACY_TABS = new Map<string, Tab>([["Builds", "Heroes"], ["Builder", "Optimizer"], ["Inventory", "Gear"]]);
+/** Labels `gs.tab` held before the tabs were renamed or dissolved — an
+ *  install updated from them reopens on the closest screen (Home, the
+ *  dashboard dissolved into Gear › Overview on 2026-11-01, opens the landing
+ *  tab, Heroes). */
+const LEGACY_TABS = new Map<string, Tab>([["Home", "Heroes"], ["Builds", "Heroes"], ["Builder", "Optimizer"], ["Inventory", "Gear"]]);
 
 /** The tab a stored `gs.tab` value names: a current tab as is, a former
- *  label as its new name, anything else Home. */
+ *  label as its new name, anything else Heroes. */
 export function parseTab(raw: unknown): Tab {
-  if (typeof raw !== "string") return "Home";
+  if (typeof raw !== "string") return "Heroes";
   if ((TABS as string[]).includes(raw)) return raw as Tab;
-  return LEGACY_TABS.get(raw) ?? "Home";
+  return LEGACY_TABS.get(raw) ?? "Heroes";
 }
 
 /** Per-tab activity counts. Renders next to the tab label as a mini pill so
@@ -127,7 +129,6 @@ export function parseTab(raw: unknown): Tab {
  *  the user losing the at-a-glance summary. Use `null` to hide a tab's
  *  badge (e.g. "Optimizer" has no natural count today). */
 export interface TabCounts {
-  Home: number | null;
   Heroes: number | null;
   Optimizer: number | null;
   Presets: number | null;

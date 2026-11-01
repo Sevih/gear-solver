@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, Inventory } from "@gear-solver/core";
-import { computeStats } from "../src/lib/homeStats.js";
+import { computeStats } from "../src/lib/gear/overviewStats.js";
 
-// The Home → Inventory drill sends `armorSet: se.id`, and the Inventory keeps
+// The Gear › Overview → Pieces drill sends `armorSet: se.id`, and Pieces keeps
 // a piece only when `f.armorSets.has(p.armorSetId)` — so `id` must be the
 // numeric set id, not the set name.
 const piece = (uid: string, armorSetId: string): GearPiece =>
@@ -10,7 +10,7 @@ const piece = (uid: string, armorSetId: string): GearPiece =>
 
 const inv = { characters: [], gear: [piece("a", "9"), piece("b", "9"), piece("c", "1")] } as unknown as Inventory;
 
-describe("Home — armor-set ids", () => {
+describe("Gear › Overview — armor-set ids", () => {
   it("top sets carry the numeric armorSetId (with game data)", () => {
     const game = {
       characters: {},

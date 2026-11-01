@@ -196,9 +196,9 @@ See [docs/architecture.md](docs/architecture.md) for the layer split rationale, 
 
 ## Status
 
-Data capture, parser, stat composer, solver, the Home dashboard, Heroes/Optimizer/Presets/
-Worklist/Gear screens, the tabbed Settings modal, persistence (saved builds + filter sets) and
-JSON backup import/export are all live. Session-scoped view state (Gear/Heroes
+Data capture, parser, stat composer, solver, the Heroes/Optimizer/Presets/Worklist/Gear
+screens (Gear: Overview dashboard, Pieces, Scrap), the tabbed Settings modal, persistence
+(saved builds + filter sets) and JSON backup import/export are all live. Session-scoped view state (Gear/Heroes
 sorts+filters reset each launch), Heroes advice rules, the equip/unequip captured-JSON rewrite
 methods + write-back endpoint with their trigger UI (Optimizer "Apply to snapshot" + Worklist apply —
 local snapshot only), the production build path for `data/` (bundled `extraResources` +

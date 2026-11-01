@@ -15,7 +15,6 @@ import { SettingsModal } from "./design/settings/SettingsModal.js";
 import type { SettingsPane } from "./lib/settings.js";
 import { updateBadge } from "./lib/update.js";
 import { useAppUpdate } from "./hooks/useAppUpdate.js";
-import { HomeScreen } from "./screens/home/HomeScreen.js";
 import { usePersistedState, type PersistedCodec } from "./hooks/usePersistedState.js";
 import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority.js";
 import { PRESET_LOCKED_KEY, PRESET_RANK_KEY, type PresetRank } from "./lib/storage/presetPriority.js";
@@ -33,11 +32,11 @@ import type { RecoFilterPatch } from "./lib/reco/translateReco.js";
 
 // Per-screen code splits — each screen ships its own chunk so the initial
 // bundle drops to just the shell + the first screen the user opens.
-// BuildsScreen pulls in compose-stats + the gear icon set; InventoryScreen
-// pulls the design tokens + the GearRow/Card pair; Builder is mostly empty
-// today but isolated for future growth. Suspense boundary below renders a
-// minimal placeholder while the chunk arrives (one-time, then cached).
-const InventoryScreen = lazy(() => import("./screens/inventory/InventoryScreen.js").then((m) => ({ default: m.InventoryScreen })));
+// BuildsScreen pulls in compose-stats + the gear icon set; GearScreen pulls
+// the Overview stats, the design tokens + the GearRow/Card pair; Builder is
+// mostly empty today but isolated for future growth. Suspense boundary below
+// renders a minimal placeholder while the chunk arrives (one-time, then cached).
+const GearScreen = lazy(() => import("./screens/gear/GearScreen.js").then((m) => ({ default: m.GearScreen })));
 const BuildsScreen = lazy(() => import("./screens/BuildsScreen.js").then((m) => ({ default: m.BuildsScreen })));
 const BuilderScreen = lazy(() => import("./screens/builder/BuilderScreen.js").then((m) => ({ default: m.BuilderScreen })));
 const PresetsScreen = lazy(() => import("./screens/presets/PresetsScreen.js").then((m) => ({ default: m.PresetsScreen })));
@@ -101,10 +100,12 @@ function usePersistOnChange<T>(value: T, persist: (v: T) => void) {
 }
 
 export function App() {
-  // Home is the default landing tab (fresh installs open here). Returning
-  // users keep whatever tab they last left via the persisted value.
-  // A label from before the tabs were renamed opens its new tab.
-  const [tab, setTab] = usePersistedState<Tab>("gs.tab", "Home", TAB_CODEC);
+  // Heroes is the default landing tab (fresh installs open here, on the
+  // first-capture steps until a snapshot imports). Returning users keep
+  // whatever tab they last left via the persisted value. A label from before
+  // the tabs were renamed (or Home, dissolved into Gear on 2026-11-01) opens
+  // its new tab.
+  const [tab, setTab] = usePersistedState<Tab>("gs.tab", "Heroes", TAB_CODEC);
   // Builder mounts on first visit and then stays mounted (hidden when inactive),
   // so its solver results — and a solve still running — survive tab switches.
   const [builderMounted, setBuilderMounted] = useState(false);
@@ -177,8 +178,8 @@ export function App() {
   // `wizardOpen` is the immediate UI state; `onboardingDone` survives reloads.
   const [onboardingDone, setOnboardingDone] = usePersistedState<boolean>("gs.onboarding.done", false);
   const [wizardOpen, setWizardOpen] = useState(!onboardingDone);
-  // The pane a given opener asks for (Home's "Open Setup", the header's update
-  // badge); null = the last pane visited.
+  // The pane a given opener asks for (the first-capture steps' Setup link, the
+  // header's update badge); null = the last pane visited.
   const [settingsOpenOn, setSettingsOpenOn] = useState<SettingsPane | null>(null);
   const openSettings = (pane: SettingsPane | null) => { setSettingsOpenOn(pane); setWizardOpen(true); };
   // App update status, polled whatever the tab: the header badge and the
@@ -250,12 +251,12 @@ export function App() {
   // Pending (not-yet-applied) gear changes across all queued builds — the
   // Worklist tab badge.
   const worklistRemaining = useMemo(() => remainingChangeCount(worklist, inv, equipped), [worklist, inv, equipped]);
-  // Pending Inventory drill-down from a Home dashboard click (or a Worklist
-  // "in Inventory" piece) — set + switch to the Inventory tab, consumed (and
-  // cleared) by InventoryScreen on apply.
+  // Pending Gear › Pieces drill-down from a Gear › Overview click (or a
+  // Worklist "in Gear" piece) — set (+ switch to the Gear tab from the
+  // Worklist); GearScreen opens Pieces, which consumes (and clears) it.
   const [invDrill, setInvDrill] = useState<InventoryDrill | null>(null);
-  // The links back from the Worklist and the Inventory's piece card: the
-  // Builder on a hero (no preset patch), or the Inventory showing a piece.
+  // The links back from the Worklist and the Gear piece card: the
+  // Builder on a hero (no preset patch), or Gear › Pieces showing a piece.
   const optimizeHero = useCallback((uid: string) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Optimizer"); }, [setTab]);
   const showPiece = useCallback((uid: string) => { setInvDrill({ pieceUid: uid }); setTab("Gear"); }, [setTab]);
   // Account-global "never use" piece UIDs — edited in Inventory (right-click),
@@ -302,8 +303,8 @@ export function App() {
 
   // Manual "Sync game data" — pulls fresh tables from the outerpedia repo,
   // then re-imports so the renderer picks them up (no window reload: a solve
-  // may be running in the kept-mounted Builder). The single path behind both
-  // the Home quick action and Settings › Data & updates.
+  // may be running in the kept-mounted Builder). Behind Settings › Data &
+  // updates' Sync button.
   async function syncGameData(): Promise<DataSyncResult> {
     report("Syncing game data…");
     const r = await requestDataSync();
@@ -438,8 +439,6 @@ export function App() {
         version={APP_VERSION}
         gameVersion={gameVersion}
         counts={{
-          // Home has no natural count badge — it's the landing dashboard.
-          Home: null,
           // Total piece count is the more useful at-a-glance figure than
           // "equipped/total" (we always know it from inv.gear.length without
           // resolving char ownership). Null while no capture has loaded yet.
@@ -511,30 +510,29 @@ export function App() {
           scrolls inside its own `overflow-y-auto` area and keeps its header in
           place — and the Inventory grid's virtualizer windows to the visible
           rows instead of mounting every tile. Screens without an inner scroll
-          area (Home, Worklist) get a scrolling wrapper below. */}
+          area (Worklist) get a scrolling wrapper below. */}
       <main className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={<div className="px-6 py-10 text-center text-[12px] text-zinc-400">Loading {tab.toLowerCase()}…</div>}>
-          {/* Home / Inventory / Builds are cheap to rebuild, so they stay
+          {/* Gear / Builds are cheap to rebuild, so they stay
               conditionally rendered (and remount fresh — which also resets
               their per-screen error boundary). */}
-          {tab === "Home" && (
-            <div className="h-full overflow-y-auto">
-              <ScreenErrorBoundary>
-                <HomeScreen
-                  inventory={inv}
-                  game={game}
-                  capStatus={capStatus}
-                  steam={steam}
-                  busy={running !== "none"}
-                  onOpenSetup={() => openSettings("setup")}
-                  onSyncData={() => void syncGameData()}
-                  onOpenBuilder={() => setTab("Optimizer")}
-                  onDrill={(d) => { setInvDrill(d); setTab("Gear"); }}
-                />
-              </ScreenErrorBoundary>
-            </div>
+          {tab === "Gear" && (
+            <ScreenErrorBoundary>
+              <GearScreen
+                inventory={inv}
+                game={game}
+                capStatus={capStatus}
+                steam={steam}
+                onOpenSetup={() => openSettings("setup")}
+                drill={invDrill}
+                onDrill={setInvDrill}
+                onDrillConsumed={() => setInvDrill(null)}
+                excludedPieces={excludedPieces}
+                onToggleExclude={toggleExclude}
+                onOptimizeWearer={optimizeHero}
+              />
+            </ScreenErrorBoundary>
           )}
-          {tab === "Gear" && <ScreenErrorBoundary><InventoryScreen inventory={inv} game={game} drill={invDrill} onDrillConsumed={() => setInvDrill(null)} excludedPieces={excludedPieces} onToggleExclude={toggleExclude} onOptimizeWearer={optimizeHero} /></ScreenErrorBoundary>}
           {tab === "Worklist" && (
             <div className="h-full overflow-y-auto">
               <ScreenErrorBoundary>
@@ -552,7 +550,7 @@ export function App() {
             </div>
           )}
           {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} onLossWarnChange={setPresetLossWarn} worklistHeroUids={worklistHeroUids} worklistClaims={solverWorklistClaims} heroFilters={heroFilters} heroPriority={heroPriority} presetRank={presetRank} onPresetRankChange={setPresetRank} presetLocked={presetLocked} onPresetLockedChange={setPresetLocked} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Optimizer"); }} onOptimizePreset={(uid, patch, note, presetNum) => { setBuilderHero(uid); setBuilderPatch({ patch, note, presetNum }); setTab("Optimizer"); }} /></ScreenErrorBoundary>}
-          {tab === "Heroes" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Optimizer"); }} worklistClaims={solverWorklistClaims} /></ScreenErrorBoundary>}
+          {tab === "Heroes" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Optimizer"); }} worklistClaims={solverWorklistClaims} steam={steam} onOpenSetup={() => openSettings("setup")} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a
               solve can finish in the background. The `h-full` wrapper keeps the

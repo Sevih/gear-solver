@@ -5,10 +5,20 @@
  * polls `/api/update/status` (hooks/useAppUpdate.ts) and this card surfaces
  * the one action that's left: "Install new version".
  */
-import { Spinner } from "../../design/Shell.js";
+import { Spinner } from "../Shell.js";
+import { cx } from "../cx.js";
 import type { UpdatePhase, UpdateStatus } from "../../lib/update.js";
-import { IC_UPDATE } from "./HomeIcons.js";
-import { Num } from "./HomePrimitives.js";
+
+// Kept local so `design/` imports nothing from `screens/`: the card's title
+// icon and its mono numbers.
+const IC_UPDATE = (
+  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 4v5h-5" />
+  </svg>
+);
+function Num({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <span className={cx("font-mono tabular-nums leading-none", className)}>{children}</span>;
+}
 
 // ── update card (compact column — all six states) ───────────────────────
 function IconBox({ phase, bg, color }: { phase: UpdatePhase; bg: string; color: string }) {

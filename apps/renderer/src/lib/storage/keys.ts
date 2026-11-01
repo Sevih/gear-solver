@@ -135,7 +135,8 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   { key: "gs.builder.cols", store: "local", backup: true, prune: false, label: "Optimizer layout", owner: "screens/builder/ResultsTable.tsx", merge: { shape: "map", accept: (shown) => typeof shown === "boolean" }, summary: "label" },
   ...settingKeys(),
   // ── The app's own state: localStorage, never backed up ─────────────────
-  // The tab the app reopens on — where this install left off.
+  // The tab the app reopens on — where this install left off, Heroes on a
+  // fresh install.
   appState("gs.tab", "Open tab", "App.tsx"),
   // Setup (plugin, capture) is per machine: a new install runs it again.
   appState("gs.onboarding.done", "Onboarding done", "App.tsx"),
@@ -156,7 +157,10 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   session("gs.inv.selection", "Gear selection", "screens/inventory/InventoryScreen.tsx"),
   session("gs.inv.selectMode", "Gear select mode", "screens/inventory/InventoryScreen.tsx"),
   session("gs.builds.filters", "Heroes filters", "screens/BuildsScreen.tsx"),
-  session("gs.home.gearView", "Home gear view", "screens/home/HomeScreen.tsx"),
+  session("gs.gear.view", "Gear view", "screens/gear/GearScreen.tsx"),
+  session("gs.gear.breakdownView", "Gear breakdown view", "screens/gear/OverviewView.tsx"),
+  session("gs.gear.scrap.filters", "Scrap filters", "screens/inventory/InventoryScreen.tsx"),
+  session("gs.gear.scrap.selectMode", "Scrap select mode", "screens/inventory/InventoryScreen.tsx"),
   session("gs.presets.classFilter", "Presets class filter", "screens/presets/PresetsScreen.tsx"),
   session("gs.presets.sort", "Presets sort", "screens/presets/PresetsScreen.tsx"),
   session("gs.presets.forced", "Presets expand / collapse all", "screens/presets/PresetsScreen.tsx"),

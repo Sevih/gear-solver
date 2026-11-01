@@ -33,9 +33,13 @@ by hand (manual import).
   from a Web Worker, a CLI, or the desktop shell. (The combination solver itself lives
   in `apps/renderer/src/lib/solver/`, not in core.)
 - **apps/renderer** — Vite + React. Loads the JSON, drives the engine, renders results.
-  Screens: **Home** (account dashboard + gear-quality distribution,
-  `screens/home/`, its numbers computed by the pure `lib/homeStats.ts`), **Gear** (table +
-  per-piece detail, `screens/inventory/`), **Heroes** (equipped/composed roster + Optimize→),
+  Screens: **Heroes** (equipped/composed roster + Optimize→, the landing tab; with
+  Gear, it shows the first-capture steps, `screens/FirstCapture.tsx`, until a snapshot
+  imports), **Gear** (`screens/gear/GearScreen.tsx`, three views: **Overview** — the account
+  dashboard + gear-quality distribution, `screens/gear/OverviewView.tsx` and
+  `screens/gear/overview/`, its numbers computed by the pure `lib/gear/overviewStats.ts` —,
+  **Pieces** — table + per-piece detail, `screens/inventory/` — and **Scrap** — the same
+  screen on the "Scrap candidates" filters with the Scrap value card),
   **Presets** (the in-game equipment presets — wearers, a reference hero and its associated
   heroes, the preset scored on each with the EE gems proposed for them, "+ Worklist" per hero;
   under them the local presets kept in GS only (`lib/storage/localPresets.ts`);

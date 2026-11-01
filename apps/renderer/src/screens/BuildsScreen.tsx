@@ -19,6 +19,8 @@ import { presetSignature } from "../lib/presets/presetRows.js";
 import { RankDragHandle, RankInput } from "../design/RankInput.js";
 import { displayNameOf, heroMatches } from "../lib/heroes/heroName.js";
 import { heroListOrder } from "../lib/heroes/heroListOrder.js";
+import { FirstCapture } from "./FirstCapture.js";
+import type { SteamStatus } from "../steam.js";
 
 /** Per-stat-axis dump spec — pairs the engine stat key with its `*Pct` /
  *  flat bucket name in the aggregated gear maps. EFF/RES use unsuffixed
@@ -847,9 +849,13 @@ interface BuildsScreenProps {
   /** Unapplied Worklist reservations, pieceUid → claiming heroUid — the
    *  advice doesn't call a piece promised to another hero "free". */
   worklistClaims: Readonly<Record<string, string>>;
+  /** The Steam capture plugin's last status poll, for the first-capture steps. */
+  steam: SteamStatus | null;
+  /** Opens Settings on Setup (the first-capture steps' link). */
+  onOpenSetup: () => void;
 }
 
-export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, onHeroPriorityChange, debug, onOptimize, worklistClaims }: BuildsScreenProps) {
+export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, onHeroPriorityChange, debug, onOptimize, worklistClaims, steam, onOpenSetup }: BuildsScreenProps) {
   // Set a hero's priority position (null clears) — positional model, contiguous
   // 1..N. Functional updates so the callbacks stay stable for the memoized cards.
   const setRank = useCallback((uid: string, pos: number | null) => {
@@ -1030,9 +1036,8 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
   // roster lists everyone, so the pill spells out "N equipped · M total".
   const equippedCount = useMemo(() => roster.reduce((n, e) => n + (e.count > 0 ? 1 : 0), 0), [roster]);
 
-  if (!inventory) {
-    return <Empty title="No capture yet" subtitle="Install the capture plugin (Settings, top right) and play OUTERPLANE to the lobby: your heroes and their gear import by themselves." />;
-  }
+  // The landing tab: a fresh install meets the first-capture steps here.
+  if (!inventory) return <FirstCapture steam={steam} onOpenSetup={onOpenSetup} />;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1086,15 +1091,6 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
           ))
         )}
       </div>
-    </div>
-  );
-}
-
-function Empty({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 px-6 py-24 text-center">
-      <h2 className="font-display text-[18px] font-semibold text-zinc-100">{title}</h2>
-      <p className="max-w-sm text-[12.5px] leading-relaxed text-zinc-400">{subtitle}</p>
     </div>
   );
 }

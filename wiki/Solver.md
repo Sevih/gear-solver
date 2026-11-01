@@ -535,7 +535,7 @@ its own height.
 (core, `parse.ts`) mirrors the client's `CEquipPresetData.SortPreset` — type ascending (Master League
 presets after the others), favorites first, then the player's order (`Preset.sortOrder`, read from
 `PresetOrderList` by `Num`, 0 without an entry) descending, then `num`. The `#num` stays on the card. The
-top bar carries the five class chips (`CLASSES` from `lib/homeStats.ts`, multi-select), a
+top bar carries the five class chips (`CLASSES` from `lib/gear/overviewStats.ts`, multi-select), a
 "Sort: In-game · Class" selector and "Clear". A preset's class (`presetClasses`) comes from its pieces (a
 weapon or accessory restricted to a class, `GearPiece.classLimit`; two different classes are both kept),
 else from the reference hero, the wearers, then the associated heroes; otherwise it is unknown. A filter

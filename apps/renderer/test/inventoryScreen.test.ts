@@ -1,4 +1,4 @@
-// InventoryScreen's effects (drill from Home or from the Worklist, auto-prune of the pills), its
+// InventoryScreen's effects (drill from Gear › Overview or from the Worklist, auto-prune of the pills), its
 // Apply handler and its session-kept selection, run through a minimal hooks runtime: Vitest runs in the
 // `node` environment (no DOM), so `react` is mocked with state / memo / effect
 // slots, the component is called as a plain function and the effects of a
@@ -138,7 +138,7 @@ function seedSession(tab: string, f: FilterState) {
   session.set(FILTERS_STORAGE_KEY, FILTER_CODEC.serialize!(f));
 }
 
-describe("InventoryScreen — drill from Home", () => {
+describe("InventoryScreen — drill from Gear › Overview", () => {
   it("a quality drill left on Special keeps its tier on the All tab", () => {
     expect(helmetTier).toBeTruthy();
     seedSession("special", { ...emptyFilters(), slots: new Set(["talisman"]) });

@@ -25,9 +25,9 @@ export function qualityShortLabel(tier: QualityTier): string {
   }
 }
 
-/** Per-tier accent color — the single source of truth shared by the Inventory
- *  tab's quality filter/bar (`QUALITY_TONE`) and the Home gear-quality
- *  distribution, so the two never drift. */
+/** Per-tier accent color — the single source of truth shared by Gear ›
+ *  Pieces' quality filter/bar (`QUALITY_TONE`) and Gear › Overview's
+ *  gear-quality distribution, so the two never drift. */
 export const QUALITY_COLOR: Record<QualityTier, string> = {
   poor: "#a1a1aa",
   decent: "#7dd3fc",

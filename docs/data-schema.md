@@ -102,7 +102,7 @@ Les noms sont base64-encoded UTF-8 (Cf. `decodeBase64Utf8` dans parse.ts).
 
 ---
 
-## Export « hero-tracker » (Home → Roster → Export)
+## Export « hero-tracker » (Gear › Overview → Roster → Export)
 
 Document d'échange consommé par le planificateur externe. **Progression
 uniquement** : ni gear, ni stats, ni awakening, ni inventaire — il chiffre un

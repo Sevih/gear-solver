@@ -1,15 +1,15 @@
 /**
- * Home talisman table — talisman × main-stat cross-tab.
+ * Gear › Overview talisman table — talisman × main-stat cross-tab.
  */
 import { Fragment } from "react";
-import { cx } from "../../design/cx.js";
-import { StatIcon } from "../../design/EquipmentIcon.js";
-import type { HomeStats } from "../../lib/homeStats.js";
+import { cx } from "../../../design/cx.js";
+import { StatIcon } from "../../../design/EquipmentIcon.js";
+import type { OverviewStats } from "../../../lib/gear/overviewStats.js";
 
 // ── talisman × main-stat cross-tab ───────────────────────────────────────
 // Rows = talisman types (red name when unowned), cols = the 9 main stats.
 // Cells are a light cyan heatmap; 0 reads muted. A totals row/col closes it.
-export function OopartsTable({ ooparts }: { ooparts: HomeStats["ooparts"] }) {
+export function OopartsTable({ ooparts }: { ooparts: OverviewStats["ooparts"] }) {
   const { cols, rows, colTotals, total } = ooparts;
   const max = Math.max(1, ...rows.flatMap((r) => r.counts));
   const cell = "grid place-items-center py-1 text-[11px] tabular-nums";

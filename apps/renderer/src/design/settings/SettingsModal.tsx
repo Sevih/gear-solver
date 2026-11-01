@@ -49,8 +49,8 @@ interface Props {
   /** `gs.onboarding.done` — until then every open lands on Setup (the
    *  wizard) instead of the last pane visited. */
   onboardingDone: boolean;
-  /** Pane to open on, overriding the last pane visited (Home's "Open Setup",
-   *  the header's update badge). */
+  /** Pane to open on, overriding the last pane visited (the first-capture
+   *  steps' Setup link, the header's update badge). */
   openOn?: SettingsPane | null;
   /** Fired the first time the wizard observes a ready=true result so App.tsx
    *  can flip the onboarding-done flag and skip future auto-pop-ups. */

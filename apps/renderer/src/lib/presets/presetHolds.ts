@@ -7,7 +7,7 @@
  *  (a) P is locked and P is not the preset being optimized, or
  *  (b) a preset Q is being optimized and P is not STRICTLY lower priority than
  *      Q (`isLowerPriority` on the preset ranks, P ≠ Q).
- * Without a target preset (a hero solve from Builds, Home, the Worklist or a
+ * Without a target preset (a hero solve from Heroes, the Worklist or a
  * hero picked by hand) only (a) applies. A piece held by several presets: the
  * most restrictive wins — locked by one is enough, else the best-ranked holder
  * other than Q counts. Stacks with the other pool rules (`equippedScope`, hero

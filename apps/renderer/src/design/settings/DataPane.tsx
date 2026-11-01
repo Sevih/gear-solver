@@ -5,7 +5,7 @@
 import { useDataVersion } from "../../hooks/useDataVersion.js";
 import { dataVersionLabel } from "../../lib/dataVersion.js";
 import type { UpdateStatus } from "../../lib/update.js";
-import { UpdateCard } from "../../screens/home/UpdateCard.js";
+import { UpdateCard } from "./UpdateCard.js";
 import { useConfirmClick } from "./useConfirmClick.js";
 import { SectionStrip, DataAction } from "./SettingsControls.js";
 

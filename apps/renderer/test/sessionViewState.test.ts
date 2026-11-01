@@ -1,8 +1,9 @@
 /**
  * View state kept across a tab switch (sessionStorage): the codecs of
  * `usePersistedState` the screens read it through (`jsonStringSet`,
- * `jsonOneOf`), then the sources of Inventory, Presets and Home — each of
- * these states is read by `useSessionState` under its `gs.*` key.
+ * `jsonOneOf`), then the sources of Gear (its views, Pieces / Scrap and
+ * Overview) and Presets — each of these states is read by `useSessionState`
+ * under its `gs.*` key.
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -36,9 +37,10 @@ describe("screens read their view state through useSessionState", () => {
   const source = (p: string) => readFileSync(new URL(`../src/screens/${p}`, import.meta.url), "utf8");
 
   it.each([
-    ["inventory/InventoryScreen.tsx", ["gs.inv.selected", "gs.inv.selection", "gs.inv.selectMode"]],
+    ["gear/GearScreen.tsx", ["gs.gear.view"]],
+    ["inventory/InventoryScreen.tsx", ["gs.inv.selected", "gs.inv.selection", "gs.inv.selectMode", "gs.gear.scrap.filters", "gs.gear.scrap.selectMode"]],
     ["presets/PresetsScreen.tsx", ["gs.presets.classFilter", "gs.presets.sort", "gs.presets.forced", "gs.presets.open"]],
-    ["home/HomeScreen.tsx", ["gs.home.gearView"]],
+    ["gear/OverviewView.tsx", ["gs.gear.breakdownView"]],
   ])("%s", (file, keys) => {
     const src = source(file);
     for (const key of keys) expect(src).toMatch(new RegExp(`useSessionState(<[^(]*>)?\\("${key.replace(/\./g, "\\.")}"`));

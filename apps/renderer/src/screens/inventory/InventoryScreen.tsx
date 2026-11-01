@@ -13,14 +13,21 @@ import { VirtualGearGrid } from "./VirtualGearGrid.js";
 import { ScrapCard } from "./ScrapCard.js";
 import { hasScrapFields, scrapValue } from "../../lib/inventory/scrapValue.js";
 import { addAll, materialRows, pruneSelection, pruneShown, scrapScope, toggleSelection } from "../../lib/inventory/scrapCard.js";
+import { SCRAP_CANDIDATES } from "../../lib/storage/inventoryFilterPresets.js";
 
 // The Scrap value card's selection, kept for the session as a list of uids.
 const SELECTION_CODEC = jsonStringSet();
 
+/** The filters Gear › Scrap opens on (session key empty) and its "Scrap
+ *  candidates" link puts back: the built-in preset's. */
+export function scrapDefaultFilters(): FilterState {
+  return SCRAP_CANDIDATES.filters();
+}
+
 // ── screen ──────────────────────────────────────────────────────────────
 
-/** A drill-down request from the Home dashboard — clicking a quality tier /
- *  slot / armor set there opens the Inventory pre-filtered to exactly that
+/** A drill-down request from Gear › Overview — clicking a quality tier /
+ *  slot / armor set there opens Gear › Pieces pre-filtered to exactly that
  *  facet (filters reset first, so the result is the clean subset the number
  *  represented). One facet at a time. Or, from the Worklist, `pieceUid`: show
  *  that piece in the detail panel — the view is left as it is when the piece
@@ -36,7 +43,7 @@ export interface InventoryDrill {
 export interface InventoryScreenProps {
   inventory: Inventory | null;
   game: GameData | null;
-  /** Pending drill from Home — consumed once on change (filters replaced with
+  /** Pending drill from Gear › Overview — consumed once on change (filters replaced with
    *  the facet, tab reset to "all"), then `onDrillConsumed` clears it so a
    *  later plain visit doesn't re-apply a stale filter. */
   drill?: InventoryDrill | null;
@@ -48,22 +55,39 @@ export interface InventoryScreenProps {
   /** Open the Builder on the shown piece's wearer (the card's portrait and
    *  "Optimize wearer →"). */
   onOptimizeWearer?: (heroUid: string) => void;
+  /** Gear › Pieces (default) or Gear › Scrap: Scrap keeps its own filters
+   *  (`gs.gear.scrap.filters`, the "Scrap candidates" preset's when empty)
+   *  and select mode (`gs.gear.scrap.selectMode`, on by default), and always
+   *  shows the Scrap value card. Sub-tab, sort, piece shown and selection are
+   *  shared by both. Estimates only: nothing here acts on the game. */
+  mode?: "pieces" | "scrap";
 }
 
-export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed, excludedPieces, onToggleExclude, onOptimizeWearer }: InventoryScreenProps) {
+export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed, excludedPieces, onToggleExclude, onOptimizeWearer, mode = "pieces" }: InventoryScreenProps) {
+  const scrapMode = mode === "scrap";
   // Session-scoped view state — filters / sort / sub-tab survive remounting on
   // a tab swap (sessionStorage) but reset to their defaults on the next app
   // launch, so each session starts from a clean inventory view rather than last
   // session's leftover sort+filters. The piece shown (`selectedId`) and the
   // Scrap value card's selection (+ its mode) too: the pieces no longer in the
   // inventory are dropped on the first render (below).
-  const [f, setF] = useSessionState<FilterState>(FILTERS_STORAGE_KEY, emptyFilters, FILTER_CODEC);
+  // Pieces and Scrap each keep their filters and select mode; the view's
+  // pair is the one in use.
+  const [piecesF, setPiecesF] = useSessionState<FilterState>(FILTERS_STORAGE_KEY, emptyFilters, FILTER_CODEC);
+  const [scrapF, setScrapF] = useSessionState<FilterState>("gs.gear.scrap.filters", scrapDefaultFilters, FILTER_CODEC);
+  const f = scrapMode ? scrapF : piecesF;
+  const setF = scrapMode ? setScrapF : setPiecesF;
   const [tab, setTabState] = useSessionState<InvTab>("gs.inv.tab", "all");
   const [sort, setSort] = useSessionState<SortKey>("gs.inv.sort", "enhance");
   const [dir, setDir] = useSessionState<"asc" | "desc">("gs.inv.dir", "desc");
   const [selectedId, setSelectedId] = useSessionState<string | null>("gs.inv.selected", null);
   const [selection, setSelection] = useSessionState<Set<string>>("gs.inv.selection", () => new Set(), SELECTION_CODEC);
-  const [selectMode, setSelectMode] = useSessionState("gs.inv.selectMode", false);
+  const [piecesSelectMode, setPiecesSelectMode] = useSessionState("gs.inv.selectMode", false);
+  const [scrapSelectMode, setScrapSelectMode] = useSessionState("gs.gear.scrap.selectMode", true);
+  // Scrap without the tables' scrap fields has no card to select for: a click
+  // just shows the piece.
+  const selectMode = scrapMode ? scrapSelectMode && !!game && hasScrapFields(game.equipment) : piecesSelectMode;
+  const setSelectMode = scrapMode ? setScrapSelectMode : setPiecesSelectMode;
   const [filterModalOpen, setFilterModalOpen] = useState(false);
 
   const ui = useMemo<UiPiece[]>(() => (inventory ? inventory.gear.map((g) => toUiPiece(g, game)) : []), [inventory, game]);
@@ -89,7 +113,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
     });
   }, [setTabState, setF]);
 
-  // Consume a Home drill-down: replace the filters with the single requested
+  // Consume an Overview drill-down: replace the filters with the single requested
   // facet (so the grid shows exactly the subset the clicked number counted),
   // reset to the "all" tab, drop any selection, then clear the request. A
   // piece drill (Worklist) shows the piece instead, touching the view only
@@ -206,8 +230,8 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // Auto-prune any selection that becomes unavailable when the scope
   // narrows, so a chip the user can no longer see can't silently zero out
   // the grid. Runs whenever any availability set changes (tab / slot
-  // toggle, or the inventory itself when capture updates). Skipped while a
-  // Home drill is pending: on mount both effects run in the same commit and
+  // toggle, or the inventory itself when capture updates). Skipped while an
+  // Overview drill is pending: on mount both effects run in the same commit and
   // the availabilities here are still those of the tab and slots the drill
   // replaces — the prune runs on the next render, in the drill's own scope.
   useEffect(() => {
@@ -299,11 +323,12 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
 
   const filterCount = activeFilterCount(f);
   const scrapReady = !!game && hasScrapFields(game.equipment);
-  const showScrap = scrapReady && (filterCount > 0 || selection.size > 0 || selectMode);
+  const showScrap = scrapReady && (scrapMode || filterCount > 0 || selection.size > 0 || selectMode);
 
   // Scrap value card — the selection when it isn't empty (even the pieces
-  // outside the view), the filtered view otherwise. Older tables without the
-  // scrap fields: no card.
+  // outside the view), the filtered view otherwise. Always shown on Scrap,
+  // on Pieces once a filter or a selection exists. Older tables without the
+  // scrap fields: no card (Scrap says why above the grid).
   const scrapCard = useMemo(() => {
     if (!showScrap || !game) return null;
     const scope = scrapScope(selection, filtered, uiById);
@@ -354,9 +379,8 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
     else { setSort(next); setDir("desc"); }
   }
 
-  if (!inventory || ui.length === 0) {
-    return <InventoryEmpty />;
-  }
+  // GearScreen shows the first-capture steps while nothing is captured.
+  if (!inventory) return null;
 
   // 2-column layout: [ItemDetail (always shown, empty placeholder if no
   // selection) + Scrap value card] | [tabs + slot bar + sort header + grid]. The old right-
@@ -395,7 +419,24 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
           <SubTabBar tab={tab} setTab={setTab} counts={tabCounts} />
           <FilterButton onClick={() => setFilterModalOpen(true)} count={filterCount} />
         </div>
-        <SlotBar tab={tab} selected={f.slots} onToggle={toggleSlot} />
+        <div className="flex items-center justify-between gap-3">
+          <SlotBar tab={tab} selected={f.slots} onToggle={toggleSlot} />
+          {scrapMode && (
+            <button
+              type="button"
+              onClick={() => applyFilters(scrapDefaultFilters())}
+              title={SCRAP_CANDIDATES.title}
+              className="shrink-0 text-[11px] text-cyan-300 underline-offset-2 hover:underline"
+            >
+              {SCRAP_CANDIDATES.name}
+            </button>
+          )}
+        </div>
+        {scrapMode && !scrapReady && (
+          <p className="pb-2 text-[11.5px] text-amber-200">
+            The loaded game tables carry no scrap prices — sync game data in Settings › Data &amp; updates.
+          </p>
+        )}
         <SortHeader
           sort={sort} dir={dir} total={sorted.length}
           onSort={toggleSort} onSubSort={onSubSort}
@@ -427,25 +468,6 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         availableReachable={availableReachable}
         armorSetName={(id) => game?.sets?.[id]?.name ?? `Set #${id}`}
       />
-    </div>
-  );
-}
-
-function InventoryEmpty() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-4 px-6 py-24 text-center">
-      <div
-        className="grid h-16 w-16 place-items-center rounded-2xl"
-        style={{ background: "linear-gradient(135deg, #16EBF1, #9D51FF 60%, #E02BCD)", boxShadow: "0 0 32px rgba(157,81,255,0.45)" }}
-      >
-        <svg viewBox="0 0 24 24" className="h-7 w-7 text-white" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 7 V17 L12 21 L20 17 V7 L12 3 Z M4 7 L12 11 L20 7 M12 11 V21" />
-        </svg>
-      </div>
-      <h2 className="font-display text-[18px] font-semibold text-white">No capture yet</h2>
-      <p className="max-w-sm text-[12.5px] leading-relaxed text-white/85">
-        Install the capture plugin (Settings, top right), then play OUTERPLANE on Steam: your gear and heroes import as soon as the lobby loads <span className="font-mono text-white">/user/item</span>. No Steam? Import your snapshot files by hand below.
-      </p>
     </div>
   );
 }

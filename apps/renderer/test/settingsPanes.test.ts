@@ -2,17 +2,18 @@
 // Backup, Advanced in that order. A pane stored by an older install (Debug,
 // Logs) reopens on Advanced; Solver holds only what applies on the next
 // solve, Display what applies at once, Advanced the developer toggles, the
-// onboarding reset and the journal, Data & updates the update center. Home no
-// longer renders the update card. Rendered server-side.
+// onboarding reset and the journal, Data & updates the update center. Gear ›
+// Overview (ex-Home) renders no update card. Rendered server-side.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SETTINGS, parseSetting, type SettingsPane } from "../src/lib/settings.js";
 import type { UpdateStatus } from "../src/lib/update.js";
+import type { Inventory } from "@gear-solver/core";
 import { SettingsModal } from "../src/design/settings/SettingsModal.js";
 import { resetSolverSettings, type SolverSettings } from "../src/design/settings/SolverPane.js";
 import { resetDisplaySettings, type DisplaySettings } from "../src/design/settings/DisplayPane.js";
-import { HomeScreen } from "../src/screens/home/HomeScreen.js";
+import { OverviewView } from "../src/screens/gear/OverviewView.js";
 
 const noop = () => {};
 
@@ -131,13 +132,13 @@ describe("pane resets", () => {
   });
 });
 
-describe("Home", () => {
-  it("no longer renders the update card", () => {
+describe("Gear › Overview", () => {
+  it("renders no update card", () => {
     stubStorage({});
-    const h = renderToStaticMarkup(createElement(HomeScreen, {
-      inventory: null, game: null, capStatus: null, steam: null, busy: false,
-      onOpenSetup: noop, onSyncData: noop, onOpenBuilder: noop,
+    const h = renderToStaticMarkup(createElement(OverviewView, {
+      inventory: { gear: [], characters: [] } as unknown as Inventory, game: null, capStatus: null,
     }));
+    expect(h).toContain("Gear quality distribution");
     expect(h).not.toContain("Up to date");
     expect(h).not.toContain("Checking for updates…");
   });

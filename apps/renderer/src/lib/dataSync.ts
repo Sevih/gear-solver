@@ -1,7 +1,7 @@
 /**
  * Client for `POST /api/data/sync` (Vite middleware in dev, the Electron
- * server in prod) — the ONE path behind every "Sync game data" button (Home
- * quick action and Settings › Data & updates). The caller re-imports on "synced"; no
+ * server in prod) — the ONE path behind the "Sync game data" button of
+ * Settings › Data & updates. The caller re-imports on "synced"; no
  * window reload, which would kill a solve running in the Builder.
  */
 

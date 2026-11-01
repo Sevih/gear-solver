@@ -3,7 +3,7 @@
 How to drive gear-solver day to day. New here? Start with [Getting Started](Getting-Started)
 to import your account first.
 
-The window has six tabs — **Home**, **Heroes**, **Optimizer**, **Presets**, **Worklist**, **Gear** —
+The window has five tabs — **Heroes**, **Optimizer**, **Presets**, **Worklist**, **Gear** —
 plus a **Settings** modal (the **Settings** button, top-right) and the capture controls in the header:
 one **capture pill** (Checking… · Steam not found · Plugin needed · Plugin update available · Game closed ·
 Waiting for game · Live — hover it for the detail and the game folder), next to it the one button that
@@ -11,33 +11,40 @@ unblocks you (**Install plugin** / **Update plugin** / **Launch game**, the same
 and **Reload**. When an app update is waiting, a **vX ready** (or **vX available**) badge shows in the
 header whatever the tab; click it to open the update center in **Settings › Data & updates**.
 
----
-
-## Home — dashboard
-
-Your landing screen. At a glance:
-
-- **Account snapshot** — heroes owned, gear count, and other quick totals.
-- **Gear quality distribution** — how much of your gear is Perfect / Excellent / Good /
-  Decent / Poor, by tier (same colors as the Gear quality filter).
-- **Gear breakdown** — a toggle with four views: **Overview** (count by slot + your top armor sets),
-  **Class** (per class, the unique weapon/accessory effects you own as chips — hover for name + effect),
-  **All sets** (the full set catalog, owned-first; unowned are dimmed with a red `0`), and **Talisman**
-  (a talisman × main-stat cross-tab — each talisman framed like in Gear, cells are a heatmap of
-  how many you own with that main stat, with row/column totals). The view you picked stays when
-  you switch tabs, back to Overview on the next launch.
-- **Library** — your saved builds.
-- **System health** — the capture state in the header pill's words, **Sync game data**, and
-  **Open Setup** (Settings on the Setup pane). Installing the plugin and launching the game are done
-  from the header button or from Setup; before your first capture, Home says which step is next and
-  points to them.
-
-App updates are not on Home: the header badge (visible from every tab) opens the update
-center in **Settings › Data & updates**.
+The app opens on **Heroes** (afterwards, on the tab you last left). On the first launch, before
+anything is captured, **Heroes** and **Gear** show the capture steps: which one is next (in the
+capture pill's words), a link to **Settings › Setup**, and the install plugin → launch game → reach
+the lobby path. The install / launch button itself is the header's (or Setup's).
 
 ---
 
 ## Gear — browse your pieces
+
+Three views, under a bar at the top: **Overview**, **Pieces** and **Scrap**. The view you picked
+stays when you switch tabs, back to Overview on the next launch.
+
+### Overview
+
+A read of your captured account:
+
+- **Snapshot line** — heroes owned, gear count, and when the snapshot was captured ("3h ago (14:32)").
+- **Gear quality distribution** — how much of your gear is Perfect / Excellent / Good /
+  Decent / Poor, by tier (same colors as the Pieces quality filter). Click a tier to open
+  **Pieces** filtered on it.
+- **Roster** — your heroes by element and by class, and **Export**, which saves your hero
+  progression as a JSON file for outerpedia's hero tracker.
+- **Gear breakdown** — a toggle with four views: **Overview** (count by slot + your top armor sets;
+  click a slot or a set to open **Pieces** filtered on it), **Class** (per class, the unique
+  weapon/accessory effects you own as chips — hover for name + effect), **All sets** (the full set
+  catalog, owned-first; unowned are dimmed with a red `0`), and **Talisman** (a talisman × main-stat
+  cross-tab — each talisman framed like in Pieces, cells are a heatmap of how many you own with that
+  main stat, with row/column totals), plus the Ascended / Singularity / Locked counts. The view you
+  picked stays when you switch tabs, back to Overview on the next launch.
+
+The capture state and its button are in the header, **Sync game data** and the app updates in
+**Settings › Data & updates**, your saved builds and filter sets in the **Optimizer**.
+
+### Pieces
 
 A dense, searchable table of every gear piece you own.
 
@@ -101,6 +108,21 @@ A dense, searchable table of every gear piece you own.
 
 > Sorts and filters reset to their defaults each time you relaunch the app — so you always
 > start from a clean view. Filter sets are kept.
+
+### Scrap
+
+The same grid, set up to pick what to sell or dissolve:
+
+- It opens on the **Scrap candidates** filters (the built-in filter set above) and keeps its own
+  filters, apart from Pieces'. Change them with **Filter**; the **Scrap candidates** link at the right
+  of the slot bar puts them back.
+- **Selection mode is on**: a click on a tile selects or unselects it (and shows it in the panel).
+  The selection, the sub-tab, the sort and the piece shown are the same as in Pieces.
+- The **Scrap value** card is always there: it prices your selection, or the pieces on screen when
+  nothing is selected. When the synced game tables carry no sell / dissolve values, a line above the
+  grid says so instead (sync game data in **Settings › Data & updates**).
+
+An estimate only: nothing is sold or dissolved from the app — you do it in the game.
 
 ---
 

@@ -86,8 +86,8 @@ export async function uninstallSteamPlugin(removeBepinex = false): Promise<Steam
   }
 }
 
-/** The capture pill: one vocabulary for the header pill and Home's System
- *  health card, so they never disagree. `label` is the short state, `title`
+/** The capture pill: one vocabulary for the header pill and the first-capture
+ *  steps, so they never disagree. `label` is the short state, `title`
  *  the detail (what is wrong or live, the plugin version, the game folder). */
 export interface CaptureBadge {
   label: string;

@@ -61,7 +61,7 @@ import { GAME_GEAR_GRID, toDesignSlot, toEngineSlot } from "../../design/tokens.
 import {
   arrangePresets, localPresetRows, presetClasses, presetRows, type PresetPiece, type PresetRow, type PresetSort,
 } from "../../lib/presets/presetRows.js";
-import { CLASSES } from "../../lib/homeStats.js";
+import { CLASSES } from "../../lib/gear/overviewStats.js";
 import {
   bestKnownFor, eeOf, evaluatePresetFor, heroBases, presetLoss, presetOvercap, type PresetEvalContext,
 } from "../../lib/presets/evaluate.js";

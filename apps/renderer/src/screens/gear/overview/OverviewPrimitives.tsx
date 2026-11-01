@@ -1,8 +1,8 @@
 /**
- * Home primitives — card, labels, numbers, segmented control, info tip,
- * action button, breakdown bar and stat tile shared by the dashboard sections.
+ * Gear › Overview primitives — card, labels, numbers, segmented control, info
+ * tip, breakdown bar and stat tile shared by the Overview cards.
  */
-import { cx } from "../../design/cx.js";
+import { cx } from "../../../design/cx.js";
 
 // ── small shared primitives ─────────────────────────────────────────────
 export function Card({ children, className, style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
@@ -70,26 +70,6 @@ export function InfoTip({ text }: { text: string }) {
     >
       ?
     </span>
-  );
-}
-export function ActBtn({ children, tone = "neutral", onClick, className, disabled }: {
-  children: React.ReactNode; tone?: "neutral" | "cyan" | "violet"; onClick?: () => void; className?: string; disabled?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={cx(
-        "rounded-lg border px-2.5 py-2 text-[11.5px] font-semibold transition-colors",
-        disabled && "cursor-not-allowed opacity-50",
-        tone === "cyan" ? "border-cyan-400/35 bg-cyan-500/8 text-cyan-200 hover:bg-cyan-500/15"
-        : tone === "violet" ? "border-violet-400/35 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20"
-        : "border-white/10 bg-white/4 text-zinc-300 hover:bg-white/8",
-        className,
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

@@ -8,6 +8,107 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧭 Home dissous dans Gear (Overview / Pieces / Scrap), atterrissage Heroes, état vide de première installation sur Heroes et Gear (U13, G102) (2026-11-01)
+- ✅ **Pourquoi.** Treizième lot de la refonte (U13 de `docs/ux-audit-2026-11-01.md`, bloc GEAR et ligne « HEROES
+  (atterrissage) » de la section 5.b, tableau « 1. Home » de la section 1.1, parcours 2.a, ligne « Onglet ouvert » de la
+  table 5.d ; arbitrages D1 « Home dissoute dans Gear › Overview et l'en-tête » et D10 « vues Class / All sets /
+  Talisman gardées dans Gear › Overview ») : Home redisait ce que l'en-tête (pastille de capture et son bouton),
+  Settings (Sync game data, Setup, mises à jour) et l'Optimizer (builds sauvegardés, filter sets) portent déjà depuis
+  U8 et U12, et sa lecture du compte relevait de Gear. Table Home → nouveau lieu : carte Account snapshot → une ligne
+  « Snapshot » discrète en tête de **Gear › Overview** (« N heroes · N pieces · captured 3h ago (14:32) », `relTime`
+  existant sur `capStatus.userItemMtime`, compteurs de `computeStats` ; la répartition par étoiles et la pastille
+  Live / Idle disparaissent, la pastille vit dans l'en-tête) ; carte **Gear quality distribution**, carte **Roster**
+  (avec Export) et carte **Gear breakdown** (Overview / Class / All sets / Talisman, tuiles Ascended / Singularity /
+  Locked) → **Gear › Overview**, inchangées, leurs clics ouvrent **Gear › Pieces** filtré ; carte Library (compteurs de
+  builds et de filter sets, « Open Optimizer → ») → retirée (Library de l'Optimizer) ; carte System health → retirée
+  (`SystemHealthCard.tsx` supprimé : pastille et bouton dans l'en-tête, Sync game data dans Settings › Data & updates,
+  Setup par le bouton Settings) ; état vide « No account captured yet » → **Heroes** et **Gear**.
+- ✅ **Onglets.** `design/Shell.tsx` : `Tab` = `"Heroes" | "Optimizer" | "Presets" | "Worklist" | "Gear"`, `TABS` dans
+  cet ordre, `TabCounts` sans `Home` ; `parseTab` : `"Home"` ajouté à `LEGACY_TABS` (→ `"Heroes"`), toute valeur
+  inconnue → `"Heroes"`. `App.tsx` : `usePersistedState<Tab>("gs.tab", "Heroes", TAB_CODEC)` — une installation neuve
+  atterrit sur Heroes, une installation qui avait laissé `gs.tab` sur `"Home"` rouvre Heroes ; le commentaire de
+  `gs.tab` dans `lib/storage/keys.ts` le dit. Badges inchangés (Gear = nombre de pièces, Heroes = héros équipés).
+- ✅ **Gear en trois vues.** Nouveau `screens/gear/GearScreen.tsx` : barre de sous-onglets **Overview · Pieces ·
+  Scrap** (style de `SubTabBar`, sans compteurs) au-dessus de la vue, état de session `gs.gear.view` (`jsonOneOf`,
+  défaut `"overview"`) ; prend toutes les props de l'ex-`InventoryScreen` plus `capStatus`, `onDrill`, `steam`,
+  `onOpenSetup`. Une demande de drill (clic d'Overview, « show piece » de la Worklist ; `InventoryDrill` inchangé) passe
+  la vue à `"pieces"` pendant le rendu (pas d'image d'Overview pour rien), puis Pieces la consomme comme avant. Overview
+  défile dans son propre conteneur, Pieces et Scrap gardent leur mise en page à hauteur fixe. `App.tsx` charge
+  `GearScreen` en paresseux à la place d'`InventoryScreen`, ne garde plus de branche Home ni d'import `HomeScreen` ;
+  `invDrill` / `showPiece` servent `GearScreen` (`onDrill={setInvDrill}`) ; les commentaires qui citaient Home sont
+  réécrits.
+- ✅ **Pieces et Scrap.** `screens/inventory/InventoryScreen.tsx` exporte toujours `InventoryScreen` et
+  `InventoryDrill` et gagne `mode: "pieces" | "scrap"` (défaut `"pieces"`, comportement de Pieces inchangé). En Scrap :
+  filtres sous `gs.gear.scrap.filters` (même `FILTER_CODEC`), initialisés à `scrapDefaultFilters()` (nouvelle aide
+  exportée, = `SCRAP_CANDIDATES.filters()`) quand la clé est vide ; lien « Scrap candidates » (petit texte, à droite de
+  la barre des slots, infobulle = le `title` du préréglage) qui les remet via `applyFilters` ; carte Scrap value
+  toujours rendue quand `scrapReady` (sélection sinon vue, `scrapScope` inchangé) ; mode sélection sous
+  `gs.gear.scrap.selectMode`, actif par défaut (neutralisé sans champs scrap : pas de carte pour laquelle choisir).
+  Les deux paires de hooks (filtres, mode sélection) sont appelées à chaque rendu et le `mode` choisit la paire, donc
+  passer de Pieces à Scrap n'exige pas de remontage. Sous-onglet, tri, pièce affichée et sélection (`gs.inv.tab`,
+  `.sort`, `.dir`, `.selected`, `.selection`) restent partagés. Tables sans champs scrap : « The loaded game tables
+  carry no scrap prices — sync game data in Settings › Data & updates. » au-dessus de la grille, pas de carte. Rien de
+  Scrap n'agit sur le jeu. `InventoryEmpty` supprimé (GearScreen montre `FirstCapture` sans inventaire ; un inventaire
+  à zéro pièce rend la grille vide).
+- ✅ **Overview.** `screens/home/HomeScreen.tsx` → `screens/gear/OverviewView.tsx` (`git mv`, composant
+  `OverviewView`, props `inventory` (non nul), `game`, `capStatus`, `onDrill` ; `onOpenBuilder`, `onSyncData`, `busy`,
+  `onOpenSetup`, `steam` retirées), contenu : ligne Snapshot, Gear quality distribution, Roster, Gear breakdown (vue
+  sous `gs.gear.breakdownView`, ex-`gs.home.gearView`, même codec). `screens/home/` → `screens/gear/overview/`
+  (`git mv`) : `HomePrimitives.tsx` → `OverviewPrimitives.tsx` (`ActBtn`, devenu sans usage, retiré),
+  `HomeIcons.tsx` → `OverviewIcons.tsx` (`IC_SNAPSHOT`, `IC_HEALTH`, `IC_LIBRARY`, `IC_UPDATE` retirés),
+  `ClassEffectRow.tsx`, `OopartsTable.tsx`, `ExportRosterButton.tsx`. `lib/homeStats.ts` → `lib/gear/overviewStats.ts`
+  (`computeStats` inchangé, type `HomeStats` → `OverviewStats`, en-tête réécrit ; `PresetsScreen` y lit `CLASSES`).
+- ✅ **Première installation.** `screens/home/EmptyDashboard.tsx` → `screens/FirstCapture.tsx` (`git mv`, composant
+  `FirstCapture`, props `steam` et `onOpenSetup`, mêmes textes et même lien « Step by step in Settings › Setup » ; « this
+  home fills in on its own » → « Heroes and Gear fill in on their own » ; le conteneur centré de l'ex-Home est repris
+  dans le composant). `BuildsScreen.tsx` le rend à la place de son `Empty` « No capture yet » (supprimé) quand
+  `inventory` est `null` (nouvelles props `steam`, `onOpenSetup`, App passe `() => openSettings("setup")`) ;
+  `GearScreen` aussi, quelle que soit la vue. Presets et Worklist gardent leur état vide.
+- ✅ **UpdateCard.** `screens/home/UpdateCard.tsx` → `design/settings/UpdateCard.tsx` (`git mv`) ; l'icône `IC_UPDATE`
+  et `Num` (un `span` mono) recopiés dans le fichier, `design/` n'importe plus rien de `screens/` ; `DataPane.tsx` suit.
+- ✅ **Clés.** `lib/storage/keys.ts` : `gs.home.gearView` → `gs.gear.breakdownView` (« Gear breakdown view »,
+  `screens/gear/OverviewView.tsx`), plus `gs.gear.view` (« Gear view », `GearScreen.tsx`), `gs.gear.scrap.filters`
+  (« Scrap filters ») et `gs.gear.scrap.selectMode` (« Scrap select mode », tous deux `InventoryScreen.tsx`), toutes de
+  session, jamais sauvegardées. Commentaires citant Home réécrits dans `steam.ts`, `lib/dataSync.ts`,
+  `lib/presets/presetHolds.ts`, `lib/quality.ts`, `SettingsModal.tsx`. `grep -rnw Home apps/renderer/src` ne rend plus
+  que des commentaires datés (« until 2026-11-01 ») et l'entrée `"Home"` de `LEGACY_TABS` ; `grep -rn "screens/home"
+  apps/renderer` vide.
+- ✅ **Manuel et docs.** `wiki/Using-the-App.md` : section « Home — dashboard » retirée, intro à cinq onglets (l'app
+  s'ouvre sur Heroes ; au premier lancement sans capture, Heroes et Gear montrent les étapes), « Gear — browse your
+  pieces » en trois sous-sections Overview (l'ex-section Home moins Library et System health, plus la ligne Snapshot,
+  Roster / Export et les clics vers Pieces), Pieces (texte actuel), Scrap (filtre Scrap candidates par défaut et son
+  lien, sélection active, carte toujours là, phrase sans prix, estimation seulement). `wiki/Getting-Started.md` (après
+  Re-check et Close : Heroes, puis Gear, se remplissent), `wiki/Home.md` (cinq onglets), `README.md` (statut : Gear
+  Overview / Pieces / Scrap), `wiki/Architecture.md` / `docs/architecture.md` (écrans, `screens/gear/`,
+  `FirstCapture.tsx`, `lib/gear/overviewStats.ts`), `wiki/Engine-Reference.md` / `docs/reference.md` (arbre
+  `screens/` ; table des tests : `gearScreen` et `overviewSets` ajoutés, `tabs`, `headerU8` à 8 tests,
+  `settingsPanes`, `sessionViewState` à 7 tests), `wiki/Solver.md` / `docs/solver.md` (chemin de `CLASSES`),
+  `docs/data-schema.md` (titre de l'export hero-tracker : Gear › Overview → Roster → Export), `docs/todo.md`
+  (l'encadré « À NE PAS toucher » vise Gear › Pieces et › Scrap ; aucun item ne citait Home). `wiki/FAQ.md` ne citait
+  pas Home. Laissés car datés ou historiques : `docs/roadmap.md` / `wiki/Roadmap.md`, `docs/STATUS.md`,
+  `docs/release-notes.md`, `docs/design/home-dashboard-brief.md`, les audits ; la réécriture de fond reste U14.
+- ✅ **Tests.** `apps/renderer/test/gearScreen.test.ts` (nouveau, 6 tests, rendu statique, `gs.gear.view` stubé) : sans
+  inventaire « No account captured yet » quelle que soit la vue ; sur `overview` (et sans clé) la barre porte Overview,
+  Pieces, Scrap dans l'ordre, « Gear quality distribution », Roster, Gear breakdown, « 2 pieces », ni « Account
+  snapshot », ni « Library », ni « System health », ni « Sync game data » ; sur `pieces` All, Gear, Special Gear ; sur
+  `scrap` le lien « Scrap candidates » et la phrase des tables sans prix (`game` nul) ; `scrapDefaultFilters()` égale
+  à `SCRAP_CANDIDATES.filters()` ; `BuildsScreen` sans inventaire contient « No account captured yet ». Ajustés sans
+  changer ce qu'ils affirment : `tabs.test.ts` (cinq libellés, `parseTab("Home")` et `parseTab("nope")` → Heroes,
+  ni « Home » ni ancien nom dans `GsHeader`), `headerU8.test.ts` (`FirstCapture` à la place d'`EmptyDashboard`, le
+  bloc `SystemHealthCard` retiré avec le composant, `captureBadge` intact), `settingsPanes.test.ts` (`OverviewView`
+  sans « Up to date »), `sessionViewState.test.ts` (sources `gear/GearScreen.tsx`, `gear/OverviewView.tsx` et les deux
+  clés Scrap d'`InventoryScreen`), `overviewSets.test.ts` (ex-`homeSets`, import et libellés), `inventoryScreen.test.ts`
+  (libellés du drill). `keys.test.ts` vert. `npm run typecheck` : `> tsc --noEmit` sans erreur ; `npm test` : `Tests
+  1080 passed (1080)` (renderer ; core 169, desktop 238) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`,
+  comme avant.
+- ⏳ **Sevih.** Sur la build : une installation qui avait laissé Home rouvre Heroes ; Gear s'ouvre sur Overview, la
+  ligne Snapshot et les trois cartes s'affichent, un clic sur un palier, un slot ou un set bascule sur Pieces filtré ;
+  « show piece » de la Worklist ouvre Pieces sur la pièce ; Scrap part des filtres Scrap candidates, sélection active,
+  carte Scrap value visible sans filtre, le lien remet les filtres après un changement ; Pieces garde ses propres
+  filtres en revenant ; Settings › Data & updates montre toujours la carte de mise à jour ; un premier lancement sans
+  capture montre les étapes sur Heroes et Gear (mise en page de `FirstCapture` dans ces deux écrans à regarder).
+  Restent : la refonte de la liste de Heroes (5.b), la recherche de Pieces hors du modal, D5 / D11 / D12 / D14, U14.
+
 ### ⚙️ Settings en six panneaux : Setup, Data & updates, Solver, Display, Backup, Advanced ; mises à jour dans Settings, seuil de perte sur Presets (U12, G101) (2026-11-01)
 - ✅ **Pourquoi.** Douzième lot de la refonte (U12 de `docs/ux-audit-2026-11-01.md`, bloc SETTINGS de la section 5.b,
   section 3.7, lignes « heatmap, compact cards, lignes de résultats » et « Seuil de perte de Presets » de la table 5.d,
