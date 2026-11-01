@@ -145,7 +145,9 @@ raise Top% or require the set.
 
 **c) SOLVE (Score) without priority** — `magnitudeScoreOf` (raw roll magnitude):
 no objective (the score would be 0 everywhere), but the product **must** stay
-bounded (else full cartesian) → we keep the fullest-rolled pieces per slot.
+bounded (else full cartesian) → we keep the fullest-rolled pieces per slot. The
+Builder's Solve button no longer leads here (the reco's priority, else CP, § 4 Hero);
+the branch remains the pre-solve estimate's and the engine's when called without weights.
 
 Required-set protection: for each `req-2pc`/`req-4pc` set not already represented
 in the budget slice, `keepTopN` re-adds **its single top-scoring member** outside
@@ -225,9 +227,22 @@ priority, mains, sets, effects) + the Actions/Library sidebar + the pinned foote
 pushes its state into the `SolverFilters` reducer (`apps/renderer/src/lib/solver/builderFilters.ts`, wired by `apps/renderer/src/screens/builder/BuilderScreen.tsx`).
 
 ### Hero
-Picker (searchable combobox) + portrait + 4 action buttons.
-- **SOLVE**: launches score mode (disabled if there is no hero or a solve is in progress).
-- **SOLVE CP**: launches CP mode.
+Picker (searchable combobox) + portrait + a **Score | CP** segmented control + a **Solve** button.
+- **Score | CP**: picks the mode (`solveMode` in `useSolverSession`, Score at each launch) without solving.
+- **Solve**: runs the current mode (disabled if there is no hero); labeled "Solve" in both modes.
+  **Default priority**: in Score, with no weight at all (`hasPriority` false), Solve fetches the hero's outerpedia
+  reco (`fetchRecoForHero`, Load reco's path; the button reads "Loading reco…") and sets only the priority of its
+  **first** build (`recoPriorityOf`, `lib/reco/recoPriority.ts`: `SubstatPrio` as 3/2/1, no mains, effects or sets,
+  no picker), through the hero's filters (so it is kept and read by Presets), then solves with it. Without a reco
+  (network failure, hero without a reco, reco without weights) the solve runs **by CP this once** (the mode doesn't
+  change) and a toast says so. The decision is the pure helper `solveDecision` (`"cp"` / `"score"` /
+  `"score-with-reco"` / `"cp-fallback"`). A hero without a reco is remembered for the session (no new call); a
+  network failure is retried at the next Solve.
+- **Priority banner** (`PriorityBanner.tsx`, under the hero row, visible with the popovers closed): with no weight,
+  "No priority set — Solve will use the outerpedia reco's weights" with **Load reco** (the whole reco, as in the
+  Library), **Set priority** (opens the Priority popover), **Use CP** (switches to CP and solves); with no reco
+  known it announces CP and keeps Set priority / Use CP. After a priority set from the reco: "Priority from
+  outerpedia reco · Edit · Clear" until it is edited (Clear resets the weights to zero).
 - **Cancel**: interrupts the solve (workers return their partial heap, the orchestrator merges what we have).
 - **Reset filters**: `dispatch({type: "resetAll"})` — clears the entire reducer.
 

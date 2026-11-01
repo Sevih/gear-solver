@@ -1,6 +1,6 @@
 /**
- * Builder toolbar — hero picker, Solve split button, quick toggles and the
- * popover buttons that open the filter panels.
+ * Builder toolbar — hero picker, Score | CP mode and Solve, the priority
+ * banner, quick toggles and the popover buttons that open the filter panels.
  */
 import { useEffect, useState, type Dispatch, type ReactNode } from "react";
 import type { GameData, Inventory } from "@gear-solver/core";
@@ -23,10 +23,11 @@ import { SetsPanel } from "./SetsPanel.js";
 import { WeaponsAccessoriesPanel } from "./WeaponsAccessoriesPanel.js";
 import { useClickOutside } from "./useClickOutside.js";
 import { REFORGE_MODES } from "./reforge.js";
+import { PriorityBanner, type PriorityBannerState } from "./PriorityBanner.js";
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Builder toolbar — Direction B (toolbar + popovers). A slim top bar carries
- * the always-needed controls (hero · Solve / Solve CP · two quick toggles);
+ * the always-needed controls (hero · Score | CP · Solve · two quick toggles);
  * the heavier filters live behind labeled popovers with active-count badges,
  * so the results table below can run near edge-to-edge. Each popover reuses
  * the existing panel components verbatim — only the layout/chrome is new.
@@ -35,7 +36,8 @@ export function BuilderToolbar({
   heroes, game, selectedUid, onSelect,
   armorSets, weaponEffects, accessoryEffects, talismanEffects, mainStatCatalogs,
   filters, dispatch,
-  solving, canSolve, solveMode, setSolveMode, onSolve, onCancelSolve,
+  solving, canSolve, solveMode, setSolveMode, onSolve, onCancelSolve, recoLoading,
+  priorityBanner, onLoadReco, onUseCp,
   canFilter, filterActive, onFilter, onClearFilter, dmgSkill,
 }: {
   heroes: Inventory["characters"];
@@ -53,12 +55,21 @@ export function BuilderToolbar({
   dispatch: Dispatch<SolverAction>;
   solving: boolean;
   canSolve: boolean;
-  /** Primary SOLVE mode (split button) — lifted so the parent's cartesian
+  /** SOLVE mode (Score | CP control) — lifted so the parent's cartesian
    *  estimate can prepare pools for the mode that will fire. */
   solveMode: SolveMode;
   setSolveMode: (m: SolveMode) => void;
   onSolve: (mode: SolveMode) => void;
   onCancelSolve: () => void;
+  /** SOLVE is fetching the hero's reco for its default priority. */
+  recoLoading: boolean;
+  /** Priority banner under the hero row, null = hidden (the hero has their
+   *  own weights, or no hero). */
+  priorityBanner: PriorityBannerState | null;
+  /** Load the whole reco (the Library's Load reco). */
+  onLoadReco: () => void;
+  /** Switch to CP mode and solve. */
+  onUseCp: () => void;
   /** Whether the post-solve Filter action can run (results stored + a band set). */
   canFilter: boolean;
   /** Whether a client filter is currently narrowing the stored results. */
@@ -113,7 +124,8 @@ export function BuilderToolbar({
         <div className="w-52 shrink-0">
           <HeroSelect heroes={heroes} game={game} value={selectedUid} onChange={onSelect} />
         </div>
-        <SolveButton solving={solving} canSolve={canSolve} mode={solveMode} setMode={setSolveMode} onSolve={onSolve} onCancelSolve={onCancelSolve} />
+        <SolveModeControl value={solveMode} onChange={setSolveMode} disabled={solving || recoLoading} />
+        <SolveButton solving={solving} canSolve={canSolve} loading={recoLoading} onSolve={() => onSolve(solveMode)} onCancelSolve={onCancelSolve} />
         {/* Post-solve client filter: re-applies the stat/rating bands to the
          *  stored results without re-solving (instant after the first solve). */}
         <button
@@ -141,6 +153,19 @@ export function BuilderToolbar({
           </button>
         )}
       </div>
+
+      {/* Priority banner — where the Score's weights come from when the hero
+       *  has none of their own; visible with the popovers closed. */}
+      {priorityBanner && (
+        <PriorityBanner
+          state={priorityBanner}
+          mode={solveMode}
+          onLoadReco={onLoadReco}
+          onSetPriority={() => setOpenKey("priority")}
+          onUseCp={onUseCp}
+          onClear={() => dispatch({ type: "clearPriority" })}
+        />
+      )}
 
       {/* Row 2 — reforge mode, the quick toggle, and the filter popovers. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
@@ -199,25 +224,47 @@ export function BuilderToolbar({
   );
 }
 
-/** Split SOLVE button — one primary action that runs the current mode
- *  (Score / Combat Power), plus a ▾ that opens a small menu to switch mode
- *  (picking a mode both keeps it and runs it). The mode is NOT persisted: it
- *  lives in the screen's `solveMode` state and starts on Solve (Score) at each
- *  visit. While solving it becomes a Cancel button. */
+/** SOLVE mode — Score | CP. Picking a segment changes the mode (kept in the
+ *  screen's `solveMode` state, Score at each launch) without solving. */
 const SOLVE_MODES: { value: SolveMode; label: string; desc: string }[] = [
-  { value: "score", label: "Solve", desc: "Maximize a priority-weighted Score" },
-  { value: "cp", label: "Solve CP", desc: "Maximize in-game Combat Power" },
+  { value: "score", label: "Score", desc: "Maximize a priority-weighted Score" },
+  { value: "cp", label: "CP", desc: "Maximize in-game Combat Power" },
 ];
-function SolveButton({ solving, canSolve, mode, setMode, onSolve, onCancelSolve }: {
+function SolveModeControl({ value, onChange, disabled }: { value: SolveMode; onChange: (m: SolveMode) => void; disabled: boolean }) {
+  return (
+    <div role="group" aria-label="Solve mode" className="flex h-9 shrink-0 items-center gap-0.5 rounded-lg border border-white/10 bg-white/4 p-1">
+      {SOLVE_MODES.map((m) => {
+        const on = value === m.value;
+        return (
+          <button
+            key={m.value}
+            type="button"
+            onClick={() => onChange(m.value)}
+            disabled={disabled}
+            aria-pressed={on}
+            title={m.desc}
+            className={cx(
+              "h-full rounded px-2.5 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              on ? "bg-cyan-400/20 text-cyan-200" : "text-white/70 hover:text-white/80",
+            )}
+          >
+            {m.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** SOLVE — runs the current mode; "Loading reco…" while it fetches the
+ *  hero's reco for a default priority; a Cancel button while solving. */
+function SolveButton({ solving, canSolve, loading, onSolve, onCancelSolve }: {
   solving: boolean;
   canSolve: boolean;
-  mode: SolveMode;
-  setMode: (m: SolveMode) => void;
-  onSolve: (mode: SolveMode) => void;
+  loading: boolean;
+  onSolve: () => void;
   onCancelSolve: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
   if (solving) {
     return (
       <button
@@ -229,46 +276,17 @@ function SolveButton({ solving, canSolve, mode, setMode, onSolve, onCancelSolve 
       </button>
     );
   }
-  const current = SOLVE_MODES.find((m) => m.value === mode) ?? SOLVE_MODES[1]!;
   const grad = { background: "linear-gradient(180deg,#22d3ee,#0bb6d4)", boxShadow: "0 0 0 1px rgba(34,211,238,0.5),0 6px 16px -6px rgba(34,211,238,0.6)" };
   return (
-    <div ref={ref} className="relative flex shrink-0">
-      <button
-        type="button"
-        onClick={() => onSolve(mode)}
-        disabled={!canSolve}
-        style={grad}
-        className="h-9 rounded-l-lg px-5 text-[12px] font-bold uppercase tracking-wider text-[#06262b] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {current.label}
-      </button>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        disabled={!canSolve}
-        aria-label="Change solve mode"
-        aria-expanded={open}
-        style={grad}
-        className="grid h-9 w-7 place-items-center rounded-r-lg border-l border-[#06262b]/25 text-[10px] text-[#06262b] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {open ? "▴" : "▾"}
-      </button>
-      {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-52 overflow-hidden rounded-lg border border-white/10 bg-zinc-900 shadow-2xl shadow-black/70">
-          {SOLVE_MODES.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              onClick={() => { setMode(m.value); setOpen(false); onSolve(m.value); }}
-              className={cx("flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-white/6", m.value === mode && "bg-cyan-500/10")}
-            >
-              <span className="text-[12px] font-bold uppercase tracking-wider text-white">{m.label}</span>
-              <span className="text-[10.5px] leading-snug text-white/60">{m.desc}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={onSolve}
+      disabled={!canSolve || loading}
+      style={grad}
+      className="h-9 shrink-0 rounded-lg px-5 text-[12px] font-bold uppercase tracking-wider text-[#06262b] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {loading ? "Loading reco…" : "Solve"}
+    </button>
   );
 }
 

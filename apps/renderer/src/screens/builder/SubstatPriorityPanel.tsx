@@ -18,11 +18,9 @@ export function SubstatPriorityPanel({
   topPct: number;
   dispatch: Dispatch<SolverAction>;
 }) {
-  // The Top-% prune runs whenever Top % < 100, priority or not: with no
-  // priority the engine ranks each slot by a CP proxy (SOLVE CP) or by raw roll
-  // magnitude (SOLVE, Score) — the latter has no objective, so its results are
-  // arbitrary. Surface that so a user lowering Top % with no priorities set
-  // knows what the slider is pruning by.
+  // Without a priority, SOLVE (Score) takes the outerpedia reco's weights, or
+  // solves by Combat Power without a reco — the banner under the hero row says
+  // which and offers the actions; this line only points there.
   const prioritized = hasPriority(priority);
   return (
     <Panel
@@ -63,10 +61,9 @@ export function SubstatPriorityPanel({
         />
         <span className="w-7 text-right font-mono text-[11px] tabular-nums text-white">{topPct}</span>
       </div>
-      {topPct < 100 && !prioritized && (
+      {!prioritized && (
         <div className="mt-1 text-[10px] leading-snug text-amber-300/80">
-          SOLVE CP ranks each slot by a CP proxy. SOLVE (Score) without a priority
-          keeps the fullest-rolled pieces, which is arbitrary: set a priority above.
+          No priority set: Solve uses the outerpedia reco's weights — see the banner above.
         </div>
       )}
     </Panel>

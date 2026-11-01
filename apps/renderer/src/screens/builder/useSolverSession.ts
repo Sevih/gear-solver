@@ -62,12 +62,12 @@ interface SolverSessionInput {
 }
 
 export function useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, workerCount, topN, topK }: SolverSessionInput) {
-  // Primary SOLVE mode (split button), lifted here so the pre-solve cartesian
+  // SOLVE mode (the toolbar's Score | CP control), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
   // RANKING differs: Score ranks by priority — or raw roll magnitude without
   // one — while CP uses a CP proxy; the combo budget bounds both).
-  // Solve-button mode defaults to "Solve" (score) and is NOT persisted — every
-  // visit starts on Solve rather than remembering a prior "Solve CP".
+  // The mode defaults to Score and is NOT persisted — every launch starts on
+  // Score rather than remembering a prior CP.
   const [solveMode, setSolveMode] = useState<SolveMode>("score");
 
   // Solver state — orchestrator stays alive for the screen's lifetime so

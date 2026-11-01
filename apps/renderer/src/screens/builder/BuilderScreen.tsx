@@ -33,7 +33,8 @@ import { equipPieces, type EquipOutcome } from "../../equip.js";
 import type { WorklistEntry } from "../../lib/storage/worklist.js";
 import { worklistChangesFor } from "../../lib/worklist/changes.js";
 import { filtersForHero, withHeroFilters, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
-import { priorityOf } from "../../lib/heroPriority/weights.js";
+import { hasPriority, priorityOf, type Priority } from "../../lib/heroPriority/weights.js";
+import { recoPriorityOf, samePriority, solveDecision } from "../../lib/reco/recoPriority.js";
 import { usePersistedState } from "../../hooks/usePersistedState.js";
 import { deltaCpLabel } from "../../lib/deltaCp.js";
 import { diffBuildVsLoadout } from "../../lib/buildDiff.js";
@@ -63,6 +64,7 @@ import { SubValuePanel } from "./SubValuePanel.js";
 import { DmgPer1PctPanel } from "./DmgPer1PctPanel.js";
 import { RightSidebar } from "./RightSidebar.js";
 import { RecoBuildPicker } from "./RecoBuildPicker.js";
+import type { PriorityBannerState } from "./PriorityBanner.js";
 import { FilterFooter } from "./FilterFooter.js";
 import { PromptDialog } from "./PromptDialog.js";
 import { useSolverSession } from "./useSolverSession.js";
@@ -135,6 +137,9 @@ interface BuilderScreenProps {
   heatmap?: boolean;
   /** Compact gear cards under the results (Settings → Solver). */
   compactCards?: boolean;
+  /** Show a toast (App's `notify`) — SOLVE says when it fell back to Combat
+   *  Power for want of a priority and a reco. */
+  onNotify?: (text: string) => void;
 }
 
 /** Cartesian size (∏ per-slot pools) above which the Builder warns the solve
@@ -162,7 +167,7 @@ function startFiltersFor(uid: string | null, map: HeroFiltersMap, savedBuilds: S
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards") }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), onNotify }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // The preset "Optimize preset →" aims at, tied to the hero it opened — set
   // with the patch below, dropped as soon as the user switches heroes.
@@ -267,18 +272,19 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   /** Right-click on a result cell → "Min ≥ / Max ≤ <value>": set that bound
    *  (the other one stays) and re-solve in the last solve's mode. The solve
    *  fires from the effect below, on the render that carries the new band —
-   *  `startSolve` reads `filters` from its closure, stale in this handler. */
-  const thresholdResolveRef = useRef<SolveMode | null>(null);
+   *  `startSolve` reads `filters` from its closure, stale in this handler.
+   *  SOLVE with the reco's priority (`solve`) goes through it too. */
+  const pendingSolveRef = useRef<SolveMode | null>(null);
   const setThresholdAndResolve = useCallback((kind: "stat" | "rating", key: string, bound: "min" | "max", value: number) => {
-    thresholdResolveRef.current = lastSolveMode;
+    pendingSolveRef.current = lastSolveMode;
     dispatch(kind === "stat"
       ? { type: "setStatFilter", stat: key, bound, value }
       : { type: "setRatingFilter", rating: key, bound, value });
   }, [lastSolveMode]);
   useEffect(() => {
-    const mode = thresholdResolveRef.current;
+    const mode = pendingSolveRef.current;
     if (!mode) return;
-    thresholdResolveRef.current = null;
+    pendingSolveRef.current = null;
     startSolve(mode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
@@ -587,6 +593,54 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setRecoPicker(r.reco); // multiple builds → let the user pick which one
   };
 
+  // SOLVE. In Score mode without a priority it takes the weights of the hero's
+  // reco (first build, nothing else of it) as their priority — through the
+  // filters, so it is kept for the hero and read by Presets — and solves with
+  // them; without reco weights it solves by Combat Power this once (the mode
+  // stays) and says so. `recoPriorityFrom` remembers the weights it set, for
+  // the banner's "Priority from outerpedia reco" until they're edited;
+  // `noRecoHeroes` the heroes whose reco has no weights (not fetched again).
+  const [recoLoading, setRecoLoading] = useState(false);
+  const [recoPriorityFrom, setRecoPriorityFrom] = useState<Record<string, Priority>>({});
+  const [noRecoHeroes, setNoRecoHeroes] = useState<ReadonlySet<string>>(() => new Set());
+  const solve = async (mode: SolveMode) => {
+    if (!selected || mode === "cp" || hasPriority(filters.priority)) { startSolve(mode); return; }
+    let recoPriority: Priority | null = null;
+    if (!noRecoHeroes.has(selected.uid)) {
+      setRecoLoading(true);
+      const r = await fetchRecoForHero(selected.uid, selected.charId, () => selectedUidRef.current);
+      setRecoLoading(false);
+      // Hero switched mid-fetch: neither solve nor touch the new hero's filters.
+      if (r === null) return;
+      recoPriority = r.status === "ok" ? recoPriorityOf(r.reco) : null;
+      // No reco, or one without weights: known for the session. A failed
+      // fetch is tried again at the next SOLVE.
+      if (r.status !== "error" && !recoPriority) setNoRecoHeroes((s) => new Set(s).add(selected.uid));
+    }
+    const decision = solveDecision({ mode, hasPriority: hasPriority(filtersRef.current.priority), recoPriority });
+    if (decision === "score-with-reco" && recoPriority) {
+      const weights = recoPriority;
+      setRecoPriorityFrom((m) => ({ ...m, [selected.uid]: weights }));
+      pendingSolveRef.current = "score";
+      for (const [stat, value] of Object.entries(weights)) dispatch({ type: "setPriority", stat, value });
+      return;
+    }
+    if (decision === "cp-fallback") {
+      const meta = game?.characters[String(selected.charId)] ?? null;
+      onNotify?.(`No priority and no reco for ${displayNameOf(selected, meta ? { nickname: meta.nickname ?? null } : null)} — solved by Combat Power`);
+      startSolve("cp");
+      return;
+    }
+    startSolve(decision === "cp" ? "cp" : "score");
+  };
+  const solveByCp = () => { setSolveMode("cp"); startSolve("cp"); };
+  // The banner under the hero row: no weight (SOLVE will take the reco's, or
+  // go by CP when the hero has none), or the reco's weights SOLVE set.
+  const fromReco = selectedUid ? recoPriorityFrom[selectedUid] : undefined;
+  const priorityBanner: PriorityBannerState | null = !selectedUid ? null
+    : !hasPriority(filters.priority) ? (noRecoHeroes.has(selectedUid) ? "no-reco" : "none")
+      : fromReco && samePriority(fromReco, filters.priority) ? "from-reco" : null;
+
   /** Compose the picked hero's full stats (gear included) via the shared
    *  composeBuild helpers, on the hero's effective character (the Core Fusion
    *  variant when fused). Same pipeline the Builds tab uses — so a hero's
@@ -734,8 +788,12 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         canSolve={selectedUid != null}
         solveMode={solveMode}
         setSolveMode={setSolveMode}
-        onSolve={startSolve}
+        onSolve={(mode) => void solve(mode)}
         onCancelSolve={cancelSolve}
+        recoLoading={recoLoading}
+        priorityBanner={priorityBanner}
+        onLoadReco={() => void getPreset()}
+        onUseCp={solveByCp}
         canFilter={solveResults.length > 0 && hasAnyBand}
         filterActive={displayFilter != null}
         onFilter={applyClientFilter}

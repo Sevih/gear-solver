@@ -201,9 +201,18 @@ results, the bottom band shows the selected build's pieces.
 
 ### 1. Pick a hero, pick a mode
 
-- **SOLVE** — maximizes a **Score** weighted by the substat priorities you set. Use it when you
-  know which stats you want.
-- **SOLVE CP** — maximizes the in-game **Combat Power** number. One objective, no tuning needed.
+- **Score | CP** — pick the mode next to the **Solve** button (picking doesn't start a solve);
+  **Solve** runs the mode shown.
+  - **Score** maximizes a **Score** weighted by the substat priorities you set. Use it when you
+    know which stats you want. With no priority set, Solve takes the weights of the hero's
+    Outerpedia reco (only its priority, from its first build) and says so under the hero row
+    (**Priority from outerpedia reco · Edit · Clear**); the priority stays with the hero like one
+    you set. If the hero has no reco (or it can't be loaded), that solve goes by Combat Power
+    instead and a toast tells you.
+  - **CP** maximizes the in-game **Combat Power** number. One objective, no tuning needed.
+- While no priority is set, a banner under the hero row says what Solve will do, with **Load
+  reco** (the whole reco), **Set priority** (opens the Priority panel) and **Use CP** (switches
+  to CP and solves).
 - **Cancel** stops a running solve. You usually get no partial results — only work chunks
   that had already fully finished are kept (most cancels happen mid-chunk, so typically
   none). **Reset filters** clears everything.
@@ -212,8 +221,8 @@ results, the bottom band shows the selected build's pieces.
 
 - **Substat priority** — a slider per stat (−1 to 3). Higher = the solver values it more.
 - **Top %** — a speed/quality dial. Lower = faster but may skip the absolute-best build; the
-  hint warns you when it's set too low. (In **SOLVE CP** it always applies — each slot is
-  ranked by a CP proxy. In **SOLVE** it only kicks in once you've set at least one priority.)
+  hint warns you when it's set too low. (In **CP** it always applies — each slot is
+  ranked by a CP proxy. In **Score** it ranks by your priority.)
 - **Main stats** — for Weapon / Accessory / Talisman, click a main-stat icon to cycle
   allowed → excluded → off. Allowed = the mains you'll accept; excluded = never use a piece
   with that main — e.g. rule out ATK talismans when a teammate already brings one (talisman

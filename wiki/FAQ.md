@@ -66,9 +66,9 @@ Your rules are too strict for your inventory. Common causes:
 - **Top %** set very low — raise it (lower Top % is faster but can drop valid builds).
 The empty-state message lists which slot dropped to zero pieces after filtering.
 
-**SOLVE CP is slow.**
+**Solve in CP mode is slow.**
 CP is heavier to compute than Score. Lower the **Top %**, add a few **filters** to shrink the
-search, or use **SOLVE** with priorities if you just want a stat profile.
+search, or use **Score** with priorities if you just want a stat profile.
 
 **A solve is taking too long.**
 Click **Cancel** to stop it. Note you usually get *no* partial results — only work chunks that
@@ -80,9 +80,11 @@ re-solve.
 How many gear slots a build changes vs what the hero currently wears — not upgrades to do. Low
 Swaps = a small change you can equip in a few moves; high Swaps = a bigger reshuffle.
 
-**SOLVE vs SOLVE CP — which do I use?**
-- Use **SOLVE** when you know the stats you want (set priorities, optionally stat filters).
-- Use **SOLVE CP** when you just want the highest in-game Combat Power.
+**Score vs CP — which do I use?** (the **Score | CP** switch next to **Solve**)
+- Use **Score** when you know the stats you want (set priorities, optionally stat filters). With
+  no priority set, Solve takes the weights of the hero's Outerpedia reco — or goes by CP when the
+  hero has none.
+- Use **CP** when you just want the highest in-game Combat Power.
 
 **Can the app equip gear onto my heroes for me?**
 Locally, yes: the Builder's **Apply to snapshot** button applies the selected build to your captured

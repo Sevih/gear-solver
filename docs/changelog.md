@@ -8,6 +8,63 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧭 Premier résultat guidé : priorité par défaut depuis la reco outerpedia, bandeau « No priority » hors popover, mode CP sans menu (U6, G94) (2026-11-01)
+- ✅ **Pourquoi.** Sixième lot de la refonte (U6 de `docs/ux-audit-2026-11-01.md`, raison 3 du diagnostic « Le premier
+  résultat dépend d'un réglage caché », arbitrage D3) : le mode par défaut, Score, classait au hasard sans priorité
+  (`computeScore` à 0 pour tous les builds), le seul avertissement vivait dans le popover Priority fermé, et le mode
+  CP, celui qui « ne demande aucun réglage », était caché derrière ▾ (dont chaque entrée lançait aussi le solve).
+- ✅ **Priorité par défaut (D3).** `apps/renderer/src/lib/reco/recoPriority.ts` (nouveau, pur) : `recoPriorityOf(reco)`
+  (priorité de la **première** build par `translateRecoBuild`, résolveur d'effets nul : seul `SubstatPrio` compte,
+  null sans reco, sans build ou sans poids), `solveDecision({ mode, hasPriority, recoPriority })` → `"cp"` /
+  `"score"` / `"score-with-reco"` / `"cp-fallback"` (le quatrième cas, `"cp"`, est le mode CP choisi : la décision
+  couvre tout le bouton), `samePriority` (stat absente = 0). Dans `BuilderScreen.tsx`, `solve(mode)` : en Score sans
+  poids, `fetchRecoForHero` (le chemin de Load reco, réponse tardive d'un autre héros ignorée), bouton « Loading
+  reco… » pendant l'appel ; avec des poids, ils sont posés par des `setPriority` (le chemin normal des filtres :
+  écrits pour le héros par l'effet de U4, lus par Presets) et le solve Score part du rendu qui les porte, par la
+  même ref que le re-solve du clic droit (`thresholdResolveRef` renommée `pendingSolveRef`, `startSolve` lisant
+  `filters` de sa closure). Ni mains, ni effets, ni sets, ni picker ; `translateReco.ts`, Load reco et le picker
+  inchangés.
+- ✅ **Sans reco.** Réseau en échec, héros sans reco ou reco sans poids : solve en CP pour cette fois (`startSolve("cp")`,
+  `solveMode` inchangé) et toast « No priority and no reco for ‹héros› — solved by Combat Power » (`onNotify`, le
+  `notify` d'App, nouvelle prop passée par `App.tsx`). Un héros sans reco (404 ou sans poids) est retenu pour la
+  session (`noRecoHeroes`, pas de nouvel appel) ; un échec réseau est retenté au Solve suivant.
+- ✅ **Bandeau** (`screens/builder/PriorityBanner.tsx`, nouveau), rendu par `BuilderToolbar` entre la ligne du héros
+  et la ligne 2, visible tant que `hasPriority` est faux, popovers fermés : « No priority set — Solve will use the
+  outerpedia reco's weights » avec **Load reco** (`getPreset`, la reco entière), **Set priority** (ouvre le popover
+  Priority) et **Use CP** (mode CP puis solve). Héros connu sans reco : « … no outerpedia reco for this hero — Solve
+  will use Combat Power », actions Set priority / Use CP (D3). Après une priorité posée par Solve : « Priority from
+  outerpedia reco · Edit · Clear » tant que les poids restent ceux de la reco (`recoPriorityFrom` par héros +
+  `samePriority`, donc dérivé : toute retouche le fait disparaître) ; Clear = `clearPriority`, le premier bandeau
+  revient. Écart assumé : en mode CP le texte dit « CP mode needs none » et Use CP disparaît (le libellé « Solve
+  will use the reco's weights » y serait faux). L'avertissement du popover Priority est raccourci (« No priority set:
+  Solve uses the outerpedia reco's weights — see the banner above. ») et s'affiche sans poids quel que soit Top %.
+- ✅ **Mode CP visible.** `BuilderToolbar.tsx` : le bouton divisé (Solve / ▾ « Change solve mode » / menu) laisse place
+  à un contrôle segmenté **Score | CP** (`SolveModeControl`, `aria-pressed`, `title` = l'ancienne description ;
+  choisir ne lance rien, le mode reste en mémoire comme avant, Score à chaque lancement) et un seul bouton
+  « Solve » qui lance le mode courant. Cancel en cours de solve inchangé ; aucun raccourci clavier n'existait sur
+  ces boutons. Commentaires de `useSolverSession.ts` remis à jour (plus de « split button »).
+- ✅ **Tests.** `apps/renderer/test/recoPriority.test.ts` (nouveau, 12) : `recoPriorityOf` (un build, plusieurs → le
+  premier, priorité seule, sans reco / sans build / priorité vide / clé inconnue → null), `solveDecision` (quatre
+  issues), `samePriority`, et `fetchReco` stubé (`vi.stubGlobal("fetch", …)` : première build lue, 404 et échec
+  réseau → `cp-fallback`). `apps/renderer/test/priorityBanner.test.ts` (nouveau, 9) : rendu statique de la barre
+  (Score | CP puis « Solve », plus de ▾ ni de « Solve CP », segment pressé, « Loading reco… » désactivé, Cancel,
+  bandeau sous la ligne du héros, aucun popover ouvert) et du bandeau dans ses états (aucune priorité, sans reco,
+  mode CP, priorité de la reco). Aucun appel réseau réel.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (§ 4 Hero : Score | CP, Solve, priorité par défaut, bandeau ; § 3
+  branche c : le bouton n'y mène plus) ; `wiki/Using-the-App.md` (§ 1 du Builder : modes, priorité par défaut, repli
+  CP, bandeau ; Top % sans « SOLVE CP ») ; `wiki/FAQ.md` (« Score vs CP », « Solve in CP mode is slow ») ;
+  `docs/reference.md` / `wiki/Engine-Reference.md` (lignes des deux tests). `docs/todo.md` n'avait pas d'item lié.
+- ✅ **Vérification.** `npm run typecheck` vert (dernière ligne `> tsc --noEmit`) ; `npm test` : `Tests  169 passed
+  (169)` (core), `Tests  238 passed (238)` (desktop), `Tests  998 passed (998)` (renderer) ; `npm run lint` : `✖ 7
+  problems (0 errors, 7 warnings)`, comme avant.
+- ⏳ **À voir par Sevih dans l'app** : sur un héros sans priorité, Solve → « Loading reco… » puis bandeau « Priority from
+  outerpedia reco » et résultats Score ; Clear → premier bandeau ; héros sans reco (ou réseau coupé) → toast et
+  résultats CP, mode resté sur Score ; Set priority / Edit ouvrent bien le popover ; rendu du segment Score | CP à
+  côté de Solve.
+- ⏳ Hors périmètre, relevé : `README.md` dit encore « SOLVE / SOLVE CP » (ligne des fonctionnalités) ; l'estimation
+  pré-solve reste calculée en Score sans poids (branche `magnitudeScoreOf`) quand le héros n'a pas de priorité, alors
+  que Solve partira avec les poids de la reco ou en CP.
+
 ### 🗂️ États de vue gardés au changement d'onglet : sélection et pièce de l'Inventory, filtres, tri et cartes de Presets, vue de Home (U5, G93) (2026-11-01)
 - ✅ **Pourquoi.** Cinquième lot de la refonte (U5 de `docs/ux-audit-2026-11-01.md`, §5.d, lignes « perdu au
   changement d'onglet » de 1.2 et 1.4, raison 4 du diagnostic) : trois modèles de persistance pour des choses
