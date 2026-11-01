@@ -839,7 +839,7 @@ interface BuildsScreenProps {
   /** App's setter for the priority map (functional updates supported). */
   onHeroPriorityChange: Dispatch<SetStateAction<HeroPriority>>;
   /** When true, surface the stat-lock / drift / copy-dump UI used for
-   *  stat-formula regression work. Default off — Settings → Debug. */
+   *  stat-formula regression work. Default off — Settings › Advanced. */
   debug: boolean;
   /** Jump to the Builder tab with this hero preselected — wired to each
    *  card's "Optimize →" button. */

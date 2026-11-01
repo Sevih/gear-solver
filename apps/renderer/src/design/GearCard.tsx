@@ -15,7 +15,7 @@
  * Builder's `BuildEffectsPanel`, shows the talisman's passive as plain lines
  * and the EE as its image + gems only. `projection` marks the reforge ticks a
  * projection added (cyan) and the Transistone ones (`T+n`). `compact`
- * (Settings › Solver › Compact result cards) shortens the card for an
+ * (Settings › Display › Compact result cards) shortens the card for an
  * eight-card comparison: no equipment icon (enhance / breakthrough / stars
  * move to the header), set names instead of item names, icon + value stats
  * (subs on a 2 × 2 grid, details in the `title`), gems as five icons, one-line
@@ -225,7 +225,7 @@ export interface GearCardBodyProps {
   /** "card": passive and set bonuses on the card; "none": left to the
    *  Builder's `BuildEffectsPanel` (see the file header). */
   effects: "card" | "none";
-  /** Compact card (Settings › Solver › Compact result cards). */
+  /** Compact card (Settings › Display › Compact result cards). */
   compact?: boolean;
   /** Rendered inside a hover popover (`RichTooltip`, `HoverCard`), which can't
    *  host a hoverable nested tooltip — the set rows' "combat" pill expands

@@ -1,7 +1,8 @@
 /**
  * Settings registry — the ONE declaration of each persisted setting of
- * Settings › Solver and › Debug (plus the last Settings pane visited): its
- * localStorage key, default, bounds / step, label and help text.
+ * Settings › Solver, › Display and › Advanced, plus the Presets screen's loss
+ * threshold and the last Settings pane visited: its localStorage key,
+ * default, bounds / step, label and help text.
  *
  * Two kinds of readers go through it:
  *  - React state (`useSetting`, `hooks/useSetting.ts`) for App and the panes;
@@ -16,7 +17,7 @@
  */
 
 /** Settings modal panes, rail order. */
-export const SETTINGS_PANES = ["setup", "solver", "data", "backup", "debug", "logs"] as const;
+export const SETTINGS_PANES = ["setup", "data", "solver", "display", "backup", "advanced"] as const;
 export type SettingsPane = (typeof SETTINGS_PANES)[number];
 
 /** Hard ceiling so a pathological override or an absurd core count can't spawn
@@ -40,7 +41,9 @@ export interface SettingValues {
   heatmap: boolean;
   /** Builder: compact gear cards under the results. */
   compactCards: boolean;
-  /** Presets tab: loss (percent) past which an associated hero is flagged. */
+  /** Optimizer: height of the results table, in rows. */
+  resultRows: number;
+  /** Presets screen: loss (percent) past which an associated hero is flagged. */
   presetLossWarn: number;
   /** Solver fan-out logging to the devtools console. */
   debugSolver: boolean;
@@ -64,11 +67,12 @@ interface SpecBase<T> {
 }
 
 /** Shape of the spec by value type: a switch, a stepper (bounds, step, an
- *  optional unit for the range line), or one of a fixed list. */
+ *  optional unit for the range line), or one of a fixed list (with the values
+ *  an older install may have stored, each mapped to its current choice). */
 type SpecKind<T> =
   [T] extends [boolean] ? { kind: "bool" }
   : [T] extends [number | null] ? { kind: "number"; min: number; max: number | (() => number); step: number; unit?: string }
-  : [T] extends [string] ? { kind: "choice"; choices: readonly T[] }
+  : [T] extends [string] ? { kind: "choice"; choices: readonly T[]; legacy?: Readonly<Record<string, T>> }
   : never;
 
 export type SettingSpec<T> = SpecBase<T> & SpecKind<T>;
@@ -126,6 +130,17 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
     help: "Shorter, narrower gear cards under the results: no item icon (enhance, breakthrough, stars by the name), set names instead of item names, icon + value stats with substats two per row, gems as icons, one-line quality and effects, details on hover. Gear and tooltips unchanged.",
     appliesNextSolve: false,
   },
+  resultRows: {
+    key: "gs.builder.resultRows",
+    default: 12,
+    kind: "number",
+    min: 5,
+    max: 15,
+    step: 1,
+    label: "Result rows",
+    help: "Height of the Optimizer's results table, in rows visible before it scrolls. Also set by the height slider above the table.",
+    appliesNextSolve: false,
+  },
   presetLossWarn: {
     key: "gs.solver.presetLossWarn",
     default: 15,
@@ -135,7 +150,7 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
     step: 5,
     unit: "%",
     label: "Preset loss warning",
-    help: "Presets tab: an associated hero losing more than this share of their own build's score is flagged.",
+    help: "Presets: an associated hero losing more than this share of their own build's score is flagged.",
     appliesNextSolve: false,
   },
   debugSolver: {
@@ -157,6 +172,8 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
     default: "setup",
     kind: "choice",
     choices: SETTINGS_PANES,
+    // The panes Debug and Logs merged into Advanced.
+    legacy: { debug: "advanced", logs: "advanced" },
     label: "Last Settings pane",
     help: "The pane Settings reopens on (Setup until onboarding is done).",
   },
@@ -164,8 +181,13 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
 
 /** The settings Settings › Solver shows — and resets with « Reset solver
  *  settings to defaults ». */
-export const SOLVER_PANE_SETTINGS = ["workerCount", "topN", "topK", "heatmap", "compactCards", "presetLossWarn"] as const;
+export const SOLVER_PANE_SETTINGS = ["workerCount", "topN", "topK"] as const;
 export type SolverPaneSetting = (typeof SOLVER_PANE_SETTINGS)[number];
+
+/** The settings Settings › Display shows — and resets with « Reset display
+ *  settings to defaults ». */
+export const DISPLAY_PANE_SETTINGS = ["heatmap", "compactCards", "resultRows"] as const;
+export type DisplayPaneSetting = (typeof DISPLAY_PANE_SETTINGS)[number];
 
 export function settingDefault<N extends SettingName>(name: N): SettingValues[N] {
   return SETTINGS[name].default;
@@ -183,9 +205,18 @@ export function settingRange(name: SettingName): string {
   return `Range ${spec.min}–${settingMax(name)}${spec.unit ? ` ${spec.unit}` : ""}.`;
 }
 
+/** A value of a choice list: itself, else what an older install's value maps
+ *  to (`legacy`), else the default. */
+function choiceOf(spec: SettingSpec<string>, v: unknown): string {
+  if ((spec.choices as readonly unknown[]).includes(v)) return v as string;
+  if (typeof v === "string" && spec.legacy && Object.hasOwn(spec.legacy, v)) return spec.legacy[v]!;
+  return spec.default;
+}
+
 /** Bring a value within a setting's bounds: a number is rounded to the step,
  *  then held in [min, max]; null stays null (workerCount = auto); a value
- *  outside a choice list falls back to the default. Booleans pass through. */
+ *  outside a choice list maps through `legacy`, else falls back to the
+ *  default. Booleans pass through. */
 export function clampSetting<N extends SettingName>(name: N, value: SettingValues[N]): SettingValues[N] {
   const spec = SETTINGS[name] as AnySpec;
   if (spec.kind === "number") {
@@ -195,16 +226,15 @@ export function clampSetting<N extends SettingName>(name: N, value: SettingValue
     const stepped = Math.round(n / spec.step) * spec.step;
     return Math.max(spec.min, Math.min(stepped, settingMax(name))) as SettingValues[N];
   }
-  if (spec.kind === "choice") {
-    return ((spec.choices as readonly unknown[]).includes(value) ? value : spec.default) as SettingValues[N];
-  }
+  if (spec.kind === "choice") return choiceOf(spec, value) as SettingValues[N];
   return value;
 }
 
 /** Parse a stored (JSON) value; the default when it is not of the setting's
- *  type. The stored value is returned as is otherwise — not clamped: the
- *  readers clamp (`resolveWorkerCount`, the panes' steppers). A hand-set
- *  `"1"` counts as on for a switch, as `lib/log.ts` always allowed. */
+ *  type (an older install's pane maps through `legacy` first). The stored
+ *  value is returned as is otherwise — not clamped: the readers clamp
+ *  (`resolveWorkerCount`, the panes' steppers). A hand-set `"1"` counts as on
+ *  for a switch, as `lib/log.ts` always allowed. */
 export function parseSetting<N extends SettingName>(name: N, raw: string | null): SettingValues[N] {
   const spec = SETTINGS[name] as AnySpec;
   const fallback = spec.default as SettingValues[N];
@@ -223,7 +253,7 @@ export function parseSetting<N extends SettingName>(name: N, raw: string | null)
       if (v === null && spec.default === null) return v as SettingValues[N];
       return (typeof v === "number" && Number.isFinite(v) ? v : fallback) as SettingValues[N];
     case "choice":
-      return ((spec.choices as readonly unknown[]).includes(v) ? v : fallback) as SettingValues[N];
+      return choiceOf(spec, v) as SettingValues[N];
   }
 }
 
@@ -240,7 +270,7 @@ export function readSetting<N extends SettingName>(name: N): SettingValues[N] {
 }
 
 /** Put every listed setting back to its default through `set` — the
- *  « Reset solver settings to defaults » link. */
+ *  « Reset solver / display settings to defaults » links. */
 export function resetSettings<N extends SettingName>(
   names: readonly N[],
   set: <M extends N>(name: M, value: SettingValues[M]) => void,

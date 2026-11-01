@@ -1,5 +1,9 @@
 /**
- * Home update card — the state-driven update center (all six states).
+ * Update card — the state-driven update center of Settings › Data & updates
+ * (all six states: up-to-date / checking / downloading% / downloaded→Install /
+ * offline→Retry / manual). Auto-download happens in the main process; App
+ * polls `/api/update/status` (hooks/useAppUpdate.ts) and this card surfaces
+ * the one action that's left: "Install new version".
  */
 import { Spinner } from "../../design/Shell.js";
 import type { UpdatePhase, UpdateStatus } from "../../lib/update.js";
@@ -89,7 +93,7 @@ export function UpdateCard({ status, onCheck, onInstall }: {
         <button onClick={onCheck} className="w-full rounded-lg border border-white/10 bg-zinc-900 py-2 text-[12px] font-semibold text-zinc-400 hover:bg-zinc-800">Check again</button>
       ) : null}
 
-      {/* app version (always) — the game data version is Settings › Data's */}
+      {/* app version (always) — the game data version is Settings › Data & updates' own line */}
       <div className="flex items-center justify-between border-t border-white/7 pt-2.5">
         <div className="flex flex-col gap-px">
           <span className="text-[8px] font-bold uppercase tracking-[0.12em] text-white/65">App</span>

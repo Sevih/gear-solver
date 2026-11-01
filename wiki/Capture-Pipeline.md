@@ -65,7 +65,7 @@ then restart Steam. Settings → Setup shows whether it's set, and the line to p
 | `.steam-plugin.json` | plugin start + every capture | Heartbeat the app reads to show **Live**. |
 | `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | Discovery of new game endpoints. |
 
-The app's **Settings → Data → Wipe captured data** empties the whole folder — refused (409)
+The app's **Settings › Data & updates › Wipe captured data** empties the whole folder — refused (409)
 while the plugin is loaded in a running game, like the equip write-back.
 
 ## Key endpoints (POST, on `glb-game …:38001`)

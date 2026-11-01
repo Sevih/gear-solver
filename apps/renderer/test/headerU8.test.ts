@@ -113,11 +113,13 @@ describe("GsHeader", () => {
   });
 
   it("shows the update badge only when one is given", () => {
-    expect(header(steam(), updateBadge(update({ state: "downloaded", version: "1.29.0" })))).toContain("v1.29.0 ready");
+    const ready = header(steam(), updateBadge(update({ state: "downloaded", version: "1.29.0" })));
+    expect(ready).toContain("v1.29.0 ready");
+    expect(ready).toContain("Open Settings › Data &amp; updates");
     expect(header(steam(), updateBadge(update({ state: "manual", version: "1.29.0" })))).toContain("v1.29.0 available");
     const none = header(steam(), updateBadge(update({ state: "uptodate" })));
     expect(none).not.toMatch(/v\d[\d.]* (ready|available)/);
-    expect(none).not.toContain("Open the update card");
+    expect(none).not.toContain("Open Settings › Data &amp; updates");
   });
 });
 

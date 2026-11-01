@@ -138,7 +138,7 @@ export function App() {
   const [steam, setSteam] = useState<SteamStatus | null>(null);
   const [gameVersion, setGameVersion] = useState<string | null>(null);
   const [running, setRunning] = useState<"none" | "steam-install">("none");
-  // The app journal (Settings → Logs): plugin install lines + every status
+  // The app journal (Settings › Advanced): plugin install lines + every status
   // message, timestamped, bounded to APP_LOG_MAX lines.
   const [log, setLog] = useState<string[]>([]);
   // Install-log lines stream in one at a time: buffer them and flush at most
@@ -177,12 +177,12 @@ export function App() {
   // `wizardOpen` is the immediate UI state; `onboardingDone` survives reloads.
   const [onboardingDone, setOnboardingDone] = usePersistedState<boolean>("gs.onboarding.done", false);
   const [wizardOpen, setWizardOpen] = useState(!onboardingDone);
-  // The pane a given opener asks for (Home's "Open Setup"); null = the last
-  // pane visited.
+  // The pane a given opener asks for (Home's "Open Setup", the header's update
+  // badge); null = the last pane visited.
   const [settingsOpenOn, setSettingsOpenOn] = useState<SettingsPane | null>(null);
   const openSettings = (pane: SettingsPane | null) => { setSettingsOpenOn(pane); setWizardOpen(true); };
-  // App update status, polled whatever the tab: the header badge and Home's
-  // update card both read it.
+  // App update status, polled whatever the tab: the header badge and the
+  // update center of Settings › Data & updates both read it.
   const appUpdate = useAppUpdate(APP_VERSION);
   // A reset holds until relaunch — a ready probe on reopening Settings must
   // not undo it (see lib/onboarding.ts).
@@ -195,19 +195,23 @@ export function App() {
   // fan-out / merge / duration logging on. Persisted so it survives reloads
   // while profiling a slow solve.
   const [debugSolver, setDebugSolver] = useSetting("debugSolver");
-  // Solver tuning (edited in Settings → Solver, consumed by the Builder).
+  // Solver tuning (edited in Settings › Solver, consumed by the Builder).
   // Keys, defaults and bounds are declared once in lib/settings.ts.
   // workerCount: null = auto (hardwareConcurrency − 1); a number pins the pool
   // size. Shares `gs.solver.workerCount` with the non-React `resolveWorkerCount`.
   const [workerCount, setWorkerCount] = useSetting("workerCount");
   // topN = ranked builds returned to the table; topK = per-worker heap depth
-  // before merge (advanced — too low drops good builds). Heatmap = results-table
-  // column shading; compactCards = shorter gear cards under the results.
+  // before merge (advanced — too low drops good builds).
   const [solverTopN, setSolverTopN] = useSetting("topN");
   const [solverTopK, setSolverTopK] = useSetting("topK");
+  // Display (edited in Settings › Display, consumed by the Builder): heatmap =
+  // results-table column shading; compactCards = shorter gear cards under the
+  // results; resultRows = the results table's height, also set by its slider.
   const [heatmap, setHeatmap] = useSetting("heatmap");
   const [compactCards, setCompactCards] = useSetting("compactCards");
-  // Presets tab: loss (percent) past which an associated hero's line turns orange.
+  const [resultRows, setResultRows] = useSetting("resultRows");
+  // Presets screen: loss (percent) past which an associated hero's line turns
+  // orange — set on that screen.
   const [presetLossWarn, setPresetLossWarn] = useSetting("presetLossWarn");
   // Hero to preselect when the Builder tab opens — set by the Builds tab's
   // "Optimize →" button, consumed (and cleared) by BuilderScreen on mount so
@@ -299,7 +303,7 @@ export function App() {
   // Manual "Sync game data" — pulls fresh tables from the outerpedia repo,
   // then re-imports so the renderer picks them up (no window reload: a solve
   // may be running in the kept-mounted Builder). The single path behind both
-  // the Home quick action and Settings → Data.
+  // the Home quick action and Settings › Data & updates.
   async function syncGameData(): Promise<DataSyncResult> {
     report("Syncing game data…");
     const r = await requestDataSync();
@@ -403,7 +407,7 @@ export function App() {
   }
 
   /** Copy the BepInEx plugin into the game folder (downloads BepInEx once if
-   *  the game has none), streaming into the journal (Settings → Logs). The
+   *  the game has none), streaming into the journal (Settings › Advanced). The
    *  game must be closed — the backend refuses otherwise. */
   async function runSteamInstall() {
     if (running !== "none") return;
@@ -411,7 +415,7 @@ export function App() {
     try {
       const { exitCode } = await streamCapture("/api/steam/install", pushLog);
       if (exitCode === 0) announce("Capture plugin installed — launch OUTERPLANE from Steam and play to the lobby.");
-      else announce(`Plugin install failed (exit ${exitCode}) — see Settings › Logs.`);
+      else announce(`Plugin install failed (exit ${exitCode}) — see Settings › Advanced.`);
     } catch (err) {
       pushLog(`[client] ${err instanceof Error ? err.message : String(err)}`);
       announce("Network error during plugin install.");
@@ -456,7 +460,7 @@ export function App() {
           busy: running !== "none",
         }}
         update={updateBadge(appUpdate.update)}
-        onOpenUpdate={() => setTab("Home")}
+        onOpenUpdate={() => openSettings("data")}
         onSetup={() => openSettings(null)}
       />
 
@@ -489,10 +493,15 @@ export function App() {
           workerCount, setWorkerCount,
           topN: solverTopN, setTopN: setSolverTopN,
           topK: solverTopK, setTopK: setSolverTopK,
+        }}
+        display={{
           heatmap, setHeatmap,
           compactCards, setCompactCards,
-          presetLossWarn, setPresetLossWarn,
+          resultRows, setResultRows,
         }}
+        update={appUpdate.update}
+        onCheckUpdate={appUpdate.check}
+        onInstallUpdate={appUpdate.install}
         log={log}
         onClearLog={clearLog}
       />
@@ -516,9 +525,6 @@ export function App() {
                   game={game}
                   capStatus={capStatus}
                   steam={steam}
-                  update={appUpdate.update}
-                  onCheckUpdate={appUpdate.check}
-                  onInstallUpdate={appUpdate.install}
                   busy={running !== "none"}
                   onOpenSetup={() => openSettings("setup")}
                   onSyncData={() => void syncGameData()}
@@ -545,7 +551,7 @@ export function App() {
               </ScreenErrorBoundary>
             </div>
           )}
-          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} worklistHeroUids={worklistHeroUids} worklistClaims={solverWorklistClaims} heroFilters={heroFilters} heroPriority={heroPriority} presetRank={presetRank} onPresetRankChange={setPresetRank} presetLocked={presetLocked} onPresetLockedChange={setPresetLocked} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Optimizer"); }} onOptimizePreset={(uid, patch, note, presetNum) => { setBuilderHero(uid); setBuilderPatch({ patch, note, presetNum }); setTab("Optimizer"); }} /></ScreenErrorBoundary>}
+          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} onLossWarnChange={setPresetLossWarn} worklistHeroUids={worklistHeroUids} worklistClaims={solverWorklistClaims} heroFilters={heroFilters} heroPriority={heroPriority} presetRank={presetRank} onPresetRankChange={setPresetRank} presetLocked={presetLocked} onPresetLockedChange={setPresetLocked} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Optimizer"); }} onOptimizePreset={(uid, patch, note, presetNum) => { setBuilderHero(uid); setBuilderPatch({ patch, note, presetNum }); setTab("Optimizer"); }} /></ScreenErrorBoundary>}
           {tab === "Heroes" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Optimizer"); }} worklistClaims={solverWorklistClaims} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a
@@ -554,7 +560,7 @@ export function App() {
           {builderMounted && (
             <div className="h-full" style={{ display: tab === "Optimizer" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} heroFilters={heroFilters} onHeroFiltersChange={setHeroFilters} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} onNotify={notify} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} heroFilters={heroFilters} onHeroFiltersChange={setHeroFilters} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} resultRows={resultRows} onResultRowsChange={setResultRows} onNotify={notify} />
               </ScreenErrorBoundary>
             </div>
           )}

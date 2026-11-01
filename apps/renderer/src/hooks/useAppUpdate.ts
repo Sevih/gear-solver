@@ -1,6 +1,7 @@
 /**
  * useAppUpdate — the app update status, polled from App so it stays live
- * whatever the tab (the header badge reads it; Home's update card too).
+ * whatever the tab (the header badge reads it; so does the update card of
+ * Settings › Data & updates).
  * Faster while a download or a check is in flight so the % bar animates; idle
  * states tick slowly. Seeded with a static "up to date" using the build-time
  * app version so the card never flashes empty.

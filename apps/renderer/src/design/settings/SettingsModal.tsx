@@ -2,17 +2,23 @@
  * Settings modal — left-rail tabbed panel (ported from the Claude Design
  * "Settings Redesign" brief). Six sections reachable from a vertical nav:
  *
- *  - Setup  — the Steam capture plugin checklist: game found / plugin
- *             installed / plugin live. Doubles as the first-launch wizard;
- *             self-dismisses once the checks pass.
- *  - Solver — worker-pool size, result count (topN), per-worker depth (topK,
- *             advanced), results heatmap, compact result cards. Edits
- *             persisted settings owned by App.
- *  - Data   — Sync game data · Reset onboarding · Wipe captured (destructive).
- *  - Backup — Export / Import backup (JSON).
- *  - Debug  — developer toggles (stat-lock tooling, solver fan-out logging).
- *  - Logs   — the app journal (install lines, timestamped status messages):
- *             Copy · Clear.
+ *  - Setup          — the Steam capture plugin checklist: game found / plugin
+ *                     installed / plugin live. Doubles as the first-launch
+ *                     wizard; self-dismisses once the checks pass.
+ *  - Data & updates — the update center (app version, check, install) · game
+ *                     data version · Sync game data · Wipe captured
+ *                     (destructive).
+ *  - Solver         — worker-pool size, result count (topN), per-worker depth
+ *                     (topK, advanced): read at the next solve.
+ *  - Display        — results heatmap, compact result cards, result rows:
+ *                     applied at once.
+ *  - Backup         — Export / Import backup (JSON).
+ *  - Advanced       — developer toggles (stat-lock tooling, solver fan-out
+ *                     logging) · Reset onboarding · the app journal (install
+ *                     lines, timestamped status messages): Copy · Clear.
+ *
+ * Solver and Display edit persisted settings owned by App (`lib/settings.ts`);
+ * the Presets screen's loss threshold is set on that screen.
  *
  * The nav stays put; the content pane scrolls. The footer is contextual —
  * Re-check lives only in the Setup pane, Close is global. Escape closes the
@@ -25,14 +31,15 @@ import type { SettingsPane } from "../../lib/settings.js";
 import { cx } from "../cx.js";
 import { Spinner } from "../Shell.js";
 import type { DataSyncResult } from "../../lib/dataSync.js";
+import type { UpdateStatus } from "../../lib/update.js";
 import type { SteamStatus } from "../../steam.js";
 import { SolverPane, type SolverSettings } from "./SolverPane.js";
+import { DisplayPane, type DisplaySettings } from "./DisplayPane.js";
 import { useMountedRef } from "./useConfirmClick.js";
 import { SteamSetupPane } from "./SteamSetupPane.js";
 import { DataPane } from "./DataPane.js";
 import { BackupPane } from "./BackupPane.js";
-import { DebugPane } from "./DebugPane.js";
-import { LogsPane } from "./LogsPane.js";
+import { AdvancedPane } from "./AdvancedPane.js";
 
 type SettingsTab = SettingsPane;
 
@@ -42,7 +49,8 @@ interface Props {
   /** `gs.onboarding.done` — until then every open lands on Setup (the
    *  wizard) instead of the last pane visited. */
   onboardingDone: boolean;
-  /** Pane to open on, overriding the last pane visited (Home's "Open Setup"). */
+  /** Pane to open on, overriding the last pane visited (Home's "Open Setup",
+   *  the header's update badge). */
   openOn?: SettingsPane | null;
   /** Fired the first time the wizard observes a ready=true result so App.tsx
    *  can flip the onboarding-done flag and skip future auto-pop-ups. */
@@ -58,7 +66,7 @@ interface Props {
   /** Report an action's outcome (status + journal; no blocking dialogs). */
   onStatus: (message: string) => void;
   /** The latest status message — the footer shows it in place of the tab
-   *  note (the full history is in the Logs tab). */
+   *  note (the full history is in Advanced's journal). */
   status: string;
   /** Current state of the developer-only stat-lock toggle (Builds tab). */
   debugStatLocks: boolean;
@@ -70,6 +78,12 @@ interface Props {
   onToggleDebugSolver: () => void;
   /** Solver tuning settings (Solver tab). */
   solver: SolverSettings;
+  /** Display settings (Display tab). */
+  display: DisplaySettings;
+  /** App update status (Data & updates tab), its check and its install. */
+  update: UpdateStatus;
+  onCheckUpdate: () => void;
+  onInstallUpdate: () => void;
   /** Steam capture plugin — last status poll, a re-probe, and the two actions. */
   steam: SteamStatus | null;
   onRefreshSteam: () => Promise<SteamStatus | null>;
@@ -77,7 +91,7 @@ interface Props {
   onSteamLaunch: () => void;
   /** An install / capture is streaming — disable the action buttons. */
   steamBusy: boolean;
-  /** The app journal (Logs tab) and its reset. */
+  /** The app journal (Advanced tab) and its reset. */
   log: string[];
   onClearLog: () => void;
 }
@@ -85,26 +99,26 @@ interface Props {
 /** Per-tab footer note (left side of the contextual footer). */
 const FOOTER_NOTE: Record<SettingsTab, string> = {
   setup: "Setup checks re-run on each open.",
+  data: "App updates come from GitHub releases; game tables from outerpedia.",
   solver: "Changes are saved and apply on the next solve.",
-  data: "Snapshots are stored locally.",
+  display: "Applied at once.",
   backup: "One JSON file holds everything you set up here — builds, filter sets, ranks, worklist, notes, settings — never the captured gear.",
-  debug: "Developer toggles — off for normal use.",
-  logs: "Kept for this session only.",
+  advanced: "Developer toggles and the app journal (kept for this session only).",
 };
 
 const TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: ReactNode }> = [
-  { id: "setup",  label: "Setup",  icon: <IconCheckCircle /> },
-  { id: "solver", label: "Solver", icon: <IconSliders /> },
-  { id: "data",   label: "Data",   icon: <IconDatabase /> },
-  { id: "backup", label: "Backup", icon: <IconBackup /> },
-  { id: "debug",  label: "Debug",  icon: <IconCode /> },
-  { id: "logs",   label: "Logs",   icon: <IconLog /> },
+  { id: "setup",    label: "Setup",          icon: <IconCheckCircle /> },
+  { id: "data",     label: "Data & updates", icon: <IconDatabase /> },
+  { id: "solver",   label: "Solver",         icon: <IconSliders /> },
+  { id: "display",  label: "Display",        icon: <IconMonitor /> },
+  { id: "backup",   label: "Backup",         icon: <IconBackup /> },
+  { id: "advanced", label: "Advanced",       icon: <IconCode /> },
 ];
 
 export function SettingsModal({
   open, onClose, onboardingDone, openOn = null, onReady, onResetOnboarding, onAfterWipe, onSyncData, onStatus, status,
   debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
-  solver, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy, log, onClearLog,
+  solver, display, update, onCheckUpdate, onInstallUpdate, steam, onRefreshSteam, onSteamInstall, onSteamLaunch, steamBusy, log, onClearLog,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -126,7 +140,7 @@ export function SettingsModal({
     }
   }
 
-  /** Settings → Data → "Sync": App's sync path re-imports on a real sync (no
+  /** Settings › Data & updates › "Sync": App's sync path re-imports on a real sync (no
    *  window reload, so a running solve survives) and reports the outcome
    *  itself. */
   async function runDataSync() {
@@ -160,7 +174,7 @@ export function SettingsModal({
   }, [open, onClose]);
 
   // Re-probe whenever the modal opens AND the Setup tab is showing (no point
-  // hitting the backend when the user is on Solver/Data/etc.).
+  // hitting the backend when the user is on Solver, Data & updates, etc.).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (open && tab === "setup") void probe(); }, [open, tab]);
 
@@ -179,7 +193,7 @@ export function SettingsModal({
         <header className="flex shrink-0 items-center justify-between border-b border-white/8 bg-zinc-950/80 px-4.5 py-3.5">
           <div className="leading-tight">
             <div className="font-display text-[15px] font-bold tracking-[-0.01em] text-zinc-100">Settings</div>
-            <div className="text-[11px] text-zinc-400">Connection, solver, data &amp; developer tools</div>
+            <div className="text-[11px] text-zinc-400">Setup, data &amp; updates, solver, display, backup &amp; advanced</div>
           </div>
           <button
             onClick={onClose}
@@ -222,11 +236,11 @@ export function SettingsModal({
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-y-auto px-4.5 py-4">
               {tab === "setup"  && <SteamSetupPane steam={steam} loading={loading} busy={steamBusy} onInstall={onSteamInstall} onLaunch={onSteamLaunch} onProbe={() => void probe()} onStatus={onStatus} />}
+              {tab === "data"   && <DataPane update={update} onCheckUpdate={onCheckUpdate} onInstallUpdate={onInstallUpdate} syncing={syncing} onSync={() => void runDataSync()} onAfterWipe={onAfterWipe} onStatus={onStatus} />}
               {tab === "solver" && <SolverPane solver={solver} showAdvanced={showAdvanced} onToggleAdvanced={() => setShowAdvanced((v) => !v)} />}
-              {tab === "data"   && <DataPane syncing={syncing} onSync={() => void runDataSync()} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} onAfterWipe={onAfterWipe} onStatus={onStatus} />}
+              {tab === "display" && <DisplayPane display={display} />}
               {tab === "backup" && <BackupPane importInputRef={importInputRef} onStatus={onStatus} />}
-              {tab === "debug"  && <DebugPane debugStatLocks={debugStatLocks} onToggleDebugStatLocks={onToggleDebugStatLocks} debugSolver={debugSolver} onToggleDebugSolver={onToggleDebugSolver} />}
-              {tab === "logs"   && <LogsPane lines={log} onClear={onClearLog} />}
+              {tab === "advanced" && <AdvancedPane debugStatLocks={debugStatLocks} onToggleDebugStatLocks={onToggleDebugStatLocks} debugSolver={debugSolver} onToggleDebugSolver={onToggleDebugSolver} onResetOnboarding={() => { onResetOnboarding(); onClose(); }} log={log} onClearLog={onClearLog} />}
             </div>
 
             {/* CONTEXTUAL FOOTER */}
@@ -301,10 +315,10 @@ function IconCode() {
     </svg>
   );
 }
-function IconLog() {
+function IconMonitor() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 6h12" /><path d="M8 12h12" /><path d="M8 18h12" /><path d="M4 6h.01" /><path d="M4 12h.01" /><path d="M4 18h.01" />
+      <rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8" /><path d="M12 16v4" />
     </svg>
   );
 }

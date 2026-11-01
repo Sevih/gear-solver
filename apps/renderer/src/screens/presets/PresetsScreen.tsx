@@ -5,7 +5,7 @@
  * it (who wear it as-is, tuned by their own EE). For each of them the preset is
  * scored on that hero (`lib/presets/evaluate.ts`); an associated hero is
  * compared to their best known outfit and flagged past the loss threshold
- * (Settings → Solver), and any hero overshooting the crit rate / penetration
+ * (set in this screen's header), and any hero overshooting the crit rate / penetration
  * cap (`presetOvercap`) is flagged. Each hero's line proposes the gems of their own EE that
  * score best with the outfit (`lib/presets/eeGems.ts`) and scores with them;
  * "+ Worklist" queues the outfit and those gems as the hero's entry,
@@ -55,6 +55,7 @@ import { Pill } from "../../design/Chips.js";
 import { CyanButton } from "../../design/Shell.js";
 import { cx } from "../../design/cx.js";
 import { RankDragHandle, RankInput } from "../../design/RankInput.js";
+import { Stepper, stepBy } from "../../design/settings/SettingsControls.js";
 import { toUiPiece, type UiMainStat } from "../../design/adapter.js";
 import { GAME_GEAR_GRID, toDesignSlot, toEngineSlot } from "../../design/tokens.js";
 import {
@@ -93,6 +94,7 @@ import { HeroPicker } from "../../design/HeroPicker.js";
 import { displayNameOf } from "../../lib/heroes/heroName.js";
 import { heroListOrder } from "../../lib/heroes/heroListOrder.js";
 import type { HeroPriority } from "../../lib/storage/heroPriority.js";
+import { SETTINGS, settingRange } from "../../lib/settings.js";
 
 interface PresetsScreenProps {
   inventory: Inventory | null;
@@ -101,6 +103,9 @@ interface PresetsScreenProps {
   userCodexLevel: number | null;
   /** Loss (percent) past which an associated hero's line turns orange. */
   lossWarnPct: number;
+  /** Set that threshold (App's `presetLossWarn` setting, `lib/settings.ts`) —
+   *  the stepper in the header. */
+  onLossWarnChange: Dispatch<SetStateAction<number>>;
   /** Heroes with a queued worklist entry — "+ Worklist" then replaces it. */
   worklistHeroUids?: ReadonlySet<string>;
   /** Queue an entry (one per hero, App's `addToWorklist` — toast included). */
@@ -149,7 +154,7 @@ interface HeroView {
 const CLASS_ORDER = CLASSES.map((c) => c.id);
 const classLabel = (id: string): string | null => CLASSES.find((c) => c.id === id)?.label ?? null;
 
-export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, worklistHeroUids, worklistClaims, heroFilters, heroPriority, presetRank, onPresetRankChange, presetLocked, onPresetLockedChange, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
+export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel, lossWarnPct, onLossWarnChange, worklistHeroUids, worklistClaims, heroFilters, heroPriority, presetRank, onPresetRankChange, presetLocked, onPresetLockedChange, onAddToWorklist, onOptimize, onOptimizePreset }: PresetsScreenProps) {
   // Read once per mount — the screen remounts on every tab switch, so a build
   // saved in the Builder is picked up on the way back. The Builder's kept
   // filters come live from App (`heroFilters`).
@@ -246,7 +251,15 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
         <span className="font-mono uppercase tracking-wider text-zinc-400">Presets</span>
         <span className="text-zinc-400">
           A preset is one reference hero's outfit, worn as-is by its associated heroes (each keeps their own EE).
-          Scores use the priority each hero has in the Optimizer (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a {lossWarnPct} % loss.
+          Scores use the priority each hero has in the Optimizer (else their latest saved build's) with the EE gems proposed for them; a line turns orange past a{" "}
+          <span className="inline-flex align-middle" title={`${SETTINGS.presetLossWarn.help} ${settingRange("presetLossWarn")}`}>
+            <Stepper
+              value={lossWarnPct}
+              onDec={() => onLossWarnChange(stepBy("presetLossWarn", -1))}
+              onInc={() => onLossWarnChange(stepBy("presetLossWarn", 1))}
+            />
+          </span>{" "}
+          % loss.
         </span>
         <div className="flex gap-1">
           {CLASSES.map((cl) => {

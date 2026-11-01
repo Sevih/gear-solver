@@ -463,7 +463,7 @@ line, the same Quality block (title, help on hover, bar), the same « Active Eff
 the weapon / accessory passive and the set bonuses are not on it (the « Effects » card under the stats
 panel shows them), the EE shows only its image and gems, and the projection marks its ticks (cyan `+n`,
 violet `T+n`) on a substat column as wide as Gear's. In addition:
-- **Compact mode** (Settings › Solver › Compact result cards, `gs.builder.compactCards`, off by default):
+- **Compact mode** (Settings › Display › Compact result cards, `gs.builder.compactCards`, off by default):
   `w-56` cards — the grid then starts at 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, the EE and the talisman
   in ONE card (`ResultPairDetail`: EE on top, talisman below, a rule between them, each with its own exclude
   action), so seven cells, 4 + 3, in `COMPACT_GEAR_GRID` order (Weapon | EE + Talisman | Helmet | Armor /
@@ -605,7 +605,8 @@ source (`hasPriority`, the one "at least one non-zero weight" predicate). The li
 build" in the second case. A hero with no saved build and no priority in the Optimizer has no score. An associated hero is compared to their **best known outfit** (`bestKnownFor`:
 their most recent saved build, re-scored with the **current** priority, else their current gear):
 `loss = 1 − score(preset) / score(best)`, shown in % "vs saved build" / "vs current gear"; past the
-threshold (15 % by default, Settings → Solver, `gs.solver.presetLossWarn`) the line turns orange with
+threshold (15 % by default, set by the stepper at the top of the Presets screen,
+`gs.solver.presetLossWarn`) the line turns orange with
 "<Name> loses 23 % vs their saved build". Without a priority: "no priority set for <Name> — set one in the
 Optimizer", no score. Nothing is written to the game.
 

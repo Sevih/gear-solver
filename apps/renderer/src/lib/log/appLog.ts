@@ -1,5 +1,5 @@
 /**
- * App journal — one bounded list of lines shown in Settings → Logs: the
+ * App journal — one bounded list of lines shown in Settings › Advanced: the
  * plugin install stream (prefixed by the backend) plus every status message,
  * stamped with the wall-clock time. Pure helpers; App owns the state.
  */

@@ -104,7 +104,7 @@ describe("PresetsScreen, Expand all", () => {
     presets: [preset(1, ["w", "ac", "h", "a", "g", "b", "0", "t"]), preset(2, ["0", "0", "0", "0", "0", "0", "0", "0"])],
   };
   const render = () => renderToStaticMarkup(createElement(PresetsScreen, {
-    inventory, game: null, userGeasLevels: null, userCodexLevel: null, lossWarnPct: 5, heroFilters: {}, heroPriority: {},
+    inventory, game: null, userGeasLevels: null, userCodexLevel: null, lossWarnPct: 5, onLossWarnChange: () => {}, heroFilters: {}, heroPriority: {},
     presetRank: {}, onPresetRankChange: () => {}, presetLocked: [], onPresetLockedChange: () => {},
   }));
   const expanded = (html: string) => html.split('aria-expanded="true"').length - 1;

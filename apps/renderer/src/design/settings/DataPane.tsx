@@ -1,17 +1,23 @@
 /**
- * Settings → Data — game data sync, onboarding reset and captured-data wipe.
+ * Settings › Data & updates — the update center (app version, check and
+ * install), the game data version, game data sync and the captured-data wipe.
  */
 import { useDataVersion } from "../../hooks/useDataVersion.js";
 import { dataVersionLabel } from "../../lib/dataVersion.js";
+import type { UpdateStatus } from "../../lib/update.js";
+import { UpdateCard } from "../../screens/home/UpdateCard.js";
 import { useConfirmClick } from "./useConfirmClick.js";
 import { SectionStrip, DataAction } from "./SettingsControls.js";
 
 export function DataPane({
-  syncing, onSync, onResetOnboarding, onAfterWipe, onStatus,
+  update, onCheckUpdate, onInstallUpdate, syncing, onSync, onAfterWipe, onStatus,
 }: {
+  /** App update status, polled by App (hooks/useAppUpdate.ts). */
+  update: UpdateStatus;
+  onCheckUpdate: () => void;
+  onInstallUpdate: () => void;
   syncing: boolean;
   onSync: () => void;
-  onResetOnboarding: () => void;
   onAfterWipe?: () => void;
   onStatus: (message: string) => void;
 }) {
@@ -22,7 +28,9 @@ export function DataPane({
   const version = useDataVersion();
   return (
     <div className="flex flex-col gap-3">
-      <SectionStrip title="Data" />
+      <SectionStrip title="App version" />
+      <UpdateCard status={update} onCheck={onCheckUpdate} onInstall={onInstallUpdate} />
+      <SectionStrip title="Game data" />
       <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2 text-[11px]">
         <span className="text-white/50">Game data version</span>{" "}
         <span className={version ? "font-mono text-white/85" : "text-white/40"}>{dataVersionLabel(version)}</span>
@@ -33,11 +41,6 @@ export function DataPane({
         actionLabel={syncing ? "Syncing…" : "Sync"}
         disabled={syncing}
         onClick={onSync}
-      />
-      <DataAction
-        label="Reset onboarding prompt"
-        description="Show this Settings modal automatically on next launch as the setup wizard."
-        onClick={onResetOnboarding}
       />
       <DataAction
         label="Wipe captured data"
@@ -51,7 +54,7 @@ export function DataPane({
 }
 
 /** POST /api/capture/wipe (empties the whole capture folder) + refresh
- *  inventory. The Data pane's button asks for a second click first. */
+ *  inventory. The Data & updates pane's button asks for a second click first. */
 async function wipeCaptured(onStatus: (message: string) => void, onAfterWipe?: () => void): Promise<void> {
   try {
     const r = await fetch("/api/capture/wipe", { method: "POST" });

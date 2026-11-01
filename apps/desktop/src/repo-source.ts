@@ -119,7 +119,7 @@ export function writeShaState(file: string, sha: string): void {
   }
 }
 
-// Process-wide "ref" pin for the data sync (and the Settings → Data display).
+// Process-wide "ref" pin for the data sync (and the Settings › Data & updates display).
 // Defaults to the branch name, which jsDelivr resolves server-side — correct
 // but less cacheable than a pinned SHA, so startup overwrites it with the
 // resolved/cached SHA. Images are NOT ref-pinned anymore (R2 bucket).

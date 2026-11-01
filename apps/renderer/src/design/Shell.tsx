@@ -147,8 +147,8 @@ interface GsHeaderProps {
   onTabChange: (tab: Tab) => void;
   capture: CaptureControlsProps;
   /** Pending app update ("vX ready" / "vX available"), null when there is
-   *  nothing to install. Visible from every tab; a click opens the update
-   *  card (`onOpenUpdate`). */
+   *  nothing to install. Visible from every tab; a click opens Settings ›
+   *  Data & updates, where the update card is (`onOpenUpdate`). */
   update?: HeaderUpdate | null;
   onOpenUpdate?: () => void;
   /** Opens the onboarding wizard manually. Wizard is otherwise auto-shown on
@@ -209,7 +209,7 @@ export function GsHeader({ active, onTabChange, capture, update = null, onOpenUp
         {update && (
           <button
             onClick={onOpenUpdate}
-            title="Open the update card"
+            title="Open Settings › Data & updates"
             className={cx(
               "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition-colors",
               update.tone === "ready" ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25"

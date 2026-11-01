@@ -8,6 +8,98 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚙️ Settings en six panneaux : Setup, Data & updates, Solver, Display, Backup, Advanced ; mises à jour dans Settings, seuil de perte sur Presets (U12, G101) (2026-11-01)
+- ✅ **Pourquoi.** Douzième lot de la refonte (U12 de `docs/ux-audit-2026-11-01.md`, bloc SETTINGS de la section 5.b,
+  section 3.7, lignes « heatmap, compact cards, lignes de résultats » et « Seuil de perte de Presets » de la table 5.d,
+  arbitrage D9 « Debug et Logs fusionnés en Advanced ») : le panneau Solver mêlait des réglages lus au prochain solve et
+  des réglages d'affichage, le seuil de l'écran Presets y vivait sous « Solver tuning », la carte de mise à jour était
+  sur Home, la hauteur du tableau de résultats n'était réglable que par sa poignée, Debug et Logs faisaient deux
+  panneaux. Table ancien → nouveau : Setup → **Setup** ; Data → **Data & updates** (plus la carte de mise à jour, moins
+  « Reset onboarding prompt ») ; Solver → **Solver** (Worker threads, Result count, Per-worker depth) et **Display**
+  (Results heatmap, Compact result cards, plus Result rows) ; Backup → **Backup** ; Debug + Logs → **Advanced** (plus
+  « Reset onboarding prompt »). Preset loss warning → l'en-tête de l'écran **Presets**. Aucune clé `gs.*` renommée.
+- ✅ **Registre et migration.** `lib/settings.ts` : `SETTINGS_PANES = ["setup", "data", "solver", "display", "backup",
+  "advanced"]` ; la forme `choice` de `SettingSpec` gagne `legacy?: Readonly<Record<string, T>>`, consulté par
+  `parseSetting` et `clampSetting` (`choiceOf`) avant le défaut ; `settingsPane.legacy = { debug: "advanced", logs:
+  "advanced" }` : une installation qui avait laissé Settings sur Debug ou Logs le rouvre sur Advanced, sur Data elle
+  rouvre sur Data & updates (même valeur `data`), une valeur inconnue sur Setup. Nouveau réglage `resultRows`
+  (`gs.builder.resultRows`, nombre, défaut 12, 5–15 au pas de 1, libellé « Result rows ») ;
+  `SOLVER_PANE_SETTINGS = ["workerCount", "topN", "topK"]`, `DISPLAY_PANE_SETTINGS = ["heatmap", "compactCards",
+  "resultRows"]` ; l'aide de `presetLossWarn` commence par « Presets: », `appliesNextSolve` reste `false`. En-tête du
+  module : Settings › Solver, › Display et › Advanced, plus le seuil de Presets et le dernier panneau.
+- ✅ **Modal.** `design/settings/SettingsModal.tsx` : rail Setup, Data & updates, Solver, Display (`IconMonitor`, un
+  écran), Backup, Advanced (`IconCode`), sous-titre « Setup, data & updates, solver, display, backup & advanced »,
+  commentaire d'en-tête réécrit, `FOOTER_NOTE` par panneau (Data & updates : « App updates come from GitHub releases;
+  game tables from outerpedia. », Solver : « Changes are saved and apply on the next solve. », vrai désormais, Display :
+  « Applied at once. », Advanced : « Developer toggles and the app journal (kept for this session only). »). Nouvelles
+  props `display: DisplaySettings`, `update`, `onCheckUpdate`, `onInstallUpdate`. La logique d'ouverture ne change pas
+  (Setup avant la fin de l'onboarding, sinon le dernier panneau, `openOn` prioritaire).
+- ✅ **Data & updates.** `DataPane.tsx` : bandeau « App version » et `UpdateCard` (importé de `screens/home/` tel quel,
+  le fichier bouge avec U13), puis bandeau « Game data », la ligne « Game data version », « Sync game data », « Wipe
+  captured data ». `App.tsx` : le badge de mise à jour de l'en-tête ouvre Settings sur ce panneau (`onOpenUpdate={() =>
+  openSettings("data")}`), son `title` dit « Open Settings › Data & updates » (`design/Shell.tsx`) ; `HomeScreen` ne
+  rend plus `UpdateCard` (ni tableau de bord, ni état vide) et perd `update` / `onCheckUpdate` / `onInstallUpdate`.
+  Commentaires du circuit mis à jour : `lib/update.ts`, `hooks/useAppUpdate.ts`, `UpdateCard.tsx`, `HomeScreen.tsx`,
+  et côté desktop `updater.ts` et `api-handler.ts`.
+- ✅ **Solver et Display.** `SolverPane.tsx` ne garde que Worker threads, Result count et, sous « Show advanced »,
+  Per-worker depth, sous le bandeau « Solver tuning · applies next solve » ; `SolverSettings` perd `heatmap`,
+  `compactCards`, `presetLossWarn` et leurs setters, son Reset ne remet que ces trois-là. Nouveau `DisplayPane.tsx` :
+  Results heatmap, Compact result cards, Result rows (stepper borné par `clampSetting`), `DisplaySettings` (valeurs et
+  setters), `resetDisplaySettings` et le lien « Reset display settings to defaults » (`resetSettings`). `Setter`,
+  `stepBy` et `HelpText`, communs aux deux panneaux et à Presets, passent de `SolverPane.tsx` à `SettingsControls.tsx`.
+  `App.tsx` possède `resultRows` par `useSetting("resultRows")` et le passe à `BuilderScreen` (`resultRows`,
+  `onResultRowsChange`), qui perd son `usePersistedState("gs.builder.resultRows", 12)` ; la poignée du tableau appelle
+  le setter, valeur tenue par `clampSetting`. `lib/storage/keys.ts` retire sa ligne à la main : `settingKeys()` la
+  génère, libellé « Result rows », `normalize` par le registre (même borne 5–15 qu'avant). Libellés de la liste de
+  sauvegarde qui citaient un panneau : heatmap et compact cards passent de « Solver settings » à « Display settings »,
+  le seuil à « Preset loss warning », les deux interrupteurs de « Debug toggles » à « Developer toggles ».
+- ✅ **Presets.** `screens/presets/PresetsScreen.tsx` : dans la phrase de l'en-tête, « …a line turns orange past a
+  {lossWarnPct} % loss » porte un `Stepper` (non `wide`) à la place du nombre, `title` = l'aide du registre + « Range
+  5–50 %. », pas de ± tenu par `clampSetting("presetLossWarn", …)` (`stepBy`) ; nouvelle prop `onLossWarnChange` (App
+  passe `setPresetLossWarn`). Le réglage reste sous `gs.solver.presetLossWarn` et ne figure plus dans aucun panneau.
+- ✅ **Advanced.** Nouveau `AdvancedPane.tsx` (`DebugPane.tsx` supprimé) : bandeau « Developer », les deux
+  interrupteurs (textes du registre, même `ToggleAction`), « Reset onboarding prompt » (remet le drapeau et ferme le
+  modal, comme avant), puis `LogsPane` rendu tel quel (« Logs (N lines) », Copy, Clear). Le toast d'échec de
+  l'installation du plugin dit « see Settings › Advanced ».
+- ✅ **Textes qui citent un panneau.** « Settings › Solver › Compact result cards » → « Settings › Display › … »
+  (`design/GearCard.tsx`, `screens/builder/BottomGearBand.tsx`), « Settings › Debug › Solver fan-out logging » →
+  « Settings › Advanced › … » (`screens/builder/FilterFooter.tsx`), « Settings › Data » → « Settings › Data & updates »
+  (`lib/dataVersion.ts`, `lib/update.ts`, `UpdateCard.tsx`, `SteamSetupPane.tsx`), plus les commentaires « Settings →
+  Data / Debug / Logs » (`data.ts`, `lib/dataSync.ts`, `lib/log.ts`, `lib/log/appLog.ts`, `BuildsScreen.tsx`,
+  `ResultsTable.tsx`, `App.tsx`, desktop `main.ts`, `repo-source.ts`, `api-handler.ts`). Les « Settings → Solver » qui
+  parlent des workers, de topN ou de topK restent justes. Le libellé « Optimizer layout » reste à `gs.builder.cols`.
+- ✅ **Manuel et docs.** `wiki/Using-the-App.md` : section « Settings (the Settings button) » réécrite pour les six
+  panneaux dans l'ordre (contenu de chacun, centre de mise à jour dans Data & updates, seuil de perte sur Presets),
+  « Home — dashboard » sans carte de mise à jour, la section Presets dit où se règle le seuil, « Keeping things up to
+  date » et l'en-tête renvoient à Settings › Data & updates, « Settings → Debug » → « Settings › Advanced ».
+  `wiki/FAQ.md`, `wiki/Getting-Started.md`, `README.md`, `wiki/Capture-Pipeline.md`, `wiki/Architecture.md` /
+  `docs/architecture.md` (Home sans centre de mise à jour, les six panneaux, la carte « manual »), `wiki/Data-Schema.md`
+  / `docs/data-schema.md`, `wiki/Solver.md` / `docs/solver.md` (compact cards sous Display, seuil réglé sur Presets),
+  `wiki/Engine-Reference.md` / `docs/reference.md` (prose du toggle statLocks, ligne `appLog.ts` de l'arbre français, table des tests : `settings.test.ts`
+  à 19 tests, ligne de `settingsPanes.test.ts`, `title` du badge dans celle de `headerU8.test.ts`). Laissés car datés :
+  `docs/roadmap.md` / `wiki/Roadmap.md`, `docs/STATUS.md`, `docs/release-notes.md`, les audits. `docs/todo.md` : aucun
+  item ne s'y rapportait.
+- ✅ **Tests.** `apps/renderer/test/settingsPanes.test.ts` (nouveau, 9 tests) : `parseSetting("settingsPane", …)`
+  (« debug » et « logs » → « advanced », « data » → « data », « nope » → « setup ») ; rendu statique de `SettingsModal`
+  (onboarding fait, `gs.settings.pane` stubé) : le rail porte Setup, Data & updates, Solver, Display, Backup, Advanced
+  dans l'ordre ; sur `solver` (contenu hors rail) Worker threads et Result count, ni Results heatmap, ni Compact result
+  cards, ni Preset loss warning, ni « >Display< » ; sur `display` les trois réglages ; sur `advanced` les deux
+  interrupteurs, « Reset onboarding prompt », « Logs (0 lines) » ; sur `data` « Game data version » et « Up to date »
+  (statut `uptodate`) ; `resetSolverSettings` et `resetDisplaySettings` appellent chacun leurs trois setters ; Home
+  rendu sans « Up to date » ni « Checking for updates… ». Ajustés sans changer ce qu'ils affirment :
+  `settings.test.ts` (Solver sans Display, Display dans son panneau ; Reset à trois réglages ; `resultRows` dans les
+  défauts et les bornes ; un panneau rangé « debug » rouvre Advanced), `transfer.test.ts` (deux réglages Solver pour le
+  libellé groupé ; 40 → 15 sur `gs.builder.resultRows` toujours vrai), `headerU8.test.ts` (le `title` du badge),
+  `presetCardOpen.test.ts` (la nouvelle prop). `keys.test.ts` et `logsPane.test.ts` inchangés et verts.
+  `grep -rnE "Settings (›|→) (Debug|Logs)" apps/renderer/src wiki README.md docs/solver.md docs/architecture.md
+  docs/reference.md` vide. `npm run typecheck` : `> tsc --noEmit` sans erreur ; `npm test` : `Tests  1074 passed
+  (1074)` (renderer ; core 169, desktop 238) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ⏳ **Sevih.** Sur la build : Settings rouvre Advanced si on l'avait laissé sur Debug ou Logs ; le badge « vX ready »
+  de l'en-tête ouvre Data & updates (carte de mise à jour, Install new version) ; Home n'a plus de carte de mise à
+  jour ; Display : Result rows et la poignée du tableau de l'Optimizer se suivent ; le stepper du seuil dans l'en-tête
+  de Presets (5 à 50 %) colore les lignes aussitôt ; « Data & updates » tient dans le rail. Restent : le mode de
+  reforge par défaut (D5), le menu Electron (D14), la dissolution de Home et le déplacement de `UpdateCard.tsx` (U13).
+
 ### 🏷️ Onglets renommés : Heroes, Optimizer, Gear, dans l'ordre cible ; `gs.tab` migré (U11, G100) (2026-11-01)
 - ✅ **Pourquoi.** Onzième lot de la refonte (U11 de `docs/ux-audit-2026-11-01.md`, arbitrage D6, variante A de la
   section 5.a, glossaire 5.c) : « Builds » désignait l'onglet des héros alors que le glossaire réserve « build » au

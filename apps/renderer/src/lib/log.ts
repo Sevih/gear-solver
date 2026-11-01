@@ -7,7 +7,7 @@
  *
  * Toggle from the devtools console:
  *   localStorage['gs.debug.solver'] = 'true'   // then re-run a solve
- * (or via the Settings → Debug panel once those toggles are wired).
+ * (or via the Settings › Advanced panel once those toggles are wired).
  *
  * Renderer-only — Web Workers have no `localStorage`, so the solver's
  * orchestrator (main thread) logs fan-out/merge here while the per-chunk
@@ -22,7 +22,7 @@ export type DebugFlag = "solver" | "statLocks";
 const FLAG_SETTING = { solver: "debugSolver", statLocks: "debugStatLocks" } as const;
 
 /** True when `gs.debug.<flag>` is on — read through `readSetting`, the same
- *  declaration (and tolerant parse) as the Settings → Debug toggle.
+ *  declaration (and tolerant parse) as the Settings › Advanced toggle.
  *  `usePersistedState` stores booleans as JSON (`"true"`/`"false"`); a hand-set
  *  `"1"` works too. No localStorage (worker, privacy mode) → debug off. */
 export function debugEnabled(flag: DebugFlag): boolean {

@@ -24,9 +24,9 @@ import { getCurrentRef } from "./repo-source.js";
 // electron-updater ships CommonJS; the default export carries the singleton.
 const { autoUpdater } = electronUpdaterPkg;
 
-/** Lifecycle the Home update card renders. Mirrors the design's state machine:
- *  uptodate · checking · downloading (with %) · downloaded (→ Install) · error,
- *  plus manual: this build can't replace itself (Linux, see
+/** Lifecycle the update card (Settings › Data & updates) renders. Mirrors
+ *  the design's state machine: uptodate · checking · downloading (with %) ·
+ *  downloaded (→ Install) · error, plus manual: this build can't replace itself (Linux, see
  *  appImageUpdateBlocker) — the card says why, and names a newer version if
  *  the check found one. */
 export type UpdatePhase = "uptodate" | "checking" | "downloading" | "downloaded" | "error" | "manual";

@@ -1,20 +1,25 @@
 /**
- * Settings → Debug — developer toggles (texts in lib/settings.ts).
+ * Settings › Advanced — developer toggles (texts in lib/settings.ts), the
+ * onboarding reset, then the app journal (`LogsPane`).
  */
 import { SETTINGS } from "../../lib/settings.js";
-import { SectionStrip, Switch } from "./SettingsControls.js";
+import { SectionStrip, Switch, DataAction } from "./SettingsControls.js";
+import { LogsPane } from "./LogsPane.js";
 
-export function DebugPane({
-  debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver,
+export function AdvancedPane({
+  debugStatLocks, onToggleDebugStatLocks, debugSolver, onToggleDebugSolver, onResetOnboarding, log, onClearLog,
 }: {
   debugStatLocks: boolean;
   onToggleDebugStatLocks: () => void;
   debugSolver: boolean;
   onToggleDebugSolver: () => void;
+  onResetOnboarding: () => void;
+  log: string[];
+  onClearLog: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <SectionStrip title="Debug" />
+      <SectionStrip title="Developer" />
       <ToggleAction
         label={SETTINGS.debugStatLocks.label}
         description={SETTINGS.debugStatLocks.help}
@@ -27,6 +32,12 @@ export function DebugPane({
         checked={debugSolver}
         onToggle={onToggleDebugSolver}
       />
+      <DataAction
+        label="Reset onboarding prompt"
+        description="Show this Settings modal automatically on next launch as the setup wizard."
+        onClick={onResetOnboarding}
+      />
+      <LogsPane lines={log} onClear={onClearLog} />
     </div>
   );
 }

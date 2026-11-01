@@ -1,8 +1,19 @@
 /**
  * Settings shared primitives — section strip, divider, segmented button,
- * stepper, switch and the action row the panes are built from.
+ * stepper, switch, a setting's help line and the action row the panes are
+ * built from.
  */
+import type { Dispatch, SetStateAction } from "react";
 import { cx } from "../cx.js";
+import { SETTINGS, clampSetting, settingRange, type SettingName, type SettingValues } from "../../lib/settings.js";
+
+/** Setter of a setting owned by App (`useSetting`). */
+export type Setter<N extends SettingName> = Dispatch<SetStateAction<SettingValues[N]>>;
+
+/** One step of a stepper, held in the setting's bounds. */
+export function stepBy(name: "topN" | "topK" | "resultRows" | "presetLossWarn", dir: 1 | -1) {
+  return (v: number) => clampSetting(name, v + dir * SETTINGS[name].step);
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Shared primitives
@@ -15,6 +26,15 @@ export function SectionStrip({ title, note }: { title: string; note?: string | n
       {note && <span className="font-mono text-[10px] text-zinc-400">{note}</span>}
     </div>
   );
+}
+
+/** Help line of a setting: its text, the bold warning if any, the range. */
+export function HelpText({ name, range = false }: { name: SettingName; range?: boolean }) {
+  const { help, helpEmphasis } = SETTINGS[name];
+  const tail = range ? ` ${settingRange(name)}` : "";
+  if (!helpEmphasis || !help.includes(helpEmphasis)) return <>{help}{tail}</>;
+  const [before, after] = help.split(helpEmphasis);
+  return <>{before}<b className="font-semibold text-amber-300">{helpEmphasis}</b>{after}{tail}</>;
 }
 
 export function Divider() {

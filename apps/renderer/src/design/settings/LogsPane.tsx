@@ -1,7 +1,7 @@
 /**
- * Settings → Logs — the app journal: plugin install lines and every status
- * message (timestamped), newest at the bottom. Copy puts it on the clipboard
- * for a bug report; Clear empties it.
+ * Settings › Advanced, Logs section — the app journal: plugin install lines
+ * and every status message (timestamped), newest at the bottom. Copy puts it
+ * on the clipboard for a bug report; Clear empties it.
  */
 import { useEffect, useState } from "react";
 import { LogView } from "../LogView.js";

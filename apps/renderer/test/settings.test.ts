@@ -1,10 +1,11 @@
 // The settings registry (`lib/settings.ts`): one declaration per persisted
-// setting of Settings › Solver and › Debug, read by React (`useSetting`) and
-// outside it (`readSetting` — orchestrator, `lib/log.ts`). The Reset of
-// Settings › Solver goes through it (compact cards included), and the pane's
-// « applies next solve » strip only heads the settings flagged so; Settings
+// setting of Settings › Solver, › Display and › Advanced (plus the Presets
+// screen's loss threshold), read by React (`useSetting`) and outside it
+// (`readSetting` — orchestrator, `lib/log.ts`). The Resets of Settings ›
+// Solver and › Display go through it; the Solver pane only holds the settings
+// that apply on the next solve, Display the ones applied at once; Settings
 // reopens on the last pane (`gs.settings.pane`), on Setup until onboarding is
-// done. The pane and the modal are rendered server-side.
+// done. The panes and the modal are rendered server-side.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -14,6 +15,7 @@ import {
 } from "../src/lib/settings.js";
 import { debugEnabled } from "../src/lib/log.js";
 import { resetSolverSettings, SolverPane, type SolverSettings } from "../src/design/settings/SolverPane.js";
+import { DisplayPane, type DisplaySettings } from "../src/design/settings/DisplayPane.js";
 import { SettingsModal } from "../src/design/settings/SettingsModal.js";
 
 const NAMES = Object.keys(SETTINGS) as SettingName[];
@@ -51,6 +53,9 @@ describe("registry", () => {
     expect(settingDefault("topK")).toBe(1000);
     expect(settingDefault("heatmap")).toBe(true);
     expect(settingDefault("compactCards")).toBe(false);
+    expect(SETTINGS.resultRows.key).toBe("gs.builder.resultRows");
+    expect(settingDefault("resultRows")).toBe(12);
+    expect(SETTINGS.presetLossWarn.key).toBe("gs.solver.presetLossWarn");
     expect(settingDefault("presetLossWarn")).toBe(15);
     expect(settingDefault("debugSolver")).toBe(false);
     expect(settingDefault("debugStatLocks")).toBe(false);
@@ -61,7 +66,7 @@ describe("registry", () => {
   it("flags only the solver settings as applying on the next solve", () => {
     const next = NAMES.filter((n) => SETTINGS[n].appliesNextSolve);
     expect(next).toEqual(["workerCount", "topN", "topK"]);
-    for (const n of ["heatmap", "compactCards", "presetLossWarn"] as const) expect(SETTINGS[n].appliesNextSolve).toBe(false);
+    for (const n of ["heatmap", "compactCards", "resultRows", "presetLossWarn"] as const) expect(SETTINGS[n].appliesNextSolve).toBe(false);
   });
 });
 
@@ -75,6 +80,8 @@ describe("clampSetting", () => {
     expect(clampSetting("presetLossWarn", 17)).toBe(15);
     expect(clampSetting("presetLossWarn", 3)).toBe(5);
     expect(clampSetting("presetLossWarn", 60)).toBe(50);
+    expect(clampSetting("resultRows", 40)).toBe(15);
+    expect(clampSetting("resultRows", 2)).toBe(5);
   });
 
   it("bounds the worker count by the cores and the ceiling, null staying auto", () => {
@@ -88,7 +95,8 @@ describe("clampSetting", () => {
 
   it("brings an unknown pane back to Setup, passes booleans through", () => {
     expect(clampSetting("settingsPane", "nope" as never)).toBe("setup");
-    expect(clampSetting("settingsPane", "debug")).toBe("debug");
+    expect(clampSetting("settingsPane", "data")).toBe("data");
+    expect(clampSetting("settingsPane", "debug" as never)).toBe("advanced");
     expect(clampSetting("heatmap", false)).toBe(false);
   });
 });
@@ -126,7 +134,7 @@ describe("readSetting", () => {
       "gs.solver.presetLossWarn": "25",
       "gs.debug.solver": "true",
       "gs.debug.statLocks": "1",
-      "gs.settings.pane": '"logs"',
+      "gs.settings.pane": '"display"',
     });
     expect(readSetting("workerCount")).toBe(6);
     expect(readSetting("topN")).toBe(300);
@@ -136,7 +144,7 @@ describe("readSetting", () => {
     expect(readSetting("presetLossWarn")).toBe(25);
     expect(readSetting("debugSolver")).toBe(true);
     expect(readSetting("debugStatLocks")).toBe(true); // a hand-set "1" counts as on
-    expect(readSetting("settingsPane")).toBe("logs");
+    expect(readSetting("settingsPane")).toBe("display");
   });
 
   it("falls back to the default when localStorage throws", () => {
@@ -164,53 +172,68 @@ function recordingSolver(): { solver: SolverSettings; calls: Record<string, unkn
     workerCount: 4, setWorkerCount: rec("workerCount"),
     topN: 200, setTopN: rec("topN"),
     topK: 300, setTopK: rec("topK"),
-    heatmap: false, setHeatmap: rec("heatmap"),
-    compactCards: true, setCompactCards: rec("compactCards"),
-    presetLossWarn: 40, setPresetLossWarn: rec("presetLossWarn"),
   } as SolverSettings;
   return { solver, calls };
+}
+
+/** DisplaySettings whose setters record what they were given. */
+function recordingDisplay(): { display: DisplaySettings; calls: Record<string, unknown> } {
+  const calls: Record<string, unknown> = {};
+  const rec = (name: string) => (v: unknown) => { calls[name] = v; };
+  const display = {
+    heatmap: false, setHeatmap: rec("heatmap"),
+    compactCards: true, setCompactCards: rec("compactCards"),
+    resultRows: 8, setResultRows: rec("resultRows"),
+  } as DisplaySettings;
+  return { display, calls };
 }
 
 describe("Reset solver settings to defaults", () => {
   it("resetSettings puts every listed setting back to its default", () => {
     const calls: Record<string, unknown> = {};
     resetSettings(SOLVER_PANE_SETTINGS, (name, value) => { calls[name] = value; });
-    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000, heatmap: true, compactCards: false, presetLossWarn: 15 });
+    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000 });
   });
 
-  it("the pane's reset (resetSolverSettings) calls every setter, compact cards included", () => {
+  it("the pane's reset (resetSolverSettings) calls every setter of the pane", () => {
     const { solver, calls } = recordingSolver();
     resetSolverSettings(solver);
-    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000, heatmap: true, compactCards: false, presetLossWarn: 15 });
+    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000 });
   });
 });
 
-describe("SolverPane — « applies next solve » only over the solver settings", () => {
+describe("SolverPane — « applies next solve » over the solver settings, nothing else", () => {
   const html = (showAdvanced: boolean) => renderToStaticMarkup(createElement(SolverPane, {
     solver: recordingSolver().solver, showAdvanced, onToggleAdvanced: () => {},
   }));
 
-  it("puts worker threads, result count and per-worker depth under the strip, the rest under Display", () => {
+  it("puts worker threads, result count and per-worker depth under the strip, no Display group", () => {
     const h = html(true);
     const strip = h.indexOf("applies next solve");
-    const display = h.indexOf(">Display<");
     expect(strip).toBeGreaterThan(-1);
-    expect(display).toBeGreaterThan(strip);
     expect(h.match(/applies next solve/g)).toHaveLength(1);
-    for (const n of ["workerCount", "topN", "topK"] as const) {
-      const at = h.indexOf(SETTINGS[n].label);
-      expect(at).toBeGreaterThan(strip);
-      expect(at).toBeLessThan(display);
-    }
-    for (const n of ["heatmap", "compactCards", "presetLossWarn"] as const) expect(h.indexOf(SETTINGS[n].label)).toBeGreaterThan(display);
+    for (const n of ["workerCount", "topN", "topK"] as const) expect(h.indexOf(SETTINGS[n].label)).toBeGreaterThan(strip);
+    expect(h).not.toContain(">Display<");
+    for (const n of ["heatmap", "compactCards", "resultRows", "presetLossWarn"] as const) expect(h).not.toContain(SETTINGS[n].label);
   });
 
   it("shows the registry texts and ranges", () => {
     const h = html(true);
     expect(h).toContain("Range 10–5000.");
     expect(h).toContain("Range 100–5000.");
-    expect(h).toContain("Range 5–50 %.");
     expect(h).toContain('<b class="font-semibold text-amber-300">Too low silently drops good builds</b>');
+  });
+});
+
+describe("DisplayPane — the settings applied at once", () => {
+  const h = renderToStaticMarkup(createElement(DisplayPane, { display: recordingDisplay().display }));
+
+  it("holds the heatmap, compact cards and result rows, none of the solver settings", () => {
+    expect(h).toContain(">Display<");
+    for (const n of ["heatmap", "compactCards", "resultRows"] as const) expect(h).toContain(SETTINGS[n].label);
+    for (const n of ["workerCount", "topN", "topK", "presetLossWarn"] as const) expect(h).not.toContain(SETTINGS[n].label);
+    expect(h).not.toContain("applies next solve");
+    expect(h).toContain("Range 5–15.");
   });
 });
 
@@ -219,11 +242,13 @@ describe("SettingsModal — reopens on the last pane, Setup until onboarding is 
     open: true, onClose: () => {}, onboardingDone, onResetOnboarding: () => {},
     onSyncData: async () => ({}) as never, onStatus: () => {}, status: "",
     debugStatLocks: false, onToggleDebugStatLocks: () => {}, debugSolver: false, onToggleDebugSolver: () => {},
-    solver: recordingSolver().solver, steam: null, onRefreshSteam: async () => null,
+    solver: recordingSolver().solver, display: recordingDisplay().display,
+    update: { state: "uptodate", version: null, progress: 0, error: null, appVersion: "1.28.0", dataSha: null },
+    onCheckUpdate: () => {}, onInstallUpdate: () => {}, steam: null, onRefreshSteam: async () => null,
     onSteamInstall: () => {}, onSteamLaunch: () => {}, steamBusy: false, log: [], onClearLog: () => {},
   }));
 
-  it("opens on the stored pane once onboarding is done", () => {
+  it("opens on the stored pane once onboarding is done (Debug now under Advanced)", () => {
     stubStorage({ "gs.settings.pane": '"debug"' });
     expect(modal(true)).toContain(SETTINGS.debugSolver.label);
   });

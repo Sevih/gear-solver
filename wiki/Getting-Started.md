@@ -38,7 +38,8 @@ app works under the hood, see [Architecture](Architecture) instead.
 
 Updates: the new version is downloaded next to the old file under its new name, and the old one
 removed (rename the AppImage without its version number to keep a fixed name). If the file sits
-somewhere read-only, the Home update card says so and you download the new AppImage by hand.
+somewhere read-only, the update card (Settings › Data & updates) says so and you download the new
+AppImage by hand.
 
 ---
 

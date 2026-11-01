@@ -34,7 +34,8 @@ Steam launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%` (Settings → Set
 line). The app updates itself as on Windows as long as the AppImage sits in a folder you can
 write to (e.g. `~/Applications`): the new version lands next to it under its new name and the
 old file is removed — rename the file without its version number to keep a fixed name. From a
-read-only place the Home update card says so and you download the new AppImage by hand.
+read-only place the update card (Settings › Data & updates) says so and you download the new
+AppImage by hand.
 
 ### ⚠️ Antivirus / SmartScreen warnings
 
@@ -202,6 +203,6 @@ sorts+filters reset each launch), Heroes advice rules, the equip/unequip capture
 methods + write-back endpoint with their trigger UI (Optimizer "Apply to snapshot" + Worklist apply —
 local snapshot only), the production build path for `data/` (bundled `extraResources` +
 first-launch seed of the writable cache), packaged releases with auto-update, and a
-`data/derived` version stamp (surfaced in Settings → Data) have landed. Backlog (localStorage
+`data/derived` version stamp (surfaced in Settings › Data & updates) have landed. Backlog (localStorage
 cache invalidation on a data-version change, CP-equivalence + mid-tree-pruning validation
 tests) is tracked in [docs/todo.md](docs/todo.md).

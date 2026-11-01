@@ -139,7 +139,7 @@ if (!app.requestSingleInstanceLock()) {
         .catch((err: unknown) => { dwarn("server", "data sync failed:", err instanceof Error ? err.message : String(err)); throw err; }),
       afterSync: (r) => {
         if (r) dlog("server", `data sync: ${r.status} — ${r.message}`);
-        // Re-pin to the SHA we just synced so Settings → Data shows the snapshot.
+        // Re-pin to the SHA we just synced so Settings › Data & updates shows the snapshot.
         setCurrentRef(readShaState(REPO_SHA_STATE)?.sha ?? getCurrentRef());
         // Background: warm the small UI/equipment image subset once per repo
         // update (prod only — dev serves from the checkout). Best-effort.

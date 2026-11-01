@@ -1,7 +1,7 @@
 /**
  * The one way to say which game data is loaded — the derived-data stamp
  * (data/derived/version.json): game version the tables were read from,
- * content hash, build date. Settings › Data and Settings › Setup show this;
+ * content hash, build date. Settings › Data & updates and Settings › Setup show this;
  * the header's "game Y" is the live game version, not the data's.
  */
 import type { DataVersion } from "../data.js";

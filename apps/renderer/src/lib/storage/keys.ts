@@ -84,16 +84,18 @@ const appState = (key: string, label: string, owner: string): StorageKeySpec =>
 const session = (key: string, label: string, owner: string): StorageKeySpec =>
   ({ key, store: "session", backup: false, prune: false, label, owner });
 
-/** The settings' labels in the backup list: one per Settings pane. */
+/** The settings' labels in the backup list: one per Settings pane (Result
+ *  rows and the Presets screen's threshold named on their own). */
 const SETTING_LABEL: Record<SettingName, string> = {
   workerCount: "Solver settings",
   topN: "Solver settings",
   topK: "Solver settings",
-  heatmap: "Solver settings",
-  compactCards: "Solver settings",
-  presetLossWarn: "Solver settings",
-  debugSolver: "Debug toggles",
-  debugStatLocks: "Debug toggles",
+  heatmap: "Display settings",
+  compactCards: "Display settings",
+  resultRows: "Result rows",
+  presetLossWarn: "Preset loss warning",
+  debugSolver: "Developer toggles",
+  debugStatLocks: "Developer toggles",
   settingsPane: "Last Settings pane",
 };
 
@@ -131,8 +133,6 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   { key: WORKLIST_KEY, store: "local", backup: true, prune: false, label: "Worklist", owner: "lib/storage/worklist.ts", merge: { shape: "list", id: "heroUid", keep: "imported", accept: isReadableWorklistEntry }, summary: "paren" },
   { key: "gs.builds.notes", store: "local", backup: true, prune: false, label: "Hero notes", owner: "screens/BuildsScreen.tsx", merge: { shape: "map", accept: (note) => typeof note === "string" && note !== "" }, summary: "label" },
   { key: "gs.builder.cols", store: "local", backup: true, prune: false, label: "Optimizer layout", owner: "screens/builder/ResultsTable.tsx", merge: { shape: "map", accept: (shown) => typeof shown === "boolean" }, summary: "label" },
-  // The slider's range (5–15, `ResultsTable.tsx`).
-  { key: "gs.builder.resultRows", store: "local", backup: true, prune: false, label: "Optimizer layout", owner: "screens/builder/BuilderScreen.tsx", merge: { shape: "value", normalize: (n) => (typeof n === "number" && Number.isFinite(n) ? Math.max(5, Math.min(15, Math.round(n))) : undefined) }, summary: "label" },
   ...settingKeys(),
   // ── The app's own state: localStorage, never backed up ─────────────────
   // The tab the app reopens on — where this install left off.

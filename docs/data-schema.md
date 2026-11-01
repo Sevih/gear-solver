@@ -151,7 +151,7 @@ node levels par account).
 2. `npm run data:sync` copie ces artefacts dans `data/derived/*.json` (y compris
    `version.json` `{ schema, resVersion, hash, builtAt }` — le `hash` ne change que si la
    donnée a réellement bougé ; `resVersion` est la version des tables du jeu). Affiché dans
-   Settings → Data.
+   Settings › Data & updates.
 3. Re-capture le compte si la version a changé (lancer le jeu avec le plugin jusqu'au lobby).
 4. Tests verts (`npm test --workspaces`).
 5. Re-validate les stat-locks via le toggle debug de l'app, refresh des

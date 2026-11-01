@@ -35,7 +35,6 @@ import { worklistChangesFor } from "../../lib/worklist/changes.js";
 import { filtersForHero, withHeroFilters, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
 import { hasPriority, priorityOf, type Priority } from "../../lib/heroPriority/weights.js";
 import { recoPriorityOf, samePriority, solveDecision } from "../../lib/reco/recoPriority.js";
-import { usePersistedState } from "../../hooks/usePersistedState.js";
 import { deltaCpLabel } from "../../lib/deltaCp.js";
 import { diffBuildVsLoadout } from "../../lib/buildDiff.js";
 import {
@@ -69,7 +68,7 @@ import type { PriorityBannerState } from "./PriorityBanner.js";
 import { FilterFooter } from "./FilterFooter.js";
 import { PromptDialog } from "./PromptDialog.js";
 import { useSolverSession } from "./useSolverSession.js";
-import { settingDefault } from "../../lib/settings.js";
+import { clampSetting, settingDefault } from "../../lib/settings.js";
 
 interface BuilderScreenProps {
   inventory: Inventory | null;
@@ -134,10 +133,14 @@ interface BuilderScreenProps {
   topN?: number;
   /** Per-worker heap depth before merge (Settings → Solver). */
   topK?: number;
-  /** Results-table column heatmap on/off (Settings → Solver). */
+  /** Results-table column heatmap on/off (Settings › Display). */
   heatmap?: boolean;
-  /** Compact gear cards under the results (Settings → Solver). */
+  /** Compact gear cards under the results (Settings › Display). */
   compactCards?: boolean;
+  /** Results table viewport height, in rows (Settings › Display, and the
+   *  table's height slider). Owned by App (`gs.builder.resultRows`). */
+  resultRows?: number;
+  onResultRowsChange?: (rows: number) => void;
   /** Show a toast (App's `notify`) — SOLVE says when it fell back to Combat
    *  Power for want of a priority and a reco. */
   onNotify?: (text: string) => void;
@@ -168,7 +171,7 @@ function startFiltersFor(uid: string | null, map: HeroFiltersMap, savedBuilds: S
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), onNotify }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), resultRows = settingDefault("resultRows"), onResultRowsChange, onNotify }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // The preset "Optimize preset →" aims at, tied to the hero it opened — set
   // with the patch below, dropped as soon as the user switches heroes.
@@ -176,8 +179,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const targetPresetNum = targetPreset && targetPreset.uid === selectedUid ? targetPreset.num : null;
   // Results table viewport height, in rows — capped so the bottom gear band
   // stays visible instead of the table greedily eating all vertical space.
-  // Persisted so the user's preferred split survives reloads.
-  const [resultRows, setResultRows] = usePersistedState<number>("gs.builder.resultRows", 12);
+  // App persists it (`resultRows`, lib/settings.ts); the slider's value is held
+  // within the setting's bounds.
+  const setResultRows = (n: number) => onResultRowsChange?.(clampSetting("resultRows", n));
   // Persistence — loaded once on mount, mutated via the add/remove helpers
   // and re-persisted explicitly (vs hooking into a useEffect that fires
   // on every render, which would re-write the blob on hero switch etc.).

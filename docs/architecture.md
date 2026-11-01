@@ -35,7 +35,7 @@ by hand (manual import).
   from a Web Worker, a CLI, or the desktop shell. (The combination solver itself lives
   in `apps/renderer/src/lib/solver/`, not in core.)
 - **apps/renderer** — Vite + React. Loads the JSON, drives the engine, renders results.
-  Screens: **Home** (account dashboard + gear-quality distribution + update center,
+  Screens: **Home** (account dashboard + gear-quality distribution,
   `screens/home/`, its numbers computed by the pure `lib/homeStats.ts`), **Gear** (table +
   per-piece detail, `screens/inventory/`), **Heroes** (equipped/composed roster + Optimize→),
   **Presets** (the in-game equipment presets — wearers, a reference hero and its associated
@@ -45,7 +45,8 @@ by hand (manual import).
   **Optimizer** (the solver — `screens/builder/`: one module per panel, the solve state in the
   `useSolverSession` hook), **Worklist** (cross-hero queue of gear changes — the Optimizer's
   "+ Worklist" pushes a build's per-slot diff here as a checklist, `equipPieces` applies it
-  locally), plus a tabbed **Settings** modal (`design/settings/`, one pane per file). The piece
+  locally), plus a tabbed **Settings** modal (`design/settings/`, one pane per file: Setup, Data &
+  updates — with the update center —, Solver, Display, Backup, Advanced). The piece
   card (`design/GearCard.tsx`) is shared by Gear, the Heroes / Presets hover tooltips and the
   Optimizer's result cards.
   Heavy solves fan out across a **pool of Web Workers** (size = `hardwareConcurrency - 1`,
@@ -77,7 +78,8 @@ by hand (manual import).
   `extraResources` for `data/`; `latest.yml` and `latest-linux.yml`, both SHA-256 in the notes),
   and packaged builds auto-update in production (`updater.ts` / `setupAutoUpdate`). An AppImage
   updates itself only when started from its file (`APPIMAGE`) in a writable folder; otherwise the
-  Home card goes "manual" with the reason (`appImageUpdateBlocker`). The installer bundles the
+  update card (Settings › Data & updates) goes "manual" with the reason (`appImageUpdateBlocker`).
+  The installer bundles the
   plugin DLL (`resources/capture-steam`, rebuilt at every release by `scripts/fetch-binaries.mjs`,
   which refuses a DLL whose version differs from `Plugin.Version`); BepInEx itself is
   downloaded, checksum-verified, when the plugin is installed. At launch `legacy-cleanup.ts`

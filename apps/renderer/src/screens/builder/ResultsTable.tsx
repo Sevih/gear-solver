@@ -189,7 +189,7 @@ export function ResultsTable({
   /** Game data — resolves a build's weapon/accessory pieces to their effect
    *  (icon + name) for the Weapon/Accessory effect columns. */
   game: GameData | null;
-  /** Results-table column heatmap on/off (Settings → Solver). */
+  /** Results-table column heatmap on/off (Settings › Display). */
   heatmap: boolean;
   /** Right-click on a stat / rating / CP cell → set that value as the
    *  column's min or max bound and re-solve. Absent → no cell menu. */

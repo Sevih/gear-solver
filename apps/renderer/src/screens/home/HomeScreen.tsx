@@ -1,19 +1,16 @@
 /**
- * Home tab — the app's default landing surface. Two jobs in one screen
- * (ported from Claude Design's "Home Directions" → Direction A: banner + grid):
+ * Home tab — the app's default landing surface (ported from Claude Design's
+ * "Home Directions" → Direction A: banner + grid): a calm, scannable read of
+ * the captured account — identity (snapshot + library + capture health) up
+ * top, the gear-quality distribution as the hero stat, then roster/gear
+ * breakdowns below.
  *
- *  1. Update center — a state-driven inline card (up-to-date / checking /
- *     downloading% / downloaded→Install / offline→Retry) that replaces the two
- *     old native dialogs. Auto-download happens in the main process; App polls
- *     `/api/update/status` (hooks/useAppUpdate.ts) and this card surfaces the
- *     one action that's left: "Install new version".
- *  2. Dashboard — a calm, scannable read of the captured account: identity
- *     (snapshot + library + capture health + updates) up top, the gear-quality
- *     distribution as the hero stat, then roster/gear breakdowns below.
+ * The update center lives in Settings › Data & updates (`UpdateCard`); the
+ * header's update badge, visible from every tab, opens it.
  *
  * All numbers are derived from the already-loaded `inventory` + `game` (no new
  * fetches). When nothing is captured yet, the dashboard collapses to the
- * capture hint; the update card still shows.
+ * capture hint.
  */
 import { useMemo, useState } from "react";
 import type { GameData, Inventory } from "@gear-solver/core";
@@ -24,9 +21,7 @@ import { jsonOneOf, useSessionState } from "../../hooks/usePersistedState.js";
 import type { InventoryDrill } from "../inventory/InventoryScreen.js";
 import { loadSavedBuilds } from "../../lib/storage/savedBuilds.js";
 import { loadFilterPresets } from "../../lib/storage/filterPresets.js";
-import type { UpdateStatus } from "../../lib/update.js";
 import { computeStats } from "../../lib/homeStats.js";
-import { UpdateCard } from "./UpdateCard.js";
 import { EmptyDashboard } from "./EmptyDashboard.js";
 import { SystemHealthCard } from "./SystemHealthCard.js";
 import { Card, SubLabel, SectionLabel, Num, Segmented, InfoTip, ActBtn, BarRow, Stat } from "./HomePrimitives.js";
@@ -62,10 +57,6 @@ export interface HomeScreenProps {
   capStatus: CaptureStatus | null;
   /** The Steam capture plugin's last status poll. */
   steam: SteamStatus | null;
-  /** App update status, polled by App (hooks/useAppUpdate.ts). */
-  update: UpdateStatus;
-  onCheckUpdate: () => void;
-  onInstallUpdate: () => void;
   busy: boolean;
   /** Opens Settings on Setup — where, with the header, the plugin install
    *  and game launch buttons live. */
@@ -78,7 +69,7 @@ export interface HomeScreenProps {
 }
 
 export function HomeScreen({
-  inventory, game, capStatus, steam, update, onCheckUpdate, onInstallUpdate, busy,
+  inventory, game, capStatus, steam, busy,
   onOpenSetup, onSyncData, onOpenBuilder, onDrill,
 }: HomeScreenProps) {
 
@@ -103,15 +94,10 @@ export function HomeScreen({
   return (
     <div className="mx-auto flex w-full flex-col gap-3.5 px-3.5 py-3.5" style={{ maxWidth: 1480 }}>
       {!stats ? (
-        <>
-          <div className="max-w-md">
-            <UpdateCard status={update} onCheck={onCheckUpdate} onInstall={onInstallUpdate} />
-          </div>
-          <EmptyDashboard steam={steam} onOpenSetup={onOpenSetup} />
-        </>
+        <EmptyDashboard steam={steam} onOpenSetup={onOpenSetup} />
       ) : (
         <>
-          {/* identity + ops row — account snapshot · system health · updates */}
+          {/* identity + ops row — account snapshot · library · system health */}
           <div className="flex items-stretch gap-3.5">
             {/* account snapshot — 2×2 grid keeps the card compact so Library
                 fits beside it on this row */}
@@ -177,11 +163,6 @@ export function HomeScreen({
             </Card>
 
             <SystemHealthCard steam={steam} busy={busy} onSyncData={onSyncData} onOpenSetup={onOpenSetup} />
-
-            {/* updates — compact column, no longer a full-width banner */}
-            <div className="flex min-w-0 flex-[1.2]">
-              <UpdateCard status={update} onCheck={onCheckUpdate} onInstall={onInstallUpdate} />
-            </div>
           </div>
 
           {/* HERO: gear quality distribution */}

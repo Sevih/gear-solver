@@ -496,7 +496,7 @@ slot, même bloc Qualité (titre, aide au survol, barre), même « Active Effect
 d'arme / d'accessoire et les bonus de set n'y sont pas (la carte « Effects » sous le panneau des stats les
 montre), l'EE n'y montre que son image et ses gemmes, et la projection marque ses ticks (`+n` cyan, `T+n`
 violet) sur une colonne de sous-stats aussi large que celle de l'Inventaire. En plus :
-- **Mode compact** (Settings › Solver › Compact result cards, `gs.builder.compactCards`, éteint par défaut) :
+- **Mode compact** (Settings › Display › Compact result cards, `gs.builder.compactCards`, éteint par défaut) :
   cartes `w-56` — la grille démarre alors à 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, l'EE et le talisman
   dans UNE carte (`ResultPairDetail` : EE en haut, talisman en bas, un filet entre les deux, chacun son action
   exclure), soit sept cellules en 4 + 3 dans l'ordre `COMPACT_GEAR_GRID` (Arme | EE + Talisman | Tête | Torse /
@@ -644,7 +644,7 @@ dans l'Optimizer n'a pas de score.
 Un associé est comparé à sa **meilleure tenue connue** (`bestKnownFor` : sa build sauvegardée la plus
 récente, re-notée avec la priorité **courante**, sinon son équipement actuel) : `loss = 1 − score(preset) /
 score(best)`, affichée en % « vs saved build » / « vs current gear » ; au-delà du seuil (15 % par défaut,
-Settings → Solver, `gs.solver.presetLossWarn`) la ligne passe en orange avec « <Nom> loses 23 % vs their
+réglé par le stepper en tête de l'écran Presets, `gs.solver.presetLossWarn`) la ligne passe en orange avec « <Nom> loses 23 % vs their
 saved build ». Sans priorité : « no priority set for <Nom> — set one in the Optimizer », pas de score. Rien
 n'est écrit vers le jeu.
 

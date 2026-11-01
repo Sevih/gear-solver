@@ -62,7 +62,7 @@ export function FilterFooter({
         {!solving && durationMs != null && (
           <span
             className="inline-flex items-center gap-1 text-white/70"
-            title="Full wall-clock of the last solve — main-thread precompute + worker search. Turn on Settings › Debug › Solver fan-out logging for the precompute/search split via Copy Debug Info."
+            title="Full wall-clock of the last solve — main-thread precompute + worker search. Turn on Settings › Advanced › Solver fan-out logging for the precompute/search split via Copy Debug Info."
           >
             <span aria-hidden>⏱</span>
             <span className="text-white/80">{durationMs < 1000 ? `${durationMs} ms` : `${(durationMs / 1000).toFixed(2)} s`}</span>

@@ -1,20 +1,17 @@
 /**
- * Settings → Solver — worker-pool size, result count, per-worker depth, the
- * results heatmap, compact result cards and the Presets tab's loss warning.
- * Keys, defaults, bounds and texts come from `lib/settings.ts`; the settings
- * read at the next solve (`appliesNextSolve`) sit under « applies next
- * solve », the others (applied at once) in their own group.
+ * Settings › Solver — worker-pool size, result count and per-worker depth,
+ * all read at the next solve (`appliesNextSolve`). Keys, defaults, bounds and
+ * texts come from `lib/settings.ts`; the settings applied at once live in
+ * Settings › Display (`DisplayPane.tsx`).
  */
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useState } from "react";
 import { cx } from "../cx.js";
 import { resolveWorkerCount } from "../../lib/solver/orchestrator.js";
 import {
-  SETTINGS, SOLVER_PANE_SETTINGS, availableCores, clampSetting, resetSettings, settingRange,
-  type SettingName, type SettingValues, type SolverPaneSetting,
+  SETTINGS, SOLVER_PANE_SETTINGS, availableCores, clampSetting, resetSettings,
+  type SettingValues, type SolverPaneSetting,
 } from "../../lib/settings.js";
-import { SectionStrip, Divider, SegButton, Stepper, Switch } from "./SettingsControls.js";
-
-type Setter<N extends SettingName> = Dispatch<SetStateAction<SettingValues[N]>>;
+import { SectionStrip, Divider, SegButton, Stepper, HelpText, stepBy, type Setter } from "./SettingsControls.js";
 
 /** Solver tuning settings — owned by App (persisted), edited here. Value
  *  meanings: `SettingValues` in lib/settings.ts. */
@@ -25,12 +22,6 @@ export interface SolverSettings {
   setTopN: Setter<"topN">;
   topK: number;
   setTopK: Setter<"topK">;
-  heatmap: boolean;
-  setHeatmap: Setter<"heatmap">;
-  compactCards: boolean;
-  setCompactCards: Setter<"compactCards">;
-  presetLossWarn: number;
-  setPresetLossWarn: Setter<"presetLossWarn">;
 }
 
 /** Each setting of the pane → its setter, for the registry-driven Reset. */
@@ -39,31 +30,14 @@ function settersOf(solver: SolverSettings): { [N in SolverPaneSetting]: Setter<N
     workerCount: solver.setWorkerCount,
     topN: solver.setTopN,
     topK: solver.setTopK,
-    heatmap: solver.setHeatmap,
-    compactCards: solver.setCompactCards,
-    presetLossWarn: solver.setPresetLossWarn,
   };
 }
 
 /** « Reset solver settings to defaults »: every setting of the pane back to
- *  its registry default (compact cards included). */
+ *  its registry default. */
 export function resetSolverSettings(solver: SolverSettings): void {
   const setters = settersOf(solver);
   resetSettings(SOLVER_PANE_SETTINGS, (name, value) => (setters[name] as (v: typeof value) => void)(value));
-}
-
-/** One step of a stepper, held in the setting's bounds. */
-function stepBy(name: "topN" | "topK" | "presetLossWarn", dir: 1 | -1) {
-  return (v: number) => clampSetting(name, v + dir * SETTINGS[name].step);
-}
-
-/** Help line of a setting: its text, the bold warning if any, the range. */
-function HelpText({ name, range = false }: { name: SettingName; range?: boolean }) {
-  const { help, helpEmphasis } = SETTINGS[name];
-  const tail = range ? ` ${settingRange(name)}` : "";
-  if (!helpEmphasis || !help.includes(helpEmphasis)) return <>{help}{tail}</>;
-  const [before, after] = help.split(helpEmphasis);
-  return <>{before}<b className="font-semibold text-amber-300">{helpEmphasis}</b>{after}{tail}</>;
 }
 
 export function SolverPane({
@@ -162,46 +136,6 @@ export function SolverPane({
             />
           </div>
         )}
-      </div>
-
-      {/* Applied at once — no « applies next solve » here. */}
-      <SectionStrip title="Display" />
-
-      {/* Heatmap */}
-      <div className="flex items-center justify-between gap-4.5">
-        <div className="flex max-w-90 flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-white">{SETTINGS.heatmap.label}</span>
-          <span className="text-[11.5px] leading-snug text-zinc-400"><HelpText name="heatmap" /></span>
-        </div>
-        <Switch checked={solver.heatmap} onToggle={() => solver.setHeatmap((v) => !v)} />
-      </div>
-
-      <Divider />
-
-      {/* Compact result cards */}
-      <div className="flex items-center justify-between gap-4.5">
-        <div className="flex max-w-90 flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-white">{SETTINGS.compactCards.label}</span>
-          <span className="text-[11.5px] leading-snug text-zinc-400"><HelpText name="compactCards" /></span>
-        </div>
-        <Switch checked={solver.compactCards} onToggle={() => solver.setCompactCards((v) => !v)} />
-      </div>
-
-      <Divider />
-
-      {/* Presets loss warning */}
-      <div className="flex items-start justify-between gap-4.5">
-        <div className="flex max-w-82.5 flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-white">{SETTINGS.presetLossWarn.label}</span>
-          <span className="text-[11.5px] leading-snug text-zinc-400">
-            <HelpText name="presetLossWarn" range />
-          </span>
-        </div>
-        <Stepper
-          value={solver.presetLossWarn}
-          onDec={() => solver.setPresetLossWarn(stepBy("presetLossWarn", -1))}
-          onInc={() => solver.setPresetLossWarn(stepBy("presetLossWarn", 1))}
-        />
       </div>
 
       <div className="flex justify-end">

@@ -265,7 +265,7 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       res.end(JSON.stringify(getStartupSyncState()));
       return true;
     }
-    // --- auto-update — drives the Home tab's inline update card. status is
+    // --- auto-update — drives the update card of Settings › Data & updates. status is
     // polled; check/install are user actions (Check again / Retry / Install). ---
     if (url === "/api/update/status" && req.method === "GET") {
       res.setHeader("Content-Type", "application/json");
@@ -292,7 +292,7 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       void proxyReco(id, res);
       return true;
     }
-    // Settings → Data → "Wipe captured data". Empties the whole capture folder
+    // Settings › Data & updates › "Wipe captured data". Empties the whole capture folder
     // (snapshots, sentinel, seen-paths.log, `_unknown/`, the Steam plugin
     // heartbeat) so the renderer reverts to its empty state. The folder itself
     // stays: the Steam plugin writes into it. Refused while the plugin is loaded

@@ -9,7 +9,7 @@ one **capture pill** (Checking… · Steam not found · Plugin needed · Plugin 
 Waiting for game · Live — hover it for the detail and the game folder), next to it the one button that
 unblocks you (**Install plugin** / **Update plugin** / **Launch game**, the same as in Settings → Setup)
 and **Reload**. When an app update is waiting, a **vX ready** (or **vX available**) badge shows in the
-header whatever the tab; click it to open the update card on Home.
+header whatever the tab; click it to open the update center in **Settings › Data & updates**.
 
 ---
 
@@ -31,9 +31,9 @@ Your landing screen. At a glance:
   **Open Setup** (Settings on the Setup pane). Installing the plugin and launching the game are done
   from the header button or from Setup; before your first capture, Home says which step is next and
   points to them.
-- **Update center** — app updates (checked in the background whatever the tab); when one is ready,
-  an **Install new version** button appears (no native pop-ups). Its footer shows the app version;
-  the game-data version is in **Settings → Data**.
+
+App updates are not on Home: the header badge (visible from every tab) opens the update
+center in **Settings › Data & updates**.
 
 ---
 
@@ -122,7 +122,7 @@ way the game does (validated to match the in-game character sheet).
   nickname, base name or id; "fusion" finds the Core Fusion heroes), filter by element / class,
   sort by **CP** or by **Rank** (rank 1 first, unranked last, then CP; ties keep the capture
   order). (A lock-state pill also appears if you enable the stat-lock tooling in
-  **Settings → Debug**.)
+  **Settings › Advanced**.)
 - **Notes** — jot a per-hero note (kept across relaunches).
 
 ---
@@ -164,7 +164,8 @@ ascended and fully reforged; hover for the cap at the pieces' current investment
   hero's priority and the EE gems proposed for them — the score with the gems as socketed today
   is shown in brackets when it differs), **Dmg** and **DmgS** — hover each for what it measures. An associated hero also shows how
   much they lose versus their own best known build — their latest **saved build**, or their
-  current gear without one. Past the threshold (15 % by default, **Settings → Solver**) the line
+  current gear without one. Past the threshold (15 % by default, set with the **−/+** stepper in the
+  sentence at the top of the Presets screen, 5 to 50 % by steps of 5) the line
   turns orange: "Ame loses 23 % vs their saved build". The priority is the one set in the Optimizer
   for that hero — kept across relaunches, and a weight you change there counts here right away —
   else the one the hero's latest saved build was solved with ("priority from saved build"); a hero
@@ -301,7 +302,7 @@ results, the bottom band shows the selected build's pieces.
   if a Reforge mode is on, the **projected** max-roll stats. Each card is the Gear tab's piece card
   (rarity and slot, quality with its help and bar, the Singularity +15 effect), without the weapon /
   accessory passive and the set bonuses, which the **Effects** card under the stats lists for the whole
-  build. **Settings › Solver › Compact result
+  build. **Settings › Display › Compact result
   cards** shortens them: no item icon (enhance, breakthrough and stars next to the name), set names
   instead of item names (« EE » for the exclusive), icon + value stats with the substats two per row,
   gems as icons, one-line quality and effects (the Singularity +15 bonus as grade + short label + value,
@@ -380,40 +381,52 @@ one the cards sit two per row.
 
 ## Settings (the Settings button)
 
-A tabbed modal. **Esc** closes it; it reopens on the last pane you visited (on **Setup** until the first
-setup check has passed).
+A tabbed modal with six panes, in this order. **Esc** closes it; it reopens on the last pane you
+visited (on **Setup** until the first setup check has passed).
 
 - **Setup** — the capture plugin checklist (game found in Steam · plugin installed · plugin
   loaded in the game), with Install / Update / Remove plugin and Launch game. The header shows
-  your game build next to the loaded game-data version (same format as in Data), with a warning line
-  when your build differs from the client outerpedia last read (informational: capture still works).
-- **Solver** — under *Solver tuning* (applies on the next solve): worker count (Auto = use your CPU;
-  or pin a number), how many results to return and, under *Show advanced*, the per-worker depth;
-  under *Display* (applies at once): results heatmap on/off, compact result cards (shorter gear
-  cards under the Optimizer's results; Gear and tooltips unchanged), and the Presets tab's loss
-  warning (15 % by default). **Reset solver settings to defaults** puts all of them back, compact
-  cards included.
-- **Data** — **Sync game data** (download the latest game tables after a patch), reset the onboarding
-  wizard, **Wipe captured data** (with the game closed), and the current **game-data version**
-  (game version of the tables, hash and date — so you can see which snapshot is loaded).
+  your game build next to the loaded game-data version (same format as in Data & updates), with a
+  warning line when your build differs from the client outerpedia last read (informational: capture
+  still works).
+- **Data & updates** — the **update center** first: the app version, the update state (up to date,
+  checking, downloading with its progress, ready → **Install new version**, offline → **Retry**,
+  manual → the reason) and **Check again**; app updates come from the GitHub releases, checked in the
+  background whatever the tab (no native pop-ups). Then the current **game-data version** (game
+  version of the tables, hash and date — so you can see which snapshot is loaded), **Sync game data**
+  (download the latest game tables published by outerpedia after a patch) and **Wipe captured data**
+  (with the game closed).
+- **Solver** — what the next solve reads (*Solver tuning · applies next solve*): worker count
+  (Auto = use your CPU; or pin a number), how many results to return and, under *Show advanced*,
+  the per-worker depth. **Reset solver settings to defaults** puts these three back.
+- **Display** — applied at once: results heatmap on/off, compact result cards (shorter gear cards
+  under the Optimizer's results; Gear and tooltips unchanged) and **Result rows**, the height of the
+  Optimizer's results table (5 to 15 rows, 12 by default — the height slider above the table sets
+  the same value). **Reset display settings to defaults** puts these three back.
 - **Backup** — **Export backup / Import backup**: one JSON file with everything you set up in the
   app — saved builds, filter sets (Optimizer and Gear), local presets, the heroes of your in-game
   presets, hero and preset ranks, locked presets, never-use pieces, the worklist, hero notes, the
-  last filters per hero, the Optimizer layout and your Solver / Debug settings. The list is shown
+  last filters per hero, the Optimizer layout and your Solver, Display and developer settings
+  (and the Presets loss threshold). The list is shown
   under the Export button. Never the captured gear: that comes from the game (re-capture it on the
   other PC). Import merges: builds and presets already present are kept; ranks, worklist entries,
   notes and settings from the file replace yours (settings held within their bounds). A file
   exported by an older version (builds & presets only) still imports.
-- **Debug** — developer toggles (safe to ignore).
+- **Advanced** — developer toggles (stat-lock tooling on Heroes, solver fan-out logging; safe to
+  ignore), **Reset onboarding prompt** (shows Settings as the setup wizard on next launch), then the
+  app journal (**Logs**: plugin install lines and every status message, kept for this session only)
+  with **Copy** and **Clear**.
+
+The Presets loss threshold is not in Settings: it is set on the Presets screen (see above).
 
 ---
 
 ## Keeping things up to date
 
 - **App updates** — checked automatically; a **vX ready** badge appears in the header once one is
-  downloaded, whatever the tab. Click it (or go to **Home**) and click **Install new version**. On Linux the AppImage needs to sit in a folder you can write to; otherwise the
+  downloaded, whatever the tab. Click it (or open **Settings › Data & updates**) and click **Install new version**. On Linux the AppImage needs to sit in a folder you can write to; otherwise the
   card reads **Manual** with the reason, and you download the new AppImage by hand.
 - **Game data** — after an OUTERPLANE patch, the app refreshes its game tables on launch. You can
-  also force it from **Settings → Data → Sync game data**, then re-capture your account.
+  also force it from **Settings › Data & updates › Sync game data**, then re-capture your account.
 
 Stuck? → **[FAQ & Troubleshooting](FAQ)**

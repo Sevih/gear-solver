@@ -1,14 +1,14 @@
 /**
  * Client for the auto-update endpoints (`/api/update/*`) served by the
  * Electron main process (apps/desktop/src/updater.ts) — and mirrored as a
- * static "up to date" payload by the Vite dev middleware so the Home tab
- * renders the update card identically under `npm run dev`.
+ * static "up to date" payload by the Vite dev middleware so Settings › Data &
+ * updates renders the update card identically under `npm run dev`.
  *
  * App polls `getUpdateStatus()` on an interval (hooks/useAppUpdate.ts, whatever
- * the tab): the header shows `updateBadge()` and the Home tab renders the inline
- * update card. `checkForUpdate()` backs the "Check again" / "Retry" buttons;
- * `installUpdate()` backs "Install new version" (the main process then quits
- * and applies the downloaded build).
+ * the tab): the header shows `updateBadge()` (a click opens Settings › Data &
+ * updates) and that pane renders the update card. `checkForUpdate()` backs
+ * the "Check again" / "Retry" buttons; `installUpdate()` backs "Install new
+ * version" (the main process then quits and applies the downloaded build).
  */
 
 /** Update lifecycle phase — matches the design's state machine, plus "manual"
@@ -26,7 +26,7 @@ export interface UpdateStatus {
   /** Running app version (e.g. "0.5.0"). */
   appVersion: string;
   /** Short SHA of the outerpedia commit the data came from, or null when
-   *  unresolved ("main"). Not shown: Settings › Data says the data version. */
+   *  unresolved ("main"). Not shown: Settings › Data & updates says the data version. */
   dataSha: string | null;
 }
 

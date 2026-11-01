@@ -300,7 +300,7 @@ describe("Settings › Backup", () => {
   it("cites the import counts by label", () => {
     expect(importSummary({ [SAVED_KEY]: 12, [PRESETS_KEY]: 3, "gs.priority.rank": 5, "gs.worklist": 4 }))
       .toBe("Imported: 12 saved builds · 3 filter sets · hero ranks · worklist (4)");
-    expect(importSummary({ [SAVED_KEY]: 1, "gs.solver.topN": 1, "gs.builder.heatmap": 1 }))
+    expect(importSummary({ [SAVED_KEY]: 1, "gs.solver.topN": 1, "gs.solver.topK": 1 }))
       .toBe("Imported: 1 saved build · solver settings");
     expect(importSummary({ [SAVED_KEY]: 0 })).toMatch(/^Nothing new to import/);
   });

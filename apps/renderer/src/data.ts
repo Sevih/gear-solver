@@ -44,7 +44,7 @@ async function getJSON<T>(url: string): Promise<T | null> {
  *  idempotent — a no-op rebuild keeps the prior stamp, so this is the data
  *  vintage, not wall-clock build time); `resVersion` is the game version of the
  *  loaded tables (absent from a cache synced before outerpedia added it). All
- *  surfaced read-only in Settings → Data so the user can tell which game-data
+ *  surfaced read-only in Settings › Data & updates so the user can tell which game-data
  *  snapshot is loaded. */
 export interface DataVersion {
   hash: string;

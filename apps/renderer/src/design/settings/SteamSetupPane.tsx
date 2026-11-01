@@ -16,7 +16,7 @@ import { useMountedRef, useConfirmClick } from "./useConfirmClick.js";
  * ───────────────────────────────────────────────────────────────────────── */
 
 /** Header note of the Steam pane: the installed build, then the loaded game
- *  data in the one format Settings › Data uses too ("build 123 · data game
+ *  data in the one format Settings › Data & updates uses too ("build 123 · data game
  *  1.11.503 · 49a39d2e9dd6 · built …"). */
 function steamBuildNote(s: SteamStatus | null, data: DataVersion | null): string | null {
   const dataNote = `data ${dataVersionLabel(data)}`;

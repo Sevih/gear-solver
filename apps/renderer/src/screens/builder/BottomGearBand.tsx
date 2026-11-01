@@ -44,7 +44,7 @@ export function BottomGearBand({
    *  footer so a trash roll can be excluded right from the results. */
   excludedPieceUids?: Set<string>;
   onToggleExclude?: (uid: string) => void;
-  /** Compact cards (Settings › Solver › Compact result cards). */
+  /** Compact cards (Settings › Display › Compact result cards). */
   compact?: boolean;
 }) {
   // Map engine slot → display piece for the selected build (the shared diff
@@ -164,7 +164,7 @@ function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleEx
   addedTicks?: number[];
   /** Per-sub ticks the Transistone potential added — their own marker. */
   transistoneTicks?: number[];
-  /** Compact card (Settings › Solver › Compact result cards). */
+  /** Compact card (Settings › Display › Compact result cards). */
   compact?: boolean;
   /** The card's own empty state when the build has no piece there. */
   emptyLabel?: string;

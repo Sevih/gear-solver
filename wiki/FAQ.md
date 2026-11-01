@@ -51,9 +51,9 @@ live in the app's local storage. Nothing leaves your machine.
 ## After a game patch
 
 **Stats or items look wrong / outdated after an OUTERPLANE update.**
-The app refreshes its game tables on launch, but you can force it: **Settings → Data → Sync game
-data**, then **re-capture** your account. The loaded snapshot's version is shown in
-**Settings → Data** (a short hash) so you can confirm it changed.
+The app refreshes its game tables on launch, but you can force it: **Settings › Data & updates › Sync
+game data**, then **re-capture** your account. The loaded snapshot's version is shown in
+**Settings › Data & updates** (a short hash) so you can confirm it changed.
 
 ---
 
@@ -109,7 +109,7 @@ In the app's local storage. Use **Settings → Backup → Export** to download t
 there.
 
 **I want a clean slate.**
-**Settings → Data → Wipe captured data** empties the whole capture folder: the imported
+**Settings › Data & updates › Wipe captured data** empties the whole capture folder: the imported
 snapshot, the seen-paths log and the unknown endpoints under `_unknown/`. Close the game first:
 the wipe is refused while the plugin is loaded in a running game (it would refill the folder).
 
