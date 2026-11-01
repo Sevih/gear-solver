@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [1.28.0] — 2026-11-01
+
 - **Preset quality and +15 grades**: each preset card now shows its **Quality** out of 138 (the six
   pieces' rolled substat ticks, 23 per piece when ascended and fully reforged — hover for the cap at
   the pieces' current investment), the **Offensive** +15 roll grades of its weapon and accessory, and
