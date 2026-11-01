@@ -8,6 +8,52 @@
 
 ## Items de backlog clôturés (index)
 
+### 🏅 Rangs par défaut des héros et des presets posés par App à chaque import, plus par les écrans (U3, G91) (2026-11-01)
+- ✅ **Pourquoi.** Troisième lot de la refonte (U3 de `docs/ux-audit-2026-11-01.md`, §3.14, arbitrage D13) : le rang
+  par défaut d'un héros (CP décroissant) n'était posé que par un effet de `screens/BuildsScreen.tsx` au montage de
+  l'onglet, celui d'un preset (ordre du jeu) par le même effet recopié dans `screens/presets/PresetsScreen.tsx`.
+  Tant que l'onglet n'avait pas été ouvert après une capture, le Builder lisait des héros et des presets « unranked »
+  (`isLowerPriority`, `presetHolds`). **Change un résultat, décidé par Sevih** : la portée « Equipped items ≤ Lower »
+  prend désormais des pièces aux héros moins bien classés dès le premier solve, sans que Builds ait été ouvert ;
+  idem pour les holds de presets d'« Optimize preset → » sans ouvrir Presets.
+- ✅ **Module pur `apps/renderer/src/lib/storage/rankDefaults.ts`.** `rankDefaults({ rank, seen, ordered })` →
+  `{ rank, seen, changed }` : toute clé de `ordered` absente de `seen` reçoit un rang à la suite, dans l'ordre donné
+  (`fillUnrankedByOrder`), et rejoint `seen` ; sans nouveauté, `changed` faux et les objets d'entrée rendus tels
+  quels (aucune écriture, aucun rendu). Une clé déjà vue sans rang (effacée par l'utilisateur) reste sans rang, même
+  règle qu'avant. `heroRankOrder(inventory, game, userGeasLevels, userCodexLevel)` reprend le calcul de CP de
+  `composedRoster` (compose, pièces équipées à slot non vide, `computeFinalStats`, `calcBattlePower` avec la ligne
+  TransStar, EE et talisman) et le même tri (`bp ?? -Infinity` décroissant, ordre du roster à égalité) ;
+  `presetRankOrder(inventory)` = `presetGameOrder`. Le calcul de CP est recopié, pas extrait de `BuildsScreen.tsx`,
+  pour ne pas toucher au pipeline de l'écran (une factorisation commune reste possible hors de ce lot).
+- ✅ **App pose les rangs.** Nouveau hook mince `apps/renderer/src/hooks/useRankDefaults.ts`, appelé par `App.tsx`
+  avec `inv`, `game`, `userGeas`, `userCodex`, `heroPriority` / `setHeroPriority`, `presetRank` / `setPresetRank` :
+  les deux ordres sont mémoïsés sur l'inventaire (et les entrées du CP), deux `useEffect` chargent `seen`
+  (`loadSeenHeroes` / `loadSeenPresets`), appellent `rankDefaults`, persistent `seen` et poussent le rang quand
+  `changed`. Comme `setInv` est appelé par l'import automatique du démarrage, les ré-imports du suivi de capture et
+  l'import manuel, chaque nouvel inventaire est classé. Une édition de rang relance seulement `rankDefaults`, sans
+  effet une fois toutes les clés vues (plus de re-tri du roster à chaque édition, cf. P10 de l'audit du 31/10).
+- ✅ **Écrans.** Les deux effets disparaissent de `BuildsScreen.tsx` et `PresetsScreen.tsx` (imports `seen` et
+  `fillUnrankedByOrder` retirés) ; ils lisent les rangs reçus en props comme avant, un héros ou un preset nouveau
+  arrive déjà classé. Commentaires mis à jour (`builderFilters.ts`, en-tête de `PresetsScreen.tsx`).
+- ✅ **Tests.** Nouveau `apps/renderer/test/rankDefaults.test.ts` (9 tests) : inventaire neuf classé dans l'ordre
+  donné ; second passage sans nouveauté → `changed` faux et mêmes objets (`toBe`) ; nouveau venu au rang suivant sans
+  toucher aux rangs existants ; clé vue mais sans rang jamais reclassée ; `heroRankOrder` sur le vrai contrat
+  (`data/derived/`) : trois héros 2000001 à arme ATK 900 / 400 / 100 classés par CP, un héros inconnu (CP non
+  résolu) en dernier, sans données de jeu l'ordre du roster ; `presetRankOrder` = `presetGameOrder`. Pour les écrans,
+  un **test de source** (pas de rendu : l'environnement `node` de Vitest n'a pas de DOM et un rendu statique
+  n'exécute aucun effet, il n'aurait rien prouvé) : `BuildsScreen.tsx` et `PresetsScreen.tsx` ne contiennent plus
+  ni `gs.priority.seen` / `gs.presets.seen`, ni les helpers `load/persistSeen*`, ni `fillUnrankedByOrder`.
+- ✅ **Docs.** `docs/solver.md` et `wiki/Solver.md` (« auto-rangés par CP à la capture » → à l'import, par App,
+  sans ouvrir Builds), `wiki/Using-the-App.md` (≤ Lower et rang des presets posés dès l'import),
+  `docs/reference.md` et `wiki/Engine-Reference.md` (arbre `rankDefaults.ts`, ligne du nouveau test).
+  `docs/todo.md` n'avait pas d'item lié.
+- ✅ **Vérification.** `npm run typecheck` vert (dernière ligne `> tsc --noEmit`) ; `npm test` : `Tests  169 passed
+  (169)` (core), `Tests  238 passed (238)` (desktop), `Tests  952 passed (952)` (renderer) ; `npm run lint` : `✖ 8
+  problems (0 errors, 8 warnings)`, comme avant.
+- ⏳ Sevih : sur un profil neuf (ou après avoir vidé `gs.priority.*` / `gs.presets.*`), importer une capture et
+  lancer un solve « ≤ Lower » sans ouvrir Builds : des pièces de héros moins bien classés doivent pouvoir sortir ;
+  puis ouvrir Builds et Presets : rangs déjà posés, aucun reclassement, un rang effacé reste effacé.
+
 ### ⚙️ Registre des réglages, Reset complet, bandeau juste, Échap et dernier panneau de Settings (U2, G90) (2026-11-01)
 - ✅ **Pourquoi.** Deuxième lot de la refonte (U2 de `docs/ux-audit-2026-11-01.md`, §3.7 et « Deux lecteurs » du §3.9) :
   les défauts de `topN`, `topK`, `heatmap`, `compactCards` étaient écrits trois fois (`App.tsx`, défauts de props de

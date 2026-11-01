@@ -303,7 +303,8 @@ The **Reforge** segmented control (toolbar) + toggles + the Exclude multi-select
   ceiling: in-game stage 4 is a 5 % draw.
 - **Equipped items** (`equippedScope`, **3 states**, **default ≤ Lower**) — which pieces
   equipped on **other** heroes the solver may pull. Default `lower`: only heroes of
-  **strictly lower** priority (auto-ranked by CP at capture, via `isLowerPriority`) → never
+  **strictly lower** priority (auto-ranked by CP on import, by App, without opening Builds:
+  `useRankDefaults`; compared via `isLowerPriority`) → never
   strips an equal/higher hero. Without a ranking it degrades to own+free (`isLowerPriority`
   ∞>∞ = false). `None` = own + free, `All` = any equipped piece (the old default, silent
   stealing possible).

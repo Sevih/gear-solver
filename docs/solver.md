@@ -315,7 +315,8 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   la ligne (`T+n`, titre « Transistone »). C'est un plafond : en jeu le palier 4 est un tirage à 5 %.
 - **Equipped items** (`equippedScope`, **défaut ≤ Lower**) — quelles pièces équipées sur
   d'**autres** héros le solver peut piocher. Défaut `lower` : seulement les héros **strictement
-  moins** prioritaires (auto-rangés par CP à la capture) → ne déshabille jamais un héros
+  moins** prioritaires (auto-rangés par CP à l'import, par App, sans ouvrir Builds :
+  `useRankDefaults`) → ne déshabille jamais un héros
   égal/supérieur. Sans ranking, dégrade en own+free (`isLowerPriority` ∞>∞ = false). `None` = own
   + free, `All` = n'importe quelle pièce équipée (l'ancien défaut, vol silencieux possible).
   Le scope s'applique au **propriétaire effectif** = claim worklist ?? `equippedBy` : une pièce

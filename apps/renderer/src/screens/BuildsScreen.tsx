@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { Character, CharacterDef, GameData, GearPiece, Inventory, NoGearStats, UserGeasLevels } from "@gear-solver/core";
-import { fillUnrankedByOrder, loadSeenHeroes, moveRankBefore, persistSeenHeroes, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
+import { moveRankBefore, rankOrder, reorderRank, type HeroPriority } from "../lib/storage/heroPriority.js";
 import { composeCharStats, effectiveCharacter, expToLevel, gameRulesOf } from "@gear-solver/core";
 import { aggregateGearBuckets, computeFinalStats, round1, type FinalStats, type ScalingMap, type SheetStatKey } from "../lib/composeBuild.js";
 import { calcBattlePower } from "../lib/solver/cp.js";
@@ -1039,21 +1039,6 @@ export function BuildsScreen({ inventory, game, userGeasLevels, userCodexLevel, 
   // Surfacing both reconciles the two numbers: the badge is "equipped", the
   // roster lists everyone, so the pill spells out "N equipped · M total".
   const equippedCount = useMemo(() => roster.reduce((n, e) => n + (e.count > 0 ? 1 : 0), 0), [roster]);
-
-  // Normalize priority against the roster: keep manual ranks (compacted) and
-  // give each NEWCOMER (a hero never offered a rank — first use, or a new
-  // capture) a default by CP, appended below the ranked ones. Heroes already
-  // seen are left alone, so clearing a rank sticks instead of being re-filled
-  // at the bottom on the next edit (and two unranked heroes can't take from
-  // each other — see isLowerPriority).
-  useEffect(() => {
-    if (composedRoster.length === 0) return;
-    const byCp = [...composedRoster].sort((a, b) => (b.bp ?? -Infinity) - (a.bp ?? -Infinity)).map((e) => e.char.uid);
-    const seen = loadSeenHeroes();
-    const next = fillUnrankedByOrder(heroPriority, byCp, seen);
-    if (byCp.some((u) => !seen.has(u))) persistSeenHeroes([...seen, ...byCp]);
-    if (next) onHeroPriorityChange(next);
-  }, [composedRoster, heroPriority, onHeroPriorityChange]);
 
   if (!inventory) {
     return <Empty title="No capture yet" subtitle="Install the capture plugin (Settings, top right) and play OUTERPLANE to the lobby: your heroes and their gear import by themselves." />;

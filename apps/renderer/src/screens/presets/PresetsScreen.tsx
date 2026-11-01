@@ -28,7 +28,8 @@
  * owns both (`gs.presets.rank` / `gs.presets.locked`) and the solver reads them
  * through `presetHolds` — a locked preset's pieces never enter another solve,
  * and "Optimize preset →" never takes the pieces of a better-ranked preset. A
- * preset never offered a rank gets one in the in-game order.
+ * preset never offered a rank gets one in the in-game order, set by App on
+ * import (`useRankDefaults`).
  *
  * Under them, the local presets (`lib/storage/localPresets.ts`, kept in GS
  * only): saved from a Builder result or copied from an in-game card ("Copy as
@@ -66,11 +67,10 @@ import { overcapText } from "../../lib/overcap.js";
 import { bestEeGemsFor } from "../../lib/presets/eeGems.js";
 import { presetWorklistFor } from "../../lib/presets/presetWorklist.js";
 import { presetOptimizeNote, presetOptimizePatch } from "../../lib/presets/optimize.js";
-import { presetGameOrder } from "../../lib/presets/presetHolds.js";
 import { presetQuality, presetRolls, presetTileMain, type PresetRoll } from "../../lib/presets/presetQuality.js";
 import { cardOpen, forceCards, initialCardCommand, type CardOpenCommand } from "../../lib/presets/cardOpen.js";
-import { loadSeenPresets, persistSeenPresets, toggleLocked, type PresetRank } from "../../lib/storage/presetPriority.js";
-import { fillUnrankedByOrder, moveRankBefore, reorderRank } from "../../lib/storage/rankPriority.js";
+import { toggleLocked, type PresetRank } from "../../lib/storage/presetPriority.js";
+import { moveRankBefore, reorderRank } from "../../lib/storage/rankPriority.js";
 import { fetchRecoForHero } from "../../lib/reco/fetchReco.js";
 import { talismanFamilyKeys, type RecoFilterPatch } from "../../lib/reco/translateReco.js";
 import { worklistGem } from "../../lib/worklist/changes.js";
@@ -212,16 +212,6 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
     dragKey.current = null;
     if (dragged) onPresetRankChange((prev) => moveRankBefore(prev, dragged, targetKey));
   }, [onPresetRankChange]);
-  // A preset never offered a rank (first use, a preset saved since) gets one
-  // below the ranked ones, in the in-game order; a cleared rank stays cleared.
-  useEffect(() => {
-    if (!inventory || inventory.presets.length === 0) return;
-    const order = presetGameOrder(inventory.presets);
-    const seen = loadSeenPresets();
-    const next = fillUnrankedByOrder(presetRank, order, seen);
-    if (order.some((k) => !seen.has(k))) persistSeenPresets([...seen, ...order]);
-    if (next) onPresetRankChange(next);
-  }, [inventory, presetRank, onPresetRankChange]);
   const toggleClass = (id: string) => setClassFilter((s) => {
     const n = new Set(s);
     if (n.has(id)) n.delete(id); else n.add(id);

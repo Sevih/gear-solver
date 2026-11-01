@@ -142,8 +142,9 @@ export const INITIAL_FILTERS: SolverFilters = {
   //   reforgeMode "classic" — score gear at the +10 endgame norm (most players
   //     stop there; +15 is resource-gated), not the captured +0/+9 state.
   //   equippedScope "lower" — may only pull gear off STRICTLY lower-priority
-  //     heroes (ranks set in the Builds tab; an unranked hero gets a default
-  //     rank by CP there, below the manual ones), never strip an equal/higher one.
+  //     heroes (ranks set in the Builds tab; a hero never offered a rank gets a
+  //     default one by CP on import, below the manual ones — `useRankDefaults`),
+  //     never strip an equal/higher one.
   //     With no ranks it degrades to own+free (isLowerPriority ∞>∞ is false).
   options: { onlyMaxed: false, reforgeMode: "classic", equippedScope: "lower", keepCurrent: false, allowBrokenSets: true, rerollPotential: false },
   excludedHeroes: new Set(),

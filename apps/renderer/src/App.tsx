@@ -18,6 +18,7 @@ import { HERO_PRIORITY_KEY, type HeroPriority } from "./lib/storage/heroPriority
 import { PRESET_LOCKED_KEY, PRESET_RANK_KEY, type PresetRank } from "./lib/storage/presetPriority.js";
 import { presetHolds } from "./lib/presets/presetHolds.js";
 import { useSetting } from "./hooks/useSetting.js";
+import { useRankDefaults } from "./hooks/useRankDefaults.js";
 import { appliedNotice, equippedByHero, goneNotice, loadWorklist, persistWorklist, reconcileWorklist, remainingChangeCount, upsertWorklistEntry, worklistClaims, type WorklistEntry } from "./lib/storage/worklist.js";
 import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
@@ -215,6 +216,9 @@ export function App() {
   // so solving the NEXT hero respects what earlier builds already reserved
   // (equipped scope + rank rules apply to claims like to real equipment).
   const solverWorklistClaims = useMemo(() => worklistClaims(worklist, inv, equipped), [worklist, inv, equipped]);
+  // Default ranks for the heroes and presets never offered one, on each
+  // imported inventory — the Builder reads them without Builds/Presets opened.
+  useRankDefaults({ inventory: inv, game, userGeasLevels: userGeas, userCodexLevel: userCodex, heroPriority, onHeroPriorityChange: setHeroPriority, presetRank, onPresetRankChange: setPresetRank });
   // The presets' pieces with their ranks and locks, for the solver.
   const solverPresetHolds = useMemo(() => (inv ? presetHolds(inv, presetRank, presetLocked) : undefined), [inv, presetRank, presetLocked]);
   // Pending (not-yet-applied) gear changes across all queued builds — the

@@ -170,7 +170,7 @@ ascended and fully reforged; hover for the cap at the pieces' current investment
   Builds tab.
 - **Rank and lock** — each preset has a priority **rank**, like the heroes on the Builds tab
   (1 = most important; type a position, or drag the ⠿ handle with **Sort: Rank**; empty =
-  unranked = lowest; new presets get one in the in-game order). **Optimize preset →** never takes
+  unranked = lowest; new presets get one in the in-game order as soon as a capture is imported). **Optimize preset →** never takes
   a piece from a preset ranked above or equal to it (unranked counts as lowest). The 🔒 **Lock**
   button keeps a preset's pieces out of every solve — any hero, any preset — except **Optimize
   preset →** on that preset itself; a locked card has an amber outline. In the Builder, the
@@ -246,7 +246,8 @@ results, the bottom band shows the selected build's pieces.
   `T+n` on the result cards. Works with or without a reforge mode; ignored under **Maxed only**.
 - **Equipped items** — a three-way control for which gear worn by *other* heroes the solver
   may pull in: **None** (only the hero's own gear + free gear), **≤ Lower** (default — also
-  gear on heroes ranked strictly lower in the Builds ranking; with no ranks set this
+  gear on heroes ranked strictly lower in the Builds ranking; every new hero gets a default
+  rank by CP as soon as a capture is imported, without opening Builds; with no ranks set this
   degrades to own + free gear), or **All** (any equipped gear). Pieces **reserved by a
   Worklist entry** count as worn by the claiming hero, so solving your next hero respects
   what earlier queued builds already grabbed (under **All**, reservations are ignored like
