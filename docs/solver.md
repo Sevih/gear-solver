@@ -42,7 +42,7 @@ Worker coûte ~30 ms + transfert de l'inventaire + gameData, à amortir).
 
 ## 2. Modes : SOLVE vs SOLVE CP
 
-| Bouton    | Objectif                | Sort key                          | Coût hot-path |
+| Mode (Score \| CP, puis Solve) | Objectif                | Sort key                          | Coût hot-path |
 |-----------|-------------------------|-----------------------------------|---------------|
 | **SOLVE**    | Maximise un **Score** pondéré par les priorités utilisateur (`Σ priority × final / norm`). Utile quand on sait quel profil de stats viser. | `score`             | `compose + cheap ratings` |
 | **SOLVE CP** | Maximise le **Combat Power** in-game (`CalcBattlePower` reverse-engineered). Mono-objectif. | `cp` (calculé dans la boucle) | `compose + cheap ratings + cp` |
@@ -86,11 +86,12 @@ sur son chunk**.
 Pour chaque slot ∈ {weapon, helmet, armor, gloves, boots, accessory, ooparts} :
 filtre les pièces de l'inventaire :
 - `g.slot === slot`
-- exclu selon `equippedScope` (`none`/`lower`/`all`) si équipé sur un **autre** héros — `lower` gate via `isLowerPriority(heroPriority, …)` (cf. § Options, Equipped items). Le « propriétaire » est le **claim worklist s'il existe, sinon `equippedBy`** : une pièce réservée par le build en attente d'un autre héros (`worklistClaims`, uid → héros réclamant, changes non appliqués seulement) est traitée comme équipée sur lui — le scope + rank s'appliquent aux réservations comme au gear réel
+- exclu selon `equippedScope` (`none`/`lower`/`all`) si équipé sur un **autre** héros — `lower` gate via `isLowerPriority(heroPriority, …)` (cf. § 4, popover Options, Equipped items). Le « propriétaire » est le **claim worklist s'il existe, sinon `equippedBy`** : une pièce réservée par le build en attente d'un autre héros (`worklistClaims`, uid → héros réclamant, changes non appliqués seulement) est traitée comme équipée sur lui — le scope + rank s'appliquent aux réservations comme au gear réel
 - exclu si `g.uid ∈ excludedPieceUids` (exclusion **globale** account-wide, clic-droit Gear — vérifié en premier)
 - exclu si `g.equippedBy ∈ excludedHeroes` (idem via le propriétaire effectif)
 - exclu si sous le **plancher « Maxed only »** (`meetsMaxedFloor`) : le toggle = **zéro extrapolation** — le plafond de chaque pièce dans le mode reforge (`pieceReforgePlan`, celui de la projection) devient son plancher d'investissement (pièces **déjà** à leur plafond ou mieux, notées sur leurs vrais rolls, projection sautée). Off → aucun gate ; 6★ `unique` : +10R6 → enhance ≥ 10 & reforges ≥ 6 ; +10R9 → ≥ 10 & ≥ 9 ; +15R9 → ≥ 15 & ≥ 9 ; pièce qui ne s'élève pas (sous 6★, ou 6★ non `unique`) : +10 & son propre budget (son étoile, 6 pour une 6★) quel que soit le mode ; pièce sans étoile (absente du contrat) : plancher du mode. Talisman : plancher enhance seul (pas de reforge sur gemmes), borné à son plafond +10 (`enhance.maxEnhanceLevel` : pas de singularité, un plancher +15 vidait le pool)
 - exclu si `classLimit` ≠ classe du héros
+- exclu si sous le **gate `minQuality`** (Options › Min quality) : le palier de qualité de la pièce (`QUALITY_TIERS`) est sous le palier choisi ; Talisman / EE (sans qualité, palier null) ne sont jamais écartés ; `minQuality` null = pas de gate
 - exclu si l'une de ses mains d'option (hors `combatOnly`) est une **main exclue** du slot (`mainExcludes`), avant le test des acceptables ; le nombre de pièces ainsi écartées remonte dans `poolSizes[slot].mainExcluded`
 - exclu si **main pick** actif pour ce slot et qu'aucune de ses mains d'option n'est dans les picks
 - exclu si **effect chip** (weapon/accessory) marqué `excluded` ; ou marqué `required` et le `setId` de la pièce (identité d'effet `UniqueOptionID`) ne match pas — la comparaison est **délibérément** sur `setId`, pas sur `effectIcon` (des effets distincts partagent une icône, ex. la famille Recklessness)
@@ -103,7 +104,7 @@ Toggle **`keepCurrent`** : si la pièce actuellement équipée par le héros exi
 libre), les pools helmet/armor/gloves/boots sont **élagués** aux seuls sets admissibles
 **avant** le cartésien — énorme réduction sur les recherches sets-contraintes. Un set requis
 **seul** (`2pc A`, slots libres) n'élague rien par défaut : il faut garder de quoi compléter.
-Le toggle **Allow broken sets** (cf. § Options) renverse ça : à *false*, les slots libres
+Le toggle **Allow broken sets** (cf. § 4, popover Options) renverse ça : à *false*, les slots libres
 doivent eux aussi former un set complet → la whitelist se restreint aux sets requis + *formables*
 (présents dans ≥2 slots armor) et un check leaf rejette les builds à singleton (cf. phase 4).
 
@@ -120,17 +121,26 @@ inclus, l'**EE jamais** (pas de pool EE — pièce équipée unique, toujours
 exempte) ; slots `keepCurrent` exemptés.
 
 Le budget s'applique à **toutes** les branches ; seule la **clé de ranking par
-slot** (un `scoreOf` passé à `keepTopN`) diffère :
+slot** (l'objectif) diffère. Chaque branche appelle
+`keepTopUnion(pool, objectif, floorScorers, keep, requiredSetIds, pin)` :
+
+**Rétention des mins** (`floorScorers`) : un filtre de stat avec une borne **min** est une contrainte dure ;
+classer par le seul objectif pouvait élaguer les pièces dont la borne a besoin, et le solve rendait 0 build alors
+qu'un build faisable existait (reproduit : priorité spd + chc + eff, min eff 570). D'où un scorer par stat bornée
+en min (`priorityScoreOf({ [stat]: 1 })`, la magnitude de ses propres jets), et `keepTopUnion` garde l'**union**
+de la tranche de l'objectif et d'une tranche par scorer, le budget du slot partagé à parts égales
+(`⌈keep / (k + 1)⌉` chacun), donc l'union reste ≤ `keep` et le budget ∏ tient. Une borne **max** n'y entre pas
+(le filtre in-loop la tient). Sans borne min, `keepTopUnion` = `keepTopN` par l'objectif.
 
 **a) Priorité explicite (SOLVE ou SOLVE CP)** — `priorityScoreOf` :
 ```
-score(piece) = Σ_rolls priority[user_key] × (value / ROLL_NORMS[engine_key])
+score(piece) = Σ_rolls priority[STAT_TO_PRIORITY[roll.stat]] × (value / ROLL_NORMS[roll.stat])
 ```
 **Normalisation cruciale** : `ROLL_NORMS` (magnitude *par-roll*) — pas `STAT_NORMS`
 (magnitude finale endgame) ; les deux échelles diffèrent ~100×. Sans elle, les
 rolls flat à grosse magnitude écrasent les rolls % à priorité égale. Le mapping
-engine→user (`STAT_TO_PRIORITY`) fait partager à `atkPct` et `atk` flat la même
-bucket priority `atk`. Les main-options *combat-only* (+15 singularité conditionnels)
+jet → axe (`STAT_TO_PRIORITY`, dérivé de `lib/statRegistry.ts`) fait partager à `atkPct` et `atk` flat la même
+clé de priorité `atk` ; les autres clés sont les noms moteur eux-mêmes (`critRate`, `critDmg`, `effRes`…). Les main-options *combat-only* (+15 singularité conditionnels)
 sont ignorées (pas sur la feuille de stats visée), comme un main en % sur un axe sans
 variante % (le −30 % SPD de Phantasm : pas de norme de roll, `isPctRollWithoutNorm` de
 `statRegistry.ts`, au lieu d'être compté −1,5 jet comme −30 SPD plats). Même règle en (c).
@@ -145,16 +155,27 @@ set peut être sous-classé ; monter le Top% ou exiger le set.
 **c) SOLVE (Score) sans priorité** — `magnitudeScoreOf` (magnitude brute des rolls) :
 pas d'objectif (le score serait 0 partout), mais le produit **doit** rester borné
 (sinon cartésien complet) → on garde les pièces les mieux rollées par slot. Le
-bouton Solve de l'Optimizer n'y mène plus (priorité de la reco, sinon CP, § 4 Hero) ;
+bouton Solve de l'Optimizer n'y mène plus (priorité de la reco, sinon CP, § 4, barre d'outils ligne 1) ;
 la branche reste celle de l'estimation pré-solve et du moteur appelé sans poids.
 
-Protection des sets requis : pour chaque set `req-2pc`/`req-4pc` non représenté
+Protection des sets requis : pour chaque set requis (2pc / 4pc d'un plan) non représenté
 dans la slice budget, `keepTopN` ré-ajoute hors budget **son seul meilleur
-membre** (au score) — identique pour les trois clés. Ré-ajouter *tous* les
+membre** (au score) — identique pour les trois clés et pour chaque tranche de `keepTopUnion`. Ré-ajouter *tous* les
 membres (ancien comportement) refaisait exploser le budget. Le **pin** de la
 pièce équipée vaut pour tout SOLVE CP, branche (a) avec priorité comme branche (b) :
 le classement change, pas la garantie « jamais sous le CP équipé ». SOLVE (Score)
 n'épingle rien.
+
+**Prune de dominance CP** (`pruneDominatedForCp`, SOLVE CP seulement, après le budget — qu'il ait tourné ou
+non, Top % 100 compris — et toutes les autres étapes, sur les pools exacts que le cartésien itère) : le CP est monotone dans chaque stat de gear, donc une pièce
+dont la contribution (`aggregatePrefixBuckets([pièce])`, sur les seuls axes que lit la compose) est ≤ à celle
+d'une autre sur tous les axes et < sur un ne peut jamais donner un meilleur CP — elle sort avant le cartésien.
+Comparaison **dans un même groupe** : même effet (`setId`) pour arme et accessoire, même set d'armure pour
+tête / torse / gants / bottes ; Talisman et EE jamais élagués (leurs gemmes viennent de l'allocation globale, et le
+reroute crit-cap par combo casse la monotonie). Désactivé dès qu'une contrainte pourrait rendre seul faisable un
+build plus faible : une borne **max** de stat, ou **n'importe quelle** borne de rating / CP / Swaps (`upg`). Les
+bornes min de stat restent compatibles (le dominant les tient dès que le dominé les tient). Les slots
+`keepCurrent` sont exemptés.
 
 ### Phase 4 — Cartesian + set-prune
 Énumération nested loop : `weapon × helmet × armor × gloves × boots × accessory × ooparts`.
@@ -167,9 +188,16 @@ n'épingle rien.
 ### Phase 5 — Per-combo : compose + ratings + filtres + heap
 Pour chaque combo qui passe phase 4 :
 
-1. **Compose** : `computeFinalStats(baseline, scaling, pieces, game, gemDelta)`.
+1. **Compose** : `computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, gemDelta, setBonuses)`.
+   - `prefixBuckets` = `aggregatePrefixBuckets(pieces.slice(0, 6))`, les six pièces arme..accessoire sommées
+     **une fois par nœud accessory** ; la boucle talisman clone ce préfixe et n'ajoute que talisman, EE, gemmes et
+     bonus de set, dans l'ordre des slots — **bit-identique** au re-sum complet (`computeFinalStats`, qui reste la
+     compose des chemins hors boucle : héros, cartes, presets).
+   - `setBonuses` = `computeSetBonuses(pieces, …)`, aussi calculé une fois par nœud accessory (le talisman ne porte
+     pas d'`armorSetId`).
    - `pieces` est un array hoisted (mutée en place) pour éviter 10M+ allocations.
-   - `gemDelta` est pré-agrégé (cf. § Gems).
+   - `gemDelta` est pré-agrégé (cf. § Gems) ; les chemins lents (cap crit, mins de stat) recomposent par la même
+     fonction avec un autre delta.
 2. **Stat filter** : si une `FinalStats[key]` est hors `[min, max]` user, `continue`.
 3. **Cheap ratings** : 8 produits simples (HpS, Ehp, EhpS, Dmg, DmgS, Mcd, McdS, DmgH).
    Dmg/Mcd sont multipliés par le **facteur du meilleur skill** du héros
@@ -211,7 +239,7 @@ Pour chaque combo qui passe phase 4 :
   workers quand le talisman est l'axe de partition), slice top-N (1000 par défaut), forward à React.
 - Solve complet vide, aucune combinaison atteinte (`permutations` 0) et des loadouts rejetés par
   « Allow broken sets » off → `onResult` porte la cause `"brokenSets"` (`SolveEmptyCause`), que la table
-  affiche (cf. § ResultsTable).
+  affiche (cf. § 4, tableau des résultats).
 - **Erreur d'un worker** (message `error` ou crash `onerror`) : tous les workers sont stoppés et les
   builds des workers déjà finis **jetés** — ils ne couvrent que leurs slices et s'afficheraient comme
   le résultat de toute la recherche. `onError` seul, pas d'`onResult` : la table reste vide sous l'erreur.
@@ -225,69 +253,66 @@ Pour chaque combo qui passe phase 4 :
 
 ## 4. Les panneaux de l'UI
 
-Les panneaux du haut (Hero, Stats, Sub tick value / Damage info, Options, filtres,
-priorité, mains, sets, effets) + sidebar Actions/Library + footer fixé. Chaque panneau
-de filtre pousse son state dans le reducer `SolverFilters` ([builderFilters.ts](../apps/renderer/src/lib/solver/builderFilters.ts), branché par [BuilderScreen.tsx](../apps/renderer/src/screens/builder/BuilderScreen.tsx)).
-
-### Hero
-Picker (combobox searchable) + portrait + contrôle segmenté **Score | CP** + bouton **Solve**.
-- **Score | CP** : choisit le mode (`solveMode` de `useSolverSession`, Score à chaque lancement) sans lancer de solve.
-- **Solve** : lance le mode courant (désactivé si pas de héros) ; libellé « Solve » dans les deux modes.
-  **Priorité par défaut** : en Score, sans aucun poids (`hasPriority` faux), Solve récupère la reco outerpedia du
-  héros (`fetchRecoForHero`, le chemin de Load reco ; le bouton dit « Loading reco… ») et n'en pose que la
-  priorité de la **première** build (`recoPriorityOf`, `lib/reco/recoPriority.ts` : `SubstatPrio` en 3/2/1, ni
-  mains, ni effets, ni sets, pas de picker), par les filtres du héros (donc gardée et lue par Presets), puis lance
-  le solve avec. Sans reco (réseau en échec, héros sans reco, reco sans poids), le solve part **en CP pour cette
-  fois** (le mode ne change pas) et un toast le dit. La décision est le helper pur `solveDecision`
-  (`"cp"` / `"score"` / `"score-with-reco"` / `"cp-fallback"`). Un héros sans reco est retenu pour la session (pas
-  de nouvel appel) ; un échec réseau est retenté au Solve suivant.
-- **Bandeau de priorité** (`PriorityBanner.tsx`, sous la ligne du héros, visible popovers fermés) : sans poids,
-  « No priority set — Solve will use the outerpedia reco's weights » avec **Load reco** (la reco entière, comme la
-  Library), **Set priority** (ouvre le popover Priority), **Use CP** (passe en CP et lance) ; sans reco connue, il
-  annonce le CP et garde Set priority / Use CP. Après une priorité posée depuis la reco : « Priority from outerpedia
-  reco · Edit · Clear » tant qu'elle n'est pas modifiée (Clear remet les poids à zéro).
-- **Cancel** : interrompt la solve (un worker annulé sort sans rien poster ; l'orchestrator merge les résultats des workers déjà finis).
-- **Reset filters** : `dispatch({type: "resetAll"})` — vide tout le reducer.
+Même plan que l'onglet Optimizer du manuel ([wiki/Using-the-App.md](../wiki/Using-the-App.md)) : la barre
+d'outils (deux lignes et le bandeau de priorité entre elles), les popovers de filtres, le tableau, la colonne de
+droite, le build sélectionné, ses cartes, le pied. Chaque contrôle de filtre envoie une action au reducer
+`SolverFilters` (`solverFiltersReducer`, [builderFilters.ts](../apps/renderer/src/lib/solver/builderFilters.ts), 21
+actions), tenu par le `useReducer` de [BuilderScreen.tsx](../apps/renderer/src/screens/builder/BuilderScreen.tsx) ;
+les contrôles qui ne sont pas des filtres (mode, solve, sélection d'un build) vivent dans l'état de l'écran ou de
+`useSolverSession.ts`. Les fichiers cités ci-dessous sont sous `apps/renderer/src/`.
 
 **Mémoire de filtres par héros** (durable) : chaque changement des filtres du héros ouvert est écrit dans
-`gs.solver.heroFilters` (`heroFilters.ts`, localStorage, possédé par App et passé à l'Optimizer et à Presets),
-et ouvrir un héros **restaure** son jeu gardé au lieu de tout resetter — au changement de héros comme
-au relancement ; distinct des **Filter sets** nommés. Un héros sans jeu gardé part des défauts avec la
-priorité de `priorityOf` (`lib/heroPriority/weights.ts` : celle de sa build sauvegardée la plus récente,
-s'il en a une), la même que celle avec laquelle Presets le note. Les *résultats* restent vidés.
+`gs.solver.heroFilters` (`lib/storage/heroFilters.ts`, localStorage, possédé par App et passé à l'Optimizer et à
+Presets), et ouvrir un héros **restaure** son jeu gardé (`loadPreset`) au lieu de tout remettre à zéro — au
+changement de héros comme au relancement ; distinct des **Filter sets** nommés. Un héros sans jeu gardé part de
+`filterDefaults` (le mode de reforge et la Transistone par défaut de Settings › Solver) avec la priorité de
+`priorityOf` (`lib/heroPriority/weights.ts` : celle de sa build sauvegardée la plus récente, s'il en a une), la
+même que celle avec laquelle Presets le note. Les *résultats* repartent vides à chaque changement de héros.
 
-### Stats
-Snapshot des `FinalStats` du build actuellement équipé sur le héros (col gauche)
-vs le build sélectionné dans la table (col droite, em-dash tant qu'aucune ligne
-n'est cliquée). Lecture pure, jamais éditable. La colonne projetée porte un **Δ
-numérique signé** par axe (`proj − current`, arrondi) en plus du tint vert/rouge —
-le « de combien », pas juste le sens. La ligne crit lit la somme brute (`critRawOf` =
-`critRateUncapped ?? critRate`, `screens/builder/critCell.ts`) pour le Δ et le tint, et au-delà
-de la borne de 100 affiche « 100% ⁺42 » (exposant ambre, `critCellParts`) de chaque côté, avec
-en tooltip la valeur brute et le gaspillage (`critCellTitle`, voir **Overcap** plus bas).
+### Barre d'outils, ligne 1 — héros et Solve (`screens/builder/BuilderToolbar.tsx`)
 
-### Sub tick value & Damage / +1% (encadrés d'aide par héros)
-Deux panneaux d'info en lecture seule (col droite, sous Stats), recalculés au
-changement de héros / niveau / awakening :
-- **Sub tick value** (`lib/subValue.ts`) — pour ATK/DEF/HP, la valeur d'un tick de
-  sub 6★ en **flat** vs en **%** (≈ équivalent flat), gagnant en cyan. Un tick % scale
-  sur `base+evo+awak` (gear-indépendant — le flat gear est ajouté après le ×%, le
-  `(1+buffRate)` s'annule) → le verdict ne dépend que de la base du héros. Valeurs par
-  tick depuis `sub-ticks.json` (dérivé de `subStatPools` outerpedia).
-- **Damage / +1%** (`lib/dmgValue.ts`) — gain de dégâts attendu pour **+1%** de chaque
-  stat pertinente : la/les stat(s) de scaling du héros (ATK/DEF/HP/**SPD** via `dmgStat` +
-  secondaires `dmgSec`, SPD/EFF/CHC inclus) vs **CHD** vs **DMG inc**, classé, meilleur en
-  cyan. **Calculé à 100% crit** (crit cap = baseline endgame). Réutilise `computeCheapRatings`
-  (modèle dégâts RE 1.4.9). Les héros **no-crit** (`noCrit`, ex. 2000086/2000091/2000008)
-  forcent `crc=0` et masquent CHD.
+- **Héros** — portrait (celui de la fusion pour un héros fusionné, `effectiveCharacter`) et `HeroPicker` en
+  `mode="single"` (`design/HeroPicker.tsx` : recherche « Search hero… » sur le nom affiché, le surnom, le nom de
+  base ou l'id — `lib/heroes/heroName.ts` —, ordre des rangs de Heroes puis de la capture —
+  `lib/heroes/heroListOrder.ts` —, ↑/↓ + Entrée). Pas d'action de reducer : le changement de héros annule le
+  solve en cours, vide les résultats et charge les filtres du héros entrant (`loadPreset`, puis `mergePreset`
+  quand un patch d'« Optimize preset → » l'attend).
+- **Score | CP** (`SolveModeControl`) — contrôle segmenté qui choisit le mode (`solveMode` de l'écran, Score à
+  chaque lancement) sans lancer de solve.
+- **Solve** (`SolveButton`) — lance le mode courant (désactivé sans héros) ; libellé « Solve » dans les deux
+  modes. **Priorité par défaut** : en Score, sans aucun poids (`hasPriority` faux), Solve récupère la reco
+  outerpedia du héros (`fetchRecoForHero`, le chemin de Load reco ; le bouton dit « Loading reco… ») et n'en pose
+  que la priorité de la **première** build (`recoPriorityOf`, `lib/reco/recoPriority.ts` : `SubstatPrio` en
+  3/2/1, ni mains, ni effets, ni sets, pas de picker), par les filtres du héros (donc gardée et lue par Presets),
+  puis lance le solve avec. Sans reco (réseau en échec, héros sans reco, reco sans poids), le solve part **en CP
+  pour cette fois** (le mode ne change pas) et un toast le dit. La décision est le helper pur `solveDecision`
+  (`"cp"` / `"score"` / `"score-with-reco"` / `"cp-fallback"`). Un héros sans reco est retenu pour la session (pas
+  de nouvel appel) ; un échec réseau est retenté au Solve suivant.
+- **Cancel** — pendant un solve, le bouton Solve **devient** Cancel (même place) : il interrompt la solve (un
+  worker annulé sort sans rien poster ; l'orchestrator merge les résultats des workers déjà finis).
+- **Filter / ✕** — filtre client après solve : réapplique les bandes de Stat filters et de Ratings aux résultats
+  gardés sans relancer de solve (`applyClientFilter` → `displayFilter` de l'écran ; actif dès qu'il y a des
+  résultats et une bande, ambre quand il filtre) ; **✕** le retire. Pas d'action de reducer.
 
-### Options
-Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
-- **Reforge** (`reforgeMode`, **4 états**, **câblé**, **défaut +10R6**, réglable dans Settings › Solver —
-  `gs.solver.reforgeMode`, +10R6 à l'installation ; le choix fait pour un héros reste avec ses filtres) — projette chaque pièce
-  du pool vers un plafond endgame **avant** le prune par budget de combos (phase 3) (`projectPieceForReforge`). Défaut
-  `classic` (+10R6) car c'est la norme endgame ; `Off` noterait le gear capturé (+0/+9), trompeur.
-  Libellés = enhancement + nombre de reforges (R) :
+### Bandeau de priorité (`screens/builder/PriorityBanner.tsx`)
+
+Sous la ligne 1, visible popovers fermés, tant que le héros n'a pas de poids à lui (`PriorityBannerState`) :
+- `none` : « No priority set — Solve will use the outerpedia reco's weights » avec **Load reco** (la reco entière,
+  comme la Library : `mergePreset`), **Set priority** (ouvre le popover Priority) et **Use CP** (passe en CP et
+  lance, `solveByCp`) ; en mode CP le texte dit que CP n'en a pas besoin et Use CP disparaît ;
+- `no-reco` : « No priority set and no outerpedia reco for this hero — Solve will use Combat Power », Set priority
+  et Use CP ;
+- `from-reco` : « Priority from outerpedia reco · Edit · Clear » tant que les poids posés par Solve ne sont pas
+  modifiés ; Edit ouvre le popover, Clear envoie `clearPriority` (tous les poids à 0).
+
+### Barre d'outils, ligne 2 — reforge et bascules rapides (`BuilderToolbar.tsx`, `lib/solver/reforge.ts`)
+
+- **Reforge** (`ReforgeModeControl`, `reforgeMode`, **4 états**, action `setReforgeMode`, **défaut +10R6**, réglable
+  dans Settings › Solver — `gs.solver.reforgeMode`, +10R6 à l'installation ; le choix fait pour un héros reste
+  avec ses filtres ; libellés et infobulles : `REFORGE_MODES`) — projette chaque pièce du pool vers un plafond
+  endgame **avant** le prune par budget de combos (phase 3) (`projectPieceForReforge`). Défaut `classic` (+10R6)
+  car c'est la norme endgame ; `Off` noterait le gear capturé (+0/+9), trompeur. Libellés = enhancement + nombre
+  de reforges (R) :
   - **Off** : gear tel que capturé.
   - **+10R6** (`classic`) : projette à **+10 non-ascended** (main re-scalé via `projectMainToCeiling`,
     + substats max-rollés à **6 ticks**).
@@ -310,7 +335,7 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   Le re-scale du main repart de la valeur +0 de la table (`rawBase`, posée par le parseur) et
   refait la chaîne float32 du jeu (`scaleMain`) — mêmes chiffres qu'en jeu (test `projectMainToCeiling` :
   240 → 1380) ; une pièce sans `rawBase` retombe sur le ratio des multiplicateurs.
-- **Maxed only** (`onlyMaxed`) — **zéro extrapolation** : le plafond de chaque pièce dans le mode
+- **Maxed only** (`onlyMaxed`, `setOption`) — **zéro extrapolation** : le plafond de chaque pièce dans le mode
   reforge devient son **plancher d'investissement** et la projection est **sautée** (pièces notées
   sur leurs vrais rolls, y compris sur les gear cards — le contexte d'affichage est snapshoté en
   `disable`). Planchers (`maxedFloorOf`/`meetsMaxedFloor`, sur `pieceReforgePlan`) : Off → aucun
@@ -321,9 +346,9 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   ses meilleurs rolls (une +15R9 dans un solve +10R6 n'est pas redescendue au plafond +10). Talisman :
   enhance seul, +10 au plus (son plafond) ; l'EE du héros n'est jamais filtré. (Remplace l'ancien cut plat `enhanceLevel < 15`,
   aveugle au mode.)
-- **Transistone potential** (`rerollPotential`, toggle de la toolbar à côté de Maxed only, **défaut
-  off**, réglable dans Settings › Solver — `gs.solver.rerollPotential`, off à l'installation ; le choix
-  fait pour un héros reste avec ses filtres) — projette le potentiel de reroll Transistone (`lib/solver/reroll.ts`, règle lue dans le
+- **Transistone potential** (`rerollPotential`, `setOption`, **défaut off**, réglable dans Settings › Solver —
+  `gs.solver.rerollPotential`, off à l'installation ; le choix fait pour un héros reste avec ses filtres) —
+  projette le potentiel de reroll Transistone (`lib/solver/reroll.ts`, règle lue dans le
   client en tête du module) : une 6★ Légendaire à 4 sous-stats **sans ligne au palier 4** monte UNE
   ligne jusqu'au palier de base 4 (+1 à +3 ticks, reforges conservées, valeur plafonnée à LV6) ; une
   pièce qui a **déjà** une ligne au palier 4 n'en reçoit pas de deuxième mais monte une ligne jusqu'au
@@ -333,7 +358,91 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   `projectPieceForReforge` **avant** les reforges, avec ou sans mode reforge, **jamais sous Maxed
   only** ; snapshoté dans le contexte d'affichage et sauvé avec le build, les gear cards marquent
   la ligne (`T+n`, titre « Transistone »). C'est un plafond : en jeu le palier 4 est un tirage à 5 %.
-- **Equipped items** (`equippedScope`, **défaut ≤ Lower**) — quelles pièces équipées sur
+
+### Popovers de filtres (`BuilderToolbar.tsx`, `PopoverButton`)
+
+Sept boutons, dans l'ordre de la barre : Options, Stat filters, Ratings, Priority, Mains, Sets, Effects. Un seul
+popover ouvert à la fois (clic dehors ou Échap le ferment) ; le badge d'un bouton compte les contraintes qu'il
+porte (Options : celles qui s'écartent des défauts, plus les héros cochés dans Don't take from…). Chaque popover
+est un composant `Panel` (`screens/builder/Panel.tsx`), décrit ici dans l'ordre du manuel.
+
+#### Priority (`screens/builder/SubstatPriorityPanel.tsx`)
+- Slider par stat (les 12 de `SOLVER_STATS`, `statColumns.ts`) : valeur entière `-1..3`, action `setPriority`.
+  Stockée dans `priority`, clés = **noms moteur** du registre (`critRate`, `critDmg`, `effRes`, `dmgReduce`,
+  `critDmgReduce`… — `lib/statRegistry.ts`, la seule source du vocabulaire des stats) ; les anciennes clés
+  (`crc`, `chd`, `res`, `dmgRed`, `critDmgRed`) des blobs sauvés avant l'unification sont réécrites à la lecture
+  (`LEGACY_STAT_KEY_RENAME`, `renameLegacyStatKeys`).
+- Slider **Top %** (`setTopPct`) : `5..100`, **défaut 60** (retour terrain : à 30 le vrai meilleur build se trouvait
+  régulièrement juste au-delà de la tranche élaguée — budget ~16 M combos à 60, quelques secondes).
+  Pilote le prune de la phase 3 ; `100` = exhaustif. Sans priorité, il mord quand même dans les **deux**
+  modes : auto-prune CP-pondéré en SOLVE CP (phase 3b), magnitude brute des rolls (`magnitudeScoreOf`) en
+  SOLVE Score (phase 3c). Au-delà de `CARTESIAN_WARN` combinaisons estimées, un bandeau ambre sous la barre
+  propose de baisser Top %, de poser une priorité ou d'exiger un set.
+- Bouton **(clear)** : `clearPriority`. Sans poids, une ligne renvoie au bandeau de priorité.
+
+Quand priority est uniformément 0 : le pool est **quand même pruné** (phases 3b/3c, même budget de combos).
+Côté gems : en SOLVE CP ils **sont réalloués** par apport de CP marginal sur le build équipé
+(`allocateGemsByCp` — cf. § Gems) ; seul SOLVE Score garde les gems actuellement socketés (pas de
+réallocation).
+
+#### Sets (`screens/builder/SetsPanel.tsx`)
+Bascule **Require / Exclude** en tête du panneau (état local du panneau), sur la même grille de chips d'armor-set
+(`SetIconChip`, gatées par feasibility : `has2pc` / `has4pc` / `canForm2pc` / `canForm4pc` calculés depuis
+l'inventaire ; les sets sans bonus 2pc / 4pc atteignable ne s'affichent pas ; infobulle nom + (N owned) /
+desc 2pc / desc 4pc / état).
+- **Require** — édite le **plan actif** de `setPlans` : une liste d'onglets « Plan 1 », « Plan 2 »… ; un plan est
+  un groupe ET (ex. 2pc A + 2pc B), un build passe si **un** plan tient. Clic sur un set = `cycleSetInPlan`
+  (`nextPlanCount`) :
+  ```
+  off → 2pc → 4pc → off
+  ```
+  par plan, en sautant les paliers que l'inventaire ne peut former et ceux qui dépasseraient les 4 slots armor
+  du plan (l'infobulle annonce alors « plan full » au lieu d'un clic sans effet). **+ OR** = `addPlan` (une
+  alternative de plus, qui devient le plan actif), le ✕ d'un onglet = `removePlan` (s'il en reste plus d'un).
+  Une ligne « Match: » résume la contrainte entière (`A ×2 + B ×2  OR  C ×4`) ; un plan à plus de 4 pièces
+  (arrivé par un filter set ou une reco) est signalé en rouge, il ne peut jamais matcher.
+- **Exclude** — clic = `toggleExcludedSet` : la liste globale `excludedSets`, orthogonale aux plans (un set
+  exclu ne rentre dans aucun build).
+
+#### Mains (`screens/builder/AccessoryMainStatsPanel.tsx`)
+Trois lignes (`MAIN_STAT_SLOTS` : Weapon / Accessory / Talisman). Chaque ligne montre les mains
+réellement présents dans l'inventaire pour ce slot (chips icône, catalogue `mainStatCatalogs` de l'écran). Click
+cycle off → **allowed** (cyan, `toggleMainPick` ; OR-allow : pièce exclue si aucune de ses mains ne match)
+→ **excluded** (rose, ✕, `toggleMainExclude` : une pièce qui porte cette main ne rentre jamais dans le
+pool, testée avant les acceptables) → off. Une main n'est jamais les deux à la fois
+(`toggleMainPick` / `toggleMainExclude` effacent l'autre état). Cas d'usage : le
+Talisman, dont les mains sont partagées dans l'équipe et ne se cumulent pas —
+exclure ATK quand un coéquipier en porte déjà un. Le compteur du bouton « Mains »
+compte acceptées + exclues ; le reco ne touche pas aux exclusions.
+
+Les autres slots (helmet/armor/gloves/boots) n'apparaissent pas : leur main est
+fixe en jeu.
+
+#### Effects (`screens/builder/WeaponsAccessoriesPanel.tsx`)
+Trois groupes de chips effect-icon (Weapons / Accessories / Talismans), filtrés par class du héros (gated par
+`classLimit`), clés sur le `setId` de la pièce. Click = `cycleEffectPick` (`nextChipState`) : `off → required →
+excluded → off`. Tooltip : nom + (N owned) / desc T4 / state.
+Un talisman conseillé par **Load reco** (`Talisman` de `/api/reco`, `translateReco.ts`) arrive, avec toute sa
+famille (les talismans de même `name` dans `equipment.json` : le conseil désigne le 6★, les 4★/5★ ont leur propre
+`setId`, `talismanFamilyKeys`), en état **`preferred`** (contour pointillé, badge `~`) : si au moins une pièce du pool talisman — après tous les filtres
+d'`allow()` — porte l'un des `setId` préférés, le pool est restreint à celles-là ; sinon il reste ouvert, comme sans
+conseil (jamais 0 build à cause d'un talisman préféré, contrairement à `required`). En « keep current », le talisman
+porté reste verrouillé. Un clic le fait passer en `required`. Le statut de Load reco signale quand aucun membre
+des familles conseillées n'est possédé.
+
+#### Stat filters (`screens/builder/StatFiltersPanel.tsx`)
+Min/max par stat finale (les 12 de `SOLVER_STATS`), action `setStatFilter`. Appliqué après compose, rejet du
+combo si une stat sort de la bande. Inputs vides = pas de borne ; min > max en rouge. Une borne min retient
+aussi des pièces au prune (`floorScorers`, phase 3) et sert les gemmes avant la priorité (§ 5).
+
+#### Ratings (`screens/builder/RatingFiltersPanel.tsx`)
+Min/max sur les ratings dérivés (`SOLVER_RATINGS` : Cp, HpS, Ehp, EhpS, Dmg, DmgS, Mcd, McdS, DmgH) + **Score** +
+**Swaps** (clé `upg`), action `setRatingFilter`. `cp` et `upg` sont traités spécialement
+(appliqués in-loop quand posés, cf. § 2 / phase 5) — pas via le `FilterSpec[]` compilé
+car ils dépendent du loadout équipé / d'un calcul coûteux non disponible à la compile.
+
+#### Options (`screens/builder/OptionsPanel.tsx`)
+- **Equipped items** (`equippedScope`, action `setEquippedScope`, **défaut ≤ Lower**) — quelles pièces équipées sur
   d'**autres** héros le solver peut piocher. Défaut `lower` : seulement les héros **strictement
   moins** prioritaires (auto-rangés par CP à l'import, par App, sans ouvrir Heroes :
   `useRankDefaults`) → ne déshabille jamais un héros
@@ -350,85 +459,97 @@ Le segmented control **Reforge** (toolbar) + toggles + le multi-select Exclude :
   verrou retient des pièces, pas des gemmes ; elles se changent librement). L'Optimizer le dit
   dans la Library (« Optimizing preset ‹nom› (rank N) — … », perdu au changement de héros) et les gear
   cards nomment le preset d'où vient une pièce (« from preset ‹nom› »).
-- **Keep current** — verrouille les slots déjà équipés à leur pièce actuelle.
-- **Allow broken sets** (`allowBrokenSets`, défaut **true**) — *true* : un set requis partiel
+- **Keep current** (`keepCurrent`, `setOption`) — verrouille les slots déjà équipés à leur pièce actuelle (les
+  gemmes restent réallouées).
+- **Allow broken sets** (`allowBrokenSets`, `setOption`, défaut **true**) — *true* : un set requis partiel
   (ex. un seul `2pc`) laisse n'importe quelle pièce remplir les slots armor libres (comportement
   legacy). *false* : chaque pièce d'armor doit compléter un set (2pc/4pc) → le solver élague en
   plus les pièces set-less/non-formables du pool et rejette les builds à singleton au leaf.
-- **Don't take from…** — **câblé** : `HeroPicker` en `mode="multi"` (`design/HeroPicker.tsx`, le même
+- **Min quality** (`minQuality`, `setMinQuality`, « Any » par défaut) — écarte du pool les pièces sous un palier
+  de qualité (le gate de la phase 2) ; Talisman / EE, sans qualité, sont toujours gardés.
+- **Don't take from…** — `HeroPicker` en `mode="multi"` (`design/HeroPicker.tsx`, le même
   sélecteur que celui du héros, avec portraits, ↑/↓ + Entrée pour cocher, « N selected ») écrit dans
   `excludedHeroes` via `toggleHeroExcluded` / `clearExcludedHeroes`.
 
-### Stat filters
-Min/max par stat finale (12 stats). Appliqué après compose, rejet du combo si une stat sort de la bande. Inputs vides = pas de borne.
+#### reset filters
+Le lien en bout de ligne 2 envoie `resetAll` avec `to: filterDefaults(defaultReforgeMode, defaultRerollPotential)` :
+il **rétablit les défauts** — `INITIAL_FILTERS` avec le mode de reforge et la Transistone par défaut de
+Settings › Solver — et ne vide pas le reducer (Top % revient à 60, Equipped items à ≤ Lower, Allow broken sets à
+true). Les pièces « Never use » (`excludedPieceUids`, globales) et les verrous de presets ne sont pas des filtres :
+il n'y touche pas.
 
-### Rating filters
-Min/max sur les ratings dérivés + Score. `cp` et `upg` sont traités spécialement
-(appliqués in-loop quand posés, cf. § 2 / phase 5) — pas via le `FilterSpec[]` compilé
-car ils dépendent du loadout équipé / d'un calcul coûteux non disponible à la compile.
+### Tableau des résultats (`screens/builder/ResultsTable.tsx`)
+Heatmap rouge-vert par colonne (min/max relatifs au result set actuel, `computeColumnRanges` ; coupée par
+Settings › Display, `gs.builder.heatmap`). Colonnes : sets (effets `wpn` / `acc`), les stats, ratings
+(`TABLE_RATINGS`), **Score**, **Swaps** (clé `upg` = nb de slots qui changent par rapport au loadout actuel — pas
+des améliorations à faire ; triable + filtrable). Tri par clic sur l'en-tête (null → desc → asc → null). Menu
+**columns** (show/hide colonnes, persisté `gs.builder.cols`, `ColumnsMenu` contrôlé) ouvrable par le bouton de la
+barre du tableau **ou par clic-droit sur n'importe quel en-tête** (`onContextMenu` sur le `<tr>` d'en-tête). Le
+curseur **height** de la même barre règle `resultRows` (5 à 15 lignes, `gs.builder.resultRows`, la valeur de
+Settings › Display › Result rows) ; le tableau est virtualisé et défile au-delà. **Clic-droit sur une cellule** de
+stat, de rating ou de CP → menu « Min ≥ v » / « Max ≤ v » (v telle qu'affichée) : pose la borne
+(`setStatFilter` / `setRatingFilter`, l'autre borne gardée), que les popovers montrent, et relance le solve dans
+le mode du dernier solve (`CellMenu`, `onThreshold`). Pas de menu sur score, swaps, effets. **Crit au-delà de
+100** : la cellule CHC affiche la valeur de la fiche (« 100% ») suivie d'un exposant ambre « +42 »
+(`critCellParts` : `critRateUncapped − critRate`, `round1`), tooltip « Crit rate 142% raw — capped at 100%
+in-game, 40% wasted over the 102% tolerance » (règle `overcapOf` ; entre 100 et 102, « within the 2% buffer ») ;
+la heatmap et le tri de la colonne lisent la somme brute (`critRawOf`), ce que dit le tooltip d'en-tête
+(`statHeaderTooltip`) ; le menu de seuil garde la valeur de la fiche. Click sur une ligne → le build sélectionné
+(première ligne sélectionnée après un solve). État `solving…` / erreur / **état vide explicite** (un
+`emptyReason` dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres, EE exceptée : un héros sans EE
+solve sans elle ; un slot vidé (aussi) par une main exclue le dit, « (N dropped: main stat excluded) » ; un
+« Filter » client qui ne garde aucun build affiche « No build passes the current filter. » ; aucun slot vide mais
+« Allow broken sets » off a rejeté chaque loadout armor (cause `"brokenSets"` de l'orchestrateur) → la table le
+dit et propose de le rallumer ou de monter le Top %).
 
-### Substat priority
-- Slider par stat (12 stats) : valeur entière `-1..3`. Stockée dans `priority` (clés user : `atk`, `crc`, `chd`, ...).
-- Slider **Top %** : `5..100`, **défaut 60** (retour terrain : à 30 le vrai meilleur build se trouvait
-  régulièrement juste au-delà de la tranche élaguée — budget ~16 M combos à 60, quelques secondes).
-  Pilote la phase 3 prune ; `100` = exhaustif.
-  À 100 = exhaustif. Sans priorité, il mord quand même dans les **deux** modes :
-  auto-prune CP-pondéré en SOLVE CP (phase 3b), magnitude brute des rolls
-  (`magnitudeScoreOf`) en SOLVE Score (phase 3c).
-- Bouton **(clear)** : `dispatch({type: "clearPriority"})`.
+### Colonne de droite (`StatsPanel.tsx`, `BuildEffectsPanel.tsx`, `SubValuePanel.tsx`, `DmgPer1PctPanel.tsx`, `RightSidebar.tsx`)
+Toute la hauteur, à côté du tableau et des cartes, dans cet ordre :
+- **Current → Projected** (`screens/builder/StatsPanel.tsx`) — `FinalStats` et CP du loadout actuel du héros
+  (col gauche) vs ceux du build sélectionné (col droite, em-dash tant qu'aucune ligne n'est cliquée). Lecture
+  pure, jamais éditable. La colonne projetée porte un **Δ numérique signé** par axe (`proj − current`, arrondi)
+  en plus du tint vert/rouge — le « de combien », pas juste le sens. La ligne crit lit la somme brute
+  (`critRawOf` = `critRateUncapped ?? critRate`, `screens/builder/critCell.ts`) pour le Δ et le tint, et au-delà
+  de la borne de 100 affiche « 100% ⁺42 » (exposant ambre, `critCellParts`) de chaque côté, avec en tooltip la
+  valeur brute et le gaspillage (`critCellTitle`, voir **Overcap** plus bas).
+- **Effects** (`screens/builder/BuildEffectsPanel.tsx`) — passifs d'arme / d'accessoire et bonus de set du build
+  sélectionné, retirés des cartes de pièces.
+- **Sub tick value** et **Damage / +1%** — deux encadrés d'aide en lecture seule, recalculés au changement de
+  héros / niveau / awakening :
+  - **Sub tick value** (`SubValuePanel.tsx`, `lib/subValue.ts`) — pour ATK/DEF/HP, la valeur d'un tick de
+    sub 6★ en **flat** vs en **%** (≈ équivalent flat), gagnant en cyan. Un tick % scale
+    sur `base+evo+awak` (gear-indépendant — le flat gear est ajouté après le ×%, le
+    `(1+buffRate)` s'annule) → le verdict ne dépend que de la base du héros. Valeurs par
+    tick depuis `sub-ticks.json` (dérivé de `subStatPools` outerpedia).
+  - **Damage / +1%** (`DmgPer1PctPanel.tsx`, `lib/dmgValue.ts`) — gain de dégâts attendu pour **+1%** de chaque
+    stat pertinente : la/les stat(s) de scaling du héros (ATK/DEF/HP/**SPD** via `dmgStat` +
+    secondaires `dmgSec`, SPD/EFF/CHC inclus) vs **CHD** vs **DMG inc**, classé, meilleur en
+    cyan. **Calculé à 100% crit** (crit cap = baseline endgame). Réutilise `computeCheapRatings`
+    (modèle dégâts RE 1.4.9). Les héros **no-crit** (`noCrit`, ex. 2000086/2000091/2000008)
+    forcent `critRate = 0` et masquent CHD.
+- **Library** (`screens/builder/RightSidebar.tsx`, localStorage, par héros) :
+  - **Load reco** — la reco outerpedia du héros (`fetchRecoForHero`, `/api/reco`) traduite en patch de filtres
+    (`translateReco.ts` : mains, sets, effets, priorité) et fusionnée par `mergePreset` ; plusieurs builds →
+    `RecoBuildPicker` ; la ligne de statut dit le résultat (rien pour ce héros, échec réseau, avertissements).
+  - **Save build + filter set** — `PromptDialog` pour le nom, puis bookmark du build sélectionné
+    (`lib/storage/savedBuilds.ts` ; il porte son contexte reforge pour reprojeter ses substats à la
+    restauration) **et** du jeu de filtres qui l'a produit sous le même nom (`lib/storage/filterPresets.ts`).
+  - **Save as local preset…** — champ inline (12 caractères, `LOCAL_PRESET_NAME_MAX`) : les 7 pièces du build,
+    sans l'EE, deviennent un preset local (`lib/storage/localPresets.ts`), le héros en référence.
+  - Ligne de statut d'« Optimize preset → » (`presetStatus` : « Optimizing preset ‹nom› (rank N) — pieces of
+    higher-ranked and locked presets excluded »).
+  - **Saved builds** — clic = `restoreBuild` (le build revient dans le tableau et sur les cartes) ; ✕ le supprime.
+  - **Filter sets** — clic = `loadPreset` du jeu nommé ; ✕ le supprime.
 
-Quand priority est uniformément 0 : le pool est **quand même pruné** (phases
-3b/3c, même budget de combos). Côté gems : en SOLVE CP ils **sont réalloués**
-par apport de CP marginal sur le build équipé (`allocateGemsByCp` — cf. § Gems) ;
-seul SOLVE Score garde les gems actuellement socketés (pas de réallocation).
-
-### Main stats
-Trois lignes (Weapon / Accessory / Talisman). Chaque ligne montre les mains
-réellement présents dans l'inventaire pour ce slot (chips icône). Click cycle
-off → **allowed** (cyan, OR-allow : pièce exclue si aucune de ses mains ne match)
-→ **excluded** (rose, ✕ : une pièce qui porte cette main ne rentre jamais dans le
-pool, testée avant les acceptables) → off. Une main n'est jamais les deux à la fois
-(`toggleMainPick` / `toggleMainExclude` effacent l'autre état). Cas d'usage : le
-Talisman, dont les mains sont partagées dans l'équipe et ne se cumulent pas —
-exclure ATK quand un coéquipier en porte déjà un. Le compteur du bouton « Mains »
-compte acceptées + exclues ; le reco ne touche pas aux exclusions.
-
-Les autres slots (helmet/armor/gloves/boots) n'apparaissent pas : leur main est
-fixe en jeu.
-
-### Sets
-Chips icône d'armor-set, gates par feasibility (`canForm2pc / canForm4pc`
-calculés depuis l'inventaire). Click cycle :
-```
-off → req-2pc → req-4pc → excluded → off
-```
-en sautant les transitions impossibles. Sets totalement inutilisables (aucun
-bonus 2pc/4pc atteignable) ne s'affichent pas. Tooltip 3-sections : nom + (N owned) / desc 2pc / desc 4pc / state.
-
-### Weapons, accessories & talismans
-Trois groupes de chips effect-icon (Weapons / Accessories / Talismans), filtrés par class du héros (gated par `classLimit`), clés sur le `setId` de la pièce. Click cycle `off → required → excluded → off`. Tooltip : nom + (N owned) / desc T4 / state.
-Un talisman conseillé par **Load reco** (`Talisman` de `/api/reco`, `translateReco.ts`) arrive, avec toute sa
-famille (les talismans de même `name` dans `equipment.json` : le conseil désigne le 6★, les 4★/5★ ont leur propre
-`setId`, `talismanFamilyKeys`), en état **`preferred`** (contour pointillé, badge `~`) : si au moins une pièce du pool talisman — après tous les filtres
-d'`allow()` — porte l'un des `setId` préférés, le pool est restreint à celles-là ; sinon il reste ouvert, comme sans
-conseil (jamais 0 build à cause d'un talisman préféré, contrairement à `required`). En « keep current », le talisman
-porté reste verrouillé. Un clic le fait passer en `required`. Le statut de Load reco signale quand aucun membre
-des familles conseillées n'est possédé.
-
-### RightSidebar — Library
-Trois sections **câblées** (localStorage, par héros) :
-- **Save / Remove build** — bookmark le build sélectionné (`storage/savedBuilds.ts`).
-  Un build sauvé porte aussi son contexte reforge pour reprojeter ses substats à la
-  restauration.
-- **Filter sets** — sauve / charge / supprime un snapshot de filtres
-  (`storage/filterPresets.ts`, `loadPreset`).
-- **Restore** — repush un build sauvé dans la table + bottom band.
-
-Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
-- **Apply to snapshot** — applique les pièces au héros en réécrivant le snapshot capturé
-  (`equipPieces`, popup de confirmation, jamais d'écriture vers le jeu) ; grisé d'avance, la raison en
-  `title`, tant que le plugin tourne dans le jeu (`applyBlockedReason`, `equip.ts`), le refus 409 restant
-  le filet.
+### Build sélectionné (`BuilderScreen.tsx`, `EquipBuildButton.tsx`)
+La ligne au-dessus des cartes : « Selected build » (ou « No build selected »), **N slots change** et **ΔCP**, puis
+deux actions.
+- **N slots change** est relu sur l'inventaire courant (`buildDiff`, `diffBuildVsLoadout` de `lib/buildDiff.ts`),
+  pas sur l'`upg` du solve : après Apply to snapshot il tombe à 0. La colonne Swaps (cellule et tri) et l'`upg` de
+  l'entrée « + Worklist » lisent le même diff vivant.
+- **ΔCP ±X** (`build.cp − currentCp`, `currentCp` = `calcBattlePower` du loadout équipé, calculé dans
+  `composition`). Le build est compté dans le mode de reforge des résultats, l'équipement tel qu'il est : hors
+  `Off`, le libellé dit la base (`ΔCP +X vs equipped (build at +10R6)`, infobulle d'une phrase — `deltaCpLabel`,
+  `lib/deltaCp.ts`), puisqu'un build identique à l'équipement y affiche un ΔCP positif.
 - **+ Worklist** — pousse le **diff par slot** (slots changés only) **et les gemmes à sertir** sur le
   Talisman / EE du build (`gemAllocation` vs `gemSlots` de la pièce du build, `lib/worklist/changes.ts`) sur
   l'onglet **Worklist** (`screens/WorklistScreen.tsx`, storage `lib/storage/worklist.ts`) : une file
@@ -445,6 +566,11 @@ Au-dessus de la gear band, deux boutons d'action sur le build sélectionné :
   de la ligne parmi celles de cet id, le jeu sertissant dans le premier emplacement libre) ;
   **auto-prune à chaque recapture** et à chaque déplacement suivi en jeu (`reconcileWorklist` retire les
   changements faits + entrées vidées, un toast le dit). Désactivé quand rien ne change (ni pièce ni gemme).
+- **Apply to snapshot** (`screens/builder/EquipBuildButton.tsx`) — applique les pièces au héros en réécrivant le
+  snapshot capturé (`equipPieces`, popup de confirmation « Apply this build to the snapshot? » qui compte les
+  pièces déplacées et celles retirées à un autre héros, jamais d'écriture vers le jeu) ; grisé d'avance, la raison
+  en `title`, tant que le plugin tourne dans le jeu (`applyBlockedReason`, `equip.ts`), le refus 409 restant le
+  filet. Après succès, App réimporte (« Applied to snapshot »).
 
 Equip / Unequip **vers le jeu** restent absents (nécessitent une API jeu inexistante).
 Le bouton **Optimize →** vit côté onglet Heroes (ouvre l'Optimizer sur le héros) ; **Optimize preset →**
@@ -455,51 +581,18 @@ wearer → ») : `optimizeHero` d'`App.tsx`, sans patch. « in Gear » d'une lig
 Gear sur la pièce (`InventoryDrill.pieceUid`). La Worklist dit en tête de liste ce qu'elle réserve
 (`RESERVATION_NOTE`, le comportement de `worklistClaims` ci-dessus).
 
-### FilterFooter (fixed en bas)
-- Chips par slot avec **hit/total (%)** — alimentés par `poolSizes` du précalcul (`precomputeContext`, thread principal).
-- **P** : permutations totales explorées (somme across workers).
-- **S** : permutations qui ont passé tous les filtres (scoring).
-- **Results** : taille du top-N retourné.
-- Indicateur `solving…` (cyan, animé) pendant un run ; une fois fini, **⏱ durée**
-  du dernier solve (wall-clock de tout le `solve()`, précalcul compris, `< 1 s` en ms sinon en s) — l'orchestrator
-  remonte `durationMs` via `onResult`. Sert à jauger la vitesse du solver d'un coup d'œil.
-- **⚙ N workers** : taille du pool de recherche résolu.
-
-### ResultsTable
-Heatmap rouge-vert par colonne (min/max relatifs au result set actuel, `computeColumnRanges`). Colonnes :
-sets, 8 stats principales, ratings (`TABLE_RATINGS`), **Score**, **Swaps**, actions
-(`Swaps`, clé `upg` = nb de slots qui changent par rapport au loadout actuel — pas des améliorations à faire ;
-triable + filtrable). Tri par clic
-sur l'en-tête (null → desc → asc → null). Menu **Columns** (show/hide colonnes, persisté
-`gs.builder.cols`) ouvrable par le bouton de la toolbar **ou par clic-droit sur n'importe
-quel en-tête** (`ColumnsMenu` contrôlé, `onContextMenu` sur le `<tr>` d'en-tête). **Clic-droit
-sur une cellule** de stat, de rating ou de CP → menu « Min ≥ v » / « Max ≤ v » (v telle qu'affichée) :
-pose la borne (`setStatFilter` / `setRatingFilter`, l'autre borne gardée), que les panneaux de filtres
-montrent, et relance le solve dans le mode du dernier solve (`CellMenu`, `onThreshold`). Pas de menu sur
-score, swaps, effets. **Crit au-delà de 100** : la cellule CHC affiche la valeur de la fiche (« 100% ») suivie
-d'un exposant ambre « +42 » (`critCellParts` : `critRateUncapped − critRate`, `round1`), tooltip « Crit rate
-142% raw — capped at 100% in-game, 40% wasted over the 102% tolerance » (règle `overcapOf` ; entre 100 et 102,
-« within the 2% buffer ») ; la heatmap et le tri de la colonne lisent la somme brute (`critRawOf`), ce que dit
-le tooltip d'en-tête (`statHeaderTooltip`) ; le menu de seuil garde la valeur de la fiche. Click sur une ligne → la `BottomGearBand` affiche les 8 pièces. État `solving…` / erreur / **état vide explicite** (un `emptyReason`
-dérivé de `poolSizes` liste les slots tombés à 0 pièce après filtres, EE exceptée : un héros sans EE solve sans elle ;
-un slot vidé (aussi) par une main exclue le dit, « (N dropped: main stat excluded) » ;
-un « Filter » client qui ne garde aucun build affiche « No build passes the current filter. » ; aucun slot vide
-mais « Allow broken sets » off a rejeté chaque loadout armor (cause `"brokenSets"` de l'orchestrateur) → la
-table le dit et propose de le rallumer ou de monter le Top %). L'en-tête « N slots change » du build sélectionné
-est relu sur l'inventaire courant (`buildDiff`), pas sur l'`upg` du solve : après Equip il tombe à 0. La colonne
-Swaps (cellule et tri) et l'`upg` de l'entrée « + Worklist » lisent le même diff vivant.
-
-### BottomGearBand
-8 cartes (mirror compact de l'inventaire) — une par slot, dans l'ordre de l'écran d'équipement du jeu
+### Cartes de pièces (`screens/builder/BottomGearBand.tsx`, `design/GearCard.tsx`)
+8 cartes — une par slot, dans l'ordre de l'écran d'équipement du jeu
 (`GAME_GEAR_GRID`, partagé avec Heroes et Presets) : grille 4 × 2 Arme | EE | Tête | Torse / Accessoire |
 Talisman | Gants | Bottes dès 1616 px de fenêtre (quatre cartes `w-80` à côté de la colonne `w-72`), sinon
 le même ordre passe à la ligne. Chaque carte montre nom,
-enhance level, icône slot, main stat, subs (avec ticks). C'est la carte de pièce de l'Inventaire
+enhance level, icône slot, main stat, subs (avec ticks). C'est la carte de pièce de Gear
 (`design/GearCard.tsx` : `GearCardPanel` autour de `GearCardBody`, `effects="none"`) : même ligne rareté /
 slot, même bloc Qualité (titre, aide au survol, barre), même « Active Effect at +15 Enhancement » ; le passif
-d'arme / d'accessoire et les bonus de set n'y sont pas (la carte « Effects » sous le panneau des stats les
+d'arme / d'accessoire et les bonus de set n'y sont pas (le panneau « Effects » de la colonne de droite les
 montre), l'EE n'y montre que son image et ses gemmes, et la projection marque ses ticks (`+n` cyan, `T+n`
-violet) sur une colonne de sous-stats aussi large que celle de l'Inventaire. En plus :
+violet) sur une colonne de sous-stats aussi large que celle de Gear. Une carte vide dit « No weapon in this
+build » (ou « No weapon yet » avant toute sélection, « Solve, then pick a build in the table. »). En plus :
 - **Mode compact** (Settings › Display › Compact result cards, `gs.builder.compactCards`, éteint par défaut) :
   cartes `w-56` — la grille démarre alors à 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, l'EE et le talisman
   dans UNE carte (`ResultPairDetail` : EE en haut, talisman en bas, un filet entre les deux, chacun son action
@@ -514,7 +607,7 @@ violet) sur une colonne de sous-stats aussi large que celle de l'Inventaire. En 
   signée ; le bonus +15 en grade coloré + icône + libellé court + valeur, `S+ DS DMG+ +12%`, par
   `singularityShortLabel` / `singularityGrade` ; ou nom court) ; passif multi-paliers du talisman non rendu,
   son texte (paliers visibles, actifs d'abord, séparés par « · ») dans le `title` du nom ; pied = rangée d'icônes d'action (`CardActions`, aujourd'hui exclure / inclure).
-  L'Inventaire et les tooltips (le même `GearCardBody`, jamais compact) ne bougent pas.
+  Gear et les tooltips (le même `GearCardBody`, jamais compact) ne bougent pas.
 - **Talisman / EE** : l'allocation de gemmes recommandée par le build (stat + valeur,
   badge **swap** si elle diffère des gemmes socketées).
 - **Stats projetées** : si le mode Reforge ≠ Off, main + subs affichés sont la projection
@@ -523,18 +616,26 @@ violet) sur une colonne de sous-stats aussi large que celle de l'Inventaire. En 
   cible, le **passif de singularité** projeté (**+15R9 uniquement**), et un badge cyan **`+N`** par sub
   indiquant les ticks de reforge ajoutés par la projection (delta vs la pièce capturée).
 - **État d'équipement** : badge par carte — 🟠 portrait + nom si la pièce est équipée sur un
-  **autre héros** (l'appliquer la lui retire), 🟢 `equipped` si déjà sur le héros courant, `free` sinon.
+  **autre héros** (l'appliquer la lui retire), 🟢 `equipped` si déjà sur le héros courant, `free` sinon ;
+  « from preset ‹nom› » quand un autre preset du jeu la tient (`presetHoldersOf`, mieux classé d'abord).
 - **Diff par slot** : une carte dont la pièce **diffère du loadout équipé** (même définition que
   `upg`) porte un **liseré cyan** + une ligne `← <pièce remplacée>` (ou `+ new slot` si le slot
   était vide). Pièce proposée, pièce portée et « slot changé » viennent d'une seule fonction,
-  `diffBuildVsLoadout` (`lib/buildDiff.ts`), que lisent aussi Equip et + Worklist. Le
-  header de la band résume le tout : **`N slots change`** + **`ΔCP ±X`** (`build.cp − currentCp`,
-  `currentCp` = `calcBattlePower` du loadout équipé, calculé dans `composition`). Le build est
-  compté dans le mode de reforge des résultats, l'équipement tel qu'il est : hors `Off`, le libellé
-  dit la base (`ΔCP +X vs equipped (build at +10R6)`, infobulle d'une phrase — `deltaCpLabel`,
-  `lib/deltaCp.ts`), puisqu'un build identique à l'équipement y affiche un ΔCP positif.
+  `diffBuildVsLoadout` (`lib/buildDiff.ts`), que lisent aussi Apply to snapshot et + Worklist.
+- **Never use** (`onToggleExclude` → `toggleExclude` d'App, `gs.solver.excludedPieces`) — écarte la pièce de tous les
+  solves, comme le clic droit sur sa tuile dans Gear ; pas une action du reducer.
 
-Em-dash quand aucun build n'est sélectionné.
+### Pied fixe (`screens/builder/FilterFooter.tsx`)
+- Chips par slot avec **hit/total (%)** — alimentés par `poolSizes` du précalcul (`precomputeContext`, thread principal).
+- **P** : permutations totales explorées (somme across workers).
+- **S** : permutations qui ont passé tous les filtres (scoring).
+- **Results** : taille du top-N retourné (ou de ce que garde le Filter client).
+- Indicateur `solving…` (cyan, animé) pendant un run ; une fois fini, **⏱ durée**
+  du dernier solve (wall-clock de tout le `solve()`, précalcul compris, `< 1 s` en ms sinon en s) — l'orchestrator
+  remonte `durationMs` via `onResult`. Sert à jauger la vitesse du solver d'un coup d'œil.
+- **⚙ N workers** : taille du pool de recherche résolu (Settings › Solver › Worker threads).
+- **Copy Debug Info** : seulement avec Settings › Advanced › Solver fan-out logging (`gs.debug.solver`) — copie le
+  diagnostic du dernier solve (précalcul vs recherche, tailles de pools, P/S, CP top vs actuel) en JSON.
 
 ### Onglet Presets
 Onglet entre Optimizer et Worklist (`screens/presets/PresetsScreen.tsx`), une carte par preset d'équipement du
@@ -572,7 +673,7 @@ pleine largeur, puis les cartes en grille à deux colonnes au-delà de 1280 px, 
 (les presets Master League après les autres), favoris d'abord, puis l'ordre du joueur
 (`Preset.sortOrder`, lu dans `PresetOrderList` par `Num`, 0 sans entrée) décroissant, puis `num`. Le
 `#num` reste affiché. La barre du haut porte les cinq chips de classe (`CLASSES` de `lib/gear/overviewStats.ts`,
-multi-sélection), un sélecteur « Sort: In-game · Class » et « Clear ». La classe d'un preset
+multi-sélection), un sélecteur « Sort: In-game · Class · Rank » et « Clear ». La classe d'un preset
 (`presetClasses`) vient de ses pièces (arme ou accessoire restreint à une classe, `GearPiece.classLimit` ;
 deux classes différentes sont gardées toutes deux), à défaut du héros de référence, des porteurs, puis des
 associés ; sinon elle est inconnue. Un filtre garde une carte dont l'une des classes est cochée et masque
@@ -582,6 +683,23 @@ les cartes vides ou de classe inconnue ; « Class » trie par la première class
 des cartes sont masquées. Les chips, le tri, le dernier « Expand all / Collapse all » et l'ouverture de
 chaque carte sont un état de vue : gardés au changement d'onglet (sessionStorage, `gs.presets.classFilter`,
 `gs.presets.sort`, `gs.presets.forced`, `gs.presets.open`), pas au relancement.
+
+**Rang et verrou.** Chaque preset du jeu a un **rang** (`gs.presets.rank`, `lib/storage/presetPriority.ts`, modèle
+positionnel 1..N comme les héros : `RankInput` + poignée ⠿ en « Sort: Rank », `reorderRank` / `moveRankBefore`) et
+un bouton **Lock** / 🔒 **Locked** (`gs.presets.locked`, `toggleLocked`, contour ambre). Les rangs par défaut ne sont
+plus posés au montage de l'écran : App les pose **à chaque import** (`hooks/useRankDefaults.ts` →
+`rankDefaults` de `lib/storage/rankDefaults.ts`, dans l'ordre du jeu, sous les rangs déjà posés ; un preset dont
+on a effacé le rang reste sans rang), comme pour les héros — l'Optimizer lit donc des presets classés sans que
+l'onglet ait été ouvert. Le solveur les lit par `presetHolds` (`lib/presets/presetHolds.ts`, cf. § 4, popover
+Options) : « Optimize preset → » ne prend aucune pièce d'un preset de rang égal ou meilleur, et les pièces d'un
+preset verrouillé ne sortent dans aucun solve sauf le sien. **Le verrou retient les pièces, jamais les gemmes** :
+ni le pool de gemmes de l'Optimizer ni les gemmes d'EE proposées ici n'en tiennent compte (voir plus bas).
+
+**Presets locaux.** Sous les presets du jeu, une section « Local presets » (`lib/storage/localPresets.ts`) : nom
+(12 caractères, la limite du jeu) + 7 pièces, sans EE, créés par « Save as local preset… » de l'Optimizer ou
+« Copy as local preset » d'une carte du jeu. Même carte avec un badge **Local**, la ligne du héros de référence
+(score, Optimize →) ; ni rang, ni verrou, ni associés, ni Worklist, ni « Optimize preset → » ; **Rename** sur place,
+**Delete** en deux clics (« Delete? »). Ils ne retiennent aucune pièce d'un solve.
 
 Un preset = la tenue d'**un perso de référence**, portée telle quelle par des **persos associés** qui se
 règlent par les gemmes de leur propre EE. Les groupes se font à la main (sélecteur de héros ; un porteur
@@ -685,11 +803,11 @@ qu'il vient des gemmes d'EE proposées.
 
 **Remplissage par la stat utile du héros** : avec une priorité partielle (ex. `{ critDmg: 3 }`), les gemmes d'une stat sans priorité valent `score = 0` ; elles ne sont plus jetées mais complètent les emplacements libres — une gemme posée n'enlève rien à la fiche, un emplacement vide si. Seules les gemmes de score **exactement 0** remplissent (une stat à priorité négative n'est jamais posée, ni une stat qui porte un `max` dans `statFilters` : elle ferait sortir le build de la bande). Ordre : le gain relatif de `dmg` qu'apporte la gemme (`gemDmgGains`, modèle de `computeCheapRatings` avec `dmgStat` / `dmgSec` / `noCrit` — celui du panneau « DMG per 1 % »), **pesé une fois par solve sur le build équipé** ; à gain nul (stat hors du modèle, CHC au cap, CHC/CHD d'un héros `noCrit`), par magnitude brute `value / ROLL_NORMS`. Porté par `ScoredGem.fill`, posé par `scoreGemPool` et lu par les quatre allocateurs (`pickOrder` : les priorités dans leur ordre, puis les remplissages) — la répartition affichée et le delta composé ne divergent pas. Inchangé : SOLVE Score sans aucune priorité (fallback `null` ci-dessous) et le score du build (`computeScore` ne lit que la priorité) ; en SOLVE CP sans priorité, les gemmes à poids CP nul remplissent par la même règle.
 
-**Cap-reaching CHC (slow path, par combo)** : quand l'utilisateur priorise `crc` **et** le pool a des gems crit (`wantCritCap`), l'allocation est **étagée** (`allocateGemsReachingCap`) :
+**Cap-reaching CHC (slow path, par combo)** : quand l'utilisateur priorise `critRate` **et** le pool a des gems crit (`wantCritCap`), l'allocation est **étagée** (`allocateGemsReachingCap`) :
 1. **Étage 1** — dépenser des gems crit pour **atteindre** le cap CHC à 100 % (en priorité, même si l'atk score plus haut), overshoot ≤ un gem 3 %.
 2. **Étage 2** — remplir le reste **par priorité puis par remplissage** (en sautant tout gem crit une fois le cap atteint, désormais gaspillé — une gemme crit de remplissage suit le même saut).
 
-Le pré-gem CHC du combo est récupéré depuis `fs.critRateUncapped − defaultCrcGem` (le crit rate est purement additif ; la somme non bornée, la CHC de la fiche étant bornée à 100). On ne **recompose** que si le delta cap-aware diffère du greedy par défaut (`gemDeltaEquals`) — souvent identique quand les gems crit rankent déjà haut. Le cas sans priorité crc (ex. fallback SOLVE CP, ou des gemmes crit de remplissage) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.critRateUncapped > 102`) — lui aussi gated par `gemDeltaEquals` avant recompose.
+Le pré-gem CHC du combo est récupéré depuis `fs.critRateUncapped − defaultCrcGem` (le crit rate est purement additif ; la somme non bornée, la CHC de la fiche étant bornée à 100). On ne **recompose** que si le delta cap-aware diffère du greedy par défaut (`gemDeltaEquals`) — souvent identique quand les gems crit rankent déjà haut. Le cas sans priorité `critRate` (ex. fallback SOLVE CP, ou des gemmes crit de remplissage) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.critRateUncapped > 102`) — lui aussi gated par `gemDeltaEquals` avant recompose.
 
 Les deux allocateurs sont **mémoïsés par `(talismanSlots, preGemCrc)`** (`capAllocCache`, par run
 `solveChunk`) : purs en (pool, slots, preGemCrc) avec pool + slots EE constants par solve, et le CHC
@@ -780,7 +898,7 @@ lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloqu
    union-des-chunks == mono-chunk dans `solveChunk.test.ts`.
 
 4. **`pieces` array hoisted + mutée en place** — évite 10M+ allocations dans
-   la boucle inner. Sûr car `computeFinalStats` ne garde pas la référence.
+   la boucle inner. Sûr car ni `aggregatePrefixBuckets` ni `computeFinalStatsFromPrefix` ne gardent la référence.
 
 4b. **Accumulateur de buckets incrémental** — les 6 pièces invariantes
     (weapon..accessory) sont agrégées **1× par itération accessory**
@@ -817,7 +935,7 @@ lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloqu
    tableau plat itéré par index. Mineur mais cumulé sur des millions de combos.
 
 10. **Set bonuses hoistés** — `computeSetBonuses` (rebuild de Map + lookups) est calculé
-    1× par combo accessory et passé à `aggregateGearBuckets`, pas recalculé par talisman.
+    1× par combo accessory et passé à `computeFinalStatsFromPrefix`, pas recalculé par talisman.
     Bit-identique (invariant sur la boucle talisman puisque le talisman n'a pas d'`armorSetId`).
 
 11. **Min-heap top-K** — `O(N log K)` au lieu de `O(N log N)` si on triait
@@ -872,39 +990,73 @@ apps/renderer/src/
 ├── workers/
 │   └── solver.worker.ts          ← thin adapter IPC ↔ engine
 ├── lib/
+│   ├── settings.ts                ← registre des réglages (clé, défaut, bornes, libellé, aide) : Settings, App et les lecteurs hors React
+│   ├── statRegistry.ts            ← vocabulaire unique des stats (noms moteur) : ROLL_NORMS, STAT_NORMS, STAT_TO_PRIORITY, LEGACY_STAT_KEY_RENAME
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
 │   ├── overcap.ts                 ← overcapOf + overcapText (caps CRC 102 / PEN 100 gaspillés, Heroes et Presets)
+│   ├── deltaCp.ts                 ← deltaCpLabel : le « ΔCP … vs equipped (build at +10R6) » du build sélectionné
+│   ├── buildDiff.ts               ← diffBuildVsLoadout : slots changés, lu par N slots change, Swaps, Apply to snapshot, + Worklist
 │   ├── heroPriority/
 │   │   └── weights.ts              ← hasPriority + effectivePriority + priorityOf : la priorité d'un héros, une source (Optimizer, Presets, solveur)
+│   ├── heroes/
+│   │   ├── heroName.ts             ← nom affiché d'un héros + recherche (surnom, nom de base, id, « fusion »)
+│   │   └── heroListOrder.ts        ← l'ordre unique des listes de héros (rang, CP si demandé, capture) : HeroPicker, Heroes
+│   ├── gear/
+│   │   └── overviewStats.ts        ← statistiques de Gear › Overview (qualité, répartition, classes, CLASSES)
+│   ├── reco/
+│   │   ├── fetchReco.ts            ← fetchRecoForHero (/api/reco)
+│   │   ├── translateReco.ts        ← reco → patch de filtres (Load reco)
+│   │   └── recoPriority.ts         ← recoPriorityOf : la priorité seule, posée par Solve sans poids
 │   ├── presets/
 │   │   ├── presetRows.ts           ← presets du jeu : pièces, porteurs (presetSignature), pièces absentes / partagées, classe, filtre / tri
+│   │   ├── presetHolds.ts          ← rangs + verrous des presets → pièces tenues (solveur, « from preset ‹nom› »)
 │   │   ├── evaluate.ts             ← evaluatePresetFor + bestKnownFor + presetLoss + heroBases + presetOvercap (onglet Presets)
 │   │   ├── eeGems.ts               ← bestEeGemsFor : gemmes d'EE par héros, pièces du preset fixées
 │   │   ├── presetWorklist.ts       ← presetWorklistFor : l'entrée Worklist d'un héros du preset
 │   │   └── optimize.ts             ← presetOptimizePatch + presetOptimizeNote : « Optimize preset → » (effets requis, sous-stats prioritaires)
 │   ├── storage/
+│   │   ├── keys.ts                 ← registre des clés gs.* (store, sauvegarde, fusion à l'import) : Export / Import de Backup
 │   │   ├── savedBuilds.ts          ← bookmark de builds par héros (localStorage)
 │   │   ├── presetHeroes.ts         ← référence + associés par preset (localStorage)
+│   │   ├── presetPriority.ts       ← rangs et verrous des presets (localStorage)
+│   │   ├── rankDefaults.ts         ← rangs par défaut des héros et des presets, posés par App à chaque import
+│   │   ├── localPresets.ts         ← presets locaux (localStorage)
 │   │   ├── heroFilters.ts          ← filtres gardés par héros (localStorage, écrits à chaque changement)
-│   │   └── filterPresets.ts        ← snapshots de filtres par héros (localStorage)
+│   │   └── filterPresets.ts        ← filter sets par héros (localStorage)
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
-│       ├── builderFilters.ts       ← SolverFilters + reducer de l'Optimizer + INITIAL_FILTERS + buildSolveFilters
+│       ├── builderFilters.ts       ← SolverFilters + reducer de l'Optimizer (21 actions) + INITIAL_FILTERS + filterDefaults + buildSolveFilters
+│       ├── reforge.ts              ← REFORGE_MODES (libellés, infobulles) + migration useReforged → reforgeMode
+│       ├── reroll.ts               ← potentiel Transistone (rerollPotential)
 │       ├── orchestrator.ts         ← pool de Web Workers, fan-out/fan-in, top-N merge
-│       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + simulateReforges
+│       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + keepTopUnion + pruneDominatedForCp + simulateReforges
 │       ├── gems.ts                 ← buildGemPool + scoreGemPool + allocateGems + allocateGemsByCp
-│       ├── ratings.ts              ← computeCheapRatings + computeScore + STAT_NORMS + STAT_TO_PRIORITY
+│       ├── ratings.ts              ← computeCheapRatings + computeScore
 │       └── cp.ts                   ← calcBattlePower (reverse-engineered)
+├── design/
+│   ├── Shell.tsx                   ← en-tête : onglets, pastille de capture, bouton d'action, Reload, badge de mise à jour, Settings
+│   ├── GearCard.tsx                ← la carte de pièce unique (Gear, Heroes, Presets, résultats de l'Optimizer, compacte ou non)
+│   ├── HeroPicker.tsx              ← le sélecteur de héros unique, simple (Optimizer, Reference) ou multiple (Don't take from…, Associated)
+│   └── settings/                   ← SettingsModal + les six panneaux (SteamSetupPane, DataPane + UpdateCard, SolverPane, DisplayPane, BackupPane, AdvancedPane + LogsPane)
 └── screens/
-    ├── builder/
-    │   ├── BuilderScreen.tsx       ← useReducer(SolverFilters) + mise en page + changement de héros + builds/presets/reco
+    ├── BuildsScreen.tsx            ← onglet Heroes : roster équipé/composé, rang, notes, computeAdvice, Optimize →
+    ├── FirstCapture.tsx            ← état vide de première installation (Heroes et Gear)
+    ├── builder/                    ← onglet Optimizer
+    │   ├── BuilderScreen.tsx       ← useReducer(SolverFilters) + mise en page + changement de héros + builds/presets/reco + build sélectionné
     │   ├── useSolverSession.ts     ← orchestrator wiring : solve/cancel, estimation pré-solve, progression, résultats
-    │   ├── BuilderToolbar.tsx      ← héros · Solve · toggles + popovers (un fichier par panneau : OptionsPanel, SetsPanel…)
-    │   ├── ResultsTable.tsx        ← table virtualisée, tri, heatmap, menu des colonnes
-    │   ├── BottomGearBand.tsx · RightSidebar.tsx · FilterFooter.tsx · StatsPanel.tsx · …
+    │   ├── BuilderToolbar.tsx      ← ligne 1 (héros, Score | CP, Solve / Cancel, Filter) + ligne 2 (Reforge, bascules, popovers, reset filters)
+    │   ├── PriorityBanner.tsx      ← bandeau « No priority set » / « Priority from outerpedia reco »
+    │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · WeaponsAccessoriesPanel.tsx
+    │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← les sept popovers
+    │   ├── ResultsTable.tsx        ← table virtualisée, tri, heatmap, menu des colonnes, hauteur, menu de seuil
+    │   ├── StatsPanel.tsx · BuildEffectsPanel.tsx · SubValuePanel.tsx · DmgPer1PctPanel.tsx · RightSidebar.tsx   ← colonne de droite
+    │   ├── EquipBuildButton.tsx    ← Apply to snapshot (confirmation, raison grisée)
+    │   ├── BottomGearBand.tsx · FilterFooter.tsx   ← cartes du build sélectionné, pied fixe
     │   └── catalogs.ts · statColumns.ts ← catalogues tirés de l'inventaire, tables stats/ratings
-    ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset (ordre du jeu, filtre / tri par classe), grille du jeu, référence, associés, gemmes d'EE, perte, overcap, + Worklist, Optimize → / Optimize preset →
-    └── BuildsScreen.tsx            ← roster équipé/composé + computeAdvice + Optimize →
+    ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset (ordre du jeu, filtre / tri par classe ou rang), grille du jeu, référence, associés, gemmes d'EE, perte, overcap, rang et verrou, presets locaux, + Worklist, Optimize → / Optimize preset →
+    ├── WorklistScreen.tsx          ← onglet Worklist : cartes par héros, réservations, Apply locally / Apply all, Remove
+    ├── gear/                       ← onglet Gear (ex-onglets Inventory et Home) : GearScreen.tsx (sous-onglets Overview / Pieces / Scrap), OverviewView.tsx + overview/
+    └── inventory/                  ← la grille de Gear › Pieces et › Scrap : InventoryScreen, FilterModal, ScrapCard, ItemDetail, VirtualGearGrid
 ```
 
 Bonus :
@@ -919,7 +1071,7 @@ Bonus :
 2. Onglet Optimizer → choisir un héros équipé.
 3. Cliquer **SOLVE** sans aucun filtre/priority → la table doit se remplir, P/S incrémentent.
 4. Cliquer une ligne → bottom band affiche les 8 pièces.
-5. Mettre `Crc min = 90` puis re-SOLVE → tous les builds retournés satisfont la borne.
+5. Mettre CHC min = 90 (popover Stat filters) puis re-SOLVE → tous les builds retournés satisfont la borne.
 6. Activer `Sharp 4pc required` → helmet/armor/gloves/boots des builds sont tous Sharp.
 7. **Comparaison régression** : SOLVE avec priority vide + Top 100% + Keep current + **Reforge Off**
    (le défaut +10R6 projette à +10 → ne matcherait pas la card) → le top-1 doit avoir les mêmes

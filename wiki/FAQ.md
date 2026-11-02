@@ -14,7 +14,7 @@ import your snapshot files by hand with the **Manual fallback** picker at the bo
 window.
 
 **I used the emulator capture of an older version — what now?**
-That source is gone: install OUTERPLANE from Steam and the capture plugin (Settings → Setup).
+That source is gone: install OUTERPLANE from Steam and the capture plugin (Settings › Setup).
 The app deleted its own capture certificate folder on the first launch of the new version. On
 the emulator, the certificate it had trusted only lasted until the instance restarted — restart
 it once and it's no longer trusted (a few leftover files under `/sdcard` can be deleted by hand;
@@ -35,7 +35,7 @@ the game folder is the usual culprit.
 **What does the plugin do to my game?**
 It reads the responses the game already received and copies them to the app's folder. It
 changes nothing in the game, sends nothing to the server, and can be removed from
-**Settings → Setup → Remove plugin**. It is still a third-party mod loaded into the client.
+**Settings › Setup › Remove plugin**. It is still a third-party mod loaded into the client.
 
 **My hero stats are slightly off vs the in-game character sheet.**
 Two stat sources (Codex and Geas) aren't sent on the lobby screen. Open the in-game **Hero
@@ -50,7 +50,7 @@ live in the app's local storage. Nothing leaves your machine.
 
 ## After a game patch
 
-**Stats or items look wrong / outdated after an OUTERPLANE update.**
+**Stats or gear look wrong / outdated after an OUTERPLANE update.**
 The app refreshes its game tables on launch, but you can force it: **Settings › Data & updates › Sync
 game data**, then **re-capture** your account. The loaded snapshot's version is shown in
 **Settings › Data & updates** (a short hash) so you can confirm it changed.
@@ -64,7 +64,9 @@ Your rules are too strict for your inventory. Common causes:
 - A **set requirement** you can't physically complete (not enough pieces of that set).
 - **Stat filters** set too high (e.g. Speed ≥ 250 when nothing reaches it).
 - **Top %** set very low — raise it (lower Top % is faster but can drop valid builds).
-The empty-state message lists which slot dropped to zero pieces after filtering.
+The empty-state message lists which slot dropped to zero pieces after filtering. A piece marked
+**Never use** or held by a **locked** preset never enters a solve either. (The popovers:
+[The filter popovers](Using-the-App#the-filter-popovers).)
 
 **Solve in CP mode is slow.**
 CP is heavier to compute than Score. Lower the **Top %**, add a few **filters** to shrink the
@@ -73,23 +75,23 @@ search, or use **Score** with priorities if you just want a stat profile.
 **A solve is taking too long.**
 Click **Cancel** to stop it. Note you usually get *no* partial results — only work chunks that
 had already fully finished are kept, which is typically none. Then tighten **Top %** / filters,
-or raise the worker count in **Settings → Solver** (Auto already uses most of your CPU), and
+or raise the worker count in **Settings › Solver** (Auto already uses most of your CPU), and
 re-solve.
 
 **Ctrl+R (or F5) does nothing.**
 On purpose: reloading the window would kill a running solve or plugin install, so the app's menu
 has no reload. To refresh the game data use **Settings › Data & updates › Sync game data**; the
 rest of the menu (zoom, full screen, developer tools on **F12**) shows when you press **Alt** —
-see [Using the App](Using-the-App).
+see [The menu bar](Using-the-App#the-menu-bar).
 
 **What's the "Swaps" column?**
 How many gear slots a build changes vs what the hero currently wears — not upgrades to do. Low
 Swaps = a small change you can equip in a few moves; high Swaps = a bigger reshuffle.
 
 **Score vs CP — which do I use?** (the **Score | CP** switch next to **Solve**)
-- Use **Score** when you know the stats you want (set priorities, optionally stat filters). With
-  no priority set, Solve takes the weights of the hero's Outerpedia reco — or goes by CP when the
-  hero has none.
+- Use **Score** when you know the stats you want (set the **priority**, optionally stat filters).
+  With no priority set, Solve takes the weights of the hero's Outerpedia reco (**Load reco**
+  loads the whole reco) — or goes by CP when the hero has none.
 - Use **CP** when you just want the highest in-game Combat Power.
 
 **Can the app equip gear onto my heroes for me?**
@@ -99,7 +101,8 @@ snapshot (after a confirmation popup; greyed out while the game is open), and th
 there's no game API for that, so these only edit the local snapshot (and only while the game is
 closed). With the game open you don't need them: equip the pieces and socket the gems in-game and the
 app follows each change on its own within a few seconds (no need to go back to the lobby), so
-the Worklist lines tick themselves as **applied**. Upgrades you do in-game (enhance, limit break,
+the Worklist lines tick themselves as **applied**. (Which one to use:
+[A typical session](Using-the-App#a-typical-session).) Upgrades you do in-game (enhance, limit break,
 smelting, reset, merge, craft) reach the app the same way (capture plugin 0.4.0+): the
 inventory shows the new +N and the fodder pieces disappear. So do sales and locks (capture plugin
 0.5.0+) and dissolves (capture plugin 0.5.1+): a piece sold or dissolved in-game leaves the
@@ -107,11 +110,12 @@ inventory (a Worklist line on it says the piece is gone), a piece locked in-game
 
 ---
 
-## Builds & data management
+## Saved builds & data management
 
 **Where are my saved builds stored? How do I move them to another PC?**
-In the app's local storage. Use **Settings → Backup → Export** to download them as JSON, then
-**Import** on the other PC. Captured gear isn't part of the backup — re-capture your account
+In the app's local storage. Use **Settings › Backup › Export backup** to download them as JSON —
+with your filter sets, local presets, ranks, locks, never-use pieces, worklist and notes —, then
+**Import backup** on the other PC. Captured gear isn't part of the backup — re-capture your account
 there.
 
 **I want a clean slate.**

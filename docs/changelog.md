@@ -8,6 +8,120 @@
 
 ## Items de backlog clôturés (index)
 
+### 📖 Manuel et `docs/solver.md` § 4 réécrits pour la navigation 2.0, C17 à C20 soldés (U14, G106) (2026-11-02)
+- ✅ **Pourquoi.** Lot U14 de `docs/ux-audit-2026-11-01.md` (tableau 5.e), dernier de la refonte : une fois la
+  navigation stabilisée (variante A, cinq onglets Heroes, Optimizer, Presets, Worklist, Gear), réécrire le manuel
+  dans l'ordre des onglets avec le glossaire 5.c, et `docs/solver.md` § 4 sur le même plan, en soldant les constats
+  C17 à C20 de `docs/audit-2026-10-31.md` (section « nettoyage »). Lot documentaire : aucun fichier `.ts` / `.tsx`
+  ne change.
+- ✅ **`wiki/Using-the-App.md` réécrit dans l'ordre des onglets.** Intro (l'en-tête : pastille de capture, bouton
+  d'action, Reload, badge « vX ready », bouton Settings ; atterrissage Heroes ; état vide de première installation),
+  puis **A typical session** (dix lignes : lancer, recharge seule du snapshot, Optimize →, priorité ou reco, règles,
+  Solve, lecture, + Worklist ou Apply to snapshot, changements en jeu, Worklist qui s'épure), **Heroes** (rang et
+  ⠿, Advice, Notes, filtres et **Reset**), **Optimizer** en huit sous-sections (ligne 1 : héros, Score | CP, Solve
+  qui devient Cancel, Filter / ✕ ; bandeau de priorité et ses trois actions ; ligne 2 : Reforge, Maxed only,
+  Transistone potential ; les sept popovers Priority, Sets, Mains, Effects, Stat filters, Ratings, Options et
+  **reset filters** ; tableau, menu **columns**, curseur **height**, clic droit ; colonne de droite Current →
+  Projected, Effects, Sub tick value, Damage / +1%, Library ; build sélectionné, ΔCP, + Worklist, Apply to
+  snapshot et sa raison grisée ; cartes de pièces, compactes ou non ; pied), **Presets** (seuil de perte réglé dans
+  la phrase de tête, perte en jets réels, Sort In-game / Class / Rank, rang et verrou — qui retient les pièces, pas
+  les gemmes —, Optimize preset →, presets locaux), **Worklist** (+ **Remove**), **Gear** (Overview / Pieces /
+  Scrap, texte d'U13 repris), **Settings** (six panneaux, texte repris), **The menu bar**, **Keeping things up to
+  date** (+ la mise à jour du plugin). Corrigé au passage contre le code : le cycle des Sets était décrit « require
+  2-pc → require 4-pc → exclude → off » (c'est une bascule Require / Exclude et off → 2pc → 4pc → off par plan),
+  la Library n'a ni « Save / Remove build » ni « Restore » (c'est **Save build + filter set**, un clic sur un build
+  sauvé, ✕), **reset filters** rétablit les défauts au lieu de « tout vider », Min quality manquait. Glossaire
+  appliqué : « outfit » → preset (ou loadout pour ce que porte un héros), « item » → piece, « Get preset » → Load
+  reco, « current gear » → loadout là où c'est l'équipement porté.
+- ✅ **Ancres.** Inchangées : `#heroes--your-roster`, `#optimizer--optimize-a-hero`,
+  `#presets--your-in-game-equipment-presets`, `#worklist--queued-gear-changes`, `#gear--browse-your-pieces`,
+  `#overview`, `#pieces`, `#scrap`, `#the-menu-bar`, `#keeping-things-up-to-date`. Disparues (aucun lien n'y
+  menait) : `#1-pick-a-hero-pick-a-mode`, `#2-tell-it-what-you-want-the-top-panels`, `#3-options`,
+  `#4-read-the-results`, `#5-save-what-you-like`, `#settings-the-settings-button` (→ `#settings`). Nouvelles :
+  `#a-typical-session`, `#toolbar-first-row-hero-and-solve`, `#the-priority-banner`,
+  `#toolbar-second-row-reforge-and-quick-toggles`, `#the-filter-popovers`, `#the-results-table`,
+  `#the-right-column`, `#the-selected-build`, `#the-piece-cards`, `#the-footer`. Liens contrôlés (`grep -rn
+  "Using-the-App#" wiki README.md docs`, slug GitHub recalculé par script sur `grep -n "^## \|^### "`) : les onze
+  existent — `wiki/Getting-Started.md` ×7 (`a-typical-session` et les six sections d'onglet / Settings),
+  `wiki/FAQ.md` ×3 (`the-filter-popovers`, `the-menu-bar`, `a-typical-session`), `wiki/Solver.md` ×1
+  (`optimizer--optimize-a-hero`). `README.md`, `wiki/Home.md`, `wiki/Architecture.md`, `wiki/Capture-Pipeline.md`,
+  `wiki/Data-Schema.md`, `wiki/Engine-Reference.md` n'ont aucun lien d'ancre vers le manuel.
+- ✅ **Pages joueur autour.** `wiki/Getting-Started.md` relu contre le code et l'audit 2.a : le modal s'ouvre sur
+  Setup, Heroes dit « No account captured yet » derrière, Install plugin grisé jeu ouvert, ligne Proton, les quatre
+  clics Install plugin → Launch game → Re-check → **Close** (le modal ne se ferme pas seul), l'arrivée
+  **silencieuse** du premier import, l'étape Hero Archive / Gift (Codex / Geas) et son effet sur les stats, une
+  sous-section **Manual fallback** ; § 4 « Next steps » dans l'ordre des onglets. `wiki/Home.md` : l'accroche de
+  chaque onglet dans l'ordre, Linux AppImage, « Apply to snapshot » (au lieu de « Apply to snapshot → hero »).
+  `wiki/FAQ.md` : « › » partout, « Stats or gear look wrong », « Saved builds & data management », Export backup /
+  Import backup et ce que la sauvegarde emporte, liens vers les sections du manuel. `README.md` : la liste des cinq
+  onglets dans l'ordre (le README n'a aucune capture d'écran nommée), « Apply to snapshot ».
+- ✅ **`docs/solver.md` § 4 réécrit** (miroir `wiki/Solver.md`, section par section) sur le plan du manuel, chaque
+  panneau avec son fichier et l'action du reducer qu'il envoie (`solverFiltersReducer`, 21 actions) : ligne 1
+  (`BuilderToolbar.tsx`, `design/HeroPicker.tsx`), `PriorityBanner.tsx`, ligne 2 (`lib/solver/reforge.ts`,
+  `setReforgeMode`, `setOption`), les popovers (`SubstatPriorityPanel.tsx` `setPriority` / `setTopPct` /
+  `clearPriority`, `SetsPanel.tsx` `cycleSetInPlan` / `addPlan` / `removePlan` / `toggleExcludedSet`,
+  `AccessoryMainStatsPanel.tsx` `toggleMainPick` / `toggleMainExclude`, `WeaponsAccessoriesPanel.tsx`
+  `cycleEffectPick`, `StatFiltersPanel.tsx` `setStatFilter`, `RatingFiltersPanel.tsx` `setRatingFilter`,
+  `OptionsPanel.tsx` `setEquippedScope` / `setOption` / `setMinQuality` / `toggleHeroExcluded` /
+  `clearExcludedHeroes`), reset filters (`resetAll`), `ResultsTable.tsx`, la colonne de droite (`StatsPanel.tsx`,
+  `BuildEffectsPanel.tsx`, `SubValuePanel.tsx`, `DmgPer1PctPanel.tsx`, `RightSidebar.tsx` : `mergePreset`,
+  `restoreBuild`, `loadPreset`), le build sélectionné (`EquipBuildButton.tsx`), `BottomGearBand.tsx` +
+  `design/GearCard.tsx`, `FilterFooter.tsx`. Sous-section « Onglet Presets » alignée : Sort In-game · Class · Rank,
+  un paragraphe **Rang et verrou** (rangs par défaut posés par App à chaque import, `useRankDefaults` →
+  `rankDefaults`, le verrou sans effet sur les gemmes), un paragraphe **Presets locaux** ; la perte en jets réels et
+  le seuil sur l'écran y étaient déjà. § 9 « Carte des fichiers » complétée des modules de la refonte
+  (`lib/settings.ts`, `lib/storage/keys.ts`, `lib/solver/reforge.ts`, `lib/heroes/heroName.ts` et
+  `heroListOrder.ts`, `lib/gear/overviewStats.ts`, `lib/reco/recoPriority.ts`, `design/GearCard.tsx`,
+  `design/HeroPicker.tsx`, `design/settings/*`, `screens/gear/*`, `screens/FirstCapture.tsx`, plus
+  `statRegistry.ts`, `deltaCp.ts`, `buildDiff.ts`, `presetHolds.ts`, `rankDefaults.ts`, `localPresets.ts`,
+  `presetPriority.ts`, `PriorityBanner.tsx`, `EquipBuildButton.tsx`, `WorklistScreen.tsx`, `screens/inventory/`) ;
+  aucun fichier disparu n'y restait (`screens/home/*`, `screens/builder/reforge.ts`, `design/GearDetail.tsx`,
+  `design/ResultGearDetail.tsx`), `BuildsScreen.tsx` existe toujours et porte l'onglet Heroes.
+- ✅ **C17** (section Hero) : décrite d'après le code, qui a bougé depuis l'audit — depuis U6 le mode est un
+  **contrôle segmenté Score | CP** à côté de Solve (plus de menu ▾), le bouton Solve **devient** Cancel pendant un
+  solve, Filter / ✕, et **reset filters** envoie `resetAll` avec `filterDefaults(…)` (les défauts, mode de reforge
+  et Transistone de Settings › Solver compris), il ne vide pas le reducer. **C18** : clés de priorité = noms moteur
+  (`critRate`, `critDmg`, `effRes`…) dans tout le fichier (formule de la phase 3a, panneau Priority, Damage / +1%,
+  § 5 cap-reaching CHC, § 10) ; seule reste, explicitement historique, la liste des anciennes clés réécrites à la
+  lecture (`LEGACY_STAT_KEY_RENAME`). **C19** : panneau Sets réécrit (bascule Require / Exclude, off → 2pc → 4pc
+  → off par plan, « + OR », « Match: », plan > 4 pièces signalé). **C20** : § 3 phase 2 (gate `minQuality`),
+  phase 3 (`keepTopUnion(…, floorScorers, …)` dans chaque branche, la rétention des mins, la protection des sets
+  par tranche, le prune de dominance CP `pruneDominatedForCp` et ses conditions), phase 5
+  (`computeFinalStatsFromPrefix` + `aggregatePrefixBuckets` + `setBonuses` hissés par nœud accessory) et § 7
+  (items 4 et 10) ; `computeFinalStats` ne reste cité que pour les chemins hors boucle (Presets, Overcap), où il est
+  juste.
+- ✅ **Vingt libellés de l'interface cités dans le manuel, et où ils se lisent.** « Search hero… »
+  (`design/HeroPicker.tsx`) · « Solve », « Cancel », « Loading reco… », « Filter », « reset filters »,
+  « Maxed only », « Transistone potential » (`screens/builder/BuilderToolbar.tsx`) · « Load reco », « Set
+  priority », « Use CP », « Priority from outerpedia reco » (`screens/builder/PriorityBanner.tsx`) · « + OR »,
+  « Match: » (`screens/builder/SetsPanel.tsx`) · « Don't take from… », « Min quality »
+  (`screens/builder/OptionsPanel.tsx`) · « columns », « height » (`screens/builder/ResultsTable.tsx`) · « Save build
+  + filter set », « Save as local preset… » (`screens/builder/RightSidebar.tsx`) · « Replace in worklist »
+  (`screens/builder/BuilderScreen.tsx`) · « Apply to snapshot » (`screens/builder/EquipBuildButton.tsx`, sa raison
+  grisée dans `equip.ts`) · « Step by step in Settings › Setup » (`screens/FirstCapture.tsx`) · « Re-check »,
+  « Close » (`design/settings/SettingsModal.tsx`) · « Apply locally », « Apply all », « Remove »
+  (`screens/WorklistScreen.tsx`) · « Copy as local preset », « Lock » / « Locked », « Optimize preset → »
+  (`screens/presets/PresetsScreen.tsx`).
+- ✅ **Vérifications.** `grep -rniE "outfit|filter preset|equip build|exclude from solver|get preset|priority
+  rank|No item selected" wiki README.md` : ne rend plus que `wiki/Engine-Reference.md` (hors périmètre) — « filter
+  presets » (l. 838) et « outfit » (l. 858, 872) dans le tableau des tests, plus un faux positif « tar**get
+  preset** » (l. 217). `grep -rnwE "Builds|Builder|Inventory|Home" wiki README.md docs/solver.md` : le type
+  `Inventory` (`Inventory.presets`, `parseInventory`), la page d'accueil du wiki (`[Home](Home)` de `_Sidebar.md`),
+  `wiki/Roadmap.md` (jalons historiques), les mentions « ex-onglets » / « formerly » de la carte des fichiers et les
+  descriptions de tests d'`Engine-Reference.md` (hors périmètre) ; aucun nom d'onglet périmé. `grep -n
+  "crc\b\|chd\b" docs/solver.md wiki/Solver.md` : la seule liste historique de `LEGACY_STAT_KEY_RENAME`. `npm run
+  typecheck` : `tsc --noEmit` sans erreur (code 0) ; `npm test` : `Tests  1098 passed (1098)` (98 fichiers ;
+  les deux autres workspaces : 244 et 169) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, le même compte
+  qu'avant. `docs/todo.md` : aucun item ne parlait du manuel ni de C17-C20, rien à retirer.
+- ⏳ **Sevih** : relire le manuel sur le wiki publié (rendu des ancres, longueur de la section Optimizer). Écarts au
+  glossaire restés **dans le code** (hors de ce lot documentaire, le manuel cite le libellé réel) : « Apply
+  locally » de la Worklist (`WorklistScreen.tsx`, le glossaire voulait « Apply to snapshot ») ; l'infobulle « Saved
+  preset: ‹nom› » des cartes Heroes (`BuildsScreen.tsx`) ; « outfit » dans la ligne de statut d'Optimize preset →
+  (`presetOptimizeNote`, `lib/presets/optimize.ts`) et dans le texte d'attente « Add the heroes who will share this
+  outfit » (`PresetsScreen.tsx`) ; l'infobulle du bouton Settings qui cite encore « debug, logs »
+  (`design/Shell.tsx`) ; le commentaire « self-dismisses once the checks pass » de `SettingsModal.tsx` (le modal ne
+  se ferme pas seul). Les trois mots bannis d'`Engine-Reference.md` relèvent d'un lot qui le touche.
+
 ### 🧭 Menu Electron minimal sans rechargement, outils de développement et guide dans le menu (D14, G105) (2026-11-02)
 - ✅ **Pourquoi.** Arbitrage D14 de `docs/ux-audit-2026-11-01.md` (section 6 ; section 1.1, observation sur
   `apps/desktop/src/main.ts`) : la fenêtre gardait le menu par défaut d'Electron, caché par `autoHideMenuBar`, dont

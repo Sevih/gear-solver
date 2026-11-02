@@ -45,19 +45,22 @@ AppImage by hand.
 
 ## 2. First launch — the setup wizard
 
-On first launch the app opens a **Setup wizard** (you can re-open it anytime from the **Settings**
-button in the top-right). Follow the checklist:
+On first launch the app opens the **Settings** modal on its **Setup** pane — the setup wizard (you
+can re-open it anytime with the **Settings** button, the sliders icon at the top-right). Behind
+it, the **Heroes** tab says "No account captured yet". Follow the checklist:
 
-1. **OUTERPLANE installed via Steam** — found automatically.
-2. **Capture plugin installed** — click **Install plugin** (one time; close the game first if it
-   was already running without the plugin, then restart it). The same button sits in the header,
-   top-right, next to the capture pill.
-3. **Game running with the plugin loaded** — launch the game (**Launch game**, in the wizard or in
-   the header).
+1. **OUTERPLANE installed via Steam** — found automatically. Not found? Install the game from
+   Steam, or import your snapshot files with the **Manual fallback** picker at the bottom of the
+   window.
+2. **Capture plugin installed** — click **Install plugin** (one time). The game must be closed
+   while it installs: the button is greyed out while the game runs (hover it for the reason). The same
+   button sits in the header, top-right, next to the capture pill. On Linux, the wizard also shows
+   the Proton launch option to paste (see [Installing on Linux](#installing-on-linux)).
+3. **Game running with the plugin loaded** — click **Launch game** (in the wizard or in the
+   header), play to the lobby, then click **Re-check** at the bottom of the wizard.
 
-When the checks are green, click **Re-check** once more if needed, then **Close**: you land on the
-**Heroes** tab, which shows the capture steps until your first snapshot imports, then fills in on
-its own (as does **Gear**).
+That's four clicks: **Install plugin**, **Launch game**, **Re-check**, then **Close** — the
+wizard doesn't close on its own when the three checks turn green. You land on **Heroes**.
 
 ---
 
@@ -71,18 +74,33 @@ Importing reads your gear + heroes straight from the game.
 2. **Play through to the lobby** (the main town screen). The plugin writes your account +
    inventory as the game loads them and gear-solver **imports on its own** within a few
    seconds — no button to press. The header's capture pill reads **Live** while the game runs.
-3. For the extra stats (codex + geas), open the in-game **Hero Archive (Codex)** and
-   **Gift / Geas** screens once — they import as soon as they load.
+   The first import arrives **silently**: no message, the tabs just fill in (**Heroes** shows
+   your roster, **Gear** your pieces, the tab badges their counts).
+3. For the extra stats (Codex + Geas), open the in-game **Hero Archive** and **Gift** screens
+   once — they import as soon as they load. Until then your heroes' stats can sit slightly
+   below the in-game character sheet (the wizard's "Ready" box reminds you of this step).
 
 Re-importing later = just play again: every lobby load refreshes the snapshot (new gear,
-an enhanced piece, a leveled hero…). The app also auto-imports the most recent capture on
-launch, and **Reload** (the round-arrow icon, top-right of the window) re-reads it on demand.
+an enhanced piece, a leveled hero…), and with the game open the moves you make in-game reach the
+app within seconds. The app also auto-imports the most recent capture on launch, and **Reload**
+(the round-arrow icon, top-right of the window) re-reads it on demand.
+
+### No Steam client? Manual fallback
+
+Until a snapshot is loaded, a **Manual fallback** file picker sits at the bottom of the window:
+pick the captured JSON files to import them by hand.
 
 ---
 
 ## 4. Next steps
 
-- Browse what you own and read each piece → **[Using the App → Gear](Using-the-App#gear--browse-your-pieces)**
-- See your heroes' current stats + suggestions → **[Using the App → Heroes](Using-the-App#heroes--your-roster)**
-- Find the best gear for a hero → **[Using the App → Optimizer](Using-the-App#optimizer--optimize-a-hero)**
+The tabs, in the order of a session — **[A typical session](Using-the-App#a-typical-session)**
+walks through one:
+
+- See your heroes' current stats + suggestions, rank them → **[Heroes](Using-the-App#heroes--your-roster)**
+- Find the best gear for a hero → **[Optimizer](Using-the-App#optimizer--optimize-a-hero)**
+- Score your in-game presets for the heroes who share them → **[Presets](Using-the-App#presets--your-in-game-equipment-presets)**
+- Work through the gear changes in-game → **[Worklist](Using-the-App#worklist--queued-gear-changes)**
+- Browse what you own and read each piece → **[Gear](Using-the-App#gear--browse-your-pieces)**
+- Solver, display and backup options → **[Settings](Using-the-App#settings)**
 - Something not working? → **[FAQ & Troubleshooting](FAQ)**

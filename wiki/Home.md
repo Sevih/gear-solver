@@ -2,7 +2,8 @@
 
 Gear optimizer for **OUTERPLANE** — Fribbels-style. It captures your account's gear and
 characters from the game, then solves for the best builds per hero with a parallelized
-in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not a web service.
+in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows installer, Linux
+AppImage). Not a web service.
 
 > **This wiki is auto-published from the [`wiki/`](https://github.com/Sevih/gear-solver/tree/main/wiki)
 > directory in the repo** (English) by a GitHub Action on every push to `main` that touches
@@ -14,7 +15,10 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
 ## Start here
 
 - **🎮 Just want to use it?** → **[Getting Started](Getting-Started)** (install + import your
-  account), then **[Using the App](Using-the-App)** (the tabs, optimizing a hero). Stuck?
+  account), then **[Using the App](Using-the-App)** — the five tabs in the order of a session:
+  **Heroes** (your roster, ranks and advice), **Optimizer** (the best gear for one hero),
+  **Presets** (your in-game presets and the heroes who share them), **Worklist** (the changes to
+  make in-game), **Gear** (every piece you own, and what to scrap). Stuck?
   → **[FAQ & Troubleshooting](FAQ)**.
 - **🔧 Want to know how it works / contribute?** → [Architecture](Architecture),
   [Solver](Solver), [Engine Reference](Engine-Reference).
@@ -36,7 +40,7 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
 - **Library** of saved builds + filter sets per hero (localStorage).
 - **Edits** equip assignments locally by rewriting the captured snapshot — `equipItem`/
   `unequipItem` (core) + a `POST /api/captured/user-item` write-back, triggered from the
-  Optimizer's "Apply to snapshot → hero" button and the Worklist's apply actions. Changes only touch
+  Optimizer's "Apply to snapshot" button and the Worklist's apply actions. Changes only touch
   the local captured snapshot — nothing is ever pushed to the game. →
   [Engine Reference](Engine-Reference)
 
@@ -47,7 +51,7 @@ in-renderer Web Worker pool. Packaged as an Electron desktop app (Windows). Not 
 | Page | What's in it |
 |------|--------------|
 | [Getting Started](Getting-Started) | Prerequisites, first-launch wizard, importing your account (capture) |
-| [Using the App](Using-the-App) | The five tabs (Heroes / Optimizer / Presets / Worklist / Gear), optimizing a hero, settings, updates |
+| [Using the App](Using-the-App) | A typical session, then the five tabs in order (Heroes / Optimizer / Presets / Worklist / Gear), Settings, the menu bar, updates |
 | [FAQ & Troubleshooting](FAQ) | Capture issues, post-patch fixes, Optimizer tips, backups |
 
 **🔧 Internals (dev)**

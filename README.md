@@ -22,6 +22,13 @@ install, import your account, optimize a hero. No build step, no command line. T
 **[player wiki](https://github.com/Sevih/gear-solver/wiki)** (Getting Started · Using the App ·
 FAQ) walks through everything.
 
+The app has five tabs, in the order of a session: **Heroes** (your roster, ranks and advice) →
+**Optimizer** (the best gear for one hero) → **Presets** (your in-game presets and the heroes who
+share them) → **Worklist** (the changes to make in-game) → **Gear** (every piece you own:
+Overview, Pieces, Scrap), plus a **Settings** modal. The
+[Using the App](https://github.com/Sevih/gear-solver/wiki/Using-the-App) page walks through a
+typical session.
+
 > Needs Windows or Linux (Steam + Proton) + OUTERPLANE on **Steam** — the app installs a small
 > capture plugin into the game (no root, no proxy). See the guide for the why and how.
 
@@ -30,7 +37,7 @@ FAQ) walks through everything.
 Make the file executable (`chmod +x Outerpedia-Gear-Solver-*.AppImage`, or Properties →
 Permissions in your file manager) and run it. Installing the capture plugin needs `unzip`
 (`sudo dnf install unzip` / `sudo apt install unzip`), and the game must be launched with the
-Steam launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%` (Settings → Setup shows the
+Steam launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%` (Settings › Setup shows the
 line). The app updates itself as on Windows as long as the AppImage sits in a folder you can
 write to (e.g. `~/Applications`): the new version lands next to it under its new name and the
 old file is removed — rename the file without its version number to keep a fixed name. From a
@@ -79,7 +86,7 @@ Read on. The rest of this README plus [docs/](docs) cover the stack, build, and 
 - **Library** of saved builds + filter sets per hero (localStorage).
 - **Edits** equip assignments locally by rewriting the captured snapshot — `equipItem`/
   `unequipItem` (core) + a `POST /api/captured/user-item` write-back, triggered from the
-  Optimizer's "Apply to snapshot → hero" button (confirmation popup) and the Worklist's per-entry /
+  Optimizer's "Apply to snapshot" button (confirmation popup) and the Worklist's per-entry /
   Apply-all actions. Changes only touch the local captured snapshot — nothing is ever
   pushed to the game.
 
