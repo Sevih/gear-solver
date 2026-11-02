@@ -32,8 +32,8 @@ const piece = (uid: string, slot: GearSlot, ticks: number[]): GearPiece => ({
 });
 const inventory = { gear: [piece("1", "helmet", [4, 4, 3, 3]), piece("2", "ooparts", [])], characters: [] } as unknown as Inventory;
 
-function render(inv: Inventory | null, view?: string) {
-  stubStorage(view ? { "gs.gear.view": JSON.stringify(view) } : {});
+function render(inv: Inventory | null, view?: string, local: Record<string, string> = {}) {
+  stubStorage({ ...(view ? { "gs.gear.view": JSON.stringify(view) } : {}), ...local });
   return renderToStaticMarkup(createElement(GearScreen, {
     inventory: inv, game: null, capStatus: null, steam: null, onOpenSetup: noop,
   }));
@@ -85,6 +85,23 @@ describe("GearScreen", () => {
 describe("Scrap filters", () => {
   it("default to the built-in Scrap candidates preset", () => {
     expect(scrapDefaultFilters()).toEqual(SCRAP_CANDIDATES.filters());
+  });
+
+  // One getItem-only store stands in for both Web Storages here.
+  const junk = { id: "u1", name: "Junk sets", filters: JSON.stringify({ stars: [4] }), createdAt: 0 };
+  const chosen = { "gs.inv.filterPresets": JSON.stringify([junk]), "gs.gear.scrap.default": JSON.stringify("u1") };
+
+  it("follow the filter set chosen with Use for Scrap, and its link carries the set's name", () => {
+    stubStorage(chosen);
+    expect(scrapDefaultFilters().stars).toEqual(new Set([4]));
+    const html = render(inventory, "scrap", chosen);
+    expect(html).toContain(">Junk sets</button>");
+    expect(html).toContain('title="Back to the filters Gear › Scrap opens on"');
+    expect(html).not.toContain(`>${SCRAP_CANDIDATES.name}</button>`);
+  });
+
+  it("the built-in's link title adds its description", () => {
+    expect(render(inventory, "scrap")).toContain(`title="Back to the filters Gear › Scrap opens on — ${SCRAP_CANDIDATES.title}"`);
   });
 });
 

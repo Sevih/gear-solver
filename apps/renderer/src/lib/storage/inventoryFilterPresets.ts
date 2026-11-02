@@ -7,6 +7,9 @@
  * so a preset saved before a filter field existed reads that field's current
  * default through `FILTER_CODEC.deserialize`. The search `query` is never
  * stored: a preset is a set of criteria, not a lookup.
+ *
+ * Also owns `gs.gear.scrap.default`: the id of the filter set Gear › Scrap
+ * opens on (the built-in's when absent or unknown).
  */
 import { FILTER_CODEC, emptyFilters, type FilterState } from "../../screens/inventory/filters.js";
 
@@ -125,8 +128,45 @@ export function saveInventoryFilterPreset(name: string, filters: FilterState): I
   return { ...entry, filters: FILTER_CODEC.deserialize(serialized) };
 }
 
+/** Deleting the Scrap default puts Gear › Scrap back on the built-in. */
 export function deleteInventoryFilterPreset(id: string): void {
   const list = readStored();
   const next = list.filter((p) => p.id !== id);
   if (next.length !== list.length) persist(next);
+  if (readScrapDefaultId() === id) setScrapDefault(SCRAP_CANDIDATES.id);
+}
+
+// ── Scrap default ───────────────────────────────────────────────────────
+export const SCRAP_DEFAULT_KEY = "gs.gear.scrap.default";
+
+/** The id stored under the key, whatever it points to; null when absent or
+ *  not a JSON string. */
+function readScrapDefaultId(): string | null {
+  try {
+    const raw = localStorage.getItem(SCRAP_DEFAULT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    return typeof parsed === "string" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The filter set Gear › Scrap opens on: the user's set the key names, else
+ *  (absent, unreadable, a set that no longer exists here — an imported id
+ *  included) the built-in. `filters` carries no search. */
+export function scrapDefaultPreset(): { id: string; name: string; title?: string; filters: FilterState } {
+  const id = readScrapDefaultId();
+  const user = id && id !== SCRAP_CANDIDATES.id ? loadInventoryFilterPresets().find((p) => p.id === id) : undefined;
+  if (user) return { id: user.id, name: user.name, filters: { ...user.filters, query: "" } };
+  return { id: SCRAP_CANDIDATES.id, name: SCRAP_CANDIDATES.name, title: SCRAP_CANDIDATES.title, filters: SCRAP_CANDIDATES.filters() };
+}
+
+/** Make `id` (the built-in's or a user set's) the Scrap default. */
+export function setScrapDefault(id: string): void {
+  try {
+    localStorage.setItem(SCRAP_DEFAULT_KEY, JSON.stringify(id));
+  } catch {
+    // Quota — silently skip.
+  }
 }

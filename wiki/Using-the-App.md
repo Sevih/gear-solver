@@ -498,8 +498,11 @@ A dense, searchable grid of every gear piece you own.
 The same grid, set up to pick what to sell or dissolve:
 
 - It opens on the **Scrap candidates** filters (the built-in filter set above) and keeps its own
-  filters, apart from Pieces'. Change them with **Filter**; the **Scrap candidates** link at the right
-  of the slot bar puts them back.
+  filters, apart from Pieces'. Change them with **Filter**; the link at the right of the slot bar puts
+  them back. To open on another filter set, pick it in **Filter › Filter sets** and click **Use for
+  Scrap** (it reads **Scrap default ✓** on the set already chosen, marked "(Scrap default)" in the
+  list); the link then carries that set's name. Deleting that set puts Scrap back on **Scrap
+  candidates**.
 - **Selection mode is on**: a click on a tile selects or unselects it (and shows its card).
   The selection, the sub-tab, the sort and the piece shown are the same as in Pieces.
 - The **Scrap value** card is always there: it prices your selection, or the pieces on screen when
@@ -542,12 +545,12 @@ passed).
 - **Backup** — **Export backup / Import backup**: one JSON file with everything you set up in the
   app — saved builds, filter sets (Optimizer and Gear), local presets, the heroes of your in-game
   presets, hero and preset ranks, locked presets, never-use pieces, the worklist, hero notes, the
-  last filters per hero, the Optimizer layout and your Solver, Display and developer settings
-  (and the Presets loss threshold). The list is shown under the Export button. Never the captured
-  gear: that comes from the game (re-capture it on the other PC). Import merges: builds and
-  presets already present are kept; ranks, worklist entries, notes and settings from the file
-  replace yours (settings held within their bounds). A file exported by an older version (builds &
-  presets only) still imports.
+  last filters per hero, the Optimizer layout, the Scrap default and your Solver, Display and
+  developer settings (and the Presets loss threshold). The list is shown under the Export button.
+  Never the captured gear: that comes from the game (re-capture it on the other PC). Import merges:
+  builds and presets already present are kept; ranks, worklist entries, notes, the Scrap default
+  and settings from the file replace yours (settings held within their bounds). A file exported by
+  an older version (builds & presets only) still imports.
 - **Advanced** — developer toggles (stat-lock tooling on Heroes, solver fan-out logging; safe to
   ignore), **Reset onboarding prompt** (shows Settings as the setup wizard on next launch), then the
   app journal (**Logs**: plugin install lines and every status message, kept for this session only)

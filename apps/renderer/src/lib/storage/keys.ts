@@ -23,7 +23,7 @@ import { SAVED_BUILDS_KEY } from "./savedBuilds.js";
 import { FILTER_PRESETS_KEY, isReadableFilterPreset } from "./filterPresets.js";
 import { HERO_FILTERS_KEY } from "./heroFilters.js";
 import { PRESET_HEROES_KEY } from "./presetHeroes.js";
-import { INVENTORY_FILTER_PRESETS_KEY, isReadableInventoryPreset } from "./inventoryFilterPresets.js";
+import { INVENTORY_FILTER_PRESETS_KEY, SCRAP_DEFAULT_KEY, isReadableInventoryPreset } from "./inventoryFilterPresets.js";
 import { LOCAL_PRESETS_KEY, isReadableLocalPreset } from "./localPresets.js";
 import { EXCLUDED_PIECES_KEY } from "./excludedPieces.js";
 import { HERO_PRIORITY_KEY, HERO_PRIORITY_SEEN_KEY } from "./heroPriority.js";
@@ -125,6 +125,8 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   { key: SAVED_BUILDS_KEY, store: "local", backup: true, prune: false, label: "Saved builds", owner: "lib/storage/savedBuilds.ts", merge: { shape: "heroLists" }, summary: "count" },
   { key: FILTER_PRESETS_KEY, store: "local", backup: true, prune: true, label: "Filter sets", owner: "lib/storage/filterPresets.ts", merge: { shape: "heroLists", accept: isReadableFilterPreset }, summary: "count" },
   { key: INVENTORY_FILTER_PRESETS_KEY, store: "local", backup: true, prune: false, label: "Gear filter sets", owner: "lib/storage/inventoryFilterPresets.ts", merge: { shape: "list", id: "id", keep: "stored", uniqueName: true, accept: isReadableInventoryPreset }, summary: "count" },
+  // An id this machine doesn't know falls back to the built-in when read.
+  { key: SCRAP_DEFAULT_KEY, store: "local", backup: true, prune: false, label: "Scrap default", owner: "lib/storage/inventoryFilterPresets.ts", merge: { shape: "value", normalize: (id) => (typeof id === "string" && id !== "" ? id : undefined) }, summary: "label" },
   { key: LOCAL_PRESETS_KEY, store: "local", backup: true, prune: false, label: "Local presets", owner: "lib/storage/localPresets.ts", merge: { shape: "list", id: "id", keep: "stored", accept: isReadableLocalPreset }, summary: "count" },
   { key: PRESET_HEROES_KEY, store: "local", backup: true, prune: false, label: "Preset heroes", owner: "lib/storage/presetHeroes.ts", merge: { shape: "map", accept: holdsHeroes, keepStored: holdsHeroes }, summary: "paren" },
   { key: HERO_FILTERS_KEY, store: "local", backup: true, prune: true, label: "Hero filters", owner: "lib/storage/heroFilters.ts", merge: { shape: "map", accept: isRecord }, summary: "label" },

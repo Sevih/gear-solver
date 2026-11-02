@@ -17,11 +17,11 @@ vi.mock("react-dom", async (importOriginal) => ({
 // The presets row reads localStorage on mount.
 (globalThis as { localStorage?: unknown }).localStorage ??= { getItem: () => null, setItem: () => {} };
 
-const { FilterModal } = await import("../src/screens/inventory/FilterModal.js");
+const { FilterModal, scrapDefaultButton } = await import("../src/screens/inventory/FilterModal.js");
 
-function render(current: FilterState): string {
+function render(current: FilterState, scrapMode = false): string {
   return renderToStaticMarkup(createElement(FilterModal, {
-    open: true, onClose: () => {}, current, onApply: () => {},
+    open: true, onClose: () => {}, current, onApply: () => {}, scrapMode,
     availableMains: new Set(["atkPct"]), availableSubs: new Set(["atkPct"]),
     availableArmorSets: new Map([["7", "Sharp"]]), availableClasses: new Set<string>(),
     availableStars: new Set([6]), availableRarities: new Set<DesignRarity>(["legendary"]),
@@ -79,5 +79,27 @@ describe("FilterModal — selection outside the current view", () => {
     expect(buttons(html, "4★")[0]).not.toContain(UNAVAILABLE);
     expect(buttons(html, "EFF")).toHaveLength(0);
     expect(html).not.toContain(UNAVAILABLE);
+  });
+});
+
+// Nothing selected on a static render: the Scrap default's mark and button
+// state are checked through the PresetsRow's initial `selected` ("").
+describe("FilterModal — Use for Scrap", () => {
+  it("only from Gear › Scrap; disabled while no filter set is selected", () => {
+    expect(buttons(render(emptyFilters()), "Use for Scrap")).toHaveLength(0);
+    const [tag] = buttons(render(emptyFilters(), true), "Use for Scrap");
+    expect(tag).toContain("disabled");
+  });
+
+  it("reads Scrap default ✓, disabled, on the set already the default", () => {
+    expect(scrapDefaultButton("builtin:scrap-candidates", true, "builtin:scrap-candidates"))
+      .toEqual({ label: "Scrap default ✓", disabled: true, title: "Gear › Scrap opens on this filter set" });
+    expect(scrapDefaultButton("u1", true, "builtin:scrap-candidates")).toEqual({ label: "Use for Scrap", disabled: false });
+    expect(scrapDefaultButton("", false, "builtin:scrap-candidates")).toEqual({ label: "Use for Scrap", disabled: true });
+  });
+
+  it("marks the Scrap default in the list, only from Gear › Scrap", () => {
+    expect(render(emptyFilters(), true)).toContain("Scrap candidates (Scrap default)");
+    expect(render(emptyFilters())).not.toContain("(Scrap default)");
   });
 });

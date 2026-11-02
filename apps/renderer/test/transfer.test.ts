@@ -53,6 +53,7 @@ const EVERY_KEY: Record<string, unknown> = {
   "gs.worklist": [worklistEntry("h1")],
   "gs.builds.notes": { h1: "speed tune" },
   "gs.builder.cols": { score: false },
+  "gs.gear.scrap.default": "i1",
   "gs.builder.resultRows": 8,
   "gs.solver.workerCount": 1,
   "gs.solver.topN": 500,
@@ -97,6 +98,16 @@ describe("transfer — backup v2 round-trip", () => {
     const res = applyBackup(bundle);
     expect(Object.values(res).every((n) => n === 0)).toBe(true);
     expect(writes).toEqual([]);
+  });
+});
+
+describe("transfer — Scrap default", () => {
+  it("the file's id replaces mine, even one this machine doesn't know (read falls back, not the import)", () => {
+    store.set("gs.gear.scrap.default", JSON.stringify("mine"));
+    expect(applyBackup(v2({ "gs.gear.scrap.default": "elsewhere" }))["gs.gear.scrap.default"]).toBe(1);
+    expect(stored("gs.gear.scrap.default")).toBe("elsewhere");
+    expect(applyBackup(v2({ "gs.gear.scrap.default": 3 }))["gs.gear.scrap.default"]).toBe(0);
+    expect(stored("gs.gear.scrap.default")).toBe("elsewhere");
   });
 });
 

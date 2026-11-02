@@ -12,7 +12,7 @@ import { QUALITY_TONE } from "../../design/gearCardText.js";
 import { GEAR_STATS, emptyFilters, type BaseRollsFilter, type FilterState } from "./filters.js";
 import {
   PRESET_NAME_MAX, SCRAP_CANDIDATES, deleteInventoryFilterPreset, loadInventoryFilterPresets,
-  saveInventoryFilterPreset, validPresetName, type InventoryFilterPreset,
+  saveInventoryFilterPreset, scrapDefaultPreset, setScrapDefault, validPresetName, type InventoryFilterPreset,
 } from "../../lib/storage/inventoryFilterPresets.js";
 
 // ── filter pieces ───────────────────────────────────────────────────────
@@ -209,21 +209,33 @@ function BaseRollsInputs({
   );
 }
 
+/** The Use for Scrap button for the selected filter set (`known`: the
+ *  built-in or one of the user's): disabled with nothing selected, and on the
+ *  set already the Scrap default, which it names. */
+export function scrapDefaultButton(selected: string, known: boolean, scrapDefault: string): { label: string; disabled: boolean; title?: string } {
+  if (known && selected === scrapDefault) return { label: "Scrap default ✓", disabled: true, title: "Gear › Scrap opens on this filter set" };
+  return { label: "Use for Scrap", disabled: !known };
+}
+
 const PRESET_BTN_CLASS = "rounded-md border border-white/10 bg-white/3 px-2 py-0.5 text-[11.5px] font-semibold text-white hover:bg-white/6 disabled:pointer-events-none disabled:opacity-40";
 
 /** Presets row under the modal title: pick a preset ("—", the built-in, then
  *  the user's), Load it into the draft (the user adjusts, then Apply), Save
  *  the draft under a name (inline field), Delete a user preset. Presets are
- *  read from storage each time the modal opens. */
+ *  read from storage each time the modal opens. On Gear › Scrap only, Use
+ *  for Scrap makes the selected preset the one Scrap opens on (the draft
+ *  doesn't move), and the list marks it. */
 function PresetsRow({
-  draft, onLoad,
-}: { draft: FilterState; onLoad: (next: FilterState) => void }) {
+  draft, onLoad, scrapMode,
+}: { draft: FilterState; onLoad: (next: FilterState) => void; scrapMode: boolean }) {
   const [presets, setPresets] = useState<InventoryFilterPreset[]>(loadInventoryFilterPresets);
+  const [scrapDefault, setScrapDefaultId] = useState(() => scrapDefaultPreset().id);
   const [selected, setSelected] = useState("");
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
   const builtin = selected === SCRAP_CANDIDATES.id;
   const userPreset = presets.find((p) => p.id === selected);
+  const scrapBtn = scrapDefaultButton(selected, builtin || !!userPreset, scrapDefault);
   const validName = validPresetName(name);
   const overwrites = validName !== null && presets.some((p) => p.name === validName);
   // A preset carries no search: the one in the draft stays in place.
@@ -243,8 +255,14 @@ function PresetsRow({
     if (!userPreset) return;
     deleteInventoryFilterPreset(userPreset.id);
     setPresets(loadInventoryFilterPresets());
+    setScrapDefaultId(scrapDefaultPreset().id);
     setSelected("");
   };
+  const useForScrap = () => {
+    setScrapDefault(selected);
+    setScrapDefaultId(scrapDefaultPreset().id);
+  };
+  const defaultMark = (id: string) => (scrapMode && id === scrapDefault ? " (Scrap default)" : "");
   return (
     <div className="flex items-center gap-2 border-b border-white/8 px-4 py-2">
       <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/70">Filter sets</span>
@@ -256,12 +274,17 @@ function PresetsRow({
         className={cx(SELECT_CLASS, "max-w-[14rem]")}
       >
         <option value="">—</option>
-        <option value={SCRAP_CANDIDATES.id} title={SCRAP_CANDIDATES.title}>{SCRAP_CANDIDATES.name}</option>
+        <option value={SCRAP_CANDIDATES.id} title={SCRAP_CANDIDATES.title}>{SCRAP_CANDIDATES.name + defaultMark(SCRAP_CANDIDATES.id)}</option>
         {presets.map((p) => (
-          <option key={p.id} value={p.id}>{p.name}</option>
+          <option key={p.id} value={p.id}>{p.name + defaultMark(p.id)}</option>
         ))}
       </select>
       <button onClick={load} disabled={!builtin && !userPreset} className={PRESET_BTN_CLASS}>Load</button>
+      {scrapMode && (
+        <button onClick={useForScrap} disabled={scrapBtn.disabled} title={scrapBtn.title} className={PRESET_BTN_CLASS}>
+          {scrapBtn.label}
+        </button>
+      )}
       {naming ? (
         <span className="flex items-center gap-1.5">
           <input
@@ -295,6 +318,7 @@ function PresetsRow({
       <button
         onClick={remove}
         disabled={!userPreset}
+        title={userPreset && userPreset.id === scrapDefault ? `Gear › Scrap goes back to opening on ${SCRAP_CANDIDATES.name}.` : undefined}
         className="ml-auto rounded-md border border-rose-400/30 bg-rose-500/10 px-2 py-0.5 text-[11.5px] font-semibold text-rose-100 hover:bg-rose-500/20 disabled:pointer-events-none disabled:opacity-40"
       >
         Delete
@@ -334,7 +358,7 @@ export function FilterButton({
  *  to the parent's FilterState and closes; Reset clears all dimensions
  *  but leaves the modal open so the player can rebuild from scratch. */
 export function FilterModal({
-  open, onClose, current, onApply,
+  open, onClose, current, onApply, scrapMode = false,
   availableMains, availableSubs, availableArmorSets, availableClasses,
   availableStars, availableRarities, availableQualities, availableReachable, armorSetName,
 }: {
@@ -342,6 +366,8 @@ export function FilterModal({
   onClose: () => void;
   current: FilterState;
   onApply: (next: FilterState) => void;
+  /** Opened from Gear › Scrap: the presets row offers Use for Scrap. */
+  scrapMode?: boolean;
   availableMains: Set<string>;
   availableSubs: Set<string>;
   availableArmorSets: Map<string, string>;
@@ -426,7 +452,7 @@ export function FilterModal({
         </div>
 
         {/* ── presets: load / save the draft under a name ── */}
-        <PresetsRow draft={draft} onLoad={setDraft} />
+        <PresetsRow draft={draft} onLoad={setDraft} scrapMode={scrapMode} />
 
         {/* ── body: scrollable sections ── */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">

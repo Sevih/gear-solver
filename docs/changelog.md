@@ -8,6 +8,55 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗑️ Filter set au choix comme défaut de Gear › Scrap, persistant et sauvegardé, lien de rappel à son nom (G109) (2026-11-02)
+- ✅ **Pourquoi.** Demande de Sevih : un filtre appliqué par défaut sur Scrap. Gear › Scrap s'ouvrait toujours sur le
+  filter set intégré « Scrap candidates » (`scrapDefaultFilters()` = `SCRAP_CANDIDATES.filters()`), ses filtres ne
+  tenaient que la session (`gs.gear.scrap.filters`) et le lien à droite de la barre des slots y revenait : aucun
+  défaut persistant.
+- ✅ **Le réglage.** `lib/storage/inventoryFilterPresets.ts`, seul propriétaire de la nouvelle clé
+  `gs.gear.scrap.default` (localStorage, une chaîne JSON : l'`id` du set) : `scrapDefaultPreset()` rend `{ id, name,
+  title?, filters }` du set désigné — un set de l'utilisateur, filtres sans `query` — et retombe sur l'intégré quand
+  la clé est absente, illisible, pas une chaîne, ou nomme un set qui n'existe plus (un `id` importé d'une autre
+  machine compris : la retombée se fait à la lecture, pas à l'import) ; `setScrapDefault(id)` l'écrit ;
+  `deleteInventoryFilterPreset` remet l'`id` de l'intégré quand le set supprimé était le défaut.
+  `screens/inventory/InventoryScreen.tsx` : `scrapDefaultFilters()` lit ce réglage, donc Scrap s'ouvre dessus (clé
+  de session vide) et le lien le remet.
+- ✅ **Registre et sauvegarde.** `lib/storage/keys.ts` : `gs.gear.scrap.default` en `store: "local"`, `backup:
+  true`, `label: "Scrap default"`, règle `value` comme les réglages (la valeur du fichier remplace la mienne ; une
+  valeur qui n'est pas une chaîne non vide est ignorée), `summary: "label"`. `transfer.ts` et la liste sous Export
+  backup (`backupLabels()` dans `BackupPane.tsx`) lisent le registre : rien d'autre à y écrire.
+- ✅ **Use for Scrap.** `screens/inventory/FilterModal.tsx` : `FilterModal` prend `scrapMode` (passé par
+  `InventoryScreen`, faux sur Pieces) et le transmet à `PresetsRow`. En mode Scrap, un bouton à droite de Load :
+  « Use for Scrap », actif quand un set (intégré ou de l'utilisateur) est sélectionné ; sur le set qui est déjà le
+  défaut il lit « Scrap default ✓ », désactivé, `title` « Gear › Scrap opens on this filter set » (état calculé par
+  la fonction pure exportée `scrapDefaultButton`). Le clic enregistre l'`id` et rien d'autre : le draft ne bouge
+  pas. La liste déroulante suffixe « (Scrap default) » au set par défaut (mode Scrap seulement) ; le `title` de
+  Delete prévient quand le set sélectionné est le défaut (« Gear › Scrap goes back to opening on Scrap
+  candidates. »).
+- ✅ **Lien de rappel.** Il porte le nom du set par défaut, `title` « Back to the filters Gear › Scrap opens on »,
+  suivi du `title` de l'intégré quand c'est lui ; relu (`useMemo` sur `scrapMode` et l'ouverture de la modale) à
+  l'ouverture et à la fermeture de la modale où il se règle.
+- ✅ **Docs.** `wiki/Using-the-App.md` : section « Scrap » (Use for Scrap, « Scrap default ✓ », « (Scrap default) »,
+  le lien prend le nom du set, Delete remet Scrap candidates) et « Settings › Backup » (le Scrap default dans ce que
+  la sauvegarde emporte et dans ce que l'import remplace) ; `docs/architecture.md` et `wiki/Architecture.md` (Scrap
+  ouvre sur son set par défaut) ; lignes `transfer.test.ts` (29 tests) et `gearScreen.test.ts` (8 tests) de
+  `docs/reference.md` et `wiki/Engine-Reference.md`.
+- ✅ **Tests.** `inventoryFilterPresets.test.ts` (+3) : clé absente, illisible, pas une chaîne ou `id` inconnu →
+  l'intégré ; `id` d'un set de l'utilisateur → son nom et ses filtres sans `query` ; Delete du défaut → l'intégré,
+  Delete d'un autre → défaut inchangé. `inventoryFilterModal.test.ts` (+3) : Use for Scrap absent en mode Pieces,
+  présent et désactivé sans sélection en mode Scrap ; `scrapDefaultButton` → « Scrap default ✓ » désactivé sur le
+  défaut ; « Scrap candidates (Scrap default) » dans la liste en mode Scrap seulement. `gearScreen.test.ts` (+2) :
+  avec un set choisi, `scrapDefaultFilters()` rend ses filtres et le lien porte son nom et le `title` court ; avec
+  l'intégré, le `title` ajoute sa description. `transfer.test.ts` : la clé entre dans le fixture de toutes les clés
+  (export puis import la restaurent) et un test dédié (l'`id` du fichier remplace le mien même inconnu ici, une
+  valeur non chaîne ignorée) ; `keys.test.ts` (littéraux `"gs.` ↔ registre) passe. `npm run typecheck` : `> tsc
+  --noEmit` sans erreur ; `npm test` : `Tests  1119 passed (1119)` ; `npm run lint` : `✖ 7 problems (0 errors, 7
+  warnings)`.
+- ⏳ **Pour Sevih (build privée suivante).** Dans Gear › Scrap, Filter, choisir un set, Use for Scrap, fermer ;
+  changer d'onglet et revenir : Scrap s'ouvre dessus (la clé de session doit être vide : elle l'est au lancement) ;
+  relancer l'app : toujours dessus ; le lien à droite de la barre des slots porte son nom. Hors périmètre : pendant
+  une même session, Scrap garde ses filtres de session déjà posés ; le lien les remet sur le nouveau défaut.
+
 ### 🧩 Barre de qualité cliquable, cartes de l'Optimizer en largeur fluide avec en-tête à deux lignes, popovers remontés sur la ligne 1 (G107) (2026-11-02)
 - ✅ **Pourquoi.** Trois retours de test sur la build 2.0 : dans Gear › Overview la barre colorée de la répartition
   de qualité ne réagissait pas au clic (seuls les cinq boutons de palier en dessous ouvraient Gear › Pieces filtré) ;

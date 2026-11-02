@@ -1,14 +1,14 @@
 // Inventory filter presets (lib/storage/inventoryFilterPresets.ts): the
 // `gs.inv.filterPresets` list (codec string per entry, tolerant read, a name
-// taken twice overwrites) and the built-in "Scrap candidates" preset read
-// through `matchesFilters`.
+// taken twice overwrites), the built-in "Scrap candidates" preset read
+// through `matchesFilters`, and the Scrap default (`gs.gear.scrap.default`).
 import { beforeEach, describe, expect, it } from "vitest";
 import { parseGearPiece, type RawItem } from "@gear-solver/core";
 import { toUiPiece, type UiPiece } from "../src/design/adapter.js";
 import { emptyFilters, matchesFilters, type FilterState } from "../src/screens/inventory/filters.js";
 import {
-  INVENTORY_FILTER_PRESETS_KEY, SCRAP_CANDIDATES, deleteInventoryFilterPreset, loadInventoryFilterPresets,
-  saveInventoryFilterPreset,
+  INVENTORY_FILTER_PRESETS_KEY, SCRAP_CANDIDATES, SCRAP_DEFAULT_KEY, deleteInventoryFilterPreset, loadInventoryFilterPresets,
+  saveInventoryFilterPreset, scrapDefaultPreset, setScrapDefault,
 } from "../src/lib/storage/inventoryFilterPresets.js";
 
 // Map-backed localStorage stub — Vitest runs in the `node` environment.
@@ -129,5 +129,39 @@ describe("Scrap candidates", () => {
   it("rejects an equipped piece, and each call hands out fresh Sets", () => {
     expect(matchesFilters(piece(6, [2, 2, 1], { status: "equipped" }), f)).toBe(false);
     expect(SCRAP_CANDIDATES.filters().stars).not.toBe(f.stars);
+  });
+});
+
+describe("Scrap default", () => {
+  const builtin = () => ({ id: SCRAP_CANDIDATES.id, name: SCRAP_CANDIDATES.name, filters: SCRAP_CANDIDATES.filters() });
+
+  it("absent, unreadable or naming an unknown set → the built-in's filters", () => {
+    expect(scrapDefaultPreset()).toMatchObject(builtin());
+    for (const raw of ["{", "42", JSON.stringify({ id: "x" }), JSON.stringify("gone")]) {
+      store.set(SCRAP_DEFAULT_KEY, raw);
+      expect(scrapDefaultPreset(), raw).toMatchObject(builtin());
+    }
+  });
+
+  it("a user set's id → its name and filters, without search", () => {
+    const saved = saveInventoryFilterPreset("Junk", { ...emptyFilters(), stars: new Set([4]), query: "ring" })!;
+    setScrapDefault(saved.id);
+    expect(store.get(SCRAP_DEFAULT_KEY)).toBe(JSON.stringify(saved.id));
+    const p = scrapDefaultPreset();
+    expect(p).toMatchObject({ id: saved.id, name: "Junk" });
+    expect(p.filters).toEqual({ ...emptyFilters(), stars: new Set([4]), query: "" });
+    setScrapDefault(SCRAP_CANDIDATES.id);
+    expect(scrapDefaultPreset()).toMatchObject(builtin());
+  });
+
+  it("deleting the default set puts the built-in back, deleting another leaves it", () => {
+    const a = saveInventoryFilterPreset("A", emptyFilters())!;
+    const b = saveInventoryFilterPreset("B", emptyFilters())!;
+    setScrapDefault(a.id);
+    deleteInventoryFilterPreset(b.id);
+    expect(scrapDefaultPreset().id).toBe(a.id);
+    deleteInventoryFilterPreset(a.id);
+    expect(scrapDefaultPreset()).toMatchObject(builtin());
+    expect(store.get(SCRAP_DEFAULT_KEY)).toBe(JSON.stringify(SCRAP_CANDIDATES.id));
   });
 });

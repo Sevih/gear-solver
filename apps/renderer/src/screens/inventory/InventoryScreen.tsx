@@ -13,15 +13,16 @@ import { VirtualGearGrid } from "./VirtualGearGrid.js";
 import { ScrapCard } from "./ScrapCard.js";
 import { hasScrapFields, scrapValue } from "../../lib/inventory/scrapValue.js";
 import { addAll, materialRows, pruneSelection, pruneShown, scrapScope, toggleSelection } from "../../lib/inventory/scrapCard.js";
-import { SCRAP_CANDIDATES } from "../../lib/storage/inventoryFilterPresets.js";
+import { scrapDefaultPreset } from "../../lib/storage/inventoryFilterPresets.js";
 
 // The Scrap value card's selection, kept for the session as a list of uids.
 const SELECTION_CODEC = jsonStringSet();
 
-/** The filters Gear › Scrap opens on (session key empty) and its "Scrap
- *  candidates" link puts back: the built-in preset's. */
+/** The filters Gear › Scrap opens on (session key empty) and its link puts
+ *  back: the Scrap default's (`gs.gear.scrap.default`, the built-in "Scrap
+ *  candidates" unless the user picked a set with Use for Scrap). */
 export function scrapDefaultFilters(): FilterState {
-  return SCRAP_CANDIDATES.filters();
+  return scrapDefaultPreset().filters;
 }
 
 // ── screen ──────────────────────────────────────────────────────────────
@@ -56,7 +57,7 @@ export interface InventoryScreenProps {
    *  "Optimize wearer →"). */
   onOptimizeWearer?: (heroUid: string) => void;
   /** Gear › Pieces (default) or Gear › Scrap: Scrap keeps its own filters
-   *  (`gs.gear.scrap.filters`, the "Scrap candidates" preset's when empty)
+   *  (`gs.gear.scrap.filters`, the Scrap default's when empty)
    *  and select mode (`gs.gear.scrap.selectMode`, on by default), and always
    *  shows the Scrap value card. Sub-tab, sort, piece shown and selection are
    *  shared by both. Estimates only: nothing here acts on the game. */
@@ -89,6 +90,10 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   const selectMode = scrapMode ? scrapSelectMode && !!game && hasScrapFields(game.equipment) : piecesSelectMode;
   const setSelectMode = scrapMode ? setScrapSelectMode : setPiecesSelectMode;
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+  // The slot bar's link names the Scrap default, re-read when the filter
+  // modal (where it is set) opens or closes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const scrapDefault = useMemo(() => (scrapMode ? scrapDefaultPreset() : null), [scrapMode, filterModalOpen]);
 
   const ui = useMemo<UiPiece[]>(() => (inventory ? inventory.gear.map((g) => toUiPiece(g, game)) : []), [inventory, game]);
 
@@ -421,14 +426,14 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         </div>
         <div className="flex items-center justify-between gap-3">
           <SlotBar tab={tab} selected={f.slots} onToggle={toggleSlot} />
-          {scrapMode && (
+          {scrapDefault && (
             <button
               type="button"
               onClick={() => applyFilters(scrapDefaultFilters())}
-              title={SCRAP_CANDIDATES.title}
+              title={`Back to the filters Gear › Scrap opens on${scrapDefault.title ? ` — ${scrapDefault.title}` : ""}`}
               className="shrink-0 text-[11px] text-cyan-300 underline-offset-2 hover:underline"
             >
-              {SCRAP_CANDIDATES.name}
+              {scrapDefault.name}
             </button>
           )}
         </div>
@@ -458,6 +463,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         onClose={() => setFilterModalOpen(false)}
         current={f}
         onApply={applyFilters}
+        scrapMode={scrapMode}
         availableMains={availableMains}
         availableSubs={availableSubs}
         availableArmorSets={availableArmorSets}
