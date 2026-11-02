@@ -8,6 +8,49 @@
 
 ## Items de backlog clôturés (index)
 
+### 🛰️ Version du jeu publiée par outerpedia servie par `/api/game-version`, le renderer ne fetch plus GitHub (G108) (2026-11-02)
+- ✅ **Pourquoi.** Sur la build 2.0, la console du renderer montrait « Connecting to
+  https://raw.githubusercontent.com/Sevih/outerpedia/main/data/generated/game-version.json violates the following
+  Content Security Policy directive: connect-src 'self' ». `apps/renderer/src/game-version.ts` lisait ce fichier
+  directement sur GitHub, et la CSP du document de prod (`apps/desktop/src/server.ts`, `connect-src 'self'`, posée
+  le 27/06) l'a toujours bloqué : `gameVersion` restait `null` en prod, le sous-titre de l'en-tête (`GsHeader`,
+  `design/Shell.tsx`, « Outerpedia · vX · game Y ») n'a jamais affiché « game Y » hors `npm run desktop:dev`. C'est
+  le seul usage de `gameVersion` dans le renderer (lu dans `App.tsx` puis passé à `GsHeader`) : Settings › Setup ne
+  l'affiche pas, et la version du jeu de Settings › Data & updates vient du `version.json` des tables, hors
+  périmètre.
+- ✅ **Côté serveur.** Nouvelle route `GET /api/game-version` dans `apps/desktop/src/api-handler.ts` (à côté de
+  `/api/reco/:id`, derrière le même contrôle d'origine que tous les `/api/*`), servie par le nouveau
+  `apps/desktop/src/game-version.ts` : `fetch` de Node vers `GAME_VERSION_URL` (rangée dans `repo-source.ts` avec
+  les autres URLs du dépôt outerpedia : `rawUrl(REPO_REF, "data/generated/game-version.json")`, donc la même URL
+  par défaut et les mêmes surcharges `OUTERPEDIA_REF` / `OUTERPEDIA_RAW_BASE`), `cache: "no-cache"`, délai 10 s ;
+  réponse `{ resVersion: string | null, at: number | null }`. Un succès est gardé 10 min en mémoire (un cache par
+  handler) ; un échec réseau, un statut non `ok`, un JSON illisible ou sans `resVersion` texte répondent
+  `{ resVersion: null, at: null }` en 200, jamais de 500, sans être mis en cache (la requête suivante réessaie).
+  Une autre méthode que GET tombe dans le 404 JSON des `/api/*` inconnus, comme les voisines. Le dev passe par le
+  même handler (middleware Vite de `apps/renderer/vite.config.ts`) : rien à câbler en plus. La CSP ne change pas.
+- ✅ **Côté renderer.** `game-version.ts` devient un client de la route (`fetch("/api/game-version")`), même
+  signature `getGameVersion(): Promise<string | null>`, même cache 10 min (les deux caches sont voulus : le renderer
+  ne redemande pas au serveur à chaque montage) ; l'en-tête du fichier dit pourquoi (CSP).
+  `grep -rn "raw.githubusercontent" apps/renderer/src` ne rend plus rien. Les autres appels réseau du renderer, relevés sans
+  y toucher : `grep -rn "https://" apps/renderer/src --include=*.ts --include=*.tsx` ne rend plus rien non plus ;
+  tous les `fetch` restants visent l'origine locale (`/gamedata/*` et `/captured/*` via `data.ts`, `/api/reco/:id`
+  relayé vers outerpedia.com par `reco-proxy.ts`, `/api/steam/install` via `capture.ts`, les autres `/api/*`), les
+  images passent par `/img/*` (`img-cache.ts` côté serveur).
+- ✅ **Tests.** `apps/desktop/test/api-handler.test.ts`, trois tests `/api/game-version` (`fetch` stubé) :
+  `{ resVersion, at }` lu depuis l'URL raw attendue avec `cache: "no-cache"`, deuxième appel à +9 min sans nouveau
+  fetch, nouveau fetch à +11 min ; `{ resVersion: null, at: null }` en 200 sur échec réseau, 429, JSON sans
+  `resVersion` et corps non JSON ; POST → 404, Host non local → 403, sans fetch. `apps/renderer/test/gameVersion.test.ts`
+  réécrit : `getGameVersion` appelle `/api/game-version`, un second appel sort du cache, `null` sur réponse non
+  `ok`, sur `resVersion: null` et sur échec réseau. `npm run typecheck` : `> tsc --noEmit` sans erreur dans les
+  trois espaces ; `npm test` sur HEAD plus ce lot seul (copie de travail hors dépôt, sans les fichiers d'un autre
+  lot en cours dans l'arbre) : `Tests  1098 passed | 1 skipped (1099)` pour le renderer (dernière ligne), desktop 246 + 1 ignoré (247 passés
+  dans l'arbre), core 169 ;
+  dans l'arbre partagé, `gearCard.test.ts` et `compactCard.test.ts` échouent sur le `GearCard.tsx` modifié par ce
+  lot parallèle, sans lien avec celui-ci. `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`.
+- ⏳ À vérifier par Sevih sur la build privée suivante : la console du renderer ne montre plus la violation CSP, et
+  le sous-titre de l'en-tête affiche « Outerpedia · vX · game Y » avec la version live d'outerpedia (c'est là, et
+  non dans Settings › Setup, que `gameVersion` s'affiche).
+
 ### 📖 Manuel et `docs/solver.md` § 4 réécrits pour la navigation 2.0, C17 à C20 soldés (U14, G106) (2026-11-02)
 - ✅ **Pourquoi.** Lot U14 de `docs/ux-audit-2026-11-01.md` (tableau 5.e), dernier de la refonte : une fois la
   navigation stabilisée (variante A, cinq onglets Heroes, Optimizer, Presets, Worklist, Gear), réécrire le manuel

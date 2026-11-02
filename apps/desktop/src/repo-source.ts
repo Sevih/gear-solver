@@ -39,6 +39,11 @@ export function rawUrl(ref: string, relPath: string): string {
   return `${RAW_BASE}/${REPO_OWNER}/${REPO_NAME}/${ref}/${relPath}`;
 }
 
+/** The live game's resource version, rewritten by outerpedia's build pipeline
+ *  on every new APK — read by `GET /api/game-version` (game-version.ts). The
+ *  archived outerpediaV2 repo still answers, frozen on an old version. */
+export const GAME_VERSION_URL = rawUrl(REPO_REF, "data/generated/game-version.json");
+
 export interface RepoFetch {
   /** HTTP status of the winning attempt, or 0 on total transport failure. */
   status: number;

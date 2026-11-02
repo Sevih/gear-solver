@@ -36,6 +36,7 @@ import { getStartupSyncState } from "./startup.js";
 import { serveImg, type ImgCacheOptions } from "./img-cache.js";
 import { resolveInside } from "./safe-path.js";
 import { createEquipJournalFollower } from "./equip-events.js";
+import { createGameVersionRoute } from "./game-version.js";
 
 export interface ApiConfig {
   /** Captured account JSON + the Steam plugin heartbeat. */
@@ -207,6 +208,7 @@ const IMPORTED_SNAPSHOTS = ["user_item", "user_character", "user_gift", "user_ar
 export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: ServerResponse) => boolean {
   const { captureOut } = cfg;
   const equipJournal = createEquipJournalFollower(captureOut);
+  const gameVersion = createGameVersionRoute();
 
   /** GET /api/capture/status — whether a snapshot exists, and the mtime of
    *  every file the renderer's import reads (the Steam follower re-imports
@@ -283,6 +285,12 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
       // but guard against a stale client racing the state).
       res.statusCode = cfg.update.install() ? 204 : 409;
       res.end();
+      return true;
+    }
+    // Live game version from outerpedia's game-version.json (header subtitle) —
+    // fetched here because the renderer's CSP is connect-src 'self'.
+    if (url === "/api/game-version" && req.method === "GET") {
+      gameVersion(res);
       return true;
     }
     // Build-reco proxy → outerpedia API (Get Preset). GET only, numeric id.

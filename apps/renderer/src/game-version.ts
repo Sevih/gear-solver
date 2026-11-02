@@ -1,18 +1,18 @@
 /**
- * Fetch the current Outerplane resource version from the outerpedia repo
- * on GitHub (the archived outerpediaV2 repo still answers, frozen on an old
- * version). The site's build pipeline writes this file every time it
- * detects a new APK, so it's the freshest cross-platform source of truth
- * for "what version of the game is live right now" — useful for the user
- * to know whether their installed app needs a `data:build` refresh.
+ * The current Outerplane resource version, as published by outerpedia's
+ * `game-version.json` (its build pipeline rewrites it on every new APK) — the
+ * freshest cross-platform answer to "what version of the game is live right
+ * now", shown in the header subtitle.
  *
- * Cached for 10 min in-process to avoid hammering the GitHub raw endpoint
- * on every focus / reload (browser HTTP cache complements this).
+ * Read through the local server's `GET /api/game-version`
+ * (apps/desktop/src/game-version.ts), never from GitHub directly: the packaged
+ * document's CSP is `connect-src 'self'`, which blocks any cross-origin fetch.
+ *
+ * Cached for 10 min in-process so focus / reload doesn't ask the server every
+ * time (the server keeps its own 10 min cache of the upstream file).
  */
-const RAW_URL = "https://raw.githubusercontent.com/Sevih/outerpedia/main/data/generated/game-version.json";
-
 interface GameVersionPayload {
-  resVersion: string;
+  resVersion: string | null;
 }
 
 let cached: { resVersion: string; at: number } | null = null;
@@ -21,9 +21,10 @@ const TTL_MS = 10 * 60 * 1000;
 export async function getGameVersion(): Promise<string | null> {
   if (cached && Date.now() - cached.at < TTL_MS) return cached.resVersion;
   try {
-    const r = await fetch(RAW_URL, { cache: "no-cache" });
+    const r = await fetch("/api/game-version", { cache: "no-cache" });
     if (!r.ok) return null;
     const data = (await r.json()) as GameVersionPayload;
+    if (typeof data.resVersion !== "string") return null;
     cached = { resVersion: data.resVersion, at: Date.now() };
     return data.resVersion;
   } catch {

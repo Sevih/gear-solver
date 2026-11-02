@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApiHandler, type ApiConfig } from "../src/api-handler.js";
 import { withServer } from "./http-harness.js";
 
@@ -146,5 +146,61 @@ describe("/api/capture/wipe — empties the whole capture folder", () => {
     });
     expect(existsSync(out)).toBe(true);
     expect(readdirSync(out)).toEqual([]);
+  });
+});
+
+describe("/api/game-version — outerpedia's live game version, fetched server-side (renderer CSP)", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  it("answers { resVersion, at } from game-version.json and caches it 10 min", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ resVersion: "1.11.502" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const handle = createApiHandler(devConfig());
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    await withServer((req, res) => { handle(req, res); }, async (call) => {
+      const first = await call("/api/game-version");
+      expect(first.status).toBe(200);
+      expect(first.headers["content-type"]).toBe("application/json");
+      expect(JSON.parse(first.body)).toEqual({ resVersion: "1.11.502", at: 1_000_000 });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://raw.githubusercontent.com/Sevih/outerpedia/main/data/generated/game-version.json",
+        expect.objectContaining({ cache: "no-cache" }),
+      );
+      now += 9 * 60 * 1000;
+      expect(JSON.parse((await call("/api/game-version")).body)).toEqual({ resVersion: "1.11.502", at: 1_000_000 });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      now += 2 * 60 * 1000;
+      await call("/api/game-version");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("answers resVersion null in a 200 on a network failure, an upstream error or a JSON without resVersion", async () => {
+    for (const upstream of [
+      async () => { throw new TypeError("fetch failed"); },
+      async () => new Response("rate limited", { status: 429 }),
+      async () => new Response(JSON.stringify({ version: "1.11.502" })),
+      async () => new Response("not json"),
+    ]) {
+      vi.stubGlobal("fetch", vi.fn(upstream));
+      const handle = createApiHandler(devConfig());
+      await withServer((req, res) => { handle(req, res); }, async (call) => {
+        const r = await call("/api/game-version");
+        expect(r.status).toBe(200);
+        expect(JSON.parse(r.body)).toEqual({ resVersion: null, at: null });
+      });
+    }
+  });
+
+  it("refuses a non-GET like its neighbours (JSON 404) and a non-local Host (403)", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ resVersion: "1.11.502" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const handle = createApiHandler(devConfig());
+    await withServer((req, res) => { handle(req, res); }, async (call) => {
+      expect((await call("/api/game-version", { method: "POST" })).status).toBe(404);
+      expect((await call("/api/game-version", { headers: { host: "evil.example" } })).status).toBe(403);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
