@@ -8,6 +8,75 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧩 Barre de qualité cliquable, cartes de l'Optimizer en largeur fluide avec en-tête à deux lignes, popovers remontés sur la ligne 1 (G107) (2026-11-02)
+- ✅ **Pourquoi.** Trois retours de test sur la build 2.0 : dans Gear › Overview la barre colorée de la répartition
+  de qualité ne réagissait pas au clic (seuls les cinq boutons de palier en dessous ouvraient Gear › Pieces filtré) ;
+  dans l'Optimizer les cartes de pièces s'ajustaient en hauteur mais pas en largeur (`w-56` / `w-80` fixes, grille
+  `repeat(4,max-content)` au-dessus de 1232 / 1616 px), d'où des textes tronqués ou qui se chevauchent et un
+  « +15 T3 6★ » qui mangeait la place du nom ; et à droite de Solve / Filter la ligne 1 de la barre restait vide
+  pendant que la ligne 2 débordait.
+- ✅ **Barre de qualité.** `screens/gear/OverviewView.tsx` : la barre devient le composant exporté `QualityBar`, une
+  tranche = un `button` (même `flex: count 1 0`, même couleur, même `h-8`, `opacity-92` au repos et
+  `hover:opacity-100`, `cursor-pointer`) qui appelle `onDrill({ quality: t.tier })` avec le `title` des boutons de
+  palier (« Click to see these ‹label› pieces in Gear ») et un `aria-label` (‹palier› : n pieces) ; `disabled` et
+  `cursor-help` sans `onDrill` ou à `count === 0` (une tranche vide a de toute façon une largeur nulle).
+- ✅ **Cartes en largeur fluide.** `screens/builder/BottomGearBand.tsx` : la bande est une grille
+  `grid-cols-[repeat(auto-fit,minmax(max(224px,calc((100%_-_24px)/4)),1fr))]` (320 px en carte pleine), plus de
+  `max-content` ni de seuils 1232 / 1616 ; le `max(…, un quart de la bande moins ses trois gouttières)` plafonne la
+  grille à quatre colonnes, pour garder la grille 4 × 2 / 4 + 3 de l'écran d'équipement du jeu sur une fenêtre
+  large (sans lui, `auto-fit` mettait les sept cellules compactes sur une seule rangée dès 1 616 px de bande, 7 × 224 + 6 × 8) ;
+  plus étroit, le même ordre (`GAME_GEAR_GRID`, `COMPACT_GEAR_GRID`) passe à la ligne ; commentaire réécrit sur
+  cette règle. Les cartes de la bande prennent leur colonne par une nouvelle prop `fluid` de `GearCardPanel` et de
+  `ResultPairDetail` (`design/GearCard.tsx`, `w-full` au lieu de `w-56` / `w-80`, état vide compris) : la carte de
+  Gear › Pieces (`ItemDetail.tsx`), les infobulles de Heroes et les cartes des presets, qui ne la passent pas,
+  gardent leur largeur fixe. Le CSS généré a été contrôlé par un `vite build` hors dépôt :
+  `grid-template-columns:repeat(auto-fit,minmax(max(224px,25% - 6px),1fr))`, `.opacity-92{opacity:.92}`,
+  `.line-clamp-2`, `.wrap-break-word` présents.
+- ✅ **En-tête compact** (`CompactBody`) : à droite du nom, deux lignes alignées à droite (`flex-col items-end`,
+  même mono 11 px et mêmes `title`) — `{stars}★ | T{bt}` (« | » en `text-white/30`, `{stars}★` seul à `bt 0`) puis
+  `+{enhance}` ; le nom garde `min-w-0 flex-1 leading-tight` et passe en `wrap-break-word` (deux lignes sur une
+  colonne étroite), le bloc de droite reste `shrink-0`. **En-tête plein** (`FullBody`) : le nom passe de
+  `truncate` à `line-clamp-2 min-w-0 wrap-break-word` (deux lignes au plus) ; la ligne slot / classe (l'ancienne
+  chaîne `classLine` à quatre espaces, repliés en un seul par le HTML) devient deux `span` dans un
+  `flex flex-wrap gap-x-2`, qui passent l'un sous l'autre au lieu de buter sur le portrait 36 px du porteur.
+  Projection et gemmes relues à 224 px : les sous-stats compactes restent icône + valeur (`+n` et `T+n` dans le
+  `title`, deux colonnes de ~90 px), la rangée de cinq gemmes fait 124 px pour 192 px utiles ; en carte pleine la
+  colonne minimale reste 320 px, la largeur d'avant.
+- ✅ **Popovers sur la ligne 1.** `screens/builder/BuilderToolbar.tsx` : les sept `PopoverButton` (Options, Stat
+  filters, Ratings, Priority, Mains, Sets, Effects) quittent la ligne 2 pour un groupe
+  `ml-auto flex flex-wrap items-center gap-x-2 gap-y-1.5` à droite de la ligne 1, après Filter / ✕ ; la ligne 1
+  passe en `flex flex-wrap` (une fenêtre étroite renvoie le groupe à la ligne, toujours à droite) ; le bandeau de
+  priorité reste entre les deux lignes. La ligne 2 garde Reforge, Maxed only, Transistone potential et
+  **reset filters** (`ml-auto`) ; le séparateur `ToolbarDivider`, qui ne séparait plus rien, est retiré. Ancrage
+  relu : les panneaux s'ouvrent toujours sous leur bouton ; le groupe étant désormais collé au bord droit du bloc,
+  Sets (panneau `w-60`, à ~150 px du bord) passe en `align="right"` comme Effects, pour que son panneau ne déborde
+  pas sur la colonne de droite ; Options à Mains (panneaux de 192 à 224 px, à plus de 220 px du bord à l'estimation) restent
+  ancrés à gauche.
+- ✅ **Docs.** `wiki/Using-the-App.md` (« The filter popovers » : les boutons à droite de la première ligne, sur
+  leur propre ligne en fenêtre étroite) ; `docs/solver.md` § 4 et `wiki/Solver.md` (popovers à droite de la ligne
+  1, Sets et Effects en `align="right"` ; cartes de pièces : grille fluide plafonnée à quatre colonnes, `fluid`,
+  largeur fixe hors de la bande, nom sur deux lignes, slot / classe en deux `span`, en-tête compact `6★ | T2` puis
+  `+15` ; carte des fichiers de `BuilderToolbar.tsx`) ; index des tests de `docs/reference.md` et
+  `wiki/Engine-Reference.md` (gearCard 11 tests, deux nouvelles lignes).
+- ✅ **Tests.** Nouveau `apps/renderer/test/overviewQualityBar.test.ts` (3) : cinq `button` aux `flex`, couleurs et
+  `title` attendus, `disabled` sans `cursor-pointer` à `count === 0`, un clic sur chaque tranche donne
+  `onDrill({ quality })` dans l'ordre des paliers, sans `onDrill` toutes inertes. Nouveau
+  `apps/renderer/test/builderToolbar.test.ts` (3) : ligne 1 en `flex-wrap`, Score, CP, Solve, Filter puis les sept
+  popovers dans le groupe `ml-auto`, ✕ entre Filter et Options, ligne 2 sans popover finie par reset filters.
+  `compactCard.test.ts` : en-tête « 6★ | T3 » puis « +15 », « 6★ » seul puis « +0 » à `bt 0`, nom sans `truncate` ;
+  la bande compacte et pleine n'a plus `max-content` ni `min-[1232px]` / `min-[1616px]`, ses cartes sont `w-full`,
+  la carte hors bande garde `w-80` (`w-56` en compact), vide ou non ; les attentes « +15T26★ » / « +06★ » de
+  `compactCard.test.ts` et `gearCard.test.ts` deviennent « 6★|T2+15 » / « 6★+0 ». `gearCard.test.ts` : nom en
+  `line-clamp-2` sans `truncate`, `<span>Weapon</span><span>Striker Exclusive</span>`. `priorityBanner.test.ts` et
+  `reforgeDefaults.test.ts` passent sans changement. `npm run typecheck` : `> tsc --noEmit` sans erreur (code 0) ;
+  `npm test` : `Tests  1110 passed (1110)` (renderer, dernière ligne ; desktop 247, core 169) ; `npm run lint` :
+  `✖ 7 problems (0 errors, 7 warnings)`.
+- ⏳ Contrôle visuel par Sevih sur la build privée suivante : cartes de l'Optimizer à ~224 px et ~400 px de colonne
+  (rien ne déborde, rien ne se chevauche, nom sur deux lignes), grille 4 × 2 / 4 + 3 sur fenêtre large, fenêtre
+  réduite jusqu'à ce que les popovers passent à la ligne (Sets et Effects s'ouvrant vers la gauche), survol et clic
+  des tranches de la barre de qualité. Écart au cahier à valider : le plafond de quatre colonnes dans le `minmax`
+  (pur `minmax(224px,1fr)` demandé) — à retirer si une rangée unique de sept cartes sur grand écran est voulue.
+
 ### 🛰️ Version du jeu publiée par outerpedia servie par `/api/game-version`, le renderer ne fetch plus GitHub (G108) (2026-11-02)
 - ✅ **Pourquoi.** Sur la build 2.0, la console du renderer montrait « Connecting to
   https://raw.githubusercontent.com/Sevih/outerpedia/main/data/generated/game-version.json violates the following

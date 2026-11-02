@@ -113,21 +113,23 @@ export function BottomGearBand({
   };
 
   // All 8 pieces (EE and Talisman are full citizens of the solver scope: their
-  // mains contribute via the IOT_BUFF channel) on the game's equipment screen
-  // grid, 4 × 2, once four w-80 cards fit beside the Builder's w-72 column:
-  // 4 × 320 + 3 × 8 gaps + 288 + 8 gap + 16 padding = 1616 px. Compact cards
-  // are w-56: 4 × 224 + 3 × 8 + 288 + 8 + 16 = 1232 px, the EE and the
-  // talisman sharing one card (`COMPACT_GEAR_GRID`, 4 + 3). Narrower, the
-  // same order wraps. Compact cells and rows don't stretch (`items-start
-  // content-start`): each card keeps its own content height.
+  // mains contribute via the IOT_BUFF channel) in the order of the game's
+  // equipment screen grid, the EE and the talisman sharing one card in
+  // compact (`COMPACT_GEAR_GRID`, 4 + 3). A fluid grid: as many columns as
+  // fit at the card's own minimum width (224 px compact, 320 px full), never
+  // more than the game's four (the minimum is at least a quarter of the band
+  // less its three 8 px gaps), and each card takes its column's width
+  // (`fluid`) — narrower, the same order wraps onto more rows. Compact cells
+  // and rows don't stretch (`items-start content-start`): each card keeps
+  // its own content height.
   return (
     <div className={compact
-      ? "flex shrink-0 flex-wrap items-start content-start gap-2 min-[1232px]:grid min-[1232px]:grid-cols-[repeat(4,max-content)]"
-      : "flex shrink-0 flex-wrap gap-2 min-[1616px]:grid min-[1616px]:grid-cols-[repeat(4,max-content)]"}>
+      ? "grid shrink-0 grid-cols-[repeat(auto-fit,minmax(max(224px,calc((100%_-_24px)/4)),1fr))] items-start content-start gap-2"
+      : "grid shrink-0 grid-cols-[repeat(auto-fit,minmax(max(320px,calc((100%_-_24px)/4)),1fr))] gap-2"}>
       {compact
         ? COMPACT_GEAR_GRID.map((cell) => typeof cell === "string"
           ? <GearCard key={cell} slot={cell} game={game} onToggleExclude={onToggleExclude} compact emptyLabel={emptyLabelOf(cell, build)} emptyHint={emptyHintOf(build)} {...cardOf(cell)} />
-          : <ResultPairDetail key={cell.join("+")} top={pairCell(cell[0])} bottom={pairCell(cell[1])} game={game} compact />)
+          : <ResultPairDetail key={cell.join("+")} top={pairCell(cell[0])} bottom={pairCell(cell[1])} game={game} compact fluid />)
         : GAME_GEAR_GRID.map((slot) => <GearCard key={slot} slot={slot} game={game} onToggleExclude={onToggleExclude} emptyLabel={emptyLabelOf(slot, build)} emptyHint={emptyHintOf(build)} {...cardOf(slot)} />)}
     </div>
   );
@@ -184,6 +186,7 @@ function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleEx
       projection={{ addedTicks: addedTicks ?? [], transistoneTicks: transistoneTicks ?? [] }}
       effects="none"
       compact={compact}
+      fluid
       emptyLabel={emptyLabel}
       emptyHint={emptyHint}
     />

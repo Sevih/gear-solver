@@ -361,7 +361,9 @@ Sous la ligne 1, visible popovers fermés, tant que le héros n'a pas de poids �
 
 ### Popovers de filtres (`BuilderToolbar.tsx`, `PopoverButton`)
 
-Sept boutons, dans l'ordre de la barre : Options, Stat filters, Ratings, Priority, Mains, Sets, Effects. Un seul
+Sept boutons à droite de la ligne 1 (renvoyés sur leur propre ligne dans une fenêtre étroite), dans l'ordre de
+la barre : Options, Stat filters, Ratings, Priority, Mains, Sets, Effects (les deux derniers ouvrent leur panneau
+depuis leur bord droit, `align="right"`). Un seul
 popover ouvert à la fois (clic dehors ou Échap le ferment) ; le badge d'un bouton compte les contraintes qu'il
 porte (Options : celles qui s'écartent des défauts, plus les héros cochés dans Don't take from…). Chaque popover
 est un composant `Panel` (`screens/builder/Panel.tsx`), décrit ici dans l'ordre du manuel.
@@ -583,9 +585,13 @@ Gear sur la pièce (`InventoryDrill.pieceUid`). La Worklist dit en tête de list
 
 ### Cartes de pièces (`screens/builder/BottomGearBand.tsx`, `design/GearCard.tsx`)
 8 cartes — une par slot, dans l'ordre de l'écran d'équipement du jeu
-(`GAME_GEAR_GRID`, partagé avec Heroes et Presets) : grille 4 × 2 Arme | EE | Tête | Torse / Accessoire |
-Talisman | Gants | Bottes dès 1616 px de fenêtre (quatre cartes `w-80` à côté de la colonne `w-72`), sinon
-le même ordre passe à la ligne. Chaque carte montre nom,
+(`GAME_GEAR_GRID`, partagé avec Heroes et Presets) : grille fluide (`repeat(auto-fit, minmax(…, 1fr))`) de quatre
+colonnes au plus, 4 × 2 Arme | EE | Tête | Torse / Accessoire | Talisman | Gants | Bottes quand la bande le permet,
+chaque colonne d'au moins 320 px (et d'au moins un quart de la bande moins ses trois gouttières de 8 px), chaque
+carte à la largeur de sa colonne (`fluid` de `GearCardPanel` : `w-full`) ; plus étroit, le même ordre passe à la
+ligne. Hors de la bande (Gear › Pieces, infobulles, presets) la carte garde sa largeur fixe (`w-80`, `w-56` en
+compact). Le nom passe sur deux lignes au plus (`line-clamp-2`) et le slot et la classe (« Striker Exclusive »)
+sont deux `span` qui passent l'un sous l'autre plutôt que sous le portrait du porteur. Chaque carte montre nom,
 enhance level, icône slot, main stat, subs (avec ticks). C'est la carte de pièce de Gear
 (`design/GearCard.tsx` : `GearCardPanel` autour de `GearCardBody`, `effects="none"`) : même ligne rareté /
 slot, même bloc Qualité (titre, aide au survol, barre), même « Active Effect at +15 Enhancement » ; le passif
@@ -594,13 +600,14 @@ montre), l'EE n'y montre que son image et ses gemmes, et la projection marque se
 violet) sur une colonne de sous-stats aussi large que celle de Gear. Une carte vide dit « No weapon in this
 build » (ou « No weapon yet » avant toute sélection, « Solve, then pick a build in the table. »). En plus :
 - **Mode compact** (Settings › Display › Compact result cards, `gs.builder.compactCards`, éteint par défaut) :
-  cartes `w-56` — la grille démarre alors à 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, l'EE et le talisman
+  colonnes d'au moins 224 px, l'EE et le talisman
   dans UNE carte (`ResultPairDetail` : EE en haut, talisman en bas, un filet entre les deux, chacun son action
   exclure), soit sept cellules en 4 + 3 dans l'ordre `COMPACT_GEAR_GRID` (Arme | EE + Talisman | Tête | Torse /
   Accessoire | Gants | Bottes), chaque carte à la hauteur de son contenu (pas d'étirement à la plus haute de la
   rangée) ; sans icône de pièce ; en-tête = `compactName` (« EE », le nom du set pour une armure, le nom de la pièce sinon, sans
-  « - [Singularity] » mais avec le dégradé) suivi de l'enhance (`+15`), du breakthrough (`T2`, s'il y en a
-  un) et des étoiles (`6★`) ; main(s) en icône + valeur sur une ligne ; subs en grille 2 × 2, icône + valeur
+  « - [Singularity] » mais avec le dégradé, sur deux lignes si la colonne est étroite), à sa droite deux lignes
+  alignées à droite : les étoiles et le breakthrough (`6★ | T2`, `6★` seul sans breakthrough) puis l'enhance
+  (`+15`) ; main(s) en icône + valeur sur une ligne ; subs en grille 2 × 2, icône + valeur
   seulement (LV, base + reforges et marque Transistone en `title` ; valeur en cyan si des ticks projetés y
   entrent, en violet si c'est la Transistone, en ambre au cap) ; gemmes en une ligne de cinq icônes (détail
   en `title`) ; qualité sur une ligne (`14/20 →17 Exc.`) ; effets Singularity sur une ligne (icône + valeur
@@ -1044,7 +1051,7 @@ apps/renderer/src/
     ├── builder/                    ← onglet Optimizer
     │   ├── BuilderScreen.tsx       ← useReducer(SolverFilters) + mise en page + changement de héros + builds/presets/reco + build sélectionné
     │   ├── useSolverSession.ts     ← orchestrator wiring : solve/cancel, estimation pré-solve, progression, résultats
-    │   ├── BuilderToolbar.tsx      ← ligne 1 (héros, Score | CP, Solve / Cancel, Filter) + ligne 2 (Reforge, bascules, popovers, reset filters)
+    │   ├── BuilderToolbar.tsx      ← ligne 1 (héros, Score | CP, Solve / Cancel, Filter, popovers à droite) + ligne 2 (Reforge, bascules, reset filters)
     │   ├── PriorityBanner.tsx      ← bandeau « No priority set » / « Priority from outerpedia reco »
     │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · WeaponsAccessoriesPanel.tsx
     │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← les sept popovers

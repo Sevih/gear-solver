@@ -246,7 +246,6 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
   // 2-pc / 4-pc bonuses live only on armor pieces (armorSetId); don't fall back
   // to setId (that's the weapon/accessory unique-option group, not a set).
   const setEntry = onCard && game && piece.armorSetId ? pickSetLevel(game, piece.armorSetId, piece.bt) : null;
-  const classLine = piece.classLimit ? `${slot?.label ?? "Item"}    ${piece.classLimit} Exclusive` : slot?.label ?? "Item";
 
   return (
     <div className="space-y-4 text-left">
@@ -254,7 +253,7 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
       <div className="flex items-center gap-1.5">
         {piece.locked && <img src="/img/ui/inven/CT_Slot_Lock.webp" alt="Locked" title="Locked in-game" className="h-4 w-4 shrink-0" />}
         <span
-          className="truncate font-display text-[15px] font-semibold"
+          className="line-clamp-2 min-w-0 font-display text-[15px] font-semibold wrap-break-word"
           style={piece.singularity
             ? { background: SINGULARITY_GRADIENT_H, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }
             : { color: rarity?.fg ?? "#f4f4f5" }}
@@ -270,7 +269,12 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
         <div className="min-w-0 flex-1">
           <div className="flex flex-col text-[11px] leading-tight">
             <span style={{ color: rarity?.fg ?? "#e4e4e7" }} className="font-semibold">{rarity?.label ?? piece.rarity}</span>
-            <span className="text-white">{classLine}</span>
+            {/* slot and class on two spans: they wrap under each other
+             *  rather than run into the wearer's portrait */}
+            <span className="flex flex-wrap gap-x-2 text-white">
+              <span>{slot?.label ?? "Item"}</span>
+              {piece.classLimit && <span>{piece.classLimit} Exclusive</span>}
+            </span>
           </div>
         </div>
         {equippedChar && (onOptimizeWearer && !inTooltip ? (
@@ -432,7 +436,7 @@ function CompactBody({ piece, game, equippedChar = null, fromPresets, projection
       <div className="flex items-start gap-1.5">
         {piece.locked && <img src="/img/ui/inven/CT_Slot_Lock.webp" alt="Locked" title="Locked in-game" className="mt-0.5 h-4 w-4 shrink-0" />}
         <span
-          className="block min-w-0 flex-1 font-display text-[15px] font-semibold leading-tight"
+          className="block min-w-0 flex-1 font-display text-[15px] font-semibold leading-tight wrap-break-word"
           style={piece.singularity
             ? { background: SINGULARITY_GRADIENT_V, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }
             : { color: rarity?.fg ?? "#f4f4f5" }}
@@ -440,12 +444,20 @@ function CompactBody({ piece, game, equippedChar = null, fromPresets, projection
         >
           {compactName(piece, game)}
         </span>
-        {/* What the dropped equipment icon carried — enhance (always),
-         *  breakthrough (when any) and the star count. */}
-        <span className="mt-0.5 flex shrink-0 items-center gap-1 font-mono text-[11px] leading-4 tabular-nums text-white/75">
+        {/* What the dropped equipment icon carried, on two right-aligned
+         *  lines: the star count and the breakthrough (when any), then the
+         *  enhance level (always). */}
+        <span className="mt-0.5 flex shrink-0 flex-col items-end font-mono text-[11px] leading-4 tabular-nums text-white/75">
+          <span className="flex items-center gap-1">
+            <span title="Stars">{piece.stars}★</span>
+            {piece.bt > 0 && (
+              <>
+                <span className="text-white/30">|</span>
+                <span title="Breakthrough">T{piece.bt}</span>
+              </>
+            )}
+          </span>
           <span title="Enhance level">+{piece.enhance}</span>
-          {piece.bt > 0 && <span title="Breakthrough">T{piece.bt}</span>}
-          <span title="Stars">{piece.stars}★</span>
         </span>
         {/* Equipped-on hero — top-right corner of the card, round. */}
         {equippedChar && <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={32} className="rounded-full" />}
@@ -568,7 +580,7 @@ const EXCLUDE_ICON = (
  *  (plus "Optimize wearer →" with `onOptimizeWearer`), and the empty
  *  placeholder — whose texts, like the exclude help, are the caller's. */
 export function GearCardPanel({
-  piece, equippedChar, game, fromPresets, excluded, onToggleExclude, onOptimizeWearer, projection, effects, compact = false,
+  piece, equippedChar, game, fromPresets, excluded, onToggleExclude, onOptimizeWearer, projection, effects, compact = false, fluid = false,
   emptyLabel = "No piece in this build", emptyHint,
   excludeHint = "Never use this piece in any solve (e.g. trash rolls) — the same as a right-click on its tile in Gear.",
 }: {
@@ -584,13 +596,16 @@ export function GearCardPanel({
   projection?: GearCardProjection;
   effects: "card" | "none";
   compact?: boolean;
+  /** Take the width of its grid column (the Optimizer's band) instead of
+   *  the fixed `w-56` / `w-80` of Gear › Pieces and the tooltips. */
+  fluid?: boolean;
   /** The empty state's label and hint. */
   emptyLabel?: string;
   emptyHint?: string;
   /** Hover text of the full-size "Never use" button. */
   excludeHint?: string;
 }) {
-  const width = compact ? "w-56" : "w-80";
+  const width = fluid ? "w-full" : compact ? "w-56" : "w-80";
   if (!piece) {
     return (
       <aside className={cx("flex shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/6 bg-white/[0.012] px-6 py-8 text-center", !compact && "h-full", width)}>
@@ -697,10 +712,11 @@ export interface ResultPairCell {
 
 /** Compact EE + talisman card: two pieces stacked in ONE `w-56` container (the
  *  EE has no main and no effects, the compact talisman is short), split by a
- *  rule, each with its own exclude action. */
-export function ResultPairDetail({ top, bottom, game }: { top: ResultPairCell; bottom: ResultPairCell; game: GameData | null; compact: true }) {
+ *  rule, each with its own exclude action. `fluid`: the width of its grid
+ *  column, as `GearCardPanel`'s. */
+export function ResultPairDetail({ top, bottom, game, fluid = false }: { top: ResultPairCell; bottom: ResultPairCell; game: GameData | null; compact: true; fluid?: boolean }) {
   return (
-    <CardShell width="w-56" fill={false}>
+    <CardShell width={fluid ? "w-full" : "w-56"} fill={false}>
       <PairCell cell={top} game={game} />
       <div className="border-t border-white/8" />
       <PairCell cell={bottom} game={game} grow />

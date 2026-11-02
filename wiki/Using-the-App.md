@@ -142,7 +142,8 @@ until you change them (**Clear** puts every weight back to 0).
 
 ### The filter popovers
 
-The rest of the second row opens one popover each (left to right: **Options**, **Stat filters**,
+The buttons on the right of the first row (on a line of their own in a narrow window) open one
+popover each (left to right: **Options**, **Stat filters**,
 **Ratings**, **Priority**, **Mains**, **Sets**, **Effects**); the number on a button is how many
 rules it holds. Esc or a click outside closes it.
 

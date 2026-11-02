@@ -83,6 +83,17 @@ describe("GearCardBody — one body for the Inventory and the Builder", () => {
     }
   });
 
+  it("full header: the name wraps on two lines at most, slot and class on two spans beside the portrait", () => {
+    const p = piece({ classLimit: "Striker", name: "A Very Long Weapon Name That Would Not Fit" });
+    for (const html of [inventory(p, { equippedChar: ame }), builder(p, { equippedChar: ame })]) {
+      const name = /<span class="([^"]*font-display[^"]*)"/.exec(html)![1]!.split(" ");
+      expect(name).toEqual(expect.arrayContaining(["line-clamp-2", "min-w-0", "wrap-break-word"]));
+      expect(name).not.toContain("truncate");
+      expect(html).toContain('<span class="flex flex-wrap gap-x-2 text-white"><span>Weapon</span><span>Striker Exclusive</span></span>');
+    }
+    expect(builder(piece())).toContain('<span class="flex flex-wrap gap-x-2 text-white"><span>Weapon</span></span>');
+  });
+
   it("the Quality block — title, help, score, reachable, tier, bar — in both contexts", () => {
     for (const html of [inventory(piece()), builder(piece())]) {
       expect(html).toMatch(/<span>Quality<\/span><span tabindex="0" class="group inline-flex cursor-help/);
@@ -138,7 +149,7 @@ describe("GearCardBody — compact", () => {
   it("keeps the compact card: no icon, header enhance / T / stars, subs as icon + value with the details in the title", () => {
     const html = builder(piece(), { compact: true, projection: { addedTicks: [1, 0, 0, 0], transistoneTicks: [1, 0, 0, 0] } });
     expect(html).not.toContain("data-equipment-icon");
-    expect(text(html)).toContain("+15T26★");
+    expect(text(html)).toContain("6★|T2+15");
     expect(html).toContain('title="LV 5 (4 + 0 + 1) · Attack% · T+1"');
     expect(text(html)).toContain("15/17→16Exc.");
     expect(text(html)).not.toContain("Quality");

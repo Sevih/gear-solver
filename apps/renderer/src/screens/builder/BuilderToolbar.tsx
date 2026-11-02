@@ -115,8 +115,10 @@ export function BuilderToolbar({
 
   return (
     <div className="relative flex shrink-0 flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-2 px-2.5 py-2">
-      {/* Row 1 — selected hero (portrait + search) and the primary actions. */}
-      <div className="flex items-center gap-2">
+      {/* Row 1 — selected hero (portrait + search) and the primary actions on
+       *  the left, the filter popovers on the right; a narrow window wraps the
+       *  popovers onto their own line rather than hiding any. */}
+      <div className="flex flex-wrap items-center gap-2">
         {selectedHero ? (
           <CharacterPortrait
             charId={selectedDisplay!.charId}
@@ -159,6 +161,40 @@ export function BuilderToolbar({
             ✕
           </button>
         )}
+        {/* The filter popovers. On the right of the block, the last two
+         *  (Sets, Effects) open from their right edge so their panel stays
+         *  inside the toolbar's width. */}
+        <div className="ml-auto flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
+            <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Stat filters" count={statCount} openKey={openKey} myKey="stat" onToggle={toggle} onClose={close}>
+            <StatFiltersPanel filters={filters.statFilters} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Ratings" count={ratingCount} openKey={openKey} myKey="rating" onToggle={toggle} onClose={close}>
+            <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} dmgSkill={dmgSkill} />
+          </PopoverButton>
+          <PopoverButton label="Priority" count={priorityCount} accent="violet" openKey={openKey} myKey="priority" onToggle={toggle} onClose={close}>
+            <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Mains" count={mainCount} openKey={openKey} myKey="mains" onToggle={toggle} onClose={close}>
+            <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} excludes={filters.mainExcludes} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Sets" count={setCount} accent="violet" align="right" openKey={openKey} myKey="sets" onToggle={toggle} onClose={close}>
+            <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Effects" count={effectCount} align="right" openKey={openKey} myKey="effects" onToggle={toggle} onClose={close}>
+            <WeaponsAccessoriesPanel
+              weapons={weaponEffects}
+              accessories={accessoryEffects}
+              talismans={talismanEffects}
+              weaponPicks={filters.weaponEffectPicks}
+              accPicks={filters.accessoryEffectPicks}
+              talismanPicks={filters.talismanEffectPicks}
+              dispatch={dispatch}
+            />
+          </PopoverButton>
+        </div>
       </div>
 
       {/* Priority banner — where the Score's weights come from when the hero
@@ -174,7 +210,7 @@ export function BuilderToolbar({
         />
       )}
 
-      {/* Row 2 — reforge mode, the quick toggle, and the filter popovers. */}
+      {/* Row 2 — reforge mode, the two quick toggles and "reset filters". */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <ReforgeModeControl value={filters.options.reforgeMode} defaultMode={defaultReforgeMode} dispatch={dispatch} />
         <ToolbarToggle
@@ -189,36 +225,6 @@ export function BuilderToolbar({
           onClick={() => dispatch({ type: "setOption", key: "rerollPotential", value: !(filters.options.rerollPotential ?? false) })}
           title={`Project the best eligible substat line up to tier 4 — a 6★ Legendary without a tier-4 line can reroll one line to tier 4 by Transistone (a 5 % draw per pass; reforge ticks are kept); one that already has a tier-4 line can still raise one line to tier 3. The line: the hero's highest-priority substat, else the largest roll. Works with or without a reforge mode; ignored under Maxed only (no extrapolation). Default for a hero's first solve: ${defaultRerollPotential ? "on" : "off"} — Settings › Solver.`}
         />
-        <ToolbarDivider />
-        <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
-          <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
-        </PopoverButton>
-        <PopoverButton label="Stat filters" count={statCount} openKey={openKey} myKey="stat" onToggle={toggle} onClose={close}>
-          <StatFiltersPanel filters={filters.statFilters} dispatch={dispatch} />
-        </PopoverButton>
-        <PopoverButton label="Ratings" count={ratingCount} openKey={openKey} myKey="rating" onToggle={toggle} onClose={close}>
-          <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} dmgSkill={dmgSkill} />
-        </PopoverButton>
-        <PopoverButton label="Priority" count={priorityCount} accent="violet" openKey={openKey} myKey="priority" onToggle={toggle} onClose={close}>
-          <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
-        </PopoverButton>
-        <PopoverButton label="Mains" count={mainCount} openKey={openKey} myKey="mains" onToggle={toggle} onClose={close}>
-          <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} excludes={filters.mainExcludes} dispatch={dispatch} />
-        </PopoverButton>
-        <PopoverButton label="Sets" count={setCount} accent="violet" openKey={openKey} myKey="sets" onToggle={toggle} onClose={close}>
-          <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />
-        </PopoverButton>
-        <PopoverButton label="Effects" count={effectCount} align="right" openKey={openKey} myKey="effects" onToggle={toggle} onClose={close}>
-          <WeaponsAccessoriesPanel
-            weapons={weaponEffects}
-            accessories={accessoryEffects}
-            talismans={talismanEffects}
-            weaponPicks={filters.weaponEffectPicks}
-            accPicks={filters.accessoryEffectPicks}
-            talismanPicks={filters.talismanEffectPicks}
-            dispatch={dispatch}
-          />
-        </PopoverButton>
         <button
           type="button"
           onClick={() => dispatch({ type: "resetAll", to: filterDefaults(defaultReforgeMode, defaultRerollPotential) })}
@@ -295,11 +301,6 @@ function SolveButton({ solving, canSolve, loading, onSolve, onCancelSolve }: {
       {loading ? "Loading reco…" : "Solve"}
     </button>
   );
-}
-
-/** Slim divider between toolbar groups. */
-function ToolbarDivider() {
-  return <span className="h-6 w-px shrink-0 bg-white/10" />;
 }
 
 /** Reforge-mode segmented control — Off / +10R6 / +10R9 / +15R9. Replaces the

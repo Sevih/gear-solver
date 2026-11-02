@@ -43,6 +43,28 @@ function relTime(ms: number | null): { rel: string; abs: string } | null {
   return { rel, abs };
 }
 
+/** The quality bar: one slice per tier, as wide as its count — each slice
+ *  the same shortcut as the tier's button below it (Gear › Pieces filtered
+ *  on that tier), inert without `onDrill` or on an empty tier. */
+export function QualityBar({ tiers, onDrill }: { tiers: ReturnType<typeof computeStats>["tiers"]; onDrill?: (d: InventoryDrill) => void }) {
+  return (
+    <div className="flex h-8 gap-0.75 overflow-hidden rounded-lg">
+      {tiers.map((t) => (
+        <button
+          key={t.tier}
+          type="button"
+          disabled={!onDrill || t.count === 0}
+          onClick={() => onDrill?.({ quality: t.tier })}
+          title={onDrill ? `${t.hint}\n\nClick to see these ${t.label} pieces in Gear` : t.hint}
+          aria-label={`${t.label}: ${t.count.toLocaleString()} pieces`}
+          className={cx("opacity-92 transition-opacity", onDrill && t.count > 0 ? "cursor-pointer hover:opacity-100" : "cursor-help")}
+          style={{ flex: `${t.count} 1 0`, background: t.color }}
+        />
+      ))}
+    </div>
+  );
+}
+
 type BreakdownView = "overview" | "class" | "sets" | "ooparts";
 const BREAKDOWN_VIEW_CODEC = jsonOneOf<BreakdownView>(["overview", "class", "sets", "ooparts"]);
 
@@ -96,11 +118,7 @@ export function OverviewView({ inventory, game, capStatus, onDrill }: OverviewVi
         >
           Gear quality distribution
         </SectionLabel>
-        <div className="flex h-8 gap-0.75 overflow-hidden rounded-lg">
-          {stats.tiers.map((t) => (
-            <div key={t.tier} style={{ flex: `${t.count} 1 0`, background: t.color, opacity: 0.92 }} />
-          ))}
-        </div>
+        <QualityBar tiers={stats.tiers} onDrill={onDrill} />
         <div className="grid grid-cols-5 gap-3">
           {stats.tiers.map((t) => (
             <button

@@ -7,7 +7,9 @@
 // card keeps its icon and its full-width exclude button. The talisman's
 // multi-tier passive moves to the name's title, and the EE + talisman share
 // one card in the compact band (seven cells), each compact card at its own
-// content height (no row stretch). Rendered server-side, the
+// content height (no row stretch). The header's stars and breakthrough sit
+// above the enhance; the band is a fluid grid whose cards take their column
+// (`w-full`), the card outside it keeping its fixed width. Rendered server-side, the
 // equipment icon mocked to a marker element.
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
@@ -161,8 +163,27 @@ describe("GearCardPanel — compact card", () => {
   it("no equipment icon; the header carries enhance, breakthrough and stars", () => {
     const html = render(piece(), true);
     expect(html).not.toContain("data-equipment-icon");
-    expect(text(html)).toContain("+15T26★");
-    expect(text(render(piece({ bt: 0, enhance: 0 }), true))).toContain("+06★");
+    expect(text(html)).toContain("6★|T2+15");
+    expect(text(render(piece({ bt: 0, enhance: 0 }), true))).toContain("6★+0");
+  });
+
+  it("header on two right-aligned lines: « 6★ | T3 » then « +15 », « 6★ » alone then « +0 » without breakthrough", () => {
+    const head = (p: UiPiece) => {
+      const html = render(p, true);
+      const block = /<span class="[^"]*flex-col items-end[^"]*">(.*?<span title="Enhance level">[^<]*<\/span>)<\/span>/.exec(html)![1]!;
+      return /^<span class="flex items-center gap-1">(.*?)<\/span>(<span title="Enhance level">.*)$/.exec(block)!.slice(1).map(text);
+    };
+    expect(head(piece({ enhance: 15, bt: 3, stars: 6 }))).toEqual(["6★|T3", "+15"]);
+    expect(head(piece({ enhance: 0, bt: 0, stars: 6 }))).toEqual(["6★", "+0"]);
+    const html = render(piece({ bt: 3 }), true);
+    expect(html).toContain('<span class="text-white/30">|</span>');
+    for (const t of ["Stars", "Breakthrough", "Enhance level"]) expect(html).toContain(`title="${t}"`);
+  });
+
+  it("the name wraps instead of being cut", () => {
+    const name = /<span class="([^"]*font-display[^"]*)"/.exec(render(piece(), true))![1]!.split(" ");
+    expect(name).toEqual(expect.arrayContaining(["min-w-0", "flex-1", "leading-tight", "wrap-break-word"]));
+    expect(name).not.toContain("truncate");
   });
 
   it("substat cells show icon + value only; LV and +n go to the title", () => {
@@ -366,6 +387,33 @@ describe("BottomGearBand — compact band", () => {
     const asides = asideClasses(html);
     expect(asides).toHaveLength(8);
     for (const c of asides) expect(c).toContain("h-full");
+  });
+
+  it("a fluid grid of at most four columns, no max-content; the band's cards take their column (w-full)", () => {
+    for (const [compact, min] of [[true, "224px"], [false, "320px"]] as const) {
+      const html = renderBand(compact);
+      const root = rootClass(html);
+      expect(root).toContain("grid");
+      expect(root).toContain(`grid-cols-[repeat(auto-fit,minmax(max(${min},calc((100%_-_24px)/4)),1fr))]`);
+      expect(html).not.toContain("max-content");
+      expect(html).not.toMatch(/min-\[1(232|616)px\]/);
+      for (const c of asideClasses(html)) {
+        expect(c).toContain("w-full");
+        expect(c).not.toContain("w-56");
+        expect(c).not.toContain("w-80");
+      }
+    }
+  });
+
+  it("outside the band the card keeps its fixed width: w-80 in Gear › Pieces, w-56 compact", () => {
+    const card = (compact: boolean, p: UiPiece | null) => asideClasses(renderToStaticMarkup(createElement(GearCardPanel, {
+      piece: p, equippedChar: null, game: null, effects: "card", compact,
+    })))[0]!;
+    for (const p of [piece(), null]) {
+      expect(card(false, p)).toContain("w-80");
+      expect(card(true, p)).toContain("w-56");
+      expect(card(false, p)).not.toContain("w-full");
+    }
   });
 
   it("compact empty card keeps its content height, the non-compact one fills", () => {

@@ -353,7 +353,9 @@ Under row 1, visible with the popovers closed, while the hero has no weights of 
 
 ### Filter popovers (`BuilderToolbar.tsx`, `PopoverButton`)
 
-Seven buttons, in the bar's order: Options, Stat filters, Ratings, Priority, Mains, Sets, Effects. One popover
+Seven buttons on the right of row 1 (sent to a line of their own in a narrow window), in the bar's order: Options,
+Stat filters, Ratings, Priority, Mains, Sets, Effects (the last two open their panel from their right edge,
+`align="right"`). One popover
 open at a time (outside click or Esc closes it); a button's badge counts the constraints it holds (Options:
 those off the defaults, plus the heroes ticked in Don't take from…). Each popover is a `Panel` component
 (`screens/builder/Panel.tsx`), described here in the manual's order.
@@ -560,21 +562,27 @@ opens Gear on the piece (`InventoryDrill.pieceUid`). The Worklist states what it
 
 ### Piece cards (`screens/builder/BottomGearBand.tsx`, `design/GearCard.tsx`)
 8 cards — one per slot, in the game's equipment-screen order (`GAME_GEAR_GRID`, shared with Heroes and Presets):
-a 4 × 2 grid Weapon | EE | Helmet | Armor / Accessory | Talisman | Gloves | Boots from a 1616 px window (four
-`w-80` cards next to the `w-72` column), otherwise the same order wraps. Each card shows name, enhance level, slot
+a fluid grid (`repeat(auto-fit, minmax(…, 1fr))`) of four columns at most, 4 × 2 Weapon | EE | Helmet | Armor /
+Accessory | Talisman | Gloves | Boots when the band allows it, each column at least 320 px wide (and at least a
+quarter of the band less its three 8 px gutters), each card as wide as its column (`GearCardPanel`'s `fluid`:
+`w-full`); narrower, the same order wraps. Outside the band (Gear › Pieces, tooltips, presets) the card keeps its
+fixed width (`w-80`, `w-56` compact). The name runs on two lines at most (`line-clamp-2`) and the slot and the
+class ("Striker Exclusive") are two `span`s that wrap under each other rather than under the wearer's portrait.
+Each card shows name, enhance level, slot
 icon, main stat, subs (with ticks). It's Gear's piece card (`design/GearCard.tsx`: `GearCardPanel` around
 `GearCardBody`, `effects="none"`): same rarity / slot line, same Quality block (title, hover help, bar), same
 "Active Effect at +15 Enhancement"; the weapon / accessory passive and the set bonuses aren't there (the right
 column's "Effects" panel shows them), the EE shows only its image and gems, and the projection marks its ticks
 (`+n` cyan, `T+n` violet) on a substat column as wide as Gear's. An empty card says "No weapon in this build" (or
 "No weapon yet" before any selection, "Solve, then pick a build in the table."). On top:
-- **Compact mode** (Settings › Display › Compact result cards, `gs.builder.compactCards`, off by default): `w-56`
-  cards — the grid then starts at 1232 px (4 × 224 + 3 × 8 + 288 + 8 + 16) —, the EE and the talisman in ONE card
+- **Compact mode** (Settings › Display › Compact result cards, `gs.builder.compactCards`, off by default):
+  columns at least 224 px wide, the EE and the talisman in ONE card
   (`ResultPairDetail`: EE on top, talisman below, a rule between them, each with its own exclude action), so seven
   cells as 4 + 3 in the `COMPACT_GEAR_GRID` order (Weapon | EE + Talisman | Helmet | Armor / Accessory | Gloves |
   Boots), each card at its own content height (no stretching to the row's tallest); no piece icon; header =
   `compactName` ("EE", the set name for an armor piece, the piece name otherwise, without "- [Singularity]" but with
-  the gradient) followed by the enhance (`+15`), the breakthrough (`T2`, when there is one) and the stars (`6★`);
+  the gradient, on two lines when the column is narrow), with on its right two right-aligned lines: the stars and
+  the breakthrough (`6★ | T2`, `6★` alone without breakthrough) then the enhance (`+15`);
   main(s) as icon + value on one line; subs in a 2 × 2 grid, icon + value only (LV, base + reforges and the
   Transistone mark in the `title`; value in cyan when projected ticks enter it, violet when it's the Transistone,
   amber at the cap); gems as one row of five icons (detail in the `title`); quality on one line (`14/20 →17 Exc.`);
@@ -962,7 +970,7 @@ apps/renderer/src/
     ├── builder/                    ← Optimizer tab
     │   ├── BuilderScreen.tsx       ← useReducer(SolverFilters) + layout + hero switch + builds/presets/reco + selected build
     │   ├── useSolverSession.ts     ← orchestrator wiring: solve/cancel, pre-solve estimate, progress, results
-    │   ├── BuilderToolbar.tsx      ← row 1 (hero, Score | CP, Solve / Cancel, Filter) + row 2 (Reforge, toggles, popovers, reset filters)
+    │   ├── BuilderToolbar.tsx      ← row 1 (hero, Score | CP, Solve / Cancel, Filter, popovers on the right) + row 2 (Reforge, toggles, reset filters)
     │   ├── PriorityBanner.tsx      ← the "No priority set" / "Priority from outerpedia reco" banner
     │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · WeaponsAccessoriesPanel.tsx
     │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← the seven popovers
