@@ -56,7 +56,9 @@ by hand (manual import).
   `clampWorkerCount`) that import the pure engine modules in
   `apps/renderer/src/lib/solver/`. See [Solver](Solver) for the solver pipeline + UI
   panels, and [Engine Reference](Engine-Reference) for the full formula + data-pipeline reference.
-- **apps/desktop** — Electron shell that hosts the renderer. `main.ts` boots a local
+- **apps/desktop** — Electron shell that hosts the renderer. `main.ts` installs a minimal
+  application menu (`menu.ts`: File / View / Help, no reload accelerator so Ctrl+R / F5 can't kill
+  a running solve) and boots a local
   server (`server.ts`) that serves `data/derived` + the capture output, exposes the
   capture HTTP endpoints (`/api/capture/{status,wipe}` and `/api/steam/*` for the plugin via
   `steam-capture.ts` — there is no Electron IPC/preload, the renderer talks plain HTTP), and accepts a `POST /api/captured/user-item` write-back (the renderer

@@ -180,7 +180,7 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
     default: false,
     kind: "bool",
     label: "Solver fan-out logging",
-    help: "Log the solver's fan-out (pool sizes, chunk count, workers) and per-solve merge/duration to the devtools console. Useful when profiling a slow solve — off by default.",
+    help: "Log the solver's fan-out (pool sizes, chunk count, workers) and per-solve merge/duration to the developer tools console (View › Toggle developer tools, or F12). Useful when profiling a slow solve — off by default.",
   },
   debugStatLocks: {
     key: "gs.debug.statLocks",

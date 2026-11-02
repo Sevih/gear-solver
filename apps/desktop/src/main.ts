@@ -13,7 +13,7 @@
  *   then loaded against that local server's ephemeral 127.0.0.1 port.
  *   Game data syncs in the background once the window is up (startup.ts).
  */
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, Menu, shell } from "electron";
 import type { Server } from "node:http";
 import { cpSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -28,6 +28,7 @@ import { getCurrentRef, readShaState, setCurrentRef } from "./repo-source.js";
 import { prefetchImages } from "./img-cache.js";
 import { runStartup } from "./startup.js";
 import { removeEmulatorLeftovers } from "./legacy-cleanup.js";
+import { appMenuTemplate } from "./menu.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -67,6 +68,16 @@ async function warmImageCache(): Promise<void> {
   const n = await prefetchImages(IMG_CACHE_DIR, [...rels], 6);
   try { writeAtomic(marker, JSON.stringify({ hash, count: n, of: rels.size })); } catch { /* best-effort */ }
   dlog("server", `image prefetch: ${n}/${rels.size} cached @ data ${hash}`);
+}
+
+/** Help › About: app, Electron and Chromium versions. */
+function showAbout(): void {
+  void dialog.showMessageBox({
+    type: "info",
+    title: "gear-solver",
+    message: `gear-solver ${app.getVersion()}\nElectron ${process.versions.electron}\nChromium ${process.versions.chrome}`,
+    buttons: ["OK"],
+  });
 }
 
 async function createWindow(): Promise<void> {
@@ -118,6 +129,16 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     dlog("server", `app ready — ${IS_DEV ? "dev (Vite)" : "prod (embedded server)"}`);
+    // Replaces Electron's default menu, so its Reload / Force reload
+    // accelerators (Ctrl+R, F5) no longer reload the window and kill a
+    // running solve. The bar stays hidden (autoHideMenuBar) until Alt; its
+    // shortcuts work regardless.
+    Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate({
+      version: app.getVersion(),
+      isDev: IS_DEV,
+      openExternal: (u) => void shell.openExternal(u),
+      showAbout,
+    })));
     // The emulator capture source is gone: drop what it left in userData (its
     // CA with the private key, mitmdump, …). No-op once done.
     for (const p of removeEmulatorLeftovers(app.getPath("userData"), CAPTURE_OUT)) dlog("server", `removed emulator leftover ${p}`);

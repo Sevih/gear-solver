@@ -76,6 +76,12 @@ had already fully finished are kept, which is typically none. Then tighten **Top
 or raise the worker count in **Settings → Solver** (Auto already uses most of your CPU), and
 re-solve.
 
+**Ctrl+R (or F5) does nothing.**
+On purpose: reloading the window would kill a running solve or plugin install, so the app's menu
+has no reload. To refresh the game data use **Settings › Data & updates › Sync game data**; the
+rest of the menu (zoom, full screen, developer tools on **F12**) shows when you press **Alt** —
+see [Using the App](Using-the-App).
+
 **What's the "Swaps" column?**
 How many gear slots a build changes vs what the hero currently wears — not upgrades to do. Low
 Swaps = a small change you can equip in a few moves; high Swaps = a bigger reshuffle.

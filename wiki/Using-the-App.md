@@ -456,6 +456,23 @@ The Presets loss threshold is not in Settings: it is set on the Presets screen (
 
 ---
 
+## The menu bar
+
+Hidden until you press **Alt**; its shortcuts work either way.
+
+- **File** — **Quit**.
+- **View** — **Zoom in** / **Zoom out** / **Reset zoom**, **Toggle full screen**, and **Toggle
+  developer tools** (**F12** or **Ctrl+Shift+I**; that is where the solver fan-out logging of
+  Settings › Advanced prints).
+- **Help** — **User guide** (this wiki), **Report an issue** (the GitHub issues) and **About
+  gear-solver**, with the app, Electron and Chromium versions.
+
+There is no reload: **Ctrl+R** and **F5** do nothing, so a running solve or plugin install can't be
+killed by a stray keypress. To pick up new game data, use **Settings › Data & updates › Sync game
+data**.
+
+---
+
 ## Keeping things up to date
 
 - **App updates** — checked automatically; a **vX ready** badge appears in the header once one is

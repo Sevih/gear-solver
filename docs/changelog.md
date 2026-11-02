@@ -8,6 +8,44 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧭 Menu Electron minimal sans rechargement, outils de développement et guide dans le menu (D14, G105) (2026-11-02)
+- ✅ **Pourquoi.** Arbitrage D14 de `docs/ux-audit-2026-11-01.md` (section 6 ; section 1.1, observation sur
+  `apps/desktop/src/main.ts`) : la fenêtre gardait le menu par défaut d'Electron, caché par `autoHideMenuBar`, dont
+  les accélérateurs Reload (Ctrl+R, F5) et Force reload rechargeaient la fenêtre et tuaient un solve ou une
+  installation du plugin en cours, alors que l'app évite exprès les rechargements ; et l'aide de « Solver fan-out
+  logging » renvoyait à une console de développement que rien ne montrait.
+- ✅ **Menu.** Nouveau `apps/desktop/src/menu.ts`, module pur (`import type` d'`electron` seulement) :
+  `appMenuTemplate({ version, isDev, openExternal, showAbout })` rend trois menus. **File** : Quit (`role: "quit"`).
+  **View** : Zoom in / Zoom out / Reset zoom (`zoomIn`, `zoomOut`, `resetZoom`), Toggle full screen
+  (`togglefullscreen`), Toggle developer tools (`toggleDevTools`, accélérateur `F12`, plus un second item caché
+  `visible: false` sur `CmdOrCtrl+Shift+I`). **Help** : User guide (`USER_GUIDE_URL`, le wiki), Report an issue
+  (`ISSUES_URL`, les issues GitHub), About gear-solver <version> → `showAbout()`. Ce qui disparaît : Reload, Force
+  reload et leurs accélérateurs Ctrl+R / F5, ainsi que le reste du menu par défaut (Edit, Window). Pas de menu
+  macOS, l'app ne cible que Windows et Linux. `isDev` est reçu mais ne change rien au menu pour l'instant.
+- ✅ **main.ts.** `Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(…)))` dans `app.whenReady`, avant
+  `runStartup` (donc avant `createWindow`), avec un commentaire : le menu posé remplace celui par défaut, Ctrl+R et
+  F5 ne rechargent plus rien. `showAbout` = `dialog.showMessageBox` (type `info`, titre « gear-solver », version de
+  l'app, d'Electron et de Chromium via `process.versions`, bouton OK). `autoHideMenuBar: true` et le
+  `openDevTools({ mode: "detach" })` du mode dev restent.
+- ✅ **Textes.** `lib/settings.ts` : l'aide de `debugSolver` dit « the developer tools console (View › Toggle
+  developer tools, or F12) ». `wiki/Using-the-App.md` : sous-section « The menu bar » après Settings (Alt la montre,
+  son contenu, pas de rechargement). `wiki/FAQ.md` : « Ctrl+R (or F5) does nothing. » sous Using the Optimizer.
+  `docs/architecture.md` et `wiki/Architecture.md` : `menu.ts` dans le paragraphe `apps/desktop`. `docs/reference.md`
+  et `wiki/Engine-Reference.md` ne listent ni les modules ni les tests de `apps/desktop` : rien à y reporter.
+  `docs/todo.md` n'avait aucun item sur le menu.
+- ✅ **Tests.** `apps/desktop/test/menu.test.ts` (6 tests, sans Electron, fonctions factices) : File / View / Help
+  dans l'ordre ; rôles `quit`, `zoomIn`, `zoomOut`, `resetZoom`, `togglefullscreen`, `toggleDevTools` présents ;
+  aucun rôle `reload` / `forceReload` ni accélérateur finissant par `+R` ou égal à `F5` dans tout l'arbre (parcours
+  récursif) ; `F12` et `CmdOrCtrl+Shift+I` sur les outils de développement ; User guide et Report an issue appellent
+  `openExternal` avec les deux URL exactes ; l'item About porte la version et appelle `showAbout`.
+  `apps/desktop/test/packaging.test.ts` reste vert (`menu.ts` est sous `src/**/*`, compilé dans `dist/` comme les
+  autres modules). `npm run typecheck` : `tsc --noEmit` sans erreur (code 0) ; `npm test` : `Tests  1098 passed
+  (1098)` (98 fichiers) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, le même compte qu'avant.
+- ⏳ **Sevih, en lançant l'app** (non lancée ici) : Alt montre la barre File / View / Help ; F12 et Ctrl+Shift+I
+  ouvrent les outils de développement (le second, porté par un item caché, est le point à confirmer) ; Ctrl+R et F5
+  n'ont plus d'effet, y compris pendant un solve ; User guide et Report an issue ouvrent le navigateur ; About
+  affiche les trois versions.
+
 ### ⚖️ Perte des presets en jets réels des deux côtés, verrou de preset sans effet sur le pool de gemmes (D11, D12, G104) (2026-11-02)
 - ✅ **Pourquoi.** Arbitrages D11 et D12 de `docs/ux-audit-2026-11-01.md` (section 6, table « Arbitrages de Sevih » ;
   section 3.2, « La perte de Presets compare des pommes et des oranges » ; section 3.5, ligne « Pool : Talisman d'un
