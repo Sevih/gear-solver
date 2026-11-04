@@ -108,6 +108,41 @@ describe("foldEquipEvents", () => {
     expect(next.PresetList).toEqual([{ Num: 1 }]);
     expect(owners(raw)[W1]).toBe("0");
   });
+
+  // CWebRES_SingularityLoadDeck and its three siblings: one WSItemEquipAllData
+  // per hero, each with its own CharUID (Lineup Record › Restore Team).
+  it("loadDeck: each ItemEquipAllList entry as an equipAll onto its own CharUID, null and CharUID 0 skipped", () => {
+    const X1 = "6200000011"; // free accessory
+    const X2 = "6200000012"; // armor on B
+    const raw = snapshot();
+    raw.ItemList.push({ ItemUID: X1, CharUID: "0", ItemID: 5 }, { ItemUID: X2, CharUID: HERO_B, ItemID: 6 });
+    const ev: EquipEvent = {
+      seq: 1,
+      path: "/singularity/loadDeck",
+      res: {
+        ItemEquipAllList: [
+          // A takes W1, H1 (worn by B) and X1, gives W2 back to the inventory.
+          { CharUID: HERO_A, ToEquipList: [W1, H1, X1], ToInvenList: [W2], UnEquipList: [{ CharUID: HERO_B, ItemUID: H1 }] },
+          null,
+          // Ignored by the client: would put X1 back in the inventory.
+          { CharUID: 0, ToEquipList: [], ToInvenList: [X1], UnEquipList: [] },
+          // B takes H2 and keeps X2.
+          { CharUID: HERO_B, ToEquipList: [H2, X2], ToInvenList: [], UnEquipList: [] },
+        ],
+        CharList: [HERO_A, "0", "0", HERO_B],
+      },
+    };
+    const { next, applied, skipped } = foldEquipEvents(raw, [ev]);
+    expect(owners(next)).toEqual({ [W1]: HERO_A, [W2]: "0", [H1]: HERO_A, [H2]: HERO_B, [X1]: HERO_A, [X2]: HERO_B });
+    expect([applied, skipped]).toEqual([5, 0]);
+  });
+
+  it("loadDeck: an empty ItemEquipAllList changes nothing", () => {
+    const raw = snapshot();
+    const { next, applied, skipped } = foldEquipEvents(raw, [{ seq: 1, path: "/worldBoss/loadDeck", res: { ItemEquipAllList: [], CharList: [] } }]);
+    expect(next).toEqual(raw);
+    expect([applied, skipped]).toEqual([0, 0]);
+  });
 });
 
 const subs = (...ids: number[]) => ids.map((OptionID) => ({ OptionID, Level: 0, BaseLevel: 0 }));

@@ -29,8 +29,11 @@ once the game has decrypted them:
 - Output: `<capture folder>/{user_item,user_character,…}.json` (`.cache/capture-out` in dev,
   `<userData>/capture-out` packaged). The manual import reads the same files.
 - Changes made in-game (plugin 0.2.0 for gear moves, 0.3.0 for gems and substats, 0.4.0 for
-  upgrades, 0.5.0 for selling and locking, 0.5.1 for dissolving): the game only re-sends `/user/item` at the lobby, but every move answers `/item/equip`
-  or `/item/equipAll`, socketing, removing or rerolling a gem or changing substats (reforge,
+  upgrades, 0.5.0 for selling and locking, 0.5.1 for dissolving, 0.5.2 for a restored team): the game only re-sends `/user/item` at the lobby, but every move answers `/item/equip`
+  or `/item/equipAll`, a team restored (Lineup Record › Restore Team) answers
+  `/singularity/loadDeck`, `/worldBoss/loadDeck`, `/guild/raid/loadDeck` or
+  `/irregular/chase/loadDeck` (one equipAll per hero in `ItemEquipAllList`, each with its own
+  `CharUID`), socketing, removing or rerolling a gem or changing substats (reforge,
   Transistone) answers `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption` or
   `/item/subOptionChange`, and an upgrade answers `/item/enchant`, `/item/enchantReset`,
   `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge` or `/item/craft`; the

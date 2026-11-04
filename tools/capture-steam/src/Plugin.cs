@@ -60,7 +60,7 @@ namespace GearSolverCapture
     {
         public const string Id = "outerpedia.gearsolver.capture";
         public const string Name = "Gear Solver Capture";
-        public const string Version = "0.5.1";
+        public const string Version = "0.5.2";
 
         internal static ManualLogSource Log;
 
@@ -284,7 +284,11 @@ namespace GearSolverCapture
         /// hero, the gem / substat ones carry the whole updated item (and the gem
         /// item, for a removal or a reroll), the upgrade ones (enhance, reset,
         /// limit break, smelting, merge, craft) the improved or created
-        /// items and the new count of the stacks they consume. They're appended to
+        /// items and the new count of the stacks they consume. A team restored
+        /// from Lineup Record (<c>/singularity/loadDeck</c>, <c>/worldBoss/loadDeck</c>,
+        /// <c>/guild/raid/loadDeck</c>, <c>/irregular/chase/loadDeck</c>) re-equips
+        /// several heroes at once: one equipAll per hero in <c>ItemEquipAllList</c>.
+        /// They're appended to
         /// <c>equip-events.ndjson</c> (one line per response) and the desktop app
         /// folds them into <c>user_item.json</c>. Truncated whenever a full
         /// <c>/user/item</c> lands (the snapshot is the truth again).</summary>
@@ -303,6 +307,10 @@ namespace GearSolverCapture
             "/item/smeltingReset",
             "/item/merge",
             "/item/craft",
+            "/singularity/loadDeck",
+            "/worldBoss/loadDeck",
+            "/guild/raid/loadDeck",
+            "/irregular/chase/loadDeck",
         };
         private const string JournalFile = "equip-events.ndjson";
 

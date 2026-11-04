@@ -1,7 +1,10 @@
 /**
  * In-game gear changes → captured snapshot. The game only sends `/user/item`
  * (the full inventory) at the lobby; a piece moved in the hero screen comes
- * back as an `item/equip` or `item/equipAll` response instead, a gem
+ * back as an `item/equip` or `item/equipAll` response instead (a team
+ * restored from Lineup Record as `singularity/loadDeck`, `worldBoss/loadDeck`,
+ * `guild/raid/loadDeck` or `irregular/chase/loadDeck`: one equipAll per hero
+ * in `ItemEquipAllList`), a gem
  * socketed / removed / rerolled or a substat change (reforge, Transistone) as
  * `item/gemInsert`, `item/gemRemove`, `item/gemChangeOption` or
  * `item/subOptionChange`, and an upgrade as `item/enchant`, `item/enchantReset`,
@@ -144,17 +147,31 @@ function movesOf(e: EquipEvent): Array<[item: unknown, owner: unknown]> {
     // ToEquipUID itself, so its new owner covers it.
     return [[r.ToInvenUID, UNEQUIPPED], [r.ToEquipUID, char]];
   }
-  if (e.path === "/item/equipAll") {
-    // CItemInventory.UpdateEquipItems: UnEquipList first, then ToInvenList
-    // off the hero, then ToEquipList onto it.
-    const list = (v: unknown) => (Array.isArray(v) ? v : []);
-    return [
-      ...list(r.UnEquipList).map((u): [unknown, unknown] => [(u as { ItemUID?: unknown } | null)?.ItemUID, UNEQUIPPED]),
-      ...list(r.ToInvenList).map((u): [unknown, unknown] => [u, UNEQUIPPED]),
-      ...list(r.ToEquipList).map((u): [unknown, unknown] => [u, char]),
-    ];
+  if (e.path === "/item/equipAll") return equipAllMoves(r, char);
+  if (Array.isArray(r.ItemEquipAllList)) {
+    // A restored team (the four `loadDeck`): one equipAll per hero, each with
+    // its own CharUID, in the list's order. The client skips a null entry and
+    // CharUID 0 (CUISingularityDeckRecordPopup and its three siblings).
+    return (r.ItemEquipAllList as unknown[]).flatMap((v) => {
+      const entry = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+      const owner = uid(entry?.CharUID);
+      return entry && owner !== null && owner !== UNEQUIPPED ? equipAllMoves(entry, entry.CharUID) : [];
+    });
   }
   return [];
+}
+
+/** One `WSItemEquipAllData` (an `item/equipAll` response, or one entry of a
+ *  `loadDeck`'s `ItemEquipAllList`) onto hero `char`, in
+ *  CItemInventory.UpdateEquipItems' order: UnEquipList first, then ToInvenList
+ *  off the hero, then ToEquipList onto it. */
+function equipAllMoves(r: Record<string, unknown>, char: unknown): Array<[item: unknown, owner: unknown]> {
+  const list = (v: unknown) => (Array.isArray(v) ? v : []);
+  return [
+    ...list(r.UnEquipList).map((u): [unknown, unknown] => [(u as { ItemUID?: unknown } | null)?.ItemUID, UNEQUIPPED]),
+    ...list(r.ToInvenList).map((u): [unknown, unknown] => [u, UNEQUIPPED]),
+    ...list(r.ToEquipList).map((u): [unknown, unknown] => [u, char]),
+  ];
 }
 
 /** A `WSItemData` as the snapshot spells it: uids as strings (the wire sends

@@ -28,8 +28,11 @@ au moment où le jeu les a déchiffrées :
   `<userData>/capture-out` packagé). L'import manuel lit les mêmes fichiers.
 - Changements faits en jeu (plugin 0.2.0 pour les déplacements, 0.3.0 pour les gemmes et les
   sous-stats, 0.4.0 pour les améliorations, 0.5.0 pour la vente et le verrou, 0.5.1 pour le
-  désassemblage) : le jeu ne renvoie
-  `/user/item` qu'au lobby, mais chaque déplacement répond `/item/equip` ou `/item/equipAll`, un
+  désassemblage, 0.5.2 pour une équipe restaurée) : le jeu ne renvoie
+  `/user/item` qu'au lobby, mais chaque déplacement répond `/item/equip` ou `/item/equipAll`, une
+  équipe restaurée (Lineup Record › Restore Team) `/singularity/loadDeck`, `/worldBoss/loadDeck`,
+  `/guild/raid/loadDeck` ou `/irregular/chase/loadDeck` (un equipAll par héros dans
+  `ItemEquipAllList`, chacun avec son `CharUID`), un
   sertissage, un retrait, un reroll de gemme ou un changement de sous-stats (reforge, Transistone)
   `/item/gemInsert`, `/item/gemRemove`,
   `/item/gemChangeOption` ou `/item/subOptionChange`, et une amélioration `/item/enchant`,

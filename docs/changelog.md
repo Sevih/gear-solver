@@ -8,6 +8,40 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔁 Équipe restaurée (Lineup Record › Restore Team) suivie en direct : les quatre `loadDeck` journalisés et repliés comme des `equipAll` (plugin 0.5.2) (G110) (2026-11-04)
+- ✅ **Pourquoi.** Bug remonté par Sevih le 04/11 : restaurer une équipe enregistrée en jeu rééquipe d'un coup les
+  pièces de plusieurs héros, mais l'app ne bougeait qu'au `/user/item` suivant (lobby). La restauration passe par
+  `singularity/loadDeck`, `worldBoss/loadDeck`, `guild/raid/loadDeck` et `irregular/chase/loadDeck`, que le plugin
+  ne journalisait pas. Dans le client, `CWebRES_SingularityLoadDeck` et ses trois sœurs portent `ItemEquipAllList`
+  (`List<WSItemEquipAllData>` : `{ CharUID, ToEquipList, ToInvenList, UnEquipList }` par héros, la réponse d'un
+  `item/equipAll`), appliqués par `CPlayer.ItemInventory.UpdateEquipItems` pour chaque entrée non nulle à `CharUID`
+  ≠ 0 (`CUISingularityDeckRecordPopup`, `CUIWorldBossTeamSavePopup`, `CUIGuildRaidDeckRecordPopup`,
+  `CUIChaseDeckRecordPopup`).
+- ✅ **Plugin 0.5.2.** `tools/capture-steam/src/Plugin.cs` (`Version`) et `GearSolverCapture.csproj` passent à
+  0.5.2 ; les quatre chemins `/singularity/loadDeck`, `/worldBoss/loadDeck`, `/guild/raid/loadDeck`,
+  `/irregular/chase/loadDeck` rejoignent l'ensemble `Journal`, commentaire compris. Forme du chemin vérifiée : le
+  hook `Log2InternalWeb` reçoit `request.CurrentUri.LocalPath` d'une URI `serviceUri + "/" + cmdResource`
+  (`CWebManager`), donc `/guild/raid/loadDeck` arrive tel quel, comme `/item/equip`.
+- ✅ **Le pli.** `apps/desktop/src/equip-events.ts` : `movesOf` traite une réponse qui porte `ItemEquipAllList`
+  (tableau) — chaque entrée objet dont `CharUID` est un uid non nul donne les trois listes dans l'ordre
+  d'`UpdateEquipItems`, avec le `CharUID` de l'entrée, les entrées dans l'ordre du tableau ; une entrée nulle, sans
+  `CharUID` ou à `CharUID` 0 est ignorée sans compter de saut, comme dans le client. Le cas `item/equipAll` et
+  celui-ci passent par une même fonction, `equipAllMoves(entry, char)`. Le reste du pli (uids inconnus sautés,
+  `touched`, `skipped`) est inchangé ; l'en-tête du fichier cite les quatre chemins.
+- ✅ **Docs.** `tools/capture-steam/README.md` (paragraphe des déplacements et table de `equip-events.ndjson`),
+  `wiki/Capture-Pipeline.md` (sa table), `docs/reference.md` et son miroir `wiki/Engine-Reference.md`.
+- ✅ **Tests.** `apps/desktop/test/equip-events.test.ts` : un `/singularity/loadDeck` à quatre entrées (A reprend
+  W1, H1 — porté par B, dans l'`UnEquipList` de A — et un accessoire, rend W2 par `ToInvenList` ; une entrée
+  `null` ; une entrée à `CharUID` 0 qui rendrait l'accessoire à l'inventaire si elle n'était pas ignorée ; B prend
+  H2 et garde son armure) → propriétaires justes, `applied` 5, `skipped` 0 ; un `/worldBoss/loadDeck` à
+  `ItemEquipAllList: []` → snapshot identique, 0 / 0. Tests existants intacts. `dotnet build tools/capture-steam -c
+  Release` : « 0 Erreur(s) » ; `npm run typecheck` : vert (dernière ligne `> tsc --noEmit` du renderer, code 0) ;
+  `npm test` : « Tests  1119 passed (1119) » (desktop « Tests  249 passed (249) ») ; `npm run lint` : « ✖ 7 problems
+  (0 errors, 7 warnings) », le même compte qu'avant le lot.
+- ⏳ Sevih sur le fixe (plugin 0.5.2 par Settings › Setup › **Update plugin** jeu fermé, ou la prochaine build
+  privée) : Singularity ou World Boss › Lineup Record › Restore Team → l'onglet Heroes / Presets montre les pièces
+  sur les bons héros sans relancer le jeu ; `equip-events.ndjson` porte la ligne `/singularity/loadDeck`.
+
 ### 🗑️ Filter set au choix comme défaut de Gear › Scrap, persistant et sauvegardé, lien de rappel à son nom (G109) (2026-11-02)
 - ✅ **Pourquoi.** Demande de Sevih : un filtre appliqué par défaut sur Scrap. Gear › Scrap s'ouvrait toujours sur le
   filter set intégré « Scrap candidates » (`scrapDefaultFilters()` = `SCRAP_CANDIDATES.filters()`), ses filtres ne

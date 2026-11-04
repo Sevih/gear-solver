@@ -38,6 +38,10 @@ game's network callback.
 Gear moved **in-game** never re-sends `/user/item` (only the lobby does), but each move comes back
 through the same primary hook as `/item/equip` (one piece: `CharUID`, `ToEquipUID`, `ToInvenUID`,
 `UnEquipCharUID`) or `/item/equipAll` (`CharUID`, `ToEquipList`, `ToInvenList`, `UnEquipList`).
+A team restored from Lineup Record (Restore Team) answers `/singularity/loadDeck`,
+`/worldBoss/loadDeck`, `/guild/raid/loadDeck` or `/irregular/chase/loadDeck`: one equipAll per hero,
+in `ItemEquipAllList` (each entry with its own `CharUID`; a null entry or `CharUID` 0 is skipped, as
+the client does); journaled since 0.5.2.
 Since 0.2.0 the plugin appends those two to a journal, `equip-events.ndjson`, and the app folds it
 into `user_item.json` on its 5 s status poll (`apps/desktop/src/equip-events.ts`): the inventory
 follows the moves live, no lobby needed. Since 0.3.0 the journal also takes the gem and substat
@@ -97,7 +101,7 @@ half file.
 |------|--------|-------|
 | `user_item.json`, `user_character.json`, `user_asset.json`, `user_info.json`, `user_lobby.json`, `user_etc.json`, `item_customInfo.json`, `user_archive.json`, `user_gift.json` | `/user/item`, `/user/character`, … `/archive/info`, `/gift/info` | Rewritten on every fetch (lobby load, screen open). |
 | `.captured` | after `/user/item` | Sentinel the app's status endpoint reports. |
-| `equip-events.ndjson` | `/item/equip`, `/item/equipAll`, `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption`, `/item/subOptionChange`, `/item/enchant`, `/item/enchantReset`, `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`, `/item/craft`; `/item/sell`, `/item/dissolve`, `/item/lock` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start; one line per sale / dissolve / lock, with the request before the response: `{"seq":n,"at":…,"path":"/item/sell","req":{"ItemList":[…]},"res":{…}}`. Emptied whenever `/user/item` lands. |
+| `equip-events.ndjson` | `/item/equip`, `/item/equipAll`, `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption`, `/item/subOptionChange`, `/item/enchant`, `/item/enchantReset`, `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`, `/item/craft`, `/singularity/loadDeck`, `/worldBoss/loadDeck`, `/guild/raid/loadDeck`, `/irregular/chase/loadDeck`; `/item/sell`, `/item/dissolve`, `/item/lock` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start; one line per sale / dissolve / lock, with the request before the response: `{"seq":n,"at":…,"path":"/item/sell","req":{"ItemList":[…]},"res":{…}}`. Emptied whenever `/user/item` lands. |
 | `.equip-events.applied` | written by the **app** | What the app already folded (`first`/`last` seq + the snapshot mtime it left), so a restart doesn't rewrite the snapshot for nothing. |
 | `.steam-plugin.json` | plugin start + every capture | Heartbeat: `{version, pid, startedAt, pathHook, captures, lastPath, lastCaptureAt, outDir}`. The app matches `pid` against the running `OUTERPLANE.exe` to show **Live**. |
 | `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | `KeepUnknown` config (not for the journaled paths); `/account/*` and `/server/*` are ignored. |
