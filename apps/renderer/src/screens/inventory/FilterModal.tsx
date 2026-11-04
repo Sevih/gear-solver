@@ -11,8 +11,8 @@ import { QUALITY_REACHABLE_HELP, QUALITY_TIERS, type QualityTier } from "../../l
 import { QUALITY_TONE } from "../../design/gearCardText.js";
 import { GEAR_STATS, emptyFilters, type BaseRollsFilter, type FilterState } from "./filters.js";
 import {
-  PRESET_NAME_MAX, SCRAP_CANDIDATES, deleteInventoryFilterPreset, loadInventoryFilterPresets,
-  saveInventoryFilterPreset, scrapDefaultPreset, setScrapDefault, validPresetName, type InventoryFilterPreset,
+  PRESET_NAME_MAX, SCRAP_CANDIDATES, addScrapDefault, deleteInventoryFilterPreset, loadInventoryFilterPresets,
+  removeScrapDefault, saveInventoryFilterPreset, scrapDefaultPresets, validPresetName, type InventoryFilterPreset,
 } from "../../lib/storage/inventoryFilterPresets.js";
 
 // ── filter pieces ───────────────────────────────────────────────────────
@@ -209,12 +209,22 @@ function BaseRollsInputs({
   );
 }
 
-/** The Use for Scrap button for the selected filter set (`known`: the
- *  built-in or one of the user's): disabled with nothing selected, and on the
- *  set already the Scrap default, which it names. */
-export function scrapDefaultButton(selected: string, known: boolean, scrapDefault: string): { label: string; disabled: boolean; title?: string } {
-  if (known && selected === scrapDefault) return { label: "Scrap default ✓", disabled: true, title: "Gear › Scrap opens on this filter set" };
-  return { label: "Use for Scrap", disabled: !known };
+/** The Scrap default button for the selected filter set (`known`: the
+ *  built-in or one of the user's; `scrapDefaults`: the ids Gear › Scrap opens
+ *  on): Use for Scrap adds the set as one more rule, Drop from Scrap removes
+ *  a set already in the list. Disabled with nothing selected, and on the
+ *  built-in when it stands alone (dropping it would put it back). */
+export function scrapDefaultButton(selected: string, known: boolean, scrapDefaults: string[]): { label: string; disabled: boolean; title: string } {
+  if (known && scrapDefaults.includes(selected)) {
+    const alone = scrapDefaults.length === 1;
+    if (alone && selected === SCRAP_CANDIDATES.id) return { label: "Drop from Scrap", disabled: true, title: "Gear › Scrap opens on this filter set alone" };
+    return {
+      label: "Drop from Scrap",
+      disabled: false,
+      title: alone ? `Gear › Scrap goes back to opening on ${SCRAP_CANDIDATES.name}` : "Gear › Scrap stops opening on this filter set",
+    };
+  }
+  return { label: "Use for Scrap", disabled: !known, title: "Gear › Scrap opens on this filter set too, as one more rule" };
 }
 
 const PRESET_BTN_CLASS = "rounded-md border border-white/10 bg-white/3 px-2 py-0.5 text-[11.5px] font-semibold text-white hover:bg-white/6 disabled:pointer-events-none disabled:opacity-40";
@@ -223,19 +233,20 @@ const PRESET_BTN_CLASS = "rounded-md border border-white/10 bg-white/3 px-2 py-0
  *  the user's), Load it into the draft (the user adjusts, then Apply), Save
  *  the draft under a name (inline field), Delete a user preset. Presets are
  *  read from storage each time the modal opens. On Gear › Scrap only, Use
- *  for Scrap makes the selected preset the one Scrap opens on (the draft
- *  doesn't move), and the list marks it. */
+ *  for Scrap adds the selected preset to the ones Scrap opens on and Drop
+ *  from Scrap removes it (the draft doesn't move); the list marks each. */
 function PresetsRow({
   draft, onLoad, scrapMode,
 }: { draft: FilterState; onLoad: (next: FilterState) => void; scrapMode: boolean }) {
   const [presets, setPresets] = useState<InventoryFilterPreset[]>(loadInventoryFilterPresets);
-  const [scrapDefault, setScrapDefaultId] = useState(() => scrapDefaultPreset().id);
+  const readDefaults = () => scrapDefaultPresets().map((p) => p.id);
+  const [scrapDefaults, setScrapDefaults] = useState(readDefaults);
   const [selected, setSelected] = useState("");
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
   const builtin = selected === SCRAP_CANDIDATES.id;
   const userPreset = presets.find((p) => p.id === selected);
-  const scrapBtn = scrapDefaultButton(selected, builtin || !!userPreset, scrapDefault);
+  const scrapBtn = scrapDefaultButton(selected, builtin || !!userPreset, scrapDefaults);
   const validName = validPresetName(name);
   const overwrites = validName !== null && presets.some((p) => p.name === validName);
   // A preset carries no search: the one in the draft stays in place.
@@ -255,14 +266,15 @@ function PresetsRow({
     if (!userPreset) return;
     deleteInventoryFilterPreset(userPreset.id);
     setPresets(loadInventoryFilterPresets());
-    setScrapDefaultId(scrapDefaultPreset().id);
+    setScrapDefaults(readDefaults());
     setSelected("");
   };
-  const useForScrap = () => {
-    setScrapDefault(selected);
-    setScrapDefaultId(scrapDefaultPreset().id);
+  const toggleScrapDefault = () => {
+    if (scrapDefaults.includes(selected)) removeScrapDefault(selected);
+    else addScrapDefault(selected);
+    setScrapDefaults(readDefaults());
   };
-  const defaultMark = (id: string) => (scrapMode && id === scrapDefault ? " (Scrap default)" : "");
+  const defaultMark = (id: string) => (scrapMode && scrapDefaults.includes(id) ? " (Scrap default)" : "");
   return (
     <div className="flex items-center gap-2 border-b border-white/8 px-4 py-2">
       <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/70">Filter sets</span>
@@ -281,7 +293,7 @@ function PresetsRow({
       </select>
       <button onClick={load} disabled={!builtin && !userPreset} className={PRESET_BTN_CLASS}>Load</button>
       {scrapMode && (
-        <button onClick={useForScrap} disabled={scrapBtn.disabled} title={scrapBtn.title} className={PRESET_BTN_CLASS}>
+        <button onClick={toggleScrapDefault} disabled={scrapBtn.disabled} title={scrapBtn.title} className={PRESET_BTN_CLASS}>
           {scrapBtn.label}
         </button>
       )}
@@ -318,7 +330,9 @@ function PresetsRow({
       <button
         onClick={remove}
         disabled={!userPreset}
-        title={userPreset && userPreset.id === scrapDefault ? `Gear › Scrap goes back to opening on ${SCRAP_CANDIDATES.name}.` : undefined}
+        title={userPreset && scrapDefaults.includes(userPreset.id)
+          ? scrapDefaults.length === 1 ? `Gear › Scrap goes back to opening on ${SCRAP_CANDIDATES.name}.` : "Gear › Scrap stops opening on this filter set."
+          : undefined}
         className="ml-auto rounded-md border border-rose-400/30 bg-rose-500/10 px-2 py-0.5 text-[11.5px] font-semibold text-rose-100 hover:bg-rose-500/20 disabled:pointer-events-none disabled:opacity-40"
       >
         Delete

@@ -8,6 +8,68 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧹 Gear › Scrap sur plusieurs règles de filtres (union) et Scrap default à plusieurs sets (G111) (2026-11-04)
+- ✅ **Pourquoi.** Demande de Sevih du 04/11 après test de la build : Scrap ne portait qu'un jeu de filtres, donc
+  « 5★ et 6★, pas au moins 3/3/2/X » ; il veut en poser plusieurs, par exemple « 6★ pas au moins 3/3/2/X » ET
+  « 5★ (toutes) », la grille montrant l'union. Une règle = un `FilterState` ; une pièce est montrée quand elle passe
+  au moins une règle (OR entre règles, AND à l'intérieur comme avant) ; une seule règle = le comportement d'avant ;
+  Pieces ne change pas.
+- ✅ **Règles.** Nouveau module `apps/renderer/src/lib/inventory/scrapRules.ts` : `ScrapRules = FilterState[]`
+  (jamais vide), `matchesAnyRule`, `RULES_CODEC` (un tableau d'objets `FILTER_CODEC` ; relit un tableau ou un objet
+  seul — l'ancien format de `gs.gear.scrap.filters`, une règle — ; vide, illisible ou sans objet → les règles du
+  Scrap default, seule lecture de stockage du module), `ruleLabel` (étoiles, raretés, `Q: …`, `Reachable: …`,
+  `N mains` / `N subs` — un seul → le nom du stat —, `N sets`, classes, base rolls `not ≥ 3/3/2/X`, `unequipped`,
+  `+0`, `T0`, `not reforged`, `singularity`, `"…"`, séparés par ` · ` ; rien d'actif → `All pieces` ; les slots
+  n'y figurent pas, la `SlotBar` les montre), `setRule` / `addRule` / `removeRule` (retirer la dernière laisse
+  `[emptyFilters()]`) et `clampRuleIndex`.
+- ✅ **Écran.** `InventoryScreen.tsx` : sur Scrap, `gs.gear.scrap.filters` porte la liste (`RULES_CODEC`, défaut
+  `scrapDefaultFilters()` qui rend désormais `FilterState[]`) et la nouvelle clé de session `gs.gear.scrap.rule`
+  l'index de la règle active (0 par défaut, ramené dans les bornes à la lecture, déclarée dans `keys.ts`) ; `f` /
+  `setF` sur Scrap = la règle active (écriture par `setRule`, la même liste rendue quand rien ne change, pour
+  l'auto-prune), donc `applyFilters`, `toggleSlot`, `scopedForStats`, le badge Filter, le drill et le
+  `FilterModal` n'ont pas bougé ; `filtered` sur Scrap = `matchesTab && matchesAnyRule` (le Scrap value card
+  prend l'union). Sous la `SlotBar`, sur Scrap seulement, une rangée de puces `1 · <ruleLabel>` (l'active en cyan
+  comme un chip de slot actif), clic = rendre active, `×` par puce (`title="Remove this rule"`, absent avec une
+  seule règle ; l'index actif suit), `+ Rule` (ajoute `emptyFilters()`, la rend active, ouvre le modal) et, à
+  partir de deux règles, la ligne 11 px « Pieces matching any rule ».
+- ✅ **Scrap default à plusieurs sets.** `inventoryFilterPresets.ts` : `gs.gear.scrap.default` porte un tableau
+  d'ids (l'ordre = celui des règles), une chaîne (ancien format, sauvegardes) se lit comme un tableau d'un ;
+  `scrapDefaultPresets()` remplace `scrapDefaultPreset()` (sets connus dans l'ordre, doublons et ids inconnus
+  écartés, l'intégré seul quand il ne reste rien) ; `setScrapDefault(ids)` (vide → `[SCRAP_CANDIDATES.id]`),
+  `addScrapDefault` (ajoute aux sets en usage, donc à l'intégré quand rien n'était choisi), `removeScrapDefault` ;
+  `deleteInventoryFilterPreset` retire le set de la liste. `keys.ts` : `normalizeScrapDefault` accepte une chaîne
+  non vide (→ tableau d'un) ou un tableau dont il garde les chaînes non vides (vide → refusé) ; `summary: "label"`
+  n'affiche que le libellé « Scrap default », lisible quelle que soit la valeur. Modal (`PresetsRow`, Scrap
+  seulement) : `Use for Scrap` / `Drop from Scrap` selon que le set sélectionné est dans la liste ;
+  `scrapDefaultButton(selected, known, scrapDefaults)` rend `{ label, disabled, title }` ; la marque
+  « (Scrap default) » sur chaque set de la liste, le `title` de Delete adapté. Le lien à droite de la `SlotBar`
+  joint les noms par ` + `, son `title` garde « Back to the filters Gear › Scrap opens on » plus la description de
+  l'intégré quand il en fait partie ; clic = règles ← `scrapDefaultFilters()`, règle active ← 0 (onglet All si une
+  règle porte un slot hors de l'onglet, comme `applyFilters`).
+- ✅ **Écarts assumés.** `Drop from Scrap` est désactivé sur l'intégré quand il est seul dans la liste (le retirer
+  le remettrait : bouton sans effet). Le lot citait, pour `matchesAnyRule`, une 6★ 3/3/3/0 qui passerait
+  « 6★, not ≥ 3/3/3/X » ou « 5★ » : elle ne passe ni l'une (3/3/3 est ≥ 3/3/3) ni l'autre ; le test prend une 6★
+  3/3/2/0 (passe), et vérifie que la 6★ 3/3/3/0 et la 6★ 4/4/4/4 sont refusées.
+- ✅ **Tests.** Nouveau `apps/renderer/test/scrapRules.test.ts` (10 tests : union, une règle = `matchesFilters`,
+  codec tableau / objet seul / vide, libellés dont celui de `SCRAP_CANDIDATES` →
+  `5★ 6★ · not ≥ 3/3/3/X · unequipped · +0 · T0 · not reforged`, mises à jour, borne de l'index).
+  `inventoryFilterPresets.test.ts` (chaîne et tableau lus, ordre, ids inconnus écartés, vide → intégré, set /
+  add / remove, suppression d'un set), `inventoryFilterModal.test.ts` (`scrapDefaultButton` avec la liste,
+  Drop from Scrap, intégré seul, marque sur chaque set), `gearScreen.test.ts` (`[SCRAP_CANDIDATES.filters()]`,
+  deux sets → deux règles, lien `Scrap candidates + Junk sets`, puces, `+ Rule`, `×`, ligne d'union),
+  `transfer.test.ts` (tableau fusionné, chaîne acceptée, nombre et liste vide refusés ; la valeur de l'aller-retour
+  v2 passe en tableau), `sessionViewState.test.ts` (`gs.gear.scrap.rule`). `npm run typecheck` : `> tsc --noEmit`
+  sans erreur ; `npm test` : `Tests  1137 passed (1137)` côté renderer (101 fichiers ; 1555 au total avec 169 et
+  249) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ✅ **Docs.** `docs/architecture.md` et `wiki/Architecture.md` (Scrap sur une liste de règles), `wiki/Using-the-App.md`
+  § Scrap (règles, `+ Rule`, `×`, l'union, Use for Scrap / Drop from Scrap, le lien à plusieurs noms),
+  `docs/reference.md` et `wiki/Engine-Reference.md` (lignes `gearScreen` 10, `transfer` 30, `sessionViewState`,
+  nouvelle ligne `scrapRules` 10).
+- ⏳ Sevih sur le fixe : Gear › Scrap, `+ Rule`, règle 2 = 5★ seul, règle 1 ramenée à 6★ not ≥ 3/3/2/X → la grille
+  montre les deux populations, le Scrap value card les compte ensemble ; `×` sur la règle 2 → retour à une règle ;
+  dans Filter › Filter sets, Use for Scrap sur un second set → le lien porte les deux noms et Scrap rouvre sur deux
+  règles (clic sur le lien).
+
 ### 🔁 Équipe restaurée (Lineup Record › Restore Team) suivie en direct : les quatre `loadDeck` journalisés et repliés comme des `equipAll` (plugin 0.5.2) (G110) (2026-11-04)
 - ✅ **Pourquoi.** Bug remonté par Sevih le 04/11 : restaurer une équipe enregistrée en jeu rééquipe d'un coup les
   pièces de plusieurs héros, mais l'app ne bougeait qu'au `/user/item` suivant (lobby). La restauration passe par

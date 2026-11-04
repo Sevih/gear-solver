@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
 import { jsonStringSet, useSessionState } from "../../hooks/usePersistedState.js";
 import type { DesignRarity, SlotId } from "../../design/tokens.js";
@@ -13,16 +13,18 @@ import { VirtualGearGrid } from "./VirtualGearGrid.js";
 import { ScrapCard } from "./ScrapCard.js";
 import { hasScrapFields, scrapValue } from "../../lib/inventory/scrapValue.js";
 import { addAll, materialRows, pruneSelection, pruneShown, scrapScope, toggleSelection } from "../../lib/inventory/scrapCard.js";
-import { scrapDefaultPreset } from "../../lib/storage/inventoryFilterPresets.js";
+import { scrapDefaultPresets } from "../../lib/storage/inventoryFilterPresets.js";
+import { RULES_CODEC, addRule, clampRuleIndex, matchesAnyRule, removeRule, ruleLabel, setRule, type ScrapRules } from "../../lib/inventory/scrapRules.js";
+import { cx } from "../../design/cx.js";
 
 // The Scrap value card's selection, kept for the session as a list of uids.
 const SELECTION_CODEC = jsonStringSet();
 
-/** The filters Gear › Scrap opens on (session key empty) and its link puts
- *  back: the Scrap default's (`gs.gear.scrap.default`, the built-in "Scrap
- *  candidates" unless the user picked a set with Use for Scrap). */
-export function scrapDefaultFilters(): FilterState {
-  return scrapDefaultPreset().filters;
+/** The rules Gear › Scrap opens on (session key empty) and its link puts
+ *  back: one per Scrap default set (`gs.gear.scrap.default`, the built-in
+ *  "Scrap candidates" unless the user picked sets with Use for Scrap). */
+export function scrapDefaultFilters(): ScrapRules {
+  return scrapDefaultPresets().map((p) => p.filters);
 }
 
 // ── screen ──────────────────────────────────────────────────────────────
@@ -56,8 +58,10 @@ export interface InventoryScreenProps {
   /** Open the Builder on the shown piece's wearer (the card's portrait and
    *  "Optimize wearer →"). */
   onOptimizeWearer?: (heroUid: string) => void;
-  /** Gear › Pieces (default) or Gear › Scrap: Scrap keeps its own filters
-   *  (`gs.gear.scrap.filters`, the Scrap default's when empty)
+  /** Gear › Pieces (default) or Gear › Scrap: Scrap keeps its own filter
+   *  rules (`gs.gear.scrap.filters`, the Scrap default's when empty; a piece
+   *  shows when it matches any rule, the active one in `gs.gear.scrap.rule`
+   *  is the one the Filter modal and the SlotBar edit)
    *  and select mode (`gs.gear.scrap.selectMode`, on by default), and always
    *  shows the Scrap value card. Sub-tab, sort, piece shown and selection are
    *  shared by both. Estimates only: nothing here acts on the game. */
@@ -75,7 +79,20 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // Pieces and Scrap each keep their filters and select mode; the view's
   // pair is the one in use.
   const [piecesF, setPiecesF] = useSessionState<FilterState>(FILTERS_STORAGE_KEY, emptyFilters, FILTER_CODEC);
-  const [scrapF, setScrapF] = useSessionState<FilterState>("gs.gear.scrap.filters", scrapDefaultFilters, FILTER_CODEC);
+  // Scrap holds a list of rules; `f` / `setF` there are the active rule, so
+  // everything below edits one FilterState on both views.
+  const [scrapRules, setScrapRules] = useSessionState<ScrapRules>("gs.gear.scrap.filters", scrapDefaultFilters, RULES_CODEC);
+  const [storedRuleIdx, setRuleIdx] = useSessionState<number>("gs.gear.scrap.rule", 0);
+  const ruleIdx = clampRuleIndex(storedRuleIdx, scrapRules.length);
+  const scrapF = scrapRules[ruleIdx]!;
+  const setScrapF = useCallback((next: SetStateAction<FilterState>) => {
+    setScrapRules((prev) => {
+      const i = clampRuleIndex(storedRuleIdx, prev.length);
+      const cur = prev[i]!;
+      const value = typeof next === "function" ? next(cur) : next;
+      return value === cur ? prev : setRule(prev, i, value);
+    });
+  }, [storedRuleIdx, setScrapRules]);
   const f = scrapMode ? scrapF : piecesF;
   const setF = scrapMode ? setScrapF : setPiecesF;
   const [tab, setTabState] = useSessionState<InvTab>("gs.inv.tab", "all");
@@ -90,10 +107,10 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   const selectMode = scrapMode ? scrapSelectMode && !!game && hasScrapFields(game.equipment) : piecesSelectMode;
   const setSelectMode = scrapMode ? setScrapSelectMode : setPiecesSelectMode;
   const [filterModalOpen, setFilterModalOpen] = useState(false);
-  // The slot bar's link names the Scrap default, re-read when the filter
-  // modal (where it is set) opens or closes.
+  // The slot bar's link names the Scrap default sets, re-read when the filter
+  // modal (where they are set) opens or closes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const scrapDefault = useMemo(() => (scrapMode ? scrapDefaultPreset() : null), [scrapMode, filterModalOpen]);
+  const scrapDefaults = useMemo(() => (scrapMode ? scrapDefaultPresets() : null), [scrapMode, filterModalOpen]);
 
   const ui = useMemo<UiPiece[]>(() => (inventory ? inventory.gear.map((g) => toUiPiece(g, game)) : []), [inventory, game]);
 
@@ -174,7 +191,11 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
     return m;
   }, [inventory]);
 
-  const filtered = useMemo(() => ui.filter((p) => matchesTab(p, tab) && matchesFilters(p, f)), [ui, tab, f]);
+  // Scrap shows the union of its rules.
+  const filtered = useMemo(
+    () => ui.filter((p) => matchesTab(p, tab) && (scrapMode ? matchesAnyRule(p, scrapRules) : matchesFilters(p, f))),
+    [ui, tab, f, scrapMode, scrapRules],
+  );
 
   // Pieces matching the CURRENT tab + slot filter, ignoring the main/sub
   // filter — used to compute which stat pills should appear in the Main /
@@ -365,6 +386,26 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
     setSelection((prev) => addAll(prev, [...excludedPieces].filter((id) => uiById.has(id))));
   }, [excludedPieces, uiById, setSelection]);
 
+  // Scrap's rule chips: pick the active rule, remove one, add an empty one
+  // (made active, the modal opened on it). Back to the Scrap default: its
+  // rules, the first active.
+  const addScrapRule = () => {
+    setScrapRules((prev) => addRule(prev, emptyFilters()));
+    setRuleIdx(scrapRules.length);
+    setFilterModalOpen(true);
+  };
+  const removeScrapRule = (i: number) => {
+    setScrapRules((prev) => removeRule(prev, i));
+    if (i < ruleIdx) setRuleIdx(ruleIdx - 1);
+    else if (i === ruleIdx) setRuleIdx(Math.max(0, i - 1));
+  };
+  const resetScrapRules = () => {
+    const next = scrapDefaultFilters();
+    setScrapRules(next);
+    setRuleIdx(0);
+    if (next.some((r) => [...r.slots].some((s) => !TAB_SLOTS[tab].includes(s)))) setTabState("all");
+  };
+
   function toggleSort(k: FixedSortKey) {
     if (sort === k) setDir(dir === "desc" ? "asc" : "desc");
     else { setSort(k); setDir("desc"); }
@@ -426,17 +467,58 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         </div>
         <div className="flex items-center justify-between gap-3">
           <SlotBar tab={tab} selected={f.slots} onToggle={toggleSlot} />
-          {scrapDefault && (
+          {scrapDefaults && (
             <button
               type="button"
-              onClick={() => applyFilters(scrapDefaultFilters())}
-              title={`Back to the filters Gear › Scrap opens on${scrapDefault.title ? ` — ${scrapDefault.title}` : ""}`}
+              onClick={resetScrapRules}
+              title={`Back to the filters Gear › Scrap opens on${scrapDefaults.map((d) => (d.title ? ` — ${d.title}` : "")).join("")}`}
               className="shrink-0 text-[11px] text-cyan-300 underline-offset-2 hover:underline"
             >
-              {scrapDefault.name}
+              {scrapDefaults.map((d) => d.name).join(" + ")}
             </button>
           )}
         </div>
+        {scrapMode && (
+          <div className="flex flex-wrap items-center gap-1 pb-2">
+            {scrapRules.map((r, i) => (
+              <span
+                key={i}
+                className={cx(
+                  "inline-flex h-7 items-center rounded-md border text-[11px] font-medium transition-colors",
+                  i === ruleIdx
+                    ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-200"
+                    : "border-white/7 bg-black/25 text-white hover:bg-white/10",
+                )}
+              >
+                <button type="button" onClick={() => setRuleIdx(i)} className="h-full px-2">
+                  {`${i + 1} · ${ruleLabel(r)}`}
+                </button>
+                {scrapRules.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeScrapRule(i)}
+                    title="Remove this rule"
+                    aria-label="Remove this rule"
+                    className="h-full pr-2 pl-0.5 text-white/60 hover:text-white"
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={addScrapRule}
+              title="Add a rule: the grid shows the pieces matching any rule"
+              className="inline-flex h-7 items-center rounded-md border border-white/7 bg-black/25 px-2 text-[11px] font-medium text-white transition-colors hover:bg-white/10"
+            >
+              + Rule
+            </button>
+            {scrapRules.length > 1 && (
+              <span className="ml-2 text-[11px] text-white/60">Pieces matching any rule</span>
+            )}
+          </div>
+        )}
         {scrapMode && !scrapReady && (
           <p className="pb-2 text-[11.5px] text-amber-200">
             The loaded game tables carry no scrap prices — sync game data in Settings › Data &amp; updates.

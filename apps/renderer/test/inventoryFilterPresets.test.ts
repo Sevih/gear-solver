@@ -8,7 +8,7 @@ import { toUiPiece, type UiPiece } from "../src/design/adapter.js";
 import { emptyFilters, matchesFilters, type FilterState } from "../src/screens/inventory/filters.js";
 import {
   INVENTORY_FILTER_PRESETS_KEY, SCRAP_CANDIDATES, SCRAP_DEFAULT_KEY, deleteInventoryFilterPreset, loadInventoryFilterPresets,
-  saveInventoryFilterPreset, scrapDefaultPreset, setScrapDefault,
+  addScrapDefault, removeScrapDefault, saveInventoryFilterPreset, scrapDefaultPresets, setScrapDefault,
 } from "../src/lib/storage/inventoryFilterPresets.js";
 
 // Map-backed localStorage stub — Vitest runs in the `node` environment.
@@ -134,34 +134,68 @@ describe("Scrap candidates", () => {
 
 describe("Scrap default", () => {
   const builtin = () => ({ id: SCRAP_CANDIDATES.id, name: SCRAP_CANDIDATES.name, filters: SCRAP_CANDIDATES.filters() });
+  const ids = () => scrapDefaultPresets().map((p) => p.id);
 
-  it("absent, unreadable or naming an unknown set → the built-in's filters", () => {
-    expect(scrapDefaultPreset()).toMatchObject(builtin());
-    for (const raw of ["{", "42", JSON.stringify({ id: "x" }), JSON.stringify("gone")]) {
+  it("absent, unreadable, empty or naming only unknown sets → the built-in alone", () => {
+    expect(scrapDefaultPresets()).toHaveLength(1);
+    expect(scrapDefaultPresets()[0]).toMatchObject(builtin());
+    for (const raw of ["{", "42", '""', "[]", "[3, null]", JSON.stringify({ id: "x" }), JSON.stringify("gone"), JSON.stringify(["gone", "also"])]) {
       store.set(SCRAP_DEFAULT_KEY, raw);
-      expect(scrapDefaultPreset(), raw).toMatchObject(builtin());
+      const list = scrapDefaultPresets();
+      expect(list, raw).toHaveLength(1);
+      expect(list[0], raw).toMatchObject(builtin());
     }
   });
 
-  it("a user set's id → its name and filters, without search", () => {
+  it("a string (one-set format) reads as a list of one; a user set → its name and filters, without search", () => {
     const saved = saveInventoryFilterPreset("Junk", { ...emptyFilters(), stars: new Set([4]), query: "ring" })!;
-    setScrapDefault(saved.id);
-    expect(store.get(SCRAP_DEFAULT_KEY)).toBe(JSON.stringify(saved.id));
-    const p = scrapDefaultPreset();
+    store.set(SCRAP_DEFAULT_KEY, JSON.stringify(saved.id));
+    const [p, ...rest] = scrapDefaultPresets();
+    expect(rest).toEqual([]);
     expect(p).toMatchObject({ id: saved.id, name: "Junk" });
-    expect(p.filters).toEqual({ ...emptyFilters(), stars: new Set([4]), query: "" });
-    setScrapDefault(SCRAP_CANDIDATES.id);
-    expect(scrapDefaultPreset()).toMatchObject(builtin());
+    expect(p!.filters).toEqual({ ...emptyFilters(), stars: new Set([4]), query: "" });
   });
 
-  it("deleting the default set puts the built-in back, deleting another leaves it", () => {
+  it("an array reads in order, unknown ids skipped", () => {
     const a = saveInventoryFilterPreset("A", emptyFilters())!;
     const b = saveInventoryFilterPreset("B", emptyFilters())!;
-    setScrapDefault(a.id);
+    store.set(SCRAP_DEFAULT_KEY, JSON.stringify([b.id, "gone", SCRAP_CANDIDATES.id, a.id, b.id]));
+    expect(ids()).toEqual([b.id, SCRAP_CANDIDATES.id, a.id]);
+    expect(scrapDefaultPresets().map((p) => p.name)).toEqual(["B", SCRAP_CANDIDATES.name, "A"]);
+  });
+
+  it("setScrapDefault writes the list, an empty one the built-in's", () => {
+    const a = saveInventoryFilterPreset("A", emptyFilters())!;
+    setScrapDefault([a.id]);
+    expect(store.get(SCRAP_DEFAULT_KEY)).toBe(JSON.stringify([a.id]));
+    setScrapDefault([]);
+    expect(store.get(SCRAP_DEFAULT_KEY)).toBe(JSON.stringify([SCRAP_CANDIDATES.id]));
+  });
+
+  it("add appends to the sets in use, remove drops one, the built-in back when none is left", () => {
+    const a = saveInventoryFilterPreset("A", emptyFilters())!;
+    addScrapDefault(a.id);
+    expect(ids()).toEqual([SCRAP_CANDIDATES.id, a.id]);
+    addScrapDefault(a.id);
+    expect(ids()).toEqual([SCRAP_CANDIDATES.id, a.id]);
+    removeScrapDefault(SCRAP_CANDIDATES.id);
+    expect(ids()).toEqual([a.id]);
+    removeScrapDefault(a.id);
+    expect(ids()).toEqual([SCRAP_CANDIDATES.id]);
+    expect(store.get(SCRAP_DEFAULT_KEY)).toBe(JSON.stringify([SCRAP_CANDIDATES.id]));
+  });
+
+  it("deleting a set drops it from the list, the built-in back when the list empties", () => {
+    const a = saveInventoryFilterPreset("A", emptyFilters())!;
+    const b = saveInventoryFilterPreset("B", emptyFilters())!;
+    const c = saveInventoryFilterPreset("C", emptyFilters())!;
+    setScrapDefault([a.id, b.id]);
+    deleteInventoryFilterPreset(c.id);
+    expect(store.get(SCRAP_DEFAULT_KEY)).toBe(JSON.stringify([a.id, b.id]));
     deleteInventoryFilterPreset(b.id);
-    expect(scrapDefaultPreset().id).toBe(a.id);
+    expect(ids()).toEqual([a.id]);
     deleteInventoryFilterPreset(a.id);
-    expect(scrapDefaultPreset()).toMatchObject(builtin());
-    expect(store.get(SCRAP_DEFAULT_KEY)).toBe(JSON.stringify(SCRAP_CANDIDATES.id));
+    expect(scrapDefaultPresets()[0]).toMatchObject(builtin());
+    expect(store.get(SCRAP_DEFAULT_KEY)).toBe(JSON.stringify([SCRAP_CANDIDATES.id]));
   });
 });

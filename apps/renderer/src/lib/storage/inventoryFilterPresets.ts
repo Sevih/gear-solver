@@ -8,8 +8,9 @@
  * default through `FILTER_CODEC.deserialize`. The search `query` is never
  * stored: a preset is a set of criteria, not a lookup.
  *
- * Also owns `gs.gear.scrap.default`: the id of the filter set Gear › Scrap
- * opens on (the built-in's when absent or unknown).
+ * Also owns `gs.gear.scrap.default`: the ids of the filter sets Gear › Scrap
+ * opens on, one rule each, in order (the built-in's when absent, empty or all
+ * unknown).
  */
 import { FILTER_CODEC, emptyFilters, type FilterState } from "../../screens/inventory/filters.js";
 
@@ -128,45 +129,82 @@ export function saveInventoryFilterPreset(name: string, filters: FilterState): I
   return { ...entry, filters: FILTER_CODEC.deserialize(serialized) };
 }
 
-/** Deleting the Scrap default puts Gear › Scrap back on the built-in. */
+/** Deleting a Scrap default set drops it from the list (the built-in comes
+ *  back when the list empties). */
 export function deleteInventoryFilterPreset(id: string): void {
   const list = readStored();
   const next = list.filter((p) => p.id !== id);
   if (next.length !== list.length) persist(next);
-  if (readScrapDefaultId() === id) setScrapDefault(SCRAP_CANDIDATES.id);
+  const ids = readScrapDefaultIds();
+  if (ids?.includes(id)) setScrapDefault(ids.filter((x) => x !== id));
 }
 
 // ── Scrap default ───────────────────────────────────────────────────────
 export const SCRAP_DEFAULT_KEY = "gs.gear.scrap.default";
 
-/** The id stored under the key, whatever it points to; null when absent or
- *  not a JSON string. */
-function readScrapDefaultId(): string | null {
+/** The ids stored under the key, whatever they point to: an array of
+ *  non-empty strings (other entries dropped), or a single string (the
+ *  one-set format, saves included) as one id; null when absent or neither. */
+function readScrapDefaultIds(): string[] | null {
   try {
     const raw = localStorage.getItem(SCRAP_DEFAULT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
-    return typeof parsed === "string" ? parsed : null;
+    if (typeof parsed === "string") return parsed ? [parsed] : null;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((id): id is string => typeof id === "string" && id !== "");
   } catch {
     return null;
   }
 }
 
-/** The filter set Gear › Scrap opens on: the user's set the key names, else
- *  (absent, unreadable, a set that no longer exists here — an imported id
- *  included) the built-in. `filters` carries no search. */
-export function scrapDefaultPreset(): { id: string; name: string; title?: string; filters: FilterState } {
-  const id = readScrapDefaultId();
-  const user = id && id !== SCRAP_CANDIDATES.id ? loadInventoryFilterPresets().find((p) => p.id === id) : undefined;
-  if (user) return { id: user.id, name: user.name, filters: { ...user.filters, query: "" } };
-  return { id: SCRAP_CANDIDATES.id, name: SCRAP_CANDIDATES.name, title: SCRAP_CANDIDATES.title, filters: SCRAP_CANDIDATES.filters() };
+export interface ScrapDefaultPreset {
+  id: string;
+  name: string;
+  title?: string;
+  filters: FilterState;
 }
 
-/** Make `id` (the built-in's or a user set's) the Scrap default. */
-export function setScrapDefault(id: string): void {
+/** The filter sets Gear › Scrap opens on, one rule each: the sets the key
+ *  names that exist here (the built-in by its id, the user's sets), in
+ *  order; ids unknown here (a deleted set, an imported id) are skipped, and
+ *  the built-in alone stands when nothing is left. `filters` carries no
+ *  search. */
+export function scrapDefaultPresets(): ScrapDefaultPreset[] {
+  const ids = readScrapDefaultIds() ?? [];
+  const user = ids.some((id) => id !== SCRAP_CANDIDATES.id) ? loadInventoryFilterPresets() : [];
+  const out: ScrapDefaultPreset[] = [];
+  for (const id of new Set(ids)) {
+    if (id === SCRAP_CANDIDATES.id) {
+      out.push({ id, name: SCRAP_CANDIDATES.name, title: SCRAP_CANDIDATES.title, filters: SCRAP_CANDIDATES.filters() });
+      continue;
+    }
+    const p = user.find((u) => u.id === id);
+    if (p) out.push({ id: p.id, name: p.name, filters: { ...p.filters, query: "" } });
+  }
+  if (out.length > 0) return out;
+  return [{ id: SCRAP_CANDIDATES.id, name: SCRAP_CANDIDATES.name, title: SCRAP_CANDIDATES.title, filters: SCRAP_CANDIDATES.filters() }];
+}
+
+/** Make `ids` (the built-in's or the user's sets) the Scrap default, in
+ *  order; an empty list writes the built-in's. */
+export function setScrapDefault(ids: string[]): void {
   try {
-    localStorage.setItem(SCRAP_DEFAULT_KEY, JSON.stringify(id));
+    localStorage.setItem(SCRAP_DEFAULT_KEY, JSON.stringify(ids.length > 0 ? ids : [SCRAP_CANDIDATES.id]));
   } catch {
     // Quota — silently skip.
   }
+}
+
+/** Append a set to the Scrap default (the sets it opens on today, then `id`). */
+export function addScrapDefault(id: string): void {
+  const ids = scrapDefaultPresets().map((p) => p.id);
+  if (!ids.includes(id)) setScrapDefault([...ids, id]);
+}
+
+/** Drop a set from the Scrap default (the built-in comes back when the list
+ *  empties). */
+export function removeScrapDefault(id: string): void {
+  const ids = scrapDefaultPresets().map((p) => p.id);
+  if (ids.includes(id)) setScrapDefault(ids.filter((x) => x !== id));
 }

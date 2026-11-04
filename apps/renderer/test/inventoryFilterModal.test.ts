@@ -91,15 +91,45 @@ describe("FilterModal — Use for Scrap", () => {
     expect(tag).toContain("disabled");
   });
 
-  it("reads Scrap default ✓, disabled, on the set already the default", () => {
-    expect(scrapDefaultButton("builtin:scrap-candidates", true, "builtin:scrap-candidates"))
-      .toEqual({ label: "Scrap default ✓", disabled: true, title: "Gear › Scrap opens on this filter set" });
-    expect(scrapDefaultButton("u1", true, "builtin:scrap-candidates")).toEqual({ label: "Use for Scrap", disabled: false });
-    expect(scrapDefaultButton("", false, "builtin:scrap-candidates")).toEqual({ label: "Use for Scrap", disabled: true });
+  const add = { label: "Use for Scrap", title: "Gear › Scrap opens on this filter set too, as one more rule" };
+
+  it("Use for Scrap on a set outside the list, Drop from Scrap on a set in it", () => {
+    const builtin = "builtin:scrap-candidates";
+    expect(scrapDefaultButton("u1", true, [builtin])).toEqual({ ...add, disabled: false });
+    expect(scrapDefaultButton("", false, [builtin])).toEqual({ ...add, disabled: true });
+    expect(scrapDefaultButton("u1", true, [builtin, "u1"]))
+      .toEqual({ label: "Drop from Scrap", disabled: false, title: "Gear › Scrap stops opening on this filter set" });
+    expect(scrapDefaultButton(builtin, true, [builtin, "u1"]))
+      .toEqual({ label: "Drop from Scrap", disabled: false, title: "Gear › Scrap stops opening on this filter set" });
+    expect(scrapDefaultButton("u1", true, ["u1"]))
+      .toEqual({ label: "Drop from Scrap", disabled: false, title: "Gear › Scrap goes back to opening on Scrap candidates" });
+  });
+
+  it("the built-in alone can't be dropped", () => {
+    expect(scrapDefaultButton("builtin:scrap-candidates", true, ["builtin:scrap-candidates"]))
+      .toEqual({ label: "Drop from Scrap", disabled: true, title: "Gear › Scrap opens on this filter set alone" });
   });
 
   it("marks the Scrap default in the list, only from Gear › Scrap", () => {
     expect(render(emptyFilters(), true)).toContain("Scrap candidates (Scrap default)");
     expect(render(emptyFilters())).not.toContain("(Scrap default)");
+  });
+
+  it("marks every set of the list", () => {
+    const presets = [{ id: "u1", name: "Junk", filters: "{}", createdAt: 0 }, { id: "u2", name: "Other", filters: "{}", createdAt: 0 }];
+    const local = {
+      "gs.inv.filterPresets": JSON.stringify(presets),
+      "gs.gear.scrap.default": JSON.stringify(["builtin:scrap-candidates", "u1"]),
+    };
+    const prev = globalThis.localStorage;
+    (globalThis as { localStorage?: unknown }).localStorage = { getItem: (k: string) => local[k as keyof typeof local] ?? null, setItem: () => {} };
+    try {
+      const html = render(emptyFilters(), true);
+      expect(html).toContain("Scrap candidates (Scrap default)");
+      expect(html).toContain("Junk (Scrap default)");
+      expect(html).not.toContain("Other (Scrap default)");
+    } finally {
+      (globalThis as { localStorage?: unknown }).localStorage = prev;
+    }
   });
 });

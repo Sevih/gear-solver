@@ -3,7 +3,8 @@
 // the first-capture steps (Heroes too), with one the sub-tab bar and the
 // view — Overview without the cards that moved to the header and Settings,
 // Pieces with its All / Gear / Special Gear sub-tabs, Scrap on the "Scrap
-// candidates" filters while its session key is empty.
+// candidates" filters while its session key is empty, one rule per Scrap
+// default set.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -11,6 +12,8 @@ import type { GearPiece, GearSlot, Inventory } from "@gear-solver/core";
 import { GearScreen } from "../src/screens/gear/GearScreen.js";
 import { scrapDefaultFilters } from "../src/screens/inventory/InventoryScreen.js";
 import { SCRAP_CANDIDATES } from "../src/lib/storage/inventoryFilterPresets.js";
+import { ruleLabel } from "../src/lib/inventory/scrapRules.js";
+import { emptyFilters } from "../src/screens/inventory/filters.js";
 import { BuildsScreen } from "../src/screens/BuildsScreen.js";
 
 const noop = () => {};
@@ -83,8 +86,8 @@ describe("GearScreen", () => {
 });
 
 describe("Scrap filters", () => {
-  it("default to the built-in Scrap candidates preset", () => {
-    expect(scrapDefaultFilters()).toEqual(SCRAP_CANDIDATES.filters());
+  it("default to the built-in Scrap candidates preset, as one rule", () => {
+    expect(scrapDefaultFilters()).toEqual([SCRAP_CANDIDATES.filters()]);
   });
 
   // One getItem-only store stands in for both Web Storages here.
@@ -93,7 +96,7 @@ describe("Scrap filters", () => {
 
   it("follow the filter set chosen with Use for Scrap, and its link carries the set's name", () => {
     stubStorage(chosen);
-    expect(scrapDefaultFilters().stars).toEqual(new Set([4]));
+    expect(scrapDefaultFilters().map((r) => r.stars)).toEqual([new Set([4])]);
     const html = render(inventory, "scrap", chosen);
     expect(html).toContain(">Junk sets</button>");
     expect(html).toContain('title="Back to the filters Gear › Scrap opens on"');
@@ -102,6 +105,27 @@ describe("Scrap filters", () => {
 
   it("the built-in's link title adds its description", () => {
     expect(render(inventory, "scrap")).toContain(`title="Back to the filters Gear › Scrap opens on — ${SCRAP_CANDIDATES.title}"`);
+  });
+
+  it("two default sets → two rules, the link names both", () => {
+    const two = { ...chosen, "gs.gear.scrap.default": JSON.stringify([SCRAP_CANDIDATES.id, "u1"]) };
+    stubStorage(two);
+    expect(scrapDefaultFilters()).toEqual([SCRAP_CANDIDATES.filters(), { ...emptyFilters(), stars: new Set([4]) }]);
+    const html = render(inventory, "scrap", two);
+    expect(html).toContain(`>${SCRAP_CANDIDATES.name} + Junk sets</button>`);
+    expect(html).toContain(`>1 · ${ruleLabel(SCRAP_CANDIDATES.filters())}</button>`);
+    expect(html).toContain(">2 · 4★</button>");
+    expect(html).toContain('title="Remove this rule"');
+    expect(html).toContain("Pieces matching any rule");
+  });
+
+  it("one rule: its chip and + Rule, no remove, no union note", () => {
+    const html = render(inventory, "scrap");
+    expect(html).toContain(`>1 · ${ruleLabel(SCRAP_CANDIDATES.filters())}</button>`);
+    expect(html).toContain('title="Add a rule: the grid shows the pieces matching any rule"');
+    expect(html).not.toContain('title="Remove this rule"');
+    expect(html).not.toContain("Pieces matching any rule");
+    expect(render(inventory, "pieces")).not.toContain("+ Rule");
   });
 });
 

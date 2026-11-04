@@ -53,7 +53,7 @@ const EVERY_KEY: Record<string, unknown> = {
   "gs.worklist": [worklistEntry("h1")],
   "gs.builds.notes": { h1: "speed tune" },
   "gs.builder.cols": { score: false },
-  "gs.gear.scrap.default": "i1",
+  "gs.gear.scrap.default": ["i1"],
   "gs.builder.resultRows": 8,
   "gs.solver.workerCount": 1,
   "gs.solver.topN": 500,
@@ -102,12 +102,19 @@ describe("transfer — backup v2 round-trip", () => {
 });
 
 describe("transfer — Scrap default", () => {
-  it("the file's id replaces mine, even one this machine doesn't know (read falls back, not the import)", () => {
-    store.set("gs.gear.scrap.default", JSON.stringify("mine"));
+  it("the file's ids replace mine, even ones this machine doesn't know (read skips them, not the import)", () => {
+    store.set("gs.gear.scrap.default", JSON.stringify(["mine"]));
+    expect(applyBackup(v2({ "gs.gear.scrap.default": ["elsewhere", 3, "", "too"] }))["gs.gear.scrap.default"]).toBe(1);
+    expect(stored("gs.gear.scrap.default")).toEqual(["elsewhere", "too"]);
+  });
+
+  it("a single id (one-set format) is accepted as a list of one; a number or an empty list refused", () => {
     expect(applyBackup(v2({ "gs.gear.scrap.default": "elsewhere" }))["gs.gear.scrap.default"]).toBe(1);
-    expect(stored("gs.gear.scrap.default")).toBe("elsewhere");
-    expect(applyBackup(v2({ "gs.gear.scrap.default": 3 }))["gs.gear.scrap.default"]).toBe(0);
-    expect(stored("gs.gear.scrap.default")).toBe("elsewhere");
+    expect(stored("gs.gear.scrap.default")).toEqual(["elsewhere"]);
+    for (const bad of [3, [], [""], ""]) {
+      expect(applyBackup(v2({ "gs.gear.scrap.default": bad }))["gs.gear.scrap.default"]).toBe(0);
+      expect(stored("gs.gear.scrap.default")).toEqual(["elsewhere"]);
+    }
   });
 });
 

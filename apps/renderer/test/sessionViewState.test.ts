@@ -38,7 +38,7 @@ describe("screens read their view state through useSessionState", () => {
 
   it.each([
     ["gear/GearScreen.tsx", ["gs.gear.view"]],
-    ["inventory/InventoryScreen.tsx", ["gs.inv.selected", "gs.inv.selection", "gs.inv.selectMode", "gs.gear.scrap.filters", "gs.gear.scrap.selectMode"]],
+    ["inventory/InventoryScreen.tsx", ["gs.inv.selected", "gs.inv.selection", "gs.inv.selectMode", "gs.gear.scrap.filters", "gs.gear.scrap.rule", "gs.gear.scrap.selectMode"]],
     ["presets/PresetsScreen.tsx", ["gs.presets.classFilter", "gs.presets.sort", "gs.presets.forced", "gs.presets.open"]],
     ["gear/OverviewView.tsx", ["gs.gear.breakdownView"]],
   ])("%s", (file, keys) => {

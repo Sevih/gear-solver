@@ -498,11 +498,17 @@ A dense, searchable grid of every gear piece you own.
 The same grid, set up to pick what to sell or dissolve:
 
 - It opens on the **Scrap candidates** filters (the built-in filter set above) and keeps its own
-  filters, apart from Pieces'. Change them with **Filter**; the link at the right of the slot bar puts
-  them back. To open on another filter set, pick it in **Filter › Filter sets** and click **Use for
-  Scrap** (it reads **Scrap default ✓** on the set already chosen, marked "(Scrap default)" in the
-  list); the link then carries that set's name. Deleting that set puts Scrap back on **Scrap
-  candidates**.
+  filters, apart from Pieces'. They are **rules**: a row of chips under the slot bar shows one per
+  rule (`1 · 5★ 6★ · not ≥ 3/3/3/X · …`). Click a chip to make it the active rule — **Filter** and
+  the slot bar edit that one; **+ Rule** adds an empty rule and opens Filter on it; **×** removes a
+  rule. With two rules or more the grid shows the pieces matching **any** rule (the line "Pieces
+  matching any rule" says so), and the Scrap value card prices them together: for example
+  "6★, not ≥ 3/3/2/X" plus "5★".
+- The link at the right of the slot bar puts the rules Scrap opens on back. To choose them, pick a
+  filter set in **Filter › Filter sets** and click **Use for Scrap**: it is added as one more rule
+  (marked "(Scrap default)" in the list); on a set already in, the button reads **Drop from Scrap**
+  and removes it. The link carries the names of these sets (`Scrap candidates + 5★ junk`).
+  Deleting a set drops it; when none is left Scrap goes back to **Scrap candidates**.
 - **Selection mode is on**: a click on a tile selects or unselects it (and shows its card).
   The selection, the sub-tab, the sort and the piece shown are the same as in Pieces.
 - The **Scrap value** card is always there: it prices your selection, or the pieces on screen when

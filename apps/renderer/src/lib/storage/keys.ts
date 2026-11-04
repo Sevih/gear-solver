@@ -111,6 +111,15 @@ function normalizeSetting<N extends SettingName>(name: N, value: unknown): Setti
   return clampSetting(name, parsed);
 }
 
+/** The Scrap default's import value: a list of non-empty ids (other entries
+ *  dropped), or one id (the one-set format) as a list of one; nothing usable
+ *  → refused. */
+function normalizeScrapDefault(value: unknown): string[] | undefined {
+  const ids = typeof value === "string" ? [value] : Array.isArray(value) ? value : [];
+  const kept = ids.filter((id): id is string => typeof id === "string" && id !== "");
+  return kept.length > 0 ? kept : undefined;
+}
+
 function settingKeys(): StorageKeySpec[] {
   return (Object.keys(SETTINGS) as SettingName[]).map((name): StorageKeySpec => {
     const base = { key: SETTINGS[name].key, store: "local" as const, prune: false, label: SETTING_LABEL[name], owner: "lib/settings.ts" };
@@ -125,8 +134,8 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   { key: SAVED_BUILDS_KEY, store: "local", backup: true, prune: false, label: "Saved builds", owner: "lib/storage/savedBuilds.ts", merge: { shape: "heroLists" }, summary: "count" },
   { key: FILTER_PRESETS_KEY, store: "local", backup: true, prune: true, label: "Filter sets", owner: "lib/storage/filterPresets.ts", merge: { shape: "heroLists", accept: isReadableFilterPreset }, summary: "count" },
   { key: INVENTORY_FILTER_PRESETS_KEY, store: "local", backup: true, prune: false, label: "Gear filter sets", owner: "lib/storage/inventoryFilterPresets.ts", merge: { shape: "list", id: "id", keep: "stored", uniqueName: true, accept: isReadableInventoryPreset }, summary: "count" },
-  // An id this machine doesn't know falls back to the built-in when read.
-  { key: SCRAP_DEFAULT_KEY, store: "local", backup: true, prune: false, label: "Scrap default", owner: "lib/storage/inventoryFilterPresets.ts", merge: { shape: "value", normalize: (id) => (typeof id === "string" && id !== "" ? id : undefined) }, summary: "label" },
+  // Ids this machine doesn't know are skipped when read (the built-in when none is left).
+  { key: SCRAP_DEFAULT_KEY, store: "local", backup: true, prune: false, label: "Scrap default", owner: "lib/storage/inventoryFilterPresets.ts", merge: { shape: "value", normalize: normalizeScrapDefault }, summary: "label" },
   { key: LOCAL_PRESETS_KEY, store: "local", backup: true, prune: false, label: "Local presets", owner: "lib/storage/localPresets.ts", merge: { shape: "list", id: "id", keep: "stored", accept: isReadableLocalPreset }, summary: "count" },
   { key: PRESET_HEROES_KEY, store: "local", backup: true, prune: false, label: "Preset heroes", owner: "lib/storage/presetHeroes.ts", merge: { shape: "map", accept: holdsHeroes, keepStored: holdsHeroes }, summary: "paren" },
   { key: HERO_FILTERS_KEY, store: "local", backup: true, prune: true, label: "Hero filters", owner: "lib/storage/heroFilters.ts", merge: { shape: "map", accept: isRecord }, summary: "label" },
@@ -164,6 +173,7 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   session("gs.gear.view", "Gear view", "screens/gear/GearScreen.tsx"),
   session("gs.gear.breakdownView", "Gear breakdown view", "screens/gear/OverviewView.tsx"),
   session("gs.gear.scrap.filters", "Scrap filters", "screens/inventory/InventoryScreen.tsx"),
+  session("gs.gear.scrap.rule", "Scrap active rule", "screens/inventory/InventoryScreen.tsx"),
   session("gs.gear.scrap.selectMode", "Scrap select mode", "screens/inventory/InventoryScreen.tsx"),
   session("gs.presets.classFilter", "Presets class filter", "screens/presets/PresetsScreen.tsx"),
   session("gs.presets.sort", "Presets sort", "screens/presets/PresetsScreen.tsx"),
