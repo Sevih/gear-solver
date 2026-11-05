@@ -12,7 +12,73 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+**Gear Solver 2.0 is a redesign of the whole app**: five tabs in the order of a session (**Heroes**,
+**Optimizer**, **Presets**, **Worklist**, **Gear**), one word per notion, one place per action, screens that
+remember where you were, and a rewritten [user guide](https://github.com/Sevih/gear-solver/wiki/Using-the-App).
+Your data, builds, filter sets and settings carry over; the old tab and panel choices are migrated.
+
+### Navigation
+- **Five tabs, task order**: Builds is now **Heroes**, Builder is **Optimizer**, Inventory is **Gear** (Overview /
+  Pieces / Scrap). Home is gone: its cards live in **Gear › Overview** (snapshot line, quality distribution,
+  roster, gear breakdown), the capture status and the plugin / game action in the **header**, the update center in
+  **Settings**. The app opens on Heroes; a fresh install says what to do on Heroes and Gear.
+- **One header**: a single capture badge (Steam not found / Plugin needed / Plugin update available / Game closed /
+  Waiting for game / Live) with Install / Update plugin / Launch game right next to it, the "update ready" badge
+  visible from every tab, one game-data version.
+- **Screens link to each other**: a Worklist card's hero opens the Optimizer, "on ‹hero›" and "in Gear" on a piece
+  open the right screen on that hero or piece, and the Worklist says which pieces it reserves from the solves.
+- **Views survive a tab switch**: Gear selection and open piece, Presets filters, sort and open cards, and the
+  Optimizer filters of each hero (now kept between launches too).
+- **Settings in six panels**: Setup, Data & updates, Solver, Display, Backup, Advanced. Reset restores every
+  setting, Esc closes, the last panel reopens. The default **reforge mode** and **Transistone potential** live in
+  Settings › Solver (a hero's own choice stays with its filters); **Result rows** (5–15) in Display.
+- **Menu bar**: File / View / Help — zoom, full screen, developer tools (F12), user guide, report an issue, About.
+  Ctrl+R / F5 no longer reload the window in the middle of a solve.
+- **Wording unified** everywhere: Never use, Hide equipped, Don't take from…, Load reco, Filter set, Rank,
+  Singularity, tier.
+
+### Optimizer
+- **Guided first result**: in Score mode with no priority set, Solve loads the outerpedia recommendation's priority
+  first ("Loading reco…"); a **No priority** banner shows outside the popover; CP mode is a plain button.
+- **+15 passive filters**: new **Weapons**, **Accessories**, **Talismans** and **+15 passives** popovers (talismans by
+  their picture on their rarity plate, grades as colored letters). Require or exclude a Singularity passive by
+  family and minimum grade, e.g. "a weapon with DS DMG+ grade A or better". A **required passive is counted** in the
+  DMG UP% / DMG RED% of the results, marked **+15** with a tooltip.
+- **"To do" column** after Swaps: how many pieces of the build still need enhancing, reforging or ascending (hover
+  for the detail); hidden with reforge Off.
+- **Toolbar**: the nine filter popovers on one line next to the hero, Options first on the Reforge line, more
+  compact buttons; result cards in fluid width with a two-line header.
+- **One piece card**: the Optimizer's result cards are the same card as Gear (quality title, help and bar, rarity /
+  slot line, +15 title).
+- **One hero picker**: search, portraits and keyboard in every hero list (Options › Don't take from… included), the
+  same hero order everywhere; a Core Fusion hero is found by its displayed name.
+- **Default ranks** of heroes and presets are set at each import: "Equipped items ≤ Lower" and preset holds apply
+  from the very first solve, without opening Heroes or Presets first.
+
+### Presets
+- **Loss in real rolls**: a preset's loss compares it with your saved build on the pieces as captured (no projected
+  reforges), so a preset identical to the saved build reads 0. The loss threshold sits at the top of the screen.
+- **Lock = pieces only**: a locked or better-ranked preset no longer reserves its gems — gems move freely in the
+  Optimizer and in Presets.
+
+### Gear
+- **Scrap**: pick any filter set as the default of Gear › Scrap (persistent, in your backups), and stack **several
+  rules** shown as a union — "6★ not at least 3/3/2/X" plus "5★, all".
+- **Quality bar** of Gear › Overview is clickable and opens Gear › Pieces filtered on that tier.
+- **Filter › +15 passive** by family and minimum grade.
+
+### Capture (plugin 0.5.4)
+- Pieces obtained in game — stage drops, sweeps, equipment summons, mail, shop, custom crafts, gem merges — and a
+  restored team (Lineup Record › Restore Team) enter Gear right away, without going back to the lobby. Close the
+  game and click **Update plugin** in the header (or Settings › Setup).
+
+### Backup
+- **Full backup**: the export carries everything but the capture — ranks, locks, notes, never-used pieces, worklist,
+  settings, presets — and lists what it contains; an import merges with what is already there.
+
+### Fixes
+- The game version in the header is now served by the app itself: the packaged app's security policy blocked the
+  direct fetch, so it was never shown.
 
 ## [1.28.0] — 2026-11-01
 
