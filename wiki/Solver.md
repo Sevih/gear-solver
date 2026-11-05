@@ -95,6 +95,7 @@ filters the inventory pieces:
 - excluded if one of its option mains (not `combatOnly`) is an **excluded main** for the slot (`mainExcludes`), before the acceptables are checked; the number of pieces dropped this way is reported in `poolSizes[slot].mainExcluded`
 - excluded if **main pick** is active for this slot and none of its option mains is among the picks
 - excluded if **effect chip** (weapon/accessory) marked `excluded`; or marked `required` and the piece's `setId` (the `UniqueOptionID` effect identity) does not match — the comparison is **deliberately** on `setId`, not `effectIcon` (distinct effects can share an icon, e.g. the Recklessness family)
+- excluded by the **+15 passives** (`passivePicks`, per group: weapon, accessory, the four armor pieces — `passiveGroupOf`): the family of the passive the piece already carries (its `source === "singularity"` main, the Singularity option's name; grade = the letter its `desc` opens with, `C < B < A < S < S+`) is `excluded` in its group, at any grade; or the group has at least one `required` and the piece carries none of them at its `minGrade` or better (OR between the `required`; a piece without a passive, below +15, or with an unreadable grade is dropped). The passive the +15 mode projects (`addProjectedSingularity`) is added after this filter and doesn't count; the number of pieces dropped this way is reported in `poolSizes[slot].passiveExcluded`
 - excluded if `armorSetId ∈ excludedSets`
 
 **`keepCurrent`** toggle: if the piece currently equipped by the hero exists for this slot, the pool is restricted to `[currentPiece]` (the solver does not touch the slot). Such locked slots are **exempt** from the set-prune below.
@@ -418,6 +419,13 @@ of the talisman pool — after every `allow()` filter — carries one of the pre
 to those; otherwise it stays open, as with no advice (never 0 builds because of a preferred talisman, unlike
 `required`). Under "keep current", the worn talisman stays locked. A click turns it into `required`. The Load
 reco status says when no member of the advised families is owned.
+Under Weapons and Accessories, and in an **Armor** block (the four armor pieces), a **+15 passive** line: one
+text chip per Singularity passive family the inventory carries on that group (`passiveCatalogFromInventory`, in
+the order of the 15 families of `singularity-options.json`, labelled by `singularityShortLabel`), plus any picked
+family no piece carries any more. A click = `cyclePassivePick`: `off → required (grade C) → excluded → off`; a
+`required` chip carries the minimum grade selector on its right (`setPassiveMinGrade`, C / B / A / S / S+). State
+`passivePicks` (per group, family → `{ state, minGrade }`), handed as-is to the engine (`allow()`, above); the
+Effects button's badge counts these picks too.
 
 #### Stat filters (`screens/builder/StatFiltersPanel.tsx`)
 Min/max per final stat (the 12 of `SOLVER_STATS`), action `setStatFilter`. Applied after compose, the combo is
@@ -481,7 +489,8 @@ column's heatmap and sort read the raw sum (`critRawOf`), which the header toolt
 the threshold menu keeps the sheet's value. Clicking a row → the selected build (the first row is selected after
 a solve). `solving…` / error / **explicit empty state** (an `emptyReason` derived from `poolSizes` lists the
 slots that dropped to 0 pieces after filtering, EE excepted: a hero without an EE solves without it; a slot
-emptied (also) by an excluded main says so, "(N dropped: main stat excluded)"; a client "Filter" that keeps no
+emptied (also) by an excluded main says so, "(N dropped: main stat excluded)", by the +15 passive filter too,
+"(N dropped: +15 passive filter)"; a client "Filter" that keeps no
 build shows "No build passes the current filter."; no empty slot but "Allow broken sets" off rejected every armor
 loadout (the orchestrator's `"brokenSets"` cause) → the table says so and offers to turn it back on or raise
 Top %).

@@ -7,6 +7,7 @@ import { STAT, type DesignRarity, type SlotId } from "../../design/tokens.js";
 import type { UiPiece } from "../../design/adapter.js";
 import { qualityTierFromScore, type QualityTier } from "../../lib/quality.js";
 import { baseStage } from "../../lib/solver/reroll.js";
+import { gradeAtLeast, isSingularityGrade, passiveOfUiPiece, type SingularityGrade } from "../../lib/singularityPassives.js";
 
 // Gear-rollable stat keys — everything in `STAT` minus the three set-only
 // stats (lifesteal / counter / enterAp) which never appear as a piece's
@@ -60,6 +61,13 @@ export interface FilterState {
    *  (X) is free, `not` inverts the result. Four `null` lines = inactive.
    *  Talisman / EE (no rolled subs) fail an active pattern, inverted or not. */
   baseRolls: BaseRollsFilter;
+  /** +15 passive families (the Singularity option's name) — OR semantics: a
+   *  piece passes when it carries one of them at `passiveMinGrade` or better.
+   *  A piece below +15 has no passive and fails an active set. */
+  passives: Set<string>;
+  /** Minimum grade of the +15 passive section — "C" = any; inert while
+   *  `passives` is empty. */
+  passiveMinGrade: SingularityGrade;
   singularityOnly: boolean;
   query: string;
 }
@@ -91,6 +99,8 @@ export function emptyFilters(): FilterState {
     breakthroughZero: false,
     notReforged: false,
     baseRolls: { op: "gte", lines: [null, null, null, null], not: false },
+    passives: new Set(),
+    passiveMinGrade: "C",
     singularityOnly: false,
     query: "",
   };
@@ -101,7 +111,7 @@ export function emptyFilters(): FilterState {
 // (`useSessionState`). The deserializer overlays stored values on top of
 // `emptyFilters()` so older sessions missing newer non-Set fields (e.g.
 // `subMode`) get the current defaults instead of undefined.
-const _setCodec = jsonWithSets<FilterState>(["slots", "rarities", "stars", "quality", "reachable", "mains", "subs", "armorSets", "classes"]);
+const _setCodec = jsonWithSets<FilterState>(["slots", "rarities", "stars", "quality", "reachable", "mains", "subs", "armorSets", "classes", "passives"]);
 export const FILTER_CODEC = {
   serialize: _setCodec.serialize,
   deserialize: (raw: string): FilterState => {
@@ -113,6 +123,8 @@ export const FILTER_CODEC = {
     ) as Partial<FilterState>;
     const out = { ...emptyFilters(), ...clean };
     out.baseRolls = readBaseRolls(clean.baseRolls);
+    // A missing or unknown grade reads C (any grade).
+    out.passiveMinGrade = isSingularityGrade(clean.passiveMinGrade) ? clean.passiveMinGrade : "C";
     return out;
   },
 };
@@ -260,6 +272,11 @@ export function matchesFilters(p: UiPiece, f: FilterState): boolean {
     const match = lines.every((v, i) => v === null || compareStage(op, stages[i] ?? 0, v));
     if (match === not) return false;
   }
+  if (f.passives.size > 0) {
+    const passive = passiveOfUiPiece(p);
+    if (!passive || !f.passives.has(passive.family)) return false;
+    if (!passive.grade || !gradeAtLeast(passive.grade, f.passiveMinGrade)) return false;
+  }
   // Trim before testing so a whitespace-only query is a no-op here too —
   // otherwise it filters the grid while `activeFilterCount` (which trims)
   // shows no active filter, an invisible mismatch.
@@ -288,6 +305,7 @@ export function activeFilterCount(f: FilterState): number {
   if (f.breakthroughZero) n++;
   if (f.notReforged) n++;
   if (baseRollsActive(f.baseRolls)) n++;
+  if (f.passives.size > 0) n++;
   if (f.singularityOnly) n++;
   if (f.query.trim() !== "") n++;
   return n;

@@ -53,7 +53,7 @@ import { migrateReforge, REFORGE_MODES } from "../../lib/solver/reforge.js";
 import type { SelectedComposition } from "./composition.js";
 import { displayNameOf } from "../../lib/heroes/heroName.js";
 import { heroListOrder } from "../../lib/heroes/heroListOrder.js";
-import { armorSetCatalogFromInventory, effectCatalogFromInventory, mainStatCatalogFromInventory, type MainStatEntry } from "./catalogs.js";
+import { armorSetCatalogFromInventory, effectCatalogFromInventory, mainStatCatalogFromInventory, passiveCatalogFromInventory, type MainStatEntry } from "./catalogs.js";
 import { MAIN_STAT_SLOTS } from "./statColumns.js";
 import { BuilderToolbar } from "./BuilderToolbar.js";
 import { ResultsTable, RESULT_ROW_H } from "./ResultsTable.js";
@@ -356,7 +356,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // dead-end. Derived from the last solve's pool sizes (null until a solve
   // runs → falls back to the generic "pick a hero" hint). The EE slot is
   // skipped: a hero without one reports `exclusive: 0` and solves without it.
-  // A slot emptied (also) by an excluded main stat says so.
+  // A slot emptied (also) by an excluded main stat or the +15 passive picks
+  // says so.
   const emptyReason = useMemo(() => {
     const ps = livePoolSizes;
     if (!ps) return null;
@@ -364,7 +365,12 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     if (dead.length === 0) return null;
     return dead.map((s) => {
       const excluded = ps[s]?.mainExcluded ?? 0;
-      const cause = excluded > 0 ? ` (${excluded} dropped: main stat excluded)` : "";
+      const passive = ps[s]?.passiveExcluded ?? 0;
+      const causes = [
+        ...(excluded > 0 ? [`${excluded} dropped: main stat excluded`] : []),
+        ...(passive > 0 ? [`${passive} dropped: +15 passive filter`] : []),
+      ];
+      const cause = causes.length > 0 ? ` (${causes.join(", ")})` : "";
       return `${SLOT_BY[s]?.label ?? s}: 0 pieces after filters${cause}`;
     }).join(" · ");
   }, [livePoolSizes]);
@@ -778,6 +784,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const weaponEffectCatalog = useMemo(() => effectCatalogFromInventory(inventory, game, "weapon", heroClass), [inventory, game, heroClass]);
   const accessoryEffectCatalog = useMemo(() => effectCatalogFromInventory(inventory, game, "accessory", heroClass), [inventory, game, heroClass]);
   const talismanEffectCatalog = useMemo(() => effectCatalogFromInventory(inventory, game, "talisman", heroClass), [inventory, game, heroClass]);
+  const passiveCatalog = useMemo(() => passiveCatalogFromInventory(inventory, game), [inventory, game]);
   /** Per-slot main-stat catalogs keyed by SlotId — only the variable-main
    *  slots from `MAIN_STAT_SLOTS` appear, each populated by scanning the
    *  inventory for owned pieces. Stats from `STAT_DISPLAY_ORDER` come
@@ -804,6 +811,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         weaponEffects={weaponEffectCatalog}
         accessoryEffects={accessoryEffectCatalog}
         talismanEffects={talismanEffectCatalog}
+        passiveCatalog={passiveCatalog}
         mainStatCatalogs={mainStatCatalogs}
         filters={filters}
         dispatch={dispatch}

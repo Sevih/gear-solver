@@ -5,6 +5,7 @@
 import type { GameData, Inventory } from "@gear-solver/core";
 import { toDesignSlot, type SlotId } from "../../design/tokens.js";
 import { STAT_DISPLAY_ORDER, statLabelFor } from "./statColumns.js";
+import { passiveFamilyOrder, passiveGroupOf, passiveLabel, passiveOfGearPiece, type PassiveGroup } from "../../lib/singularityPassives.js";
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Game-data extraction — turns the raw equipment / sets tables into the
@@ -167,6 +168,41 @@ export function effectCatalogFromInventory(
   return Array.from(map.entries())
     .map(([key, { icon, name, descT4, owned }]) => ({ key, icon, name, descT4, owned }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export interface PassiveEntry {
+  /** The passive family — the Singularity option's name, the pick key. */
+  family: string;
+  /** Short chip label ("DS DMG+", "vs Fire DMG+"…). */
+  label: string;
+  /** Owned pieces of the group carrying it (≥ 1). */
+  owned: number;
+}
+
+/** Per-group +15 passive palette — only the families an owned piece of the
+ *  group already carries (a piece below +15 has none), in the order of the
+ *  15 families in `game.singularityOptions`. */
+export function passiveCatalogFromInventory(
+  inventory: Inventory | null,
+  game: GameData | null,
+): Record<PassiveGroup, PassiveEntry[]> {
+  const out: Record<PassiveGroup, PassiveEntry[]> = { weapon: [], accessory: [], armor: [] };
+  if (!inventory) return out;
+  const counts: Record<PassiveGroup, Map<string, number>> = { weapon: new Map(), accessory: new Map(), armor: new Map() };
+  for (const g of inventory.gear) {
+    const group = passiveGroupOf(g.slot);
+    const family = group ? passiveOfGearPiece(g)?.family : null;
+    if (!group || !family) continue;
+    counts[group].set(family, (counts[group].get(family) ?? 0) + 1);
+  }
+  const order = passiveFamilyOrder(game);
+  const rank = (f: string) => { const i = order.indexOf(f); return i < 0 ? order.length : i; };
+  for (const group of Object.keys(out) as PassiveGroup[]) {
+    out[group] = [...counts[group].entries()]
+      .map(([family, owned]) => ({ family, label: passiveLabel(family), owned }))
+      .sort((a, b) => rank(a.family) - rank(b.family) || a.family.localeCompare(b.family));
+  }
+  return out;
 }
 
 /** Per-slot main-stat catalog — scan owned pieces in `slot`, collect every

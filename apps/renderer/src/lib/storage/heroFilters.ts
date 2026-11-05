@@ -12,7 +12,7 @@
  * else in `SolverFilters` is already JSON-safe. A map left in sessionStorage by
  * an older version is ignored, not migrated.
  */
-import type { SolverFilters } from "../solver/builderFilters.js";
+import { emptyPassivePicks, type SolverFilters } from "../solver/builderFilters.js";
 
 export const HERO_FILTERS_KEY = "gs.solver.heroFilters";
 const KEY = HERO_FILTERS_KEY;
@@ -57,10 +57,10 @@ export function persistHeroFilters(map: HeroFiltersMap): void {
 
 /** Defensive clone (top-level + the `excludedHeroes` Set) so a stored snapshot
  *  can't be mutated by a later reducer update, and a restore can't alias the
- *  map's Set into the live reducer state. `mainExcludes` came later — a
- *  snapshot stored without it gets `{}`. */
+ *  map's Set into the live reducer state. `mainExcludes` and `passivePicks`
+ *  came later — a snapshot stored without them gets none. */
 export function cloneFilters(f: SolverFilters): SolverFilters {
-  return { ...f, excludedHeroes: new Set(f.excludedHeroes), mainExcludes: f.mainExcludes ?? {} };
+  return { ...f, excludedHeroes: new Set(f.excludedHeroes), mainExcludes: f.mainExcludes ?? {}, passivePicks: f.passivePicks ?? emptyPassivePicks() };
 }
 
 /** Starting filters for a hero the Builder opens: their remembered set, else

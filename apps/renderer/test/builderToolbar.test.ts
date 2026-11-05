@@ -6,18 +6,18 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { INITIAL_FILTERS } from "../src/lib/solver/builderFilters.js";
+import { INITIAL_FILTERS, type SolverFilters } from "../src/lib/solver/builderFilters.js";
 import { BuilderToolbar } from "../src/screens/builder/BuilderToolbar.js";
 
 const noop = () => {};
 const POPOVERS = ["Options", "Stat filters", "Ratings", "Priority", "Mains", "Sets", "Effects"];
 const ROW2 = '<div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">';
 
-function rows(filterActive = false): [string, string] {
+function rows(filterActive = false, filters: SolverFilters = INITIAL_FILTERS): [string, string] {
   const html = renderToStaticMarkup(createElement(BuilderToolbar, {
     heroes: [], game: null, selectedUid: null, onSelect: noop, dmgSkill: null,
     armorSets: [], weaponEffects: [], accessoryEffects: [], talismanEffects: [], mainStatCatalogs: {},
-    filters: INITIAL_FILTERS, dispatch: noop,
+    filters, dispatch: noop,
     solving: false, canSolve: true, solveMode: "score", setSolveMode: noop, onSolve: noop, onCancelSolve: noop,
     recoLoading: false, priorityBanner: null, onLoadReco: noop, onUseCp: noop,
     canFilter: true, filterActive, onFilter: noop, onClearFilter: noop,
@@ -54,5 +54,24 @@ describe("Optimizer toolbar — rows", () => {
     expect(row2).toContain(">Reforge<");
     expect(row2.indexOf("Maxed only")).toBeLessThan(row2.indexOf("Transistone potential"));
     expect(buttons(row2).at(-1)).toBe("reset filters");
+  });
+});
+
+describe("Optimizer toolbar — Effects count", () => {
+  /** The badge right after the Effects trigger's label, null without one. */
+  const effectsBadge = (html: string) => html.match(/>Effects(?:<span[^>]*>(\d+)<\/span>)?/)?.[1] ?? null;
+
+  it("counts the +15 passive picks of every group with the effect picks", () => {
+    const filters: SolverFilters = {
+      ...INITIAL_FILTERS,
+      weaponEffectPicks: { "1001": "required" },
+      passivePicks: {
+        weapon: { "Increased DMG within Dimensional Singularity": { state: "required", minGrade: "A" } },
+        accessory: {},
+        armor: { "Reduced DMG Taken vs Fire": { state: "excluded", minGrade: "C" }, "Reduced DMG Taken from targets": { state: "required", minGrade: "C" } },
+      },
+    };
+    expect(effectsBadge(rows(false, filters)[0])).toBe("4");
+    expect(effectsBadge(rows()[0])).toBeNull();
   });
 });

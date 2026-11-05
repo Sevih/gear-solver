@@ -6,8 +6,9 @@ import { cx } from "../../design/cx.js";
 import { GameText } from "../../design/GameText.js";
 import { RichTooltip } from "../../design/RichTooltip.js";
 import { ARMOR_SLOTS } from "../../lib/solver/setPlans.js";
-import type { ChipState } from "../../lib/solver/builderFilters.js";
-import type { ArmorSetEntry, EffectEntry } from "./catalogs.js";
+import type { ChipState, PassivePick } from "../../lib/solver/builderFilters.js";
+import { SINGULARITY_GRADES, type SingularityGrade } from "../../lib/singularityPassives.js";
+import type { ArmorSetEntry, EffectEntry, PassiveEntry } from "./catalogs.js";
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Icon chip atoms — shared by Sets and Weapons & accessories. Click cycles
@@ -120,6 +121,59 @@ export function EffectIconChip({ effect, state, onClick }: { effect: EffectEntry
         <EffectBadge state={state} />
       </button>
     </RichTooltip>
+  );
+}
+
+/** +15 passive chip — the family's short label, off → required → excluded
+ *  with the effect chips' styling; a required chip carries the minimum grade
+ *  selector on its right. */
+export function PassiveChip({ entry, pick, onCycle, onGrade }: {
+  entry: PassiveEntry;
+  pick: PassivePick | undefined;
+  onCycle: () => void;
+  onGrade: (grade: SingularityGrade) => void;
+}) {
+  const state: ChipState = pick?.state ?? "off";
+  const stateLabel =
+    state === "off" ? "click to require"
+    : state === "required" ? `required, grade ≥ ${pick!.minGrade} (click to exclude)`
+    : "excluded at any grade (click to clear)";
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <RichTooltip content={
+        <div className="space-y-1">
+          <div className="text-[11.5px] font-semibold">
+            {entry.family} <span className="font-normal text-white/60">({entry.owned} owned)</span>
+          </div>
+          <div className="border-t border-white/10" />
+          <div className="text-[10.5px] italic text-white/70">{stateLabel}</div>
+        </div>
+      }>
+        <button
+          type="button"
+          onClick={onCycle}
+          className={cx(
+            "relative h-6 rounded-md border px-1.5 text-[10.5px] font-medium text-white transition-colors",
+            chipClasses(state === "required", state === "excluded"),
+            state === "excluded" && "line-through",
+          )}
+        >
+          {entry.label}
+          <EffectBadge state={state} />
+        </button>
+      </RichTooltip>
+      {pick?.state === "required" && (
+        <select
+          value={pick.minGrade}
+          aria-label={`Minimum grade for ${entry.label}`}
+          title={`${entry.family}: grade ${pick.minGrade} or better`}
+          onChange={(e) => onGrade(e.target.value as SingularityGrade)}
+          className="h-6 rounded-md border border-white/10 bg-black/30 px-0.5 font-mono text-[10.5px] text-white focus:border-cyan-400/40 focus:outline-none"
+        >
+          {SINGULARITY_GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+        </select>
+      )}
+    </span>
   );
 }
 

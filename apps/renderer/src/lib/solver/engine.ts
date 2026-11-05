@@ -33,6 +33,7 @@ import {
 import { calcBattlePower, makeCpEvaluator } from "./cp.js";
 import { debug, debugEnabled } from "../log.js";
 import { isLowerPriority } from "../storage/heroPriority.js";
+import { gradeAtLeast, passiveGroupOf, passiveOfGearPiece } from "../singularityPassives.js";
 import { presetBlockedUids } from "../presets/presetHolds.js";
 import { allocateGems, allocateGemsByCp, allocateGemsCapped, allocateGemsReachingCap, allocateGemsServingMins, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type GemAllocation, type GemMinNeed, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
@@ -406,6 +407,17 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   const requiredTalismanEffects = new Set(talismanEffectPicks.filter(([, v]) => v === "required").map(([k]) => k));
   const excludedTalismanEffects = new Set(talismanEffectPicks.filter(([, v]) => v === "excluded").map(([k]) => k));
   const preferredTalismanEffects = new Set(talismanEffectPicks.filter(([, v]) => v === "preferred").map(([k]) => k));
+  // +15 passive picks per group (weapon / accessory / the four armor pieces):
+  // the families excluded at any grade, and the required ones with their
+  // minimum grade (OR inside a group). Only the pieces that already carry the
+  // passive count — the ascended projection adds one after this filter.
+  const passiveRules = Object.fromEntries(Object.entries(filters.passivePicks ?? {}).map(([group, picks]) => {
+    const entries = Object.entries(picks ?? {});
+    return [group, {
+      excluded: new Set(entries.filter(([, p]) => p.state === "excluded").map(([family]) => family)),
+      required: new Map(entries.filter(([, p]) => p.state === "required").map(([family, p]) => [family, p.minGrade])),
+    }];
+  }));
 
   // Quality gate — drop pieces whose rolled-substat quality is below the
   // chosen tier. `minQualityRank < 0` (unset / unknown) disables the check.
@@ -446,6 +458,8 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // Pieces `allow` rejected for an excluded main, per engine slot — reported
   // in `poolSizes` so an emptied slot can name the cause.
   const mainExcludedDrops: Record<string, number> = {};
+  // Pieces `allow` rejected for their +15 passive, per engine slot — same use.
+  const passiveExcludedDrops: Record<string, number> = {};
   // Per-slot filter helper. Returns true if the piece is allowed in this slot.
   const allow = (g: GearPiece, slot: string): boolean => {
     if (g.slot !== slot) return false;
@@ -500,6 +514,20 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       const requiredEffects = slot === "weapon" ? requiredWeaponEffects : slot === "accessory" ? requiredAccessoryEffects : requiredTalismanEffects;
       if (effKey && excludedEffects.has(effKey)) return false;
       if (requiredEffects.size > 0 && (!effKey || !requiredEffects.has(effKey))) return false;
+    }
+    // +15 passive picks — an excluded family rejects the piece at any grade;
+    // with a required family in the group, the piece must carry one of them at
+    // its minimum grade or better (no passive, or an unreadable grade, fails).
+    const passiveRule = passiveRules[passiveGroupOf(slot) ?? ""];
+    if (passiveRule && (passiveRule.excluded.size > 0 || passiveRule.required.size > 0)) {
+      const passive = passiveOfGearPiece(g);
+      const min = passive ? passiveRule.required.get(passive.family) : undefined;
+      const rejected = (passive != null && passiveRule.excluded.has(passive.family))
+        || (passiveRule.required.size > 0 && (min == null || passive?.grade == null || !gradeAtLeast(passive.grade, min)));
+      if (rejected) {
+        passiveExcludedDrops[slot] = (passiveExcludedDrops[slot] ?? 0) + 1;
+        return false;
+      }
     }
     // Excluded sets — drop the piece outright.
     if (g.armorSetId && excludedSets.has(g.armorSetId)) return false;
@@ -801,6 +829,10 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   if (mainExcludedDrops.weapon) poolSizes.weapon!.mainExcluded = mainExcludedDrops.weapon;
   if (mainExcludedDrops.accessory) poolSizes.accessory!.mainExcluded = mainExcludedDrops.accessory;
   if (mainExcludedDrops.ooparts) poolSizes.talisman!.mainExcluded = mainExcludedDrops.ooparts;
+  // +15 passives: weapon, accessory and the four armor slots.
+  for (const slot of ["weapon", "accessory", "helmet", "armor", "gloves", "boots"] as const) {
+    if (passiveExcludedDrops[slot]) poolSizes[slot]!.passiveExcluded = passiveExcludedDrops[slot];
+  }
 
   // Gem pool — full inventory union, scored once. Scoring depends on
   // `priority`; when uniformly zero, scores collapse to 0 and the

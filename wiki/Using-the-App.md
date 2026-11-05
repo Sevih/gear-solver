@@ -163,6 +163,15 @@ rules it holds. Esc or a click outside closes it.
 - **Effects** — Weapons, Accessories and Talismans: click an effect to cycle off → required →
   excluded. A talisman advised by **Load reco** starts *preferred* (dotted outline): used if you
   own one (any star of the same family), otherwise any talisman is.
+  Under Weapons and Accessories, and in the **Armor** block (the four armor pieces together), a
+  **+15 passive** line lists the Singularity passives your pieces of that group already carry
+  (DS DMG+, vs Fire DMG+, DMG-…): click one to cycle off → required → excluded. A required passive
+  gets a grade selector (C / B / A / S / S+, C = any grade): only the pieces carrying it at that
+  grade or better stay, e.g. **DS DMG+** required at **A** keeps the weapons with DS DMG+ in A, S or
+  S+. Several required passives in a group = any of them. A piece without a passive (below +15) is
+  dropped as soon as its group has a required one — the filter never guesses the passive a piece
+  would roll at +15 — and an excluded passive drops the pieces carrying it at any grade. When a
+  slot ends up empty, the footer names the pieces the passive filter dropped.
 - **Stat filters** — min / max on any final stat (e.g. SPD ≥ 200). Gems: a stat filter's minimum
   is served before the priority — a build short of it gets that stat's gems first, the priority
   fills the remaining slots; a build that only passes with its socketed gems keeps them (its
@@ -446,6 +455,11 @@ A dense, searchable grid of every gear piece you own.
   counts at its current tier. A **Good** piece that a reroll would push past 85 % shows under
   **Excellent** here and not under Quality's Excellent. Talismans and EE have no quality score and
   never match.
+- **+15 passive** (in the Filter modal, after Secondary Stat): one pill per Singularity passive a
+  piece of the current view carries (DS DMG+, vs Fire DMG+…, the full name on hover); ticking
+  several keeps the pieces carrying any of them, and **Min grade** (C to S+, C = any) keeps only
+  those at that grade or better. No pill ticked = the section is off, its grade too. A piece below
+  +15 has no passive and never passes; a Scrap rule shows the section as e.g. `DS DMG+ ≥ A`.
 - **Base rolls** (in the Filter modal): the initial tiers of a piece's substats, best line first,
   before reforge and enhancement — the same "3/3/3/1" as the Transistone reroll. Pick an operator
   (at least, more than, exactly, at most, less than) and four values (X = any): every line must

@@ -7,10 +7,11 @@
  * Sets need conversion before/after JSON. `excludedHeroes` is the only
  * non-JSON-safe field; we round-trip via array.
  */
-import type { SolverFilters } from "../solver/builderFilters.js";
+import { emptyPassivePicks, type PassivePick, type PassivePicks, type SolverFilters } from "../solver/builderFilters.js";
 import type { ReforgeMode } from "../solver/engine.js";
 import { legacyReforgeMode } from "../solver/reforge.js";
 import { setPicksToPlans } from "../solver/setPlans.js";
+import { isSingularityGrade, PASSIVE_GROUPS } from "../singularityPassives.js";
 import { renameLegacyStatKeys } from "../statRegistry.js";
 
 export interface FilterPreset {
@@ -73,6 +74,22 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
     }
     return out;
   };
+  // +15 passive picks came later — absent → none. Per group, a family keeps a
+  // known state; an unknown grade reads C (any grade).
+  const sanitizePassives = (m: unknown): PassivePicks => {
+    const out = emptyPassivePicks();
+    if (!m || typeof m !== "object") return out;
+    for (const group of PASSIVE_GROUPS) {
+      const picks = (m as Record<string, unknown>)[group];
+      if (!picks || typeof picks !== "object") continue;
+      for (const [family, v] of Object.entries(picks)) {
+        const pick = v as Partial<PassivePick> | null;
+        if (!family || (pick?.state !== "required" && pick?.state !== "excluded")) continue;
+        out[group][family] = { state: pick.state, minGrade: isSingularityGrade(pick.minGrade) ? pick.minGrade : "C" };
+      }
+    }
+    return out;
+  };
   return {
     ...s,
     filters: {
@@ -88,6 +105,7 @@ function fromSerialized(s: SerializedPreset): FilterPreset {
       weaponEffectPicks: sanitizeEffects(f.weaponEffectPicks),
       accessoryEffectPicks: sanitizeEffects(f.accessoryEffectPicks),
       talismanEffectPicks: sanitizeTalismanEffects(f.talismanEffectPicks),
+      passivePicks: sanitizePassives(f.passivePicks),
       // Field added after some presets were saved — default to no quality gate.
       minQuality: f.minQuality ?? null,
       // Main exclusions came later — a preset saved before has none.

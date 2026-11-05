@@ -15,6 +15,7 @@ import { hasScrapFields, scrapValue } from "../../lib/inventory/scrapValue.js";
 import { addAll, materialRows, pruneSelection, pruneShown, scrapScope, toggleSelection } from "../../lib/inventory/scrapCard.js";
 import { scrapDefaultPresets } from "../../lib/storage/inventoryFilterPresets.js";
 import { RULES_CODEC, addRule, clampRuleIndex, matchesAnyRule, removeRule, ruleLabel, setRule, type ScrapRules } from "../../lib/inventory/scrapRules.js";
+import { passiveOfUiPiece } from "../../lib/singularityPassives.js";
 import { cx } from "../../design/cx.js";
 
 // The Scrap value card's selection, kept for the session as a list of uids.
@@ -216,7 +217,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // individual `availableX` binding unchanged.
   const {
     availableMains, availableSubs, availableArmorSets, availableClasses,
-    availableStars, availableRarities, availableQualities, availableReachable,
+    availableStars, availableRarities, availableQualities, availableReachable, availablePassives,
   } = useMemo(() => {
     const mains = new Set<string>();
     const subs = new Set<string>();
@@ -231,6 +232,8 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
     const rarities = new Set<DesignRarity>();
     const qualities = new Set<QualityTier>();
     const reachable = new Set<QualityTier>();
+    // +15 passive families (Singularity option names) carried in the scope.
+    const passives = new Set<string>();
     for (const p of scopedForStats) {
       for (const m of p.main) mains.add(m.stat);
       for (const sub of p.subs) subs.add(sub.stat);
@@ -244,12 +247,14 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
       if (p.quality) qualities.add(p.quality.tier);
       const rt = reachableTier(p);
       if (rt) reachable.add(rt);
+      const passive = passiveOfUiPiece(p);
+      if (passive) passives.add(passive.family);
     }
     return {
       availableMains: mains, availableSubs: subs, availableArmorSets: armorSets,
       availableClasses: classes, availableStars: stars,
       availableRarities: rarities, availableQualities: qualities,
-      availableReachable: reachable,
+      availableReachable: reachable, availablePassives: passives,
     };
   }, [scopedForStats, game]);
 
@@ -554,6 +559,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         availableRarities={availableRarities}
         availableQualities={availableQualities}
         availableReachable={availableReachable}
+        availablePassives={availablePassives}
         armorSetName={(id) => game?.sets?.[id]?.name ?? `Set #${id}`}
       />
     </div>

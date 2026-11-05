@@ -7,6 +7,7 @@
  */
 import type { SlotId } from "../../design/tokens.js";
 import type { QualityTier } from "../quality.js";
+import { SINGULARITY_GRADES, type PassiveGroup, type SingularityGrade } from "../singularityPassives.js";
 import type { RecoFilterPatch } from "../reco/translateReco.js";
 import type { ReforgeMode } from "./engine.js";
 import { ARMOR_SLOTS } from "./setPlans.js";
@@ -84,12 +85,35 @@ export interface SolverFilters {
   /** Talisman effect picks — same cycle, plus `preferred`, set only by a
    *  recommendation (narrows the pool when the hero can use one, else open). */
   talismanEffectPicks: Record<string, ChipState>;
+  /** +15 passive picks per group (weapon, accessory, the four armor pieces),
+   *  keyed on the passive family (the Singularity option's name). A family is
+   *  required at a minimum grade (OR inside a group) or excluded at any grade;
+   *  an absent family is off. */
+  passivePicks: PassivePicks;
   /** Minimum gear quality tier admitted into the solve pool. Null = no gate.
    *  Talisman / EE have no quality and are always kept. */
   minQuality: QualityTier | null;
 }
 
 export type ChipState = "off" | "required" | "excluded" | "preferred";
+
+export interface PassivePick {
+  state: "required" | "excluded";
+  /** Lowest grade a required family is accepted at — "C" = any grade. Kept
+   *  (unused) while excluded, so a cycle back to required starts at C. */
+  minGrade: SingularityGrade;
+}
+export type PassivePicks = Record<PassiveGroup, Record<string, PassivePick>>;
+
+export function emptyPassivePicks(): PassivePicks {
+  return { weapon: {}, accessory: {}, armor: {} };
+}
+
+/** Number of passive families picked across the three groups. */
+export function passivePickCount(picks: PassivePicks | undefined): number {
+  if (!picks) return 0;
+  return Object.keys(picks.weapon ?? {}).length + Object.keys(picks.accessory ?? {}).length + Object.keys(picks.armor ?? {}).length;
+}
 
 export function nextChipState(s: ChipState | undefined): ChipState {
   if (s === "preferred") return "required";
@@ -133,6 +157,7 @@ export function buildSolveFilters(filters: SolverFilters): SolveFilters {
     weaponEffectPicks: filters.weaponEffectPicks as SolveFilters["weaponEffectPicks"],
     accessoryEffectPicks: filters.accessoryEffectPicks as SolveFilters["accessoryEffectPicks"],
     talismanEffectPicks: filters.talismanEffectPicks as SolveFilters["talismanEffectPicks"],
+    passivePicks: filters.passivePicks ?? emptyPassivePicks(),
     minQuality: filters.minQuality,
   };
 }
@@ -167,6 +192,7 @@ export const INITIAL_FILTERS: SolverFilters = {
   weaponEffectPicks: {},
   accessoryEffectPicks: {},
   talismanEffectPicks: {},
+  passivePicks: emptyPassivePicks(),
   minQuality: null,
 };
 
@@ -200,6 +226,11 @@ export type SolverAction =
   /** Toggle a set in/out of the hard-excluded list. */
   | { type: "toggleExcludedSet"; setId: string }
   | { type: "cycleEffectPick"; group: "weapon" | "accessory" | "talisman"; key: string }
+  /** Cycle a +15 passive family in a group: off → required (grade C) →
+   *  excluded → off. */
+  | { type: "cyclePassivePick"; group: PassiveGroup; family: string }
+  /** Minimum grade of a required passive family (no-op on any other state). */
+  | { type: "setPassiveMinGrade"; group: PassiveGroup; family: string; grade: SingularityGrade }
   | { type: "clearPriority" }
   /** Back to the hero defaults (`filterDefaults`). */
   | { type: "resetAll"; to: SolverFilters }
@@ -326,6 +357,24 @@ export function solverFiltersReducer(state: SolverFilters, action: SolverAction)
       if (nxt === "off") delete map[action.key];
       else map[action.key] = nxt;
       return { ...state, [mapKey]: map };
+    }
+    case "cyclePassivePick": {
+      const picks = state.passivePicks ?? emptyPassivePicks();
+      const group = { ...(picks[action.group] ?? {}) };
+      const cur = group[action.family];
+      if (!cur) group[action.family] = { state: "required", minGrade: SINGULARITY_GRADES[0] };
+      else if (cur.state === "required") group[action.family] = { state: "excluded", minGrade: SINGULARITY_GRADES[0] };
+      else delete group[action.family];
+      return { ...state, passivePicks: { ...picks, [action.group]: group } };
+    }
+    case "setPassiveMinGrade": {
+      const picks = state.passivePicks ?? emptyPassivePicks();
+      const cur = picks[action.group]?.[action.family];
+      if (cur?.state !== "required") return state;
+      return {
+        ...state,
+        passivePicks: { ...picks, [action.group]: { ...picks[action.group], [action.family]: { ...cur, minGrade: action.grade } } },
+      };
     }
     case "clearPriority":
       return { ...state, priority: {} };

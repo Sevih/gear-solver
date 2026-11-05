@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { FILTER_PRESETS_KEY, loadFilterPresets } from "../src/lib/storage/filterPresets.js";
+import { INITIAL_FILTERS, type SolverFilters } from "../src/lib/solver/builderFilters.js";
+import { FILTER_PRESETS_KEY, loadFilterPresets, persistFilterPresets } from "../src/lib/storage/filterPresets.js";
 import { applyBackup } from "../src/lib/storage/transfer.js";
 
 // Map-backed localStorage stub — Vitest runs in the `node` environment.
@@ -92,5 +93,33 @@ describe("filter presets — a malformed entry", () => {
     store.set(FILTER_PRESETS_KEY, JSON.stringify({ h1: [legacyPreset({})] }));
     applyBackup({ kind: "gear-solver-backup", version: 1, exportedAt: 0, savedBuilds: {}, filterPresets: { h2: [{ id: "x", name: "broken" }] } });
     expect(loadFilterPresets().h1!.map((p) => p.id)).toEqual(["p1"]);
+  });
+});
+
+describe("filter presets — +15 passive picks", () => {
+  const DS = "Increased DMG within Dimensional Singularity";
+
+  it("a preset saved before the field loads with no pick", () => {
+    expect(loadOne(legacyPreset({})).passivePicks).toEqual({ weapon: {}, accessory: {}, armor: {} });
+  });
+
+  it("round-trips through persist / load", () => {
+    const filters = {
+      ...INITIAL_FILTERS,
+      passivePicks: { weapon: { [DS]: { state: "required", minGrade: "A" } }, accessory: {}, armor: { "Reduced DMG Taken vs Fire": { state: "excluded", minGrade: "C" } } },
+    } as SolverFilters;
+    persistFilterPresets({ h1: [{ id: "p", name: "n", heroUid: "h1", filters, createdAt: 0 }] });
+    expect(loadFilterPresets().h1![0]!.filters.passivePicks).toEqual(filters.passivePicks);
+  });
+
+  it("an unknown grade reads C, an unknown state or group is dropped", () => {
+    const picks = {
+      weapon: { [DS]: { state: "required", minGrade: "SS" }, Other: { state: "preferred", minGrade: "A" } },
+      talisman: { [DS]: { state: "required", minGrade: "A" } },
+      armor: "nope",
+    };
+    expect(loadOne(legacyPreset({}, { passivePicks: picks })).passivePicks).toEqual({
+      weapon: { [DS]: { state: "required", minGrade: "C" } }, accessory: {}, armor: {},
+    });
   });
 });

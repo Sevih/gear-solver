@@ -10,8 +10,9 @@ import { cx } from "../../design/cx.js";
 import type { DmgSkillInfo } from "../../lib/dmgSkill.js";
 import type { ReforgeMode } from "../../lib/solver/engine.js";
 import type { SolveMode } from "../../lib/solver/types.js";
-import { filterDefaults, type SolverAction, type SolverFilters } from "../../lib/solver/builderFilters.js";
-import type { ArmorSetEntry, EffectEntry, MainStatEntry } from "./catalogs.js";
+import { filterDefaults, passivePickCount, type SolverAction, type SolverFilters } from "../../lib/solver/builderFilters.js";
+import type { PassiveGroup } from "../../lib/singularityPassives.js";
+import type { ArmorSetEntry, EffectEntry, MainStatEntry, PassiveEntry } from "./catalogs.js";
 import { displayNameOf } from "../../lib/heroes/heroName.js";
 import { HeroPicker } from "../../design/HeroPicker.js";
 import { OptionsPanel } from "./OptionsPanel.js";
@@ -35,7 +36,7 @@ import { settingDefault } from "../../lib/settings.js";
  * ───────────────────────────────────────────────────────────────────────── */
 export function BuilderToolbar({
   heroes, game, selectedUid, onSelect,
-  armorSets, weaponEffects, accessoryEffects, talismanEffects, mainStatCatalogs,
+  armorSets, weaponEffects, accessoryEffects, talismanEffects, passiveCatalog, mainStatCatalogs,
   filters, dispatch,
   defaultReforgeMode = settingDefault("reforgeMode"), defaultRerollPotential = settingDefault("rerollPotential"),
   solving, canSolve, solveMode, setSolveMode, onSolve, onCancelSolve, recoLoading,
@@ -52,6 +53,8 @@ export function BuilderToolbar({
   weaponEffects: EffectEntry[];
   accessoryEffects: EffectEntry[];
   talismanEffects: EffectEntry[];
+  /** +15 passive families the inventory carries, per group (Effects panel). */
+  passiveCatalog?: Record<PassiveGroup, PassiveEntry[]>;
   mainStatCatalogs: Record<string, MainStatEntry[]>;
   filters: SolverFilters;
   dispatch: Dispatch<SolverAction>;
@@ -97,7 +100,7 @@ export function BuilderToolbar({
     .reduce((n, m) => n + Object.values(m).filter(Boolean).length, 0);
   const setCount = filters.setPlans.filter((p) => p.length > 0).length + filters.excludedSets.length;
   const effectCount = Object.keys(filters.weaponEffectPicks).length + Object.keys(filters.accessoryEffectPicks).length
-    + Object.keys(filters.talismanEffectPicks).length;
+    + Object.keys(filters.talismanEffectPicks).length + passivePickCount(filters.passivePicks);
   // Options badge counts only the constraints that deviate from the defaults
   // (equipped scope off its "lower" baseline either way, keep-current on,
   // broken-sets disallowed, min-quality set, plus each excluded hero).
@@ -191,6 +194,8 @@ export function BuilderToolbar({
               weaponPicks={filters.weaponEffectPicks}
               accPicks={filters.accessoryEffectPicks}
               talismanPicks={filters.talismanEffectPicks}
+              passives={passiveCatalog}
+              passivePicks={filters.passivePicks}
               dispatch={dispatch}
             />
           </PopoverButton>

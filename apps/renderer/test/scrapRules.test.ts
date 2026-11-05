@@ -86,6 +86,14 @@ describe("ruleLabel", () => {
     };
     expect(ruleLabel(f)).toBe('Epic Legendary · Q: Poor Good · ATK% · 2 subs · 2 sets · < 2/X/X/X · singularity · "ring"');
   });
+
+  it("the +15 passives by short label, the minimum grade once unless C", () => {
+    const one: FilterState = { ...emptyFilters(), passives: new Set(["Increased DMG within Dimensional Singularity"]), passiveMinGrade: "A" };
+    expect(ruleLabel(one)).toBe("DS DMG+ ≥ A");
+    const two: FilterState = { ...one, passives: new Set(["Increased DMG within Dimensional Singularity", "DMG Increase vs Fire"]), passiveMinGrade: "C" };
+    expect(ruleLabel(two)).toBe("DS DMG+ / vs Fire DMG+");
+    expect(ruleLabel({ ...emptyFilters(), passiveMinGrade: "S" })).toBe("All pieces");
+  });
 });
 
 describe("rule list updates", () => {

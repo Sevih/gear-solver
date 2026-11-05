@@ -19,9 +19,9 @@ vi.mock("react-dom", async (importOriginal) => ({
 
 const { FilterModal, scrapDefaultButton } = await import("../src/screens/inventory/FilterModal.js");
 
-function render(current: FilterState, scrapMode = false): string {
+function render(current: FilterState, scrapMode = false, availablePassives?: Set<string>): string {
   return renderToStaticMarkup(createElement(FilterModal, {
-    open: true, onClose: () => {}, current, onApply: () => {}, scrapMode,
+    open: true, onClose: () => {}, current, onApply: () => {}, scrapMode, availablePassives,
     availableMains: new Set(["atkPct"]), availableSubs: new Set(["atkPct"]),
     availableArmorSets: new Map([["7", "Sharp"]]), availableClasses: new Set<string>(),
     availableStars: new Set([6]), availableRarities: new Set<DesignRarity>(["legendary"]),
@@ -131,5 +131,37 @@ describe("FilterModal — Use for Scrap", () => {
     } finally {
       (globalThis as { localStorage?: unknown }).localStorage = prev;
     }
+  });
+});
+
+describe("FilterModal — +15 passive", () => {
+  const DS = "Increased DMG within Dimensional Singularity";
+  const available = new Set([DS, "DMG Increase vs Fire"]);
+  /** The <select> of the section, opening tag. */
+  const gradeSelect = (html: string) => html.match(/<select[^>]*aria-label="Minimum passive grade"[^>]*>/)?.[0] ?? null;
+
+  it("no passive in the view and none ticked → no section", () => {
+    const html = render(emptyFilters());
+    expect(html).not.toContain("+15 passive");
+    expect(gradeSelect(html)).toBeNull();
+  });
+
+  it("one pill per family of the view, by short label, full name in the title; the grade selector disabled while none is ticked", () => {
+    const html = render(emptyFilters(), false, available);
+    expect(html).toContain("+15 passive");
+    expect(buttons(html, "DS DMG+")[0]).toContain(`title="${DS}"`);
+    expect(buttons(html, "vs Fire DMG+")).toHaveLength(1);
+    expect(buttons(html, "vs Water DMG+")).toHaveLength(0);
+    expect(gradeSelect(html)).toContain(" disabled=\"\"");
+    expect(html).toContain("Min grade S+");
+  });
+
+  it("a ticked family enables the selector; one absent from the view is listed after, marked", () => {
+    const html = render({ ...emptyFilters(), passives: new Set([DS, "Reduced DMG Taken vs Dark"]), passiveMinGrade: "A" }, false, available);
+    expect(gradeSelect(html)).not.toContain(" disabled=\"\"");
+    const [dark] = buttons(html, "vs Dark DMG-");
+    expect(dark).toContain(UNAVAILABLE);
+    expect(html.indexOf("vs Fire DMG+")).toBeLessThan(html.indexOf("vs Dark DMG-"));
+    expect(html).toMatch(/<option value="A" selected="">Min grade A<\/option>/);
   });
 });

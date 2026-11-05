@@ -8,6 +8,91 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎯 Filtre sur le passif +15 par famille et grade minimum, Optimizer et Gear (G114) (2026-11-05)
+- ✅ **Pourquoi.** Demande de Sevih du 05/11 : filtrer sur le passif +15 (l'option Singularity qu'une pièce reçoit à
+  +15, `SingularityOptionID`) par famille et par grade minimum, dans l'Optimizer (forcer ou exclure : « une arme avec
+  DS DMG+ de grade A ou plus ») et dans Gear (ne montrer que les pièces qui portent tel passif à tel grade au moins).
+- ✅ **Module pur** `apps/renderer/src/lib/singularityPassives.ts` : `SINGULARITY_GRADES` (`C < B < A < S < S+`,
+  type `SingularityGrade`, garde `isSingularityGrade`), `gradeAtLeast`, `passiveOf({ name, desc })` → `{ family,
+  grade }` (famille = le `name` de l'option, rogné : la table écrit « DMG Increase to target » avec une espace finale ;
+  grade par `singularityGrade` de `gearCardText.ts`, null si le desc n'ouvre pas sur une lettre), `passiveOfGearPiece`
+  (le main `source === "singularity"`), `passiveOfUiPiece` (dans `effects`), `passiveGroupOf` (weapon, accessory, les
+  quatre pièces d'armure → `armor` ; talisman et EE → null), `passiveLabel` (= `singularityShortLabel`, sinon le nom),
+  `passiveFamilyOrder` (les 15 familles dans l'ordre des ids de la table). `SINGULARITY_LABELS` couvrait déjà les 15
+  familles : rien ajouté ni changé.
+- ✅ **Optimizer, état.** `SolverFilters.passivePicks` (`builderFilters.ts`) : par groupe, famille →
+  `{ state: "required" | "excluded"; minGrade }`, défaut `emptyPassivePicks()` (trois objets vides) ; actions
+  `cyclePassivePick` (off → required à C → excluded → off ; le grade revient à C au passage en excluded) et
+  `setPassiveMinGrade` (sans effet hors `required`) ; `passivePickCount` ; `buildSolveFilters` le passe tel quel dans
+  `SolveFilters.passivePicks` (optionnel dans `types.ts`, requêtes d'avant le champ = aucun filtre) ; `loadPreset`
+  copie déjà l'état entier, `mergePreset` (Load reco) le garde. `filterPresets.ts` l'assainit à la lecture
+  (`sanitizePassives` : groupes connus seulement, familles non vides, état `required` / `excluded`, grade inconnu → C,
+  champ absent → vide) ; `heroFilters.ts` (`cloneFilters`) donne aussi le défaut à un instantané par héros rangé
+  avant le champ, sans quoi le panneau lisait `undefined.weapon`.
+- ✅ **Optimizer, moteur** (`engine.ts`). `prepareContext` lit les picks en tête (exclus en `Set`, requis en
+  `Map` famille → grade minimum, par groupe) ; `allow()`, juste après les effets : pour une pièce dont
+  `passiveGroupOf(slot)` n'est pas null et dont le groupe a des picks, une famille `excluded` portée → rejet à
+  n'importe quel grade ; au moins un `required` dans le groupe → la pièce doit porter l'une de ces familles à un grade
+  ≥ son `minGrade` (OU ; sans passif ou grade illisible = refus). Le passif projeté par le mode +15
+  (`addProjectedSingularity`) arrive après le filtrage du pool et ne compte pas. Les rejets sont comptés par slot
+  (`passiveExcludedDrops`, comme `mainExcludedDrops`) et exposés dans `poolSizes[slot].passiveExcluded` (weapon,
+  accessory et les quatre armures) ; `BuilderScreen.tsx` ajoute à la phrase d'un slot vidé « N dropped: +15 passive
+  filter », jointe par une virgule à celle d'une main exclue quand les deux jouent.
+- ✅ **Optimizer, UI.** `passiveCatalogFromInventory(inventory, game)` (`catalogs.ts`) : par groupe, les familles que
+  l'inventaire porte, avec leur compte, dans l'ordre de la table. `WeaponsAccessoriesPanel.tsx` : une ligne
+  « +15 passive » sous les effets de Weapons et d'Accessories et dans un bloc **Armor** nouveau (après Talismans ; « no
+  +15 passive » quand il n'y a rien), chaque famille une `PassiveChip` (`IconChips.tsx`) : chip texte au libellé
+  court, mêmes classes que `EffectIconChip` (`chipClasses`, badge ✓ / ✕), barrée en `excluded`, infobulle = nom
+  complet, (N owned) et l'état (« required, grade ≥ A (click to exclude) ») ; une chip `required` porte à sa droite un
+  `<select>` C…S+ `aria-label="Minimum grade for <label>"`. Une famille cochée que plus aucune pièce ne porte reste
+  listée (sinon le filtre vidait un slot sans chip à retirer). L'astuce du panneau dit la règle. Le compte du bouton
+  Effects inclut `passivePickCount` ; `BuilderToolbar` reçoit `passiveCatalog` (optionnel), mémoïsé dans
+  `BuilderScreen`.
+- ✅ **Gear.** `FilterState.passives: Set<string>` et `passiveMinGrade` (défaut `"C"`) dans
+  `screens/inventory/filters.ts` ; `FILTER_CODEC` range `passives` parmi les champs `Set` et lit un grade absent ou
+  inconnu comme C ; `matchesFilters` : avec au moins une famille, la pièce doit porter un passif de l'une d'elles à
+  un grade ≥ le minimum ; `activeFilterCount` compte 1 pour la section. `InventoryScreen.tsx` calcule
+  `availablePassives` (familles de `scopedForStats`) dans le passage unique des autres disponibilités ;
+  `FilterModal.tsx` : une `ModalSection label="+15 passive"` après Secondary Stat (affichée dès qu'une famille est
+  disponible ou cochée), un badge OR et le `<select>` « Min grade C…S+ » (`aria-label="Minimum passive grade"`,
+  désactivé sans pilule cochée), une pilule All puis une pilule par famille disponible (libellé court, `title` = nom
+  complet), les cochées absentes de la vue listées après, marquées comme pour les mains. `ruleLabel`
+  (`scrapRules.ts`) ajoute la part : libellés courts triés joints par ` / `, puis ` ≥ <grade>` hors C
+  (`DS DMG+ ≥ A`). `SCRAP_CANDIDATES` inchangé (il s'étend par `emptyFilters()`).
+- ✅ **Tests** (renderer 1137 → 1173, 101 → 105 fichiers). Nouveaux : `singularityPassives.test.ts` (7 : grades,
+  `gradeAtLeast`, `passiveOf` sur 300137 / 300147 de la table et sur un desc sans lettre, famille rognée,
+  `passiveOfGearPiece` / `passiveOfUiPiece`, `passiveGroupOf`, les 15 familles de la table chacune avec un libellé
+  court et les cinq grades), `passivePicks.test.ts` (6, sur le modèle de `talismanPreferred.test.ts` : armes DS DMG+ A,
+  DS DMG+ B et sans passif — `required` A → la première, C → les deux premières, `excluded` → la troisième, deux
+  `required` = OU, un `required` sur Armor laisse les armes et vide les casques sans passif, champ absent → pool
+  entier, `passiveExcluded` compté), `inventoryPassives.test.ts` (6 : `matchesFilters` famille et grade, OU, section
+  inactive sans pilule, `activeFilterCount`, `FILTER_CODEC`), `effectsPassivePanel.test.ts` (4 : catalogue par groupe
+  et rendu statique du panneau). Complétés : `builderFilters.test.ts` (+5 : cycle, grade, `buildSolveFilters`, Load
+  reco qui garde les picks, `cloneFilters` sans le champ), `filterPresets.test.ts` (+3 : champ absent, aller-retour
+  `persistFilterPresets` / `loadFilterPresets`, grade inconnu → C et état ou groupe inconnu écarté),
+  `builderToolbar.test.ts` (+1 : le badge Effects compte 4 pour un effet et trois passifs), `scrapRules.test.ts` (+1 :
+  `DS DMG+ ≥ A`, deux familles sans grade), `inventoryFilterModal.test.ts` (+3 : pas de section sans passif, pilules
+  des familles disponibles seulement et sélecteur désactivé, famille cochée absente listée après et marquée). Les tests
+  existants intacts (`availablePassives`, `passiveCatalog` et les props du panneau sont optionnels).
+- ✅ **Docs.** `wiki/Using-the-App.md` (Effects : la ligne +15 passive par groupe, le grade minimum, une pièce sans
+  passif écartée par un required ; le modal Filter de Gear : la section +15 passive), `docs/solver.md` et son miroir
+  `wiki/Solver.md` (la liste des exclusions d'`allow()`, la section Effects, la phrase du slot vidé),
+  `docs/reference.md` et `wiki/Engine-Reference.md` (quatre lignes de tests, `scrapRules` 10 → 11, `builderToolbar`
+  3 → 4 ; les autres fichiers touchés n'ont pas de ligne dans ces tables).
+- ✅ **Vérifications.** `npm run typecheck` → `tsc --noEmit` des trois workspaces sans erreur (sortie 0) ; `npm test`
+  → dernière ligne « Tests 1173 passed (1173) » (et 169 et 256 pour les deux autres workspaces) ; `npm run lint` →
+  « ✖ 7 problems (0 errors, 7 warnings) », les mêmes qu'avant le lot (deux tombent dans `FilterModal.tsx` et
+  `BuilderScreen.tsx` sur des lignes que le lot n'a pas écrites).
+- ✅ **Laissé, suite possible.** Le nettoyage automatique d'`InventoryScreen` (qui retire une sélection devenue
+  indisponible quand la vue se resserre) ne touche pas `passives` : le lot ne le demandait pas, et une famille cochée
+  absente reste visible et retirable dans le modal. La puce de règle Scrap trie les libellés (ordre stable), sans
+  suivre l'ordre de la table. Le catalogue des passifs n'est pas filtré par la classe du héros, à la différence des
+  effets d'arme.
+- ⏳ **Sevih, sur le fixe** : Optimizer › Effects › Weapon › « DS DMG+ » required, grade A → le solve ne propose que
+  des armes +15 avec ce passif en A, S ou S+ ; la même puce en excluded → aucune arme avec ce passif ; Gear › Filter ›
+  +15 passive « DS DMG+ », Min grade A → seules ces pièces dans la grille, et la puce de règle Scrap lit
+  `DS DMG+ ≥ A`.
+
 ### 💎 Capture : custom craft et fusion de gemmes pliés dans le snapshot (plugin 0.5.4) (G113) (2026-11-05)
 - ✅ **Pourquoi.** Suite de G112 : deux réponses du client créaient encore des objets sans être journalisées, le
   custom craft (`item/customCraft`) et la fusion de gemmes (`item/gemMerge`). Lu dans le client avant de coder :

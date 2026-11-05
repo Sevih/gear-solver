@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   INITIAL_FILTERS,
+  buildSolveFilters,
   solverFiltersReducer,
   type SetChipReach,
   type SolverFilters,
@@ -158,5 +159,47 @@ describe("solverFiltersReducer — main exclusions", () => {
     expect(restored.mainExcludes).toEqual({});
     // …and the reducer works on it.
     expect(exclude(restored, "atkPct").mainExcludes).toEqual({ talisman: { atkPct: true } });
+  });
+});
+
+describe("solverFiltersReducer — +15 passive picks", () => {
+  const DS = "Increased DMG within Dimensional Singularity";
+  const cycle = (s: SolverFilters, group: "weapon" | "accessory" | "armor" = "weapon") =>
+    solverFiltersReducer(s, { type: "cyclePassivePick", group, family: DS });
+
+  it("starts empty in the three groups", () => {
+    expect(INITIAL_FILTERS.passivePicks).toEqual({ weapon: {}, accessory: {}, armor: {} });
+  });
+
+  it("cycles off → required at C → excluded → off", () => {
+    const s1 = cycle(INITIAL_FILTERS);
+    expect(s1.passivePicks.weapon).toEqual({ [DS]: { state: "required", minGrade: "C" } });
+    const s2 = cycle(s1);
+    expect(s2.passivePicks.weapon).toEqual({ [DS]: { state: "excluded", minGrade: "C" } });
+    expect(cycle(s2).passivePicks.weapon).toEqual({});
+    // The other groups are left alone, the initial state untouched.
+    expect(s1.passivePicks.armor).toEqual({});
+    expect(INITIAL_FILTERS.passivePicks.weapon).toEqual({});
+  });
+
+  it("setPassiveMinGrade sets a required family's grade, no-op otherwise; a cycle back resets it to C", () => {
+    const req = cycle(INITIAL_FILTERS, "armor");
+    const graded = solverFiltersReducer(req, { type: "setPassiveMinGrade", group: "armor", family: DS, grade: "A" });
+    expect(graded.passivePicks.armor[DS]).toEqual({ state: "required", minGrade: "A" });
+    const excluded = cycle(graded, "armor");
+    expect(excluded.passivePicks.armor[DS]).toEqual({ state: "excluded", minGrade: "C" });
+    expect(solverFiltersReducer(excluded, { type: "setPassiveMinGrade", group: "armor", family: DS, grade: "S" })).toBe(excluded);
+    expect(solverFiltersReducer(INITIAL_FILTERS, { type: "setPassiveMinGrade", group: "weapon", family: DS, grade: "S" })).toBe(INITIAL_FILTERS);
+  });
+
+  it("buildSolveFilters passes the picks through; a reco overlay keeps them", () => {
+    const graded = solverFiltersReducer(cycle(INITIAL_FILTERS), { type: "setPassiveMinGrade", group: "weapon", family: DS, grade: "S+" });
+    expect(buildSolveFilters(graded).passivePicks).toEqual({ weapon: { [DS]: { state: "required", minGrade: "S+" } }, accessory: {}, armor: {} });
+    expect(solverFiltersReducer(graded, { type: "mergePreset", patch: patch() }).passivePicks).toBe(graded.passivePicks);
+  });
+
+  it("cloneFilters gives a filter stored without the field no pick", () => {
+    const { passivePicks: _omit, ...legacy } = INITIAL_FILTERS;
+    expect(cloneFilters(legacy as SolverFilters).passivePicks).toEqual({ weapon: {}, accessory: {}, armor: {} });
   });
 });

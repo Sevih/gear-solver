@@ -8,6 +8,7 @@ import type { PrecomputedSolveContext, ReforgeMode } from "./engine.js";
 import type { CheapRatings } from "./ratings.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
 import type { PresetHolds } from "../presets/presetHolds.js";
+import type { SingularityGrade } from "../singularityPassives.js";
 
 /** How much of the OTHER heroes' equipped gear the solver may pull into the
  *  candidate pool (the selected hero's own gear + free gear is always in):
@@ -103,6 +104,13 @@ export interface SolveFilters {
   /** Talisman effect picks, keyed on `setId` like the weapon/accessory ones.
    *  Absent → no talisman constraint (payloads from before the field). */
   talismanEffectPicks?: Record<string, TalismanEffectConstraint>;
+  /** +15 passive picks per group ("weapon", "accessory", "armor" = the four
+   *  armor pieces), keyed on the passive family (Singularity option name):
+   *  `excluded` drops a piece carrying it at any grade; any `required` in a
+   *  group keeps only the pieces carrying one of them at its `minGrade` or
+   *  better (a piece without a passive fails). Absent → no passive constraint
+   *  (payloads from before the field). */
+  passivePicks?: Record<string, Record<string, { state: "required" | "excluded"; minGrade: SingularityGrade }>>;
   /** Minimum gear quality tier to admit into the pool (rollable-sub slots
    *  only; Talisman / EE have no quality and are always kept). Null = no
    *  quality gate. One of "poor" | "decent" | "good" | "excellent" |
@@ -258,9 +266,9 @@ export interface SolveBuild {
 /** Per-slot pool stats for the footer. Sent once at the start of each solve
  *  (after pre-filter, before the cartesian loop). */
 /** Per-slot pool counts. `mainExcluded` = pieces that passed every earlier
- *  gate but carried an excluded main stat — names the cause when a slot
- *  comes back empty. */
-export type PoolSizes = Record<string, { hit: number; of: number; mainExcluded?: number }>;
+ *  gate but carried an excluded main stat, `passiveExcluded` = pieces dropped
+ *  by the +15 passive picks — name the cause when a slot comes back empty. */
+export type PoolSizes = Record<string, { hit: number; of: number; mainExcluded?: number; passiveExcluded?: number }>;
 
 /** Streaming progress — workers send this every ~100ms. Counters are
  *  CUMULATIVE per worker (not deltas) so the orchestrator can drop stale

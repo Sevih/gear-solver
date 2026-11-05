@@ -9,6 +9,7 @@ import { StatIcon } from "../../design/EquipmentIcon.js";
 import { RARITY, STAT, type DesignRarity } from "../../design/tokens.js";
 import { QUALITY_REACHABLE_HELP, QUALITY_TIERS, type QualityTier } from "../../lib/quality.js";
 import { QUALITY_TONE } from "../../design/gearCardText.js";
+import { SINGULARITY_GRADES, passiveLabel, type SingularityGrade } from "../../lib/singularityPassives.js";
 import { GEAR_STATS, emptyFilters, type BaseRollsFilter, type FilterState } from "./filters.js";
 import {
   PRESET_NAME_MAX, SCRAP_CANDIDATES, addScrapDefault, deleteInventoryFilterPreset, loadInventoryFilterPresets,
@@ -366,7 +367,7 @@ export function FilterButton({
 }
 
 /** Game-style filter modal — opens via the filter button, exposes every
- *  filter dimension (Rarity, Stars, Quality, Reachable quality, Main, Sub, Base rolls, Set, Status,
+ *  filter dimension (Rarity, Stars, Quality, Reachable quality, Main, Sub, +15 passive, Base rolls, Set, Status,
  *  Singularity, Search) as multi-select pill groups. Draft state lives
  *  locally so Cancel discards uncommitted changes; Apply pushes the draft
  *  to the parent's FilterState and closes; Reset clears all dimensions
@@ -374,7 +375,7 @@ export function FilterButton({
 export function FilterModal({
   open, onClose, current, onApply, scrapMode = false,
   availableMains, availableSubs, availableArmorSets, availableClasses,
-  availableStars, availableRarities, availableQualities, availableReachable, armorSetName,
+  availableStars, availableRarities, availableQualities, availableReachable, availablePassives = new Set(), armorSetName,
 }: {
   open: boolean;
   onClose: () => void;
@@ -393,6 +394,8 @@ export function FilterModal({
   availableRarities: Set<DesignRarity>;
   availableQualities: Set<QualityTier>;
   availableReachable: Set<QualityTier>;
+  /** +15 passive families carried in the current scope (none → no pill). */
+  availablePassives?: Set<string>;
   /** Label of an armor set selected in the draft but absent from the view. */
   armorSetName: (id: string) => string;
 }) {
@@ -425,9 +428,12 @@ export function FilterModal({
   const missingSubs = missingFrom(draft.subs, availableSubs);
   const missingClasses = missingFrom(draft.classes, availableClasses);
   const missingSets = missingFrom(draft.armorSets, availableArmorSets);
+  const missingPassives = missingFrom(draft.passives, availablePassives);
   const mainStats = GEAR_STATS.filter((s) => availableMains.has(s) || missingMains.has(s));
   const subStats = GEAR_STATS.filter((s) => availableSubs.has(s) || missingSubs.has(s));
   const classPills = [...availableClasses, ...missingClasses];
+  const byLabel = (a: string, b: string) => passiveLabel(a).localeCompare(passiveLabel(b));
+  const passivePills = [...[...availablePassives].sort(byLabel), ...[...missingPassives].sort(byLabel)];
   const setPills: [string, string][] = [...availableArmorSets.entries(), ...[...missingSets].map((id): [string, string] => [id, armorSetName(id)])];
   if (!open) return null;
   return createPortal(
@@ -651,6 +657,44 @@ export function FilterModal({
                 unavailable={missingSubs}
                 onToggle={(s) => setDraft({ ...draft, subs: toggle(draft.subs, s) })}
               />
+            </ModalSection>
+          )}
+
+          {passivePills.length > 0 && (
+            <ModalSection
+              label="+15 passive"
+              right={
+                <span className="flex items-center gap-1.5">
+                  <ModeBadge mode="or" />
+                  <select
+                    value={draft.passiveMinGrade}
+                    aria-label="Minimum passive grade"
+                    title={draft.passives.size === 0 ? "Pick a passive first." : `Grade ${draft.passiveMinGrade} or better; C = any grade.`}
+                    disabled={draft.passives.size === 0}
+                    onChange={(e) => setDraft({ ...draft, passiveMinGrade: e.target.value as SingularityGrade })}
+                    className={cx(SELECT_CLASS, "disabled:opacity-40")}
+                  >
+                    {SINGULARITY_GRADES.map((g) => (
+                      <option key={g} value={g}>Min grade {g}</option>
+                    ))}
+                  </select>
+                </span>
+              }
+            >
+              <div className="flex flex-wrap gap-1.5">
+                <AllPill active={draft.passives.size === 0} onClick={() => setDraft({ ...draft, passives: new Set() })} />
+                {passivePills.map((family) => (
+                  <FPill
+                    key={family}
+                    active={draft.passives.has(family)}
+                    className={cx(missingPassives.has(family) && UNAVAILABLE_CLASS)}
+                    title={missingPassives.has(family) ? UNAVAILABLE_TITLE : family}
+                    onClick={() => setDraft({ ...draft, passives: toggle(draft.passives, family) })}
+                  >
+                    {passiveLabel(family)}
+                  </FPill>
+                ))}
+              </div>
             </ModalSection>
           )}
 

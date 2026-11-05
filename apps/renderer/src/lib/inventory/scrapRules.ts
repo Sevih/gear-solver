@@ -10,6 +10,7 @@ import { RARITY, STAT, type DesignRarity } from "../../design/tokens.js";
 import { QUALITY_LABEL, QUALITY_TIERS } from "../quality.js";
 import { FILTER_CODEC, emptyFilters, matchesFilters, type BaseRollsOp, type FilterState } from "../../screens/inventory/filters.js";
 import { scrapDefaultPresets } from "../storage/inventoryFilterPresets.js";
+import { passiveLabel } from "../singularityPassives.js";
 
 /** Never empty. */
 export type ScrapRules = FilterState[];
@@ -70,6 +71,11 @@ export function ruleLabel(f: FilterState): string {
   const b = f.baseRolls;
   if (b.lines.some((v) => v !== null)) {
     parts.push(`${b.not ? "not " : ""}${OP_SYMBOL[b.op]} ${b.lines.map((v) => (v === null ? "X" : String(v))).join("/")}`);
+  }
+  if (f.passives.size > 0) {
+    // The families' short labels, then the minimum grade once (C = any, left out).
+    const labels = [...f.passives].map(passiveLabel).sort().join(" / ");
+    parts.push(f.passiveMinGrade !== "C" ? `${labels} ≥ ${f.passiveMinGrade}` : labels);
   }
   if (!f.showEquipped) parts.push("unequipped");
   if (f.enhanceZero) parts.push("+0");
