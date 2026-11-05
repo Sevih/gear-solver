@@ -95,7 +95,7 @@ filters the inventory pieces:
 - excluded if one of its option mains (not `combatOnly`) is an **excluded main** for the slot (`mainExcludes`), before the acceptables are checked; the number of pieces dropped this way is reported in `poolSizes[slot].mainExcluded`
 - excluded if **main pick** is active for this slot and none of its option mains is among the picks
 - excluded if **effect chip** (weapon/accessory) marked `excluded`; or marked `required` and the piece's `setId` (the `UniqueOptionID` effect identity) does not match — the comparison is **deliberately** on `setId`, not `effectIcon` (distinct effects can share an icon, e.g. the Recklessness family)
-- excluded by the **+15 passives** (`passivePicks`, per group: weapon, accessory, the four armor pieces — `passiveGroupOf`): the family of the passive the piece already carries (its `source === "singularity"` main, the Singularity option's name; grade = the letter its `desc` opens with, `C < B < A < S < S+`) is `excluded` in its group, at any grade; or the group has at least one `required` and the piece carries none of them at its `minGrade` or better (OR between the `required`; a piece without a passive, below +15, or with an unreadable grade is dropped). The passive the +15 mode projects (`addProjectedSingularity`) is added after this filter and doesn't count; the number of pieces dropped this way is reported in `poolSizes[slot].passiveExcluded`
+- excluded by the **+15 passives** (`passivePicks`, per group: weapon, accessory, the four armor pieces — `passiveGroupOf`): the family of the passive the piece already carries (its `source === "singularity"` main, the Singularity option's name; grade = the letter its `desc` opens with, `C < B < A < S < S+`) is `excluded` in its group, at any grade; or the group has at least one `required` and the piece carries none of them at its `minGrade` or better (OR between the `required`; a piece without a passive, below +15, or with an unreadable grade is dropped). The passive the +15 mode projects (`addProjectedSingularity`) is added after this filter and doesn't count; the number of pieces dropped this way is reported in `poolSizes[slot].passiveExcluded`. **Requested passive counted** (G116): after the pool projection (and under Only maxed or Off too, the passive being a real roll), a piece whose conditional passive (`combatOnly`: vs an element, within Dimensional Singularity, Ultimate Skill) is a `required` family of its group enters the pool as a **clone** whose `singularity` entry turns `combatOnly: false` (`withRequestedPassiveCounted`, `lib/singularityPassives.ts`; the inventory is never mutated): `composeBuild` routes it through `fromBuff` to `dmgUp` (weapons, accessories) or `dmgReduce` (armor), hence into the column, the ratings, the Stat filters and the prune ranking — asking for "DS DMG+ ≥ A" is building for the Singularity. The 15 families of `singularity-options.json` all resolve to `ST_DMG_BOOST` or `ST_DMG_REDUCE_RATE` (`OAT_ADD`); an `excluded`, off or unconditional family (already on the sheet) is left alone
 - excluded if `armorSetId ∈ excludedSets`
 
 **`keepCurrent`** toggle: if the piece currently equipped by the hero exists for this slot, the pool is restricted to `[currentPiece]` (the solver does not touch the slot). Such locked slots are **exempt** from the set-prune below.
@@ -486,7 +486,15 @@ filters: it leaves them alone.
 Red-green heatmap per column (min/max relative to the current result set, `computeColumnRanges`; turned off by
 Settings › Display, `gs.builder.heatmap`). Columns: sets (`wpn` / `acc` effects), the stats, ratings
 (`TABLE_RATINGS`), **Score**, **Swaps** (key `upg` = the number of slots that change vs the current loadout — not
-upgrades to do; sortable + filterable). Sort by clicking the header (null → desc → asc → null). **columns** menu
+upgrades to do; sortable + filterable), **to do** (G116, key `todo`, sortable, hidden with reforge `Off`: the gear
+pieces — talisman and EE apart — still to enhance, reforge or ascend to reach the build, `buildTodoOf` of
+`screens/builder/buildTodo.ts` over `pieceReforgePlan` in the **solve's** mode; a piece counts when
+`enhanceLevel < ceiling.enhanceLevel`, `reforgeCount < budget` or `ceiling.ascended && !ascended`; tooltip
+"3 pieces — 2 to enhance (+10 → +15), 5 reforges, 1 to ascend", 0 = reached as is; in +10R9 the ceiling isn't
+`ascended`, so the ascension isn't listed there, the 3 reforges are). The **DMG UP%** and **DMG RED%** cells of a
+build where a piece carries a counted requested passive (above) carry a cyan "+15" exponent, tooltip
+"+120% DS DMG+ (A) · …" (`countedPassivesOfBuild` over the **solve's** `passivePicks`, kept in the results' and the
+saved builds' `ReforgeContext`). Sort by clicking the header (null → desc → asc → null). **columns** menu
 (show/hide columns, persisted `gs.builder.cols`, controlled `ColumnsMenu`) opened by the table bar's button **or
 by right-clicking any header** (`onContextMenu` on the header `<tr>`). The **height** slider of the same bar sets
 `resultRows` (5 to 15 rows, `gs.builder.resultRows`, the value of Settings › Display › Result rows); the table is

@@ -55,6 +55,75 @@ export function passiveOfUiPiece(p: Pick<UiPiece, "effects">): Passive | null {
   return null;
 }
 
+/** A requested +15 passive counted on the sheet — the piece's `singularity`
+ *  main entry when its family is `required` in the piece's group. */
+export interface CountedPassive {
+  /** `dmgUp` (weapon, accessory, most families) or `dmgReduce` (armor). */
+  stat: string;
+  value: number;
+  family: string;
+  grade: SingularityGrade | null;
+}
+
+/** Passive picks as the reducer or a solve request holds them, read for their
+ *  state only. */
+export type PassivePickStates = Record<string, Record<string, { state: string; minGrade?: string }> | undefined>;
+
+/** The required families of a group (`passivePicks[group]`), or null without
+ *  any. Shared by the engine (pool step) and the results table (marker). */
+export function requiredFamiliesOf(
+  picks: PassivePickStates | null | undefined,
+  group: PassiveGroup | null,
+): Set<string> | null {
+  if (!group) return null;
+  const out = new Set<string>();
+  for (const [family, p] of Object.entries(picks?.[group] ?? {})) if (p?.state === "required") out.add(family);
+  return out.size > 0 ? out : null;
+}
+
+/** The piece's conditional passive (`combatOnly`) when its family is one of
+ *  `required`; null otherwise — no passive, a family not required, or an
+ *  unconditional one (already on the sheet). */
+export function countedPassiveOf(piece: Pick<GearPiece, "main">, required: ReadonlySet<string> | null): CountedPassive | null {
+  if (!required) return null;
+  const entry = piece.main.find((m) => m.source === "singularity");
+  if (!entry || !entry.combatOnly) return null;
+  const passive = passiveOf(entry);
+  if (!passive || !required.has(passive.family)) return null;
+  return { stat: entry.stat, value: entry.value, family: passive.family, grade: passive.grade };
+}
+
+/** The piece with its requested passive counted: a CLONE whose `singularity`
+ *  main entry is `combatOnly: false`, so `composeBuild` folds it into the
+ *  sheet (`fromBuff` → `dmgUp` / `dmgReduce`). The same reference when nothing
+ *  is counted (`countedPassiveOf`) — the inventory is shared, never mutated. */
+export function withRequestedPassiveCounted(piece: GearPiece, required: ReadonlySet<string> | null): GearPiece {
+  if (!countedPassiveOf(piece, required)) return piece;
+  return { ...piece, main: piece.main.map((m) => (m.source === "singularity" ? { ...m, combatOnly: false } : m)) };
+}
+
+/** The requested passives a build's pieces carry (`countedPassiveOf` per
+ *  piece, in piece order) — what the engine counted on its sheet, for the
+ *  results table's "+15" marker. */
+export function countedPassivesOfBuild(
+  pieces: ReadonlyArray<GearPiece | undefined>,
+  picks: PassivePickStates | null | undefined,
+): CountedPassive[] {
+  const out: CountedPassive[] = [];
+  if (!picks) return out;
+  for (const piece of pieces) {
+    if (!piece) continue;
+    const counted = countedPassiveOf(piece, requiredFamiliesOf(picks, passiveGroupOf(piece.slot)));
+    if (counted) out.push(counted);
+  }
+  return out;
+}
+
+/** "+45% DS DMG+ (A) · +40% vs Fire DMG+ (B)" — the marker's tooltip. */
+export function countedPassivesTitle(list: ReadonlyArray<CountedPassive>): string {
+  return list.map((c) => `+${Math.round(c.value * 10) / 10}% ${passiveLabel(c.family)}${c.grade ? ` (${c.grade})` : ""}`).join(" · ");
+}
+
 export type PassiveGroup = "weapon" | "accessory" | "armor";
 export const PASSIVE_GROUPS: readonly PassiveGroup[] = ["weapon", "accessory", "armor"];
 

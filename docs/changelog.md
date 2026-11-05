@@ -8,6 +8,69 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎯 Passifs +15 demandés comptés dans DMG UP% / DMG RED%, colonne « to do » des pièces à monter (G116) (2026-11-05)
+- ✅ **Pourquoi.** Demande de Sevih du 05/11, après G114 : demander un passif +15 (une famille `required` dans
+  `passivePicks`), c'est bâtir pour ce contenu, mais seules les deux familles inconditionnelles
+  (`combatOnly: false`) entraient dans la feuille — les treize autres (vs élément, dans la Singularité
+  dimensionnelle, Ultimate Skill) étaient sautées par `addPieceToBuckets` (`composeBuild.ts`). Et la table n'avait
+  aucune colonne disant combien de pièces du build restent à monter (Swaps compte les slots qui changent).
+- ✅ **Table vérifiée d'abord.** `data/derived/singularity-options.json`, `st` / `ap` par famille : les huit familles
+  DMG+ (vs Earth / Water / Fire / Light / Dark, « DMG Increase to target », « Increased DMG within Dimensional
+  Singularity », « Ultimate Skill DMG increases within Dimensional Singularity ») sont `ST_DMG_BOOST` `OAT_ADD` →
+  `dmgUp` ; les sept DMG- (vs les cinq éléments, « from targets », « within Dimensional Singularity ») sont
+  `ST_DMG_REDUCE_RATE` `OAT_ADD` → `dmgReduce` (`resolveOption`, `GAME_STAT`). Aucune famille ne tombe hors des deux
+  colonnes, Ultimate Skill compris (pas d'autre `st`) : toutes comptent. Un test garde cette table.
+- ✅ **Pas « passif demandé compté »** (`precomputeContext`, `engine.ts`, juste après la projection du pool et
+  avant le prune par budget) : pour les six slots d'équipement, `requiredFamiliesOf(passivePicks, passiveGroupOf(slot))`
+  puis `withRequestedPassiveCounted` (`lib/singularityPassives.ts`, avec `countedPassiveOf`) : une pièce dont
+  l'entrée `singularity` est `combatOnly` et d'une famille requise devient un clone dont cette entrée passe à
+  `combatOnly: false` ; sinon la même référence (inventaire partagé avec Gear, jamais muté). Excluded, off ou
+  inconditionnelle : rien. Le pas tourne dans tous les modes, Only maxed et Off compris (le passif est un vrai roll,
+  pas une projection), et attrape aussi la pièce d'un slot verrouillé par keep current. `composeBuild` route
+  l'entrée par `fromBuff` vers `buffPct` : elle entre dans `finalStats.dmgUp` / `dmgReduce`, donc la colonne, les
+  ratings, les Stat filters et le classement du prune. Le projeté inconditionnel du mode +15
+  (`addProjectedSingularity`) est inchangé.
+- ✅ **Marque « +15 ».** Les `passivePicks` du solve (ceux de la requête, `buildSolveFilters`) sont gardés dans le
+  `ReforgeContext` des résultats (`passivePicks?`, snapshot de `useSolverSession` au lancement, repris par
+  `migrateReforge` et dans le type `SavedBuild.reforge` : un build sauvegardé garde sa marque, un ancien n'en a
+  pas). `ResultsTable` reçoit `reforge={resultsReforge}` (comme `BottomGearBand`) ; `passivesByBuild` (mémo par
+  build, `countedPassivesOfBuild` sur `pieceByUid`) range les passifs comptés par colonne ; la cellule DMG UP% ou
+  DMG RED% concernée porte un `<sup>` « +15 » `text-[8px]` cyan, `title` = `countedPassivesTitle`
+  (« +120% DS DMG+ (A) · +40% vs Fire DMG+ (B) », libellés `passiveLabel`).
+- ✅ **Colonne « to do »** (`screens/builder/buildTodo.ts`, calcul côté renderer, pas de champ ajouté à
+  `SolveBuild` ni au contrat worker) : `buildTodoOf(pieces, mode, rules)` sur les six pièces d'équipement (talisman
+  et EE à part) avec `pieceReforgePlan` dans le mode **du solve** — à faire si `enhanceLevel < ceiling.enhanceLevel`,
+  `reforgeCount < budget` ou `ceiling.ascended && !ascended` ; `null` en `disable`. Mémo par build (`todoByBuild`,
+  règles `gameRulesOf(game)`), en-tête « to do » après swaps (`SortHeader` `colKey="todo"`, tooltip demandé), tri,
+  `colSpan`, entrée « To do » du menu columns ; cachée en `disable` (donc aussi sous Only maxed, dont le contexte
+  d'affichage est `disable`). Cellule = nombre de pièces, `title` = `buildTodoTitle` (« 3 pieces — 2 to enhance
+  (+10 → +15), 5 reforges, 1 to ascend » ; 0 → « Reached as is — nothing to enhance, reforge or ascend »). Pas
+  d'export CSV ni de copie de la table dans le code : rien à étendre.
+- ✅ **Tests.** Nouveau `requestedPassives.test.ts` (7) : arme DS DMG+ A réelle (300137 — 120 % dans la table, pas
+  45 %) `required` → clone, `dmgUp` + 120 (`computeFinalStats` sur le pool), pièce d'inventaire intacte ; off →
+  même référence ; excluded → pièce écartée ; inconditionnelle (300116, 35 %) comptée avec ou sans pick, jamais
+  clonée ; armure vs Fire DMG- → `dmgReduce`, aussi sous Only maxed ; les 15 familles → `dmgUp` / `dmgReduce` ;
+  `countedPassivesOfBuild` / titre ; rendu statique de `ResultRow` (exporté) : « +15 » cyan dans DMG UP% seul.
+  Nouveau `buildTodo.test.ts` (7) : +15 R9 ascended → 0 ; +10 R6 6★ `unique` en +15R9 → enhance, 3 reforges,
+  ascend, talisman non compté ; +10R9 → 3 reforges ; pièce qui n'ascende pas → 0 ; `disable` → null ; rendu de
+  `ResultsTable` (en-tête après swaps, absent en `disable`) et de la cellule. `passivePicks.test.ts` : + 1 test (pas
+  « counted »). `talismanPreferred`, `critCell` et le reste intacts. `npm run typecheck` : dernière ligne
+  `> tsc --noEmit` (sans erreur) ; `npm test` : dernière ligne `Tests  1197 passed (1197)` (renderer, 108 fichiers ;
+  1182 avant le lot ; core 169 et desktop 263 inchangés) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`,
+  comme avant.
+- ✅ **Docs.** `docs/solver.md` + `wiki/Solver.md` (le pas « passif demandé compté » après la liste d'`allow()`, la
+  colonne « to do » et la marque dans la table des résultats), `wiki/Using-the-App.md` (+15 passives : le passif
+  requis compte ; la table : « to do »), `docs/reference.md` + `wiki/Engine-Reference.md` (`passivePicks` 7 tests,
+  `requestedPassives` et `buildTodo` 7 tests chacun).
+- ⏳ **Remarque, hors périmètre.** En +10R9 le plafond n'est pas `ascended` (`reforgePlansOf`) : la règle demandée ne
+  liste donc pas l'ascension, alors que les 3 reforges en plus l'exigent ; la pièce compte bien « à faire » (par ses
+  reforges). Dire « 1 to ascend » aussi en +10R9 demanderait une règle sur le budget (`budget > maxReforgesOf` non
+  ascendé) : à décider.
+- ⏳ **Sevih, sur le fixe** : Optimizer › +15 passives › Weapon › « DS DMG+ » required → la colonne DMG UP% monte de
+  la valeur du passif de l'arme retenue, avec le « +15 » et son tooltip ; la même puce en off → la colonne
+  redescend ; la colonne « to do » lit 0 sur un build de pièces +15 R9 et compte les pièces à monter sinon, le
+  tooltip détaille ; en reforge Off, plus de colonne « to do ».
+
 ### 🧭 Weapons, Accessories, Talismans et +15 passives chacun sa section, talismans en image, grades aux couleurs des cartes (G115) (2026-11-05)
 - ✅ **Pourquoi.** Demande de Sevih du 05/11, après G114 : la barre d'outils de l'Optimizer a de la place, le popover
   Effects empilait trois familles de puces et les passifs +15 ; chaque famille prend son bouton, les talismans (dont

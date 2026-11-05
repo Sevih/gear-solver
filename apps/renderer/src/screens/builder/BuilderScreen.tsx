@@ -871,6 +871,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               game={game}
               heatmap={heatmap}
               dmgSkill={composition?.dmgSkill ?? null}
+              reforge={resultsReforge}
               onThreshold={setThresholdAndResolve}
             />
           </div>

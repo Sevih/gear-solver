@@ -4,7 +4,8 @@
 // excluded family drops the piece at any grade, a required one keeps only the
 // pieces carrying it at its minimum grade or better — a piece without a
 // passive (below +15) is dropped by a required pick. Drops are counted in
-// `poolSizes[slot].passiveExcluded`.
+// `poolSizes[slot].passiveExcluded`. A required family's passive is then
+// counted on the sheet (G116, `requestedPassives.test.ts`).
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { GameData, GearPiece, Inventory } from "@gear-solver/core";
@@ -96,6 +97,15 @@ describe("+15 passive picks — weapon pool", () => {
     expect(ctx.pools.helmet).toEqual([]);
     expect(ctx.poolSizes.helmet!.passiveExcluded).toBe(1);
     expect(ctx.poolSizes.weapon!.passiveExcluded).toBeUndefined();
+  });
+
+  it("counted: a required family's passive goes on (clone, `combatOnly: false`), an excluded one never", () => {
+    const ctx = precompute(WEAPONS, { weapon: { [DS]: { state: "required", minGrade: "C" } } });
+    for (const g of ctx.pools.weapon) expect(g.main[0]!.combatOnly).toBe(false);
+    expect(ctx.pools.weapon).not.toContain(WEAPONS[0]);
+    expect(WEAPONS[0]!.main[0]!.combatOnly).toBe(true);
+    const off = precompute(WEAPONS, { weapon: { [DS]: { state: "excluded", minGrade: "C" } } });
+    expect(off.pools.weapon).toEqual([WEAPONS[2]]);
   });
 
   it("no pick (older payload) → the whole pool, nothing counted", () => {

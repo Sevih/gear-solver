@@ -177,7 +177,11 @@ is how many rules it holds. Esc or a click outside closes it.
   group = any of them. A piece without a passive (below +15) is dropped as soon as its group has
   a required one — the filter never guesses the passive a piece would roll at +15 — and an
   excluded passive drops the pieces carrying it at any grade. When a slot ends up empty, the
-  footer names the pieces the passive filter dropped.
+  footer names the pieces the passive filter dropped. A required passive also **counts**: asking
+  for DS DMG+ (or vs Fire DMG+, DMG-…) means building for that content, so the value of the
+  passive each piece carries goes into **DMG UP%** (weapon, accessory) or **DMG RED%** (armor) —
+  and into the ratings and stat filters. The cell then shows a small cyan **+15**; hover it for
+  the passives counted.
 - **Stat filters** — min / max on any final stat (e.g. SPD ≥ 200). Gems: a stat filter's minimum
   is served before the priority — a build short of it gets that stat's gems first, the priority
   fills the remaining slots; a build that only passes with its socketed gems keeps them (its
@@ -205,8 +209,12 @@ reforge mode and Transistone potential of **Settings › Solver**).
 ### The results table
 
 - One row per build, with a red→green **heatmap** per column (**Settings › Display** turns it
-  off): sets, the stats, the ratings, **Score**, and **Swaps** (how many slots change vs the
-  hero's loadout — not upgrades to do). The first row is selected after a solve.
+  off): sets, the stats, the ratings, **Score**, **Swaps** (how many slots change vs the
+  hero's loadout — not upgrades to do) and **to do** (how many of the six gear pieces still have
+  to be enhanced, reforged or ascended to reach the build in the solve's reforge mode — talisman
+  and EE not counted; 0 = the build is reached as is; hover for the detail, e.g. *3 pieces — 2 to
+  enhance (+10 → +15), 5 reforges, 1 to ascend*; hidden with reforge **Off**). The first row is
+  selected after a solve.
 - Click a column header to sort; **right-click** a header (or the **columns** button) to show or
   hide columns. **Right-click a value** (a stat, a rating or CP) → **Min ≥** / **Max ≤** that value:
   the bound lands in the filter popovers and the solve re-runs.

@@ -5,6 +5,7 @@
  * Optimizer toolbar and Settings › Solver show.
  */
 import type { ReforgeMode, ReforgeTickWeights } from "./engine.js";
+import type { SingularityGrade } from "../singularityPassives.js";
 
 /** Reforge context carried alongside a result set — the mode + priority the
  *  build was solved with, so the bottom gear band can re-project the same
@@ -18,7 +19,14 @@ export interface ReforgeContext {
   /** The Transistone potential was projected (`SolverOptions.rerollPotential`);
    *  absent on builds saved before it → off. */
   rerollPotential?: boolean;
+  /** The solve's +15 passive picks — the results table marks the required
+   *  families the engine counted in DMG UP% / DMG RED%; absent on builds
+   *  saved before them → no marker. */
+  passivePicks?: PassivePicksContext;
 }
+
+/** The passive picks as a solve request carries them (`SolveFilters.passivePicks`). */
+export type PassivePicksContext = Record<string, Record<string, { state: "required" | "excluded"; minGrade: SingularityGrade }>>;
 
 /** The reforge mode of a stored shape that may predate the modes: its
  *  `reforgeMode`, else the legacy `useReforged` boolean — true → "classic"
@@ -29,9 +37,12 @@ export function legacyReforgeMode(o: { reforgeMode?: ReforgeMode; useReforged?: 
 
 /** Migrate a persisted reforge context (saved builds) to the current shape
  *  (`legacyReforgeMode`). */
-export function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number>; tickWeights?: ReforgeTickWeights | null; rerollPotential?: boolean } | undefined): ReforgeContext {
+export function migrateReforge(r: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number>; tickWeights?: ReforgeTickWeights | null; rerollPotential?: boolean; passivePicks?: PassivePicksContext } | undefined): ReforgeContext {
   if (!r) return { reforgeMode: "disable", priority: {} };
-  return { reforgeMode: legacyReforgeMode(r), priority: r.priority, tickWeights: r.tickWeights ?? null, rerollPotential: r.rerollPotential ?? false };
+  return {
+    reforgeMode: legacyReforgeMode(r), priority: r.priority, tickWeights: r.tickWeights ?? null, rerollPotential: r.rerollPotential ?? false,
+    ...(r.passivePicks ? { passivePicks: r.passivePicks } : {}),
+  };
 }
 
 /** UI metadata for the reforge-mode segmented controls (Optimizer toolbar,

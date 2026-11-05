@@ -33,7 +33,7 @@ import {
 import { calcBattlePower, makeCpEvaluator } from "./cp.js";
 import { debug, debugEnabled } from "../log.js";
 import { isLowerPriority } from "../storage/heroPriority.js";
-import { gradeAtLeast, passiveGroupOf, passiveOfGearPiece } from "../singularityPassives.js";
+import { gradeAtLeast, passiveGroupOf, passiveOfGearPiece, requiredFamiliesOf, withRequestedPassiveCounted } from "../singularityPassives.js";
 import { presetBlockedUids } from "../presets/presetHolds.js";
 import { allocateGems, allocateGemsByCp, allocateGemsCapped, allocateGemsReachingCap, allocateGemsServingMins, buildGemPool, CRC_OVERSHOOT_CEIL, gemDeltaEquals, gemSlotsOf, scoreGemPool, type GemAllocation, type GemMinNeed, type ScoredGem } from "./gems.js";
 import { computeCheapRatings, computeScore, ROLL_NORMS, STAT_TO_PRIORITY, type CheapRatings } from "./ratings.js";
@@ -647,6 +647,19 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const) {
       pools[slot] = pools[slot].map((p) => projectPieceForReforge(p, game, reforgeMode, filters.priority, reforgeWeights ?? undefined, reroll));
     }
+  }
+
+  // Requested +15 passives counted: a piece whose conditional passive (vs an
+  // element, within Dimensional Singularity…) is `required` in its group gets
+  // it on the sheet — asking for "DS DMG+ ≥ A" is building for that content,
+  // so its DMG+ / DMG- enters `dmgUp` / `dmgReduce`, the ratings, the stat
+  // filters and the prune ranking below. The piece is cloned (`main` entry
+  // `combatOnly: false`), never mutated; excluded, off and unconditional
+  // families are left alone. Runs in every mode, "Only maxed" included: the
+  // passive is a real roll, not a projection.
+  for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const) {
+    const required = requiredFamiliesOf(filters.passivePicks, passiveGroupOf(slot));
+    if (required) pools[slot] = pools[slot].map((p) => withRequestedPassiveCounted(p, required));
   }
 
   // Combo-budget per-slot prune (bounds ∏ poolSizes — see below). Needs a

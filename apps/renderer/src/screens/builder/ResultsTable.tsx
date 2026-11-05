@@ -4,7 +4,7 @@
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { GameData, GearPiece } from "@gear-solver/core";
+import { DEFAULT_RULES, gameRulesOf, type GameData, type GearPiece } from "@gear-solver/core";
 import { StatIcon } from "../../design/EquipmentIcon.js";
 import { Pill } from "../../design/Chips.js";
 import { cx } from "../../design/cx.js";
@@ -17,6 +17,9 @@ import { useClickOutside } from "./useClickOutside.js";
 import { SOLVER_STATS, SKILL_SCALED_RATINGS, ratingTitle, TABLE_RATINGS, statHeaderTooltip } from "./statColumns.js";
 import type { ArmorSetEntry } from "./catalogs.js";
 import { critCellParts, critCellTitle, critRawOf } from "./critCell.js";
+import type { ReforgeContext } from "../../lib/solver/reforge.js";
+import { countedPassivesOfBuild, countedPassivesTitle, type CountedPassive } from "../../lib/singularityPassives.js";
+import { buildTodoOf, buildTodoTitle, type BuildTodo } from "./buildTodo.js";
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Middle area — results table + right sidebar
@@ -54,6 +57,7 @@ function ColumnsMenu({
     ...TABLE_RATINGS.map((r) => ({ key: r.key, label: r.label, iconKey: null, def: true, forced: false })),
     { key: "score", label: "Score", iconKey: null, def: true, forced: false },
     { key: "upg", label: "Swaps", iconKey: null, def: true, forced: false },
+    { key: "todo", label: "To do", iconKey: null, def: true, forced: false },
   ];
   return (
     <div ref={ref} className="relative">
@@ -150,7 +154,7 @@ function CellMenu({
 
 export function ResultsTable({
   builds, selectedIdx, onSelect, solving, error, emptyReason, brokenSetsEmpty, filteredOut, statFilters, rows, onRowsChange,
-  pieceByUid, heroUid, armorSets, game, heatmap, dmgSkill, onThreshold,
+  pieceByUid, heroUid, armorSets, game, heatmap, dmgSkill, reforge, onThreshold,
 }: {
   builds: SolveBuild[];
   /** Picked hero's best-skill factor — names the winning skill in the
@@ -191,6 +195,10 @@ export function ResultsTable({
   game: GameData | null;
   /** Results-table column heatmap on/off (Settings › Display). */
   heatmap: boolean;
+  /** Reforge context of the solve that produced `builds` (not the toolbar's
+   *  current one): its mode drives the "to do" column (hidden under
+   *  `disable`), its passive picks the "+15" marker of DMG UP% / DMG RED%. */
+  reforge: ReforgeContext;
   /** Right-click on a stat / rating / CP cell → set that value as the
    *  column's min or max bound and re-solve. Absent → no cell menu. */
   onThreshold?: (kind: "stat" | "rating", key: string, bound: "min" | "max", value: number) => void;
@@ -249,6 +257,34 @@ export function ResultsTable({
     }
     return m;
   }, [builds, pieceByUid, armorSetById]);
+  // Per-build requested +15 passives the engine counted on the sheet, split by
+  // the column they landed in — the "+15" marker and its tooltip. Builds with
+  // none are absent (stable `undefined` for the row memo).
+  const passivesByBuild = useMemo(() => {
+    const m = new Map<SolveBuild, CountedPassivesByStat>();
+    if (!reforge.passivePicks) return m;
+    for (const b of builds) {
+      const list = countedPassivesOfBuild(b.pieceUids.map((uid) => pieceByUid.get(uid)), reforge.passivePicks);
+      if (list.length === 0) continue;
+      const byStat: CountedPassivesByStat = {};
+      for (const c of list) (byStat[c.stat] ??= []).push(c);
+      m.set(b, byStat);
+    }
+    return m;
+  }, [builds, pieceByUid, reforge.passivePicks]);
+  // Per-build "to do": pieces still to enhance / reforge / ascend to reach the
+  // solve's projection (`pieceReforgePlan` in the solve's mode, on the pieces
+  // as they are today). Empty under `disable`.
+  const todoByBuild = useMemo(() => {
+    const m = new Map<SolveBuild, BuildTodo>();
+    if (reforge.reforgeMode === "disable") return m;
+    const rules = game ? gameRulesOf(game) : DEFAULT_RULES;
+    for (const b of builds) {
+      const todo = buildTodoOf(b.pieceUids.map((uid) => pieceByUid.get(uid)), reforge.reforgeMode, rules);
+      if (todo) m.set(b, todo);
+    }
+    return m;
+  }, [builds, pieceByUid, game, reforge.reforgeMode]);
   // Column visibility — persisted per-key overrides (key → shown). Stats
   // default to the first 8 visible; ratings + Score + Swaps default visible. A
   // stat with an active filter band is force-shown regardless so you never
@@ -279,6 +315,8 @@ export function ResultsTable({
   );
   const showScore = colPrefs["score"] ?? true;
   const showUpg = colPrefs["upg"] ?? true;
+  // Nothing to reach without a projection: hidden under `disable`.
+  const showTodo = reforge.reforgeMode !== "disable" && (colPrefs["todo"] ?? true);
   const showWpn = colPrefs["wpn"] ?? true;
   const showAcc = colPrefs["acc"] ?? true;
   // Per-column min/max for the heatmap — recomputed when builds (or the set
@@ -315,6 +353,7 @@ export function ResultsTable({
     const get = (b: SolveBuild): number => {
       if (sortKey === "score") return b.score;
       if (sortKey === "upg") return liveUpg.get(b) ?? b.upg;
+      if (sortKey === "todo") return todoByBuild.get(b)?.pieces ?? 0;
       if (sortKey === "cp") return b.cp ?? -Infinity;
       if (sortKey === "critRate") return critRawOf(b.finalStats);
       const stat = (b.finalStats as unknown as Record<string, number>)[sortKey];
@@ -325,7 +364,7 @@ export function ResultsTable({
     };
     const sign = sortDir === "desc" ? -1 : 1;
     return [...builds].sort((a, b) => sign * (get(a) - get(b)));
-  }, [builds, sortKey, sortDir, liveUpg]);
+  }, [builds, sortKey, sortDir, liveUpg, todoByBuild]);
   // Map each build to its index in the original `builds` array — used as
   // both the row key and the click payload (selectedIdx points into the
   // ORIGINAL order so it survives a re-sort). Replaces a previous
@@ -354,7 +393,7 @@ export function ResultsTable({
   const totalSize = rowVirtualizer.getTotalSize();
   const padTop = virtualRows.length > 0 ? virtualRows[0]!.start : 0;
   const padBottom = virtualRows.length > 0 ? totalSize - virtualRows[virtualRows.length - 1]!.end : 0;
-  const colSpan = 1 + (showWpn ? 1 : 0) + (showAcc ? 1 : 0) + statCols.length + ratingCols.length + (showScore ? 1 : 0) + (showUpg ? 1 : 0) + 1;
+  const colSpan = 1 + (showWpn ? 1 : 0) + (showAcc ? 1 : 0) + statCols.length + ratingCols.length + (showScore ? 1 : 0) + (showUpg ? 1 : 0) + (showTodo ? 1 : 0) + 1;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/8 bg-bg-elev-2">
       <div className="flex shrink-0 items-center justify-between border-b border-white/8 px-3 py-1.5">
@@ -429,12 +468,17 @@ export function ResultsTable({
                   swaps
                 </SortHeader>
               )}
+              {showTodo && (
+                <SortHeader colKey="todo" title="Pieces to enhance, reforge or ascend to reach the build (talisman and EE not counted)" sortKey={sortKey} sortDir={sortDir} onClick={cycleSort}>
+                  to do
+                </SortHeader>
+              )}
               <th className="px-1.5 py-1 text-right text-[9.5px] uppercase tracking-wider">actions</th>
             </tr>
           </thead>
           <tbody>
             {builds.length === 0 && !solving && !error && (
-              // colSpan = 1 sets + statCols + N ratings + score + swaps + actions.
+              // colSpan = 1 sets + statCols + N ratings + score + swaps + to do + actions.
               <tr><td colSpan={colSpan} className="px-3 py-12 text-center text-[11px] italic">
                 {emptyReason ? (
                   <span className="text-amber-300/80">
@@ -470,6 +514,9 @@ export function ResultsTable({
                   ratingCols={ratingCols}
                   showScore={showScore}
                   showUpg={showUpg}
+                  showTodo={showTodo}
+                  todo={todoByBuild.get(b)}
+                  passives={passivesByBuild.get(b)}
                   showWpn={showWpn}
                   showAcc={showAcc}
                   effects={effectByBuild.get(b)}
@@ -578,12 +625,16 @@ interface SetTag { icon: string; name: string; count: 2 | 4 }
  *  + effect name for the tooltip. */
 interface EffectChip { icon: string | null; name: string }
 
+/** A build's counted +15 passives keyed by the stat column they landed in
+ *  (`dmgUp`, `dmgReduce`). */
+export type CountedPassivesByStat = Partial<Record<string, CountedPassive[]>>;
+
 /** Memoized so a hover/sort/selection change only re-renders the rows whose
  *  props actually changed. Requires stable props: `onSelect` is the parent's
  *  useState setter, `ranges` is memoized, `build` refs are stable. The click
  *  handler is bound to the stable `index` here rather than passed pre-closed. */
-const ResultRow = memo(function ResultRow({
-  build, upg, selected, ranges, statCols, ratingCols, showScore, showUpg, showWpn, showAcc, effects, setTags, index, onSelect, onCellMenu,
+export const ResultRow = memo(function ResultRow({
+  build, upg, selected, ranges, statCols, ratingCols, showScore, showUpg, showTodo = false, todo, passives, showWpn, showAcc, effects, setTags, index, onSelect, onCellMenu,
 }: {
   build: SolveBuild;
   /** Swaps — slots that differ from the hero's current loadout (live, not `build.upg`). */
@@ -597,6 +648,13 @@ const ResultRow = memo(function ResultRow({
   ratingCols: ReadonlyArray<typeof TABLE_RATINGS[number]>;
   showScore: boolean;
   showUpg: boolean;
+  /** "to do" column shown (a reforge mode other than `disable`). */
+  showTodo?: boolean;
+  /** This build's "to do" (stable memoized ref); undefined → 0. */
+  todo?: BuildTodo;
+  /** Requested +15 passives counted in this build's DMG UP% / DMG RED%
+   *  (stable memoized ref); undefined → no marker. */
+  passives?: CountedPassivesByStat;
   showWpn: boolean;
   showAcc: boolean;
   /** This build's weapon + accessory effect chips (stable memoized ref). */
@@ -641,16 +699,20 @@ const ResultRow = memo(function ResultRow({
         // Crit past the sheet's 100 bound: "100%" + the raw overflow in amber,
         // shaded on the raw sum. The threshold menu keeps the sheet's value.
         const crit = s.key === "critRate" ? critCellParts(build.finalStats) : null;
+        // DMG UP% / DMG RED%: a requested +15 passive counted → "+15" marker,
+        // the tooltip listing them.
+        const counted = passives?.[s.key];
         return (
           <td
             key={s.key}
             style={heatStyle(crit ? critRawOf(build.finalStats) : v, ranges.stat[s.key])}
             className="px-1.5 py-1 text-right text-white"
-            title={crit ? critCellTitle(build.finalStats) : undefined}
+            title={crit ? critCellTitle(build.finalStats) : counted ? countedPassivesTitle(counted) : undefined}
             onContextMenu={onCellMenu && v != null ? (e) => onCellMenu(e, "stat", s.key, v, s.unit) : undefined}
           >
             {fmt(v, s.unit)}
             {crit && crit.over > 0 && <sup className="ml-px text-[8px] leading-none text-amber-300">+{crit.over}</sup>}
+            {counted && <sup className="ml-px text-[8px] leading-none text-cyan-300">+15</sup>}
           </td>
         );
       })}
@@ -675,6 +737,11 @@ const ResultRow = memo(function ResultRow({
       {showUpg && (
         <td className="px-1.5 py-1 text-right text-white/70" title={`${upg} slot(s) change vs the current loadout`}>
           {upg}
+        </td>
+      )}
+      {showTodo && (
+        <td className="px-1.5 py-1 text-right text-white/70" title={todo ? buildTodoTitle(todo) : undefined}>
+          {todo?.pieces ?? 0}
         </td>
       )}
       <td className="px-1.5 py-1 text-right text-white/70">

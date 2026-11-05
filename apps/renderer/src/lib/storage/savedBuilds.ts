@@ -9,6 +9,7 @@
  * a single localStorage hit.
  */
 import type { ReforgeMode } from "../solver/engine.js";
+import type { PassivePicksContext } from "../solver/reforge.js";
 import type { SolveBuild, SolveMode } from "../solver/types.js";
 import type { FinalStats } from "../composeBuild.js";
 import { renameLegacyStatKeys } from "../statRegistry.js";
@@ -30,8 +31,9 @@ export interface SavedBuild {
    *  `useReforged` is the legacy boolean shape (pre-reforge-modes) — read
    *  tolerantly and migrated to `reforgeMode` on restore. `tickWeights` = the
    *  no-priority reforge weights the solve projected with (absent before);
-   *  `rerollPotential` = the Transistone potential was projected (absent before). */
-  reforge?: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number>; tickWeights?: Record<string, number> | null; rerollPotential?: boolean };
+   *  `rerollPotential` = the Transistone potential was projected (absent before),
+   *  `passivePicks` = the solve's +15 passive picks (absent before → no marker). */
+  reforge?: { reforgeMode?: ReforgeMode; useReforged?: boolean; priority: Record<string, number>; tickWeights?: Record<string, number> | null; rerollPotential?: boolean; passivePicks?: PassivePicksContext };
   /** Wall-clock ms — sort key for newest-first display. */
   createdAt: number;
 }
