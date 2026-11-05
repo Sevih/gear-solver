@@ -143,10 +143,10 @@ until you change them (**Clear** puts every weight back to 0).
 
 ### The filter popovers
 
-The buttons on the right of the first row, two lines of five (below the hero in a narrow
-window), open one popover each (first line: **Options**, **Stat filters**, **Ratings**,
-**Priority**, **Mains**; second line: **Sets**, **Weapons**, **Accessories**, **Talismans**,
-**+15 passives**); the number on a button
+The buttons on the right of the first row, on one line (below the hero in a narrow window) —
+**Stat filters**, **Ratings**, **Priority**, **Mains**, **Sets**, **Weapons**, **Accessories**,
+**Talismans**, **+15 passives** — and **Options**, first on the second row ahead of
+**Reforge**, open one popover each; the number on a button
 is how many rules it holds. Esc or a click outside closes it.
 
 - **Priority** — a slider per stat (−1 to 3): higher = the solver values it more; **(clear)**

@@ -122,9 +122,9 @@ export function BuilderToolbar({
   return (
     <div className="relative flex shrink-0 flex-col gap-2 rounded-lg border border-white/8 bg-bg-elev-2 px-2.5 py-2">
       {/* Row 1 — selected hero (portrait + search) and the primary actions on
-       *  the left, the filter popovers on the right (two lines of five); a
-       *  narrow window wraps the popover block onto its own line rather than
-       *  hiding any. */}
+       *  the left, the nine filter popovers on one line on the right; a narrow
+       *  window wraps the popover group onto its own line rather than hiding
+       *  any. */}
       <div className="flex flex-wrap items-center gap-2">
         {selectedHero ? (
           <CharacterPortrait
@@ -168,45 +168,39 @@ export function BuilderToolbar({
             ✕
           </button>
         )}
-        {/* The filter popovers — two lines of five, right-aligned, in toolbar
-         *  order. Priority, Mains and the whole second line (Sets, Weapons,
-         *  Accessories, Talismans, +15 passives) open from their right edge so
-         *  their panel stays inside the toolbar's width. */}
-        <div className="ml-auto flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-2">
-            <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
-              <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
-            </PopoverButton>
-            <PopoverButton label="Stat filters" count={statCount} openKey={openKey} myKey="stat" onToggle={toggle} onClose={close}>
-              <StatFiltersPanel filters={filters.statFilters} dispatch={dispatch} />
-            </PopoverButton>
-            <PopoverButton label="Ratings" count={ratingCount} openKey={openKey} myKey="rating" onToggle={toggle} onClose={close}>
-              <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} dmgSkill={dmgSkill} />
-            </PopoverButton>
-            <PopoverButton label="Priority" count={priorityCount} accent="violet" align="right" openKey={openKey} myKey="priority" onToggle={toggle} onClose={close}>
-              <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
-            </PopoverButton>
-            <PopoverButton label="Mains" count={mainCount} align="right" openKey={openKey} myKey="mains" onToggle={toggle} onClose={close}>
-              <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} excludes={filters.mainExcludes} dispatch={dispatch} />
-            </PopoverButton>
-          </div>
-          <div className="flex items-center gap-2">
-            <PopoverButton label="Sets" count={setCount} accent="violet" align="right" openKey={openKey} myKey="sets" onToggle={toggle} onClose={close}>
-              <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />
-            </PopoverButton>
-            <PopoverButton label="Weapons" count={weaponCount} align="right" openKey={openKey} myKey="weapons" onToggle={toggle} onClose={close}>
-              <EffectPanel group="weapon" effects={weaponEffects} picks={filters.weaponEffectPicks} dispatch={dispatch} />
-            </PopoverButton>
-            <PopoverButton label="Accessories" count={accessoryCount} align="right" openKey={openKey} myKey="accessories" onToggle={toggle} onClose={close}>
-              <EffectPanel group="accessory" effects={accessoryEffects} picks={filters.accessoryEffectPicks} dispatch={dispatch} />
-            </PopoverButton>
-            <PopoverButton label="Talismans" count={talismanCount} align="right" openKey={openKey} myKey="talismans" onToggle={toggle} onClose={close}>
-              <EffectPanel group="talisman" effects={talismanEffects} picks={filters.talismanEffectPicks} dispatch={dispatch} />
-            </PopoverButton>
-            <PopoverButton label="+15 passives" count={passiveCount} align="right" openKey={openKey} myKey="passives" onToggle={toggle} onClose={close}>
-              <PassivesPanel passives={passiveCatalog} passivePicks={filters.passivePicks} game={game} dispatch={dispatch} />
-            </PopoverButton>
-          </div>
+        {/* The nine filter popovers, on one line on the right in toolbar order
+         *  (the group wraps under the hero in a narrow window, still flush
+         *  right). Talismans and +15 passives open from their right edge so
+         *  their panel stays inside the toolbar's width; the others fit from
+         *  their left edge. */}
+        <div className="ml-auto flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          <PopoverButton label="Stat filters" count={statCount} openKey={openKey} myKey="stat" onToggle={toggle} onClose={close}>
+            <StatFiltersPanel filters={filters.statFilters} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Ratings" count={ratingCount} openKey={openKey} myKey="rating" onToggle={toggle} onClose={close}>
+            <RatingFiltersPanel filters={filters.ratingFilters} dispatch={dispatch} dmgSkill={dmgSkill} />
+          </PopoverButton>
+          <PopoverButton label="Priority" count={priorityCount} accent="violet" openKey={openKey} myKey="priority" onToggle={toggle} onClose={close}>
+            <SubstatPriorityPanel priority={filters.priority} topPct={filters.topPct} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Mains" count={mainCount} openKey={openKey} myKey="mains" onToggle={toggle} onClose={close}>
+            <AccessoryMainStatsPanel catalogs={mainStatCatalogs} picks={filters.mainPicks} excludes={filters.mainExcludes} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Sets" count={setCount} accent="violet" openKey={openKey} myKey="sets" onToggle={toggle} onClose={close}>
+            <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Weapons" count={weaponCount} openKey={openKey} myKey="weapons" onToggle={toggle} onClose={close}>
+            <EffectPanel group="weapon" effects={weaponEffects} picks={filters.weaponEffectPicks} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Accessories" count={accessoryCount} openKey={openKey} myKey="accessories" onToggle={toggle} onClose={close}>
+            <EffectPanel group="accessory" effects={accessoryEffects} picks={filters.accessoryEffectPicks} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Talismans" count={talismanCount} align="right" openKey={openKey} myKey="talismans" onToggle={toggle} onClose={close}>
+            <EffectPanel group="talisman" effects={talismanEffects} picks={filters.talismanEffectPicks} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="+15 passives" count={passiveCount} align="right" openKey={openKey} myKey="passives" onToggle={toggle} onClose={close}>
+            <PassivesPanel passives={passiveCatalog} passivePicks={filters.passivePicks} game={game} dispatch={dispatch} />
+          </PopoverButton>
         </div>
       </div>
 
@@ -223,8 +217,13 @@ export function BuilderToolbar({
         />
       )}
 
-      {/* Row 2 — reforge mode, the two quick toggles and "reset filters". */}
+      {/* Row 2 — the Options popover (its panel opens under the row, from the
+       *  toolbar's left edge), reforge mode, the two quick toggles and
+       *  "reset filters". */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
+          <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
+        </PopoverButton>
         <ReforgeModeControl value={filters.options.reforgeMode} defaultMode={defaultReforgeMode} dispatch={dispatch} />
         <ToolbarToggle
           label="Maxed only"

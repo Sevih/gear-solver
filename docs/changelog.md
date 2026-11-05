@@ -8,6 +8,48 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧭 Neuf popovers de filtres sur une ligne, Options en tête de la ligne Reforge (G118) (2026-11-05)
+- ✅ **Pourquoi.** Demande de Sevih du 05/11, après G117 : le bloc de deux lignes de cinq popovers ne lui allait
+  pas. Retour à une seule ligne de popovers à droite de la ligne 1, et **Options** quitte cette ligne pour ouvrir
+  la ligne 2, devant Reforge. Les boutons gardent la taille compacte de G117 (`h-6`, 10,5 px).
+- ✅ **Les deux lignes.** Dans `BuilderToolbar.tsx`, le bloc `ml-auto flex flex-col items-end gap-1.5` et ses deux
+  conteneurs disparaissent : la ligne 1 retrouve le groupe d'avant G117, `ml-auto flex flex-wrap items-center
+  gap-x-2 gap-y-1.5`, avec neuf popovers dans l'ordre Stat filters, Ratings, Priority, Mains, Sets, Weapons,
+  Accessories, Talismans, +15 passives. Le popover Options (même `PopoverButton`, `count={optionCount}`,
+  `myKey="options"`, `OptionsPanel`) devient le premier enfant de la ligne 2, avant `ReforgeModeControl`, en
+  `align="left"` (le défaut) : son panneau s'ouvre sous la ligne 2 depuis le bord gauche de la barre (19-227 px).
+  Mêmes props, mêmes `myKey`, mêmes comptes, mêmes panneaux.
+- ✅ **Les `align`, mesurés.** Banc hors dépôt comme G117 : la CSS de `vite build` (sortie hors dépôt, servie en
+  HTTP local pour que la police Paybooc se charge) et la barre montée seule dans Firefox sans tête à 1280 px, dans
+  un conteneur `p-2 overflow-hidden` comme celui de `BuilderScreen` (barre de 8 à 1272 px), chaque panneau ouvert
+  tour à tour, sans badge puis avec un badge à deux chiffres sur chaque bouton. Sans badge (le pire cas pour un
+  panneau ouvert à gauche : les boutons sont le plus à droite), ouverts à gauche : Stat filters 487-711, Ratings
+  583-807, Priority 662-886, Mains 742-934, Sets 813-1053, Weapons 877-1117, Accessories 964-1204 (68 px de marge) ;
+  Talismans ouvert à gauche irait jusqu'à 1308 et +15 passives jusqu'à 1416, coupés par l'`overflow-hidden`.
+  **Talismans et +15 passives gardent donc `align="right"`** (912-1152 et 1005-1261) ; **Priority, Mains, Sets,
+  Weapons et Accessories passent en `align="left"`** (le défaut ; ils étaient à droite depuis G117). Avec les
+  badges partout, tout tient aussi (Stat filters 228-452 … Accessories 878-1118, Talismans 883-1123, +15 passives
+  1005-1261). Le groupe étant collé à droite (`ml-auto`), ces positions ne dépendent pas de la largeur de la
+  fenêtre ; vérifié aussi à 1480 px (fenêtre par défaut de l'app) : rien ne déborde.
+- ✅ **À noter : à 1280 px, la ligne de popovers passe sous le héros.** Les neuf boutons font 774 px sans badge
+  et le bloc de gauche (portrait, recherche, Score | CP, Solve, Filter) finit à 551 px : il faut une fenêtre
+  d'environ 1350 px pour qu'ils tiennent à droite du héros (1610 px avec un badge à deux chiffres partout). À
+  1280 px le `flex-wrap` les met sur leur propre ligne, sous le héros, toujours collés à droite ; à 1480 px
+  (fenêtre par défaut) ils sont à droite du héros sans badge. Taille des boutons hors périmètre : rien changé.
+- ✅ **Tests.** `apps/renderer/test/builderToolbar.test.ts` : `POPOVER_BLOCK` / `POPOVER_LINE` et le test des deux
+  lignes disparaissent ; `POPOVERS` devient les neuf de la ligne 1, vérifiés dans un seul groupe `ml-auto
+  flex-wrap` sans ligne imbriquée, déclencheurs en `h-6` ; la ligne 2 compte un seul popover, Options, en tête,
+  avant Reforge, Maxed only, Transistone potential et reset filters ; le test des quatre badges est inchangé
+  (4 tests). `npm run typecheck` : vert (dernière ligne `> tsc --noEmit`, sans erreur) ; `npm test` : 1629 tests
+  verts (169 + 263 + 1197, dernière série `Tests  1197 passed (1197)`) ; `npm run lint` : `✖ 7 problems (0 errors,
+  7 warnings)`, comme avant.
+- ✅ **Docs.** `docs/solver.md` et `wiki/Solver.md` (popovers de filtres : neuf sur une ligne, `align` mesurés,
+  seuil de largeur ; ligne 2 : Options en tête ; arborescence), `wiki/Using-the-App.md` (paragraphe des
+  popovers), `docs/reference.md` et `wiki/Engine-Reference.md` (ligne `builderToolbar.test.ts` : 4 tests).
+- ⏳ Sevih, sur le fixe : les neuf boutons sur une ligne à droite du héros (à 1280 px ils passent sous le héros,
+  voir plus haut : à juger dans la taille de fenêtre habituelle), Options en premier sur la ligne de Reforge, et
+  chaque panneau ouvert reste dans la barre (Accessories, ouvert à gauche, est le plus juste).
+
 ### 🎴 Optimizer › Talismans : chaque puce sur la plaque de rareté de l'objet (hors lot) (2026-11-05)
 - ✅ **Pourquoi.** Demande de Sevih du 05/11, après G115 : les talismans du panneau se lisent mieux sur leur fond
   de rareté (la plaque rouge d'un Legendary), comme les tuiles de Gear.

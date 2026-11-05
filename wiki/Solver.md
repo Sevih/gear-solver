@@ -304,6 +304,9 @@ Under row 1, visible with the popovers closed, while the hero has no weights of 
 
 ### Toolbar, row 2 — reforge and quick toggles (`BuilderToolbar.tsx`, `lib/solver/reforge.ts`)
 
+At the head of the row, the **Options** popover (see Filter popovers; its panel opens under the row from its left
+edge), then:
+
 - **Reforge** (`ReforgeModeControl`, `reforgeMode`, **4 states**, action `setReforgeMode`, **default +10R6**, set
   in Settings › Solver — `gs.solver.reforgeMode`, +10R6 out of the box; the choice made for a hero stays with
   their filters; labels and tooltips: `REFORGE_MODES`) — projects every pool piece to an endgame ceiling
@@ -354,11 +357,14 @@ Under row 1, visible with the popovers closed, while the hero has no weights of 
 
 ### Filter popovers (`BuilderToolbar.tsx`, `PopoverButton`)
 
-Ten buttons on the right of row 1, on two lines of five aligned on their right edge (the whole block drops below
-the hero in a narrow window), in the bar's order: Options, Stat filters, Ratings, Priority, Mains, then Sets,
-Weapons, Accessories, Talismans, +15 passives (`h-6`, 10.5 px text, like Reforge and the toggles of row 2).
-Priority, Mains and the whole second line open their panel from their right edge (`align="right"`) so it stays
-inside the toolbar's width; Options, Stat filters and Ratings from their left edge. One popover
+Nine buttons on one line on the right of row 1 (an `ml-auto flex-wrap` group: in a window too narrow for it, it
+drops below the hero, still flush right), in the bar's order: Stat filters, Ratings, Priority, Mains, Sets,
+Weapons, Accessories, Talismans, +15 passives; the tenth, **Options**, opens row 2, ahead of Reforge (all at
+`h-6`, 10.5 px text, like Reforge and the toggles of row 2). Talismans and +15 passives open their panel from
+their right edge (`align="right"`) so it stays inside the toolbar's width; the other seven, and Options, from
+their left edge (measured at 1280 px: Accessories, the rightmost of the seven, ends 68 px from the edge without
+badges; Talismans opened from the left overflowed by 36). The group fits to the right of the hero from a window of
+about 1350 px without badges (774 px of buttons); at 1280 px it drops below the hero. One popover
 open at a time (outside click or Esc closes it); a button's badge counts the constraints it holds (Options:
 those off the defaults, plus the heroes ticked in Don't take from…). Each popover is a `Panel` component
 (`screens/builder/Panel.tsx`), described here in the manual's order.
@@ -1000,7 +1006,7 @@ apps/renderer/src/
     ├── builder/                    ← Optimizer tab
     │   ├── BuilderScreen.tsx       ← useReducer(SolverFilters) + layout + hero switch + builds/presets/reco + selected build
     │   ├── useSolverSession.ts     ← orchestrator wiring: solve/cancel, pre-solve estimate, progress, results
-    │   ├── BuilderToolbar.tsx      ← row 1 (hero, Score | CP, Solve / Cancel, Filter, popovers on the right in two lines of five) + row 2 (Reforge, toggles, reset filters)
+    │   ├── BuilderToolbar.tsx      ← row 1 (hero, Score | CP, Solve / Cancel, Filter, the nine filter popovers on the right, on one line) + row 2 (Options, Reforge, toggles, reset filters)
     │   ├── PriorityBanner.tsx      ← the "No priority set" / "Priority from outerpedia reco" banner
     │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · EffectPanel.tsx · PassivesPanel.tsx
     │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← the ten popovers
