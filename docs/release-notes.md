@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [2.0.0] — 2026-11-05
+
 **Gear Solver 2.0 is a redesign of the whole app**: five tabs in the order of a session (**Heroes**,
 **Optimizer**, **Presets**, **Worklist**, **Gear**), one word per notion, one place per action, screens that
 remember where you were, and a rewritten [user guide](https://github.com/Sevih/gear-solver/wiki/Using-the-App).
