@@ -561,6 +561,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         availableReachable={availableReachable}
         availablePassives={availablePassives}
         armorSetName={(id) => game?.sets?.[id]?.name ?? `Set #${id}`}
+        game={game}
       />
     </div>
   );

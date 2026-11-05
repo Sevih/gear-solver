@@ -1,17 +1,20 @@
 /**
- * Builder icon chips — set / effect chips, their tooltips and state badges,
- * shared by the Sets and Weapons & accessories panels.
+ * Builder icon chips — set / effect / +15 passive chips, their tooltips and
+ * state badges, shared by the Sets, Weapons, Accessories, Talismans and
+ * +15 passives panels.
  */
+import type { GameData } from "@gear-solver/core";
 import { cx } from "../../design/cx.js";
 import { GameText } from "../../design/GameText.js";
 import { RichTooltip } from "../../design/RichTooltip.js";
 import { ARMOR_SLOTS } from "../../lib/solver/setPlans.js";
+import { GradePicker } from "../../design/GradePicker.js";
 import type { ChipState, PassivePick } from "../../lib/solver/builderFilters.js";
-import { SINGULARITY_GRADES, type SingularityGrade } from "../../lib/singularityPassives.js";
+import type { SingularityGrade } from "../../lib/singularityPassives.js";
 import type { ArmorSetEntry, EffectEntry, PassiveEntry } from "./catalogs.js";
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Icon chip atoms — shared by Sets and Weapons & accessories. Click cycles
+ * Icon chip atoms — shared by Sets and the effect panels. Click cycles
  * the chip through its valid states; the surrounding panel owns the state
  * map. Two state machines:
  *  - effect chips:   off → required → excluded → off (a talisman's
@@ -93,13 +96,24 @@ function SetTooltipBody({ set, stateLabel }: { set: ArmorSetEntry; stateLabel: s
 }
 
 /** Weapon / accessory / talisman effect chip — off/required/excluded, plus a
- *  talisman's `preferred` (the required tone with a dashed border). */
-export function EffectIconChip({ effect, state, onClick }: { effect: EffectEntry; state: ChipState; onClick: () => void }) {
+ *  talisman's `preferred` (the required tone with a dashed border). The icon
+ *  is the effect's (`iconKind="effect"`, weapons and accessories) or the
+ *  item's own art (`"item"`, talismans: their effect icons look alike); no
+ *  image → the effect's initials. */
+export function EffectIconChip({ effect, state, onClick, iconKind = "effect" }: {
+  effect: EffectEntry;
+  state: ChipState;
+  onClick: () => void;
+  iconKind?: "effect" | "item";
+}) {
   const stateLabel =
     state === "off" ? "click to require"
     : state === "preferred" ? "preferred by the recommendation (click to require)"
     : state === "required" ? "required (click to exclude)"
     : "excluded (click to clear)";
+  const src = iconKind === "item"
+    ? (effect.image ? `/img/equipment/${effect.image}.webp` : null)
+    : (effect.icon ? `/img/ui/effect/${effect.icon}.webp` : null);
   return (
     <RichTooltip content={<EffectTooltipBody effect={effect} stateLabel={stateLabel} />}>
       <button
@@ -111,11 +125,11 @@ export function EffectIconChip({ effect, state, onClick }: { effect: EffectEntry
           state === "preferred" && "border-dashed",
         )}
       >
-        {effect.icon ? (
-          <img src={`/img/ui/effect/${effect.icon}.webp`} alt={effect.name} className="pointer-events-none h-5 w-5 object-contain" />
+        {src ? (
+          <img src={src} alt={effect.name} className={cx("pointer-events-none object-contain", iconKind === "item" ? "h-6 w-6" : "h-5 w-5")} />
         ) : (
-          // No curated icon — show the effect's initials so the chip is still
-          // identifiable (and we don't request `/img/ui/effect/.webp` → 404).
+          // No image — show the effect's initials so the chip is still
+          // identifiable (and we don't request an empty `.webp` → 404).
           <span className="pointer-events-none text-[9px] font-semibold uppercase text-white/70">{effect.name.slice(0, 2)}</span>
         )}
         <EffectBadge state={state} />
@@ -126,12 +140,14 @@ export function EffectIconChip({ effect, state, onClick }: { effect: EffectEntry
 
 /** +15 passive chip — the family's short label, off → required → excluded
  *  with the effect chips' styling; a required chip carries the minimum grade
- *  selector on its right. */
-export function PassiveChip({ entry, pick, onCycle, onGrade }: {
+ *  picker (the five colored letters) on its right. */
+export function PassiveChip({ entry, pick, onCycle, onGrade, game }: {
   entry: PassiveEntry;
   pick: PassivePick | undefined;
   onCycle: () => void;
   onGrade: (grade: SingularityGrade) => void;
+  /** Colors of the grade letters (`singularityOptions`). */
+  game?: Pick<GameData, "singularityOptions"> | null;
 }) {
   const state: ChipState = pick?.state ?? "off";
   const stateLabel =
@@ -163,15 +179,12 @@ export function PassiveChip({ entry, pick, onCycle, onGrade }: {
         </button>
       </RichTooltip>
       {pick?.state === "required" && (
-        <select
+        <GradePicker
+          label={`Minimum grade for ${entry.label}`}
           value={pick.minGrade}
-          aria-label={`Minimum grade for ${entry.label}`}
-          title={`${entry.family}: grade ${pick.minGrade} or better`}
-          onChange={(e) => onGrade(e.target.value as SingularityGrade)}
-          className="h-6 rounded-md border border-white/10 bg-black/30 px-0.5 font-mono text-[10.5px] text-white focus:border-cyan-400/40 focus:outline-none"
-        >
-          {SINGULARITY_GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
-        </select>
+          onChange={onGrade}
+          game={game}
+        />
       )}
     </span>
   );

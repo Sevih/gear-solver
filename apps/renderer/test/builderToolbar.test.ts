@@ -1,5 +1,5 @@
 // Optimizer toolbar rows: row 1 carries the hero, Score | CP, Solve and
-// Filter on the left and the seven filter popovers on the right (wrapping
+// Filter on the left and the ten filter popovers on the right (wrapping
 // onto their own line in a narrow window), row 2 Reforge, Maxed only,
 // Transistone potential and "reset filters" — no popover. Rendered
 // server-side.
@@ -10,7 +10,7 @@ import { INITIAL_FILTERS, type SolverFilters } from "../src/lib/solver/builderFi
 import { BuilderToolbar } from "../src/screens/builder/BuilderToolbar.js";
 
 const noop = () => {};
-const POPOVERS = ["Options", "Stat filters", "Ratings", "Priority", "Mains", "Sets", "Effects"];
+const POPOVERS = ["Options", "Stat filters", "Ratings", "Priority", "Mains", "Sets", "Weapons", "Accessories", "Talismans", "+15 passives"];
 const ROW2 = '<div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">';
 
 function rows(filterActive = false, filters: SolverFilters = INITIAL_FILTERS): [string, string] {
@@ -33,7 +33,7 @@ const popovers = (html: string) => [...html.matchAll(/<button[^>]*aria-expanded=
 const buttons = (html: string) => [...html.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((m) => m[1]);
 
 describe("Optimizer toolbar — rows", () => {
-  it("row 1: Score | CP, Solve, Filter, then the seven popovers in a wrapping group on the right", () => {
+  it("row 1: Score | CP, Solve, Filter, then the ten popovers in a wrapping group on the right", () => {
     const [row1] = rows();
     expect(row1).toContain('<div class="flex flex-wrap items-center gap-2">');
     expect(row1).toContain('<div class="ml-auto flex flex-wrap items-center gap-x-2 gap-y-1.5">');
@@ -57,21 +57,29 @@ describe("Optimizer toolbar — rows", () => {
   });
 });
 
-describe("Optimizer toolbar — Effects count", () => {
-  /** The badge right after the Effects trigger's label, null without one. */
-  const effectsBadge = (html: string) => html.match(/>Effects(?:<span[^>]*>(\d+)<\/span>)?/)?.[1] ?? null;
+describe("Optimizer toolbar — Weapons, Accessories, Talismans and +15 passives counts", () => {
+  /** The badge right after a trigger's label, null without one. */
+  const badge = (html: string, label: string) =>
+    html.match(new RegExp(`>${label.replace(/[+]/g, "\\+")}(?:<span[^>]*>(\\d+)</span>)?`))?.[1] ?? null;
 
-  it("counts the +15 passive picks of every group with the effect picks", () => {
+  it("each button counts the picks of its own group; +15 passives those of every group", () => {
     const filters: SolverFilters = {
       ...INITIAL_FILTERS,
       weaponEffectPicks: { "1001": "required" },
+      accessoryEffectPicks: { "2001": "excluded", "2002": "required" },
+      talismanEffectPicks: { "3001": "preferred", "3002": "required", "3003": "excluded" },
       passivePicks: {
         weapon: { "Increased DMG within Dimensional Singularity": { state: "required", minGrade: "A" } },
         accessory: {},
         armor: { "Reduced DMG Taken vs Fire": { state: "excluded", minGrade: "C" }, "Reduced DMG Taken from targets": { state: "required", minGrade: "C" } },
       },
     };
-    expect(effectsBadge(rows(false, filters)[0])).toBe("4");
-    expect(effectsBadge(rows()[0])).toBeNull();
+    const [row1] = rows(false, filters);
+    expect(badge(row1, "Weapons")).toBe("1");
+    expect(badge(row1, "Accessories")).toBe("2");
+    expect(badge(row1, "Talismans")).toBe("3");
+    expect(badge(row1, "+15 passives")).toBe("3");
+    const [empty] = rows();
+    for (const label of ["Weapons", "Accessories", "Talismans", "+15 passives"]) expect(badge(empty, label)).toBeNull();
   });
 });

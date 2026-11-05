@@ -362,9 +362,9 @@ Sous la ligne 1, visible popovers fermés, tant que le héros n'a pas de poids �
 
 ### Popovers de filtres (`BuilderToolbar.tsx`, `PopoverButton`)
 
-Sept boutons à droite de la ligne 1 (renvoyés sur leur propre ligne dans une fenêtre étroite), dans l'ordre de
-la barre : Options, Stat filters, Ratings, Priority, Mains, Sets, Effects (les deux derniers ouvrent leur panneau
-depuis leur bord droit, `align="right"`). Un seul
+Dix boutons à droite de la ligne 1 (renvoyés sur leur propre ligne dans une fenêtre étroite), dans l'ordre de
+la barre : Options, Stat filters, Ratings, Priority, Mains, Sets, Weapons, Accessories, Talismans, +15 passives
+(les cinq derniers ouvrent leur panneau depuis leur bord droit, `align="right"`). Un seul
 popover ouvert à la fois (clic dehors ou Échap le ferment) ; le badge d'un bouton compte les contraintes qu'il
 porte (Options : celles qui s'écartent des défauts, plus les héros cochés dans Don't take from…). Chaque popover
 est un composant `Panel` (`screens/builder/Panel.tsx`), décrit ici dans l'ordre du manuel.
@@ -421,10 +421,14 @@ compte acceptées + exclues ; le reco ne touche pas aux exclusions.
 Les autres slots (helmet/armor/gloves/boots) n'apparaissent pas : leur main est
 fixe en jeu.
 
-#### Effects (`screens/builder/WeaponsAccessoriesPanel.tsx`)
-Trois groupes de chips effect-icon (Weapons / Accessories / Talismans), filtrés par class du héros (gated par
-`classLimit`), clés sur le `setId` de la pièce. Click = `cycleEffectPick` (`nextChipState`) : `off → required →
-excluded → off`. Tooltip : nom + (N owned) / desc T4 / state.
+#### Weapons, Accessories, Talismans (`screens/builder/EffectPanel.tsx`)
+Trois boutons, trois panneaux (`EffectPanel`, paramétré par `group` : `weapon` / `accessory` / `talisman`) de chips
+d'effet, filtrées par class du héros (gated par `classLimit`), clés sur le `setId` de la pièce. Click =
+`cycleEffectPick` (`nextChipState`) : `off → required → excluded → off`. Tooltip : nom + (N owned) / desc T4 /
+state. L'icône d'une chip (`EffectIconChip`, `iconKind`) : l'icône d'effet pour Weapons et Accessories
+(`EffectEntry.icon`), l'image de l'objet pour Talismans (`iconKind="item"`, `EffectEntry.image` : l'image de la
+première pièce possédée de ce `setId`, `effectCatalogFromInventory`, servie à `/img/equipment/<image>.webp`) ; sans
+image, les initiales de l'effet. Le badge de chaque bouton compte les picks de son groupe.
 Un talisman conseillé par **Load reco** (`Talisman` de `/api/reco`, `translateReco.ts`) arrive, avec toute sa
 famille (les talismans de même `name` dans `equipment.json` : le conseil désigne le 6★, les 4★/5★ ont leur propre
 `setId`, `talismanFamilyKeys`), en état **`preferred`** (contour pointillé, badge `~`) : si au moins une pièce du pool talisman — après tous les filtres
@@ -432,13 +436,20 @@ d'`allow()` — porte l'un des `setId` préférés, le pool est restreint à cel
 conseil (jamais 0 build à cause d'un talisman préféré, contrairement à `required`). En « keep current », le talisman
 porté reste verrouillé. Un clic le fait passer en `required`. Le statut de Load reco signale quand aucun membre
 des familles conseillées n'est possédé.
-Sous Weapons et Accessories, et dans un bloc **Armor** (les quatre pièces d'armure), une ligne **+15 passive** :
-une chip texte par famille de passif Singularity que l'inventaire porte sur ce groupe (`passiveCatalogFromInventory`,
-ordre des 15 familles de `singularity-options.json`, libellé `singularityShortLabel`), plus une famille cochée que
-plus aucune pièce ne porte. Click = `cyclePassivePick` : `off → required (grade C) → excluded → off` ; une chip
-`required` porte à sa droite le sélecteur de grade minimum (`setPassiveMinGrade`, C / B / A / S / S+). État
-`passivePicks` (par groupe, famille → `{ state, minGrade }`), transmis tel quel au moteur (`allow()`, ci-dessus) ;
-le badge du bouton Effects compte aussi ces picks.
+
+#### +15 passives (`screens/builder/PassivesPanel.tsx`)
+Trois groupes, **Weapon**, **Accessory** et **Armor** (les quatre pièces d'armure) : une chip texte par famille de
+passif Singularity que l'inventaire porte sur ce groupe (`passiveCatalogFromInventory`, ordre des 15 familles de
+`singularity-options.json`, libellé `singularityShortLabel`), plus une famille cochée que plus aucune pièce ne
+porte ; « no +15 passive » quand un groupe n'a rien. Click = `cyclePassivePick` : `off → required (grade C) →
+excluded → off` ; une chip `required` porte à sa droite le sélecteur de grade minimum (`setPassiveMinGrade`) :
+`GradePicker` (`design/GradePicker.tsx`, `role="radiogroup"`), les cinq lettres C B A S S+ en gras, chacune dans la
+couleur que la carte d'une pièce affiche (`singularityGradeColor`, la couleur `<color=#…>` de la première option de
+la table portant ce grade, à défaut les cinq constantes de la table), la lettre choisie pleine (fond `white/10`,
+bordure de sa couleur), les autres à 55 % et cliquables. Le même composant sert dans Gear › Filter › +15 passive
+(`aria-label="Minimum passive grade"`, désactivé sans pilule cochée). État `passivePicks` (par groupe, famille →
+`{ state, minGrade }`), transmis tel quel au moteur (`allow()`, ci-dessus) ; le badge du bouton +15 passives compte
+ces picks (`passivePickCount`).
 
 #### Stat filters (`screens/builder/StatFiltersPanel.tsx`)
 Min/max par stat finale (les 12 de `SOLVER_STATS`), action `setStatFilter`. Appliqué après compose, rejet du
@@ -1062,8 +1073,8 @@ apps/renderer/src/
     │   ├── useSolverSession.ts     ← orchestrator wiring : solve/cancel, estimation pré-solve, progression, résultats
     │   ├── BuilderToolbar.tsx      ← ligne 1 (héros, Score | CP, Solve / Cancel, Filter, popovers à droite) + ligne 2 (Reforge, bascules, reset filters)
     │   ├── PriorityBanner.tsx      ← bandeau « No priority set » / « Priority from outerpedia reco »
-    │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · WeaponsAccessoriesPanel.tsx
-    │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← les sept popovers
+    │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · EffectPanel.tsx · PassivesPanel.tsx
+    │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← les dix popovers
     │   ├── ResultsTable.tsx        ← table virtualisée, tri, heatmap, menu des colonnes, hauteur, menu de seuil
     │   ├── StatsPanel.tsx · BuildEffectsPanel.tsx · SubValuePanel.tsx · DmgPer1PctPanel.tsx · RightSidebar.tsx   ← colonne de droite
     │   ├── EquipBuildButton.tsx    ← Apply to snapshot (confirmation, raison grisée)

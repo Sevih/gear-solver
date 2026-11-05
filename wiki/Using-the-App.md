@@ -35,7 +35,8 @@ button itself is the header's (or Setup's).
 4. Set what you want, or let the reco do it: with no priority set, **Solve** takes the weights of
    the hero's Outerpedia reco; **Load reco** (Library) loads the whole reco (mains, effects,
    sets, priority); the **Priority** popover sets the weights by hand; **CP** needs none.
-5. Add rules if you need them — **Sets**, **Mains**, **Effects**, **Stat filters**…
+5. Add rules if you need them — **Sets**, **Mains**, **Weapons**, **Talismans**, **+15 passives**,
+   **Stat filters**…
 6. Click **Solve**.
 7. Read: click a row of the table; **Current → Projected** shows the stat change, the line above
    the cards gives **ΔCP**, the cards show the pieces.
@@ -143,9 +144,9 @@ until you change them (**Clear** puts every weight back to 0).
 ### The filter popovers
 
 The buttons on the right of the first row (on a line of their own in a narrow window) open one
-popover each (left to right: **Options**, **Stat filters**,
-**Ratings**, **Priority**, **Mains**, **Sets**, **Effects**); the number on a button is how many
-rules it holds. Esc or a click outside closes it.
+popover each (left to right: **Options**, **Stat filters**, **Ratings**, **Priority**, **Mains**,
+**Sets**, **Weapons**, **Accessories**, **Talismans**, **+15 passives**); the number on a button
+is how many rules it holds. Esc or a click outside closes it.
 
 - **Priority** — a slider per stat (−1 to 3): higher = the solver values it more; **(clear)**
   puts them all back to 0. Under the sliders, **Top %**: a speed / quality dial (5 to 100, 100 =
@@ -160,18 +161,23 @@ rules it holds. Esc or a click outside closes it.
   excluded. Allowed = the mains you'll accept for that slot; excluded = never use a piece with
   that main — e.g. rule out ATK talismans when a teammate already brings one (talisman mains are
   shared by the team and don't stack). Only the mains you own appear.
-- **Effects** — Weapons, Accessories and Talismans: click an effect to cycle off → required →
-  excluded. A talisman advised by **Load reco** starts *preferred* (dotted outline): used if you
-  own one (any star of the same family), otherwise any talisman is.
-  Under Weapons and Accessories, and in the **Armor** block (the four armor pieces together), a
-  **+15 passive** line lists the Singularity passives your pieces of that group already carry
-  (DS DMG+, vs Fire DMG+, DMG-…): click one to cycle off → required → excluded. A required passive
-  gets a grade selector (C / B / A / S / S+, C = any grade): only the pieces carrying it at that
-  grade or better stay, e.g. **DS DMG+** required at **A** keeps the weapons with DS DMG+ in A, S or
-  S+. Several required passives in a group = any of them. A piece without a passive (below +15) is
-  dropped as soon as its group has a required one — the filter never guesses the passive a piece
-  would roll at +15 — and an excluded passive drops the pieces carrying it at any grade. When a
-  slot ends up empty, the footer names the pieces the passive filter dropped.
+- **Weapons** and **Accessories** — click an effect icon to cycle off → required → excluded.
+  Required = only the pieces rolling one of the required effects; excluded = never that effect.
+  Empty = any effect. Only the effects you own (for the hero's class) appear.
+- **Talismans** — the same cycle, but each chip shows the talisman itself (the art of the first
+  one you own), not its effect icon. A talisman advised by **Load reco** starts *preferred*
+  (dotted outline): used if you own one (any star of the same family), otherwise any talisman is.
+- **+15 passives** — three groups, **Weapon**, **Accessory** and **Armor** (the four armor pieces
+  together), each listing the Singularity passives your pieces of that group already carry
+  (DS DMG+, vs Fire DMG+, DMG-…); a group with none says *no +15 passive*. Click one to cycle
+  off → required → excluded. A required passive gets the five grade letters **C B A S S+** beside
+  it, bold, in the colors a piece's card shows them in: click one to set the minimum grade (C =
+  any grade); only the pieces carrying the passive at that grade or better stay, e.g. **DS DMG+**
+  required at **A** keeps the weapons with DS DMG+ in A, S or S+. Several required passives in a
+  group = any of them. A piece without a passive (below +15) is dropped as soon as its group has
+  a required one — the filter never guesses the passive a piece would roll at +15 — and an
+  excluded passive drops the pieces carrying it at any grade. When a slot ends up empty, the
+  footer names the pieces the passive filter dropped.
 - **Stat filters** — min / max on any final stat (e.g. SPD ≥ 200). Gems: a stat filter's minimum
   is served before the priority — a build short of it gets that stat's gems first, the priority
   fills the remaining slots; a build that only passes with its socketed gems keeps them (its
@@ -457,9 +463,10 @@ A dense, searchable grid of every gear piece you own.
   never match.
 - **+15 passive** (in the Filter modal, after Secondary Stat): one pill per Singularity passive a
   piece of the current view carries (DS DMG+, vs Fire DMG+…, the full name on hover); ticking
-  several keeps the pieces carrying any of them, and **Min grade** (C to S+, C = any) keeps only
-  those at that grade or better. No pill ticked = the section is off, its grade too. A piece below
-  +15 has no passive and never passes; a Scrap rule shows the section as e.g. `DS DMG+ ≥ A`.
+  several keeps the pieces carrying any of them, and the grade letters (**C B A S S+**, in the
+  card colors, C = any) keep only those at that grade or better. No pill ticked = the section is
+  off, its grade letters grayed out. A piece below +15 has no passive and never passes; a Scrap
+  rule shows the section as e.g. `DS DMG+ ≥ A`.
 - **Base rolls** (in the Filter modal): the initial tiers of a piece's substats, best line first,
   before reforge and enhancement — the same "3/3/3/1" as the Transistone reroll. Pick an operator
   (at least, more than, exactly, at most, less than) and four values (X = any): every line must

@@ -8,6 +8,62 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧭 Weapons, Accessories, Talismans et +15 passives chacun sa section, talismans en image, grades aux couleurs des cartes (G115) (2026-11-05)
+- ✅ **Pourquoi.** Demande de Sevih du 05/11, après G114 : la barre d'outils de l'Optimizer a de la place, le popover
+  Effects empilait trois familles de puces et les passifs +15 ; chaque famille prend son bouton, les talismans (dont
+  les icônes d'effet se ressemblent) se reconnaissent à leur image, et le grade minimum d'un passif reprend le rendu
+  des cartes (la lettre en couleur) au lieu d'un `<select>`.
+- ✅ **Barre d'outils** (`BuilderToolbar.tsx`) : le bouton **Effects** disparaît au profit de quatre boutons à la
+  suite de Sets, **Weapons**, **Accessories**, **Talismans**, **+15 passives** (`myKey` `weapons` / `accessories` /
+  `talismans` / `passives`), tous en `align="right"` comme Sets. Chaque badge compte les picks de son groupe
+  (`weaponEffectPicks`, `accessoryEffectPicks`, `talismanEffectPicks`), celui de +15 passives `passivePickCount`.
+  Mêmes props qu'avant : les catalogues existaient déjà, `game` (déjà passé) sert aux couleurs des grades.
+- ✅ **Panneaux.** `WeaponsAccessoriesPanel.tsx` supprimé. `screens/builder/EffectPanel.tsx` : un `EffectPanel`
+  paramétré par `group` (`weapon` / `accessory` / `talisman`), titre, astuce (celle d'Effects découpée par groupe :
+  le cycle partout, le `preferred` de Load reco seulement sous Talismans) et `iconKind` lus dans une table
+  `EFFECT_PANELS` ; même `Panel` `w-60`, « none » sans effet. `screens/builder/PassivesPanel.tsx` : les groupes
+  Weapon / Accessory / Armor de G114 (`PassiveRow`, `PassiveChip`), titre de groupe au lieu de la sous-ligne
+  « +15 passive », « no +15 passive » dans tout groupe vide (G114 ne l'écrivait que pour Armor) ; astuce = la règle
+  de G114 (required à un grade minimum, OU dans un groupe, pièce sans passif écartée ; excluded à tout grade).
+- ✅ **Talismans en image.** `EffectEntry.image` (`catalogs.ts`) : `EquipmentDef.image` de la première pièce
+  possédée de ce `setId` (`effectCatalogFromInventory`). `EffectIconChip` (`IconChips.tsx`) reçoit
+  `iconKind: "effect" | "item"` (défaut `"effect"` : Weapons et Accessories inchangés) ; `"item"` affiche
+  `/img/equipment/<image>.webp` (en `h-6 w-6`, l'art d'objet remplit la puce ; l'icône d'effet reste en `h-5 w-5`),
+  sans image le repli texte (initiales). Tooltip, cycle et `preferred` (pointillé) inchangés.
+- ✅ **Grades en couleur.** `singularityGradeColor(grade, game)` (`lib/singularityPassives.ts`) : la couleur
+  `<color=#…>` de la première option de la table (ids triés) portant ce grade (`singularityGrade(desc)`), à défaut
+  les cinq constantes lues dans `data/derived/singularity-options.json` (C `#27D054`, B `#0EA8F5`, A `#F5340E`,
+  S `#b266ff`, S+ `#ff00ff`). `design/GradePicker.tsx` (dans `design/` : partagé par l'Optimizer et Gear) :
+  `role="radiogroup"` à l'`aria-label` reçu, cinq boutons `aria-label="Grade <X>"` + `aria-pressed`, lettres en gras
+  dans leur couleur, la choisie fond `white/10` et bordure de sa couleur, les autres à 55 % et cliquables (y compris
+  sous le minimum : c'est un minimum) ; `disabled` → `aria-disabled` sur le groupe, opacité 40 %, boutons désactivés.
+  Utilisé par `PassiveChip` (`Minimum grade for <label>`, tooltip « required, grade ≥ A » inchangé) et par
+  Gear › Filter › +15 passive (`FilterModal.tsx`, `aria-label="Minimum passive grade"`, désactivé sans pilule cochée,
+  même `title` qu'avant) ; `FilterModal` prend un `game` optionnel, passé par `InventoryScreen`.
+- ✅ **Tests.** `builderToolbar.test.ts` : dix popovers dans l'ordre, le test du badge Effects devient celui des
+  quatre comptes (1 / 2 / 3 / 3, aucun badge à vide). `effectsPassivePanel.test.ts` renommé `passivesPanel.test.ts`
+  (suit `PassivesPanel`) : les 4 tests gardés, le sélecteur lu sur `aria-pressed` au lieu de l'`<option selected>`,
+  et « famille cochée que plus rien ne porte » compte désormais un seul « no +15 passive » (Accessory vide) au lieu
+  d'aucun, conséquence voulue de la règle par groupe ; + 2 tests (ordre des trois groupes, rendu du `GradePicker` :
+  lettres, couleurs, `font-bold`, la choisie encadrée, aucune désactivée). `inventoryFilterModal.test.ts` : les
+  trois tests de G114 passent au `GradePicker` (`aria-disabled` + `opacity-40` sans pilule, la lettre A pressée et
+  toutes actives avec). `singularityPassives.test.ts` : + 3 tests `singularityGradeColor` (vraie table, autre couleur
+  qui l'emporte, sans table). Nouveau `effectPanels.test.ts` (4 tests : icône d'effet pour Weapons et Accessories,
+  image d'objet pour Talismans sans icône d'effet, initiales sans image, « none » ; catalogue des talismans avec
+  `image`). `npm run typecheck` : dernière ligne `> tsc --noEmit` (sans erreur) ; `npm test` : dernière ligne
+  `Tests  1182 passed (1182)` (renderer, 106 fichiers ; 1173 avant le lot ; core 169 et desktop 263 inchangés) ;
+  `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ✅ **Docs.** `wiki/Using-the-App.md` (Effects en trois points : Weapons et Accessories, Talismans à l'image de
+  l'objet, +15 passives aux lettres colorées ; l'ordre des boutons ; Gear › Filter › +15 passive), `docs/solver.md`
+  + `wiki/Solver.md` (dix popovers, sections Weapons / Accessories / Talismans et +15 passives, le `GradePicker`,
+  l'arborescence), `docs/reference.md` + `wiki/Engine-Reference.md` (lignes `builderToolbar`, `singularityPassives`
+  10 tests, `passivesPanel` 6 tests, `effectPanels` 4 tests).
+- ⏳ **Sevih, sur le fixe.** Les quatre boutons sur une ligne à 1280 px (pas vu à l'écran ici, `npm run dev` hors
+  périmètre : estimation seulement : les dix boutons font ~920 px, plus que la place à droite du héros, donc le bloc
+  passe sur sa propre ligne et devrait y tenir ; sinon le `flex-wrap` du bloc fait la suite) ; les talismans reconnaissables à leur image ; le grade minimum
+  choisi sur les lettres colorées (Optimizer et Gear) ; un solve avec « DS DMG+ ≥ A » required donne le même pool
+  qu'avant le lot (le moteur n'est pas touché : `passivePicks` inchangé).
+
 ### 🎯 Filtre sur le passif +15 par famille et grade minimum, Optimizer et Gear (G114) (2026-11-05)
 - ✅ **Pourquoi.** Demande de Sevih du 05/11 : filtrer sur le passif +15 (l'option Singularity qu'une pièce reçoit à
   +15, `SingularityOptionID`) par famille et par grade minimum, dans l'Optimizer (forcer ou exclure : « une arme avec

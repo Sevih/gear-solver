@@ -83,3 +83,21 @@ export function passiveFamilyOrder(game: Pick<GameData, "singularityOptions"> | 
   }
   return out;
 }
+
+/** The colors the table paints each grade letter in (`<color=#…>` of the
+ *  desc) — the fallback when no table is loaded. */
+const GRADE_COLOR_FALLBACK: Record<SingularityGrade, string> = {
+  C: "#27D054", B: "#0EA8F5", A: "#F5340E", S: "#b266ff", "S+": "#ff00ff",
+};
+
+/** The color a piece's card shows a grade letter in: that of the first option
+ *  of the table carrying this grade (`singularityGrade(desc).color`), else the
+ *  table's usual color. */
+export function singularityGradeColor(grade: SingularityGrade, game: Pick<GameData, "singularityOptions"> | null | undefined): string {
+  const ids = Object.keys(game?.singularityOptions ?? {}).sort((a, b) => Number(a) - Number(b));
+  for (const id of ids) {
+    const g = singularityGrade(game!.singularityOptions[id]?.desc ?? null);
+    if (g?.color && g.grade.toUpperCase() === grade) return g.color;
+  }
+  return GRADE_COLOR_FALLBACK[grade];
+}

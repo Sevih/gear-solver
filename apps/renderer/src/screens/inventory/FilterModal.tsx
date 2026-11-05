@@ -2,6 +2,7 @@
  * Inventory filter modal — the toolbar's Filter button and the modal with its
  * pill / checkbox / mode controls.
  */
+import type { GameData } from "@gear-solver/core";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "../../design/cx.js";
@@ -9,7 +10,8 @@ import { StatIcon } from "../../design/EquipmentIcon.js";
 import { RARITY, STAT, type DesignRarity } from "../../design/tokens.js";
 import { QUALITY_REACHABLE_HELP, QUALITY_TIERS, type QualityTier } from "../../lib/quality.js";
 import { QUALITY_TONE } from "../../design/gearCardText.js";
-import { SINGULARITY_GRADES, passiveLabel, type SingularityGrade } from "../../lib/singularityPassives.js";
+import { passiveLabel } from "../../lib/singularityPassives.js";
+import { GradePicker } from "../../design/GradePicker.js";
 import { GEAR_STATS, emptyFilters, type BaseRollsFilter, type FilterState } from "./filters.js";
 import {
   PRESET_NAME_MAX, SCRAP_CANDIDATES, addScrapDefault, deleteInventoryFilterPreset, loadInventoryFilterPresets,
@@ -375,7 +377,7 @@ export function FilterButton({
 export function FilterModal({
   open, onClose, current, onApply, scrapMode = false,
   availableMains, availableSubs, availableArmorSets, availableClasses,
-  availableStars, availableRarities, availableQualities, availableReachable, availablePassives = new Set(), armorSetName,
+  availableStars, availableRarities, availableQualities, availableReachable, availablePassives = new Set(), armorSetName, game = null,
 }: {
   open: boolean;
   onClose: () => void;
@@ -398,6 +400,8 @@ export function FilterModal({
   availablePassives?: Set<string>;
   /** Label of an armor set selected in the draft but absent from the view. */
   armorSetName: (id: string) => string;
+  /** Colors of the +15 passive grade letters (`singularityOptions`). */
+  game?: Pick<GameData, "singularityOptions"> | null;
 }) {
   const [draft, setDraft] = useState<FilterState>(current);
   // Re-seed draft from current whenever the modal transitions to open —
@@ -666,18 +670,14 @@ export function FilterModal({
               right={
                 <span className="flex items-center gap-1.5">
                   <ModeBadge mode="or" />
-                  <select
+                  <GradePicker
+                    label="Minimum passive grade"
                     value={draft.passiveMinGrade}
-                    aria-label="Minimum passive grade"
                     title={draft.passives.size === 0 ? "Pick a passive first." : `Grade ${draft.passiveMinGrade} or better; C = any grade.`}
                     disabled={draft.passives.size === 0}
-                    onChange={(e) => setDraft({ ...draft, passiveMinGrade: e.target.value as SingularityGrade })}
-                    className={cx(SELECT_CLASS, "disabled:opacity-40")}
-                  >
-                    {SINGULARITY_GRADES.map((g) => (
-                      <option key={g} value={g}>Min grade {g}</option>
-                    ))}
-                  </select>
+                    onChange={(passiveMinGrade) => setDraft({ ...draft, passiveMinGrade })}
+                    game={game}
+                  />
                 </span>
               }
             >

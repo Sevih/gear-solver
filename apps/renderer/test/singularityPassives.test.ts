@@ -9,7 +9,7 @@ import type { UiPiece } from "../src/design/adapter.js";
 import { singularityShortLabel } from "../src/design/gearCardText.js";
 import {
   SINGULARITY_GRADES, gradeAtLeast, passiveFamilyOrder, passiveGroupOf, passiveLabel, passiveOf,
-  passiveOfGearPiece, passiveOfUiPiece,
+  passiveOfGearPiece, passiveOfUiPiece, singularityGradeColor,
 } from "../src/lib/singularityPassives.js";
 
 const TABLE = JSON.parse(readFileSync(new URL("../../../data/derived/singularity-options.json", import.meta.url), "utf8")) as GameData["singularityOptions"];
@@ -74,5 +74,21 @@ describe("the table's 15 families", () => {
       const grades = new Set(Object.values(TABLE).map((o) => passiveOf(o)).filter((p) => p?.family === family).map((p) => p!.grade));
       expect([...grades].sort()).toEqual([...SINGULARITY_GRADES].sort());
     }
+  });
+});
+
+describe("singularityGradeColor", () => {
+  it("the color of the grade letter on the real table, as a piece's card shows it", () => {
+    expect(SINGULARITY_GRADES.map((g) => singularityGradeColor(g, GAME).toLowerCase())).toEqual(["#27d054", "#0ea8f5", "#f5340e", "#b266ff", "#ff00ff"]);
+  });
+
+  it("reads the table: another color there wins", () => {
+    const game = { singularityOptions: { "1": { name: "X", desc: "<color=#123456>A</color> text" } } } as unknown as GameData;
+    expect(singularityGradeColor("A", game)).toBe("#123456");
+    expect(singularityGradeColor("S", game)).toBe("#b266ff");
+  });
+
+  it("without a table, the table's usual five colors", () => {
+    expect(SINGULARITY_GRADES.map((g) => singularityGradeColor(g, null))).toEqual(["#27D054", "#0EA8F5", "#F5340E", "#b266ff", "#ff00ff"]);
   });
 });

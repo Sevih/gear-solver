@@ -21,7 +21,8 @@ import { RatingFiltersPanel } from "./RatingFiltersPanel.js";
 import { SubstatPriorityPanel } from "./SubstatPriorityPanel.js";
 import { AccessoryMainStatsPanel } from "./AccessoryMainStatsPanel.js";
 import { SetsPanel } from "./SetsPanel.js";
-import { WeaponsAccessoriesPanel } from "./WeaponsAccessoriesPanel.js";
+import { EffectPanel } from "./EffectPanel.js";
+import { PassivesPanel } from "./PassivesPanel.js";
 import { useClickOutside } from "./useClickOutside.js";
 import { REFORGE_MODES } from "../../lib/solver/reforge.js";
 import { PriorityBanner, type PriorityBannerState } from "./PriorityBanner.js";
@@ -53,7 +54,7 @@ export function BuilderToolbar({
   weaponEffects: EffectEntry[];
   accessoryEffects: EffectEntry[];
   talismanEffects: EffectEntry[];
-  /** +15 passive families the inventory carries, per group (Effects panel). */
+  /** +15 passive families the inventory carries, per group (+15 passives panel). */
   passiveCatalog?: Record<PassiveGroup, PassiveEntry[]>;
   mainStatCatalogs: Record<string, MainStatEntry[]>;
   filters: SolverFilters;
@@ -99,8 +100,10 @@ export function BuilderToolbar({
   const mainCount = [...Object.values(filters.mainPicks), ...Object.values(filters.mainExcludes)]
     .reduce((n, m) => n + Object.values(m).filter(Boolean).length, 0);
   const setCount = filters.setPlans.filter((p) => p.length > 0).length + filters.excludedSets.length;
-  const effectCount = Object.keys(filters.weaponEffectPicks).length + Object.keys(filters.accessoryEffectPicks).length
-    + Object.keys(filters.talismanEffectPicks).length + passivePickCount(filters.passivePicks);
+  const weaponCount = Object.keys(filters.weaponEffectPicks).length;
+  const accessoryCount = Object.keys(filters.accessoryEffectPicks).length;
+  const talismanCount = Object.keys(filters.talismanEffectPicks).length;
+  const passiveCount = passivePickCount(filters.passivePicks);
   // Options badge counts only the constraints that deviate from the defaults
   // (equipped scope off its "lower" baseline either way, keep-current on,
   // broken-sets disallowed, min-quality set, plus each excluded hero).
@@ -164,9 +167,9 @@ export function BuilderToolbar({
             ✕
           </button>
         )}
-        {/* The filter popovers. On the right of the block, the last two
-         *  (Sets, Effects) open from their right edge so their panel stays
-         *  inside the toolbar's width. */}
+        {/* The filter popovers. On the right of the block, the last five
+         *  (Sets, Weapons, Accessories, Talismans, +15 passives) open from
+         *  their right edge so their panel stays inside the toolbar's width. */}
         <div className="ml-auto flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
             <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
@@ -186,18 +189,17 @@ export function BuilderToolbar({
           <PopoverButton label="Sets" count={setCount} accent="violet" align="right" openKey={openKey} myKey="sets" onToggle={toggle} onClose={close}>
             <SetsPanel sets={armorSets} setPlans={filters.setPlans} excludedSets={filters.excludedSets} dispatch={dispatch} />
           </PopoverButton>
-          <PopoverButton label="Effects" count={effectCount} align="right" openKey={openKey} myKey="effects" onToggle={toggle} onClose={close}>
-            <WeaponsAccessoriesPanel
-              weapons={weaponEffects}
-              accessories={accessoryEffects}
-              talismans={talismanEffects}
-              weaponPicks={filters.weaponEffectPicks}
-              accPicks={filters.accessoryEffectPicks}
-              talismanPicks={filters.talismanEffectPicks}
-              passives={passiveCatalog}
-              passivePicks={filters.passivePicks}
-              dispatch={dispatch}
-            />
+          <PopoverButton label="Weapons" count={weaponCount} align="right" openKey={openKey} myKey="weapons" onToggle={toggle} onClose={close}>
+            <EffectPanel group="weapon" effects={weaponEffects} picks={filters.weaponEffectPicks} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Accessories" count={accessoryCount} align="right" openKey={openKey} myKey="accessories" onToggle={toggle} onClose={close}>
+            <EffectPanel group="accessory" effects={accessoryEffects} picks={filters.accessoryEffectPicks} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="Talismans" count={talismanCount} align="right" openKey={openKey} myKey="talismans" onToggle={toggle} onClose={close}>
+            <EffectPanel group="talisman" effects={talismanEffects} picks={filters.talismanEffectPicks} dispatch={dispatch} />
+          </PopoverButton>
+          <PopoverButton label="+15 passives" count={passiveCount} align="right" openKey={openKey} myKey="passives" onToggle={toggle} onClose={close}>
+            <PassivesPanel passives={passiveCatalog} passivePicks={filters.passivePicks} game={game} dispatch={dispatch} />
           </PopoverButton>
         </div>
       </div>

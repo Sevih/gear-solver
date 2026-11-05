@@ -137,8 +137,12 @@ describe("FilterModal — Use for Scrap", () => {
 describe("FilterModal — +15 passive", () => {
   const DS = "Increased DMG within Dimensional Singularity";
   const available = new Set([DS, "DMG Increase vs Fire"]);
-  /** The <select> of the section, opening tag. */
-  const gradeSelect = (html: string) => html.match(/<select[^>]*aria-label="Minimum passive grade"[^>]*>/)?.[0] ?? null;
+  /** The grade picker of the section, opening tag. */
+  const gradeSelect = (html: string) => html.match(/<span role="radiogroup" aria-label="Minimum passive grade"[^>]*>/)?.[0] ?? null;
+  /** Its letter buttons, opening-tag attributes and text. */
+  const gradeLetters = (html: string) =>
+    [...(html.match(/<span role="radiogroup" aria-label="Minimum passive grade"[^>]*>(.*?)<\/span>/)?.[1] ?? "").matchAll(/<button([^>]*)>([^<]*)<\/button>/g)]
+      .map((m) => ({ attrs: m[1]!, text: m[2]! }));
 
   it("no passive in the view and none ticked → no section", () => {
     const html = render(emptyFilters());
@@ -152,16 +156,19 @@ describe("FilterModal — +15 passive", () => {
     expect(buttons(html, "DS DMG+")[0]).toContain(`title="${DS}"`);
     expect(buttons(html, "vs Fire DMG+")).toHaveLength(1);
     expect(buttons(html, "vs Water DMG+")).toHaveLength(0);
-    expect(gradeSelect(html)).toContain(" disabled=\"\"");
-    expect(html).toContain("Min grade S+");
+    expect(gradeSelect(html)).toContain('aria-disabled="true"');
+    expect(gradeSelect(html)).toContain("opacity-40");
+    expect(gradeLetters(html).map((l) => l.text)).toEqual(["C", "B", "A", "S", "S+"]);
   });
 
   it("a ticked family enables the selector; one absent from the view is listed after, marked", () => {
     const html = render({ ...emptyFilters(), passives: new Set([DS, "Reduced DMG Taken vs Dark"]), passiveMinGrade: "A" }, false, available);
-    expect(gradeSelect(html)).not.toContain(" disabled=\"\"");
+    expect(gradeSelect(html)).not.toContain("aria-disabled");
     const [dark] = buttons(html, "vs Dark DMG-");
     expect(dark).toContain(UNAVAILABLE);
     expect(html.indexOf("vs Fire DMG+")).toBeLessThan(html.indexOf("vs Dark DMG-"));
-    expect(html).toMatch(/<option value="A" selected="">Min grade A<\/option>/);
+    const letters = gradeLetters(html);
+    expect(letters.filter((l) => l.attrs.includes('aria-pressed="true"')).map((l) => l.text)).toEqual(["A"]);
+    expect(letters.every((l) => !l.attrs.includes('disabled=""'))).toBe(true);
   });
 });

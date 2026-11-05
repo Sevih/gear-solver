@@ -45,6 +45,10 @@ export interface EffectEntry {
    *  shared across different effects; never used as an identity. Null when the
    *  effect has no curated icon (→ the chip shows a text placeholder). */
   icon: string | null;
+  /** Item art of the first owned piece rolling this effect
+   *  (`EquipmentDef.image`, `/img/equipment/<image>.webp`) — the talisman
+   *  chips show it instead of the effect icon. Null when that piece has none. */
+  image: string | null;
   /** Effect display name — pulled from `game.equipmentPassives[itemId].name`
    *  (the canonical effect title like "Destruction"), with a fallback to
    *  the equipment item name and finally the effect key. */
@@ -133,7 +137,8 @@ export function armorSetCatalogFromInventory(inventory: Inventory | null, game: 
 /** Build the per-slot effect palette — only effects the player actually
  *  owns a piece for, gated by the picked hero's class restriction. The
  *  chip's identity is the effect (`setId` = UniqueOptionID); it shows the
- *  effect icon, the one the gear renderer overlays on equipped pieces. */
+ *  effect icon, the one the gear renderer overlays on equipped pieces, or
+ *  for a talisman the item art of the first owned piece (`image`). */
 export function effectCatalogFromInventory(
   inventory: Inventory | null,
   game: GameData | null,
@@ -144,7 +149,7 @@ export function effectCatalogFromInventory(
   // Key on the effect IDENTITY (`setId` = UniqueOptionID), not the icon — the
   // icon is shared across distinct effects (the Recklessness family), so icon-
   // keying collapsed five effects into one chip. Store the icon for display.
-  const map = new Map<string, { icon: string | null; name: string; descT4: string | null; owned: number }>();
+  const map = new Map<string, { icon: string | null; image: string | null; name: string; descT4: string | null; owned: number }>();
   for (const g of inventory.gear) {
     // Use the design SlotId so the comparison is symmetric with the rest
     // of the panels (weapon/accessory happen to match the engine name 1:1
@@ -163,10 +168,10 @@ export function effectCatalogFromInventory(
     const passive = game.equipmentPassives[String(g.itemId)];
     const name = passive?.name ?? def.name ?? def.setId;
     const descT4 = passive?.textByTier?.[4] ?? null;
-    map.set(def.setId, { icon: def.effectIcon ?? null, name, descT4, owned: 1 });
+    map.set(def.setId, { icon: def.effectIcon ?? null, image: def.image ?? null, name, descT4, owned: 1 });
   }
   return Array.from(map.entries())
-    .map(([key, { icon, name, descT4, owned }]) => ({ key, icon, name, descT4, owned }))
+    .map(([key, { icon, image, name, descT4, owned }]) => ({ key, icon, image, name, descT4, owned }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
