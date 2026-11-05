@@ -28,7 +28,7 @@ Harmony **postfixes**, all read-only (`src/Plugin.cs`):
 |------|------|
 | `CWebManager.Log2InternalWeb(string message, string cmd, bool request)` | **Primary.** Called on every successful response with the decrypted JSON and the path (`/user/item`). Path → file name (the files the renderer reads). `request == true` (outgoing) is skipped. |
 | `CWebManager.DecryptMsg(string)` (static) | **Fallback.** The stub above is tiny and Mono's JIT may inline it into its caller, in which case the patch never fires. `DecryptMsg` is too big to inline; its postfix identifies the payload by its **top-level keys** (`ItemList`+`PresetList` → `user_item`, `CharList`+`SlotList` → `user_character`, …) and stays silent once the primary hook has fired. `GiftList` alone is `user_gift` (`CWebRES_GiftInfo`); the PvP start response (`CWebRES_PVPStart`) carries the opponent's `GiftList` next to `TicketData`/`CharList`/`ItemList` and is skipped. |
-| `CWebRES_ItemSell.OnApply(CWebRequestBase _req)`, `CWebRES_ItemDissolve.OnApply`, `CWebRES_ItemLock.OnApply` | **Sale, dissolve and lock** (since 0.5.0; dissolve since 0.5.1). Copies the client's request (`ItemList`; `ItemList`; `ItemUID` + `IsLock`) and writes the journal line for the gesture, see below. A missing class, method or request field logs a warning and leaves that path out (no line at all), nothing else changes. |
+| `CWebRES_ItemSell.OnApply(CWebRequestBase _req)`, `CWebRES_ItemDissolve.OnApply`, `CWebRES_ItemLock.OnApply`, `CWebRES_ItemGemMerge.OnApply` | **Sale, dissolve, lock and gem merge** (since 0.5.0; dissolve since 0.5.1, gem merge since 0.5.4). Copies the client's request (`ItemList`; `ItemList`; `ItemUID` + `IsLock`; `ItemUIDList` + `IsSingle`) and writes the journal line for the gesture, see below. A missing class, method or request field logs a warning and leaves that path out (no line at all), nothing else changes. |
 
 Both targets are resolved **by name at runtime** (`AccessTools.TypeByName`, no reference to
 `Assembly-CSharp.dll`), so a game update that renames them logs an error instead of crashing
@@ -62,6 +62,7 @@ app writes, removing the entry at 0, as the client's `CItemInventory.UpdateItem`
 | `/item/smelting`, `/item/smeltingReset` | `Item` | `srcItem` (the source stack) |
 | `/item/merge` | `getItem` (created) | `useItem` (the source stack) |
 | `/item/craft` | `CraftItemList` (created) | `AdditionItem`, `MaterialItemList` |
+| `/item/customCraft` | `ItemData` (created, `Quantity` forced to 1 as the client does) | — |
 | `/dungeon/complete`, `/mail/getItem` | `RewardList[RT_TOTAL].ItemList` | — |
 | `/dungeon/useSweepTicket` | `RewardList[RT_TOTAL].ItemList` | `ItemData` (the sweep ticket) |
 | `/recruit/equip/recruit` | `RewardList[RT_TOTAL].ItemList` | `UseItemList` (the recruit items) |
@@ -76,13 +77,21 @@ a shop purchase (`/shop/buy`), an event boss (`/event/boss/reward`) or a Monad G
 boss and Monad Gate, whose every entry is applied — as the client's `CItemInventory.CreateItems`),
 or `GetItem` for the shop; the ticket or item the gesture consumed is a simple entry (table above).
 
+Since 0.5.4 a custom craft (`/item/customCraft`) follows too: `CWebRES_ItemCustomCraft` carries
+the piece in `ItemData`, which the client creates with `Quantity` set to 1 (the rest of its
+`OnApply` is the Custom Craft state and the gold, nothing to fold).
+
 Since 0.5.0 a sale and a lock toggle follow too, but their responses don't name the pieces:
 `CWebRES_ItemSell` only carries the new gold (`Asset_0`) and the client removes the pieces from
 its own request (`CWebREQ_ItemSell.ItemList`, uids); `CWebRES_ItemLock` is empty and the client
 reads `ItemUID` / `IsLock` off `CWebREQ_ItemLock`. Since 0.5.1 a dissolve too: `CWebRES_ItemDissolve`
 only carries the materials received (`RewardList`, entries at `ItemUID` 0, no piece) and the client
 removes the pieces from `CWebREQ_ItemDissolve.ItemList` (0.4.0 to 0.5.0 journaled the response alone,
-which names no piece: those lines are skipped). So for these three the line carries the request:
+which names no piece: those lines are skipped). Since 0.5.4 a gem merge too: the client takes the
+merged gems off its own request (`CWebREQ_ItemGemMerge.ItemUIDList`: 1 per uid listed when
+`IsSingle`, a stack of two listed twice; the whole stack otherwise), then creates `UseItemList` (the
+used stacks' new state) and the `ItemList` of the `RT_NORMAL` entry (`1` on the wire) of
+`RewardList` (the gems obtained). So for these four the line carries the request:
 
 | Path | Request journaled | Line written by | The app |
 |------|-------------------|-----------------|---------|
@@ -90,6 +99,7 @@ which names no piece: those lines are skipped). So for these three the line carr
 | `/item/sell` | yes, `{"ItemList":["<uid>",…]}` | `CWebRES_ItemSell.OnApply` | removes each uid (presets included) |
 | `/item/dissolve` | yes, `{"ItemList":["<uid>",…]}` | `CWebRES_ItemDissolve.OnApply` | removes each uid (presets included); the materials received aren't folded |
 | `/item/lock` | yes, `{"ItemUID":"<uid>","IsLock":true}` | `CWebRES_ItemLock.OnApply` | sets the entry's `IsLock` to 1 / 0 |
+| `/item/gemMerge` | yes, `{"ItemUIDList":["<uid>",…],"IsSingle":true}` | `CWebRES_ItemGemMerge.OnApply` | −1 per uid listed (`IsSingle`) or removes each stack, then upserts `UseItemList` and `RewardList[RT_NORMAL].ItemList` (an entry at `Quantity` 0 removes the stack, creates nothing) |
 
 Why not the `request == true` call of `Log2InternalWeb`: the client only makes it on its
 coroutine request path (`CRequestCommand<TReq, TRes>`, with the path spelled `item/sell`), and
@@ -100,7 +110,7 @@ paths writes nothing by itself: it is kept and embedded as `res` in the next lin
 (`{}` when none was seen). So one line per gesture, never a `res`-only line; a request the server
 refused (no `OnApply`) writes nothing either.
 
-`/item/sell/consumable` and the Custom Gear responses (`/item/customUpdate*`) aren't journaled:
+`/item/sell/consumable` and the other Custom Gear responses (`/item/customUpdate*`) aren't journaled:
 the first only sells consumables, the last is out of the solver's scope. A new `/user/item` truncates the journal before its
 snapshot is written (the snapshot is the truth again). The shape fallback has no path, so it
 can't journal: with only the fallback active, moves still wait for the lobby. The hooks only enqueue; disk writes happen on one background writer
@@ -114,7 +124,7 @@ half file.
 |------|--------|-------|
 | `user_item.json`, `user_character.json`, `user_asset.json`, `user_info.json`, `user_lobby.json`, `user_etc.json`, `item_customInfo.json`, `user_archive.json`, `user_gift.json` | `/user/item`, `/user/character`, … `/archive/info`, `/gift/info` | Rewritten on every fetch (lobby load, screen open). |
 | `.captured` | after `/user/item` | Sentinel the app's status endpoint reports. |
-| `equip-events.ndjson` | `/item/equip`, `/item/equipAll`, `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption`, `/item/subOptionChange`, `/item/enchant`, `/item/enchantReset`, `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`, `/item/craft`, `/singularity/loadDeck`, `/worldBoss/loadDeck`, `/guild/raid/loadDeck`, `/irregular/chase/loadDeck`, `/dungeon/complete`, `/dungeon/useSweepTicket`, `/recruit/equip/recruit`, `/mail/getItem`, `/event/boss/reward`, `/monadGate/route/complete`, `/shop/buy`; `/item/sell`, `/item/dissolve`, `/item/lock` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start; one line per sale / dissolve / lock, with the request before the response: `{"seq":n,"at":…,"path":"/item/sell","req":{"ItemList":[…]},"res":{…}}`. Emptied whenever `/user/item` lands. |
+| `equip-events.ndjson` | `/item/equip`, `/item/equipAll`, `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption`, `/item/subOptionChange`, `/item/enchant`, `/item/enchantReset`, `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`, `/item/craft`, `/item/customCraft`, `/singularity/loadDeck`, `/worldBoss/loadDeck`, `/guild/raid/loadDeck`, `/irregular/chase/loadDeck`, `/dungeon/complete`, `/dungeon/useSweepTicket`, `/recruit/equip/recruit`, `/mail/getItem`, `/event/boss/reward`, `/monadGate/route/complete`, `/shop/buy`; `/item/sell`, `/item/dissolve`, `/item/lock`, `/item/gemMerge` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start; one line per sale / dissolve / lock / gem merge, with the request before the response: `{"seq":n,"at":…,"path":"/item/sell","req":{"ItemList":[…]},"res":{…}}`. Emptied whenever `/user/item` lands. |
 | `.equip-events.applied` | written by the **app** | What the app already folded (`first`/`last` seq + the snapshot mtime it left), so a restart doesn't rewrite the snapshot for nothing. |
 | `.steam-plugin.json` | plugin start + every capture | Heartbeat: `{version, pid, startedAt, pathHook, captures, lastPath, lastCaptureAt, outDir}`. The app matches `pid` against the running `OUTERPLANE.exe` to show **Live**. |
 | `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | `KeepUnknown` config (not for the journaled paths); `/account/*` and `/server/*` are ignored. |

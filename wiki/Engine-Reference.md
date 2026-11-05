@@ -29,23 +29,25 @@ once the game has decrypted them:
 - Output: `<capture folder>/{user_item,user_character,…}.json` (`.cache/capture-out` in dev,
   `<userData>/capture-out` packaged). The manual import reads the same files.
 - Changes made in-game (plugin 0.2.0 for gear moves, 0.3.0 for gems and substats, 0.4.0 for
-  upgrades, 0.5.0 for selling and locking, 0.5.1 for dissolving, 0.5.2 for a restored team, 0.5.3 for pieces obtained): the game only re-sends `/user/item` at the lobby, but every move answers `/item/equip`
+  upgrades, 0.5.0 for selling and locking, 0.5.1 for dissolving, 0.5.2 for a restored team, 0.5.3 for pieces obtained, 0.5.4 for custom craft and gem merge): the game only re-sends `/user/item` at the lobby, but every move answers `/item/equip`
   or `/item/equipAll`, a team restored (Lineup Record › Restore Team) answers
   `/singularity/loadDeck`, `/worldBoss/loadDeck`, `/guild/raid/loadDeck` or
   `/irregular/chase/loadDeck` (one equipAll per hero in `ItemEquipAllList`, each with its own
   `CharUID`), socketing, removing or rerolling a gem or changing substats (reforge,
   Transistone) answers `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption` or
   `/item/subOptionChange`, and an upgrade answers `/item/enchant`, `/item/enchantReset`,
-  `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge` or `/item/craft`, and
-  a piece obtained comes with the gesture that gives it — a stage drop `/dungeon/complete`, a sweep
+  `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge` or `/item/craft`, a
+  custom craft answers `/item/customCraft` (the piece in `ItemData`, its `Quantity` forced to 1 as
+  the client does), and a piece obtained comes with the gesture that gives it — a stage drop `/dungeon/complete`, a sweep
   `/dungeon/useSweepTicket`, a gear recruit `/recruit/equip/recruit`, a mail `/mail/getItem`, an
   event boss `/event/boss/reward`, a Monad Gate route `/monadGate/route/complete`, a purchase
   `/shop/buy`; the plugin appends those to `equip-events.ndjson` (one `{ seq, at, path, res }` line per response,
-  emptied on every `/user/item`) — a sale `/item/sell`, a dissolve `/item/dissolve` and a lock
-  toggle `/item/lock` go in with the client's request, which their response doesn't repeat (one
+  emptied on every `/user/item`) — a sale `/item/sell`, a dissolve `/item/dissolve`, a lock
+  toggle `/item/lock` and a gem merge `/item/gemMerge` go in with the client's request, which their
+  response doesn't repeat (one
   `{ seq, at, path, req, res }` line per gesture, written from `CWebRES_ItemSell.OnApply` /
-  `CWebRES_ItemDissolve.OnApply` / `CWebRES_ItemLock.OnApply`, the response seen for that path as
-  `res`) —, and the app folds them into `user_item.json` on every
+  `CWebRES_ItemDissolve.OnApply` / `CWebRES_ItemLock.OnApply` / `CWebRES_ItemGemMerge.OnApply`, the
+  response seen for that path as `res`) —, and the app folds them into `user_item.json` on every
   `GET /api/capture/status` (polled every 5 s) — `foldEquipEvents` in
   [equip-events.ts](https://github.com/Sevih/gear-solver/blob/main/apps/desktop/src/equip-events.ts),
   by uid: moves rewrite `CharUID`; the others carry, per the `ITEM_FIELDS` table (by path), whole
@@ -64,10 +66,15 @@ once the game has decrypted them:
   dissolve folds each uid of `req.ItemList` as a simple entry at 0 (removed, presets included) —
   the `item/dissolve` response only carries the materials received (`RewardList`, `ItemUID` 0),
   which aren't pieces and aren't folded —, a lock sets the `IsLock` of the `req.ItemUID` entry to 1
-  or 0 from `req.IsLock`; such a line without `req` is skipped (so a dissolve journaled by a 0.5.0
+  or 0 from `req.IsLock`, a gem merge follows `CWebRES_ItemGemMerge.OnApply`'s order: each uid of
+  `req.ItemUIDList` loses 1 when `req.IsSingle` (a stack listed twice loses 2), else the whole stack
+  leaves, then `UseItemList` (the used stacks' new state) and the `ItemList` of the first
+  `RT_NORMAL` (1) entry of `RewardList` (the gems obtained) as whole items, the way
+  `CItemInventory.CreateItem` does (an entry at `Quantity` 0 removes the stack held and creates
+  nothing); such a line without `req` is skipped (so a dissolve journaled by a 0.5.0
   plugin waits for the lobby). A gain response without any piece (gold only, a hero bought) and a
-  gain entry at uid 0 don't count as skipped. `item/sell/consumable` and Custom Gear aren't
-  followed. What the app already folded is noted in
+  gain entry at uid 0 don't count as skipped. `item/sell/consumable` and the rest of Custom Gear
+  (`/item/customUpdate*`) aren't followed. What the app already folded is noted in
   `.equip-events.applied`.
 
 Files: [Plugin.cs](https://github.com/Sevih/gear-solver/blob/main/tools/capture-steam/src/Plugin.cs),
@@ -879,15 +886,19 @@ Heroes tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/heroPicker.test.ts` | 12 tests — one hero picker (U10a): static render of `HeroPicker` in `single` (the picked hero's displayed name, closed; open, one row per hero with a portrait, a Core Fusion hero's fused portrait, the picked one `aria-selected`) and in `multi` (label, "N selected" and ✕ only once something is ticked; open, checkboxes ticked for the picked heroes, portraits); `heroSearchHaystack` / `heroMatches` (a fused hero found under its displayed name and its base sheet's nickname, "fusion", empty query, no data); `heroListOrder` (rank then CP then capture, unranked after ranked, no CP after those with one, stable ties, CP only, input left untouched) |
 | `apps/renderer/test/tabs.test.ts` | 5 tests — tab names (U11, U13): `parseTab` (a stored `gs.tab` "Builds" / "Builder" / "Inventory" / "Home" → Heroes / Optimizer / Gear / Heroes, a current tab unchanged, `null` / "nope" / "Debug" / `42` / "toString" → Heroes); static render of `GsHeader`: the five labels in order Heroes, Optimizer, Presets, Worklist, Gear, none of the former ones nor "Home" |
 | `apps/renderer/test/gearScreen.test.ts` | 10 tests — Gear tab (U13), static render of `GearScreen`: without an inventory the first-capture steps ("No account captured yet") whatever the view; with a two-piece inventory, the bar Overview, Pieces, Scrap in order, Overview with "Gear quality distribution", Roster and Gear breakdown but no "Account snapshot", "Library" nor "System health"; Pieces with All / Gear / Special Gear; Scrap with the "Scrap candidates" link and the line for tables without scrap prices; `scrapDefaultFilters()` equal to `[SCRAP_CANDIDATES' filters]`, or to the filters of the set chosen with Use for Scrap (`gs.gear.scrap.default`) whose name the link then carries, two sets → two rules and the link `Scrap candidates + <name>`, the link's `title` ("Back to the filters Gear › Scrap opens on", plus the built-in's description); the rule chips (`1 · <label>`, `+ Rule`, `×` and "Pieces matching any rule" only from two rules on, nothing on Pieces); `BuildsScreen` without an inventory shows `FirstCapture` |
-| `apps/renderer/test/scrapRules.test.ts` | 10 tests — Gear › Scrap's rules (`lib/inventory/scrapRules.ts`): `matchesAnyRule` (a 6★ 3/3/2/0 and a 5★ 2/2/1/0 pass "6★, not ≥ 3/3/3/X" or "5★", a 6★ 3/3/3/0 or 4/4/4/4 passes neither; one rule = `matchesFilters`), `RULES_CODEC` (an array round-trips, a single object — the old format — reads as one rule, empty, unreadable or holding no object → the Scrap default's rules), `ruleLabel` (`SCRAP_CANDIDATES`' filters → `5★ 6★ · not ≥ 3/3/3/X · unequipped · +0 · T0 · not reforged`, empty → `All pieces`, one stat by name, several by count, the search last), `setRule` / `addRule` / `removeRule` (removing the last rule → `[emptyFilters()]`), `clampRuleIndex` |
+| `apps/renderer/test/scrapRules.test.ts` | 11 tests — Gear › Scrap's rules (`lib/inventory/scrapRules.ts`): `matchesAnyRule` (a 6★ 3/3/2/0 and a 5★ 2/2/1/0 pass "6★, not ≥ 3/3/3/X" or "5★", a 6★ 3/3/3/0 or 4/4/4/4 passes neither; one rule = `matchesFilters`), `RULES_CODEC` (an array round-trips, a single object — the old format — reads as one rule, empty, unreadable or holding no object → the Scrap default's rules), `ruleLabel` (`SCRAP_CANDIDATES`' filters → `5★ 6★ · not ≥ 3/3/3/X · unequipped · +0 · T0 · not reforged`, empty → `All pieces`, one stat by name, several by count, the search last; the +15 passives by short label joined by ` / `, then ` ≥ <grade>` unless C — `DS DMG+ ≥ A`), `setRule` / `addRule` / `removeRule` (removing the last rule → `[emptyFilters()]`), `clampRuleIndex` |
 | `apps/renderer/test/overviewSets.test.ts` | 2 tests — Gear › Overview (`computeStats` of `lib/gear/overviewStats.ts`): the top sets and the catalog carry the numeric `armorSetId` (the click to Pieces filters on it), with or without game data |
 | `apps/renderer/test/overviewQualityBar.test.ts` | 3 tests — Gear › Overview quality bar (G107, `QualityBar`): five `button`s with the tier buttons' proportions, colors and `title`, inert at `count === 0`, a click calls `onDrill({ quality })` for its slice; without `onDrill` all inert, the `title` reduced to the hint |
-| `apps/renderer/test/builderToolbar.test.ts` | 3 tests — Optimizer toolbar rows (G107): row 1 in `flex-wrap`, Score \| CP, Solve, Filter (and ✕) then the seven popovers in an `ml-auto` group; row 2 Reforge, Maxed only, Transistone potential and reset filters, no popover |
+| `apps/renderer/test/builderToolbar.test.ts` | 4 tests — Optimizer toolbar rows (G107): row 1 in `flex-wrap`, Score \| CP, Solve, Filter (and ✕) then the seven popovers in an `ml-auto` group; row 2 Reforge, Maxed only, Transistone potential and reset filters, no popover; the Effects badge counts the +15 passive picks of the three groups with the effects (G114) |
 | `apps/renderer/test/presetOptimize.test.ts` | 9 tests — "Optimize preset →": `presetOptimizePatch` (the weapon's, accessory's and talisman's effects `required`, the talisman widened to its family; a piece missing or without an effect → slot left open and a note; substats from the outfit alone 4+/3/2 pieces → 3/2/1, talisman and EE aside; merged with the reco, max of the weights, reco first then piece count, cut at 5; empty outfit without a reco → no priority; mains from the reco only, empty `setPlans`; merged by `mergePreset`: bands kept, sets open); `presetOptimizeNote` (with and without a reco) |
 | `apps/renderer/test/presetsOvercap.test.ts` | 9 tests — wasted caps: `overcapOf` (the rule shared by Heroes / Presets: nothing under the caps, nothing at 102 crit exactly nor at 100 PEN, raw crit 142 with `critRate` bounded at 100 → 40 wasted and the Heroes text, fallback on `critRate` without the raw sum, PEN 120 → 20, two axes crit first); `presetOvercap` (warning tone from `OVERCAP_WARN_PTS`, no evaluation → nothing, the proposed EE gems' share vs as socketed) |
 | `apps/renderer/test/critCell.test.ts` | 7 tests — raw crit past 100 in the Optimizer: `critCellParts` (raw 142 → `{ shown: 100, over: 42 }`, 100 exactly and under the bound → `over` 0, rounded to 0.1, fallback on `critRate` without the raw sum); `critCellTitle` (142 → 40 wasted over the 102 tolerance, 101.5 → within the buffer, nothing under 100); `computeColumnRanges` (crit heatmap range read on the raw sum: 80 → 142) |
 | `apps/renderer/test/deltaCp.test.ts` | 2 tests — `deltaCpLabel`: reforge `Off` → bare `ΔCP ±X`, no tooltip; active mode → `vs equipped (build at <mode>)` + tooltip |
 | `apps/renderer/test/talismanPreferred.test.ts` | 8 tests — `talismanEffectPicks` on the real contract (`precomputeContext`): owned preferred → pool narrowed to it (variants included; the advice's family: only a 5★ owned → it, no member → whole pool), not owned or dropped by another filter (class, "equipped" scope) → whole pool, unowned `required` → empty pool, `excluded`, keep current locked, absent field → whole pool |
+| `apps/renderer/test/singularityPassives.test.ts` | 7 tests — +15 passives (`lib/singularityPassives.ts`, G114): grades `C < B < A < S < S+` and `gradeAtLeast`, `passiveOf` on a real option (300137 → DS family, grade A; 300147 → S+), family trimmed (the table's "DMG Increase to target" ends with a space), a desc without a letter → grade null, no name → null; `passiveOfGearPiece` / `passiveOfUiPiece` (none below +15); `passiveGroupOf` (armor = four pieces, talisman and EE → null); the table's 15 families in its order, each with a short label and all five grades |
+| `apps/renderer/test/passivePicks.test.ts` | 6 tests — `passivePicks` on the real contract (`precomputeContext`, G114): three weapons DS DMG+ A, DS DMG+ B and no passive — `required` minGrade A → the first only, C → the first two, never the one without a passive; `excluded` → the third only; two `required` = OR, each at its grade; a `required` on Armor leaves the weapons alone and empties the helmets without a passive; absent field → whole pool; `poolSizes[slot].passiveExcluded` counted |
+| `apps/renderer/test/inventoryPassives.test.ts` | 6 tests — Gear › Filter's "+15 passive" section (`matchesFilters`, G114): a ticked family at C → all its grades, never a piece without a passive; minimum grade A → A and better; OR between families; no pill = inactive, grade included (`activeFilterCount` 0, 1 for the section); `FILTER_CODEC` (round-trip, absent fields → none at C, unknown grade → C) |
+| `apps/renderer/test/effectsPassivePanel.test.ts` | 4 tests — Optimizer › Effects' "+15 passive" line (G114): `passiveCatalogFromInventory` (per group, only the families carried, table order, owned count); static render of the panel: one chip per family, Armor block "no +15 passive" when empty, `Minimum grade for <label>` selector on a `required` chip only, `excluded` struck through, a picked family nothing carries any more kept |
 | `apps/renderer/test/heroTracker.test.ts` | 11 tests — `buildHeroTrackerExport` (outerpedia hero-tracker export): versioned envelope keyed by base hero id, level/affinity resolved from the XP curves (floors lv5 / aff 1), EE level taken from the owned EE item (best copy, non-EE gear ignored), fused hero under its base id + nested `core_fusion` block (omitted when unfused, tier 1 when the level is missing), `transcend_star` clamped to base rarity and out-of-range values clamped, unknown hero still exported |
 
 Run: `npm test --workspaces --if-present`. **Total: 300 tests** (core 22: parse 11 + equip 11 · renderer 278: solver 95, solveChunk 4, gemsCapped 16, setPlans 26, transfer 8, translateReco 10, workerCount 7, worklistPlan 11, subValue 5, dmgValue 4, buildAdvice 16, cpPrune 23, heroPriority 21, dominance 10, statRegistry 11, heroTracker 11).

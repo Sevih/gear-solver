@@ -19,8 +19,8 @@ namespace GearSolverCapture
     /// Gear Solver capture source for the OUTERPLANE Steam client.
     ///
     /// The game talks to its servers through <c>CWebManager</c> (BestHTTP/2 +
-    /// a repeating-key XOR on the body). Two hooks, both read-only, plus two
-    /// for the gestures whose response doesn't name the pieces (3):
+    /// a repeating-key XOR on the body). Two hooks, both read-only, plus one
+    /// per gesture whose response doesn't name the pieces (3):
     ///
     ///  1. <c>CWebManager.Log2InternalWeb(string message, string cmd, bool request)</c>
     ///     — an empty logging stub the devs left in, called on every successful
@@ -31,11 +31,14 @@ namespace GearSolverCapture
     ///     is tiny and Mono's JIT may inline it into its caller), we identify the
     ///     payload by its top-level keys instead of the path.
     ///  3. <c>CWebRES_ItemSell.OnApply(CWebRequestBase _req)</c>,
-    ///     <c>CWebRES_ItemDissolve.OnApply</c> and <c>CWebRES_ItemLock.OnApply</c>
-    ///     — a sale only returns the new gold, a dissolve the materials it gave
-    ///     and a lock toggle nothing: the client applies its own REQUEST
+    ///     <c>CWebRES_ItemDissolve.OnApply</c>, <c>CWebRES_ItemLock.OnApply</c>
+    ///     and <c>CWebRES_ItemGemMerge.OnApply</c>
+    ///     — a sale only returns the new gold, a dissolve the materials it gave,
+    ///     a lock toggle nothing and a gem merge not the stacks it consumed: the
+    ///     client applies its own REQUEST
     ///     (<c>CWebREQ_ItemSell.ItemList</c>, <c>CWebREQ_ItemDissolve.ItemList</c>,
-    ///     <c>CWebREQ_ItemLock.ItemUID</c> / <c>IsLock</c>). Hook 1 can't see
+    ///     <c>CWebREQ_ItemLock.ItemUID</c> / <c>IsLock</c>,
+    ///     <c>CWebREQ_ItemGemMerge.ItemUIDList</c> / <c>IsSingle</c>). Hook 1 can't see
     ///     it: its <c>request == true</c> call only exists on the coroutine
     ///     request path, and these gestures go
     ///     through the callback one (<c>CNetwork.Request(req, callback)</c>).
@@ -49,7 +52,7 @@ namespace GearSolverCapture
     /// Output mirrors tools/capture/addon.py: <c>user_item.json</c>,
     /// <c>user_character.json</c>, … plus a <c>.captured</c> sentinel once the
     /// inventory landed, an <c>equip-events.ndjson</c> journal of the gear moves,
-    /// gem, substat and upgrade changes, sales, dissolves and lock toggles made in-game
+    /// gem, substat and upgrade changes, sales, dissolves, lock toggles and gem merges made in-game
     /// since the last <c>/user/item</c>,
     /// unknown endpoints under
     /// <c>_unknown/</c>, and a <c>.steam-plugin.json</c> heartbeat the desktop
@@ -60,7 +63,7 @@ namespace GearSolverCapture
     {
         public const string Id = "outerpedia.gearsolver.capture";
         public const string Name = "Gear Solver Capture";
-        public const string Version = "0.5.3";
+        public const string Version = "0.5.4";
 
         internal static ManualLogSource Log;
 
@@ -109,7 +112,7 @@ namespace GearSolverCapture
         internal static volatile bool PathHookFired;
 
         /// <summary>Request fields the OnApply hooks copy (null = not hooked).</summary>
-        private static PropertyInfo _sellItemList, _dissolveItemList, _lockItemUID, _lockIsLock;
+        private static PropertyInfo _sellItemList, _dissolveItemList, _lockItemUID, _lockIsLock, _gemMergeItemUIDList, _gemMergeIsSingle;
 
         public static void Apply()
         {
@@ -149,6 +152,11 @@ namespace GearSolverCapture
             _lockIsLock = RequestProperty("CWebREQ_ItemLock", "IsLock");
             if (!HookOnApply(harmony, "CWebRES_ItemLock", "/item/lock", nameof(AfterItemLockApply), _lockItemUID != null && _lockIsLock != null))
                 _lockItemUID = _lockIsLock = null;
+            _gemMergeItemUIDList = RequestProperty("CWebREQ_ItemGemMerge", "ItemUIDList");
+            _gemMergeIsSingle = RequestProperty("CWebREQ_ItemGemMerge", "IsSingle");
+            if (!HookOnApply(harmony, "CWebRES_ItemGemMerge", "/item/gemMerge", nameof(AfterItemGemMergeApply),
+                    _gemMergeItemUIDList != null && _gemMergeIsSingle != null))
+                _gemMergeItemUIDList = _gemMergeIsSingle = null;
         }
 
         private static PropertyInfo RequestProperty(string type, string name)
@@ -243,6 +251,21 @@ namespace GearSolverCapture
             }
         }
 
+        private static void AfterItemGemMergeApply(object _req)
+        {
+            try
+            {
+                var list = _gemMergeItemUIDList.GetValue(_req, null) as IEnumerable<string>;
+                var isSingle = _gemMergeIsSingle.GetValue(_req, null);
+                if (list == null || !(isSingle is bool)) return;
+                Sink.CaptureRequest("/item/gemMerge", new { ItemUIDList = new List<string>(list), IsSingle = (bool)isSingle });
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError($"ItemGemMerge.OnApply hook: {e}");
+            }
+        }
+
         private static void AfterDecryptMsg(string __result)
         {
             try
@@ -283,8 +306,8 @@ namespace GearSolverCapture
         /// at the lobby; the equip responses say which piece left or joined which
         /// hero, the gem / substat ones carry the whole updated item (and the gem
         /// item, for a removal or a reroll), the upgrade ones (enhance, reset,
-        /// limit break, smelting, merge, craft) the improved or created
-        /// items and the new count of the stacks they consume. A team restored
+        /// limit break, smelting, merge, craft, custom craft) the improved or
+        /// created items and the new count of the stacks they consume. A team restored
         /// from Lineup Record (<c>/singularity/loadDeck</c>, <c>/worldBoss/loadDeck</c>,
         /// <c>/guild/raid/loadDeck</c>, <c>/irregular/chase/loadDeck</c>) re-equips
         /// several heroes at once: one equipAll per hero in <c>ItemEquipAllList</c>.
@@ -310,6 +333,7 @@ namespace GearSolverCapture
             "/item/smeltingReset",
             "/item/merge",
             "/item/craft",
+            "/item/customCraft",
             "/singularity/loadDeck",
             "/worldBoss/loadDeck",
             "/guild/raid/loadDeck",
@@ -326,7 +350,7 @@ namespace GearSolverCapture
 
         /// <summary>Gestures journaled WITH the client's request, one line per
         /// gesture written by the OnApply hook (<c>{ seq, at, path, req, res }</c>):
-        /// <c>/item/sell</c>, <c>/item/dissolve</c>, <c>/item/lock</c> (filled by <see cref="TrackRequest"/>
+        /// <c>/item/sell</c>, <c>/item/dissolve</c>, <c>/item/lock</c>, <c>/item/gemMerge</c> (filled by <see cref="TrackRequest"/>
         /// for each hook that took). Their response alone writes nothing: it is
         /// kept for the next line of its path. Never in <see cref="Journal"/>.</summary>
         private static readonly HashSet<string> WithRequest = new HashSet<string>(StringComparer.Ordinal);
@@ -446,7 +470,7 @@ namespace GearSolverCapture
             WithRequest.Add(path);
         }
 
-        /// <summary>A sale, dissolve or lock the client just applied: one journal line
+        /// <summary>A sale, dissolve, lock or gem merge the client just applied: one journal line
         /// with its request and the response seen for it (<c>{}</c> if none).</summary>
         public static void CaptureRequest(string path, object req)
         {

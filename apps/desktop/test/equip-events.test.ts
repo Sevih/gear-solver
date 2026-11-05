@@ -619,6 +619,102 @@ describe("foldEquipEvents — pieces obtained (drop, sweep, recruit, mail, event
   });
 });
 
+describe("foldEquipEvents — custom craft and gem merge", () => {
+  const GA = "6500000001"; // gem stack, 3
+  const GB = "6500000002"; // gem stack, 1
+  const GC = "6500000003"; // gem stack, 2
+  const OUT1 = "6500000101"; // gem obtained
+  const OUT2 = "6500000102"; // gem obtained
+  const CUSTOM = "6500000201"; // custom gear piece crafted
+  const gem = (ItemUID: string, Quantity: number, ItemID = 50001) => ({ ItemUID, CharUID: "0", ItemID, Quantity, InvenType: 0 });
+  const base = () => ({
+    ItemList: [...snapshot().ItemList, gem(GA, 3), gem(GB, 1), gem(GC, 2)],
+    PresetList: [{ Num: 1 }],
+  });
+  const uids = (raw: { ItemList: Array<{ ItemUID: string }> }) => raw.ItemList.map((it) => it.ItemUID);
+  const reward = (RewardType: number, ItemList: unknown[]) => ({ RewardType, UserExp: 0, ItemList, AssetList: [], CharList: [] });
+  const merge = (seq: number, IsSingle: boolean, ItemUIDList: string[], res: Record<string, unknown>): EquipEvent =>
+    ({ seq, path: "/item/gemMerge", req: { ItemUIDList, IsSingle }, res });
+
+  it("customCraft: the piece joins the end of ItemList with all its fields, at Quantity 1", () => {
+    const piece = wire(CUSTOM, 0, 9101, [160001, 160002, 0, 0, 0], { Quantity: 0 });
+    const res = { ItemCustomData: {}, ItemData: piece, ItemCustomResetTime: "2026-11-06T00:00:00Z", Asset_0: 1000 };
+    const { next, applied, skipped } = foldEquipEvents(base(), [{ seq: 1, path: "/item/customCraft", res }]);
+    expect(uids(next)).toEqual([...uids(base()), CUSTOM]);
+    expect(next.ItemList.at(-1)).toEqual({ ...piece, CharUID: "0", Quantity: 1 });
+    expect([applied, skipped]).toEqual([1, 0]);
+  });
+
+  it("gemMerge single: two stacks lose 1 (0 = gone), UseItemList sets the other's new count, the RT_NORMAL gem joins", () => {
+    const res = {
+      RewardList: [reward(0, [gem(OUT2, 1, 50002)]), reward(1, [gem(OUT1, 1, 50002)])],
+      UseItemList: [gem(GA, 2)],
+      ResultInfoList: [],
+      Asset_0: 1,
+    };
+    const { next, applied, skipped } = foldEquipEvents(base(), [merge(1, true, [GA, GB], res)]);
+    expect(byUid(next, GB)).toBeUndefined();
+    expect(byUid(next, GA)).toEqual(gem(GA, 2));
+    expect(byUid(next, GC)).toEqual(gem(GC, 2));
+    expect(byUid(next, OUT1)).toEqual(gem(OUT1, 1, 50002));
+    expect(byUid(next, OUT2)).toBeUndefined(); // the RT_TOTAL entry isn't applied
+    expect(next.ItemList.at(-1)).toMatchObject({ ItemUID: OUT1 });
+    expect([applied, skipped]).toEqual([3, 0]);
+  });
+
+  it("gemMerge single on one stack listed twice: it loses 2 before UseItemList", () => {
+    const res = { RewardList: [reward(1, [gem(OUT1, 1, 50002)])], UseItemList: [] };
+    const { next, applied, skipped } = foldEquipEvents(base(), [merge(1, true, [GA, GA], res)]);
+    expect(byUid(next, GA)).toEqual(gem(GA, 1));
+    expect([applied, skipped]).toEqual([2, 0]);
+  });
+
+  it("gemMerge total: each uid of the request leaves, the gems obtained join", () => {
+    const res = { RewardList: [reward(1, [gem(OUT1, 1, 50002), gem(OUT2, 2, 50003)])], UseItemList: [], Asset_0: 1 };
+    const { next, applied, skipped } = foldEquipEvents(base(), [merge(1, false, [GA, GB, GC], res)]);
+    expect(uids(next)).toEqual([...uids(snapshot()), OUT1, OUT2]);
+    expect(byUid(next, OUT2)).toEqual(gem(OUT2, 2, 50003));
+    expect([applied, skipped]).toEqual([5, 0]);
+  });
+
+  it("gemMerge total: a leftover stack comes back through UseItemList, one at 0 isn't created", () => {
+    const res = { RewardList: [reward(1, [gem(OUT1, 1, 50002)])], UseItemList: [gem(GA, 1), gem(GC, 0)] };
+    const { next, applied, skipped } = foldEquipEvents(base(), [merge(1, false, [GA, GC], res)]);
+    expect(byUid(next, GA)).toEqual(gem(GA, 1));
+    expect(byUid(next, GC)).toBeUndefined();
+    expect(byUid(next, GB)).toEqual(gem(GB, 1));
+    expect([applied, skipped]).toEqual([3, 0]);
+  });
+
+  it("gemMerge: an uid the snapshot lacks is skipped; a line without a usable req is skipped whole", () => {
+    const res = { RewardList: [reward(1, [gem(OUT1, 1, 50002)])], UseItemList: [] };
+    const missing = foldEquipEvents(base(), [merge(1, false, [GB, "6599999999"], res)]);
+    expect(byUid(missing.next, GB)).toBeUndefined();
+    expect(byUid(missing.next, OUT1)).toBeDefined();
+    expect([missing.applied, missing.skipped]).toEqual([2, 1]);
+    const raw = base();
+    const noReq = foldEquipEvents(raw, [
+      { seq: 1, path: "/item/gemMerge", res },
+      { seq: 2, path: "/item/gemMerge", req: { ItemUIDList: [GA] }, res },
+      { seq: 3, path: "/item/gemMerge", req: { ItemUIDList: GA, IsSingle: true }, res },
+    ]);
+    expect(noReq.next).toEqual(raw);
+    expect([noReq.applied, noReq.skipped]).toEqual([0, 3]);
+  });
+
+  it("is idempotent when UseItemList carries the used stacks: a replay changes nothing", () => {
+    const events: EquipEvent[] = [
+      { seq: 1, path: "/item/customCraft", res: { ItemData: wire(CUSTOM, 0, 9101, [160001, 0, 0, 0, 0]) } },
+      merge(2, true, [GA, GC], { RewardList: [reward(1, [gem(OUT1, 1, 50002)])], UseItemList: [gem(GA, 2), gem(GC, 1)] }),
+      merge(3, false, [GB], { RewardList: [reward(1, [gem(OUT2, 1, 50003)])], UseItemList: [] }),
+    ];
+    const once = foldEquipEvents(base(), events);
+    const twice = foldEquipEvents(once.next, events);
+    expect(twice.next).toEqual(once.next);
+    expect(twice.applied).toBe(0);
+  });
+});
+
 describe("parseEquipJournal", () => {
   it("reads complete lines only and drops malformed ones", () => {
     const text = [

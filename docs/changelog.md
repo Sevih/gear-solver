@@ -8,6 +8,68 @@
 
 ## Items de backlog clôturés (index)
 
+### 💎 Capture : custom craft et fusion de gemmes pliés dans le snapshot (plugin 0.5.4) (G113) (2026-11-05)
+- ✅ **Pourquoi.** Suite de G112 : deux réponses du client créaient encore des objets sans être journalisées, le
+  custom craft (`item/customCraft`) et la fusion de gemmes (`item/gemMerge`). Lu dans le client avant de coder :
+  `CWebRES_ItemCustomCraft.OnApply` réinitialise l'état du Custom Craft (`CFacilityManager.CustomCraft.Init`), pose
+  l'or (`Asset_0`), force `ItemData.Quantity = 1` puis `CreateItem(ItemData)` ; aucun autre objet n'est mis à jour
+  (ni `UpdateItem` ni `UpdateItems`), donc aucune entrée simple à plier. `CWebRES_ItemGemMerge.OnApply`, lui, retire
+  les gemmes fusionnées d'après sa REQUÊTE (`CWebREQ_ItemGemMerge.ItemUIDList` + `IsSingle`) : en fusion simple
+  (`CUIGemNormalMergeItem`, deux uids, le même deux fois pour une pile d'au moins deux) chaque uid perd 1 par
+  `CItem.UpdateQuantity`, en fusion totale (`CUIGemTotalMergeItem`) chaque pile part par `RemoveItem` ; puis
+  `CreateItems(UseItemList)` et `CPlayer.SetRewardList` sur la première entrée `RT_NORMAL` de `RewardList`, qui fait
+  `CreateItems` de son `ItemList`. Contrairement à ce que supposait le lot, `UseItemList` n'est donc pas la liste des
+  gemmes obtenues mais, selon toute vraisemblance, le nouvel état des piles utilisées (en simple, le client laisse
+  une pile à 0 jusqu'à ce `CreateItem` → `UpdateItem` qui la retire ; en totale, il recrée le reliquat impair) ;
+  les gemmes obtenues sont dans `RewardList[RT_NORMAL].ItemList`. Bloqué sur ce point, décision de Sevih du 05/11 :
+  journaliser `gemMerge` avec sa requête comme vente / désassemblage / verrou, et plier dans l'ordre du client.
+- ✅ **Plugin 0.5.4** (`Plugin.cs` + `GearSolverCapture.csproj`) : `/item/customCraft` rejoint `Journal` ;
+  `/item/gemMerge` passe par le mécanisme des gestes avec requête : `HookOnApply` sur `CWebRES_ItemGemMerge`
+  (`AfterItemGemMergeApply`, champs `ItemUIDList` / `IsSingle` lus par réflexion, `TrackRequest("/item/gemMerge")`),
+  une ligne `{ seq, at, path, req: { ItemUIDList, IsSingle }, res }` par fusion ; il n'est pas dans `Journal`
+  (jamais de ligne `res` seule). En-tête du plugin (« plus one per gesture » au lieu de « plus two », qui ne
+  comptait déjà plus les trois hooks), commentaires de `Journal`, `WithRequest` et `CaptureRequest` à jour.
+- ✅ **Pli** (`apps/desktop/src/equip-events.ts`). `ItemFields` gagne `reward: "normal"` (la PREMIÈRE entrée dont
+  `RewardType` vaut `RT_NORMAL`, `1` sur le fil, deuxième membre de `REWARD_TYPE.cs`, nom accepté aussi, comme le
+  `RewardList.Find` du client) et `quantity` (la `Quantity` que le client impose aux upserts avant `CreateItem`).
+  `/item/customCraft` → `{ upsert: ["ItemData"], quantity: 1 }`. `/item/gemMerge` → `{ upsert: ["UseItemList"],
+  reward: "normal" }`, traité dans un bloc dédié de `foldEquipEvents` (comme `/item/lock`) qui lit la requête
+  (`gemMergeOf`) et l'applique AVANT les upserts : −1 par uid listé si `IsSingle`, pile entière sinon ; puis
+  `UseItemList` et les gemmes obtenues à la manière de `CItemInventory.CreateItem` (un upsert à `Quantity` 0 retire
+  la pile tenue et ne crée rien, sinon l'upsert habituel). Une pile que la requête vide reste en place à 0 jusqu'à
+  la fin des upserts et ne part qu'ensuite si `UseItemList` ne l'a pas rendue : même état final que l'ordre du
+  client, mais une pile rendue garde sa position au lieu de repasser en fin de liste à chaque rejeu. Une fusion
+  totale pousse ses uids dans les retraits des presets même rendus (`RemoveItem` → `DeletePresetEquipUID`), une
+  simple seulement si la pile finit à 0. Un uid absent du snapshot (ou une pile sans `Quantity` entière en simple)
+  compte un saut ; une ligne sans requête lisible (`req` absent, `ItemUIDList` non tableau, `IsSingle` non booléen)
+  compte un saut entier, comme vente / désassemblage. `gain` non posé sur les deux chemins : un custom craft donne
+  toujours sa pièce et une fusion consomme toujours des gemmes, une réponse sans rien à plier n'est pas un cas
+  normal. Pour le reste, les deux tranches de `foldEquipEvents` partagent deux fermetures (`upsert`,
+  `setQuantity`) au lieu du code en ligne, sans changement de comportement (les 51 tests existants passent tels
+  quels). En-tête du fichier : les deux chemins, la requête de `gemMerge` et le pas relatif de la fusion simple.
+- ✅ **Tests** (`apps/desktop/test/equip-events.test.ts`, bloc « custom craft and gem merge », 7 tests) :
+  `customCraft` → la pièce en fin d'`ItemList` avec tous ses champs à `Quantity` 1, `applied` 1 ; fusion simple →
+  deux piles à −1 (l'une à 0 disparaît), `UseItemList` remet l'autre à son nouvel état, la gemme `RT_NORMAL` ajoutée
+  et celle de `RT_TOTAL` non, `applied` 3 / `skipped` 0 ; une pile listée deux fois perd 2 ; fusion totale → les
+  uids retirés, les gemmes obtenues ajoutées (`applied` 5) ; reliquat rendu par `UseItemList`, entrée à 0 non créée ;
+  uid absent → un saut, lignes sans `req` / `IsSingle` / `ItemUIDList` tableau → trois sauts, snapshot intact ;
+  rejeu idempotent quand `UseItemList` porte les piles utilisées.
+- ✅ **Docs** : README du plugin (table des hooks, ligne `/item/customCraft` de la table des champs, paragraphe
+  « Since 0.5.4 », ligne `/item/gemMerge` de la table des gestes avec requête, table Output), `wiki/Capture-Pipeline.md`,
+  `docs/reference.md` + `wiki/Engine-Reference.md` (chemins, versions, pli de la fusion, « le reste du Custom Gear »).
+- ✅ **Vérifié** : `dotnet build tools/capture-steam -c Release` → « 0 Erreur(s) » (0 avertissement) ;
+  `npm run typecheck` → `tsc --noEmit` sans sortie, code 0 ; `npm test` → « Tests  1173 passed (1173) » (dont
+  `equip-events.test.ts` 58 tests) ; `npm run lint` → « ✖ 7 problems (0 errors, 7 warnings) », aucun dans les
+  fichiers de ce lot (tous dans `apps/renderer/src`).
+- ⏳ Sevih sur le fixe (plugin 0.5.4 par Settings › Setup › Update plugin jeu fermé, ou la prochaine build
+  privée) : un custom craft, une fusion simple et une fusion totale → la pièce ou les gemmes dans Gear sans repasser
+  au lobby, et les piles consommées au bon compte. À regarder dans la ligne `/item/gemMerge` d'`equip-events.ndjson` :
+  `UseItemList` porte-t-il bien les piles utilisées (avec leur nouveau compte, 0 compris) ? Sinon, en fusion simple,
+  le −1 d'une pile absente d'`UseItemList` serait rejoué à chaque nouvelle ligne du journal jusqu'au lobby (le
+  follower rejoue tout le journal sur le snapshot déjà plié), et il faudra revoir le pli.
+- ⏳ Suites possibles, hors périmètre : `item/craftConsume` et `item/craftRecycle` (matériaux et assets seulement),
+  `remains/move`, `character/recall`, `character/trustEnchant`.
+
 ### 🎁 Capture : les pièces obtenues en jeu entrent dans Gear sans repasser au lobby (plugin 0.5.3) (G112) (2026-11-05)
 - ✅ **Pourquoi.** Demande de Sevih du 05/11 : l'inventaire ne bougeait pas quand une pièce était obtenue en jeu
   (drop de fin de stage, sweep, invocation d'équipement, courrier, boutique) ; il fallait attendre le `/user/item`

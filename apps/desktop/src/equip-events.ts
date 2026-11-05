@@ -9,7 +9,8 @@
  * `item/gemInsert`, `item/gemRemove`, `item/gemChangeOption` or
  * `item/subOptionChange`, and an upgrade as `item/enchant`, `item/enchantReset`,
  * `item/breakLimit`, `item/smelting`, `item/smeltingReset`, `item/merge`,
- * `item/craft`. A piece obtained comes back with the gesture that gave it: a
+ * `item/craft`, a custom gear piece crafted as `item/customCraft` (the piece
+ * in `ItemData`, its `Quantity` forced to 1 as the client does). A piece obtained comes back with the gesture that gave it: a
  * stage drop as `dungeon/complete`, a sweep as `dungeon/useSweepTicket`, a gear
  * recruit as `recruit/equip/recruit`, a mail as `mail/getItem`, an event boss
  * as `event/boss/reward`, a Monad Gate route as `monadGate/route/complete`, a
@@ -17,13 +18,17 @@
  * for the shop). The Steam plugin appends those to
  * `equip-events.ndjson` (one line per response, `{ seq, at, path, res }`) and
  * truncates the file whenever a fresh `/user/item` lands. A sale
- * (`item/sell`), a dissolve (`item/dissolve`) or a lock toggle (`item/lock`)
+ * (`item/sell`), a dissolve (`item/dissolve`), a lock toggle (`item/lock`) or
+ * a gem merge (`item/gemMerge`)
  * comes with the client's own REQUEST instead (`{ seq, at, path, req, res }`):
  * the response says nothing about the pieces (`CWebRES_ItemSell` only carries
  * the new gold, `CWebRES_ItemDissolve` the materials received, and the client
  * removes the pieces from `CWebREQ_ItemSell.ItemList` /
  * `CWebREQ_ItemDissolve.ItemList`; `CWebRES_ItemLock` reads `ItemUID` /
- * `IsLock` off `CWebREQ_ItemLock`). This module folds the
+ * `IsLock` off `CWebREQ_ItemLock`; `CWebRES_ItemGemMerge` takes the merged
+ * gems off `CWebREQ_ItemGemMerge.ItemUIDList` — 1 per uid listed when
+ * `IsSingle`, the whole stack otherwise — then creates `UseItemList` and the
+ * `RT_NORMAL` reward's `ItemList`). This module folds the
  * journal into `user_item.json` so the renderer's follower re-imports on the
  * mtime change, as after a lobby.
  *
@@ -43,7 +48,9 @@
  * entry's `IsLock` to 1 or 0. Each event sets absolute state, so
  * replaying the whole journal onto a snapshot that already holds part of it
  * lands on the same state: the follower replays it all whenever something
- * changed instead of tracking a partial offset.
+ * changed instead of tracking a partial offset. The one relative step, a
+ * single gem merge's −1 per uid, is followed by `UseItemList`, the used
+ * stacks' new state, which makes the result absolute again.
  *
  * Not modelled: the gem stack `gemInsert` consumes. The client decrements it
  * from its own request (`ItemUIDGem`), the response doesn't say — so the gem
@@ -75,7 +82,8 @@ export interface EquipEvent {
   res: unknown;
   /** The client's request, for the paths whose response doesn't say what
    *  changed (`/item/sell`, `/item/dissolve`: `{ ItemList: string[] }`, `/item/lock`:
-   *  `{ ItemUID: string, IsLock: boolean }`). */
+   *  `{ ItemUID: string, IsLock: boolean }`, `/item/gemMerge`:
+   *  `{ ItemUIDList: string[], IsSingle: boolean }`). */
   req?: unknown;
 }
 
@@ -97,13 +105,18 @@ interface ItemFields {
    *  (`WSRewardData`), after the top-level upserts, in the list's order:
    *  `"total"` = only the entries whose `RewardType` is `RT_TOTAL` (the one the
    *  client hands to `CreateItems`; the others repeat it per source), `"all"` =
-   *  every entry. An entry that isn't an object or has no `ItemList` array is
-   *  ignored. */
-  reward?: "total" | "all";
+   *  every entry, `"normal"` = the first entry whose `RewardType` is
+   *  `RT_NORMAL` (`CWebRES_ItemGemMerge`: `RewardList.Find(…RT_NORMAL)` handed
+   *  to `CPlayer.SetRewardList`, which `CreateItems` its `ItemList`). An entry
+   *  that isn't an object or has no `ItemList` array is ignored. */
+  reward?: "total" | "all" | "normal";
   /** A gain (drop, sweep, recruit, mail, shop…): a response without any piece
    *  is a normal outcome (gold only, a hero bought), and an entry at uid 0 is
    *  no piece (the client tests `ItemUID > 0`) — neither counts as skipped. */
   gain?: true;
+  /** The client overwrites each upsert's `Quantity` with this before
+   *  `CreateItem` (`CWebRES_ItemCustomCraft`: `ItemData.Quantity = 1`). */
+  quantity?: number;
 }
 
 /** Responses that carry items, by path, and in which fields (one entry or a
@@ -126,6 +139,12 @@ const ITEM_FIELDS: ReadonlyMap<string, ItemFields> = new Map<string, ItemFields>
   ["/item/smeltingReset", { upsert: ["Item"], simple: ["srcItem"] }],
   ["/item/merge", { upsert: ["getItem"], simple: ["useItem"] }],
   ["/item/craft", { upsert: ["CraftItemList"], simple: ["AdditionItem", "MaterialItemList"] }],
+  // CWebRES_ItemCustomCraft: ItemData.Quantity = 1, then CreateItem(ItemData);
+  // the rest of its OnApply is the Custom Craft state and the gold.
+  ["/item/customCraft", { upsert: ["ItemData"], simple: [], quantity: 1 }],
+  // CWebRES_ItemGemMerge, after its request (see foldGemMerge): CreateItems on
+  // UseItemList, then SetRewardList on the RT_NORMAL reward.
+  ["/item/gemMerge", { upsert: ["UseItemList"], simple: [], reward: "normal" }],
   // Gains: CItemInventory.CreateItems on the RT_TOTAL reward (or on every
   // reward), the consumed ticket / recruit item through UpdateItem.
   ["/dungeon/complete", { upsert: [], simple: [], reward: "total", gain: true }],
@@ -240,6 +259,8 @@ function simpleOf(v: unknown): { ItemUID: string; Quantity: number } | null {
 /** `REWARD_TYPE.RT_TOTAL`, the enum's first member: the wire sends it as 0
  *  (its name is accepted too). */
 const isTotal = (v: unknown) => v === 0 || v === "RT_TOTAL";
+/** `REWARD_TYPE.RT_NORMAL`, the second member: 1 on the wire. */
+const isNormal = (v: unknown) => v === 1 || v === "RT_NORMAL";
 
 /** The raw entries of one event's `upsert` or `simple` fields — empty for the
  *  equip family. The upserts end with the pieces of the retained `RewardList`
@@ -254,7 +275,9 @@ function entriesOf(e: EquipEvent, kind: "upsert" | "simple"): unknown[] {
       const entry = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
       if (!entry || !Array.isArray(entry.ItemList)) continue;
       if (fields.reward === "total" && !isTotal(entry.RewardType)) continue;
+      if (fields.reward === "normal" && !isNormal(entry.RewardType)) continue;
       out.push(...(entry.ItemList as unknown[]));
+      if (fields.reward === "normal") break; // RewardList.Find: the first only
     }
   }
   if (!fields.gain) return out;
@@ -277,6 +300,20 @@ function removedOf(e: EquipEvent): Array<{ ItemUID: string; Quantity: number } |
     const ItemUID = uid(v);
     return ItemUID === null || ItemUID === UNEQUIPPED ? null : { ItemUID, Quantity: 0 };
   });
+}
+
+/** `item/gemMerge`: the request's uids in order (one per occurrence: a single
+ *  merge of two gems of one stack lists its uid twice) and whether it is a
+ *  single merge. Null when the line has no usable request; an unusable uid
+ *  is null in the list. */
+function gemMergeOf(e: EquipEvent): { uids: Array<string | null>; single: boolean } | null {
+  const r = reqOf(e);
+  if (!r || !Array.isArray(r.ItemUIDList) || typeof r.IsSingle !== "boolean") return null;
+  const uids = (r.ItemUIDList as unknown[]).map((v) => {
+    const id = uid(v);
+    return id === null || id === UNEQUIPPED ? null : id;
+  });
+  return { uids, single: r.IsSingle };
 }
 
 /** `CItemInventory.DeletePresetEquipUID` for each uid of `removed`, in order:
@@ -309,7 +346,7 @@ function clearPresetSlots(presets: unknown, removed: readonly string[]): { prese
  *  — plus the preset slots cleared by a removal —, and how many were skipped — a move or a simple entry whose uid is absent
  *  from the inventory (a piece obtained after this snapshot: not invented), an
  *  unreadable uid, an item response with no usable entry, or a sale /
- *  dissolve / lock line without a usable request. Never throws on
+ *  dissolve / lock / gem merge line without a usable request. Never throws on
  *  event data. */
 export function foldEquipEvents<T extends FoldableUserItem>(
   raw: T, events: readonly EquipEvent[],
@@ -320,6 +357,20 @@ export function foldEquipEvents<T extends FoldableUserItem>(
   // brings back later: the client doesn't put a re-added uid back in a preset.
   const removed: string[] = [];
   let skipped = 0;
+  const upsert = (it: { ItemUID: string } & Record<string, unknown>) => {
+    // Fields the response lacks (InvenType…) stay as the snapshot had them.
+    items.set(it.ItemUID, { CharUID: UNEQUIPPED, ...items.get(it.ItemUID), ...it });
+    touched.add(it.ItemUID);
+  };
+  /** A stack's new count onto a uid the snapshot holds (0 = gone). */
+  const setQuantity = (id: string, it: FoldableItem, Quantity: number) => {
+    if (Quantity === 0) {
+      items.delete(id);
+      removed.push(id);
+    }
+    else if (it.Quantity !== Quantity) items.set(id, { ...it, Quantity });
+    touched.add(id);
+  };
   for (const e of events) {
     for (const [itemRaw, ownerRaw] of movesOf(e)) {
       const item = uid(itemRaw);
@@ -341,6 +392,51 @@ export function foldEquipEvents<T extends FoldableUserItem>(
       touched.add(item!);
       continue;
     }
+    if (e.path === "/item/gemMerge") {
+      // CWebRES_ItemGemMerge.OnApply, in its order: the request's gems first
+      // (−1 per uid listed when IsSingle, the whole stack otherwise), then
+      // CreateItems on UseItemList and on the RT_NORMAL reward's ItemList.
+      // A stack the request empties stays in place at 0 until the upserts
+      // ran: one UseItemList gives back keeps its position (a replay
+      // doesn't move it to the end); the others leave afterwards.
+      const merge = gemMergeOf(e);
+      const upserts = entriesOf(e, "upsert").map(itemOf);
+      if (!merge || (merge.uids.length === 0 && upserts.length === 0)) { skipped++; continue; }
+      const emptied = new Set<string>();
+      for (const id of merge.uids) {
+        const it = id === null ? undefined : items.get(id);
+        if (!it || emptied.has(id!)) { skipped++; continue; } // a stack this snapshot lacks: not invented
+        const q = it.Quantity;
+        if (merge.single && (typeof q !== "number" || !Number.isSafeInteger(q))) { skipped++; continue; }
+        const left = merge.single ? Math.max(0, (q as number) - 1) : 0;
+        if (left === 0) {
+          emptied.add(id!);
+          // CItemInventory.RemoveItem (a total merge) clears the presets even
+          // for a stack UseItemList brings back; a single one only removes
+          // through UpdateItem at 0, below.
+          if (!merge.single) removed.push(id!);
+        }
+        if (it.Quantity !== left) items.set(id!, { ...it, Quantity: left });
+        touched.add(id!);
+      }
+      for (const it of upserts) {
+        if (!it) { skipped++; continue; }
+        // CItemInventory.CreateItem: a uid held gets its count (0 = gone), an
+        // absent one at 0 isn't created.
+        if (it.Quantity === 0) {
+          const held = items.get(it.ItemUID);
+          if (held) setQuantity(it.ItemUID, held, 0);
+          continue;
+        }
+        upsert(it);
+      }
+      for (const id of emptied) {
+        if (items.get(id)?.Quantity !== 0) continue; // given back by UseItemList
+        items.delete(id);
+        if (merge.single) removed.push(id);
+      }
+      continue;
+    }
     const byRequest = REMOVED_BY_REQUEST.has(e.path);
     if (!byRequest && !ITEM_FIELDS.has(e.path)) continue;
     const upserts = entriesOf(e, "upsert").map(itemOf);
@@ -351,21 +447,15 @@ export function foldEquipEvents<T extends FoldableUserItem>(
       if (!(ITEM_FIELDS.get(e.path)?.gain && upserts.length === 0 && simples.length === 0)) skipped++;
       continue;
     }
+    const forced = ITEM_FIELDS.get(e.path)?.quantity;
     for (const it of upserts) {
       if (!it) { skipped++; continue; }
-      // Fields the response lacks (InvenType…) stay as the snapshot had them.
-      items.set(it.ItemUID, { CharUID: UNEQUIPPED, ...items.get(it.ItemUID), ...it });
-      touched.add(it.ItemUID);
+      upsert(forced === undefined ? it : { ...it, Quantity: forced });
     }
     for (const s of simples) {
       const it = s ? items.get(s.ItemUID) : undefined;
       if (!s || !it) { skipped++; continue; } // a stack this snapshot lacks: not invented
-      if (s.Quantity === 0) {
-        items.delete(s.ItemUID);
-        removed.push(s.ItemUID);
-      }
-      else if (it.Quantity !== s.Quantity) items.set(s.ItemUID, { ...it, Quantity: s.Quantity });
-      touched.add(s.ItemUID);
+      setQuantity(s.ItemUID, it, s.Quantity);
     }
   }
   const before = new Map(raw.ItemList.map((it) => [it.ItemUID, it]));
