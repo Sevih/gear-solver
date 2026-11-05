@@ -12,12 +12,12 @@
   "dependencies": {
     "@gear-solver/core": "*",
     "@tanstack/react-virtual": "^3.14.21",
-    "react": "^18.3.1",
+    "react": "^19.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
-    "@types/react": "^18.3.12",
+    "@types/react": "^19.3.0",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.3.0",
