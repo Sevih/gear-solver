@@ -29,15 +29,18 @@ once the game has decrypted them:
 - Output: `<capture folder>/{user_item,user_character,…}.json` (`.cache/capture-out` in dev,
   `<userData>/capture-out` packaged). The manual import reads the same files.
 - Changes made in-game (plugin 0.2.0 for gear moves, 0.3.0 for gems and substats, 0.4.0 for
-  upgrades, 0.5.0 for selling and locking, 0.5.1 for dissolving, 0.5.2 for a restored team): the game only re-sends `/user/item` at the lobby, but every move answers `/item/equip`
+  upgrades, 0.5.0 for selling and locking, 0.5.1 for dissolving, 0.5.2 for a restored team, 0.5.3 for pieces obtained): the game only re-sends `/user/item` at the lobby, but every move answers `/item/equip`
   or `/item/equipAll`, a team restored (Lineup Record › Restore Team) answers
   `/singularity/loadDeck`, `/worldBoss/loadDeck`, `/guild/raid/loadDeck` or
   `/irregular/chase/loadDeck` (one equipAll per hero in `ItemEquipAllList`, each with its own
   `CharUID`), socketing, removing or rerolling a gem or changing substats (reforge,
   Transistone) answers `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption` or
   `/item/subOptionChange`, and an upgrade answers `/item/enchant`, `/item/enchantReset`,
-  `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge` or `/item/craft`; the
-  plugin appends those to `equip-events.ndjson` (one `{ seq, at, path, res }` line per response,
+  `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge` or `/item/craft`, and
+  a piece obtained comes with the gesture that gives it — a stage drop `/dungeon/complete`, a sweep
+  `/dungeon/useSweepTicket`, a gear recruit `/recruit/equip/recruit`, a mail `/mail/getItem`, an
+  event boss `/event/boss/reward`, a Monad Gate route `/monadGate/route/complete`, a purchase
+  `/shop/buy`; the plugin appends those to `equip-events.ndjson` (one `{ seq, at, path, res }` line per response,
   emptied on every `/user/item`) — a sale `/item/sell`, a dissolve `/item/dissolve` and a lock
   toggle `/item/lock` go in with the client's request, which their response doesn't repeat (one
   `{ seq, at, path, req, res }` line per gesture, written from `CWebRES_ItemSell.OnApply` /
@@ -48,7 +51,11 @@ once the game has decrypted them:
   by uid: moves rewrite `CharUID`; the others carry, per the `ITEM_FIELDS` table (by path), whole
   items (`WSItemData`, the fields of `RawItem`), which replace the entry of the same uid or join the
   end of the list (the gem item `gemRemove` puts back into the inventory, the pieces `breakLimit` or
-  `craft` create), and "simple" entries (uid + new `Quantity`: materials consumed or given back),
+  `craft` create, the pieces obtained: the `ItemList` of the `RewardList` entries — the one whose
+  `RewardType` is `RT_TOTAL` (0) only, or all of them for the event boss and Monad Gate, as the
+  client's `CItemInventory.CreateItems` — and `GetItem` for the shop), and "simple" entries (uid +
+  new `Quantity`: materials consumed or given back, the sweep ticket `ItemData`, the recruit items
+  `UseItemList`, the shop's `UseItem`),
   which only rewrite `Quantity`, the entry being removed at 0 as the client's
   `CItemInventory.UpdateItem` does (the piece an enhance eats no longer exists) — and its uid becomes
   0 in the `ItemUIDList` of every preset holding it, as `CItemInventory.RemoveItem`
@@ -58,7 +65,8 @@ once the game has decrypted them:
   the `item/dissolve` response only carries the materials received (`RewardList`, `ItemUID` 0),
   which aren't pieces and aren't folded —, a lock sets the `IsLock` of the `req.ItemUID` entry to 1
   or 0 from `req.IsLock`; such a line without `req` is skipped (so a dissolve journaled by a 0.5.0
-  plugin waits for the lobby). `item/sell/consumable` and Custom Gear aren't
+  plugin waits for the lobby). A gain response without any piece (gold only, a hero bought) and a
+  gain entry at uid 0 don't count as skipped. `item/sell/consumable` and Custom Gear aren't
   followed. What the app already folded is noted in
   `.equip-events.applied`.
 

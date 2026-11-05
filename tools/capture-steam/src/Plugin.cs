@@ -60,7 +60,7 @@ namespace GearSolverCapture
     {
         public const string Id = "outerpedia.gearsolver.capture";
         public const string Name = "Gear Solver Capture";
-        public const string Version = "0.5.2";
+        public const string Version = "0.5.3";
 
         internal static ManualLogSource Log;
 
@@ -288,6 +288,9 @@ namespace GearSolverCapture
         /// from Lineup Record (<c>/singularity/loadDeck</c>, <c>/worldBoss/loadDeck</c>,
         /// <c>/guild/raid/loadDeck</c>, <c>/irregular/chase/loadDeck</c>) re-equips
         /// several heroes at once: one equipAll per hero in <c>ItemEquipAllList</c>.
+        /// A piece obtained (drop, sweep, gear recruit, mail, shop, event boss,
+        /// Monad Gate) comes in the gesture's <c>RewardList</c> (or <c>GetItem</c>
+        /// for the shop), with the ticket or item it consumed.
         /// They're appended to
         /// <c>equip-events.ndjson</c> (one line per response) and the desktop app
         /// folds them into <c>user_item.json</c>. Truncated whenever a full
@@ -311,6 +314,13 @@ namespace GearSolverCapture
             "/worldBoss/loadDeck",
             "/guild/raid/loadDeck",
             "/irregular/chase/loadDeck",
+            "/dungeon/complete",
+            "/dungeon/useSweepTicket",
+            "/recruit/equip/recruit",
+            "/mail/getItem",
+            "/event/boss/reward",
+            "/monadGate/route/complete",
+            "/shop/buy",
         };
         private const string JournalFile = "equip-events.ndjson";
 

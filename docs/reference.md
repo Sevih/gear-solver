@@ -28,7 +28,7 @@ au moment où le jeu les a déchiffrées :
   `<userData>/capture-out` packagé). L'import manuel lit les mêmes fichiers.
 - Changements faits en jeu (plugin 0.2.0 pour les déplacements, 0.3.0 pour les gemmes et les
   sous-stats, 0.4.0 pour les améliorations, 0.5.0 pour la vente et le verrou, 0.5.1 pour le
-  désassemblage, 0.5.2 pour une équipe restaurée) : le jeu ne renvoie
+  désassemblage, 0.5.2 pour une équipe restaurée, 0.5.3 pour les pièces obtenues) : le jeu ne renvoie
   `/user/item` qu'au lobby, mais chaque déplacement répond `/item/equip` ou `/item/equipAll`, une
   équipe restaurée (Lineup Record › Restore Team) `/singularity/loadDeck`, `/worldBoss/loadDeck`,
   `/guild/raid/loadDeck` ou `/irregular/chase/loadDeck` (un equipAll par héros dans
@@ -37,7 +37,10 @@ au moment où le jeu les a déchiffrées :
   `/item/gemInsert`, `/item/gemRemove`,
   `/item/gemChangeOption` ou `/item/subOptionChange`, et une amélioration `/item/enchant`,
   `/item/enchantReset`, `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`
-  ou `/item/craft` ; le plugin les ajoute à
+  ou `/item/craft`, et une pièce obtenue arrive avec le geste qui la donne — drop de fin de stage
+  `/dungeon/complete`, sweep `/dungeon/useSweepTicket`, invocation d'équipement
+  `/recruit/equip/recruit`, courrier `/mail/getItem`, event boss `/event/boss/reward`, Monad Gate
+  `/monadGate/route/complete`, boutique `/shop/buy` ; le plugin les ajoute à
   `equip-events.ndjson` (une ligne `{ seq, at, path, res }` par réponse, vidé à chaque `/user/item`)
   — une vente `/item/sell`, un désassemblage `/item/dissolve` et un verrou `/item/lock` y entrent
   avec la requête du client, que leur réponse ne redit pas (une ligne `{ seq, at, path, req, res }`
@@ -48,8 +51,11 @@ au moment où le jeu les a déchiffrées :
   déplacements réécrivent `CharUID` ; les autres portent, selon la table `ITEM_FIELDS` (par chemin),
   des items entiers (`WSItemData`, les champs de `RawItem`) qui remplacent l'entrée de même uid ou
   s'ajoutent en fin de liste (la gemme rendue à l'inventaire par `gemRemove`, les pièces créées par
-  `breakLimit` ou `craft`), et des entrées « simples » (uid + nouvelle `Quantity` : matériaux
-  consommés ou rendus) qui ne réécrivent que `Quantity`, l'entrée étant retirée à 0 comme le fait
+  `breakLimit` ou `craft`, les pièces obtenues : les `ItemList` des entrées de `RewardList` — celle
+  de `RewardType` `RT_TOTAL` (0) seule, ou toutes pour l'event boss et Monad Gate, comme
+  `CItemInventory.CreateItems` dans le client —, et `GetItem` pour la boutique), et des entrées « simples » (uid + nouvelle `Quantity` : matériaux
+  consommés ou rendus, le ticket de sweep `ItemData`, les objets d'invocation `UseItemList`, le
+  `UseItem` de la boutique) qui ne réécrivent que `Quantity`, l'entrée étant retirée à 0 comme le fait
   `CItemInventory.UpdateItem` dans le client (la pièce mangée par un enchant n'existe plus) — et son uid
   passe à 0 dans le `ItemUIDList` de chaque preset qui la portait, comme `CItemInventory.RemoveItem`
   (`DeletePresetEquipUID`), sans attendre le lobby. La pile
@@ -59,7 +65,8 @@ au moment où le jeu les a déchiffrées :
   reçus (`RewardList`, `ItemUID` 0), qui ne sont pas des pièces et ne sont pas pliés —, un verrou
   met `IsLock` de l'entrée `req.ItemUID` à 1 ou 0 d'après `req.IsLock` ; une telle ligne sans `req`
   est ignorée (un désassemblage journalisé par un plugin 0.5.0 attend donc le lobby).
-  `item/sell/consumable` et le Custom Gear ne sont pas suivis. Ce que l'app a déjà plié est noté
+  Une réponse de gain sans pièce (or seul, héros acheté) et une entrée de gain à uid 0 ne comptent
+  pas comme ignorées. `item/sell/consumable` et le Custom Gear ne sont pas suivis. Ce que l'app a déjà plié est noté
   dans `.equip-events.applied`.
 
 Fichiers : [Plugin.cs](../tools/capture-steam/src/Plugin.cs),

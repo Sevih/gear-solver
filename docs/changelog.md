@@ -8,6 +8,67 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎁 Capture : les pièces obtenues en jeu entrent dans Gear sans repasser au lobby (plugin 0.5.3) (G112) (2026-11-05)
+- ✅ **Pourquoi.** Demande de Sevih du 05/11 : l'inventaire ne bougeait pas quand une pièce était obtenue en jeu
+  (drop de fin de stage, sweep, invocation d'équipement, courrier, boutique) ; il fallait attendre le `/user/item`
+  complet du retour au lobby. Le client applique ces gains par `CItemInventory.CreateItems(list)` (`CreateItem` par
+  entrée : `UpdateItem` si l'uid existe, sinon ajout) et le ticket ou l'objet consommé par `UpdateItem` (quantité
+  0 = retrait) ; on fait pareil, comme `item/craft` le faisait déjà pour une pièce créée.
+- ✅ **Plugin 0.5.3** (`Plugin.cs` + `GearSolverCapture.csproj`) : `/dungeon/complete`, `/dungeon/useSweepTicket`,
+  `/recruit/equip/recruit`, `/mail/getItem`, `/event/boss/reward`, `/monadGate/route/complete` et `/shop/buy`
+  rejoignent `Journal` (une ligne `{ seq, at, path, res }` par réponse dans `equip-events.ndjson`), commentaire à
+  jour ; rien d'autre côté plugin.
+- ✅ **Pli** (`apps/desktop/src/equip-events.ts`). La description d'un chemin dans `ITEM_FIELDS` (désormais
+  l'interface `ItemFields`) gagne `reward: "total" | "all"` : les `ItemList` des entrées de `RewardList` retenues
+  (`"total"` = celles dont `RewardType` vaut `RT_TOTAL`, `"all"` = toutes ; une entrée non-objet ou sans `ItemList`
+  tableau ignorée) sont des upserts, ajoutés par `entriesOf` APRÈS les upserts de premier niveau, dans l'ordre du
+  tableau. `RT_TOTAL` est le premier membre de `REWARD_TYPE.cs`, donc `0` sur le fil — confirmé par les réponses
+  de la capture du portable (`"RewardType":0` / `1`) — ; le nom `"RT_TOTAL"` est accepté aussi (la fixture de
+  dissolution des tests l'écrit ainsi). Entrées : `/dungeon/complete` et `/mail/getItem` `{ reward: "total" }`,
+  `/dungeon/useSweepTicket` `{ reward: "total", simple: ["ItemData"] }`, `/recruit/equip/recruit`
+  `{ reward: "total", simple: ["UseItemList"] }`, `/event/boss/reward` et `/monadGate/route/complete`
+  `{ reward: "all" }` (le client y applique chaque entrée), `/shop/buy` `{ upsert: ["GetItem"], simple: ["UseItem"] }`.
+  Ces sept chemins portent aussi `gain: true` : une entrée à uid 0 n'est pas une pièce (le client teste
+  `ItemUID > 0` pour `GetItem` / `UseItem`, et les matériaux d'une récompense peuvent arriver à uid 0 comme ceux
+  d'une dissolution) et est écartée sans compter de saut — `itemOf` / `simpleOf` rendaient bien null sur « 0 », mais
+  le pli comptait ce null comme un saut —, et une réponse de gain sans aucune pièce (or seul, héros acheté, courrier
+  sans `RT_TOTAL`) ne compte pas comme sautée, alors qu'elle le reste pour les chemins `item/*` d'avant. En-tête du
+  fichier : les sept chemins cités. `touched`, `skipped` (hors ces deux cas), presets et follower inchangés.
+- ✅ **Ordre.** Le pli applique les upserts puis les entrées simples. Pour le recrutement c'est l'ordre du client
+  (récompenses puis `UseItemList`) ; pour le sweep le client met à jour `ItemData` (le ticket) AVANT de créer les
+  récompenses : sans effet ici, le ticket et les pièces reçues ont des uids distincts, donc l'ordre ne change pas
+  l'état final — le pli n'a pas été réécrit.
+- ✅ **Docs.** `tools/capture-steam/README.md` (paragraphe « Since 0.5.3 », lignes de la table des champs, table des
+  fichiers), `wiki/Capture-Pipeline.md` (ligne `equip-events.ndjson`), `docs/reference.md` et son miroir
+  `wiki/Engine-Reference.md` (le paragraphe des gestes : version 0.5.3, les sept chemins, d'où le pli lit les
+  pièces, les entrées simples nouvelles, les gains sans pièce non comptés). Aucune table de ces docs ne compte
+  `equip-events.test.ts`.
+- ✅ **Tests.** `apps/desktop/test/equip-events.test.ts` (44 → 51), bloc « pieces obtained » : un `/dungeon/complete`
+  dont `RewardList` porte une entrée `RT_FIRST` avec une pièce et une entrée `RT_TOTAL` avec deux pièces (dont la
+  même) → les deux pièces de `RT_TOTAL` en fin de `ItemList` avec tous leurs champs, rien de plus, `applied` = 2 —
+  `RT_FIRST` vaut `2` dans `REWARD_TYPE.cs` (`1` est `RT_NORMAL`), le test l'écrit ainsi ; un
+  `/recruit/equip/recruit` (la pièce ajoutée, l'objet d'invocation à 3 par `UseItemList`) ; un
+  `/dungeon/useSweepTicket` avec `ItemData` à `Quantity: 0` (le ticket retiré, les pièces `RT_TOTAL` ajoutées, celle
+  de `RT_NORMAL` non) ; un `/event/boss/reward` à deux entrées (plus une entrée null et une sans `ItemList`, ignorées)
+  → les pièces des deux ; un `/shop/buy` avec `GetItem` nouveau et `UseItem` à uid « 0 » → la pièce ajoutée, aucun
+  saut ; un `/mail/getItem` sans `RT_TOTAL`, un `/shop/buy` d'un héros et un `/dungeon/complete` dont la seule pièce
+  est à uid 0 → rien, `[applied, skipped]` = `[0, 0]` ; l'idempotence d'un rejeu. Les tests existants intacts.
+- ✅ **Vérifications.** `dotnet build tools/capture-steam -c Release` → « 0 Erreur(s) », 0 avertissement (DLL 0.5.3) ;
+  `npm run typecheck` → `tsc --noEmit` des trois workspaces sans erreur (sortie 0) ; `npm test` → dernière ligne
+  « Tests 1137 passed (1137) » (et 169 et 256 pour les deux autres workspaces) ; `npm run lint` → « ✖ 7 problems
+  (0 errors, 7 warnings) », tous dans le renderer, aucun dans les fichiers du lot.
+- ✅ **Laissé, suite possible.** Les autres réponses du client qui créent des pièces ne sont pas journalisées :
+  `item/gemMerge`, `item/customCraft`, `remains/move`, `character/recall`, `character/trustEnchant`. Les matériaux
+  et consommables reçus sont pliés comme des entrées quelconques, sans traitement propre ; personnages, assets et
+  tickets autres que ceux cités ne sont pas suivis. Écart mineur connu : `CreateItem` sur un uid déjà présent ne fait
+  qu'un `UpdateItem` (quantité), et une entrée à `Quantity` 0 l'ôte ou n'est pas créée ; le pli, lui, upserte
+  l'entrée entière (même résultat tant que le serveur envoie l'état courant, ce qu'il fait ; une récompense à
+  quantité 0 n'a pas été observée).
+- ⏳ **Sevih, sur le fixe** (plugin 0.5.3 par Settings › Setup › Update plugin jeu fermé, ou la prochaine build
+  privée) : finir un stage qui lâche une pièce, ou un sweep, ou une invocation d'équipement → la pièce est dans
+  Gear sans repasser au lobby ; `equip-events.ndjson` porte la ligne `/dungeon/complete` (ou
+  `/recruit/equip/recruit`).
+
 ### 🧹 Gear › Scrap sur plusieurs règles de filtres (union) et Scrap default à plusieurs sets (G111) (2026-11-04)
 - ✅ **Pourquoi.** Demande de Sevih du 04/11 après test de la build : Scrap ne portait qu'un jeu de filtres, donc
   « 5★ et 6★, pas au moins 3/3/2/X » ; il veut en poser plusieurs, par exemple « 6★ pas au moins 3/3/2/X » ET

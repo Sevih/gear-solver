@@ -62,6 +62,19 @@ app writes, removing the entry at 0, as the client's `CItemInventory.UpdateItem`
 | `/item/smelting`, `/item/smeltingReset` | `Item` | `srcItem` (the source stack) |
 | `/item/merge` | `getItem` (created) | `useItem` (the source stack) |
 | `/item/craft` | `CraftItemList` (created) | `AdditionItem`, `MaterialItemList` |
+| `/dungeon/complete`, `/mail/getItem` | `RewardList[RT_TOTAL].ItemList` | — |
+| `/dungeon/useSweepTicket` | `RewardList[RT_TOTAL].ItemList` | `ItemData` (the sweep ticket) |
+| `/recruit/equip/recruit` | `RewardList[RT_TOTAL].ItemList` | `UseItemList` (the recruit items) |
+| `/event/boss/reward`, `/monadGate/route/complete` | `RewardList[*].ItemList` | — |
+| `/shop/buy` | `GetItem` (when its uid > 0) | `UseItem` (when its uid > 0) |
+
+Since 0.5.3 a piece obtained follows too: a stage drop (`/dungeon/complete`), a sweep
+(`/dungeon/useSweepTicket`), a gear recruit (`/recruit/equip/recruit`), a mail (`/mail/getItem`),
+a shop purchase (`/shop/buy`), an event boss (`/event/boss/reward`) or a Monad Gate route
+(`/monadGate/route/complete`). The pieces are whole items in the `ItemList` of the response's
+`RewardList` entries (only the `RewardType` `RT_TOTAL` one, `0` on the wire, except for the event
+boss and Monad Gate, whose every entry is applied — as the client's `CItemInventory.CreateItems`),
+or `GetItem` for the shop; the ticket or item the gesture consumed is a simple entry (table above).
 
 Since 0.5.0 a sale and a lock toggle follow too, but their responses don't name the pieces:
 `CWebRES_ItemSell` only carries the new gold (`Asset_0`) and the client removes the pieces from
@@ -101,7 +114,7 @@ half file.
 |------|--------|-------|
 | `user_item.json`, `user_character.json`, `user_asset.json`, `user_info.json`, `user_lobby.json`, `user_etc.json`, `item_customInfo.json`, `user_archive.json`, `user_gift.json` | `/user/item`, `/user/character`, … `/archive/info`, `/gift/info` | Rewritten on every fetch (lobby load, screen open). |
 | `.captured` | after `/user/item` | Sentinel the app's status endpoint reports. |
-| `equip-events.ndjson` | `/item/equip`, `/item/equipAll`, `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption`, `/item/subOptionChange`, `/item/enchant`, `/item/enchantReset`, `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`, `/item/craft`, `/singularity/loadDeck`, `/worldBoss/loadDeck`, `/guild/raid/loadDeck`, `/irregular/chase/loadDeck`; `/item/sell`, `/item/dissolve`, `/item/lock` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start; one line per sale / dissolve / lock, with the request before the response: `{"seq":n,"at":…,"path":"/item/sell","req":{"ItemList":[…]},"res":{…}}`. Emptied whenever `/user/item` lands. |
+| `equip-events.ndjson` | `/item/equip`, `/item/equipAll`, `/item/gemInsert`, `/item/gemRemove`, `/item/gemChangeOption`, `/item/subOptionChange`, `/item/enchant`, `/item/enchantReset`, `/item/breakLimit`, `/item/smelting`, `/item/smeltingReset`, `/item/merge`, `/item/craft`, `/singularity/loadDeck`, `/worldBoss/loadDeck`, `/guild/raid/loadDeck`, `/irregular/chase/loadDeck`, `/dungeon/complete`, `/dungeon/useSweepTicket`, `/recruit/equip/recruit`, `/mail/getItem`, `/event/boss/reward`, `/monadGate/route/complete`, `/shop/buy`; `/item/sell`, `/item/dissolve`, `/item/lock` | One line per response, appended: `{"seq":n,"at":"<ISO UTC>","path":"/item/equip","res":{…response as is…}}`, `seq` monotone since game start; one line per sale / dissolve / lock, with the request before the response: `{"seq":n,"at":…,"path":"/item/sell","req":{"ItemList":[…]},"res":{…}}`. Emptied whenever `/user/item` lands. |
 | `.equip-events.applied` | written by the **app** | What the app already folded (`first`/`last` seq + the snapshot mtime it left), so a restart doesn't rewrite the snapshot for nothing. |
 | `.steam-plugin.json` | plugin start + every capture | Heartbeat: `{version, pid, startedAt, pathHook, captures, lastPath, lastCaptureAt, outDir}`. The app matches `pid` against the running `OUTERPLANE.exe` to show **Live**. |
 | `_unknown/<path>.json`, `seen-paths.log` | any other endpoint | `KeepUnknown` config (not for the journaled paths); `/account/*` and `/server/*` are ignored. |

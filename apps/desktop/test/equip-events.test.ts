@@ -540,6 +540,85 @@ describe("foldEquipEvents — sale, dissolve and lock (request-carrying lines)",
   });
 });
 
+// Gains, after CWebRES_DungeonComplete / DungeonUseSweepTicket /
+// RecruitEquipmentRecruit / MailGetItem / EventBossReward / ShopBuy: the
+// pieces in RewardList[].ItemList (CItemInventory.CreateItems), RewardType as
+// the wire sends it (REWARD_TYPE: RT_TOTAL 0, RT_NORMAL 1, RT_FIRST 2).
+describe("foldEquipEvents — pieces obtained (drop, sweep, recruit, mail, event boss, shop)", () => {
+  const TICKET = "6400000001"; // sweep ticket / recruit item stack
+  const NEW1 = "6400000101";
+  const NEW2 = "6400000102";
+  const NEW3 = "6400000103";
+  const base = () => ({
+    ItemList: [...snapshot().ItemList, { ItemUID: TICKET, CharUID: "0", ItemID: 40001, Quantity: 5, InvenType: 0 }],
+    PresetList: [{ Num: 1 }],
+  });
+  const uids = (raw: { ItemList: Array<{ ItemUID: string }> }) => raw.ItemList.map((it) => it.ItemUID);
+  const piece = (id: string, sub = 160001) => wire(id, 0, 7, [sub, 0, 0, 0, 0]);
+  const reward = (RewardType: number, ItemList: unknown[]) => ({ RewardType, UserExp: 0, ItemList, AssetList: [], CharList: [] });
+
+  it("dungeon/complete: the RT_TOTAL pieces join with all their fields, RT_FIRST adds nothing", () => {
+    const res = { RewardList: [reward(2, [piece(NEW1)]), reward(0, [piece(NEW1), piece(NEW2, 160002)])], Asset_0: 1 };
+    const { next, applied, skipped } = foldEquipEvents(base(), [{ seq: 1, path: "/dungeon/complete", res }]);
+    expect(uids(next)).toEqual([...uids(base()), NEW1, NEW2]);
+    expect(byUid(next, NEW2)).toEqual({ ...piece(NEW2, 160002), CharUID: "0" });
+    expect([applied, skipped]).toEqual([2, 0]);
+  });
+
+  it("recruit/equip/recruit: the piece received joins, the recruit item's count follows UseItemList", () => {
+    const res = { RewardList: [reward(0, [piece(NEW1)])], UseItemList: [wire(TICKET, 0, 40001, [0, 0, 0, 0, 0], { Quantity: 3 })] };
+    const { next, applied, skipped } = foldEquipEvents(base(), [{ seq: 1, path: "/recruit/equip/recruit", res }]);
+    expect(next.ItemList.at(-1)).toMatchObject({ ItemUID: NEW1, ItemID: 7 });
+    expect(byUid(next, TICKET)).toEqual({ ItemUID: TICKET, CharUID: "0", ItemID: 40001, Quantity: 3, InvenType: 0 });
+    expect([applied, skipped]).toEqual([2, 0]);
+  });
+
+  it("dungeon/useSweepTicket: the last ticket (Quantity 0) leaves, the pieces join", () => {
+    const res = { RewardList: [reward(0, [piece(NEW1), piece(NEW2)]), reward(1, [piece(NEW3)])], ItemData: wire(TICKET, 0, 40001, [0, 0, 0, 0, 0], { Quantity: 0 }) };
+    const { next, applied, skipped } = foldEquipEvents(base(), [{ seq: 1, path: "/dungeon/useSweepTicket", res }]);
+    expect(byUid(next, TICKET)).toBeUndefined();
+    expect(uids(next).slice(-2)).toEqual([NEW1, NEW2]);
+    expect(byUid(next, NEW3)).toBeUndefined();
+    expect([applied, skipped]).toEqual([3, 0]);
+  });
+
+  it("event/boss/reward: the pieces of every RewardList entry join", () => {
+    const res = { RewardList: [reward(1, [piece(NEW1)]), reward(3, [piece(NEW2)]), null, { RewardType: 0 }] };
+    const { next, applied, skipped } = foldEquipEvents(base(), [{ seq: 1, path: "/event/boss/reward", res }]);
+    expect(uids(next).slice(-2)).toEqual([NEW1, NEW2]);
+    expect([applied, skipped]).toEqual([2, 0]);
+  });
+
+  it("shop/buy: GetItem joins, a UseItem at uid 0 is ignored without a skip", () => {
+    const res = { GetItem: piece(NEW1), UseItem: { ItemUID: "0", ItemID: 0, Quantity: 0 }, Asset_0: 1 };
+    const { next, applied, skipped } = foldEquipEvents(base(), [{ seq: 1, path: "/shop/buy", res }]);
+    expect(next.ItemList.at(-1)).toMatchObject({ ItemUID: NEW1 });
+    expect([applied, skipped]).toEqual([1, 0]);
+  });
+
+  it("a gain without any piece (mail without RT_TOTAL, a hero bought) changes nothing and skips nothing", () => {
+    const raw = base();
+    const { next, applied, skipped } = foldEquipEvents(raw, [
+      { seq: 1, path: "/mail/getItem", res: { RewardList: [reward(1, [piece(NEW1)])] } },
+      { seq: 2, path: "/shop/buy", res: { GetItem: { ItemUID: 0, Quantity: 0 }, UseItem: { ItemUID: "0", Quantity: 0 }, GetCharacter: { CharID: 1 } } },
+      { seq: 3, path: "/dungeon/complete", res: { RewardList: [reward(0, [{ ItemUID: "0", ItemID: 21102, Quantity: 40 }])] } },
+    ]);
+    expect(next).toEqual(raw);
+    expect([applied, skipped]).toEqual([0, 0]);
+  });
+
+  it("is idempotent: a replay onto the folded snapshot changes nothing", () => {
+    const events: EquipEvent[] = [
+      { seq: 1, path: "/dungeon/complete", res: { RewardList: [reward(0, [piece(NEW1)])] } },
+      { seq: 2, path: "/recruit/equip/recruit", res: { RewardList: [reward(0, [piece(NEW2)])], UseItemList: [{ ItemUID: TICKET, Quantity: 4 }] } },
+    ];
+    const once = foldEquipEvents(base(), events);
+    const twice = foldEquipEvents(once.next, events);
+    expect(twice.next).toEqual(once.next);
+    expect(twice.applied).toBe(0);
+  });
+});
+
 describe("parseEquipJournal", () => {
   it("reads complete lines only and drops malformed ones", () => {
     const text = [

@@ -9,7 +9,12 @@
  * `item/gemInsert`, `item/gemRemove`, `item/gemChangeOption` or
  * `item/subOptionChange`, and an upgrade as `item/enchant`, `item/enchantReset`,
  * `item/breakLimit`, `item/smelting`, `item/smeltingReset`, `item/merge`,
- * `item/craft`. The Steam plugin appends those to
+ * `item/craft`. A piece obtained comes back with the gesture that gave it: a
+ * stage drop as `dungeon/complete`, a sweep as `dungeon/useSweepTicket`, a gear
+ * recruit as `recruit/equip/recruit`, a mail as `mail/getItem`, an event boss
+ * as `event/boss/reward`, a Monad Gate route as `monadGate/route/complete`, a
+ * purchase as `shop/buy` (the pieces in `RewardList[].ItemList`, or `GetItem`
+ * for the shop). The Steam plugin appends those to
  * `equip-events.ndjson` (one line per response, `{ seq, at, path, res }`) and
  * truncates the file whenever a fresh `/user/item` lands. A sale
  * (`item/sell`), a dissolve (`item/dissolve`) or a lock toggle (`item/lock`)
@@ -28,7 +33,7 @@
  * `ITEM_FIELDS`). A whole updated item (`WSItemData`, the same fields as
  * `RawItem`) replaces the entry of the same uid — or joins the end of
  * `ItemList` when absent (the gem item `gemRemove` puts back, the pieces
- * `breakLimit` / `craft` create). A "simple" one (uid + `Quantity`: a material
+ * `breakLimit` / `craft` create, the pieces a gain brings). A "simple" one (uid + `Quantity`: a material
  * stack consumed or given back) only sets that entry's `Quantity`, and 0
  * removes the entry, as `CItemInventory.UpdateItem` does in the client (a piece
  * eaten as fodder no longer exists) — and, like `CItemInventory.RemoveItem`
@@ -85,6 +90,22 @@ interface FoldableUserItem {
   PresetList?: unknown;
 }
 
+interface ItemFields {
+  upsert: readonly string[];
+  simple: readonly string[];
+  /** Also upsert the `ItemList` of the response's `RewardList` entries
+   *  (`WSRewardData`), after the top-level upserts, in the list's order:
+   *  `"total"` = only the entries whose `RewardType` is `RT_TOTAL` (the one the
+   *  client hands to `CreateItems`; the others repeat it per source), `"all"` =
+   *  every entry. An entry that isn't an object or has no `ItemList` array is
+   *  ignored. */
+  reward?: "total" | "all";
+  /** A gain (drop, sweep, recruit, mail, shop…): a response without any piece
+   *  is a normal outcome (gold only, a hero bought), and an entry at uid 0 is
+   *  no piece (the client tests `ItemUID > 0`) — neither counts as skipped. */
+  gain?: true;
+}
+
 /** Responses that carry items, by path, and in which fields (one entry or a
  *  list of them). `upsert`: whole updated items (`WSItemData`) — the piece and
  *  the gem item of the gem responses, the improved piece, the pieces created.
@@ -93,7 +114,7 @@ interface FoldableUserItem {
  *  client hands to `CItemInventory.UpdateItem`, which reads nothing else (the
  *  reset item, the merge source, the craft materials). After the CWebRES_Item*
  *  classes and their `OnApply`; no response puts one uid in both. */
-const ITEM_FIELDS: ReadonlyMap<string, { upsert: readonly string[]; simple: readonly string[] }> = new Map([
+const ITEM_FIELDS: ReadonlyMap<string, ItemFields> = new Map<string, ItemFields>([
   ["/item/gemInsert", { upsert: ["Item"], simple: [] }],
   ["/item/gemRemove", { upsert: ["Item", "ItemGem"], simple: [] }],
   ["/item/gemChangeOption", { upsert: ["Item", "ItemGem"], simple: [] }],
@@ -105,6 +126,17 @@ const ITEM_FIELDS: ReadonlyMap<string, { upsert: readonly string[]; simple: read
   ["/item/smeltingReset", { upsert: ["Item"], simple: ["srcItem"] }],
   ["/item/merge", { upsert: ["getItem"], simple: ["useItem"] }],
   ["/item/craft", { upsert: ["CraftItemList"], simple: ["AdditionItem", "MaterialItemList"] }],
+  // Gains: CItemInventory.CreateItems on the RT_TOTAL reward (or on every
+  // reward), the consumed ticket / recruit item through UpdateItem.
+  ["/dungeon/complete", { upsert: [], simple: [], reward: "total", gain: true }],
+  ["/dungeon/useSweepTicket", { upsert: [], simple: ["ItemData"], reward: "total", gain: true }],
+  ["/recruit/equip/recruit", { upsert: [], simple: ["UseItemList"], reward: "total", gain: true }],
+  ["/mail/getItem", { upsert: [], simple: [], reward: "total", gain: true }],
+  ["/event/boss/reward", { upsert: [], simple: [], reward: "all", gain: true }],
+  ["/monadGate/route/complete", { upsert: [], simple: [], reward: "all", gain: true }],
+  // CWebRES_ShopBuy: GetItem created or updated, UseItem updated, each only
+  // when its ItemUID > 0 (a hero, a skin or an asset bought has none).
+  ["/shop/buy", { upsert: ["GetItem"], simple: ["UseItem"], gain: true }],
 ]);
 
 /** Gestures whose pieces leave by the request's `ItemList` uids (the
@@ -205,13 +237,28 @@ function simpleOf(v: unknown): { ItemUID: string; Quantity: number } | null {
   return { ItemUID, Quantity };
 }
 
+/** `REWARD_TYPE.RT_TOTAL`, the enum's first member: the wire sends it as 0
+ *  (its name is accepted too). */
+const isTotal = (v: unknown) => v === 0 || v === "RT_TOTAL";
+
 /** The raw entries of one event's `upsert` or `simple` fields — empty for the
- *  equip family. */
+ *  equip family. The upserts end with the pieces of the retained `RewardList`
+ *  entries. A gain drops the entries at uid 0 (no piece). */
 function entriesOf(e: EquipEvent, kind: "upsert" | "simple"): unknown[] {
   const fields = ITEM_FIELDS.get(e.path);
   const r = e.res as Record<string, unknown> | null;
   if (!fields || !r || typeof r !== "object") return [];
-  return fields[kind].flatMap((k) => (Array.isArray(r[k]) ? (r[k] as unknown[]) : r[k] != null ? [r[k]] : []));
+  const out = fields[kind].flatMap((k) => (Array.isArray(r[k]) ? (r[k] as unknown[]) : r[k] != null ? [r[k]] : []));
+  if (kind === "upsert" && fields.reward && Array.isArray(r.RewardList)) {
+    for (const v of r.RewardList as unknown[]) {
+      const entry = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+      if (!entry || !Array.isArray(entry.ItemList)) continue;
+      if (fields.reward === "total" && !isTotal(entry.RewardType)) continue;
+      out.push(...(entry.ItemList as unknown[]));
+    }
+  }
+  if (!fields.gain) return out;
+  return out.filter((v) => uid((v as { ItemUID?: unknown } | null)?.ItemUID) !== UNEQUIPPED);
 }
 
 /** The request of a request-carrying event, or null when the line has none. */
@@ -298,7 +345,12 @@ export function foldEquipEvents<T extends FoldableUserItem>(
     if (!byRequest && !ITEM_FIELDS.has(e.path)) continue;
     const upserts = entriesOf(e, "upsert").map(itemOf);
     const simples = byRequest ? removedOf(e) : entriesOf(e, "simple").map(simpleOf);
-    if (!upserts.some((it) => it !== null) && !simples.some((s) => s !== null)) { skipped++; continue; }
+    if (!upserts.some((it) => it !== null) && !simples.some((s) => s !== null)) {
+      // A gain with no piece at all (gold, a hero, a mail of materials only
+      // at uid 0) is nothing to fold, not a miss.
+      if (!(ITEM_FIELDS.get(e.path)?.gain && upserts.length === 0 && simples.length === 0)) skipped++;
+      continue;
+    }
     for (const it of upserts) {
       if (!it) { skipped++; continue; }
       // Fields the response lacks (InvenType…) stay as the snapshot had them.
