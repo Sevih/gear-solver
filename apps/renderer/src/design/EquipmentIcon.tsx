@@ -81,6 +81,12 @@ const RARITY_SLOT_BG: Record<DesignRarity, string> = {
   legendary: "TI_Slot_Unique",
 };
 
+/** The rarity slot plate a tile paints under the item art, served at
+ *  `/img/ui/bg/<plate>.webp` — shared with the Optimizer's talisman chips. */
+export function raritySlotBg(rarity: DesignRarity): string {
+  return RARITY_SLOT_BG[rarity];
+}
+
 // Overlay typography (APK CUIItemThumbnail prefab).
 const ENH_TEXT_SHADOW = "1px -1px 0 rgba(30,30,30,.4), 1px 1px 0 rgba(0,0,0,.2)";
 const TIER_TEXT_SHADOW = "1px -1px 0 rgba(30,30,30,.78), 1px 1px 0 rgba(0,0,0,.5)";

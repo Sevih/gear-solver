@@ -430,8 +430,9 @@ d'effet, filtrées par class du héros (gated par `classLimit`), clés sur le `s
 `cycleEffectPick` (`nextChipState`) : `off → required → excluded → off`. Tooltip : nom + (N owned) / desc T4 /
 state. L'icône d'une chip (`EffectIconChip`, `iconKind`) : l'icône d'effet pour Weapons et Accessories
 (`EffectEntry.icon`), l'image de l'objet pour Talismans (`iconKind="item"`, `EffectEntry.image` : l'image de la
-première pièce possédée de ce `setId`, `effectCatalogFromInventory`, servie à `/img/equipment/<image>.webp`) ; sans
-image, les initiales de l'effet. Le badge de chaque bouton compte les picks de son groupe.
+première pièce possédée de ce `setId`, `effectCatalogFromInventory`, servie à `/img/equipment/<image>.webp`, sur la
+plaque de rareté de cette pièce, `EffectEntry.rarity` → `raritySlotBg`, comme les tuiles de Gear) ; sans image, les
+initiales de l'effet. Le badge de chaque bouton compte les picks de son groupe.
 Un talisman conseillé par **Load reco** (`Talisman` de `/api/reco`, `translateReco.ts`) arrive, avec toute sa
 famille (les talismans de même `name` dans `equipment.json` : le conseil désigne le 6★, les 4★/5★ ont leur propre
 `setId`, `talismanFamilyKeys`), en état **`preferred`** (contour pointillé, badge `~`) : si au moins une pièce du pool talisman — après tous les filtres

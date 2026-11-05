@@ -416,8 +416,8 @@ effect chips, filtered by the hero's class (gated by `classLimit`), keyed on the
 `cycleEffectPick` (`nextChipState`): `off → required → excluded → off`. Tooltip: name + (N owned) / T4 desc /
 state. A chip's icon (`EffectIconChip`, `iconKind`): the effect icon for Weapons and Accessories
 (`EffectEntry.icon`), the item's art for Talismans (`iconKind="item"`, `EffectEntry.image`: the art of the first
-owned piece of that `setId`, `effectCatalogFromInventory`, served at `/img/equipment/<image>.webp`); no image →
-the effect's initials. Each button's badge counts the picks of its group.
+owned piece of that `setId`, `effectCatalogFromInventory`, served at `/img/equipment/<image>.webp`, on that piece's
+rarity plate, `EffectEntry.rarity` → `raritySlotBg`, as the Gear tiles paint it); no image → the effect's initials. Each button's badge counts the picks of its group.
 A talisman advised by **Load reco** (`Talisman` of `/api/reco`, `translateReco.ts`) arrives, with its whole
 family (the talismans of the same `name` in `equipment.json`: the advice names the 6★, the 4★/5★ have their own
 `setId`, `talismanFamilyKeys`), in the **`preferred`** state (dashed outline, `~` badge): if at least one piece

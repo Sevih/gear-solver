@@ -3,7 +3,7 @@
  * the toolbar panels render.
  */
 import type { GameData, Inventory } from "@gear-solver/core";
-import { toDesignSlot, type SlotId } from "../../design/tokens.js";
+import { toDesignRarity, toDesignSlot, type DesignRarity, type SlotId } from "../../design/tokens.js";
 import { STAT_DISPLAY_ORDER, statLabelFor } from "./statColumns.js";
 import { passiveFamilyOrder, passiveGroupOf, passiveLabel, passiveOfGearPiece, type PassiveGroup } from "../../lib/singularityPassives.js";
 
@@ -49,6 +49,9 @@ export interface EffectEntry {
    *  (`EquipmentDef.image`, `/img/equipment/<image>.webp`) — the talisman
    *  chips show it instead of the effect icon. Null when that piece has none. */
   image: string | null;
+  /** Rarity of that piece (`EquipmentDef.grade`) — the talisman chips paint
+   *  its slot plate under the art, as the Gear tiles do. Null without a grade. */
+  rarity: DesignRarity | null;
   /** Effect display name — pulled from `game.equipmentPassives[itemId].name`
    *  (the canonical effect title like "Destruction"), with a fallback to
    *  the equipment item name and finally the effect key. */
@@ -149,7 +152,7 @@ export function effectCatalogFromInventory(
   // Key on the effect IDENTITY (`setId` = UniqueOptionID), not the icon — the
   // icon is shared across distinct effects (the Recklessness family), so icon-
   // keying collapsed five effects into one chip. Store the icon for display.
-  const map = new Map<string, { icon: string | null; image: string | null; name: string; descT4: string | null; owned: number }>();
+  const map = new Map<string, { icon: string | null; image: string | null; rarity: DesignRarity | null; name: string; descT4: string | null; owned: number }>();
   for (const g of inventory.gear) {
     // Use the design SlotId so the comparison is symmetric with the rest
     // of the panels (weapon/accessory happen to match the engine name 1:1
@@ -168,10 +171,10 @@ export function effectCatalogFromInventory(
     const passive = game.equipmentPassives[String(g.itemId)];
     const name = passive?.name ?? def.name ?? def.setId;
     const descT4 = passive?.textByTier?.[4] ?? null;
-    map.set(def.setId, { icon: def.effectIcon ?? null, image: def.image ?? null, name, descT4, owned: 1 });
+    map.set(def.setId, { icon: def.effectIcon ?? null, image: def.image ?? null, rarity: def.grade ? toDesignRarity(def.grade) : null, name, descT4, owned: 1 });
   }
   return Array.from(map.entries())
-    .map(([key, { icon, image, name, descT4, owned }]) => ({ key, icon, image, name, descT4, owned }))
+    .map(([key, { icon, image, rarity, name, descT4, owned }]) => ({ key, icon, image, rarity, name, descT4, owned }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 

@@ -8,6 +8,15 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎴 Optimizer › Talismans : chaque puce sur la plaque de rareté de l'objet (hors lot) (2026-11-05)
+- ✅ **Pourquoi.** Demande de Sevih du 05/11, après G115 : les talismans du panneau se lisent mieux sur leur fond
+  de rareté (la plaque rouge d'un Legendary), comme les tuiles de Gear.
+- ✅ **Fait.** `EffectEntry.rarity` (`catalogs.ts`, `EquipmentDef.grade` → `toDesignRarity` de la première pièce
+  possédée) ; `EffectIconChip` en `iconKind="item"` peint `/img/ui/bg/<plaque>.webp` sous l'image (`raritySlotBg`,
+  exporté par `design/EquipmentIcon.tsx` : la table `RARITY_SLOT_BG` des tuiles), rien sans image ni sans grade ;
+  Weapons et Accessories inchangés. Tests `effectPanels.test.ts` adaptés (plaque Unique sous l'image, Rare, sans
+  grade ; le catalogue porte la rareté). Docs : `wiki/Using-the-App.md`, `docs/solver.md`, `wiki/Solver.md`.
+
 ### 🧭 Les dix popovers de filtres sur deux lignes de cinq à droite de la barre, boutons plus compacts (G117) (2026-11-05)
 - ✅ **Pourquoi.** Demande de Sevih du 05/11, après G115 : avec dix boutons de filtres, la ligne 1 de la barre
   d'outils de l'Optimizer débordait. Les dix popovers tiennent maintenant sur deux lignes de cinq, à droite du

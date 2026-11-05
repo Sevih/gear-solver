@@ -166,7 +166,7 @@ is how many rules it holds. Esc or a click outside closes it.
   Required = only the pieces rolling one of the required effects; excluded = never that effect.
   Empty = any effect. Only the effects you own (for the hero's class) appear.
 - **Talismans** — the same cycle, but each chip shows the talisman itself (the art of the first
-  one you own), not its effect icon. A talisman advised by **Load reco** starts *preferred*
+  one you own, on its rarity plate as in Gear), not its effect icon. A talisman advised by **Load reco** starts *preferred*
   (dotted outline): used if you own one (any star of the same family), otherwise any talisman is.
 - **+15 passives** — three groups, **Weapon**, **Accessory** and **Armor** (the four armor pieces
   together), each listing the Singularity passives your pieces of that group already carry

@@ -5,6 +5,7 @@
  */
 import type { GameData } from "@gear-solver/core";
 import { cx } from "../../design/cx.js";
+import { raritySlotBg } from "../../design/EquipmentIcon.js";
 import { GameText } from "../../design/GameText.js";
 import { RichTooltip } from "../../design/RichTooltip.js";
 import { ARMOR_SLOTS } from "../../lib/solver/setPlans.js";
@@ -98,8 +99,9 @@ function SetTooltipBody({ set, stateLabel }: { set: ArmorSetEntry; stateLabel: s
 /** Weapon / accessory / talisman effect chip — off/required/excluded, plus a
  *  talisman's `preferred` (the required tone with a dashed border). The icon
  *  is the effect's (`iconKind="effect"`, weapons and accessories) or the
- *  item's own art (`"item"`, talismans: their effect icons look alike); no
- *  image → the effect's initials. */
+ *  item's own art (`"item"`, talismans: their effect icons look alike) on
+ *  its rarity slot plate, as the Gear tiles paint it; no image → the
+ *  effect's initials. */
 export function EffectIconChip({ effect, state, onClick, iconKind = "effect" }: {
   effect: EffectEntry;
   state: ChipState;
@@ -114,6 +116,7 @@ export function EffectIconChip({ effect, state, onClick, iconKind = "effect" }: 
   const src = iconKind === "item"
     ? (effect.image ? `/img/equipment/${effect.image}.webp` : null)
     : (effect.icon ? `/img/ui/effect/${effect.icon}.webp` : null);
+  const plate = iconKind === "item" && src && effect.rarity ? `/img/ui/bg/${raritySlotBg(effect.rarity)}.webp` : null;
   return (
     <RichTooltip content={<EffectTooltipBody effect={effect} stateLabel={stateLabel} />}>
       <button
@@ -125,8 +128,11 @@ export function EffectIconChip({ effect, state, onClick, iconKind = "effect" }: 
           state === "preferred" && "border-dashed",
         )}
       >
+        {plate && (
+          <img src={plate} alt="" className="pointer-events-none absolute inset-0 h-full w-full rounded-[5px] object-cover" draggable={false} />
+        )}
         {src ? (
-          <img src={src} alt={effect.name} className={cx("pointer-events-none object-contain", iconKind === "item" ? "h-6 w-6" : "h-5 w-5")} />
+          <img src={src} alt={effect.name} className={cx("pointer-events-none relative object-contain", iconKind === "item" ? "h-6 w-6" : "h-5 w-5")} />
         ) : (
           // No image — show the effect's initials so the chip is still
           // identifiable (and we don't request an empty `.webp` → 404).
