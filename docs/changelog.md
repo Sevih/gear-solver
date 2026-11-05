@@ -8,6 +8,41 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧭 Les dix popovers de filtres sur deux lignes de cinq à droite de la barre, boutons plus compacts (G117) (2026-11-05)
+- ✅ **Pourquoi.** Demande de Sevih du 05/11, après G115 : avec dix boutons de filtres, la ligne 1 de la barre
+  d'outils de l'Optimizer débordait. Les dix popovers tiennent maintenant sur deux lignes de cinq, à droite du
+  héros, et rapetissent un poil ; la ligne 2 (Reforge, Maxed only, Transistone potential, reset filters) ne bouge pas.
+- ✅ **Le bloc.** Dans `BuilderToolbar.tsx`, l'ancien groupe `ml-auto flex flex-wrap items-center gap-x-2 gap-y-1.5`
+  devient un bloc `ml-auto flex flex-col items-end gap-1.5` de deux conteneurs `flex items-center gap-2`, dans
+  l'ordre de la barre : Options, Stat filters, Ratings, Priority, Mains, puis Sets, Weapons, Accessories,
+  Talismans, +15 passives, alignés sur leur bord droit. Le `flex-wrap` de la ligne 1 reste : dans une fenêtre
+  étroite, le bloc entier passe sous le héros. Mêmes props, mêmes `myKey`, mêmes comptes, mêmes panneaux.
+- ✅ **Les boutons.** `PopoverButton` passe de `h-7 … px-2.5 text-[11px]` à `h-6 … px-2 text-[10.5px]` (badge et
+  chevron inchangés) ; `ReforgeModeControl` et `ToolbarToggle` prennent `h-6` et le texte à 10,5 px pour rester
+  alignés (leurs marges intérieures ne changent pas) ; Score | CP, Solve et Filter gardent `h-9`. Le bloc fait
+  2 × 24 px + 6 px : la ligne 1 grandit d'autant, portrait et boutons de gauche restent centrés.
+- ✅ **Les panneaux, vérifiés sur un rendu.** Banc hors dépôt : la CSS de `vite build` (sortie hors dépôt) et la
+  barre montée seule dans Firefox sans tête à 1280 px, dans un conteneur `p-2 overflow-hidden` comme celui de
+  `BuilderScreen` (barre de 8 à 1272 px), chaque popover ouvert tour à tour et son panneau mesuré, sans badge puis
+  avec des badges partout. Options (`w-52`, 867-1075) tient à gauche. Mais **Priority et Mains**, désormais au
+  bout de la première ligne, débordaient : Priority (`w-56`) jusqu'à 1344 px, Mains (`w-48`) jusqu'à 1390 px,
+  coupés par l'`overflow-hidden` de l'écran. Même remède que celui prévu pour Options : **Priority et Mains passent
+  en `align="right"`** (966-1190 et 1069-1261 px), seul écart aux `align` d'aujourd'hui. Ratings reste à gauche
+  (1041-1265 px sans badge, 7 px de marge ; 994-1218 avec badges) ; Stat filters et toute la seconde ligne
+  tiennent comme avant.
+- ✅ **Tests.** `apps/renderer/test/builderToolbar.test.ts` : l'assertion sur le groupe `ml-auto` vise le nouveau
+  bloc ; un test de plus découpe le bloc en ses deux lignes `flex` et vérifie cinq popovers par ligne dans l'ordre,
+  les déclencheurs en `h-6`, et la ligne 2 toujours Reforge, Maxed only, Transistone potential, reset filters
+  (5 tests). `npm run typecheck` : vert (dernière ligne `> tsc --noEmit`, sans erreur) ; `npm test` : 1630 tests
+  verts (169 + 263 + 1198, dernière série `Tests  1198 passed (1198)`) ; `npm run lint` : `✖ 7 problems (0 errors,
+  7 warnings)`, comme avant.
+- ✅ **Docs.** `docs/solver.md` et `wiki/Solver.md` (popovers de filtres : deux lignes de cinq, `h-6`, `align` par
+  bouton ; arborescence), `wiki/Using-the-App.md` (paragraphe des popovers), `docs/reference.md` et
+  `wiki/Engine-Reference.md` (ligne `builderToolbar.test.ts` : 5 tests, deux lignes).
+- ⏳ Sevih, sur le fixe : à 1280 px, deux lignes de cinq boutons à droite du héros, Reforge / Maxed only /
+  Transistone potential sur leur ligne en dessous, et chaque panneau ouvert (Priority et Mains compris, qui
+  s'ouvrent maintenant vers la gauche) reste dans la barre ; Ratings, à 7 px du bord sans badge, est le plus juste.
+
 ### 🎯 Passifs +15 demandés comptés dans DMG UP% / DMG RED%, colonne « to do » des pièces à monter (G116) (2026-11-05)
 - ✅ **Pourquoi.** Demande de Sevih du 05/11, après G114 : demander un passif +15 (une famille `required` dans
   `passivePicks`), c'est bâtir pour ce contenu, mais seules les deux familles inconditionnelles

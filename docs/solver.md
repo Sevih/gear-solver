@@ -362,9 +362,12 @@ Sous la ligne 1, visible popovers fermés, tant que le héros n'a pas de poids �
 
 ### Popovers de filtres (`BuilderToolbar.tsx`, `PopoverButton`)
 
-Dix boutons à droite de la ligne 1 (renvoyés sur leur propre ligne dans une fenêtre étroite), dans l'ordre de
-la barre : Options, Stat filters, Ratings, Priority, Mains, Sets, Weapons, Accessories, Talismans, +15 passives
-(les cinq derniers ouvrent leur panneau depuis leur bord droit, `align="right"`). Un seul
+Dix boutons à droite de la ligne 1, sur deux lignes de cinq alignées sur leur bord droit (le bloc entier passe
+sous le héros dans une fenêtre étroite), dans l'ordre de la barre : Options, Stat filters, Ratings, Priority,
+Mains, puis Sets, Weapons, Accessories, Talismans, +15 passives (`h-6`, texte à 10,5 px, comme Reforge et les
+bascules de la ligne 2). Priority, Mains et toute la seconde ligne ouvrent leur panneau depuis leur bord droit
+(`align="right"`), pour qu'il reste dans la largeur de la barre ; Options, Stat filters et Ratings depuis leur
+bord gauche. Un seul
 popover ouvert à la fois (clic dehors ou Échap le ferment) ; le badge d'un bouton compte les contraintes qu'il
 porte (Options : celles qui s'écartent des défauts, plus les héros cochés dans Don't take from…). Chaque popover
 est un composant `Panel` (`screens/builder/Panel.tsx`), décrit ici dans l'ordre du manuel.
@@ -1079,7 +1082,7 @@ apps/renderer/src/
     ├── builder/                    ← onglet Optimizer
     │   ├── BuilderScreen.tsx       ← useReducer(SolverFilters) + mise en page + changement de héros + builds/presets/reco + build sélectionné
     │   ├── useSolverSession.ts     ← orchestrator wiring : solve/cancel, estimation pré-solve, progression, résultats
-    │   ├── BuilderToolbar.tsx      ← ligne 1 (héros, Score | CP, Solve / Cancel, Filter, popovers à droite) + ligne 2 (Reforge, bascules, reset filters)
+    │   ├── BuilderToolbar.tsx      ← ligne 1 (héros, Score | CP, Solve / Cancel, Filter, popovers à droite sur deux lignes de cinq) + ligne 2 (Reforge, bascules, reset filters)
     │   ├── PriorityBanner.tsx      ← bandeau « No priority set » / « Priority from outerpedia reco »
     │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · EffectPanel.tsx · PassivesPanel.tsx
     │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← les dix popovers

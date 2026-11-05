@@ -354,9 +354,11 @@ Under row 1, visible with the popovers closed, while the hero has no weights of 
 
 ### Filter popovers (`BuilderToolbar.tsx`, `PopoverButton`)
 
-Ten buttons on the right of row 1 (sent to a line of their own in a narrow window), in the bar's order: Options,
-Stat filters, Ratings, Priority, Mains, Sets, Weapons, Accessories, Talismans, +15 passives (the last five open
-their panel from their right edge, `align="right"`). One popover
+Ten buttons on the right of row 1, on two lines of five aligned on their right edge (the whole block drops below
+the hero in a narrow window), in the bar's order: Options, Stat filters, Ratings, Priority, Mains, then Sets,
+Weapons, Accessories, Talismans, +15 passives (`h-6`, 10.5 px text, like Reforge and the toggles of row 2).
+Priority, Mains and the whole second line open their panel from their right edge (`align="right"`) so it stays
+inside the toolbar's width; Options, Stat filters and Ratings from their left edge. One popover
 open at a time (outside click or Esc closes it); a button's badge counts the constraints it holds (Options:
 those off the defaults, plus the heroes ticked in Don't take from…). Each popover is a `Panel` component
 (`screens/builder/Panel.tsx`), described here in the manual's order.
@@ -998,7 +1000,7 @@ apps/renderer/src/
     ├── builder/                    ← Optimizer tab
     │   ├── BuilderScreen.tsx       ← useReducer(SolverFilters) + layout + hero switch + builds/presets/reco + selected build
     │   ├── useSolverSession.ts     ← orchestrator wiring: solve/cancel, pre-solve estimate, progress, results
-    │   ├── BuilderToolbar.tsx      ← row 1 (hero, Score | CP, Solve / Cancel, Filter, popovers on the right) + row 2 (Reforge, toggles, reset filters)
+    │   ├── BuilderToolbar.tsx      ← row 1 (hero, Score | CP, Solve / Cancel, Filter, popovers on the right in two lines of five) + row 2 (Reforge, toggles, reset filters)
     │   ├── PriorityBanner.tsx      ← the "No priority set" / "Priority from outerpedia reco" banner
     │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · EffectPanel.tsx · PassivesPanel.tsx
     │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← the ten popovers
