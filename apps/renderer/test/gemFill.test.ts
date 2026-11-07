@@ -98,9 +98,10 @@ describe("gem filling — the free slots take the hero's useful stat", () => {
   });
 
   it("a noCrit hero takes no CHD as filler while a useful gem is left", () => {
-    // Rhona (2000008, noCrit): CHD gains 0 dmg, so the lv5 ATK% go first though
-    // a lv6 CHD is bigger by raw magnitude.
-    const alloc = allocOf(request(2000008, [DMGUP6, ...ids(3, ATK5), ...ids(6, CHD6)], { priority: { dmgUp: 3 } }));
+    // Tamamo-no-Mae (2000086): noCrit AND damage on ATK (no dmgStat / dmgSec;
+    // Rhona scales on HP since 1.11.601). CHD gains 0 dmg, so the lv5 ATK% go
+    // first though a lv6 CHD is bigger by raw magnitude.
+    const alloc = allocOf(request(2000086, [DMGUP6, ...ids(3, ATK5), ...ids(6, CHD6)], { priority: { dmgUp: 3 } }));
     expect(alloc.talisman).toEqual([DMGUP6, ATK5, ATK5, ATK5, CHD6]);
     expect(alloc.ee).toEqual(ids(5, CHD6));
   });

@@ -8,6 +8,28 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧪 Test de remplissage des gemmes d'un héros sans crit : Tamamo-no-Mae à la place de Rhona (G119) (2026-11-07)
+- ✅ **Pourquoi.** Dans `apps/renderer/test/gemFill.test.ts`, le test « a noCrit hero takes no CHD as filler while a
+  useful gem is left » prenait **Rhona (2000008)** comme héros noCrit qui scale sur l'ATK. Avec la table 1.11.601,
+  Rhona devient un HP-scaler (`dmgStat: "hp"` à la place de `dmgSec: [{ hp, 0.02 }]`, `bestSkill` S2 burst 3
+  facteur 1900) : les gemmes ATK% ne lui rapportent plus rien non plus et le remplissage retombe à la grandeur
+  brute (reçu `[DMGUP6, CHD6, CHD6, CHD6, CHD6]`, attendu `[DMGUP6, ATK5, ATK5, ATK5, CHD6]`). Le test vérifie un
+  fait du moteur, pas Rhona : il doit tenir sur les deux tables.
+- ✅ **Le héros.** **Tamamo-no-Mae (2000086)** est le seul héros `noCrit: true` sans `dmgStat` ni `dmgSec`, vérifié
+  dans `characters.json` sur les deux tables (1.11.504 et 1.11.601, même `bestSkill` S3 facteur 2490) ; Rhona et
+  Nella (2000091) sont HP-scalers en 1.11.601. `2000008` devient `2000086` et le commentaire dit pourquoi (noCrit ET
+  dégâts sur l'ATK, Rhona scalant sur l'HP depuis la 1.11.601). Même pool, mêmes attentes, qui tiennent telles
+  quelles : `DMGUP6` puis les trois `ATK5` puis un `CHD6` en talisman, cinq `CHD6` en EE.
+- ✅ **Les deux tables.** `data/derived` copié hors dépôt (avec `apps/desktop/src/game-client.json`, que
+  `data/sync.mjs` rafraîchit aussi), `npm test` sur la 1.11.504, puis `node data/sync.mjs` (1.11.601, hash
+  `46bb6a261cd2`) et `npm test` à nouveau, puis restauration depuis la copie : `git status --short` ne montre que le
+  test (et ce changelog). Le bloc « offensive ratings (Rhona / K.Tamamo / G.Nella) » de
+  `apps/renderer/test/solver.test.ts` passe sur les deux tables (`-t "offensive ratings"` : 1 passed en 1.11.601).
+- ✅ **Tests.** `npm run typecheck` : `tsc --noEmit` sans erreur. `npm test`, identique sur les deux tables : core
+  `Tests  169 passed (169)`, desktop `Tests  263 passed (263)`, renderer `Tests  1197 passed (1197)`.
+  `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, le même compte qu'avant.
+- ⏳ Rien : la PR `data-sync` apporte la table 1.11.601.
+
 ### 🧭 Neuf popovers de filtres sur une ligne, Options en tête de la ligne Reforge (G118) (2026-11-05)
 - ✅ **Pourquoi.** Demande de Sevih du 05/11, après G117 : le bloc de deux lignes de cinq popovers ne lui allait
   pas. Retour à une seule ligne de popovers à droite de la ligne 1, et **Options** quitte cette ligne pour ouvrir
