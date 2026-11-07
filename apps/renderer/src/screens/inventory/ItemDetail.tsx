@@ -35,7 +35,7 @@ export function ItemDetail({
       onToggleExclude={onToggleExclude}
       onOptimizeWearer={onOptimizeWearer}
       effects="card"
-      emptyLabel="No item selected"
+      emptyLabel="No piece selected"
       emptyHint="Click a tile in the grid to inspect its main / substats / equipped character."
       excludeHint="Never use this piece in any solve (e.g. trash rolls). Also via right-click on the tile."
     />

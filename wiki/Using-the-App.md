@@ -410,7 +410,7 @@ changes ("N changes across M heroes") and says whether their order matters.
 - **Work through it in-game** — tick each line off as you equip it for real; on your next
   capture (or as soon as the app sees the move, with the game open), changes that are done are
   pruned automatically and a notice in the bottom-right corner says so.
-- **Apply locally** — per card, applies that hero's swaps to your captured snapshot (the same
+- **Apply to snapshot** — per card, applies that hero's swaps to your captured snapshot (the same
   rewrite as the Optimizer's **Apply to snapshot**, never the game itself), so the rest of the app
   reflects them. Gems aren't socketed by the app: socket them in-game. If it fails, the card says
   why (game open, no snapshot, write error).

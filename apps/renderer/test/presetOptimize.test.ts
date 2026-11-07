@@ -65,7 +65,7 @@ describe("presetOptimizePatch — effects", () => {
     expect(patch.accessoryEffectPicks).toEqual({});
     expect(patch.talismanEffectPicks).toEqual({ o6: "required" });
     expect(notes).toContain("Weapon: no unique effect — no effect filter.");
-    expect(notes).toContain("Accessory: not in the outfit — no effect filter.");
+    expect(notes).toContain("Accessory: not in the preset — no effect filter.");
   });
 });
 
@@ -80,7 +80,7 @@ describe("presetOptimizePatch — priority substats", () => {
     const { patch, build, notes } = presetOptimizePatch({ pieces, reco: null, game: GAME, talismanFamily: FAMILY });
     expect(patch.priority).toEqual({ critRate: 3, atk: 2, pen: 1 });
     expect(build).toBeNull();
-    expect(notes).toContain("No outerpedia reco: substats from the outfit only.");
+    expect(notes).toContain("No outerpedia reco: substats from the preset only.");
   });
 
   it("merges with the reco: max of both weights, then reco keys first, then piece count; cut at five", () => {
@@ -150,11 +150,11 @@ describe("presetOptimizeNote", () => {
     const pieces = outfit([["pen"], ["pen"]]);
     const withReco = presetOptimizePatch({ pieces, reco: reco({ Burst: { SubstatPrio: [["critDmg"]] } }), game: GAME, talismanFamily: FAMILY });
     expect(presetOptimizeNote({ num: 3, name: "Nuke" }, withReco)).toBe(
-      'Optimizing preset #3 Nuke — same weapon / accessory / talisman effects required, 2 priority substats from the outfit + outerpedia\'s "Burst" reco.',
+      'Optimizing preset #3 Nuke — same weapon / accessory / talisman effects required, 2 priority substats from the preset + outerpedia\'s "Burst" reco.',
     );
     const without = presetOptimizePatch({ pieces, reco: null, game: GAME, talismanFamily: FAMILY });
     expect(presetOptimizeNote({ num: 3, name: "Nuke" }, without)).toBe(
-      "Optimizing preset #3 Nuke — same weapon / accessory / talisman effects required, 1 priority substat from the outfit. No outerpedia reco: substats from the outfit only.",
+      "Optimizing preset #3 Nuke — same weapon / accessory / talisman effects required, 1 priority substat from the preset. No outerpedia reco: substats from the preset only.",
     );
   });
 });

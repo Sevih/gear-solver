@@ -57,7 +57,7 @@ export function presetOptimizePatch({ pieces, reco, game, talismanFamily }: Pres
   for (const { slot, label } of EFFECT_SLOTS) {
     const piece = pieces.find((p) => p.slot === slot);
     if (!piece) {
-      notes.push(`${label}: not in the outfit — no effect filter.`);
+      notes.push(`${label}: not in the preset — no effect filter.`);
       continue;
     }
     const keys = slot === "ooparts"
@@ -73,7 +73,7 @@ export function presetOptimizePatch({ pieces, reco, game, talismanFamily }: Pres
   const fromReco = build && reco
     ? translateRecoBuild(reco.builds[build]!, (id) => (id != null ? game.equipment[String(id)]?.setId ?? null : null), talismanFamily)
     : null;
-  if (!fromReco) notes.push("No outerpedia reco: substats from the outfit only.");
+  if (!fromReco) notes.push("No outerpedia reco: substats from the preset only.");
   else if (names.length > 1) notes.push(`Reco build "${build}" (first of ${names.length} — "Load reco" picks another).`);
 
   // Outfit: how many pieces roll each priority key (talisman and EE roll none).
@@ -120,7 +120,7 @@ export function presetOptimizePatch({ pieces, reco, game, talismanFamily }: Pres
 /** The Builder's status line after "Optimize preset →". */
 export function presetOptimizeNote(preset: { num: number; name: string }, r: PresetOptimize): string {
   const n = Object.keys(r.patch.priority).length;
-  const source = r.build ? `from the outfit + outerpedia's "${r.build}" reco` : "from the outfit";
+  const source = r.build ? `from the preset + outerpedia's "${r.build}" reco` : "from the preset";
   const head = `Optimizing preset #${preset.num} ${preset.name || "Unnamed preset"} — same weapon / accessory / talisman effects required, ${n} priority substat${n === 1 ? "" : "s"} ${source}.`;
   return [head, ...r.notes].join(" ");
 }

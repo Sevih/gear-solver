@@ -574,7 +574,7 @@ actions.
   Talisman / EE (`gemAllocation` vs the build piece's `gemSlots`, `lib/worklist/changes.ts`) to the **Worklist**
   tab (`screens/WorklistScreen.tsx`, storage `lib/storage/worklist.ts`): a cross-hero queue, **one entry per hero**
   (a new build **replaces** the hero's entry, `upsertWorklistEntry`; the button then reads "Replace in worklist"),
-  where each change is a checkable line + an **Apply locally** (same `equipPieces`; gems aren't socketed by the
+  where each change is a checkable line + an **Apply to snapshot** (same `equipPieces`; gems aren't socketed by the
   app, they're socketed in-game). *applied / stale / conflict* states **derived live** from the inventory (nothing
   frozen: the piece's name and main read from the current snapshot, `worklistTarget`, the stored `toName` /
   `toMain` being only a fallback for a vanished piece; a *stale* line — a piece eaten, sold or dissolved in-game —
@@ -780,13 +780,13 @@ and read live from App: a weight changed in the Optimizer counts at the next ren
 of the hero's most recent saved build, then nothing; a priority without any weight falls through to the next
 source (`hasPriority`, the one "at least one non-zero weight" predicate). The line says "priority from saved
 build" in the second case. A hero with no saved build and no priority in the Optimizer has no score. An associated hero is compared to their **best known build** (`bestKnownFor`:
-their most recent saved build, re-scored with the **current** priority, else their current gear), **in real
+their most recent saved build, re-scored with the **current** priority, else their loadout), **in real
 rolls on both sides**: the saved build is recomposed from its pieces (`build.pieceUids`) as captured today
 (actual rolls and enhance — never its stored `finalStats`, projected to +10R6 / +15R9 / Transistone by the
 solve), with the gems it allocated on the Talisman and the EE (`gemAllocationOverride`; an allocation without
 a gem keeps the socketed gems, as the solve did); if one of its pieces left the inventory (sold, dissolved),
-it no longer counts and the comparison is against the current gear ("vs current gear"):
-`loss = 1 − score(preset) / score(best)`, shown in % "vs saved build" / "vs current gear"; past the
+it no longer counts and the comparison is against their loadout ("vs loadout"):
+`loss = 1 − score(preset) / score(best)`, shown in % "vs saved build" / "vs loadout"; past the
 threshold (15 % by default, set by the stepper at the top of the Presets screen,
 `gs.solver.presetLossWarn`) the line turns orange with
 "<Name> loses 23 % vs their saved build". Without a priority: "no priority set for <Name> — set one in the
@@ -1018,7 +1018,7 @@ apps/renderer/src/
     │   ├── BottomGearBand.tsx · FilterFooter.tsx   ← the selected build's cards, pinned footer
     │   └── catalogs.ts · statColumns.ts ← catalogs from the inventory, stats/ratings tables
     ├── presets/PresetsScreen.tsx   ← Presets tab: per-preset cards (game order, class or rank filter / sort), game grid, reference, associated, EE gems, loss, overcap, rank and lock, local presets, + Worklist, Optimize → / Optimize preset →
-    ├── WorklistScreen.tsx          ← Worklist tab: per-hero cards, reservations, Apply locally / Apply all, Remove
+    ├── WorklistScreen.tsx          ← Worklist tab: per-hero cards, reservations, Apply to snapshot / Apply all, Remove
     ├── gear/                       ← Gear tab (formerly the Inventory and Home tabs): GearScreen.tsx (Overview / Pieces / Scrap sub-tabs), OverviewView.tsx + overview/
     └── inventory/                  ← the grid of Gear › Pieces and › Scrap: InventoryScreen, FilterModal, ScrapCard, ItemDetail, VirtualGearGrid
 ```

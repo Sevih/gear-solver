@@ -250,7 +250,7 @@ export function PresetsScreen({ inventory, game, userGeasLevels, userCodexLevel,
       <div className="flex flex-wrap items-center gap-3 px-6 pt-4 text-[11.5px]">
         <span className="font-mono uppercase tracking-wider text-zinc-400">Presets</span>
         <span className="text-zinc-400">
-          A preset is one reference hero's outfit, worn as-is by its associated heroes (each keeps their own EE).
+          A preset is one reference hero's loadout, worn as-is by its associated heroes (each keeps their own EE).
           Scores use the priority each hero has in the Optimizer (else their latest saved build's) with the EE gems proposed for them, in real rolls on both sides: a saved build is recomposed from its pieces as captured, with the gems it allocated; a line turns orange past a{" "}
           <span className="inline-flex align-middle" title={`${SETTINGS.presetLossWarn.help} ${settingRange("presetLossWarn")}`}>
             <Stepper
@@ -616,7 +616,7 @@ function PresetCard({
                   <div className="w-56">
                     <HeroPicker mode="single" heroes={candidates} game={game} value={null} onChange={(uid) => { if (uid) onAddAssociated(uid); }} />
                   </div>
-                  {associatedUids.length === 0 && <span className="text-[11.5px] italic text-zinc-400">Add the heroes who will share this outfit</span>}
+                  {associatedUids.length === 0 && <span className="text-[11.5px] italic text-zinc-400">Add the heroes who will share this preset</span>}
                 </div>
                 {associatedUids.map((uid) => (
                   <HeroLine key={uid} uid={uid} row={row} ctx={ctx} heroes={heroes} lossWarnPct={lossWarnPct} worklist={worklist} onOptimize={onOptimize} onRemove={() => onRemoveAssociated(uid)} />
@@ -889,7 +889,7 @@ function HeroLine({
   const loss = best ? presetLoss(evalPreset?.score ?? null, best.score) : null;
   const lossPct = loss != null ? Math.round(loss * 100) : null;
   const warn = lossPct != null && lossPct > lossWarnPct;
-  const vs = best?.source === "saved" ? "saved build" : "current gear";
+  const vs = best?.source === "saved" ? "saved build" : "loadout";
   const lossTitle = `Best known: score ${fmtNum(best?.score)} (${vs}), in real rolls on both sides — ${
     best?.source === "saved"
       ? "the saved build recomposed from its pieces as captured, with the gems it allocated"
@@ -965,7 +965,7 @@ function HeroLine({
         >✕</button>
       )}
       {evalPreset && gemNames.length > 0 && (
-        <span className="basis-full pl-10 text-[11px] text-zinc-300" title="The gems of their own EE that score best with this outfit — the Talisman's stay as they are (part of the preset)">
+        <span className="basis-full pl-10 text-[11px] text-zinc-300" title="The gems of their own EE that score best with this preset — the Talisman's stay as they are (part of the preset)">
           <span className="text-[9px] uppercase tracking-wider text-zinc-400">EE gems:</span> {gemNames.join(", ")}
         </span>
       )}

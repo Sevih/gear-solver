@@ -96,7 +96,7 @@ Swaps = a small change you can equip in a few moves; high Swaps = a bigger reshu
 
 **Can the app equip gear onto my heroes for me?**
 Locally, yes: the Optimizer's **Apply to snapshot** button applies the selected build to your captured
-snapshot (after a confirmation popup; greyed out while the game is open), and the **Worklist** tab has **Apply locally** /
+snapshot (after a confirmation popup; greyed out while the game is open), and the **Worklist** tab has **Apply to snapshot** /
 **Apply all** for queued changes. What it *can't* do is push changes into the actual game —
 there's no game API for that, so these only edit the local snapshot (and only while the game is
 closed). With the game open you don't need them: equip the pieces and socket the gems in-game and the

@@ -365,7 +365,7 @@ describe("BottomGearBand — compact band", () => {
       expect(band(solved, compact)).toContain("No EE in this build");
       expect(band(null, compact)).toContain("No boots yet");
       expect(band(null, compact)).not.toContain("Click a tile");
-      expect(band(null, compact)).not.toContain("No item selected");
+      expect(band(null, compact)).not.toContain("No piece selected");
     }
     expect(band(null, false)).toContain("Solve, then pick a build in the table.");
   });

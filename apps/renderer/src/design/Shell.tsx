@@ -226,7 +226,7 @@ export function GsHeader({ active, onTabChange, capture, update = null, onOpenUp
         )}
         <button
           onClick={onSetup}
-          title="Open Settings (setup checklist, solver, data, backup, debug, logs)"
+          title="Open Settings (Setup, Data & updates, Solver, Display, Backup, Advanced)"
           className="grid h-7 w-7 place-items-center rounded-md border border-white/8 bg-white/3 text-white transition-colors hover:bg-white/6 active:scale-95"
           aria-label="Settings"
         >

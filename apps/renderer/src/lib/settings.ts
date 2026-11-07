@@ -149,7 +149,7 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
     default: false,
     kind: "bool",
     label: "Compact result cards",
-    help: "Shorter, narrower gear cards under the results: no item icon (enhance, breakthrough, stars by the name), set names instead of item names, icon + value stats with substats two per row, gems as icons, one-line quality and effects, details on hover. Gear and tooltips unchanged.",
+    help: "Shorter, narrower gear cards under the results: no piece icon (enhance, breakthrough, stars by the name), set names instead of piece names, icon + value stats with substats two per row, gems as icons, one-line quality and effects, details on hover. Gear and tooltips unchanged.",
     appliesNextSolve: false,
   },
   resultRows: {

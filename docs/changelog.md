@@ -8,6 +8,56 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔤 Derniers écarts au glossaire 5.c dans le code : Apply to snapshot, Preset, volets de Settings (G123) (2026-11-07)
+- ✅ **Pourquoi.** Point ⏳ « Écarts au glossaire restés dans le code » laissé par U14 (G106) : des chaînes visibles
+  gardaient des mots que le glossaire de `docs/ux-audit-2026-11-01.md` § 5.c bannit (« Apply locally », qui fait
+  croire à une action en jeu, « outfit », « saved preset », « current gear », « item » pour une pièce,
+  « optimization » dans une aide), et deux textes décrivaient mal le modal Settings. Lot de libellés : aucun
+  comportement, aucun contrôle déplacé, aucune clé `gs.*` touchée.
+- ✅ **Libellés changés (avant → après).** Worklist (`screens/WorklistScreen.tsx`) : bouton par carte « Apply
+  locally » → « Apply to snapshot » ; infobulle des lignes de gemmes « Socket in-game — Apply locally / Apply all
+  don't socket gems. » → « … Apply to snapshot / Apply all … » (les textes de « Apply all » des lignes ~177 et ~304
+  ne citaient déjà plus que « Apply all » : rien à changer). Heroes (`screens/BuildsScreen.tsx`) : infobulle
+  « Saved preset: ‹nom› » → « Preset: ‹nom› ». Optimize preset → (`lib/presets/optimize.ts`) : « ‹slot›: not in the
+  outfit — no effect filter. » → « not in the preset », « No outerpedia reco: substats from the outfit only. » →
+  « from the preset only », `presetOptimizeNote` « from the outfit + outerpedia's "‹build›" reco » / « from the
+  outfit » → « from the preset … ». Presets (`screens/presets/PresetsScreen.tsx`) : « Add the heroes who will share
+  this outfit » → « … this preset » ; phrase de tête « A preset is one reference hero's outfit » → « … reference
+  hero's loadout » ; infobulle des gemmes d'EE « … score best with this outfit » → « … with this preset » ; perte
+  « vs their current gear » / « vs current gear » → « vs their loadout » / « vs loadout ». En-tête
+  (`design/Shell.tsx`) : infobulle du bouton Settings « Open Settings (setup checklist, solver, data, backup, debug,
+  logs) » → « Open Settings (Setup, Data & updates, Solver, Display, Backup, Advanced) », les six volets de `TABS`.
+  Gear (`screens/inventory/ItemDetail.tsx`) : « No item selected » → « No piece selected » (l'exemple même du
+  glossaire). Optimizer (`screens/builder/BuilderToolbar.tsx`) : infobulle du filtre « (instant after the first
+  optimization) » → « (instant after the first solve) ». Settings › Display (`lib/settings.ts`, aide de compact
+  cards) : « no item icon … set names instead of item names » → « no piece icon … piece names ».
+- ✅ **Commentaires.** `design/settings/SettingsModal.tsx` : l'en-tête disait que le volet Setup « self-dismisses once
+  the checks pass » ; c'est faux (`onReady` ne fait que poser `gs.onboarding.done` et relire le statut du plugin,
+  le modal reste ouvert) : il dit maintenant que le wizard marque l'onboarding fait (plus d'ouverture au lancement)
+  et reste ouvert. Les deux commentaires de `WorklistScreen.tsx` qui nomment le bouton suivent le nouveau nom.
+- ✅ **Docs, des deux côtés.** `wiki/Using-the-App.md` (section Worklist) et `wiki/FAQ.md` : « Apply locally » →
+  « Apply to snapshot ». `docs/solver.md` et `wiki/Solver.md` : Apply locally → Apply to snapshot (Worklist et
+  arborescence), « vs current gear » → « vs loadout » ; `docs/solver.md` cite aussi la ligne de statut d'Optimize
+  preset → (« from the preset + outerpedia's … », « from the preset »). `wiki/Engine-Reference.md` : « the
+  Worklist's Apply locally » → « Apply to snapshot », « filter presets » → « filter sets », « best outfit » → « best
+  loadout », « current gear » → « loadout » (×2), « from the outfit alone » / « empty outfit » → « preset » ;
+  noms de tests, de fonctions et de clés cités tels quels intacts.
+- ✅ **Tests.** `apps/renderer/test/presetOptimize.test.ts` : les quatre attentes de notes et de ligne de statut
+  suivent « preset » ; `apps/renderer/test/compactCard.test.ts` : la bande vide ne contient jamais « No piece
+  selected » (la consigne de l'Inventory, renommée) ; aucun test retiré. `npm run typecheck` : dernière ligne
+  `> tsc --noEmit` (sans erreur) ; `npm test` : dernière ligne `Tests  1199 passed (1199)` (renderer, 108 fichiers ;
+  core 169 et desktop 263 inchangés) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ✅ **Laissé, et pourquoi.** Identifiants et commentaires (`outfitWeight`, `outfitUids`, les commentaires
+  « outfit » de `lib/presets/*`, `lib/storage/*`, `equip.ts` et `lib/storage/worklist.ts` qui citent encore
+  « Apply locally ») ; le nom de test « Apply all and Apply locally agree » (`worklist.test.ts`) et ceux de
+  `presets.test.ts` / `cpPin.test.ts` en « current gear » ; « optimization(s) » de `wiki/Solver.md` § 7, de
+  `wiki/Engine-Reference.md`, de `wiki/Home.md` et de `wiki/Roadmap.md` (optimisations de l'algorithme ou prose, pas
+  une aide de l'interface) ; « target preset » d'`Engine-Reference.md` (c'est bien un preset du jeu) ; l'onglet
+  « Presets » (le terme retenu) ; le libellé « LV ‹n› » des lignes de sous-stats des cartes (`design/GearCard.tsx`),
+  qui affiche le total de ticks (base + reforges) et non le palier de base : le glossaire ne bannit « LV » que comme
+  synonyme de Tier, et le renommer serait un changement visuel non demandé.
+- ⏳ **Pour Sevih.** Dire si « LV ‹n› » des cartes doit devenir autre chose (ticks ?) ; rien d'autre.
+
 ### 🔺 Optimizer, colonne « to do » : l'ascension comptée en +10R9 (G121) (2026-11-07)
 - ✅ **Pourquoi.** En reforge +10R9 (`ascended10`), la cellule « to do » et son infobulle ne disaient jamais
   « to ascend », alors que les 3 reforges au-delà de R6 exigent l'ascension d'une 6★ Unique (remarque laissée par

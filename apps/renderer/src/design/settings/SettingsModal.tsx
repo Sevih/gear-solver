@@ -4,7 +4,8 @@
  *
  *  - Setup          — the Steam capture plugin checklist: game found / plugin
  *                     installed / plugin live. Doubles as the first-launch
- *                     wizard; self-dismisses once the checks pass.
+ *                     wizard; once the checks pass it marks onboarding
+ *                     done (no more pop-up at launch) but stays open.
  *  - Data & updates — the update center (app version, check, install) · game
  *                     data version · Sync game data · Wipe captured
  *                     (destructive).

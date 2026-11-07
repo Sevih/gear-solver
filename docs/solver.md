@@ -596,7 +596,7 @@ deux actions.
   l'onglet **Worklist** (`screens/WorklistScreen.tsx`, storage `lib/storage/worklist.ts`) : une file
   inter-héros, **une entrée par héros** (un nouveau build **remplace** l'entrée du héros,
   `upsertWorklistEntry` ; le bouton dit alors « Replace in worklist »), où chaque changement est une ligne
-  cochable + un **Apply locally** (même `equipPieces` ; les gemmes ne sont pas serties par l'app, elles se
+  cochable + un **Apply to snapshot** (même `equipPieces` ; les gemmes ne sont pas serties par l'app, elles se
   sertissent en jeu). États *applied / stale / conflict* **dérivés live** de l'inventaire (rien n'est figé :
   nom et main de la pièce lus dans le snapshot courant, `worklistTarget`, les `toName` / `toMain` stockés
   n'étant qu'un repli pour une pièce disparue ; une ligne *stale* — pièce mangée, vendue ou dissoute en jeu —
@@ -800,8 +800,8 @@ reco pour l'arme et l'accessoire. Sets : aucun plan (`setPlans: []` → un plan 
 reco » reste là pour la reco complète). Sans reco (404, erreur, hors ligne) : la tenue seule. L'Optimizer
 reçoit le patch avec `initialHeroUid` (`initialPatch`) et le fusionne après avoir chargé les
 filtres du héros — jamais sur ceux du héros sortant ; la ligne de statut dit « Optimizing preset #<num>
-<name> — same weapon / accessory / talisman effects required, N priority substats from the outfit +
-outerpedia's "<build>" reco. » (ou « from the outfit », suivi des notes).
+<name> — same weapon / accessory / talisman effects required, N priority substats from the preset +
+outerpedia's "<build>" reco. » (ou « from the preset », suivi des notes).
 
 **Priorité.** `priorityOf` (`lib/heroPriority/weights.ts`, la même source que l'Optimizer) lit, dans
 l'ordre, la priorité gardée par l'Optimizer pour le héros (`gs.solver.heroFilters`, localStorage, écrite à
@@ -817,8 +817,8 @@ aujourd'hui (jets et enhance réels — jamais ses `finalStats` stockées, proje
 Transistone par le solve), avec les gemmes qu'elle avait allouées au Talisman et à l'EE
 (`gemAllocationOverride` ; une allocation sans gemme garde les gemmes serties, comme le solve) ; si une de
 ses pièces a quitté l'inventaire (vendue, dissoute), elle ne compte plus et la comparaison se fait à
-l'équipement actuel (« vs current gear »). `loss = 1 − score(preset) /
-score(best)`, affichée en % « vs saved build » / « vs current gear » ; au-delà du seuil (15 % par défaut,
+l'équipement actuel (« vs loadout »). `loss = 1 − score(preset) /
+score(best)`, affichée en % « vs saved build » / « vs loadout » ; au-delà du seuil (15 % par défaut,
 réglé par le stepper en tête de l'écran Presets, `gs.solver.presetLossWarn`) la ligne passe en orange avec « <Nom> loses 23 % vs their
 saved build ». Sans priorité : « no priority set for <Nom> — set one in the Optimizer », pas de score. Rien
 n'est écrit vers le jeu.
@@ -1100,7 +1100,7 @@ apps/renderer/src/
     │   ├── BottomGearBand.tsx · FilterFooter.tsx   ← cartes du build sélectionné, pied fixe
     │   └── catalogs.ts · statColumns.ts ← catalogues tirés de l'inventaire, tables stats/ratings
     ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset (ordre du jeu, filtre / tri par classe ou rang), grille du jeu, référence, associés, gemmes d'EE, perte, overcap, rang et verrou, presets locaux, + Worklist, Optimize → / Optimize preset →
-    ├── WorklistScreen.tsx          ← onglet Worklist : cartes par héros, réservations, Apply locally / Apply all, Remove
+    ├── WorklistScreen.tsx          ← onglet Worklist : cartes par héros, réservations, Apply to snapshot / Apply all, Remove
     ├── gear/                       ← onglet Gear (ex-onglets Inventory et Home) : GearScreen.tsx (sous-onglets Overview / Pieces / Scrap), OverviewView.tsx + overview/
     └── inventory/                  ← la grille de Gear › Pieces et › Scrap : InventoryScreen, FilterModal, ScrapCard, ItemDetail, VirtualGearGrid
 ```

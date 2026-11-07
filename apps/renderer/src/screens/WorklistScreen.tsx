@@ -3,7 +3,7 @@
  * Builder land here as per-hero cards (one per hero — a new build replaces
  * the card); each changed slot is a checkable line, and so is each gem to
  * socket on the build's Talisman / EE. Work through them in-game and tick each
- * off, or "Apply locally" to rewrite the captured snapshot so the rest of the
+ * off, or "Apply to snapshot" to rewrite the captured snapshot so the rest of the
  * app reflects the swap (we never write to the game — that API doesn't exist;
  * gems aren't applied locally either, they are socketed in-game).
  *
@@ -263,7 +263,7 @@ function WorklistCard({
   const remaining = rows.filter((r) => !r.applied && !r.stale).length;
   // A gone line is nothing left to do, but nothing applied either.
   const allApplied = rows.every((r) => r.applied);
-  // Apply locally moves pieces only — gems are socketed in-game.
+  // Apply to snapshot moves pieces only — gems are socketed in-game.
   const pieceTodo = rows.some((r) => r.c.kind !== "gem" && !r.applied && !r.stale);
   const hasConflict = rows.some((r) => r.conflict && !r.applied);
   const hasStale = rows.some((r) => r.stale);
@@ -485,7 +485,7 @@ function WorklistCard({
           )}
           title="Rewrite the captured snapshot so the app reflects these swaps (does NOT touch the game)."
         >
-          {applying ? "Applying…" : allApplied ? "Applied" : "Apply locally"}
+          {applying ? "Applying…" : allApplied ? "Applied" : "Apply to snapshot"}
         </button>
         <button
           type="button"
@@ -560,7 +560,7 @@ function GemLine({ c, pieceName, game, applied, stale, nested, slotLabel, onTogg
   const value = gemValue(c.toGem);
   return (
     <label
-      title="Socket in-game — Apply locally / Apply all don't socket gems."
+      title="Socket in-game — Apply to snapshot / Apply all don't socket gems."
       className={cx("flex cursor-pointer items-start gap-2.5 py-1.5", nested && "pl-6", stale && "opacity-45")}
     >
       <input

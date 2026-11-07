@@ -722,7 +722,7 @@ const BuildCard = memo(function BuildCard({ entry, lockEntry, setLocks, game, de
         {presetName && (
           <div
             className="max-w-22 truncate rounded-md border border-white/12 bg-white/4 px-1.5 py-0.5 text-center text-[10px] text-white"
-            title={`Saved preset: ${presetName}`}
+            title={`Preset: ${presetName}`}
           >
             {presetName}
           </div>

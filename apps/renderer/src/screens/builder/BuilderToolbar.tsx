@@ -148,7 +148,7 @@ export function BuilderToolbar({
           type="button"
           onClick={onFilter}
           disabled={!canFilter || solving}
-          title="Filter the existing results by the stat/rating bands — no re-solve (instant after the first optimization)."
+          title="Filter the existing results by the stat/rating bands — no re-solve (instant after the first solve)."
           className={cx(
             "h-9 shrink-0 rounded-lg border px-3.5 text-[11px] font-semibold uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-40",
             filterActive
