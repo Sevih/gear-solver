@@ -8,6 +8,85 @@
 
 ## Items de backlog clôturés (index)
 
+### 📦 Bumps Dependabot repris sur main : Electron 45, electron-builder 26.18, wait-on 9, plugin-react 5.2, groupe minor/patch, actions/checkout 7 (G122) (2026-11-07)
+- ✅ **Pourquoi.** Cinq PR de Dependabot attendaient (#52 groupe minor/patch, #46 Electron, #44 `wait-on`, #43
+  `@vitejs/plugin-react`, #41 `actions/checkout`) ; elles sont reprises à la main sur `main`, banc compris, et
+  Dependabot les fermera de lui-même quand `main` portera les versions. React 19 (#45, CI rouge) est hors lot. Aucune
+  PR touchée, rien de poussé.
+- ✅ **Bumps (ancienne → nouvelle plage, version résolue dans le lock).** `apps/desktop/package.json` : `electron`
+  `^44.9.3` → `^45.2.1` (résolu 45.2.3), `electron-builder` `^26.15.3` → `^26.18.0`, `electron-updater` `^6.8.9` →
+  `^6.8.11` (dans `dependencies` et dans `build.extraMetadata.dependencies`, comme le fait la PR #52), `@types/node`
+  `^26.6.5` → `^26.6.6`. `apps/renderer/package.json` : `@tanstack/react-virtual` `^3.14.21` → `^3.14.24` (résolu
+  3.14.26, `virtual-core` 3.19.6 → 3.19.11), `@vitejs/plugin-react` `^4.3.4` → `^5.2.0` (était 4.7.0 au lock).
+  Racine : `typescript-eslint` `8.72.0` → `8.72.1` (épinglé, toute la famille `@typescript-eslint/*` suit),
+  `wait-on` `^8.0.1` → `^9.5.1` (était 8.0.5). `.github/workflows/data-sync.yml` : les deux `actions/checkout`
+  passent de `@11d5960a… # v4.4.0` à `@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`, le SHA déjà utilisé par
+  `ci.yml` et `publish-wiki.yml` ; rien d'autre dans les workflows.
+- ✅ **`build.electronVersion` suit l'installé : `"45.2.3"`.** electron-builder lit ce champ pour télécharger le
+  binaire à empaqueter, et depuis la montée 44 les deux bougent ensemble (la 26.x refuse une version non épinglée).
+  `npm install` a résolu `^45.2.1` en 45.2.3 : épingler 45.2.1 aurait livré un autre binaire que celui du dev, d'où
+  45.2.3. La plage du `devDependencies` reste `^45.2.1`, celle de la PR #46. Rien d'autre ne bouge dans la config
+  electron-builder.
+- ✅ **plugin-react s'arrête à la 5.2.0, la 6 attend Vite 8.** La PR #43 vise la 6.1.2, dont les `peerDependencies`
+  exigent `vite` `^8.0.0` (pair obligatoire ; seuls `oxc-transform-react`, `@rolldown/plugin-babel` et
+  `babel-plugin-react-compiler` sont optionnels), alors que le renderer est en `vite` `^6.4.3` : la 6 passerait
+  l'install en pair non satisfait. La 5.2.0 accepte `vite` `^4.2.0 || … || ^8.0.0` et Node `^20.19.0 || >=22.12.0` ;
+  `vite.config.ts` appelle `react()` sans option, rien à adapter. Elle tire `react-refresh` 0.17.0 → 0.18.0 et
+  `@rolldown/pluginutils` 1.0.0-beta.27 → 1.0.0-rc.3. plugin-react 6 et Vite 8 iront ensemble dans un lot à part ;
+  la PR #43 restera donc ouverte d'ici là.
+- ✅ **Notes d'Electron 45 lues (« Breaking API Changes (45.0) », electronjs.org/docs/latest/breaking-changes) :
+  rien ne nous touche.** Retirés ou changés : shims Node (`events`, `timers`, `url`, `Buffer`) des preloads
+  sandboxés et `EventEmitter` natif d'`ipcRenderer` ; Node dans les workers de sous-frames ; preloads des frames
+  `chrome-extension://` ; `getUserMedia` `chromeMediaSource: 'desktop'` ; `contentTracing.enableHeapProfiling()`
+  et le format JSON de `stopRecording()` ; `display-capture` dans `setPermissionRequestHandler` ;
+  `document.requestStorageAccessFor` désactivé ; descripteurs de fichiers ASAR utilisables par `fs` seulement
+  (`EBADF`/`EACCES` en accès brut, `fs.stat` suit les liens) ; enfants `window.open()` des fenêtres non sandboxées
+  dans leur propre processus ; `safeStorage` synchrone déprécié (retiré en 46). Chez nous : aucun preload (la
+  fenêtre de `apps/desktop/src/main.ts` a `contextIsolation`, `sandbox: true`, `nodeIntegration: false`), aucun
+  `ipcRenderer`, `safeStorage`, `contentTracing`, `getUserMedia`, `setPermissionRequestHandler`, `window.open` ni
+  accès brut à l'ASAR (`grep -rnE` sur `apps/desktop/src` et `apps/renderer/src`) ; le desktop n'importe
+  d'`electron` que `app`, `BrowserWindow`, `dialog`, `Menu`, `shell` et le type `MenuItemConstructorOptions`. Aucun
+  code applicatif modifié.
+- ✅ **wait-on 9 : même appel.** La 9.0.0 ne fait que retirer les Node non maintenus (supportés : 20, 22, 24) ;
+  `npx wait-on --help` documente toujours `http-get://`, l'appel `wait-on http-get://localhost:5173` du script
+  `desktop:dev` reste valable tel quel.
+- ✅ **`package-lock.json`.** `npm install` à la racine : +170 / −184 lignes ; en plus des paquets ci-dessus,
+  `app-builder-lib`, `dmg-builder`, `electron-publish`, `electron-builder-squirrel-windows` 26.15.3 → 26.18.0,
+  `builder-util` → 26.16.0, quelques `semver` imbriqués en patch, `@peculiar/webcrypto` 1.7.1 → 1.7.2,
+  `@noble/hashes` remonté en 1.8.0 au premier niveau (la copie imbriquée sous `pkijs` disparaît), et la ligne
+  `version` du workspace desktop resynchronisée de 1.15.0 sur le 2.0.0 du `package.json`.
+- ✅ **`npm audit` : 16 vulnérabilités (15 modérées, 1 haute), pas 0, et ce sont exactement les mêmes qu'avant le
+  lot** (même compte sur le lock de `HEAD`, audité par `npm audit --package-lock-only` sur une copie). Deux avis,
+  apparus depuis le dernier audit à 0 : `joi` 18.0.0 – 18.3.0 (haute, GHSA-4528-x5fx-h6hg, split quadratique de
+  `string().email({ multiple: true })`), tiré par `wait-on` (joi 18.3.0 au lock, `wait-on` 9.5.1 demande
+  `^18.2.9`), corrigeable par `npm audit fix` dans le lock seul ; `minimatch` 7.0.0 – 11.0.0 (modérée,
+  GHSA-g3hv-75wg-m249), tiré par `eslint` 10, `typescript-eslint`, `@eslint/config-array` et `app-builder-lib` /
+  `@electron/universal` (les 14 autres modérées en sont les parents), pour lequel npm ne propose qu'un
+  `--force` qui redescendrait `eslint` en 9 et `electron-builder` en 25. Rien n'est corrigé ici (hors périmètre :
+  ni `joi` ni `minimatch` ne sont dans la liste du lot) ; tout est en outillage de dev ou de build, rien n'est
+  embarqué dans l'app.
+- ✅ **Build et pack.** `npm run build` (core + renderer : « ✓ built in 1.06s ») ; `npm run build -w
+  @gear-solver/desktop` (`tsc -p .`, sans erreur) ; `npm run pack -w @gear-solver/desktop` → « electron-builder
+  version=26.18.0 », « packaging platform=linux arch=x64 electron=45.2.3 appOutDir=release/linux-unpacked »,
+  binaire téléchargé et extrait, sans erreur ; `latest.yml` et `latest-linux.yml` de `release/` intacts (seul
+  `builder-debug.yml` réécrit, non suivi par git comme tout `apps/desktop/release/`).
+- ✅ **Lancement de l'exécutable empaqueté, sans affichage réel.** Pas de `xvfb-run` ni de `Xvfb` sur le poste :
+  lancé dans un `kwin_wayland --virtual` isolé (socket dédiée, 1600 × 1000) avec `--ozone-platform=wayland` et un
+  `XDG_CONFIG_HOME` jetable (aucun userData réel touché). Après 15 s le processus vit, `GET
+  http://127.0.0.1:17891/` → 200 avec `<title>Gear Solver · Outerpedia</title>`, et le renderer a écrit son
+  sessionStorage (`gs.builds.filters`) : la page s'est bien chargée dans Electron 45. Journal : un avertissement
+  Chromium « '--ozone-platform=wayland' is not compatible with Vulkan » (sans effet, propre au mode virtuel) et
+  « auto-update disabled: Not started from the AppImage file », attendu pour un `--dir`. Processus arrêtés par PID.
+- ✅ **Vérification.** `npm run typecheck` : dernière ligne `> tsc --noEmit` (renderer, sans erreur, code de
+  sortie 0) ; `npm test` : dernière ligne `Tests  1199 passed (1199)` (renderer, 108 fichiers ; core 169 et desktop
+  263) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ✅ **Docs.** `docs/release-notes.md › [Unreleased]` : une ligne « Electron 45 », comme pour la montée 44.
+  `docs/STATUS.md`, `docs/todo.md`, le README et `wiki/` ne citent aucune version bumpée : inchangés.
+- ⏳ **Sevih** : banc Windows de l'installeur sur le fixe (lancement, Settings › Setup, capture au lobby,
+  auto-update depuis la 2.0.0) avant la prochaine release ; fermer ou laisser Dependabot fermer #52, #46, #44 et
+  #41 après le push ; #43 reste ouverte jusqu'au lot plugin-react 6 + Vite 8 ; décider d'un `npm audit fix`
+  (lock seul) pour `joi`.
+
 ### 🔤 Derniers écarts au glossaire 5.c dans le code : Apply to snapshot, Preset, volets de Settings (G123) (2026-11-07)
 - ✅ **Pourquoi.** Point ⏳ « Écarts au glossaire restés dans le code » laissé par U14 (G106) : des chaînes visibles
   gardaient des mots que le glossaire de `docs/ux-audit-2026-11-01.md` § 5.c bannit (« Apply locally », qui fait

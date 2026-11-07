@@ -12,7 +12,7 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+- Electron 45 (Chromium and Node.js runtime update); no visible change expected.
 
 ## [2.0.0] — 2026-11-05
 
