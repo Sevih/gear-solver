@@ -8,6 +8,41 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔄 Data sync : les tables synchronisées sont poussées sur main, plus de PR (G120) (2026-11-07)
+- ✅ **Pourquoi.** Qu'un patch du jeu ne demande plus rien côté gear-solver. L'app packagée suit déjà les tables
+  d'outerpedia à l'exécution (`apps/desktop/src/data-sync.ts`, mode REPO) ; il restait la PR `data-sync/*` que
+  `.github/workflows/data-sync.yml` ouvrait chaque jour pour le miroir committé (`data/derived` +
+  `apps/desktop/src/game-client.json`), à merger à la main.
+- ✅ **Le workflow.** L'étape « open the PR » devient « commit to main » : même commit (`chore(data): tables $RES
+  ($HASH) from outerpedia $OUTERPEDIA_SHA`, auteur github-actions[bot]) et `git push origin HEAD:main`. Le checkout
+  d'un run planifié ou manuel est sur la branche locale `main` (pas de HEAD détaché) avec le jeton persisté : pas de
+  `git switch`. Course avec un push humain : un push refusé fait un `git pull --rebase origin main` puis un second
+  push ; un second échec laisse le run rouge, le run du lendemain repart d'un checkout frais. Gardés : le garde
+  `git status --porcelain` (fichier non suivi compris ; arbre propre = « nothing to push »), typecheck + `npm test`
+  avec `OUTERPEDIA_PATH` avant le push (un échec ne pousse rien), le résumé `$GITHUB_STEP_SUMMARY` (journal de
+  `sync.mjs`, `git show --stat` du commit poussé, changement de `client` de `game-client.json`). Retirés : la
+  branche `data-sync/$res-$hash`, le test `git ls-remote` de branche déjà proposée, le corps de PR, `gh pr create`,
+  la fermeture des anciennes PR, et `pull-requests: write` (`contents: write` suffit). L'en-tête dit la règle
+  (« pushed to main, never released from here ») et pourquoi typecheck + tests tournent ici (un push par
+  `GITHUB_TOKEN` ne déclenche pas `ci.yml`).
+- ✅ **Protection de branche.** `gh api repos/Sevih/gear-solver/branches/main/protection` : 404 « Branch not
+  protected », et `rulesets` vide : rien ne bloque le push direct du bot.
+- ✅ **Docs.** `docs/architecture.md` et son miroir `wiki/Architecture.md` (§ data sync) et `docs/STATUS.md` disent le
+  push direct sur `main` après typecheck et tests, sans PR, et que l'app en prod n'attend pas ce commit (mode REPO).
+  Aucune autre mention d'une PR de tables dans `docs/`, `wiki/` ni `README.md`.
+- ✅ **Vérification.** YAML relu et chargé par `js-yaml` (`actionlint` absent du poste). Rejeu à blanc de l'étape de
+  synchro : `data/derived` et `game-client.json` copiés hors dépôt (`cp -a`), `OUTERPEDIA_PATH=../outerpedia node
+  data/sync.mjs` → `synced 22 tables`, `derived version: 46bb6a261cd2`, `synced game-client.json` ; `git status
+  --porcelain` montre sept tables modifiées (`characters`, `equipment`, `items`, `multi-tier-passives`, `options`,
+  `sets`, `version.json` : 1.11.504 → 1.11.601), donc le run aurait poussé ; restauration depuis la copie, aucune
+  table dans ce commit. `npm run typecheck` : `tsc --noEmit` sans erreur. `npm test` : core `Tests  169 passed
+  (169)`, desktop `Tests  263 passed (263)`, renderer `Tests  1197 passed (1197)`. `npm run lint` : `✖ 7 problems
+  (0 errors, 7 warnings)`, le même compte qu'avant.
+- ⏳ **Sevih.** Premier vrai run à surveiller (`gh workflow run data-sync.yml` ou le run de 09:00 UTC) : il poussera
+  les tables 1.11.601 sur `main`. La PR `data-sync/*` encore ouverte (#54) et sa branche ne sont plus fermées par le
+  workflow : à fermer à la main. Hors périmètre, repéré : `data-sync.yml` épingle `actions/checkout`
+  v4.4.0, `ci.yml` v7.0.1.
+
 ### 🧪 Test de remplissage des gemmes d'un héros sans crit : Tamamo-no-Mae à la place de Rhona (G119) (2026-11-07)
 - ✅ **Pourquoi.** Dans `apps/renderer/test/gemFill.test.ts`, le test « a noCrit hero takes no CHD as filler while a
   useful gem is left » prenait **Rhona (2000008)** comme héros noCrit qui scale sur l'ATK. Avec la table 1.11.601,

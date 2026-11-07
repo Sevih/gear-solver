@@ -77,8 +77,10 @@ by hand (manual import).
   app follows game patches **without a new build**.
   Between releases, `.github/workflows/data-sync.yml` runs the same `data/sync.mjs` every day
   against a fresh checkout of the public `Sevih/outerpedia` and, when `data/derived` or
-  `game-client.json` changed, runs typecheck and tests, then opens a PR (never merged
-  automatically) so the committed mirror doesn't lag behind a game patch.
+  `game-client.json` changed, runs typecheck and tests, then commits the new tables and pushes
+  them straight to `main` (no PR, nothing released from there) so the committed mirror doesn't
+  lag behind a game patch. The packaged app doesn't wait for that commit: it already follows
+  outerpedia at runtime (REPO mode above).
   Packaging is live: `scripts/release.mjs` refreshes `data/derived`, runs typecheck, tests and
   lint against it (a failure stops before anything is published and reverts the version bump and
   the stamped journals), then builds and publishes the Windows installer (NSIS) and the Linux

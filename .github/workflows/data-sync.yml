@@ -1,13 +1,15 @@
 name: Data sync
 
 # Daily mirror of outerpedia's solver tables into data/derived (plus the Steam
-# client reference apps/desktop/src/game-client.json), proposed as a PR: the
-# same `data/sync.mjs` as `npm run data:sync`, against a fresh checkout of the
-# public Sevih/outerpedia repo. OUTERPLANE patches land on Tuesday morning UTC
-# and outerpedia is pushed within the hour: 09:00 UTC picks them up the same day.
-# A PR opened with GITHUB_TOKEN does not trigger ci.yml, so this job runs
-# typecheck + tests itself before opening it: a failure leaves the run red and
-# opens nothing. Nothing is merged nor released from here.
+# client reference apps/desktop/src/game-client.json), pushed to main, never
+# released from here: the same `data/sync.mjs` as `npm run data:sync`, against a
+# fresh checkout of the public Sevih/outerpedia repo. OUTERPLANE patches land on
+# Tuesday morning UTC and outerpedia is pushed within the hour: 09:00 UTC picks
+# them up the same day. No PR: the packaged app already follows outerpedia at
+# runtime (data-sync.ts, REPO mode), this commit only keeps the mirror current.
+# A push made with GITHUB_TOKEN does not trigger ci.yml, so this job runs
+# typecheck + tests itself before pushing: a failure leaves the run red and
+# pushes nothing.
 on:
   schedule:
     - cron: '0 9 * * *'
@@ -15,7 +17,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 # Never two runs at once (a manual run queues behind the daily one).
 concurrency:
@@ -64,25 +65,16 @@ jobs:
           # `git status --porcelain`, not `git diff`: a table published for the first
           # time is an UNTRACKED file, invisible to `git diff` (items.json, 28/10).
           if [ -z "$(git status --porcelain -- data/derived apps/desktop/src/game-client.json)" ]; then
-            echo "Tables up to date with outerpedia \`$outerpedia_sha\`: nothing to propose." >> "$GITHUB_STEP_SUMMARY"
+            echo "Tables up to date with outerpedia \`$outerpedia_sha\`: nothing to push." >> "$GITHUB_STEP_SUMMARY"
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           res=$(jq -r .resVersion data/derived/version.json)
           hash=$(jq -r .hash data/derived/version.json)
-          branch="data-sync/$res-${hash:0:7}"
-          # Same tables as a branch already pushed (PR still open, or closed by hand):
-          # don't re-propose them every day.
-          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
-            echo "Tables $res ($hash) already proposed on \`$branch\`." >> "$GITHUB_STEP_SUMMARY"
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           {
             echo "changed=true"
             echo "res=$res"
             echo "hash=$hash"
-            echo "branch=$branch"
             echo "outerpedia_sha=$outerpedia_sha"
           } >> "$GITHUB_OUTPUT"
 
@@ -97,44 +89,39 @@ jobs:
           OUTERPEDIA_PATH: ${{ github.workspace }}/outerpedia
         run: npm test
 
-      - name: open the PR
+      # The checkout of a scheduled / dispatched run sits on the local branch
+      # main (not a detached HEAD), with the token persisted for the push.
+      - name: commit to main
         if: steps.sync.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
           RES: ${{ steps.sync.outputs.res }}
           HASH: ${{ steps.sync.outputs.hash }}
-          BRANCH: ${{ steps.sync.outputs.branch }}
           OUTERPEDIA_SHA: ${{ steps.sync.outputs.outerpedia_sha }}
         run: |
-          body="$RUNNER_TEMP/pr-body.md"
+          client_before=$(git show HEAD:apps/desktop/src/game-client.json | jq -c .client)
+          client_after=$(jq -c .client apps/desktop/src/game-client.json)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/derived apps/desktop/src/game-client.json
+          git commit -m "chore(data): tables $RES ($HASH) from outerpedia $OUTERPEDIA_SHA"
+          # main moved during the run (a human push): rebase once and retry; a
+          # second failure leaves the run red, the next daily run starts afresh.
+          if ! git push origin HEAD:main; then
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
           {
-            echo "Tables synced by \`data-sync.yml\` from Sevih/outerpedia@$OUTERPEDIA_SHA; typecheck and tests passed in the run."
+            echo "Tables $RES ($HASH) from Sevih/outerpedia@$OUTERPEDIA_SHA pushed to main as \`$(git rev-parse --short HEAD)\`; typecheck and tests passed in the run."
             echo
             echo '```'
             cat "$RUNNER_TEMP/sync.log"
             echo '```'
             echo
             echo '```'
-            git diff --stat -- data/derived apps/desktop/src/game-client.json
+            git show --stat --format= HEAD
             echo '```'
-            client_before=$(git show HEAD:apps/desktop/src/game-client.json | jq -c .client)
-            client_after=$(jq -c .client apps/desktop/src/game-client.json)
             if [ "$client_before" != "$client_after" ]; then
               echo
               echo "\`game-client.json\` client: \`$client_before\` → \`$client_after\`"
             fi
-          } > "$body"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$BRANCH"
-          git add data/derived apps/desktop/src/game-client.json
-          git commit -m "chore(data): tables $RES ($HASH) from outerpedia $OUTERPEDIA_SHA"
-          git push origin "$BRANCH"
-          gh pr create --base main --head "$BRANCH" --title "chore(data): tables $RES from outerpedia" --body-file "$body"
-          # Only the newest tables stay proposed: older data-sync PRs are closed, their branch deleted.
-          gh pr list --state open --json number,headRefName \
-            --jq ".[] | select(.headRefName | startswith(\"data-sync/\")) | select(.headRefName != \"$BRANCH\") | .number" |
-            while read -r pr; do
-              gh pr close "$pr" --delete-branch --comment "Superseded by tables $RES ($HASH), branch \`$BRANCH\`."
-            done
-          echo "Tables $RES ($HASH) proposed on \`$BRANCH\`." >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -27,8 +27,9 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
      `build.mjs`/`calc-stats.mjs`) : elle émet 21 artefacts committés à `data/generated/solver/`.
    - `data/derived/` : miroir committé de ces artefacts (tables compactes `options`, `equipment`,
      `sets`, `characters`, `sub-ticks`, … que le moteur consomme), rafraîchi via `npm run data:sync`
-     depuis le checkout outerpedia, et chaque jour par `.github/workflows/data-sync.yml` (PR
-     `data-sync/*` ouverte après typecheck et tests quand les tables ont changé).
+     depuis le checkout outerpedia, et chaque jour par `.github/workflows/data-sync.yml` (poussé
+     directement sur `main`, sans PR, après typecheck et tests quand les tables ont changé ;
+     l'app packagée n'attend pas ce commit, elle suit outerpedia à l'exécution en mode REPO).
      `version.json` `{ hash, builtAt }` — `hash` = hash de contenu
      **stable** (affiché dans Settings → Data).
    - **Sync au lancement depuis le repo public `Sevih/outerpedia`** (`apps/desktop/src/data-sync.ts`,
