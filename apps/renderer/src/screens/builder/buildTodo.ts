@@ -5,7 +5,7 @@
  * and EE are not counted: the projection never touches them. Pure.
  */
 import type { GameRules, GearPiece } from "@gear-solver/core";
-import { pieceReforgePlan, type ReforgeMode } from "../../lib/solver/engine.js";
+import { maxReforgesOf, pieceReforgePlan, type ReforgeMode } from "../../lib/solver/engine.js";
 
 const GEAR_SLOTS = new Set(["weapon", "helmet", "armor", "gloves", "boots", "accessory"]);
 
@@ -20,7 +20,8 @@ export interface BuildTodo {
   enhanceTo: number | null;
   /** Reforges left, summed over the pieces (budget − done). */
   reforges: number;
-  /** Pieces the ceiling ascends that aren't ascended yet. */
+  /** Pieces whose plan in the mode goes through ascension (see `buildTodoOf`)
+   *  that aren't ascended yet. */
   ascend: number;
 }
 
@@ -43,7 +44,10 @@ export function buildTodoOf(pieces: ReadonlyArray<GearPiece | undefined>, mode: 
       any = true;
       todo.reforges += budget - piece.reforgeCount;
     }
-    if (ceiling.ascended && !piece.ascended) {
+    // The plan ascends when its ceiling does (+15R9) or when its budget takes the
+    // ascension bonus (+10R9: the ceiling keeps `ascended: false`, a main-stat
+    // formula flag, but reforges past the non-ascended count need ascension).
+    if (!piece.ascended && (ceiling.ascended || budget > maxReforgesOf(piece, false, rules))) {
       any = true;
       todo.ascend++;
     }

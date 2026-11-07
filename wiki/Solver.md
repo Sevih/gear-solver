@@ -497,9 +497,11 @@ Settings › Display, `gs.builder.heatmap`). Columns: sets (`wpn` / `acc` effect
 upgrades to do; sortable + filterable), **to do** (G116, key `todo`, sortable, hidden with reforge `Off`: the gear
 pieces — talisman and EE apart — still to enhance, reforge or ascend to reach the build, `buildTodoOf` of
 `screens/builder/buildTodo.ts` over `pieceReforgePlan` in the **solve's** mode; a piece counts when
-`enhanceLevel < ceiling.enhanceLevel`, `reforgeCount < budget` or `ceiling.ascended && !ascended`; tooltip
-"3 pieces — 2 to enhance (+10 → +15), 5 reforges, 1 to ascend", 0 = reached as is; in +10R9 the ceiling isn't
-`ascended`, so the ascension isn't listed there, the 3 reforges are). The **DMG UP%** and **DMG RED%** cells of a
+`enhanceLevel < ceiling.enhanceLevel`, `reforgeCount < budget` or, not `ascended`, when its plan goes through the
+ascension — `ceiling.ascended` or `budget > maxReforgesOf(piece, false, rules)` (G121: in +10R9 the ceiling keeps
+`ascended: false`, but a 6★ `unique`'s 3 reforges past R6 take the ascension bonus, so it's listed too; a piece
+that can't ascend never is); tooltip "3 pieces — 2 to enhance (+10 → +15), 5 reforges, 1 to ascend", 0 = reached
+as is). The **DMG UP%** and **DMG RED%** cells of a
 build where a piece carries a counted requested passive (above) carry a cyan "+15" exponent, tooltip
 "+120% DS DMG+ (A) · …" (`countedPassivesOfBuild` over the **solve's** `passivePicks`, kept in the results' and the
 saved builds' `ReforgeContext`). Sort by clicking the header (null → desc → asc → null). **columns** menu

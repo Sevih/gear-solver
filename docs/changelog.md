@@ -8,6 +8,32 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔺 Optimizer, colonne « to do » : l'ascension comptée en +10R9 (G121) (2026-11-07)
+- ✅ **Pourquoi.** En reforge +10R9 (`ascended10`), la cellule « to do » et son infobulle ne disaient jamais
+  « to ascend », alors que les 3 reforges au-delà de R6 exigent l'ascension d'une 6★ Unique (remarque laissée par
+  G116). Cause : `buildTodoOf` comptait l'ascension sur `ceiling.ascended && !piece.ascended`, et le plafond
+  d'`ascended10` garde `ascended: false` — un drapeau de formule de main stat et de passif (`reforgePlansOf`), laissé
+  tel quel.
+- ✅ **Le critère.** `apps/renderer/src/screens/builder/buildTodo.ts` : une pièce non `ascended` compte « to ascend »
+  quand son plan dans le mode passe par l'ascension, `ceiling.ascended` OU `budget > maxReforgesOf(piece, false,
+  rules)` (le budget de `pieceReforgePlan` dépasse le compte de reforges de la pièce non ascendue : le mode lui prend
+  le bonus d'ascension). +15R9 et +10R6 inchangés ; en +10R9 une 6★ Unique non ascendue compte « 1 to ascend » en
+  plus de ses 3 reforges ; une pièce qui ne peut pas ascender (sous 6★, ou 6★ non Unique) n'a jamais de budget
+  au-delà de son compte et ne compte toujours pas. `reforgePlansOf`, `pieceReforgePlan`, le moteur, le worker et le
+  tri de la colonne intacts.
+- ✅ **Tests.** `apps/renderer/test/buildTodo.test.ts` (7 → 9, règles réelles d'`enhance.json`) : le cas +10R9 d'une
+  6★ Unique +10 R6 devient 3 reforges + 1 to ascend, infobulle « 1 piece — 3 reforges, 1 to ascend » ; +10R9 sur une
+  pièce déjà ascendue à +10 R6 → 3 reforges, pas d'ascension (« 1 piece — 3 reforges ») ; +10R9 sur une 6★ `rare`
+  R6 et une 5★ `unique` R0 → 5 reforges, rien à ascender. `npm run typecheck` : dernière ligne `> tsc --noEmit`
+  (sans erreur) ; `npm test` : dernière ligne `Tests  1199 passed (1199)` (renderer, 108 fichiers ; 1197 avant le
+  lot ; core 169 et desktop 263 inchangés) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ✅ **Docs.** `docs/solver.md` + `wiki/Solver.md` (colonne « to do » : le critère d'ascension, la phrase « en +10R9
+  l'ascension n'est pas listée » retirée), `docs/reference.md` + `wiki/Engine-Reference.md` (`buildTodo` 9 tests).
+  `wiki/Using-the-App.md` reste juste (« still to be enhanced, reforged or ascended »), non touché.
+- ⏳ **Sevih, sur le fixe** : Optimizer en reforge +10R9 avec une 6★ Unique +10 R6 non ascendue dans un build → la
+  cellule « to do » la compte et son infobulle dit « …, 3 reforges, 1 to ascend » ; une pièce déjà ascendue ou une
+  pièce non Unique n'y ajoute pas d'ascension.
+
 ### 🔄 Data sync : les tables synchronisées sont poussées sur main, plus de PR (G120) (2026-11-07)
 - ✅ **Pourquoi.** Qu'un patch du jeu ne demande plus rien côté gear-solver. L'app packagée suit déjà les tables
   d'outerpedia à l'exécution (`apps/desktop/src/data-sync.ts`, mode REPO) ; il restait la PR `data-sync/*` que

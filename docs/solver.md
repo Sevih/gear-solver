@@ -515,9 +515,11 @@ Settings › Display, `gs.builder.heatmap`). Colonnes : sets (effets `wpn` / `ac
 des améliorations à faire ; triable + filtrable), **to do** (G116, clé `todo`, triable, cachée en reforge `Off` : les
 pièces d'équipement — talisman et EE à part — encore à monter, reforger ou ascender pour atteindre le build,
 `buildTodoOf` de `screens/builder/buildTodo.ts` sur `pieceReforgePlan` dans le mode **du solve** ; une pièce compte
-si `enhanceLevel < ceiling.enhanceLevel`, `reforgeCount < budget` ou `ceiling.ascended && !ascended` ; tooltip
-« 3 pieces — 2 to enhance (+10 → +15), 5 reforges, 1 to ascend », 0 = atteint tel quel ; en +10R9 le plafond
-n'est pas `ascended`, l'ascension n'y est donc pas listée, les 3 reforges si). Les cellules **DMG UP%** et
+si `enhanceLevel < ceiling.enhanceLevel`, `reforgeCount < budget` ou, non `ascended`, quand son plan passe par
+l'ascension — `ceiling.ascended` ou `budget > maxReforgesOf(piece, false, rules)` (G121 : en +10R9 le plafond garde
+`ascended: false`, mais les 3 reforges d'une 6★ `unique` au-delà de R6 prennent le bonus d'ascension, elle est donc
+listée aussi ; une pièce qui ne peut pas ascender ne l'est jamais) ; tooltip « 3 pieces — 2 to enhance (+10 → +15),
+5 reforges, 1 to ascend », 0 = atteint tel quel). Les cellules **DMG UP%** et
 **DMG RED%** d'un build dont une pièce porte un passif demandé compté (ci-dessus) portent un exposant cyan
 « +15 », tooltip « +120% DS DMG+ (A) · … » (`countedPassivesOfBuild` sur les `passivePicks` **du solve**, gardés
 dans le `ReforgeContext` des résultats et des builds sauvegardés). Tri par clic sur l'en-tête (null → desc → asc → null). Menu

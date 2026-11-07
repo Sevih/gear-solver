@@ -40,9 +40,24 @@ describe("buildTodoOf", () => {
     expect(buildTodoTitle(todo)).toBe("1 piece — 1 to enhance (+10 → +15), 3 reforges, 1 to ascend");
   });
 
-  it("+10R9: no enhance past +10, the 3 reforges (its ceiling isn't `ascended`: no ascension listed)", () => {
+  it("+10R9: no enhance past +10, the 3 reforges and the ascension they need", () => {
     const todo = buildTodoOf([raw], "ascended10", RULES)!;
+    expect(todo).toEqual({ pieces: 1, enhance: 0, enhanceFrom: null, enhanceTo: null, reforges: 3, ascend: 1 });
+    expect(buildTodoTitle(todo)).toBe("1 piece — 3 reforges, 1 to ascend");
+  });
+
+  it("+10R9 on a piece already ascended at +10 R6 → the 3 reforges, no ascension", () => {
+    const ascended = piece("asc", "armor", { enhanceLevel: 10, reforgeCount: 6, ascended: true });
+    const todo = buildTodoOf([ascended], "ascended10", RULES)!;
     expect(todo).toEqual({ pieces: 1, enhance: 0, enhanceFrom: null, enhanceTo: null, reforges: 3, ascend: 0 });
+    expect(buildTodoTitle(todo)).toBe("1 piece — 3 reforges");
+  });
+
+  it("+10R9 on pieces that can't ascend (6★ rare, 5★ unique) → nothing to ascend", () => {
+    const epic6 = piece("epic6", "gloves", { rarity: "rare", enhanceLevel: 10, reforgeCount: 6 });
+    const five = piece("five", "accessory", { star: 5, enhanceLevel: 10, reforgeCount: 0 });
+    const todo = buildTodoOf([epic6, five], "ascended10", RULES)!;
+    expect(todo).toEqual({ pieces: 1, enhance: 0, enhanceFrom: null, enhanceTo: null, reforges: 5, ascend: 0 });
   });
 
   it("a piece that can't ascend stops at its own +10 ceiling", () => {
