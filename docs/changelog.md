@@ -8,6 +8,82 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧪 Banc de la synchronisation des tables en prod packagée (Linux), préchauffage des images rejoué après un lancement hors ligne (G126) (2026-11-14)
+- ✅ **Pourquoi.** Puce « Vérif sync repo en prod packagé » du todo, jamais contrôlée depuis que `data-sync.yml` pousse
+  les tables sur `main`. Lot de vérification : mesures sur l'exécutable empaqueté, un seul défaut trouvé et corrigé
+  (préchauffage des images, plus bas) ; le mode de synchronisation n'est pas touché.
+- ✅ **Banc.** `npm run desktop:build`, `npm run fetch-binaries -w @gear-solver/desktop` (plugin 0.5.4, icônes), `npm run
+  pack -w @gear-solver/desktop` (« packaging platform=linux arch=x64 electron=45.2.3 appOutDir=release/linux-unpacked »).
+  `release/linux-unpacked/outerpedia-gear-solver` lancé dans un `kwin_wayland --virtual` isolé (socket dédiée, bus
+  D-Bus privé, 1600 × 1000) avec `--ozone-platform=wayland`, un `XDG_CONFIG_HOME` jetable par scénario et
+  `GS_DEBUG=server`. Il n'y a pas de `desktop.log` sur `main` : le journal du processus principal est sa sortie
+  standard, horodatée par le banc ; les durées sont prises du lancement du processus à la réponse `"phase":"done"` de
+  `GET /api/data/startup-sync` (sondée toutes les 100 ms). Requêtes sortantes comptées par un petit proxy local branché
+  sur les réglages du code (`OUTERPEDIA_CDN_BASE`, `OUTERPEDIA_RAW_BASE`, `OUTERPEDIA_IMAGE_BASE`) ; l'appel à
+  `api.github.com` (en dur dans `repo-source.ts`) ne passe pas par lui, il y en a un par lancement en ligne. Le
+  userData sous Linux est `$XDG_CONFIG_HOME/@gear-solver/desktop` (le `name` du paquet, pas le `productName`). Piège du
+  banc : un shell qui exporte `ELECTRON_RUN_AS_NODE=1` fait tourner le binaire en Node (« bad option:
+  --ozone-platform=wayland ») ; le banc le retire de l'environnement.
+- ✅ **1. Premier lancement en ligne, userData vide.** Graine copiée à 1,81 s (« seeded derived from bundle », 22 fichiers
+  de `resources/data/derived`), sync finie à 2,55 s, `startup-sync` à **2,63 s** (premier lancement à froid du binaire ;
+  0,47 s au rejeu sur un autre userData vide). Résultat `fresh` « data up to date (fc3186f, data 46bb6a261cd2) » :
+  **aucune table téléchargée**, et c'est le comportement voulu, la graine embarquée porte déjà le hash d'outerpedia
+  main (`46bb6a261cd2`, resVersion 1.11.601, `version.json` du 07/11 ; main = `fc3186f` au moment du banc). Réseau
+  (proxy) : 1 `version.json` de 113 octets sur jsDelivr, comparé puis non réécrit (corps identique), 1
+  `game-version.json` (route `/api/game-version`, pas la sync) ; `repo-sha.json` écrit à `fc3186f…`. Le chemin de
+  téléchargement est exercé au point 4. Le préchauffage tire **386 icônes** d'équipement et de gemmes de R2 (1,75 Mo
+  en 1,5 s), marqueur `prefetch.json` 386/386.
+- ✅ **2. Deuxième lancement, hash inchangé.** `startup-sync` à **0,55 s** (sync finie 0,33 s après « app ready »),
+  `fresh` « data up to date (fc3186f) » : la porte du SHA répond sans même relire `version.json`. Aucun fichier écrit
+  dans `outerpedia-cache` (`find -newer`), aucune requête jsDelivr ni R2 au proxy, seulement `game-version.json`.
+- ✅ **3. Images.** Par le serveur local (`/img/*`, le même gestionnaire que les `<img>` du renderer ; le banc n'a pas de
+  capture, l'app reste sur l'écran de première capture) : portrait `characters/faceicon/FI_2000001.webp` 1re vue 82 ms
+  → **1 requête R2**, 2e et 3e vues 1,3 ms et 0,8 ms → 0 requête ; EE `characters/ee/2000001.webp` 36 ms puis 0,7 ms, 1
+  requête au total. Au lancement suivant, ces deux images et une icône préchauffée
+  (`equipment/TI_Equipment_Weapon_01.webp`) sont servies du disque en ~1 ms, **0 requête R2**. Au-dessus, Chromium
+  garde aussi sa propre copie (`Cache-Control: max-age=86400`).
+- ✅ **4. Patch simulé.** `OUTERPEDIA_REF=cdd8bf63…` (commit d'outerpedia main du 02/11, `version.json` resVersion
+  1.11.504, hash `49a39d2e9dd6`) sur le userData du point 1 : `synced` « synced 22 tables @ cdd8bf6 », `startup-sync`
+  à **4,75 s**, 22 fichiers téléchargés (5,3 Mo), 7 tables au contenu différent de main (md5), `repo-sha.json` et
+  `version.json` au nouveau commit, préchauffage rejoué pour le nouveau hash (385 icônes, toutes déjà en cache). Retour
+  sans `OUTERPEDIA_REF` : « synced 22 tables @ fc3186f » à **3,69 s**, les 22 tables identiques octet pour octet à
+  l'état d'avant le patch, `/gamedata/version.json` resservi en 1.11.601 / `46bb6a261cd2`. Constat : jsDelivr a refusé
+  5 fichiers sur 22 au premier passage (403 « Package size exceeded the configured limit of 50 MB », le dépôt
+  outerpedia dépasse sa limite pour `gh/`), puis 1 sur 22 au retour ; le repli sur raw.githubusercontent les a tous
+  servis (`fetchRepoFile`), sans erreur.
+- ✅ **5. Hors ligne à cache froid.** `unshare -rn` seul ne suffit pas : root dans l'espace de noms, Electron refuse
+  (« Running as root without --no-sandbox is not supported ») ; le banc lève `lo` dans `unshare -rn` puis relance
+  l'app dans un `unshare -U --map-user=1000 --map-group=1000` imbriqué (même réseau coupé, utilisateur normal ;
+  `curl https://api.github.com` y échoue en 8 ms). Graine copiée, `offline` « offline — using cached game data » à
+  **0,30 s**, fenêtre chargée (lue par le port DevTools : assistant de première ouverture sur Setup, « data game
+  1.11.601 · 46bb6a261cd2 »), `/gamedata/version.json` servi depuis la graine, un `POST /api/data/sync` manuel répond le
+  même `offline`, processus vivant après 12 s, **aucun plantage**. Message : au lancement, aucun. `App.tsx` n'annonce
+  le résultat du démarrage que pour `unavailable` et `error` ; une graine complète fait de ce cas un `offline` muet,
+  et Settings › Data & updates n'y montre que « Game data version » (celle de la graine). Le bouton Sync du volet
+  afficherait « Game data: offline — using cached game data. » dans le pied (`describeDataSync`), lu dans le code,
+  pas cliqué au banc.
+- ✅ **Défaut trouvé et corrigé : un lancement hors ligne annulait le préchauffage des images jusqu'au patch suivant.**
+  `warmImageCache` (`apps/desktop/src/main.ts`) écrivait son marqueur `prefetch.json` quel que soit le résultat : hors
+  ligne, `{"hash":"46bb6a261cd2","count":0,"of":386}`. Prouvé au banc : relancé en ligne sur ce userData, l'app ne
+  tirait plus aucune icône (0 requête R2, pas de dossier `images/`) tant que le hash des données ne changeait pas ;
+  les icônes n'arrivaient qu'une à une à l'affichage. `prefetchImages` (`img-cache.ts`) rend désormais `{ cached,
+  failed }` (`failed` : tout échec autre qu'un 404 du bucket, erreur réseau, délai, 5xx), et le marqueur n'est écrit que
+  sans échec ; la ligne de journal le dit (« …, 386 failed (retried next launch) »). Un 404 reste définitif, comme
+  avant. Rejoué sur une nouvelle build `--dir` : hors ligne « 0/386 cached …, 386 failed », pas de marqueur ; relancé en
+  ligne, « 386/386 cached », marqueur écrit. Docs : `wiki/Engine-Reference.md` (préchauffage) ; `docs/reference.md`
+  ne le décrit pas.
+- ✅ **Tests.** `apps/desktop/test/img-cache-prefetch.test.ts` (nouveau, 4 tests, `fetch` stubé) : tout en cache sans
+  échec ; une image déjà sur disque sautée sans requête ; hors ligne 0 en cache, 3 échecs ; un 404 n'est pas un échec,
+  un 503 l'est. Desktop 263 → 267.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` (sans erreur) ; `npm test` → core « Tests 169 passed
+  (169) », desktop « Tests 267 passed (267) », renderer « Tests 1210 passed (1210) » (dernière ligne) ; `npm run lint`
+  → « ✖ 7 problems (0 errors, 7 warnings) », comme avant. Rien de `apps/desktop/release/` ni de `dist/` commité.
+- ⏳ **Sevih** sur le fixe, installeur Windows : le même banc (1er lancement à userData vide, dossier attendu
+  `%APPDATA%\@gear-solver\desktop\outerpedia-cache` à confirmer ; 2e lancement instantané ; Wi-Fi coupé à userData vide
+  = démarrage sur la graine sans plantage). À décider : un `offline` au lancement mérite-t-il un mot (toast ou ligne
+  dans Data & updates), aujourd'hui muet par choix de `App.tsx` ; et les 403 de jsDelivr sur outerpedia (dépôt au-delà
+  de 50 Mo), qui font passer une partie de chaque nouvelle sync par raw.githubusercontent.
+
 ### 🐞 Gear › Pieces : l'auto-prune attend l'inventaire chargé et garde grisée la valeur hors portée d'un preset appliqué (G125) (2026-11-14)
 - ✅ **Quoi.** Les deux derniers bugs de l'audit G69 (section « Bugs trouvés par l'audit du 2026-10-29 » du todo,
   retirée). Tous deux dans l'auto-prune des puces de Gear › Pieces et › Scrap

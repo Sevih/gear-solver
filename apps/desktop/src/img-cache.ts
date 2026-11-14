@@ -197,15 +197,26 @@ function canonicalRel(rel: string): string {
  * `/images` base, e.g. `equipment/TI_Equipment_Weapon_06.webp`) into the disk
  * cache, skipping ones already cached. Bounded concurrency, abortable,
  * best-effort (individual failures are ignored). Returns the count newly
- * cached.
+ * cached and the count that could not be fetched for a reason other than a
+ * bucket 404 (network error, timeout, 5xx…): a warm-up with failures is not
+ * done, the caller must not mark it so (an offline first launch would
+ * otherwise skip the warm-up until the next data patch).
  *
  * Used to pre-warm the equipment-icon subset referenced by the freshly-synced
  * derived data so the grid doesn't flicker on first render — character art
  * stays on-demand.
  */
-export async function prefetchImages(cacheDir: string, imageRels: string[], concurrency = 6, signal?: AbortSignal): Promise<number> {
+export interface PrefetchResult {
+  /** Images newly written to the disk cache. */
+  cached: number;
+  /** Images not fetched for a reason other than a bucket 404. */
+  failed: number;
+}
+
+export async function prefetchImages(cacheDir: string, imageRels: string[], concurrency = 6, signal?: AbortSignal): Promise<PrefetchResult> {
   const cacheImagesDir = join(cacheDir, "images");
   let cached = 0;
+  let failed = 0;
   let i = 0;
   const worker = async (): Promise<void> => {
     while (i < imageRels.length) {
@@ -216,11 +227,12 @@ export async function prefetchImages(cacheDir: string, imageRels: string[], conc
       try {
         const got = await fetchR2(rel);
         if (got.status === 200 && got.buf && cacheImage(cacheDir, rel, got.buf, got.etag)) cached++;
-      } catch { /* best-effort */ }
+        else if (got.status !== 404) failed++;
+      } catch { failed++; }
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, imageRels.length) }, worker));
-  return cached;
+  return { cached, failed };
 }
 
 /**

@@ -53,10 +53,11 @@
 - [~] 🟢 **Capture no-root** — livrée par la source Steam (plugin BepInEx, validé en jeu le 2026-09-05). **Reste** :
       (a) vérifier qu'un compte mobile se lie au client Steam (FAQ MAJOR9) avant de le vendre aux joueurs ; (b) tester
       le chemin « BepInEx absent » (download + pose dans le dossier du jeu) sur une install vierge.
-- [ ] **Vérif sync repo en prod packagé** — 1er lancement online : seed `data/derived` bundlé → comparaison du hash de
-      `version.json` → download des artefacts solver depuis `Sevih/outerpedia` ; images en cache à la demande depuis
-      R2. Vérifier `/img/*` ne tape R2 que sur miss · 2e lancement inchangé = instantané · simuler un patch
-      (`OUTERPEDIA_REF` autre branche) · offline cold-cache = pas de crash.
+- [~] **Vérif sync repo en prod packagé** — banc Linux fait le 14/11 (G126, `--dir` empaqueté : 1er lancement, 2e
+      lancement, cache d'images, patch simulé par `OUTERPEDIA_REF`, offline à cache froid ; voir le changelog).
+      **Reste sur Windows**, installeur NSIS sur le fixe : 1er lancement à userData vide (dossier attendu
+      `%APPDATA%\@gear-solver\desktop\outerpedia-cache`, à confirmer), 2e lancement instantané, puis Wi-Fi coupé à
+      userData vide = démarrage sur la graine sans plantage.
 
 ---
 

@@ -40,8 +40,9 @@ let httpServer: Server | null = null;
 /** Warm the disk image cache with the equipment-icon subset the freshly-synced
  *  derived data references (item art + unique-option / set badges + gem
  *  sprites). Runs at most once per derived-data hash (guarded by a marker
- *  file), in the background, and is fully best-effort. Character art is
- *  intentionally left on-demand. */
+ *  file, written only when no image failed to download — an offline launch
+ *  retries at the next one), in the background, and is fully best-effort.
+ *  Character art is intentionally left on-demand. */
 async function warmImageCache(): Promise<void> {
   let hash: string | null;
   const rels = new Set<string>();
@@ -65,9 +66,10 @@ async function warmImageCache(): Promise<void> {
   try {
     if (existsSync(marker) && (JSON.parse(readFileSync(marker, "utf-8")) as { hash?: string }).hash === hash) return;
   } catch { /* corrupt marker → re-prefetch */ }
-  const n = await prefetchImages(IMG_CACHE_DIR, [...rels], 6);
+  const { cached: n, failed } = await prefetchImages(IMG_CACHE_DIR, [...rels], 6);
+  dlog("server", `image prefetch: ${n}/${rels.size} cached @ data ${hash}${failed ? `, ${failed} failed (retried next launch)` : ""}`);
+  if (failed > 0) return;
   try { writeAtomic(marker, JSON.stringify({ hash, count: n, of: rels.size })); } catch { /* best-effort */ }
-  dlog("server", `image prefetch: ${n}/${rels.size} cached @ data ${hash}`);
 }
 
 /** Help › About: app, Electron and Chromium versions. */

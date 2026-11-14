@@ -110,7 +110,8 @@ compte, puis calculer les meilleures combinaisons par héros. Web app, données 
    capture Steam (`steam-capture.ts` : détection du jeu, install BepInEx + plugin, statut/heartbeat). Le
    **packaging** prod est **livré** : installeur (electron-builder), données embarquées
    (`extraResources`), mise à jour automatique (`setupAutoUpdate`) et releases (1.9.0 du 16/10,
-   1.10.0 du 17/10). Reste la vérification de la sync repo en prod packagé (`docs/todo.md`).
+   1.10.0 du 17/10). La sync repo en prod packagé est vérifiée sous Linux (banc G126 du 14/11) ; reste le
+   même banc sur l'installeur Windows (`docs/todo.md`).
 
 ## Comment lancer
 
@@ -149,10 +150,12 @@ npm run data:sync        # rafraîchit data/derived depuis le checkout outerpedi
   sont **livrés**. Reste **structurel** : réduire le **nombre** de combos atteignant le compose/CP
   (pré-filtre de pool plus agressif, borne CP par upper-bound) — demande un profilage sur vrai compte.
 - **Packaging desktop (M8)** : **livré** (installeur, données embarquées, mise à jour
-  automatique, releases 1.9.0 et 1.10.0). **Reste la vérif de la sync repo en prod packagé**
-  (item « Vérif sync repo en prod packagé » de `docs/todo.md`) : 1er lancement online
-  seed→SHA→download→rebuild, cache image à la demande, 2e lancement SHA inchangé instantané,
-  offline cold-cache sans crash.
+  automatique, releases 1.9.0 et 1.10.0). **La sync repo en prod packagé est vérifiée sous Linux**
+  (banc G126 du 14/11, build `--dir`) : 1er lancement en ligne sur la graine (hash égal à outerpedia
+  main, rien à télécharger, 2,6 s), 2e lancement 0,55 s sans écriture, images R2 une fois puis
+  cache, patch simulé (`OUTERPEDIA_REF`) 22 tables en 4,8 s et retour, offline à cache froid sans
+  plantage. **Reste le même banc sur l'installeur Windows** (item « Vérif sync repo en prod
+  packagé » de `docs/todo.md`).
 - **Édition d'équipement** : les méthodes core (`equipItem`/`unequipItem`), l'endpoint writer
   `POST /api/captured/user-item`, le client renderer **et l'UI déclencheur** (bouton « Equip
   build » du Builder + Apply locally / Apply all du Worklist) sont **livrés** — édition du JSON

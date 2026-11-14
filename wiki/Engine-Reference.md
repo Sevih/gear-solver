@@ -931,7 +931,9 @@ addresses move. Check a new dump by searching `static int CalcFinalStat(` in
   (V2 layout → R2). Each asset is therefore fetched only once. Cache:
   `.cache/outerpedia` in dev (gitignored), `<userData>/outerpedia-cache` in
   prod. The background prefetch (prod) warms the equipment icons referenced by
-  the derived data, once per version hash. Repo coordinates + SHA centralized
+  the derived data, once per version hash (a warm-up where downloads failed,
+  e.g. an offline launch, is not marked done and runs again at the next
+  launch). Repo coordinates + SHA centralized
   in `repo-source.ts`.
 - **Historical RE notes** — the detailed derivations (CalcFinalStat, CP,
   inherent EE/Transcend, locks workflow) lived in the Claude memory of the
