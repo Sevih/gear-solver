@@ -58,19 +58,6 @@
       R2. Vérifier `/img/*` ne tape R2 que sur miss · 2e lancement inchangé = instantané · simuler un patch
       (`OUTERPEDIA_REF` autre branche) · offline cold-cache = pas de crash.
 
-## Bugs trouvés par l'audit du 2026-10-29 (G69)
-
-> (b) = prouvé, mais plus large ou à trancher ; (c) = plausible, non prouvé. Les corrections sûres de l'audit sont
-> dans le changelog.
-
-- [ ] (c) **Auto-prune avec un inventaire pas encore chargé** — `InventoryScreen.tsx:52` / `:165` : monté avant la fin
-      d'`autoImport` (rechargement du renderer avec l'onglet Inventaire actif, `gs.tab` étant durable), `ui = []` vide
-      toutes les disponibilités et l'auto-prune vide les puces gardées en session. À vérifier : un rechargement du
-      renderer arrive-t-il en usage packagé ? Sinon sans effet (la session repart vide à chaque lancement).
-- [ ] (b) **Auto-prune à l'Apply d'un preset qui change de portée** — laissé par G70 : un preset qui change les
-      emplacements ou l'onglet (ex. Casque + sub EFF, sans casque EFF) perd encore en silence la valeur absente de la
-      nouvelle portée ; le cas « même portée » est couvert (valeur grisée, retirable). Touche l'auto-prune : à trancher.
-
 ---
 
 > ✅ **À NE PAS toucher (Gear › Pieces et › Scrap, `InventoryScreen`)** : virtualisation par lignes + reflow `ResizeObserver`, indexation

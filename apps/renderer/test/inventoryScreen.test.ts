@@ -241,6 +241,93 @@ describe("InventoryScreen — selection kept for the session", () => {
   });
 });
 
+/** The amber line above the grid counting the greyed filter values, or null. */
+const unavailableNotice = (tree: unknown): string | null => {
+  for (const el of walk(tree)) {
+    if (el.type !== "p") continue;
+    const text = [el.props.children].flat().join("");
+    if (text.includes("without an available piece")) return text;
+  }
+  return null;
+};
+
+describe("InventoryScreen — auto-prune waits for the inventory", () => {
+  const kept = () => ({ ...emptyFilters(), subs: new Set(["atkPct", "eff"]) });
+
+  it("no inventory yet: the chips kept for the session stay", () => {
+    seedSession("all", kept());
+    const tree = runtime.render(() => InventoryScreen({ inventory: null, game: null }));
+    expect(FILTER_CODEC.deserialize!(session.get(FILTERS_STORAGE_KEY)!).subs).toEqual(new Set(["atkPct", "eff"]));
+    expect(unavailableNotice(tree)).toBeNull();
+  });
+
+  it("an empty inventory, loaded, prunes them", () => {
+    seedSession("all", kept());
+    const empty = { gear: [], characters: [] } as unknown as Inventory;
+    const tree = runtime.render(() => InventoryScreen({ inventory: empty, game: null }));
+    expect(find<ModalProps>(tree, FilterModal).props.current.subs.size).toBe(0);
+  });
+
+  it("a loaded inventory prunes the unavailable chips only, also when it arrives after the mount", () => {
+    seedSession("all", kept());
+    let inv: Inventory | null = null;
+    const screen = () => InventoryScreen({ inventory: inv, game: null });
+    runtime.render(screen);
+    inv = inventory;
+    const tree = runtime.render(screen);
+    expect(find<ModalProps>(tree, FilterModal).props.current.subs).toEqual(new Set(["atkPct"]));
+  });
+});
+
+describe("InventoryScreen — filter preset applied on another scope", () => {
+  // EFF only on boots: available on Gear with no slot, absent from the helmets.
+  const boots: GearPiece = { ...piece("3", "boots", []), subs: [{ stat: "eff", value: 8, percent: true, ticks: 2, reforgeTicks: 0 }] };
+  const withBoots = { gear: [helmet, talisman, boots], characters: [] } as unknown as Inventory;
+  const screen = () => InventoryScreen({ inventory: withBoots, game: null });
+
+  it("Helmet + sub EFF: EFF stays, greyed in the modal, and the line counts it", () => {
+    seedSession("gear", emptyFilters());
+    let tree = runtime.render(screen);
+    expect(unavailableNotice(tree)).toBeNull();
+    find<ModalProps>(tree, FilterModal).props.onApply({ ...emptyFilters(), slots: new Set(["helmet"]), subs: new Set(["eff", "atkPct"]) });
+    tree = runtime.render(screen);
+    const modal = find<ModalProps>(tree, FilterModal).props;
+    expect(modal.current.subs).toEqual(new Set(["eff", "atkPct"]));
+    expect(modal.availableSubs.has("eff")).toBe(false);
+    expect(unavailableNotice(tree)).toBe("1 filter without an available piece");
+  });
+
+  it("removing the greyed value with a click clears the line", () => {
+    seedSession("gear", emptyFilters());
+    let tree = runtime.render(screen);
+    find<ModalProps>(tree, FilterModal).props.onApply({ ...emptyFilters(), slots: new Set(["helmet"]), subs: new Set(["eff"]) });
+    tree = runtime.render(screen);
+    find<ModalProps>(tree, FilterModal).props.onApply({ ...emptyFilters(), slots: new Set(["helmet"]) });
+    tree = runtime.render(screen);
+    expect(find<ModalProps>(tree, FilterModal).props.current.subs.size).toBe(0);
+    expect(unavailableNotice(tree)).toBeNull();
+  });
+
+  it("same scope: unchanged, the value stays greyed and counted", () => {
+    seedSession("gear", { ...emptyFilters(), slots: new Set(["helmet"]) });
+    let tree = runtime.render(screen);
+    find<ModalProps>(tree, FilterModal).props.onApply({ ...emptyFilters(), slots: new Set(["helmet"]), subs: new Set(["eff"]) });
+    tree = runtime.render(screen);
+    expect(find<ModalProps>(tree, FilterModal).props.current.subs).toEqual(new Set(["eff"]));
+    expect(unavailableNotice(tree)).toBe("1 filter without an available piece");
+  });
+
+  it("a slot chip toggled by hand afterwards still prunes", () => {
+    seedSession("gear", emptyFilters());
+    let tree = runtime.render(screen);
+    find<ModalProps>(tree, FilterModal).props.onApply({ ...emptyFilters(), slots: new Set(["helmet"]), subs: new Set(["eff"]) });
+    tree = runtime.render(screen);
+    find<SlotBarProps>(tree, SlotBar).props.onToggle("talisman");
+    tree = runtime.render(screen);
+    expect(find<ModalProps>(tree, FilterModal).props.current.subs.size).toBe(0);
+  });
+});
+
 describe("FilterModal — Load of a filter preset", () => {
   it("keeps the search typed in the draft", () => {
     const saved = saveInventoryFilterPreset("Talismans", { ...emptyFilters(), slots: new Set(["talisman"]) })!;

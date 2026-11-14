@@ -8,6 +8,51 @@
 
 ## Items de backlog clôturés (index)
 
+### 🐞 Gear › Pieces : l'auto-prune attend l'inventaire chargé et garde grisée la valeur hors portée d'un preset appliqué (G125) (2026-11-14)
+- ✅ **Quoi.** Les deux derniers bugs de l'audit G69 (section « Bugs trouvés par l'audit du 2026-10-29 » du todo,
+  retirée). Tous deux dans l'auto-prune des puces de Gear › Pieces et › Scrap
+  (`apps/renderer/src/screens/inventory/InventoryScreen.tsx`), seule exception touchée à la note « À NE PAS toucher »
+  du todo, comme G70.
+- ✅ **(c) Inventaire pas encore chargé : établi sans effet en usage packagé.** `App.tsx` monte avec `inv = null` et
+  `refreshInventory("Auto-import")` le remplit ensuite ; `gs.tab` est durable, donc l'onglet Gear s'ouvre bien
+  avant la fin de l'import à chaque lancement. Mais `GearScreen` rend `FirstCapture` tant que `inventory` est nul,
+  si bien qu'`InventoryScreen` ne monte jamais sans inventaire ; et un rechargement du renderer qui garderait la
+  session n'existe plus en packagé (le menu de `apps/desktop/src/menu.ts` n'a ni Reload ni Force reload, Ctrl+R et F5
+  ne rechargent rien ; reste la console F12). Au lancement, la session repart de toute façon vide. Corrigé quand même
+  (ne coûte rien) : un drapeau `inventoryReady` (`inventory !== null`) plutôt que le tableau `ui` vide ; l'auto-prune
+  ne tourne pas tant qu'il est faux, `inventoryReady` est dans ses dépendances, si bien qu'il repasse à l'arrivée de
+  l'inventaire ; un inventaire chargé mais vide prune comme avant. La ligne de compte ci-dessous attend le même drapeau.
+- ✅ **(b) Preset appliqué sur une autre portée : la valeur reste, grisée.** Le bug vivait dans Gear › Pieces, pas dans
+  le Builder : le Builder n'a pas d'auto-prune (`loadPreset` du réducteur de `lib/solver/builderFilters.ts` remplace
+  les filtres tels quels). Dans Gear, l'Apply d'un preset de la `FilterModal` qui change les emplacements (ou
+  l'onglet, bascule sur All de G70) changeait les disponibilités, l'auto-prune repassait et retirait en silence une
+  valeur absente de la nouvelle portée (Casque + sub EFF sans casque EFF). Décision de Sevih : même traitement que
+  la même portée. `applyFilters` note le filtre appliqué dans `appliedRef` ; tant que le filtre courant est cet objet,
+  l'auto-prune le laisse entier (`prev === appliedRef.current`), et la modale affiche déjà la valeur hors vue
+  grisée, avec le `title` « No piece in the current view », retirable d'un clic (G70). Un changement de portée fait
+  à la main (onglet via `setTab`, puce de la `SlotBar` via `toggleSlot`, drill) efface la marque et prune comme avant ;
+  tout autre filtre qui prend la place (autre règle de Scrap, autre vue) n'est pas cet objet et prune aussi. Une
+  ligne ambre « N filters without an available piece » (« 1 filter… » au singulier) s'affiche au-dessus du
+  `SortHeader`, à l'endroit de l'avis sur les prix de recyclage, sans le remplacer quand les deux s'affichent (deux
+  lignes) ; elle compte les valeurs sélectionnées que la modale grise (Main, Sub, Set, Class, Star, Grade, Quality,
+  Reachable, Passives) et vaut aussi pour la même portée.
+- ✅ **Tests.** `apps/renderer/test/inventoryScreen.test.ts` (11 → 18) : inventaire absent → puces gardées en
+  session, pas de ligne ; inventaire chargé vide → pruné ; inventaire arrivé après le montage → seul `eff`
+  (indisponible) retiré, `atkPct` gardé ; preset Casque + EFF appliqué sur Gear sans emplacement (EFF seulement sur
+  des bottes) → EFF présent, absent des disponibilités de la modale, ligne « 1 filter without an available piece » ;
+  retrait d'un clic puis Apply → ligne disparue ; même portée → valeur gardée et comptée ; puce Talisman cliquée
+  ensuite → prunée. Sans la correction, quatre échouent (inventaire absent, arrivée après montage, preset Casque + EFF,
+  même portée par la ligne), passent avec.
+- ✅ **Docs.** `wiki/Using-the-App.md` (Filter sets : valeur hors vue gardée même quand le preset change les
+  emplacements ou l'onglet, ligne de compte) ; `docs/solver.md` et `wiki/Solver.md` ne décrivent pas l'auto-prune,
+  inchangés.
+- ✅ **Vérification.** `npm run typecheck` → `> tsc --noEmit` (sans erreur) ; `npm test` → core « Tests 169 passed
+  (169) », desktop « Tests 263 passed (263) », renderer « Tests 1210 passed (1210) » (dernière ligne) ;
+  `npm run lint` → « ✖ 7 problems (0 errors, 7 warnings) », comme avant.
+- ⏳ **Sevih** sur le fixe : Gear › Pieces, onglet Gear, un preset Casque + une sub qu'aucun casque ne porte →
+  valeur grisée dans la modale, ligne ambre au-dessus du tri, rien de retiré ; un clic sur une puce d'emplacement la
+  retire comme avant.
+
 ### 🃏 Cartes de gear de l'Optimizer : main stats à droite de l'icône, Never use en haut à droite (G124) (2026-11-14)
 - ✅ **Pourquoi.** Demande de Sevih du 14/11 : resserrer les cartes de la bande de l'Optimizer. Le bloc « main rolls »
   pleine largeur coûtait une rangée sous l'icône, et le bouton « Never use » prenait un pied entier.

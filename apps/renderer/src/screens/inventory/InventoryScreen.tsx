@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import type { Character, GameData, Inventory } from "@gear-solver/core";
 import { jsonStringSet, useSessionState } from "../../hooks/usePersistedState.js";
 import type { DesignRarity, SlotId } from "../../design/tokens.js";
@@ -114,6 +114,16 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   const scrapDefaults = useMemo(() => (scrapMode ? scrapDefaultPresets() : null), [scrapMode, filterModalOpen]);
 
   const ui = useMemo<UiPiece[]>(() => (inventory ? inventory.gear.map((g) => toUiPiece(g, game)) : []), [inventory, game]);
+  // No inventory yet is not an empty one: until it loads, `ui` is empty and
+  // every availability with it, so the auto-prune below waits for this flag.
+  const inventoryReady = inventory !== null;
+  // The filter last applied from the modal: the auto-prune leaves it whole
+  // when the Apply itself changes the scope (a preset's slots, the switch to
+  // All), so a value without a piece stays greyed in the modal, removable with
+  // a click, instead of vanishing. A tab switch, a slot chip or a drill (the
+  // user changing the scope by hand) drops it, and prunes as before; so does
+  // any other filter taking its place (another Scrap rule, the other view).
+  const appliedRef = useRef<FilterState | null>(null);
 
   // Tab buckets — counted off the raw inventory so the badge stays meaningful
   // when the user has narrowed the view with other filters.
@@ -127,6 +137,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // otherwise a "weapon" chip selected on Gear would silently zero out the
   // grid when the user switches to Special Gear.
   const setTab = useCallback((next: InvTab) => {
+    appliedRef.current = null;
     setTabState(next);
     setF((prev) => {
       const allowed = new Set(TAB_SLOTS[next]);
@@ -144,6 +155,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // changes nothing.
   useEffect(() => {
     if (!drill) return;
+    appliedRef.current = null;
     if (drill.pieceUid) {
       const p = ui.find((x) => x.id === drill.pieceUid);
       if (p) {
@@ -171,11 +183,13 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // All, so the SlotBar shows that chip instead of a grid emptied by an
   // invisible criterion.
   const applyFilters = useCallback((next: FilterState) => {
+    appliedRef.current = next;
     setF(next);
     if ([...next.slots].some((s) => !TAB_SLOTS[tab].includes(s))) setTabState("all");
   }, [tab, setF, setTabState]);
 
   const toggleSlot = useCallback((s: SlotId) => {
+    appliedRef.current = null;
     setF((prev) => {
       const next = new Set(prev.slots);
       if (next.has(s)) next.delete(s); else next.add(s);
@@ -265,9 +279,13 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
   // Overview drill is pending: on mount both effects run in the same commit and
   // the availabilities here are still those of the tab and slots the drill
   // replaces — the prune runs on the next render, in the drill's own scope.
+  // Skipped too until the inventory has loaded (a loaded empty one prunes),
+  // and while the filter is the one applied from the modal (kept whole).
   useEffect(() => {
-    if (drill) return;
+    if (drill || !inventoryReady) return;
     setF((prev) => {
+      // Still the filter applied from the modal: nothing to drop.
+      if (prev === appliedRef.current) return prev;
       const nextMains = new Set([...prev.mains].filter((s) => availableMains.has(s)));
       const nextSubs = new Set([...prev.subs].filter((s) => availableSubs.has(s)));
       const nextArmorSets = new Set([...prev.armorSets].filter((id) => availableArmorSets.has(id)));
@@ -291,7 +309,18 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         reachable: nextReachable,
       };
     });
-  }, [drill, availableMains, availableSubs, availableArmorSets, availableClasses, availableStars, availableRarities, availableQualities, availableReachable, setF]);
+  }, [drill, inventoryReady, availableMains, availableSubs, availableArmorSets, availableClasses, availableStars, availableRarities, availableQualities, availableReachable, setF]);
+
+  // Selected values without a piece in the scope — the pills the modal greys
+  // ("No piece in the current view"), counted for the line above the grid.
+  const unavailableCount = useMemo(() => {
+    const missing = <T,>(selected: Set<T>, available: { has(v: T): boolean }) => [...selected].filter((v) => !available.has(v)).length;
+    return missing(f.mains, availableMains) + missing(f.subs, availableSubs)
+      + missing(f.armorSets, availableArmorSets) + missing(f.classes, availableClasses)
+      + missing(f.stars, availableStars) + missing(f.rarities, availableRarities)
+      + missing(f.quality, availableQualities) + missing(f.reachable, availableReachable)
+      + missing(f.passives, availablePassives);
+  }, [f, availableMains, availableSubs, availableArmorSets, availableClasses, availableStars, availableRarities, availableQualities, availableReachable, availablePassives]);
 
   const sorted = useMemo(() => {
     const out = [...filtered];
@@ -527,6 +556,11 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         {scrapMode && !scrapReady && (
           <p className="pb-2 text-[11.5px] text-amber-200">
             The loaded game tables carry no scrap prices — sync game data in Settings › Data &amp; updates.
+          </p>
+        )}
+        {inventoryReady && unavailableCount > 0 && (
+          <p className="pb-2 text-[11.5px] text-amber-200">
+            {unavailableCount} {unavailableCount === 1 ? "filter" : "filters"} without an available piece
           </p>
         )}
         <SortHeader

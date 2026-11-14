@@ -494,7 +494,9 @@ A dense, searchable grid of every gear piece you own.
   except the search and the sub-tab (All / Gear / Special Gear): **Load** leaves your search in
   place, and a filter set holding a slot the current sub-tab doesn't show switches the view to **All**
   on Apply. A selected value no piece of the view carries stays in the modal, dimmed, so you can
-  remove it. The built-in **Scrap candidates** (always first, can't be deleted) shows the unequipped
+  remove it, also when the filter set changes the slots or the sub-tab: nothing is dropped
+  without a click of yours, and a line above the grid counts them ("2 filters without an
+  available piece"). The built-in **Scrap candidates** (always first, can't be deleted) shows the unequipped
   5★ / 6★ gear at +0, T0, never reforged, with Base rolls **not at least 3/3/3/X** — the pieces
   without three lines at 3.
 - **Sort**: by enhance level, stars, breakthrough, or by a specific substat's value.
