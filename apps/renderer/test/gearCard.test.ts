@@ -94,6 +94,22 @@ describe("GearCardBody — one body for the Inventory and the Builder", () => {
     expect(builder(piece())).toContain('<span class="flex flex-wrap gap-x-2 text-white"><span>Weapon</span></span>');
   });
 
+  it("main rolls in the icon's column, under rarity and slot, before the portrait and the subs", () => {
+    const weapon = piece({ main: [
+      { label: "ATK 500", stat: "atk", value: "500", percent: false, name: null },
+      { label: "CRIT DMG 48%", stat: "critDmg", value: "48%", percent: true, name: "Critical Damage" },
+    ] });
+    for (const html of [inventory(weapon, { equippedChar: ame }), builder(weapon, { equippedChar: ame })]) {
+      const at = (needle: string) => html.indexOf(needle);
+      const order = ["data-equipment-icon", ">Legendary<", "<span>Weapon</span>", ">500<", ">48%<", "FI_7.webp", "LV 5"].map(at);
+      for (const i of order) expect(i).toBeGreaterThan(-1);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+      expect(html).toMatch(/<span class="min-w-0 flex-1 truncate text-white" title="Critical Damage">Critical Damage<\/span>/);
+      expect(html).toMatch(/<div class="flex items-center gap-1.5 font-mono text-\[12px\] tabular-nums">/);
+      expect(html).not.toContain("text-[13px]");
+    }
+  });
+
   it("the Quality block — title, help, score, reachable, tier, bar — in both contexts", () => {
     for (const html of [inventory(piece()), builder(piece())]) {
       expect(html).toMatch(/<span>Quality<\/span><span tabindex="0" class="group inline-flex cursor-help/);
@@ -142,6 +158,19 @@ describe("GearCardBody — projection", () => {
     expect(t).toContain("LV 5(4 + 1)");
     expect(t).toContain("LV 6(4 + 2)");
     expect(t).not.toContain("T+");
+  });
+});
+
+describe("GearCardBody — header action", () => {
+  it("the full card puts it at the end of the name's row, the compact one after the portrait", () => {
+    const action = createElement("b", { "data-action": "" });
+    const full = builder(piece(), { equippedChar: ame, headerAction: action });
+    expect(full.indexOf("data-action")).toBeGreaterThan(full.indexOf(">Blade<"));
+    expect(full.indexOf("data-action")).toBeLessThan(full.indexOf("data-equipment-icon"));
+    const compact = builder(piece(), { equippedChar: ame, compact: true, headerAction: action });
+    expect(compact.indexOf("data-action")).toBeGreaterThan(compact.indexOf("FI_7.webp"));
+    expect(compact.indexOf("data-action")).toBeLessThan(compact.indexOf('title="LV '));
+    expect(builder(piece())).not.toContain("ml-auto shrink-0 self-start");
   });
 });
 

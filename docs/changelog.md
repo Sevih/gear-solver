@@ -8,6 +8,46 @@
 
 ## Items de backlog clôturés (index)
 
+### 🃏 Cartes de gear de l'Optimizer : main stats à droite de l'icône, Never use en haut à droite (G124) (2026-11-14)
+- ✅ **Pourquoi.** Demande de Sevih du 14/11 : resserrer les cartes de la bande de l'Optimizer. Le bloc « main rolls »
+  pleine largeur coûtait une rangée sous l'icône, et le bouton « Never use » prenait un pied entier.
+- ✅ **Main stats dans la colonne de l'icône.** `FullBody` (`apps/renderer/src/design/GearCard.tsx`) range les main
+  stats dans la colonne à droite de l'icône de 80 px, sous la rareté et la ligne slot / classe (`classLimit` reste
+  sur la ligne du slot), avant le portrait du porteur. Même ligne qu'avant (icône de stat, nom, valeur en mono),
+  compactée : 12 px au lieu de 13, icône 16 au lieu de 18, `gap-1.5`, `space-y-1` ; le nom prend `truncate` avec
+  son `title`, la valeur reste entière (`shrink-0`), si bien que les deux mains d'une arme tiennent dans la hauteur
+  de l'icône sans passer sous le portrait. La carte perd une rangée. C'est le même composant partout : la HoverCard
+  de Gear (`inTooltip`) et la carte d'inspection de Gear › Pieces suivent la même disposition.
+- ✅ **« Never use » en haut à droite.** `GearCardBody` reçoit `headerAction` (un `ReactNode`), rendu au bout de la
+  rangée du nom (`ml-auto shrink-0 self-start`), au-dessus du portrait ; `GearCardPanel` y passe un petit bouton :
+  icône ⊘ + « Never use », ou ⊘ + « Never used — click to allow » une fois la pièce exclue (même teinte rose, même
+  `title` = `excludeHint`, `aria-pressed` en plus, comme l'action compacte). Le pied ne garde qu'« Optimize wearer → »,
+  donc il n'existe plus que dans Gear (`ItemDetail`, qui passe `onOptimizeWearer`) : dans l'Optimizer, il disparaît.
+  Le libellé exclu passe de « ⊘ Never used — click to allow » (glyphe dans le texte) à l'icône SVG + « Never used —
+  click to allow » : le nom accessible perd le ⊘, comme celui de l'action compacte.
+- ✅ **Carte compacte.** Corps inchangé ; son action icône (`CardActions`, mêmes `aria-label` « Never use » / « Never
+  used — click to allow », même état pressé) quitte le pied (`CompactExcludeFooter` devient `CompactExcludeAction`)
+  pour le bout de la rangée d'en-tête, après les étoiles / enhance et le portrait : c'est un élément `shrink-0` de la
+  même ligne flex, il ne chevauche rien, le nom (`flex-1`, `wrap-break-word`) se replie plus tôt. La carte double
+  EE + talisman (`ResultPairDetail`, `PairCell`) suit : une action par moitié (« Never use EE », « Never use
+  talisman »), en haut à droite de chacune, plus de pied ; seul reste le filet entre les deux moitiés.
+- ✅ **Tests.** `gearCard.test.ts` (11 → 13) : main stats dans la colonne de l'icône (ordre du DOM icône → rareté →
+  slot → mains → portrait → subs, deux mains, 12 px, nom coupé avec `title`) et `headerAction` au bout de la rangée
+  du nom (plein) ou après le portrait (compact). `compactCard.test.ts` : l'action compacte est dans l'en-tête (après
+  l'enhance, avant les subs, plus de `border-t`) ; la carte pleine porte « Never use » après le nom et avant l'icône,
+  sans pied, sans `w-full`, état exclu rose et pressé ; la carte double place chaque action en haut de sa moitié ;
+  la bande (pleine et compacte) a huit boutons et aucun pied. `gearDetailWearer.test.ts` : « Optimize wearer → »
+  seul dans le pied de Gear, « Never use » au-dessus de l'icône, pas de pied sans le lien. Aucun test retiré.
+- ✅ **Docs.** `wiki/Using-the-App.md` (cartes de l'Optimizer, version compacte, carte de Gear › Pieces),
+  `wiki/Solver.md` / `docs/solver.md` (disposition, mode compact, Never use) et les inventaires de tests
+  (`docs/reference.md`, `wiki/Engine-Reference.md`).
+- ✅ **Vérification.** `npm run typecheck` (dernière ligne `> tsc --noEmit`, sans erreur), `npm test` (dernière ligne
+  `Tests  1203 passed (1203)`), `npm run lint` (`✖ 7 problems (0 errors, 7 warnings)`, comme avant).
+- ⏳ **Pour Sevih.** Coup d'œil dans l'app : une arme à deux main stats à long nom (« Critical Damage » coupé ?) et
+  un nom de pièce long sur deux lignes à côté de « Never used — click to allow » sur une colonne de 320 px ; en
+  compact, un nom de set long à côté des étoiles, du portrait et de l'icône. La carte de Gear › Pieces change aussi
+  (même `GearCardPanel`) : « Never use » y monte en haut à droite, « Optimize wearer → » reste en bas.
+
 ### 📦 Bumps Dependabot repris sur main : Electron 45, electron-builder 26.18, wait-on 9, plugin-react 5.2, groupe minor/patch, actions/checkout 7 (G122) (2026-11-07)
 - ✅ **Pourquoi.** Cinq PR de Dependabot attendaient (#52 groupe minor/patch, #46 Electron, #44 `wait-on`, #43
   `@vitejs/plugin-react`, #41 `actions/checkout`) ; elles sont reprises à la main sur `main`, banc compris, et

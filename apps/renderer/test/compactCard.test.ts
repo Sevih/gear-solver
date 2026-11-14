@@ -2,9 +2,9 @@
 // short quality label, Singularity effects shortened to icon + value or a
 // short name, substat cells reduced to icon + value with the details in the
 // title, no equipment icon (enhance / breakthrough / stars in the header),
-// gems as icons and one icon action in the footer, the Singularity +15 bonus
-// as grade + short label + value — while the non-compact
-// card keeps its icon and its full-width exclude button. The talisman's
+// gems as icons and one icon action at the top right (G124, no footer), the
+// Singularity +15 bonus as grade + short label + value — while the non-compact
+// card keeps its icon and a labelled exclude button at the top right. The talisman's
 // multi-tier passive moves to the name's title, and the EE + talisman share
 // one card in the compact band (seven cells), each compact card at its own
 // content height (no row stretch). The header's stars and breakthrough sit
@@ -232,10 +232,14 @@ describe("GearCardPanel — compact card", () => {
     expect(html).toContain("color:#ff00ff");
   });
 
-  it("footer: a single icon action with its hover label", () => {
+  it("top right: a single icon action with its hover label, in the header row, no footer", () => {
     const html = render(piece(), true);
     const buttons = [...html.matchAll(/<button([^>]*)>/g)].map((m) => m[1]!);
     expect(buttons).toHaveLength(1);
+    // After the header's enhance, before the substats; nothing under the body.
+    expect(html.indexOf("<button")).toBeGreaterThan(html.indexOf('title="Enhance level"'));
+    expect(html.indexOf("<button")).toBeLessThan(html.indexOf('title="LV '));
+    expect(html).not.toContain("border-t");
     expect(buttons[0]).toContain('aria-label="Never use"');
     expect(buttons[0]).toContain('aria-pressed="false"');
     expect(text(html)).not.toContain("Never use");
@@ -246,13 +250,23 @@ describe("GearCardPanel — compact card", () => {
 });
 
 describe("GearCardPanel — non-compact card", () => {
-  it("keeps the equipment icon and the full-width exclude button", () => {
+  it("keeps the equipment icon; Never use sits at the top right, in the name's row, no footer", () => {
     const html = render(piece(), false);
     expect(html).toContain("data-equipment-icon");
     const button = [...html.matchAll(/<button([^>]*)>(.*?)<\/button>/g)];
     expect(button).toHaveLength(1);
-    expect(button[0]![1]).toContain("w-full");
+    expect(button[0]![1]).not.toContain("w-full");
+    expect(button[0]![1]).toContain('aria-pressed="false"');
+    expect(button[0]![2]).toContain("<svg");
     expect(text(button[0]![2]!)).toBe("Never use");
+    // After the name, before the icon row; the card has no footer left.
+    expect(html.indexOf("<button")).toBeGreaterThan(html.indexOf(">Blade<"));
+    expect(html.indexOf("<button")).toBeLessThan(html.indexOf("data-equipment-icon"));
+    expect(html).not.toContain("border-t");
+    const excluded = [...render(piece(), false, true).matchAll(/<button([^>]*)>(.*?)<\/button>/g)];
+    expect(excluded[0]![1]).toContain('aria-pressed="true"');
+    expect(excluded[0]![1]).toContain("rose");
+    expect(text(excluded[0]![2]!)).toBe("Never used — click to allow");
   });
 });
 
@@ -312,6 +326,16 @@ describe("ResultPairDetail — compact EE + talisman card", () => {
     expect(labels).toEqual(["Never use EE", "Never use talisman"]);
   });
 
+  it("each half's action at its own top right: EE's in its header, the talisman's after its name", () => {
+    const html = renderPair(ee, tal);
+    const [first, second] = [...html.matchAll(/<button/g)].map((m) => m.index!);
+    expect(first).toBeGreaterThan(html.indexOf(">EE<"));
+    expect(first).toBeLessThan(html.indexOf(">Charm<"));
+    expect(second).toBeGreaterThan(html.indexOf(">Charm<"));
+    // The only rule left is the one between the two halves.
+    expect(html.match(/border-t/g)).toHaveLength(1);
+  });
+
   it("a missing piece shows its empty label, without an action", () => {
     const html = renderPair(ee, null);
     expect(text(html)).toContain("No talisman");
@@ -351,6 +375,14 @@ describe("BottomGearBand — compact band", () => {
 
   it("non-compact: eight cards", () => {
     expect(renderBand(false).match(/<aside/g)).toHaveLength(8);
+  });
+
+  it("each card's Never use sits in its header, no footer in the Optimizer", () => {
+    for (const compact of [false, true]) {
+      const html = renderBand(compact);
+      expect(html).not.toContain("border-t border-white/8 px-4");
+      expect(html.match(/<button/g)).toHaveLength(8);
+    }
   });
 
   it("an empty card names its slot, never the Inventory's tile prompt", () => {

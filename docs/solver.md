@@ -630,8 +630,10 @@ chaque colonne d'au moins 320 px (et d'au moins un quart de la bande moins ses t
 carte à la largeur de sa colonne (`fluid` de `GearCardPanel` : `w-full`) ; plus étroit, le même ordre passe à la
 ligne. Hors de la bande (Gear › Pieces, infobulles, presets) la carte garde sa largeur fixe (`w-80`, `w-56` en
 compact). Le nom passe sur deux lignes au plus (`line-clamp-2`) et le slot et la classe (« Striker Exclusive »)
-sont deux `span` qui passent l'un sous l'autre plutôt que sous le portrait du porteur. Chaque carte montre nom,
-enhance level, icône slot, main stat, subs (avec ticks). C'est la carte de pièce de Gear
+sont deux `span` qui passent l'un sous l'autre plutôt que sous le portrait du porteur. Chaque carte montre nom (avec
+**Never use** en haut à droite de sa rangée), enhance level, icône slot, puis à côté de l'icône la ligne rareté /
+slot et la ou les main stats (12 px, un nom long coupé avec son `title`, pour que les deux mains d'une arme
+tiennent dans la hauteur de l'icône), subs (avec ticks). C'est la carte de pièce de Gear
 (`design/GearCard.tsx` : `GearCardPanel` autour de `GearCardBody`, `effects="none"`) : même ligne rareté /
 slot, même bloc Qualité (titre, aide au survol, barre), même « Active Effect at +15 Enhancement » ; le passif
 d'arme / d'accessoire et les bonus de set n'y sont pas (le panneau « Effects » de la colonne de droite les
@@ -652,7 +654,8 @@ build » (ou « No weapon yet » avant toute sélection, « Solve, then pick a b
   en `title`) ; qualité sur une ligne (`14/20 →17 Exc.`) ; effets Singularity sur une ligne (icône + valeur
   signée ; le bonus +15 en grade coloré + icône + libellé court + valeur, `S+ DS DMG+ +12%`, par
   `singularityShortLabel` / `singularityGrade` ; ou nom court) ; passif multi-paliers du talisman non rendu,
-  son texte (paliers visibles, actifs d'abord, séparés par « · ») dans le `title` du nom ; pied = rangée d'icônes d'action (`CardActions`, aujourd'hui exclure / inclure).
+  son texte (paliers visibles, actifs d'abord, séparés par « · ») dans le `title` du nom ; l'icône exclure / inclure (`CardActions`) en haut à droite, après le portrait (`headerAction`), une par moitié
+  dans la carte double, plus de pied.
   Gear et les tooltips (le même `GearCardBody`, jamais compact) ne bougent pas.
 - **Talisman / EE** : l'allocation de gemmes recommandée par le build (stat + valeur,
   badge **swap** si elle diffère des gemmes socketées).
@@ -669,7 +672,10 @@ build » (ou « No weapon yet » avant toute sélection, « Solve, then pick a b
   était vide). Pièce proposée, pièce portée et « slot changé » viennent d'une seule fonction,
   `diffBuildVsLoadout` (`lib/buildDiff.ts`), que lisent aussi Apply to snapshot et + Worklist.
 - **Never use** (`onToggleExclude` → `toggleExclude` d'App, `gs.solver.excludedPieces`) — écarte la pièce de tous les
-  solves, comme le clic droit sur sa tuile dans Gear ; pas une action du reducer.
+  solves, comme le clic droit sur sa tuile dans Gear ; pas une action du reducer. Un petit bouton ⊘ en haut à droite
+  de la carte, dans la rangée du nom (`headerAction` de `GearCardBody`, fourni par `GearCardPanel`), rose et pressé
+  une fois exclue (« Never used — click to allow ») ; la carte n'a plus de pied dans l'Optimizer (celle de Gear
+  garde « Optimize wearer → »).
 
 ### Pied fixe (`screens/builder/FilterFooter.tsx`)
 - Chips par slot avec **hit/total (%)** — alimentés par `poolSizes` du précalcul (`precomputeContext`, thread principal).

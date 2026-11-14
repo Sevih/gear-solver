@@ -5,8 +5,8 @@
  * Inventory and the Builder, and the compact EE + talisman pair
  * (`ResultPairDetail`). Its pure helpers live in `gearCardText.ts`.
  *
- * Renders, in order: name, icon + rarity/slot line + wearer, main rolls,
- * substats (or gems for talisman/EE — never both), quality, multi-tier
+ * Renders, in order: name (and the panel's "Never use" at the top right),
+ * icon + a column of rarity/slot line and main rolls + wearer, substats (or gems for talisman/EE — never both), quality, multi-tier
  * passive (talisman/EE), unique-option passive (weapons/accessories), set
  * effect (armor 2/4-pc), and the Singularity active effect on ascended pieces.
  *
@@ -19,8 +19,8 @@
  * eight-card comparison: no equipment icon (enhance / breakthrough / stars
  * move to the header), set names instead of item names, icon + value stats
  * (subs on a 2 × 2 grid, details in the `title`), gems as five icons, one-line
- * effects and quality, an icon action row instead of the exclude button, a
- * narrower card, the talisman's multi-tier passive in the name's `title`, and
+ * effects and quality, an icon exclude action at the top right instead of the
+ * button, a narrower card, the talisman's multi-tier passive in the name's `title`, and
  * the EE + talisman sharing one card (`ResultPairDetail`).
  */
 import type { ReactNode } from "react";
@@ -231,13 +231,16 @@ export interface GearCardBodyProps {
    *  host a hoverable nested tooltip — the set rows' "combat" pill expands
    *  inline instead (`SetCombatBadge` `expanded`). */
   inTooltip?: boolean;
+  /** A control at the card's top right, in the header row (the panel's
+   *  "Never use" — `GearCardPanel`, `PairCell`). */
+  headerAction?: ReactNode;
 }
 
 export function GearCardBody(props: GearCardBodyProps) {
   return props.compact ? <CompactBody {...props} /> : <FullBody {...props} />;
 }
 
-function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPresets, projection, effects, inTooltip = false }: GearCardBodyProps) {
+function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPresets, projection, effects, inTooltip = false, headerAction }: GearCardBodyProps) {
   const slot = piece.slot ? SLOTS.find((s) => s.id === piece.slot) : null;
   const rarity = RARITY[piece.rarity];
   const onCard = effects === "card";
@@ -260,10 +263,11 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
         >
           {piece.name}{piece.singularity ? " - [Singularity]" : ""}
         </span>
+        {headerAction && <div className="ml-auto shrink-0 self-start">{headerAction}</div>}
       </div>
       {fromPresets && fromPresets.length > 0 && <FromPresetsLine fromPresets={fromPresets} compact={false} />}
 
-      {/* icon + rarity/class line + equipped char */}
+      {/* icon + column (rarity/class line, main rolls) + equipped char */}
       <div className="flex items-start gap-3">
         <EquipmentIcon piece={piece.iconPiece} size={80} />
         <div className="min-w-0 flex-1">
@@ -276,6 +280,22 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
               {piece.classLimit && <span>{piece.classLimit} Exclusive</span>}
             </span>
           </div>
+          {/* main rolls — beside the icon, at 12 px so a weapon's two mains
+           *  fit its height; a long name is cut, in full in its title */}
+          {!bareEE && piece.main.length > 0 && (
+            <div className="mt-1.5 space-y-1">
+              {piece.main.map((m, i) => {
+                const label = m.name ?? statLong(m.stat);
+                return (
+                  <div key={i} className="flex items-center gap-1.5 font-mono text-[12px] tabular-nums">
+                    <StatIcon stat={m.stat} size={16} className="shrink-0" />
+                    <span className="min-w-0 flex-1 truncate text-white" title={label}>{label}</span>
+                    <span className="shrink-0 font-semibold text-white">{m.value}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         {equippedChar && (onOptimizeWearer && !inTooltip ? (
           <button
@@ -291,19 +311,6 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
           <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={36} />
         ))}
       </div>
-
-      {/* main rolls */}
-      {!bareEE && piece.main.length > 0 && (
-        <div className="space-y-1.5">
-          {piece.main.map((m, i) => (
-            <div key={i} className="flex items-center gap-2 font-mono text-[13px] tabular-nums">
-              <StatIcon stat={m.stat} size={18} className="shrink-0" />
-              <span className="flex-1 text-white">{m.name ?? statLong(m.stat)}</span>
-              <span className="font-semibold text-white">{m.value}</span>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* substats (gear) OR gems (talisman / EE) — never both */}
       {piece.gemSlots ? (
@@ -422,7 +429,7 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
 
 /** The compact card (Builder only): see the file header. The EE shows just
  *  its gems, the card's effects stay in `BuildEffectsPanel`. */
-function CompactBody({ piece, game, equippedChar = null, fromPresets, projection }: GearCardBodyProps) {
+function CompactBody({ piece, game, equippedChar = null, fromPresets, projection, headerAction }: GearCardBodyProps) {
   const rarity = RARITY[piece.rarity];
   const isEE = piece.slot === "exclusive";
   const fullName = `${piece.name}${piece.singularity ? " - [Singularity]" : ""}`;
@@ -461,6 +468,8 @@ function CompactBody({ piece, game, equippedChar = null, fromPresets, projection
         </span>
         {/* Equipped-on hero — top-right corner of the card, round. */}
         {equippedChar && <CharFace charId={equippedChar.charId} name={equippedChar.name ?? `#${equippedChar.charId}`} size={32} className="rounded-full" />}
+        {/* The panel's exclude action, at the very top right. */}
+        {headerAction && <div className="shrink-0">{headerAction}</div>}
       </div>
       {fromPresets && fromPresets.length > 0 && <FromPresetsLine fromPresets={fromPresets} compact />}
 
@@ -530,7 +539,7 @@ function CompactBody({ piece, game, equippedChar = null, fromPresets, projection
   );
 }
 
-/** One quick action of a compact card's footer. */
+/** One quick icon action of a compact card (its top-right exclude). */
 export interface CardAction {
   key: string;
   icon: ReactNode;
@@ -541,7 +550,7 @@ export interface CardAction {
   onClick: () => void;
 }
 
-/** Compact card footer: a right-aligned row of 24 px icon buttons. */
+/** A right-aligned row of 24 px icon buttons (the compact card's actions). */
 export function CardActions({ actions }: { actions: CardAction[] }) {
   return (
     <div className="flex items-center justify-end gap-1.5">
@@ -576,9 +585,10 @@ const EXCLUDE_ICON = (
 );
 
 /** The piece panel of the Inventory (left-hand inspect card) and of each
- *  Builder result slot: container, scroll wrapper, body, "Never use" footer
- *  (plus "Optimize wearer →" with `onOptimizeWearer`), and the empty
- *  placeholder — whose texts, like the exclude help, are the caller's. */
+ *  Builder result slot: container, scroll wrapper, body with "Never use" at
+ *  its top right (in the name's row), the "Optimize wearer →" footer with
+ *  `onOptimizeWearer`, and the empty placeholder — whose texts, like the
+ *  exclude help, are the caller's. */
 export function GearCardPanel({
   piece, equippedChar, game, fromPresets, excluded, onToggleExclude, onOptimizeWearer, projection, effects, compact = false, fluid = false,
   emptyLabel = "No piece in this build", emptyHint,
@@ -591,7 +601,7 @@ export function GearCardPanel({
   excluded?: boolean;
   onToggleExclude?: (uid: string) => void;
   /** Open the Builder on the piece's wearer — the portrait in the card and
-   *  "Optimize wearer →" next to "Never use" (greyed out on a free piece). */
+   *  the "Optimize wearer →" footer (greyed out on a free piece). */
   onOptimizeWearer?: (heroUid: string) => void;
   projection?: GearCardProjection;
   effects: "card" | "none";
@@ -621,51 +631,53 @@ export function GearCardPanel({
     );
   }
 
+  // "Never use" at the card's top right: the icon action on the compact
+  // card, a small labelled button on the full one.
+  const toggle = onToggleExclude ? () => onToggleExclude(piece.id) : null;
+  const excludeAction = !toggle ? undefined : compact ? (
+    <CompactExcludeAction excluded={excluded} onClick={toggle} />
+  ) : (
+    <button
+      type="button"
+      onClick={toggle}
+      title={excludeHint}
+      aria-pressed={excluded ?? false}
+      className={cx(
+        "flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+        excluded
+          ? "border-rose-400/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
+          : "border-white/10 bg-white/3 text-white/80 hover:bg-white/6",
+      )}
+    >
+      {EXCLUDE_ICON}
+      {excluded ? "Never used — click to allow" : "Never use"}
+    </button>
+  );
+
   return (
     <CardShell width={width} fill={!compact}>
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <GearCardBody piece={piece} game={game} equippedChar={equippedChar} onOptimizeWearer={onOptimizeWearer} fromPresets={fromPresets} projection={projection} effects={effects} compact={compact} />
+        <GearCardBody piece={piece} game={game} equippedChar={equippedChar} onOptimizeWearer={onOptimizeWearer} fromPresets={fromPresets} projection={projection} effects={effects} compact={compact} headerAction={excludeAction} />
       </div>
-      {onToggleExclude && compact && (
-        <CompactExcludeFooter excluded={excluded} onClick={() => onToggleExclude(piece.id)} />
-      )}
-      {!compact && (onToggleExclude || onOptimizeWearer) && (
+      {!compact && onOptimizeWearer && (
         <div className="flex shrink-0 gap-2 border-t border-white/8 px-4 py-2.5">
-          {onToggleExclude && (
-            <button
-              type="button"
-              onClick={() => onToggleExclude(piece.id)}
-              title={excludeHint}
-              className={cx(
-                "flex items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors",
-                onOptimizeWearer ? "min-w-0 flex-1" : "w-full",
-                excluded
-                  ? "border-rose-400/50 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
-                  : "border-white/10 bg-white/3 text-white/80 hover:bg-white/6",
-              )}
-            >
-              {excluded ? "⊘ Never used — click to allow" : "Never use"}
-            </button>
-          )}
-          {onOptimizeWearer && (
-            <button
-              type="button"
-              onClick={() => equippedChar && onOptimizeWearer(equippedChar.uid)}
-              disabled={!equippedChar}
-              aria-label={equippedChar ? `Optimize wearer → (${equippedChar.name ?? `#${equippedChar.charId}`})` : "Optimize wearer →"}
-              title={equippedChar
-                ? `Open the Optimizer on ${equippedChar.name ?? `#${equippedChar.charId}`}, who wears this piece.`
-                : "Nobody wears this piece."}
-              className={cx(
-                "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors",
-                equippedChar
-                  ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25"
-                  : "cursor-not-allowed border-white/6 bg-white/2 text-white/45",
-              )}
-            >
-              Optimize wearer →
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => equippedChar && onOptimizeWearer(equippedChar.uid)}
+            disabled={!equippedChar}
+            aria-label={equippedChar ? `Optimize wearer → (${equippedChar.name ?? `#${equippedChar.charId}`})` : "Optimize wearer →"}
+            title={equippedChar
+              ? `Open the Optimizer on ${equippedChar.name ?? `#${equippedChar.charId}`}, who wears this piece.`
+              : "Nobody wears this piece."}
+            className={cx(
+              "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium transition-colors",
+              equippedChar
+                ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25"
+                : "cursor-not-allowed border-white/6 bg-white/2 text-white/45",
+            )}
+          >
+            Optimize wearer →
+          </button>
         </div>
       )}
     </CardShell>
@@ -683,17 +695,14 @@ function CardShell({ width, fill, children }: { width: string; fill: boolean; ch
   );
 }
 
-/** Compact card footer with the "never use" action. `what` names the piece in
- *  the label when two pieces share the card ("Never use EE"). */
-function CompactExcludeFooter({ excluded = false, onClick, what }: { excluded?: boolean; onClick: () => void; what?: string }) {
+/** The compact card's "never use" icon action, at its top right. `what`
+ *  names the piece in the label when two pieces share the card ("Never use
+ *  EE"). */
+function CompactExcludeAction({ excluded = false, onClick, what }: { excluded?: boolean; onClick: () => void; what?: string }) {
   const label = what
     ? (excluded ? `${what} never used — click to allow` : `Never use ${what}`)
     : (excluded ? "Never used — click to allow" : "Never use");
-  return (
-    <div className="shrink-0 border-t border-white/8 px-4 py-1.5">
-      <CardActions actions={[{ key: "exclude", icon: EXCLUDE_ICON, label, active: excluded, onClick }]} />
-    </div>
-  );
+  return <CardActions actions={[{ key: "exclude", icon: EXCLUDE_ICON, label, active: excluded, onClick }]} />;
 }
 
 /** One half of a compact pair card: a piece (or the empty label) and the data
@@ -712,7 +721,7 @@ export interface ResultPairCell {
 
 /** Compact EE + talisman card: two pieces stacked in ONE `w-56` container (the
  *  EE has no main and no effects, the compact talisman is short), split by a
- *  rule, each with its own exclude action. `fluid`: the width of its grid
+ *  rule, each with its own exclude action at the top right of its half. `fluid`: the width of its grid
  *  column, as `GearCardPanel`'s. */
 export function ResultPairDetail({ top, bottom, game, fluid = false }: { top: ResultPairCell; bottom: ResultPairCell; game: GameData | null; compact: true; fluid?: boolean }) {
   return (
@@ -730,14 +739,12 @@ function PairCell({ cell, game, grow = false }: { cell: ResultPairCell; game: Ga
     return <div className={cx("px-4 py-4 text-[12px] italic text-white/65", grow && "flex-1")}>{cell.emptyLabel}</div>;
   }
   const projection = { addedTicks: cell.addedTicks ?? [], transistoneTicks: cell.transistoneTicks ?? [] };
+  const excludeAction = onToggleExclude
+    ? <CompactExcludeAction excluded={cell.excluded} onClick={() => onToggleExclude(piece.id)} what={piece.slot === "exclusive" ? "EE" : (piece.slot ?? "piece")} />
+    : undefined;
   return (
-    <>
-      <div className={cx("px-4 py-4", grow && "flex-1")}>
-        <GearCardBody piece={piece} game={game} equippedChar={cell.equippedChar} fromPresets={cell.fromPresets} projection={projection} effects="none" compact />
-      </div>
-      {onToggleExclude && (
-        <CompactExcludeFooter excluded={cell.excluded} onClick={() => onToggleExclude(piece.id)} what={piece.slot === "exclusive" ? "EE" : (piece.slot ?? "piece")} />
-      )}
-    </>
+    <div className={cx("px-4 py-4", grow && "flex-1")}>
+      <GearCardBody piece={piece} game={game} equippedChar={cell.equippedChar} fromPresets={cell.fromPresets} projection={projection} effects="none" compact headerAction={excludeAction} />
+    </div>
   );
 }

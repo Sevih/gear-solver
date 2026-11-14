@@ -1,8 +1,8 @@
 // The piece card's link to the wearer's Builder: the portrait in
 // `GearCardBody` becomes an "Optimize ‹hero› →" button when the card gets
 // `onOptimizeWearer` (never inside a tooltip), and the Inventory's
-// `ItemDetail` adds "Optimize wearer →" next to "Never use", greyed out on a
-// free piece. Rendered server-side, the equipment icon mocked to a marker.
+// `ItemDetail` keeps "Optimize wearer →" in the footer (greyed out on a free
+// piece) while "Never use" sits at the card's top right (G124). Rendered server-side, the equipment icon mocked to a marker.
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -55,19 +55,25 @@ describe("GearCardBody — wearer portrait", () => {
 });
 
 describe("ItemDetail — Optimize wearer →", () => {
-  it("sits next to Never use, live on a worn piece", () => {
+  it("alone in the footer, live on a worn piece; Never use at the top right", () => {
     const html = detail(ame, () => {});
     expect(html).toContain("Never use");
     expect(html).toMatch(/<button type="button" aria-label="Optimize wearer → \(Ame\)"[^>]*>Optimize wearer →<\/button>/);
+    // Never use in the name's row, above the icon; the footer after the body.
+    expect(html.indexOf("Never use")).toBeLessThan(html.indexOf("data-equipment-icon"));
+    expect(html.indexOf("Optimize wearer →")).toBeGreaterThan(html.indexOf("data-equipment-icon"));
+    const footer = html.slice(html.indexOf("border-t"));
+    expect(footer).not.toContain("Never use");
   });
 
   it("greyed out on a free piece", () => {
     expect(detail(null, () => {})).toMatch(/<button type="button" disabled="" aria-label="Optimize wearer →"[^>]*>Optimize wearer →<\/button>/);
   });
 
-  it("absent without the link", () => {
+  it("absent without the link, the footer with it", () => {
     const html = detail(ame);
     expect(html).toContain("Never use");
     expect(html).not.toContain("Optimize");
+    expect(html).not.toContain("border-t");
   });
 });

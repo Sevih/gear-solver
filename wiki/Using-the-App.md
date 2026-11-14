@@ -268,8 +268,9 @@ reforge mode, your loadout as it is now). Then two ways out:
 ### The piece cards
 
 One card per slot, laid out like the game's equipment screen (Weapon, EE, Helmet, Armor /
-Accessory, Talisman, Gloves, Boots). Each card is the Gear tab's piece card (rarity and slot,
-quality with its help and bar, the Singularity +15 effect), without the weapon / accessory
+Accessory, Talisman, Gloves, Boots). Each card is the Gear tab's piece card (the name with
+**Never use** at its top right, then the piece icon with, beside it, the rarity, the slot and the
+main stat(s), quality with its help and bar, the Singularity +15 effect), without the weapon / accessory
 passive and the set bonuses, which the **Effects** panel lists for the whole build. On top:
 
 - the **recommended gem allocation** on the Talisman / EE (with a **swap** badge when it differs
@@ -279,7 +280,8 @@ passive and the set bonuses, which the **Effects** panel lists for the whole bui
 - who wears the piece now (another hero — applying takes it off them —, this hero, or free), the
   piece it replaces when the slot changes, and **from preset ‹name›** when it sits in an in-game
   preset;
-- **Never use**, which keeps the piece out of every solve from now on.
+- **Never use**, top right of the card, which keeps the piece out of every solve from now on
+  (**Never used — click to allow** brings it back).
 
 **Settings › Display › Compact result cards** shortens them: no piece icon (enhance, breakthrough
 and stars next to the name), set names instead of piece names (« EE » for the exclusive), icon +
@@ -287,7 +289,8 @@ value stats with the substats two per row, gems as icons, one-line quality and e
 Singularity +15 bonus as grade + short label + value, e.g. « S+ DS DMG+ +12% » for DMG within
 Dimensional Singularity or « vs Fire DMG- » for DMG taken from Fire targets; details on hover),
 the talisman's passive moved to the hover text of its name, the EE and the talisman sharing one
-card (seven cards, four then three), and a small **Never use** icon instead of the button. A slot
+card (seven cards, four then three, each half with its own icon), and a small **Never use** icon
+at the top right instead of the button. A slot
 the build leaves empty says so on its card (« No weapon in this build »).
 
 ### The footer
@@ -514,10 +517,10 @@ A dense, searchable grid of every gear piece you own.
   the piece shown too), and a piece that leaves the inventory leaves it too.
 - **Click any piece** → the left panel shows its piece card: main stat(s), substats with their
   tick counts (or gems for Talisman/EE), reforge / breakthrough / Singularity state, a
-  **quality score**, and the piece's own and set passives. **Never use** under the card (or a
-  right-click on the tile) keeps the piece out of every solve, marked ⊘ on its tile; **Never used
-  — click to allow** brings it back. **Optimize wearer →**, next to it, opens the **Optimizer** on
-  the hero wearing the piece (greyed out on a free piece); a click on the wearer's portrait in the
+  **quality score**, and the piece's own and set passives. **Never use** at the card's top right (or
+  a right-click on the tile) keeps the piece out of every solve, marked ⊘ on its tile; **Never used
+  — click to allow** brings it back. **Optimize wearer →**, under the card, opens the **Optimizer**
+  on the hero wearing the piece (greyed out on a free piece); a click on the wearer's portrait in the
   card does the same.
 
 > Sorts and filters reset to their defaults each time you relaunch the app — so you always

@@ -606,8 +606,9 @@ quarter of the band less its three 8 px gutters), each card as wide as its colum
 `w-full`); narrower, the same order wraps. Outside the band (Gear › Pieces, tooltips, presets) the card keeps its
 fixed width (`w-80`, `w-56` compact). The name runs on two lines at most (`line-clamp-2`) and the slot and the
 class ("Striker Exclusive") are two `span`s that wrap under each other rather than under the wearer's portrait.
-Each card shows name, enhance level, slot
-icon, main stat, subs (with ticks). It's Gear's piece card (`design/GearCard.tsx`: `GearCardPanel` around
+Each card shows name (with **Never use** at the
+top right of its row), enhance level, slot icon, then beside the icon the rarity / slot line and the main stat(s)
+(12 px, a long name cut with its `title`, so a weapon's two mains fit the icon's height), subs (with ticks). It's Gear's piece card (`design/GearCard.tsx`: `GearCardPanel` around
 `GearCardBody`, `effects="none"`): same rarity / slot line, same Quality block (title, hover help, bar), same
 "Active Effect at +15 Enhancement"; the weapon / accessory passive and the set bonuses aren't there (the right
 column's "Effects" panel shows them), the EE shows only its image and gems, and the projection marks its ticks
@@ -627,7 +628,8 @@ column's "Effects" panel shows them), the EE shows only its image and gems, and 
   Singularity effects on one line (icon + signed value; the +15 bonus as colored grade + icon + short label +
   value, `S+ DS DMG+ +12%`, through `singularityShortLabel` / `singularityGrade`; or short name); the talisman's
   multi-tier passive not rendered, its text (visible tiers, active first, separated by "·") in the name's
-  `title`; footer = a row of action icons (`CardActions`, exclude / include today). Gear and the tooltips (the
+  `title`; the exclude / include icon (`CardActions`) at the top right, after the portrait (`headerAction`), one per
+half in the pair card, no footer. Gear and the tooltips (the
   same `GearCardBody`, never compact) don't change.
 - **Talisman / EE**: the build's recommended gem allocation (stat + value, **swap** badge if it differs from the
   socketed gems).
@@ -644,7 +646,10 @@ column's "Effects" panel shows them), the EE shows only its image and gems, and 
   and "slot changed" come from a single function, `diffBuildVsLoadout` (`lib/buildDiff.ts`), which Apply to
   snapshot and + Worklist read too.
 - **Never use** (`onToggleExclude` → App's `toggleExclude`, `gs.solver.excludedPieces`) — keeps the piece out of
-  every solve, like a right-click on its tile in Gear; not a reducer action.
+  every solve, like a right-click on its tile in Gear; not a reducer action. A small ⊘ button at the card's top
+  right, in the name's row (`GearCardBody`'s `headerAction`, given by `GearCardPanel`), rose and pressed once
+  excluded ("Never used — click to allow"); the card has no footer in the Optimizer (Gear's keeps "Optimize
+  wearer →").
 
 ### Pinned footer (`screens/builder/FilterFooter.tsx`)
 - Per-slot chips with **hit/total (%)** — fed by `poolSizes` of the precompute (`precomputeContext`, main thread).
