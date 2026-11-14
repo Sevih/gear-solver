@@ -219,6 +219,15 @@ reforge mode and Transistone potential of **Settings › Solver**).
 - Click a column header to sort; **right-click** a header (or the **columns** button) to show or
   hide columns. **Right-click a value** (a stat, a rating or CP) → **Min ≥** / **Max ≤** that value:
   the bound lands in the filter popovers and the solve re-runs.
+- **Compare two builds** — right-click a row → **Pin for compare** (📌 in its first cell; one pin at
+  a time, the same entry on the pinned row unpins it). A **Compare** panel opens above the piece
+  cards: the pinned build on the left, the selected row on the right — or the hero's current
+  loadout (gear as captured) with **vs loadout**, or when no row is selected. Every stat, Score, CP
+  when known and the table's ratings, with the change (green better, red worse); each side's eight
+  slots as tiles, the pieces that differ outlined, the identical ones dimmed; and a line
+  "N pieces differ, M swaps vs loadout" (M: the right-hand build's swaps, the pinned one's against
+  the loadout). The tiles follow **Compact result cards**. × closes the panel and unpins; the next
+  solve drops the pin.
 - **height**, above the table, sets how many rows show before it scrolls (5 to 15; the same value
   as **Settings › Display › Result rows**).
 - A crit rate past the in-game 100 % cap shows as **100% ⁺42** (the overflow in amber; hover for
@@ -252,7 +261,7 @@ reforge mode and Transistone potential of **Settings › Solver**).
 
 ### The selected build
 
-Above the cards, a line sums up the selected build: **N slots change** and **ΔCP** against the
+Above the cards (and the **Compare** panel, when a build is pinned), a line sums up the selected build: **N slots change** and **ΔCP** against the
 hero's loadout (outside **Off**, "ΔCP +X vs equipped (build at +10R6)": the build is counted in the
 reforge mode, your loadout as it is now). Then two ways out:
 

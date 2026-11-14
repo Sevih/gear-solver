@@ -22,7 +22,9 @@ import { dmgSkillInfo } from "../../lib/dmgSkill.js";
 import { computeFinalStats } from "../../lib/composeBuild.js";
 import { calcBattlePower } from "../../lib/solver/cp.js";
 import type { ReforgeMode } from "../../lib/solver/engine.js";
-import type { SolveMode } from "../../lib/solver/types.js";
+import type { SolveBuild, SolveMode } from "../../lib/solver/types.js";
+import { computeCheapRatings, computeScore } from "../../lib/solver/ratings.js";
+import { loadoutUidsOf, type CompareSide } from "../../lib/solver/compareBuilds.js";
 import type { HeroPriority } from "../../lib/storage/heroPriority.js";
 import { presetHoldersOf, type PresetHolds } from "../../lib/presets/presetHolds.js";
 import {
@@ -59,6 +61,7 @@ import { BuilderToolbar } from "./BuilderToolbar.js";
 import { ResultsTable, RESULT_ROW_H } from "./ResultsTable.js";
 import { EquipBuildButton } from "./EquipBuildButton.js";
 import { BottomGearBand } from "./BottomGearBand.js";
+import { ComparePanel, type ComparePanelSide } from "./ComparePanel.js";
 import { StatsPanel } from "./StatsPanel.js";
 import { BuildEffectsPanel } from "./BuildEffectsPanel.js";
 import { SubValuePanel } from "./SubValuePanel.js";
@@ -325,6 +328,22 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     () => (selectedBuild && selectedUid ? diffBuildVsLoadout(selectedBuild.pieceUids, selectedUid, pieceByUid) : []),
     [selectedBuild, selectedUid, pieceByUid],
   );
+
+  // ── Compare ──────────────────────────────────────────────────────────────
+  // A result pinned from the table's row menu, compared with the selected row
+  // or the hero's current loadout ("vs loadout", or no row selected). Session
+  // only; tied to the solve it came from — the next solve drops it (`results`
+  // is that solve's array, a new solve brings a new one).
+  const [pin, setPin] = useState<{ build: SolveBuild; results: SolveBuild[] } | null>(null);
+  const [compareVsLoadout, setCompareVsLoadout] = useState(false);
+  const pinnedBuild = pin && pin.results === solveResults ? pin.build : null;
+  const togglePin = useCallback((i: number) => {
+    const b = displayedResults[i];
+    if (!b) return;
+    setCompareVsLoadout(false);
+    setPin((p) => (p?.build === b ? null : { build: b, results: solveResults }));
+  }, [displayedResults, solveResults]);
+  const closeCompare = useCallback(() => setPin(null), []);
 
   // ── Apply to snapshot ────────────────────────────────────────────────────
   // Apply the selected build's pieces to the selected hero by rewriting the
@@ -719,6 +738,34 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false, dmgSkill: dmgSkillInfo(meta.bestSkill, meta.rotation), sheet: { baseline: composed.noGearStats, scaling: composed.scaling } };
   }, [inventory, game, selected, userGeasLevels, userCodexLevel]);
 
+  /** The Compare panel's two sides: the pinned build, and the selected one or
+   *  the current loadout — as captured (no reforge projection), its ratings
+   *  and score computed the engine's way (`computeCheapRatings` with the
+   *  hero's damage profile, `computeScore` in the solve's priority). */
+  const compareSides = useMemo<{ pinned: ComparePanelSide; other: ComparePanelSide; vsLoadout: boolean; canPickSelected: boolean } | null>(() => {
+    if (!pinnedBuild || !selectedUid) return null;
+    const swapsOf = (b: SolveBuild) => diffBuildVsLoadout(b.pieceUids, selectedUid, pieceByUid).filter((d) => d.changed).length;
+    const rankOf = (b: SolveBuild) => solveResults.indexOf(b) + 1;
+    const canPickSelected = selectedBuild != null && selectedBuild !== pinnedBuild;
+    const vsLoadout = compareVsLoadout || selectedBuild == null;
+    let other: ComparePanelSide;
+    if (vsLoadout) {
+      if (!composition) return null;
+      const c = composition;
+      const side: CompareSide = {
+        pieceUids: loadoutUidsOf(selectedUid, pieceByUid),
+        finalStats: c.current,
+        ratings: computeCheapRatings(c.current, c.dmgStat, c.dmgSec, c.noCrit, c.dmgSkill.factor, c.dmgSkill.turn.factor),
+        score: computeScore(c.current, resultsReforge.priority),
+        cp: c.currentCp,
+      };
+      other = { title: "Current loadout", side, swaps: 0 };
+    } else {
+      other = { title: `Selected #${rankOf(selectedBuild!)}`, side: selectedBuild!, swaps: swapsOf(selectedBuild!) };
+    }
+    return { pinned: { title: `Pinned #${rankOf(pinnedBuild)}`, side: pinnedBuild, swaps: swapsOf(pinnedBuild) }, other, vsLoadout, canPickSelected };
+  }, [pinnedBuild, selectedBuild, selectedUid, pieceByUid, solveResults, compareVsLoadout, composition, resultsReforge.priority]);
+
   /** Battle-Power swing of the selected build vs the hero's current loadout —
    *  the headline number for "is this swap worth it?". Null until both a build
    *  is selected and the current-loadout CP composed. The build side is in the
@@ -873,6 +920,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               dmgSkill={composition?.dmgSkill ?? null}
               reforge={resultsReforge}
               onThreshold={setThresholdAndResolve}
+              pinned={pinnedBuild}
+              onTogglePin={togglePin}
             />
           </div>
           {/* Gear band takes the remaining height and scrolls if the window is
@@ -928,7 +977,20 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
                 />
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+              {compareSides && (
+                <ComparePanel
+                  pinned={compareSides.pinned}
+                  other={compareSides.other}
+                  vsLoadout={compareSides.vsLoadout}
+                  canPickSelected={compareSides.canPickSelected}
+                  pieceByUid={pieceByUid}
+                  game={game}
+                  compact={compactCards}
+                  onToggleVsLoadout={() => setCompareVsLoadout((v) => !v)}
+                  onClose={closeCompare}
+                />
+              )}
               <BottomGearBand build={selectedBuild} diff={buildDiff} game={game} reforge={resultsReforge} sheet={composition?.sheet ?? null} charsByUid={charsByUid} presetsOf={presetsOf} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} compact={compactCards} />
             </div>
           </div>

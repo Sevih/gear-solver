@@ -529,7 +529,24 @@ curseur **height** de la même barre règle `resultRows` (5 à 15 lignes, `gs.bu
 Settings › Display › Result rows) ; le tableau est virtualisé et défile au-delà. **Clic-droit sur une cellule** de
 stat, de rating ou de CP → menu « Min ≥ v » / « Max ≤ v » (v telle qu'affichée) : pose la borne
 (`setStatFilter` / `setRatingFilter`, l'autre borne gardée), que les popovers montrent, et relance le solve dans
-le mode du dernier solve (`CellMenu`, `onThreshold`). Pas de menu sur score, swaps, effets. **Crit au-delà de
+le mode du dernier solve (`CellMenu`, `onThreshold`). Pas de seuil sur score, swaps, effets. **Pin for
+compare** (G128) : le même menu, ouvert depuis n'importe quelle cellule d'une ligne (`onContextMenu` du `<tr>`,
+sauté quand une cellule de valeur a déjà traité l'événement), porte une entrée « Pin for compare »
+(`menuitemcheckbox` ; sur la ligne épinglée « 📌 Unpin compare ») ; la ligne épinglée montre un 📌 dans sa
+première cellule tant qu'elle survit aux filtres de la table. L'épingle vit dans `BuilderScreen` (`pin`, une
+référence `SolveBuild` plus le tableau `solveResults` dont elle vient : un nouveau solve apporte un nouveau
+tableau et la fait tomber), en session seulement. Panneau **Compare** (`screens/builder/ComparePanel.tsx`)
+au-dessus des cartes de pièces, dans leur zone de défilement : le build épinglé (à gauche) contre la ligne
+sélectionnée, ou le loadout actuel (bascule « vs loadout », forcée quand aucune ligne n'est sélectionnée ou sur la
+ligne épinglée elle-même — les stats du loadout sont `composition.current` tel que capturé, ses ratings
+`computeCheapRatings` avec le profil de dégâts du héros, son score `computeScore` dans la priorité du solve, son CP
+`currentCp`). Logique dans `lib/solver/compareBuilds.ts` : `compareBuilds(a, b, pieceByUid)` → par axe
+(`SOLVER_STATS`, le crit sur sa somme brute ; `TABLE_RATINGS` hors CP ; score ; CP) les deux valeurs et `b − a`
+(null quand un côté est inconnu), et par slot (ordre du moteur) les deux pièces, `differs` par uid (un slot vide
+d'un seul côté diffère). Chaque côté montre ses huit slots dans `GAME_GEAR_GRID` (deux rangées de quatre tuiles
+`SlotMini`, 48 px, 36 px sous Compact result cards), les différents cerclés d'ambre, les autres estompés ; la
+ligne d'en-tête dit « N pieces differ, M swaps vs loadout » (M = les swaps vivants du build de droite,
+`diffBuildVsLoadout` ; ceux de l'épinglé face au loadout). × ferme et désépingle. **Crit au-delà de
 100** : la cellule CHC affiche la valeur de la fiche (« 100% ») suivie d'un exposant ambre « +42 »
 (`critCellParts` : `critRateUncapped − critRate`, `round1`), tooltip « Crit rate 142% raw — capped at 100%
 in-game, 40% wasted over the 102% tolerance » (règle `overcapOf` ; entre 100 et 102, « within the 2% buffer ») ;
@@ -1121,7 +1138,8 @@ apps/renderer/src/
     │   ├── PriorityBanner.tsx      ← bandeau « No priority set » / « Priority from outerpedia reco »
     │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · EffectPanel.tsx · PassivesPanel.tsx
     │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← les dix popovers
-    │   ├── ResultsTable.tsx        ← table virtualisée, tri, heatmap, menu des colonnes, hauteur, menu de seuil
+    │   ├── ResultsTable.tsx        ← table virtualisée, tri, heatmap, menu des colonnes, hauteur, menu de seuil et d'épingle
+    │   ├── ComparePanel.tsx        ← panneau Compare : build épinglé vs sélectionné ou loadout (lib/solver/compareBuilds.ts)
     │   ├── StatsPanel.tsx · BuildEffectsPanel.tsx · SubValuePanel.tsx · DmgPer1PctPanel.tsx · RightSidebar.tsx   ← colonne de droite
     │   ├── EquipBuildButton.tsx    ← Apply to snapshot (confirmation, raison grisée)
     │   ├── BottomGearBand.tsx · FilterFooter.tsx   ← cartes du build sélectionné, pied fixe

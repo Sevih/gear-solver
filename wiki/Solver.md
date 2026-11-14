@@ -510,8 +510,23 @@ by right-clicking any header** (`onContextMenu` on the header `<tr>`). The **hei
 `resultRows` (5 to 15 rows, `gs.builder.resultRows`, the value of Settings › Display › Result rows); the table is
 virtualized and scrolls past it. **Right-clicking a cell** of a stat, a rating or CP → a "Min ≥ v" / "Max ≤ v"
 menu (v as displayed): sets the bound (`setStatFilter` / `setRatingFilter`, the other bound kept), which the
-popovers show, and re-runs the solve in the last solve's mode (`CellMenu`, `onThreshold`). No menu on score,
-swaps, effects. **Crit past 100**: the CHC cell shows the sheet's value ("100%") followed by an amber "+42"
+popovers show, and re-runs the solve in the last solve's mode (`CellMenu`, `onThreshold`). No threshold on
+score, swaps, effects. **Pin for compare** (G128): the same menu, opened from any cell of a row (the `<tr>`'s
+`onContextMenu`, skipped when a value cell already handled the event), carries a "Pin for compare" entry
+(`menuitemcheckbox`; on the pinned row "📌 Unpin compare"); the pinned row shows a 📌 in its first cell while it
+survives the table's filters. The pin lives in `BuilderScreen` (`pin`, a `SolveBuild` ref plus the `solveResults`
+array it came from: a new solve brings a new array and drops it), session only. **Compare** panel
+(`screens/builder/ComparePanel.tsx`) above the piece cards, in their scroll area: the pinned build (left) vs the
+selected row, or the current loadout ("vs loadout" toggle, forced when no row is selected or on the pinned row
+itself — the loadout's stats are `composition.current` as captured, its ratings `computeCheapRatings` with the
+hero's damage profile, its score `computeScore` in the solve's priority, its CP `currentCp`). Logic in
+`lib/solver/compareBuilds.ts`: `compareBuilds(a, b, pieceByUid)` → per axis (`SOLVER_STATS`, crit on its raw
+sum; `TABLE_RATINGS` but CP; score; CP) both values and `b − a` (null when a side is unknown), and per slot (engine
+order) both pieces, `differs` by uid (an empty slot on one side differs). Each side shows its eight slots in
+`GAME_GEAR_GRID` (two rows of four `SlotMini` tiles, 48 px, 36 px under Compact result cards), the differing ones
+outlined in amber, the others dimmed; the header line reads "N pieces differ, M swaps vs loadout" (M = the
+right-hand build's live swaps, `diffBuildVsLoadout`; the pinned one's against the loadout). × closes and unpins.
+**Crit past 100**: the CHC cell shows the sheet's value ("100%") followed by an amber "+42"
 exponent (`critCellParts`: `critRateUncapped − critRate`, `round1`), tooltip "Crit rate 142% raw — capped at 100%
 in-game, 40% wasted over the 102% tolerance" (rule `overcapOf`; between 100 and 102, "within the 2% buffer"); the
 column's heatmap and sort read the raw sum (`critRawOf`), which the header tooltip says (`statHeaderTooltip`);
@@ -1037,7 +1052,8 @@ apps/renderer/src/
     │   ├── PriorityBanner.tsx      ← the "No priority set" / "Priority from outerpedia reco" banner
     │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · EffectPanel.tsx · PassivesPanel.tsx
     │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← the ten popovers
-    │   ├── ResultsTable.tsx        ← virtualized table, sort, heatmap, columns menu, height, threshold menu
+    │   ├── ResultsTable.tsx        ← virtualized table, sort, heatmap, columns menu, height, threshold and pin menu
+    │   ├── ComparePanel.tsx        ← Compare panel: pinned build vs selected or loadout (lib/solver/compareBuilds.ts)
     │   ├── StatsPanel.tsx · BuildEffectsPanel.tsx · SubValuePanel.tsx · DmgPer1PctPanel.tsx · RightSidebar.tsx   ← right column
     │   ├── EquipBuildButton.tsx    ← Apply to snapshot (confirmation, greyed-out reason)
     │   ├── BottomGearBand.tsx · FilterFooter.tsx   ← the selected build's cards, pinned footer

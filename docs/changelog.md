@@ -8,6 +8,59 @@
 
 ## Items de backlog clôturés (index)
 
+### 📌 Optimizer : comparer deux builds, épingle dans la table et panneau côte à côte (G128) (2026-11-14)
+- ✅ **Pourquoi.** Demande de Sevih du 14/11 : la colonne « swaps » résume en un chiffre l'écart d'un build au
+  loadout, sans le détail, et rien ne permettait de mettre deux résultats l'un à côté de l'autre. On épingle
+  maintenant un résultat, on en sélectionne un autre (ou le loadout actuel) et on voit côte à côte les stats et les
+  pièces qui changent.
+- ✅ **Logique pure (`apps/renderer/src/lib/solver/compareBuilds.ts`).** `compareBuilds(a, b, pieceByUid)` sur deux
+  `CompareSide` (`pieceUids`, `finalStats`, `ratings`, `score`, `cp` ; un `SolveBuild` en est un, le loadout aussi
+  avec ratings / score / CP à null quand inconnus) → par axe les deux valeurs et `b − a` (null si un côté manque) :
+  les stats dans l'ordre de `FINAL_STAT_KEYS` (= `SOLVER_STATS`), le crit sur sa somme brute (`critRateUncapped`,
+  comme le tri de la table et « Current → Projected ») ; `COMPARE_RATING_KEYS` (les ratings de la table hors CP, un
+  test garde l'égalité avec `TABLE_RATINGS` : la lib n'importe pas `screens/`) ; score ; CP. Par slot (ordre du
+  moteur, `COMPARE_SLOTS`) les deux pièces et `differs` par uid (un slot vide d'un seul côté diffère), plus le
+  compte `differing`. `loadoutUidsOf(héros, pieceByUid)` donne le loadout porté (`equippedBy`, la règle de
+  `diffBuildVsLoadout`).
+- ✅ **Épingle (`screens/builder/ResultsTable.tsx`).** Le menu du clic droit (`CellMenu`, exporté) s'ouvre désormais
+  depuis n'importe quelle cellule d'une ligne (`onContextMenu` du `<tr>`, sauté quand une cellule de valeur a déjà
+  traité l'événement, `isDefaultPrevented`) : Min ≥ / Max ≤ sur une valeur comme avant, plus « Pin for compare »
+  (`menuitemcheckbox` ; sur la ligne épinglée « 📌 Unpin compare », qui la retire). Le menu ne s'ouvre que s'il a
+  quelque chose à offrir ; sa largeur ne change pas, son maintien à l'écran compte ses entrées. La ligne épinglée
+  porte un 📌 dans sa première cellule (sets) tant qu'elle survit aux filtres de la table. L'épingle vit dans
+  `BuilderScreen` (`pin` = la référence du `SolveBuild` et le tableau `solveResults` dont il vient : un nouveau
+  solve apporte un nouveau tableau, l'épingle tombe sans effet ni index à recaler), une seule à la fois, en
+  session, sans persistance.
+- ✅ **Panneau Compare (`screens/builder/ComparePanel.tsx`).** Placé AU-DESSUS des cartes de la bande, dans leur
+  zone de défilement (pas à leur place : la bande reste le détail du build sélectionné, à un défilement), sous la
+  ligne « Selected build » et ses boutons. En-tête : « N pieces differ, M swaps vs loadout » (M = les swaps vivants
+  du build de droite, `diffBuildVsLoadout` ; face au loadout, ceux de l'épinglé), la bascule « vs loadout »
+  (`aria-pressed`) et × qui ferme et désépingle. À gauche le build épinglé (« 📌 Pinned #rang »), à droite la ligne
+  sélectionnée (« Selected #rang ») ou le loadout actuel (« Current loadout » : bascule, ou forcé quand aucune
+  ligne n'est sélectionnée ; si la ligne sélectionnée est l'épinglée, le panneau le dit, « Select another row to
+  compare. »). Chaque côté montre ses huit slots dans `GAME_GEAR_GRID`, deux rangées de quatre tuiles `SlotMini`
+  (48 px, 36 px sous Settings › Display › Compact result cards) avec ses propres swaps ; les slots qui diffèrent
+  cerclés d'ambre, les identiques estompés. Au milieu, en grille fluide, CP (quand un côté le connaît), Score, les
+  douze stats et les ratings de la table, les deux valeurs et le Δ coloré (vert mieux, rouge moins bien, « = »),
+  crit au-delà de 100 en « 100%⁺N » comme la table. Côté loadout : stats `composition.current` telles que
+  capturées (sans projection de reforge, comme le ΔCP), ratings `computeCheapRatings` avec le profil de dégâts du
+  héros (`dmgStat`, `dmgSec`, `noCrit`, facteurs de skill), score `computeScore` dans la priorité du solve, CP
+  `currentCp`.
+- ✅ **Tests.** `apps/renderer/test/compareBuilds.test.ts` (11) : axes de la table (ordre des stats, ratings hors
+  CP) ; deux builds identiques → zéro différence ; un slot différent → ce slot seul, deltas `b − a`, CP inconnu sans
+  Δ ; vs loadout avec le talisman vide → ce slot diffère, ratings inconnus à null ; crit brut ; rendu statique du
+  menu (entrée à côté des seuils, état épinglé, cellule sans valeur → épingle seule, sans `onTogglePin` → pas
+  d'entrée), du 📌 de la ligne épinglée, et du panneau (deux colonnes, le slot différent cerclé des deux côtés et
+  les quatorze autres estompés, ligne de résumé, Δ, bascule loadout, tuiles compactes). Aucun test retiré.
+  `npm run typecheck` : `> tsc --noEmit` (dernière ligne, renderer, sans erreur) ; `npm test` : `Tests 1230 passed
+  (1230)` (renderer ; 169 et 267 dans les autres workspaces) ; `npm run lint` : `✖ 7 problems (0 errors, 7
+  warnings)`, comme avant.
+- ✅ **Docs.** `wiki/Using-the-App.md` (Optimizer › The results table, puce « Compare two builds » ; The selected
+  build), `docs/solver.md` / `wiki/Solver.md` (tableau des résultats, plan des fichiers).
+- ⏳ À voir par Sevih en vrai : la lisibilité du panneau en fenêtre normale (grille de stats au milieu, deux blocs
+  de tuiles) et en Compact ; les tuiles montrent les pièces telles que capturées (pas la projection de reforge des
+  cartes de la bande). Hors périmètre, non fait : sauvegarder une comparaison, comparer plus de deux builds.
+
 ### 🔍 Optimizer : infobulle « pourquoi cette pièce ? » sur les cartes de la bande, delta pondéré vs la pièce portée (G127) (2026-11-14)
 - ✅ **Pourquoi.** Demande de Sevih du 14/11 : devant un résultat de l'Optimizer, on ne savait pas ce qu'une pièce
   apporte. Au survol d'une carte de la bande du bas, une infobulle dit maintenant ce que la pièce du build gagne (ou

@@ -107,27 +107,41 @@ function ColumnsMenu({
   );
 }
 
-/** Which result cell a right-click opened the threshold menu on — the bound
- *  goes to `setStatFilter` (stat) or `setRatingFilter` (rating, CP included). */
-interface CellMenuTarget {
-  x: number;
-  y: number;
+/** A right-clicked stat / rating / CP cell — the threshold menu's bound goes
+ *  to `setStatFilter` (stat) or `setRatingFilter` (rating, CP included). */
+export interface CellMenuCell {
   kind: "stat" | "rating";
   key: string;
   /** The value as the cell prints it (`roundDisplay`) — the bound set. */
   value: number;
   unit: string;
 }
-type OpenCellMenu = (e: MouseEvent, kind: "stat" | "rating", key: string, value: number, unit: string) => void;
+/** Where a right-click on a result row opened its menu: the row (its index in
+ *  the original `builds`, the pin payload) and, on a value cell, that cell. */
+export interface CellMenuTarget {
+  x: number;
+  y: number;
+  index: number;
+  /** Null on a cell without a value (sets, effects, score…): no threshold. */
+  cell: CellMenuCell | null;
+}
+type OpenCellMenu = (e: MouseEvent, index: number, cell: CellMenuCell | null) => void;
 
-/** Right-click menu on a result cell: "Min ≥ v" / "Max ≤ v" set that bound
- *  on the column (the other bound stays) and re-solve. Closes on Cancel,
- *  Escape or an outside click. Fixed at the click point, kept on screen. */
-function CellMenu({
-  target, onPick, onClose,
+/** Right-click menu on a result row: on a value cell "Min ≥ v" / "Max ≤ v"
+ *  set that bound on the column (the other bound stays) and re-solve; on any
+ *  cell "Pin for compare" pins the row (the pinned row: unpins it). Closes on
+ *  Cancel, Escape or an outside click. Fixed at the click point, kept on
+ *  screen. */
+export function CellMenu({
+  target, pinned = false, onPick, onTogglePin, onClose,
 }: {
   target: CellMenuTarget;
-  onPick: (bound: "min" | "max") => void;
+  /** The right-clicked row is the pinned one — the entry unpins it. */
+  pinned?: boolean;
+  /** Absent → no threshold entries. */
+  onPick?: (bound: "min" | "max") => void;
+  /** Absent → no pin entry. */
+  onTogglePin?: () => void;
   onClose: () => void;
 }) {
   const ref = useClickOutside<HTMLDivElement>(true, onClose);
@@ -136,17 +150,39 @@ function CellMenu({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
-  const shown = `${target.value}${target.unit}`;
+  const cell = onPick ? target.cell : null;
+  const shown = cell ? `${cell.value}${cell.unit}` : "";
   const item = "block w-full rounded px-2 py-0.5 text-left hover:bg-white/8";
+  // Kept on screen: 28 px per entry (84 for the three of the threshold menu).
+  const height = 28 * ((cell ? 2 : 0) + (onTogglePin ? 1 : 0) + 1);
+  // `window` is absent in a static render (tests) — no clamp there.
+  const vw = typeof window === "undefined" ? Infinity : window.innerWidth;
+  const vh = typeof window === "undefined" ? Infinity : window.innerHeight;
   return (
     <div
       ref={ref}
       role="menu"
-      style={{ left: Math.min(target.x, window.innerWidth - 136), top: Math.min(target.y, window.innerHeight - 84) }}
+      style={{ left: Math.min(target.x, vw - 136), top: Math.min(target.y, vh - height) }}
       className="fixed z-40 w-32 rounded-lg border border-white/10 bg-bg-elev-1 p-1 font-mono text-[11px] tabular-nums text-white/85 shadow-2xl shadow-black/70"
     >
-      <button type="button" role="menuitem" className={item} onClick={() => onPick("min")}>Min ≥ {shown}</button>
-      <button type="button" role="menuitem" className={item} onClick={() => onPick("max")}>Max ≤ {shown}</button>
+      {cell && onPick && (
+        <>
+          <button type="button" role="menuitem" className={item} onClick={() => onPick("min")}>Min ≥ {shown}</button>
+          <button type="button" role="menuitem" className={item} onClick={() => onPick("max")}>Max ≤ {shown}</button>
+        </>
+      )}
+      {onTogglePin && (
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          aria-checked={pinned}
+          className={item}
+          title={pinned ? "Unpin this build (closes the comparison)" : "Pin this build, then select another row to compare them side by side"}
+          onClick={onTogglePin}
+        >
+          {pinned ? "📌 Unpin compare" : "Pin for compare"}
+        </button>
+      )}
       <button type="button" role="menuitem" className={cx(item, "text-white/55")} onClick={onClose}>Cancel</button>
     </div>
   );
@@ -154,7 +190,7 @@ function CellMenu({
 
 export function ResultsTable({
   builds, selectedIdx, onSelect, solving, error, emptyReason, brokenSetsEmpty, filteredOut, statFilters, rows, onRowsChange,
-  pieceByUid, heroUid, armorSets, game, heatmap, dmgSkill, reforge, onThreshold,
+  pieceByUid, heroUid, armorSets, game, heatmap, dmgSkill, reforge, onThreshold, pinned = null, onTogglePin,
 }: {
   builds: SolveBuild[];
   /** Picked hero's best-skill factor — names the winning skill in the
@@ -202,6 +238,12 @@ export function ResultsTable({
   /** Right-click on a stat / rating / CP cell → set that value as the
    *  column's min or max bound and re-solve. Absent → no cell menu. */
   onThreshold?: (kind: "stat" | "rating", key: string, bound: "min" | "max", value: number) => void;
+  /** The build pinned for compare (a ref into `builds`; absent from them →
+   *  no row carries the pin), marked "📌" in its first cell. */
+  pinned?: SolveBuild | null;
+  /** Row menu "Pin for compare" → pin / unpin the row at this index of
+   *  `builds`. Absent → no pin entry. */
+  onTogglePin?: (i: number) => void;
 }) {
   // setId → display meta, for the per-build Set tags.
   const armorSetById = useMemo(() => {
@@ -293,13 +335,19 @@ export function ResultsTable({
   // Columns menu open state lifted here so a right-click on any column header
   // opens the same menu the toolbar "columns" button does.
   const [colsMenuOpen, setColsMenuOpen] = useState(false);
-  // Threshold menu of a right-clicked cell. The opener is stable so it
-  // doesn't defeat the row memo.
+  // Menu of a right-clicked row (thresholds on a value cell, pin). The opener
+  // is stable so it doesn't defeat the row memo. A value cell opens it first;
+  // the row's own handler then sees the event handled and skips.
   const [cellMenu, setCellMenu] = useState<CellMenuTarget | null>(null);
-  const openCellMenu = useCallback<OpenCellMenu>((e, kind, key, value, unit) => {
+  const hasThreshold = onThreshold != null;
+  const hasPin = onTogglePin != null;
+  const openCellMenu = useCallback<OpenCellMenu>((e, index, cell) => {
+    if (e.isDefaultPrevented()) return;
+    const kept = hasThreshold ? cell : null;
+    if (!kept && !hasPin) return; // nothing to offer: the native menu stays
     e.preventDefault();
-    setCellMenu({ x: e.clientX, y: e.clientY, kind, key, value: roundDisplay(value), unit });
-  }, []);
+    setCellMenu({ x: e.clientX, y: e.clientY, index, cell: kept ? { ...kept, value: roundDisplay(kept.value) } : null });
+  }, [hasThreshold, hasPin]);
   const closeCellMenu = useCallback(() => setCellMenu(null), []);
   const statCols = useMemo(
     () => SOLVER_STATS.filter((s, i) => {
@@ -509,6 +557,7 @@ export function ResultsTable({
                   build={b}
                   upg={liveUpg.get(b) ?? b.upg}
                   selected={b === selectedBuildRef}
+                  pinned={b === pinned}
                   ranges={ranges}
                   statCols={statCols}
                   ratingCols={ratingCols}
@@ -523,7 +572,7 @@ export function ResultsTable({
                   setTags={setTagsByBuild.get(b)}
                   index={idx}
                   onSelect={onSelect}
-                  onCellMenu={onThreshold ? openCellMenu : undefined}
+                  onCellMenu={hasThreshold || hasPin ? openCellMenu : undefined}
                 />
               );
             })}
@@ -531,14 +580,20 @@ export function ResultsTable({
           </tbody>
         </table>
       </div>
-      {cellMenu && onThreshold && (
+      {cellMenu && (
         <CellMenu
           target={cellMenu}
+          pinned={pinned != null && builds[cellMenu.index] === pinned}
           onClose={closeCellMenu}
-          onPick={(bound) => {
+          onPick={onThreshold && cellMenu.cell ? (bound) => {
+            const cell = cellMenu.cell!;
             setCellMenu(null);
-            onThreshold(cellMenu.kind, cellMenu.key, bound, cellMenu.value);
-          }}
+            onThreshold(cell.kind, cell.key, bound, cell.value);
+          } : undefined}
+          onTogglePin={onTogglePin ? () => {
+            setCellMenu(null);
+            onTogglePin(cellMenu.index);
+          } : undefined}
         />
       )}
     </div>
@@ -634,12 +689,14 @@ export type CountedPassivesByStat = Partial<Record<string, CountedPassive[]>>;
  *  useState setter, `ranges` is memoized, `build` refs are stable. The click
  *  handler is bound to the stable `index` here rather than passed pre-closed. */
 export const ResultRow = memo(function ResultRow({
-  build, upg, selected, ranges, statCols, ratingCols, showScore, showUpg, showTodo = false, todo, passives, showWpn, showAcc, effects, setTags, index, onSelect, onCellMenu,
+  build, upg, selected, pinned = false, ranges, statCols, ratingCols, showScore, showUpg, showTodo = false, todo, passives, showWpn, showAcc, effects, setTags, index, onSelect, onCellMenu,
 }: {
   build: SolveBuild;
   /** Swaps — slots that differ from the hero's current loadout (live, not `build.upg`). */
   upg: number;
   selected?: boolean;
+  /** This row is pinned for compare — "📌" in its first cell. */
+  pinned?: boolean;
   ranges: ColumnRanges;
   /** Stat columns to render — stable (memoized) reference from ResultsTable
    *  so it doesn't defeat the row memo on hover/sort. */
@@ -665,13 +722,15 @@ export const ResultRow = memo(function ResultRow({
   setTags: SetTag[] | undefined;
   index: number;
   onSelect: (i: number) => void;
-  /** Right-click on a stat / rating / CP cell → threshold menu (stable ref
-   *  from ResultsTable). Undefined → the cells keep no context menu. */
+  /** Right-click on the row → its menu, with the threshold entries on a
+   *  stat / rating / CP cell (stable ref from ResultsTable). Undefined → the
+   *  row keeps no context menu. */
   onCellMenu?: OpenCellMenu;
 }) {
   return (
     <tr
       onClick={() => onSelect(index)}
+      onContextMenu={onCellMenu ? (e) => onCellMenu(e, index, null) : undefined}
       style={{ height: RESULT_ROW_H }}
       className={cx(
         "cursor-pointer border-b border-white/4 hover:bg-white/4",
@@ -681,6 +740,7 @@ export const ResultRow = memo(function ResultRow({
       <td className="px-1.5 py-1 text-left">
         {setTags && setTags.length > 0 ? (
           <div className="flex items-center gap-1">
+            {pinned && <PinMark />}
             {setTags.map((t, i) => (
               <span key={i} className="inline-flex items-center gap-0.5" title={`${t.name} ·${t.count}pc`}>
                 <img src={`/img/ui/effect/${t.icon}.webp`} alt={t.name} className="h-3.5 w-3.5 object-contain" />
@@ -689,7 +749,9 @@ export const ResultRow = memo(function ResultRow({
             ))}
           </div>
         ) : (
-          <span className="text-white/55">—</span>
+          pinned
+            ? <span className="flex items-center gap-1"><PinMark /><span className="text-white/55">—</span></span>
+            : <span className="text-white/55">—</span>
         )}
       </td>
       {showWpn && <EffectCell chip={effects?.weapon ?? null} />}
@@ -708,7 +770,7 @@ export const ResultRow = memo(function ResultRow({
             style={heatStyle(crit ? critRawOf(build.finalStats) : v, ranges.stat[s.key])}
             className="px-1.5 py-1 text-right text-white"
             title={crit ? critCellTitle(build.finalStats) : counted ? countedPassivesTitle(counted) : undefined}
-            onContextMenu={onCellMenu && v != null ? (e) => onCellMenu(e, "stat", s.key, v, s.unit) : undefined}
+            onContextMenu={onCellMenu && v != null ? (e) => onCellMenu(e, index, { kind: "stat", key: s.key, value: v, unit: s.unit }) : undefined}
           >
             {fmt(v, s.unit)}
             {crit && crit.over > 0 && <sup className="ml-px text-[8px] leading-none text-amber-300">+{crit.over}</sup>}
@@ -723,7 +785,7 @@ export const ResultRow = memo(function ResultRow({
             key={r.key}
             style={heatStyle(v, ranges.rating[r.key])}
             className="px-1.5 py-1 text-right text-white"
-            onContextMenu={onCellMenu && v != null ? (e) => onCellMenu(e, "rating", r.key, v, "") : undefined}
+            onContextMenu={onCellMenu && v != null ? (e) => onCellMenu(e, index, { kind: "rating", key: r.key, value: v, unit: "" }) : undefined}
           >
             {fmt(v, "")}
           </td>
@@ -750,6 +812,11 @@ export const ResultRow = memo(function ResultRow({
     </tr>
   );
 });
+
+/** The "pinned for compare" marker of a row's first cell. */
+function PinMark() {
+  return <span className="text-[10px] leading-none" title="Pinned for compare" data-pin>📌</span>;
+}
 
 /** Single weapon/accessory effect cell — the effect icon (or initials when the
  *  effect has no curated icon), with the effect name as the hover tooltip. */
