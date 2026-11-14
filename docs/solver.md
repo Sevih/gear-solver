@@ -676,6 +676,27 @@ build » (ou « No weapon yet » avant toute sélection, « Solve, then pick a b
   de la carte, dans la rangée du nom (`headerAction` de `GearCardBody`, fourni par `GearCardPanel`), rose et pressé
   une fois exclue (« Never used — click to allow ») ; la carte n'a plus de pied dans l'Optimizer (celle de Gear
   garde « Optimize wearer → »).
+- **« Pourquoi cette pièce ? »** (`lib/solver/pieceDelta.ts`, `screens/builder/PieceDeltaTooltip.tsx`) : au survol
+  d'une carte (ou d'une moitié de la carte double compacte), après 400 ms, ou au focus clavier sur la carte, un
+  `HoverCard` (`delayMs`, sans curseur `?`) explique ce que la pièce du build apporte **par rapport à la pièce
+  portée** dans ce slot (`SlotDiff.worn`). `pieceDelta(candidat, porté | null, priorité, ctx)` valorise chaque
+  pièce SEULE sur la fiche du héros (`computeFinalStats(noGearStats, scaling, [pièce])` moins la fiche sans
+  gear, `SelectedComposition.sheet`) sur chaque axe de `FINAL_STAT_KEYS` (= `SOLVER_STATS`, même ordre) : un %
+  compte en unités de stat finale, comme le compose. Les deux pièces sont projetées comme le solve les a notées
+  (`projectPieceForReforge`, même mode, ticks et Transistone), le Talisman / l'EE candidat avec l'allocation de
+  gemmes du build (`gemAllocationOverride`, la pièce portée avec ses gemmes socketées ; allocation vide = ses
+  propres gemmes, le repli du moteur). Le delta est pondéré par `computeScore` lui-même (un axe à la fois :
+  Δ / `STAT_NORMS` × poids × 100), dans la priorité du solve (`resultsReforge.priority`). La fiche étant
+  linéaire dans les buckets de gear, la somme égale la différence des `computeScore` des deux builds qui ne
+  diffèrent que par ce slot, aux troncatures du compose près (±1 par axe composé) et hors caps 100 % de CHC / PEN
+  (le test le vérifie). Les bonus de set ne sont pas comptés (ils dépendent des autres pièces) : une ligne
+  « Set bonus: see the Effects panel » quand la pièce change l'`armorSetId` du slot. Rendu : une phrase de tête
+  (« +12.4 score vs the worn piece », « vs the empty slot » sur un slot vide, « −3.1 score — kept for its set /
+  effect » en ambre quand le total est négatif : le solver l'a prise pour un set, un effet requis, une main
+  stat ; « No stat is weighted in this solve's priority. » sans priorité), un tableau « Stat · Worn → this · Δ ·
+  Weight · Δ×w » des seules stats pondérées que l'une des deux pièces porte, les autres repliées en « +N stats
+  not weighted », le total en gras. Même pièce que la portée → « Already equipped — the build keeps this
+  piece. ». Compact et pleine taille : le même survol.
 
 ### Pied fixe (`screens/builder/FilterFooter.tsx`)
 - Chips par slot avec **hit/total (%)** — alimentés par `poolSizes` du précalcul (`precomputeContext`, thread principal).
@@ -1104,6 +1125,7 @@ apps/renderer/src/
     │   ├── StatsPanel.tsx · BuildEffectsPanel.tsx · SubValuePanel.tsx · DmgPer1PctPanel.tsx · RightSidebar.tsx   ← colonne de droite
     │   ├── EquipBuildButton.tsx    ← Apply to snapshot (confirmation, raison grisée)
     │   ├── BottomGearBand.tsx · FilterFooter.tsx   ← cartes du build sélectionné, pied fixe
+    │   ├── PieceDeltaTooltip.tsx   ← « pourquoi cette pièce ? » au survol d'une carte (lib/solver/pieceDelta.ts)
     │   └── catalogs.ts · statColumns.ts ← catalogues tirés de l'inventaire, tables stats/ratings
     ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset (ordre du jeu, filtre / tri par classe ou rang), grille du jeu, référence, associés, gemmes d'EE, perte, overcap, rang et verrou, presets locaux, + Worklist, Optimize → / Optimize preset →
     ├── WorklistScreen.tsx          ← onglet Worklist : cartes par héros, réservations, Apply to snapshot / Apply all, Remove

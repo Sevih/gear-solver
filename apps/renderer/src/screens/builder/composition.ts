@@ -3,7 +3,7 @@
  * panels read.
  */
 import type { DmgSkillInfo } from "../../lib/dmgSkill.js";
-import type { FinalStats } from "../../lib/composeBuild.js";
+import type { FinalStats, FinalStatsBaseline, ScalingMap } from "../../lib/composeBuild.js";
 
 /** Composed snapshot for the selected hero — drives the Stats panel readout
  *  and (eventually) the solver scoring baseline. Null when no hero is picked
@@ -31,4 +31,7 @@ export interface SelectedComposition {
    *  `missing` when the hero has no skill data → ×1.00 fallback). Drives the
    *  Dmg/DmgS/Mcd/McdS tooltips + header badge. */
   dmgSkill: DmgSkillInfo;
+  /** The hero's gearless sheet (the composer's `noGearStats` + `scaling`) —
+   *  what the gear band's "why this piece?" values a piece on. */
+  sheet: { baseline: FinalStatsBaseline; scaling: ScalingMap };
 }

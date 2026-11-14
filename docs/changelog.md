@@ -8,6 +8,61 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔍 Optimizer : infobulle « pourquoi cette pièce ? » sur les cartes de la bande, delta pondéré vs la pièce portée (G127) (2026-11-14)
+- ✅ **Pourquoi.** Demande de Sevih du 14/11 : devant un résultat de l'Optimizer, on ne savait pas ce qu'une pièce
+  apporte. Au survol d'une carte de la bande du bas, une infobulle dit maintenant ce que la pièce du build gagne (ou
+  perd) en score par rapport à celle que le héros porte dans ce slot, stat par stat.
+- ✅ **Logique pure (`apps/renderer/src/lib/solver/pieceDelta.ts`).** `pieceDelta(candidat, porté | null, priorité,
+  ctx)` valorise chaque pièce SEULE sur la fiche du héros : `computeFinalStats(noGearStats, scaling, [pièce])` moins
+  la fiche sans gear, sans bonus de set (`[]`), sur chaque axe de `FINAL_STAT_KEYS` (le registre, mêmes clés et même
+  ordre que `SOLVER_STATS`, un test le garde ; la lib n'importe pas `screens/`). Un % compte donc en unités de stat
+  finale (ATK% → ATK par la base et l'amplificateur du héros), comme le compose ; CHC lit la somme non bornée (un
+  delta, pas un total). Pondération par `computeScore` lui-même, un axe à la fois (Δ / `STAT_NORMS` × poids × 100),
+  pour que la normalisation ne puisse pas diverger du score ; le moteur et `ratings.ts` ne bougent pas. Rend par axe
+  porté, candidat, delta, poids et delta pondéré, plus le total, `identical` (même uid : tout à zéro), `emptySlot` et
+  `setChanged` (l'`armorSetId` du slot change). Le Talisman / l'EE candidat prend l'allocation de gemmes du build
+  (`ctx.candidateGems` → `gemAllocationOverride` de `lib/presets/evaluate.ts`, réutilisé) ; une allocation vide
+  laisse ses propres gemmes, le repli du moteur ; la pièce portée garde ses gemmes socketées (ce que le héros a
+  aujourd'hui, ce que la carte compare).
+- ✅ **Câblage.** `SelectedComposition` gagne `sheet` (`noGearStats` + `scaling` du compose que `BuilderScreen` fait
+  déjà) ; `BottomGearBand` le reçoit (`sheet`) et calcule le delta dans le `useMemo` qui projette déjà les pièces :
+  la pièce du build projetée (`projectPieceForReforge`, mêmes mode, ticks et Transistone que ses `addedTicks` /
+  `transistoneTicks`) contre la pièce portée (`SlotDiff.worn` de `diffBuildVsLoadout`) projetée de la même façon,
+  dans la priorité du solve (`resultsReforge.priority`) : les deux comme le solve les aurait notées.
+- ✅ **Infobulle (`apps/renderer/src/screens/builder/PieceDeltaTooltip.tsx`).** Phrase de tête « +12.4 score vs the
+  worn piece » (« vs the empty slot » sur un slot vide), « −3.1 score — kept for its set / effect » en ambre quand le
+  total est négatif (le solver l'a prise pour un set, un effet requis, une main stat), « No stat is weighted in this
+  solve's priority. » sans priorité, « Already equipped — the build keeps this piece. » pour la pièce déjà portée.
+  Puis un tableau compact « Stat · Worn → this · Δ · Weight · Δ×w » des stats pondérées que l'une des deux pièces
+  porte (ordre du vocabulaire, % à une décimale, plats entiers, vrai signe moins), les stats à poids nul repliées en
+  « +N stats not weighted », le total en gras, et « Set bonus: see the Effects panel » quand la pièce change le set.
+  Même mécanisme que les autres survols : `HoverCard` (portail, position fixe, bornée à la fenêtre) gagne deux props
+  optionnelles, `delayMs` (ouverture après le délai, annulée si le pointeur part avant ; le focus ouvre tout de
+  suite) et `helpCursor` (le curseur `?`, éteint sur une carte entière) ; ses deux usages existants ne changent pas
+  (défauts 0 et vrai). La bande ouvre après 400 ms, ferme au départ du pointeur ; la carte est focusable au clavier
+  (anneau cyan au `focus-visible`). Carte pleine et compacte : le même survol ; dans la carte double EE + talisman,
+  chaque moitié a le sien (`ResultPairCell.wrap`, `design/GearCard.tsx`). Pas d'infobulle sur une carte vide, ni sans
+  fiche composée.
+- ✅ **Tests (`apps/renderer/test/pieceDelta.test.ts`, 9).** Sur le vrai contrat (`data/derived`, fiche d'un héros réel
+  par `precomputeContext`) : arme vs arme portée, chaque delta égal à la différence des fiches des deux builds qui ne
+  diffèrent que par ce slot (±4 sur les axes composés, ±0,1 sur les %), chaque pondéré = Δ / `STAT_NORMS` × poids ×
+  100, et le total égal à la différence des `computeScore` des deux builds à une borne près calculée depuis ces
+  tolérances, elle-même moins d'un dixième de l'écart (la preuve du « à la normalisation près », hors caps : CHC des
+  deux builds sous 100) ; slot vide (côté porté à zéro, total = apport de la pièce au build) ; pièce identique (tout
+  à zéro, « already equipped ») ; talisman avec cinq gemmes ATK% allouées contre le porté et ses quatre HP%
+  socketées, puis allocation vide = ses propres gemmes ; changement de set. Rendu statique de l'infobulle : ordre des
+  lignes, stat pondérée non portée absente, repli des poids nuls, `300 → 500`, `8.0% → 4.0%`, total en gras, phrase
+  négative, ligne de set, cas sans priorité. Aucun test retiré.
+- ✅ **Docs.** `wiki/Using-the-App.md` (cartes de l'Optimizer), `docs/solver.md` / `wiki/Solver.md` (cartes de pièces
+  et arborescence), inventaires de tests (`docs/reference.md`, `wiki/Engine-Reference.md`).
+- ✅ **Vérification.** `npm run typecheck` (dernière ligne `> tsc --noEmit`, sans erreur), `npm test` (dernière ligne
+  `Tests  1219 passed (1219)`), `npm run lint` (`✖ 7 problems (0 errors, 7 warnings)`, comme avant).
+- ⏳ **Pour Sevih.** Coup d'œil dans l'app : le délai de 400 ms (trop court en traversant la bande ?), la position de
+  l'infobulle au-dessus d'une carte pleine (elle ne se retourne pas sous la carte si la place manque en haut), et le
+  Talisman / l'EE dont seules les gemmes changent : même uid, donc « Already equipped » alors que le build re-socket
+  les gemmes (la carte montre l'allocation) — à dire si l'infobulle doit alors parler des gemmes. Hors périmètre
+  repéré : rien.
+
 ### 🧪 Banc de la synchronisation des tables en prod packagée (Linux), préchauffage des images rejoué après un lancement hors ligne (G126) (2026-11-14)
 - ✅ **Pourquoi.** Puce « Vérif sync repo en prod packagé » du todo, jamais contrôlée depuis que `data-sync.yml` pousse
   les tables sur `main`. Lot de vérification : mesures sur l'exécutable empaqueté, un seul défaut trouvé et corrigé

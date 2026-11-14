@@ -716,7 +716,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const dmgStat = meta.dmgStat ?? "atk";
     const amp = (k: "atk" | "def" | "hp") => 1 + (composed.scaling[k]?.buffPct ?? 0) / 100;
     const dmgAmp = { atk: amp("atk"), def: amp("def"), hp: amp("hp") };
-    return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false, dmgSkill: dmgSkillInfo(meta.bestSkill, meta.rotation) };
+    return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false, dmgSkill: dmgSkillInfo(meta.bestSkill, meta.rotation), sheet: { baseline: composed.noGearStats, scaling: composed.scaling } };
   }, [inventory, game, selected, userGeasLevels, userCodexLevel]);
 
   /** Battle-Power swing of the selected build vs the hero's current loadout —
@@ -929,7 +929,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <BottomGearBand build={selectedBuild} diff={buildDiff} game={game} reforge={resultsReforge} charsByUid={charsByUid} presetsOf={presetsOf} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} compact={compactCards} />
+              <BottomGearBand build={selectedBuild} diff={buildDiff} game={game} reforge={resultsReforge} sheet={composition?.sheet ?? null} charsByUid={charsByUid} presetsOf={presetsOf} excludedPieceUids={excludedPieceUids} onToggleExclude={onToggleExclude} compact={compactCards} />
             </div>
           </div>
         </div>

@@ -1,16 +1,26 @@
 /**
  * Builder bottom gear band — one card per slot of the selected build.
  */
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { Character, GameData, GearPiece } from "@gear-solver/core";
 import { GAME_GEAR_GRID, SLOT_BY, toEngineSlot, type SlotId } from "../../design/tokens.js";
 import { toUiPiece } from "../../design/adapter.js";
 import { GearCardPanel, ResultPairDetail, type ResultPairCell } from "../../design/GearCard.js";
+import { HoverCard } from "../../design/HoverCard.js";
 import { projectPieceForReforge } from "../../lib/solver/engine.js";
 import { rerollPotential } from "../../lib/solver/reroll.js";
 import type { SolveBuild } from "../../lib/solver/types.js";
 import type { SlotDiff } from "../../lib/buildDiff.js";
 import type { ReforgeContext } from "../../lib/solver/reforge.js";
+import type { FinalStatsBaseline, ScalingMap } from "../../lib/composeBuild.js";
+import { pieceDelta, type PieceDelta } from "../../lib/solver/pieceDelta.js";
+import { PieceDeltaTooltip } from "./PieceDeltaTooltip.js";
+
+/** Hover delay of a card's "why this piece?" popover — long enough that the
+ *  pointer crossing the band on its way elsewhere doesn't flash it. */
+const WHY_DELAY_MS = 400;
+/** The popover's width — room for its five columns. */
+const WHY_MAX_W = 320;
 
 /** Compact band order: `GAME_GEAR_GRID` with the EE and the talisman sharing
  *  one card (EE on top) in the EE's place — seven cells, 4 + 3. */
@@ -23,7 +33,7 @@ export const COMPACT_GEAR_GRID: readonly (SlotId | readonly ["exclusive", "talis
  * Bottom gear band — one card per main slot for the selected result
  * ───────────────────────────────────────────────────────────────────────── */
 export function BottomGearBand({
-  build, diff, game, reforge, charsByUid, presetsOf, excludedPieceUids, onToggleExclude, compact = false,
+  build, diff, game, reforge, sheet = null, charsByUid, presetsOf, excludedPieceUids, onToggleExclude, compact = false,
 }: {
   build: SolveBuild | null;
   /** The build's per-slot diff vs the hero's loadout (`diffBuildVsLoadout`) —
@@ -35,6 +45,10 @@ export function BottomGearBand({
    *  so its main/substats match the build's projected `finalStats` instead of
    *  the pieces' current rolls (the engine scored the projected clones). */
   reforge: ReforgeContext;
+  /** The hero's gearless sheet (the composer's `noGearStats` + `scaling`) —
+   *  values each card's piece and the worn one for the "why this piece?"
+   *  popover (`pieceDelta`). Null → no popover. */
+  sheet?: { baseline: FinalStatsBaseline; scaling: ScalingMap } | null;
   /** Roster indexed by uid — resolves each piece's `equippedBy` to a character. */
   charsByUid: Map<string, Character>;
   /** In-game presets holding a piece, other than the one being optimized
@@ -55,10 +69,11 @@ export function BottomGearBand({
   // left to project), so identity
   // inequality is a reliable "was projected" signal.
   const pieceBySlot = useMemo(() => {
-    const map = new Map<string, { piece: GearPiece; equippedBy: string | null; addedTicks: number[]; transistoneTicks: number[] }>();
-    for (const { slot, proposed: original } of diff) {
+    const map = new Map<string, { piece: GearPiece; equippedBy: string | null; addedTicks: number[]; transistoneTicks: number[]; why: PieceDelta | null }>();
+    for (const { slot, proposed: original, worn } of diff) {
       const reroll = reforge.rerollPotential ?? false;
-      const piece = game ? projectPieceForReforge(original, game, reforge.reforgeMode, reforge.priority, reforge.tickWeights ?? undefined, reroll) : original;
+      const project = (p: GearPiece) => game ? projectPieceForReforge(p, game, reforge.reforgeMode, reforge.priority, reforge.tickWeights ?? undefined, reroll) : p;
+      const piece = project(original);
       const reforged = piece !== original;
       // Ticks the Transistone potential added (projected first, on the captured
       // piece — the same `rerollPotential` call the projection made).
@@ -71,10 +86,17 @@ export function BottomGearBand({
       const addedTicks = reforged && piece.subs.length === original.subs.length
         ? piece.subs.map((s, i) => (s.ticks ?? 0) - (original.subs[i]?.ticks ?? 0) - (transistoneTicks[i] ?? 0))
         : [];
-      map.set(slot, { piece, equippedBy: original.equippedBy, addedTicks, transistoneTicks });
+      // "Why this piece?": the projected piece (with the build's gems on the
+      // Talisman / EE) vs the worn one, projected the same way — both as the
+      // solve would score them, in the solve's priority.
+      const candidateGems = slot === "ooparts" ? build?.gemAllocation?.talisman : slot === "exclusive" ? build?.gemAllocation?.ee : undefined;
+      const why = sheet
+        ? pieceDelta(piece, worn ? project(worn) : null, reforge.priority, { ...sheet, game, candidateGems })
+        : null;
+      map.set(slot, { piece, equippedBy: original.equippedBy, addedTicks, transistoneTicks, why });
     }
     return map;
-  }, [diff, game, reforge]);
+  }, [diff, game, reforge, sheet, build]);
 
   // Everything a slot's card gets from the selected build.
   const cardOf = (slot: SlotId) => {
@@ -105,11 +127,12 @@ export function BottomGearBand({
       ? { ...piece, gemSlots: recommendedGems }
       : piece;
     const fromPresets = piece ? presetsOf?.(piece.uid) : undefined;
-    return { piece: pieceForCard, equippedChar, fromPresets, excluded, addedTicks: entry?.addedTicks, transistoneTicks: entry?.transistoneTicks };
+    const why = entry?.why ? <PieceDeltaTooltip delta={entry.why} /> : undefined;
+    return { piece: pieceForCard, equippedChar, fromPresets, excluded, addedTicks: entry?.addedTicks, transistoneTicks: entry?.transistoneTicks, why };
   };
   const pairCell = (slot: SlotId): ResultPairCell => {
-    const c = cardOf(slot);
-    return { ...c, piece: c.piece && game ? toUiPiece(c.piece, game) : null, onToggleExclude, emptyLabel: emptyLabelOf(slot, build) };
+    const { why, ...c } = cardOf(slot);
+    return { ...c, piece: c.piece && game ? toUiPiece(c.piece, game) : null, onToggleExclude, emptyLabel: emptyLabelOf(slot, build), wrap: whyWrap(why) };
   };
 
   // All 8 pieces (EE and Talisman are full citizens of the solver scope: their
@@ -135,6 +158,17 @@ export function BottomGearBand({
   );
 }
 
+/** The "why this piece?" hover around a card (or a pair-card half): opens
+ *  after `WHY_DELAY_MS`, closes when the pointer leaves, opens on focus. */
+function whyWrap(why: ReactNode | undefined): ((card: ReactNode) => ReactNode) | undefined {
+  if (!why) return undefined;
+  return (card) => (
+    <HoverCard content={why} maxWidth={WHY_MAX_W} delayMs={WHY_DELAY_MS} helpCursor={false} className="h-full rounded-xl focus-visible:ring-1 focus-visible:ring-cyan-400/50">
+      {card}
+    </HoverCard>
+  );
+}
+
 /** An empty result card's own state: "No weapon in this build" (EE for the
  *  exclusive), or "No weapon yet" before any build is selected — with
  *  `emptyHintOf` saying how to get one. */
@@ -150,7 +184,7 @@ const emptyHintOf = (build: SolveBuild | null): string | undefined =>
  *  effects left to `BuildEffectsPanel` and the projection's ticks marked. The
  *  piece (already reforge-projected upstream in `BottomGearBand`) goes through
  *  the same `toUiPiece` adapter. */
-function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleExclude, addedTicks, transistoneTicks, compact, emptyLabel, emptyHint }: {
+function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleExclude, addedTicks, transistoneTicks, why, compact, emptyLabel, emptyHint }: {
   slot: SlotId;
   piece: GearPiece | null;
   game: GameData | null;
@@ -166,6 +200,8 @@ function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleEx
   addedTicks?: number[];
   /** Per-sub ticks the Transistone potential added — their own marker. */
   transistoneTicks?: number[];
+  /** "Why this piece?" popover body (`PieceDeltaTooltip`) — on hover/focus. */
+  why?: ReactNode;
   /** Compact card (Settings › Display › Compact result cards). */
   compact?: boolean;
   /** The card's own empty state when the build has no piece there. */
@@ -175,7 +211,7 @@ function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleEx
   // Adapt the (reforge-projected) engine piece through the same adapter the
   // Inventory tab uses, then render the shared piece panel.
   const ui = piece && game ? toUiPiece(piece, game) : null;
-  return (
+  const card = (
     <GearCardPanel
       piece={ui}
       equippedChar={equippedChar ?? null}
@@ -191,4 +227,6 @@ function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleEx
       emptyHint={emptyHint}
     />
   );
+  const wrap = ui ? whyWrap(why) : undefined;
+  return wrap ? wrap(card) : card;
 }

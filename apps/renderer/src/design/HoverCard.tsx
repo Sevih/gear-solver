@@ -9,7 +9,7 @@
  * sidebar's `overflow-y-auto` clipping; centered above the trigger and clamped
  * to the viewport. Positioning logic mirrors `HoverHint`.
  */
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "./cx.js";
 
@@ -18,7 +18,7 @@ const EDGE_PADDING = 8;
 const ANCHOR_GAP = 8;
 
 export function HoverCard({
-  children, content, maxWidth = DEFAULT_MAX_W, className,
+  children, content, maxWidth = DEFAULT_MAX_W, className, delayMs = 0, helpCursor = true,
 }: {
   /** The visible trigger (e.g. an effect icon + name row). */
   children: ReactNode;
@@ -26,9 +26,29 @@ export function HoverCard({
   content: ReactNode;
   maxWidth?: number;
   className?: string;
+  /** Hover delay before the popover opens (focus opens at once) — for a
+   *  large trigger the pointer crosses on its way elsewhere (a gear card). */
+  delayMs?: number;
+  /** The `?` cursor over the trigger — off for a whole card. */
+  helpCursor?: boolean;
 }) {
   const triggerRef = useRef<HTMLSpanElement | null>(null);
   const [open, setOpen] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearTimer = () => {
+    if (timerRef.current != null) clearTimeout(timerRef.current);
+    timerRef.current = null;
+  };
+  useEffect(() => clearTimer, []);
+  const openSoon = () => {
+    clearTimer();
+    if (delayMs <= 0) setOpen(true);
+    else timerRef.current = setTimeout(() => setOpen(true), delayMs);
+  };
+  const close = () => {
+    clearTimer();
+    setOpen(false);
+  };
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   const recompute = useCallback(() => {
@@ -58,11 +78,11 @@ export function HoverCard({
     <span
       ref={triggerRef}
       tabIndex={0}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
-      className={cx("block cursor-help outline-none", className)}
+      onMouseEnter={openSoon}
+      onMouseLeave={close}
+      onFocus={() => { clearTimer(); setOpen(true); }}
+      onBlur={close}
+      className={cx("block outline-none", helpCursor && "cursor-help", className)}
     >
       {children}
       {open && pos && createPortal(

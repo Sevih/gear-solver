@@ -650,6 +650,26 @@ half in the pair card, no footer. Gear and the tooltips (the
   right, in the name's row (`GearCardBody`'s `headerAction`, given by `GearCardPanel`), rose and pressed once
   excluded ("Never used — click to allow"); the card has no footer in the Optimizer (Gear's keeps "Optimize
   wearer →").
+- **"Why this piece?"** (`lib/solver/pieceDelta.ts`, `screens/builder/PieceDeltaTooltip.tsx`): hovering a card (or
+  one half of the compact pair card), after 400 ms, or keyboard focus on the card, opens a `HoverCard` (`delayMs`,
+  no `?` cursor) explaining what the build's piece brings **over the piece worn** in that slot (`SlotDiff.worn`).
+  `pieceDelta(candidate, worn | null, priority, ctx)` values each piece ALONE on the hero's sheet
+  (`computeFinalStats(noGearStats, scaling, [piece])` minus the gearless sheet, `SelectedComposition.sheet`) on
+  every axis of `FINAL_STAT_KEYS` (= `SOLVER_STATS`, same order): a % counts in final-stat units, as the composer
+  folds it. Both pieces are projected as the solve scored them (`projectPieceForReforge`, same mode, ticks and
+  Transistone), the candidate Talisman / EE with the build's gem allocation (`gemAllocationOverride`; the worn one
+  with its socketed gems; an empty allocation = its own gems, the engine's fallback). The delta is weighted by
+  `computeScore` itself (one axis at a time: Δ / `STAT_NORMS` × weight × 100), in the solve's priority
+  (`resultsReforge.priority`). The sheet being linear in the gear buckets, the sum equals the difference of the
+  `computeScore` of the two builds that differ only by this slot, up to the composer's truncations (±1 per
+  compound axis) and outside the 100 % caps of CHC / PEN (the test checks it). Set bonuses aren't counted (they
+  depend on the other pieces): a "Set bonus: see the Effects panel" line when the piece changes the slot's
+  `armorSetId`. Render: a lead sentence ("+12.4 score vs the worn piece", "vs the empty slot" on an empty slot,
+  "−3.1 score — kept for its set / effect" in amber when the total is negative: the solver took it for a set, a
+  required effect, a main stat; "No stat is weighted in this solve's priority." without a priority), a "Stat ·
+  Worn → this · Δ · Weight · Δ×w" table of the weighted stats either piece carries only, the others folded into
+  "+N stats not weighted", the total in bold. Same piece as the worn one → "Already equipped — the build keeps
+  this piece.". Compact and full size: the same hover.
 
 ### Pinned footer (`screens/builder/FilterFooter.tsx`)
 - Per-slot chips with **hit/total (%)** — fed by `poolSizes` of the precompute (`precomputeContext`, main thread).
@@ -1021,6 +1041,7 @@ apps/renderer/src/
     │   ├── StatsPanel.tsx · BuildEffectsPanel.tsx · SubValuePanel.tsx · DmgPer1PctPanel.tsx · RightSidebar.tsx   ← right column
     │   ├── EquipBuildButton.tsx    ← Apply to snapshot (confirmation, greyed-out reason)
     │   ├── BottomGearBand.tsx · FilterFooter.tsx   ← the selected build's cards, pinned footer
+    │   ├── PieceDeltaTooltip.tsx   ← "why this piece?" on a card's hover (lib/solver/pieceDelta.ts)
     │   └── catalogs.ts · statColumns.ts ← catalogs from the inventory, stats/ratings tables
     ├── presets/PresetsScreen.tsx   ← Presets tab: per-preset cards (game order, class or rank filter / sort), game grid, reference, associated, EE gems, loss, overcap, rank and lock, local presets, + Worklist, Optimize → / Optimize preset →
     ├── WorklistScreen.tsx          ← Worklist tab: per-hero cards, reservations, Apply to snapshot / Apply all, Remove

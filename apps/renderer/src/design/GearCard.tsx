@@ -717,6 +717,9 @@ export interface ResultPairCell {
   transistoneTicks?: number[];
   /** Shown in place of the body when the build has no piece there. */
   emptyLabel: string;
+  /** Wraps the half (with its piece) — the Optimizer's "why this piece?"
+   *  hover card. */
+  wrap?: (half: ReactNode) => ReactNode;
 }
 
 /** Compact EE + talisman card: two pieces stacked in ONE `w-56` container (the
@@ -742,9 +745,10 @@ function PairCell({ cell, game, grow = false }: { cell: ResultPairCell; game: Ga
   const excludeAction = onToggleExclude
     ? <CompactExcludeAction excluded={cell.excluded} onClick={() => onToggleExclude(piece.id)} what={piece.slot === "exclusive" ? "EE" : (piece.slot ?? "piece")} />
     : undefined;
-  return (
+  const half = (
     <div className={cx("px-4 py-4", grow && "flex-1")}>
       <GearCardBody piece={piece} game={game} equippedChar={cell.equippedChar} fromPresets={cell.fromPresets} projection={projection} effects="none" compact headerAction={excludeAction} />
     </div>
   );
+  return cell.wrap ? cell.wrap(half) : half;
 }

@@ -283,6 +283,17 @@ passive and the set bonuses, which the **Effects** panel lists for the whole bui
 - **Never use**, top right of the card, which keeps the piece out of every solve from now on
   (**Never used — click to allow** brings it back).
 
+**Why this piece?** Rest the pointer on a card for a moment (or move the keyboard focus onto it):
+a popover tells what the piece brings **over the one the hero wears in that slot today**, in your
+priority. The first line gives the score it adds (« +12.4 score vs the worn piece »); a negative
+one (« −3.1 score — kept for its set / effect ») means the solver kept the piece for something the
+score doesn't see — a set, a required effect, a main stat. Below, one row per weighted stat:
+worn → this, the difference, its weight and its share of the score, then the total. Stats your
+priority doesn't weight are summed up as « +N stats not weighted ». Both pieces are counted the way
+the solve counted them (projected with a reforge mode on, the Talisman / EE with the build's gems);
+set bonuses aren't, as they depend on the other pieces — the **Effects** panel shows them. A piece
+the hero already wears just says « Already equipped ». The same in compact mode.
+
 **Settings › Display › Compact result cards** shortens them: no piece icon (enhance, breakthrough
 and stars next to the name), set names instead of piece names (« EE » for the exclusive), icon +
 value stats with the substats two per row, gems as icons, one-line quality and effects (the
