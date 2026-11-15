@@ -331,3 +331,40 @@ describe("presets — PresetOrderList (shape from the decompiled client, no capt
     expect([...inv.presets].sort(comparePresets).map((p) => p.num)).toEqual([3, 1, 2, 4]);
   });
 });
+
+describe("gem lines (Talisman / EE sockets)", () => {
+  // The client computes a sub line as min(OptionValue + Level × OptionFactor,
+  // OptionMaxValue); every gem templet has no factor and max = value, so a gem
+  // is worth its fixed value whatever the Level the wire carries on its line.
+  const gemGame: GameData = {
+    ...game,
+    options: { ...game.options, "15051": { st: "ST_BUFF_CHANCE", ap: "OAT_RATE", v: 25 } },
+    gems: { "15051": { type: "BuffChance", level: 6, st: "ST_BUFF_CHANCE", ap: "OAT_RATE", v: 25 } } as GameData["gems"],
+    equipment: {
+      ...game.equipment,
+      "2000092": { slot: "exclusive", grade: "unique", star: 6, classLimit: null, setId: null, armorSetId: null, name: "EE", mainGroup: "2000092", subGroup: null, image: null, effectIcon: null, armorSetIcon: null, class: null },
+    },
+  };
+  const ee = (lines: Array<{ OptionID: number; Level: number; BaseLevel: number }>): RawUserItem => ({
+    ItemList: [{
+      ItemUID: "ee", CharUID: "0", ItemID: 2000092, Exp: 0, BreakLimitLevel: 0, Quantity: 1,
+      SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 99,
+      SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0,
+      OptionList: [0, 0], SubOptionList: lines,
+    }],
+  });
+
+  it("a gem line at Level 2 is worth the same as at Level 0 (ticks 1, no reforge)", () => {
+    const leveled = parseInventory(ee([{ OptionID: 15051, Level: 2, BaseLevel: 2 }]), undefined, gemGame).gear[0]!;
+    const plain = parseInventory(ee([{ OptionID: 15051, Level: 0, BaseLevel: 0 }]), undefined, gemGame).gear[0]!;
+    expect(leveled.subs).toEqual(plain.subs);
+    expect(leveled.subs[0]).toMatchObject({ stat: "eff", value: 2.5, percent: true, ticks: 1, reforgeTicks: 0 });
+    expect(leveled.gemSlots).toEqual([15051, 0, 0, 0, 0]);
+  });
+
+  it("a gear substat (16xxxx) keeps its Level as ticks", () => {
+    const w = parseInventory(sample, undefined, gemGame).gear[0]!;
+    expect(w.subs[0]).toMatchObject({ stat: "critRate", ticks: 4, reforgeTicks: 2 });
+    expect(w.subs[0]!.value).toBeCloseTo(12);
+  });
+});

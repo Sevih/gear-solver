@@ -202,8 +202,10 @@ function addSetBonuses(setBonuses: SetBonusList, b: GearBuckets): void {
  *
  *  Talisman/EE handling: the in-game SubOptionList for these slots IS the
  *  gem slot list (5 OAT_RATE/OAT_ADD entries via OptionIDs 15001-15054).
- *  The parser puts those into `piece.subs` via the standard path, so without
- *  any override the current gems contribute to the buckets automatically.
+ *  The parser puts those into `piece.subs` at their fixed gem value (the
+ *  line's `Level` ignored — `parseGearPiece`), so without any override the
+ *  current gems contribute to the buckets automatically, exactly as the gem
+ *  pool values them.
  *  When `gemOverride` is supplied, Talisman/EE subs are SKIPPED and the
  *  pre-aggregated deltas are added in their place. */
 export function aggregateGearBuckets(

@@ -8,6 +8,54 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧮 Solver : gemmes serties comptées à leur valeur fixe, paliers de stat de nouveau monotones (G130) (2026-11-15)
+- ✅ **Pourquoi.** Bug remonté par Sevih le 15/11 dans l'Optimizer sur Gnosis Beth (priorité EFF 3, SPD 2, CHC 1,
+  CHD / CDMG RED / DMG RED / DMG UP à −1, filtres EFF ≥ 628, CHC ≥ 100, SPD ≥ 265, Top % 60, reforge désactivé). Avec
+  EFF ≥ 628, le solver rendait des builds dont l'EE portait une gemme DMG Increase ; à ≥ 629, plus rien. Et ajouter un
+  palier rendait PARFOIS un meilleur score que sans, ce que l'inclusion des espaces interdit.
+- ✅ **Reproduction (script hors dépôt, capture du 15/11 copiée, filtres du héros relus dans le localStorage).**
+  Avant : sans palier, 1 000 builds, meilleur 894,7 ; avec les trois filtres, EFF ≥ 600 : 109 builds, 894,7 ;
+  ≥ 620 : 7 builds, **908,7** ; ≥ 628 : 2 builds, **899,4** (EFF 628, allocation vide, EE serti
+  `15051 ×2 (Level 2) · 15053 · 15051 ×2`) ; ≥ 629 : 0. EFF ≥ 628 seul : 695 builds, **906,6** (EFF 639).
+- ✅ **Cause.** Ni l'allocation ni l'élagage : le parseur (`packages/core/src/parse.ts`) lisait le `Level` d'une ligne
+  de gemme comme des ticks (`Level + 1`), si bien que les deux 15051 à `Level 2` de l'EE comptaient 7,5 % EFF au lieu
+  de 2,5 %, alors que le pool de gemmes (`buildGemPool`, résolution au tick 1) les valait 2,5 %. Seul le repli
+  « gemmes serties » de `serveMinFilters`, tenté quand un minimum échoue, composait ces 7,5 % : un palier ouvrait donc
+  une fiche surcomptée que le solve sans palier ne voyait jamais (908,7 > 894,7), et ≥ 629 restait vide parce
+  qu'aucune allocation du pool ne pouvait reproduire ce surcompte. Or le client calcule une ligne
+  `min(OptionValue + Level × OptionFactor, OptionMaxValue)` (`CItemSubOptionData`), et dans `ItemOptionTemplet` toutes
+  les gemmes 15001 à 15054 ont un `OptionFactor` vide et `OptionMaxValue` = `OptionValue` (15051 : 25 / — / 25), contre
+  un facteur > 0 pour les sous-stats 16xxxx (160005 : 20 / 20 / 120). Le `Level` d'une gemme est du bruit (0, 1 ou 2
+  au hasard dans la capture, jusque sur une pile de 121 gemmes identiques, recopié de la pile au sertissage) : la fiche
+  équipée de G.Beth passe de 628 à **613** d'EFF.
+- ✅ **Correctif.** `parseGearPiece` résout une ligne de `SubOptionList` dont l'OptionID est dans la table des gemmes
+  (`game.gems`) avec ticks = 1 et `reforgeTicks` 0, quel que soit son `Level` ; les sous-stats gardent `Level + 1`.
+  Commentaire de `aggregateGearBuckets` (`apps/renderer/src/lib/composeBuild.ts`) mis à jour ; `docs/data-schema.md`
+  et `wiki/Data-Schema.md` disent la règle. Le moteur n'est pas touché, temps de solve inchangés (≈ 0,8 s avec les
+  trois filtres, 2,1 s sans palier, avant comme après).
+- ✅ **Après (même script).** Sans palier : 894,7 ; trois filtres, EFF ≥ 600 : 46 builds, 894,7 ; ≥ 610 : 8, 889,4 ;
+  ≥ 615 et ≥ 616 : 2, 889,0 (Talisman 5 × CHC, EE 5 × EFF, EFF 616) ; ≥ 617, 620, 628, 629 : 0. EFF seul ≥ 628 : 72
+  builds, 880,0 ; ≥ 629 : 32 builds, 878,8 (EFF 630). SPD ≥ 265 seul et CHC ≥ 100 seul : 894,7. Aucun score avec palier
+  ne dépasse plus celui sans palier, et le nombre de builds décroît avec le palier. Contre-épreuve exhaustive sur les
+  mêmes pools élagués (toutes les répartitions EFF / CHC / remplissage des 10 emplacements, par combo) : EFF maximal à
+  CHC ≥ 100 et SPD ≥ 265 = **616**, meilleurs scores par palier identiques à ceux du solver (894,7 / 889,4 / 889,0).
+  Avec les trois filtres, EFF ≥ 629 est donc réellement hors d'atteinte sur ce compte (il faut 5 gemmes crit pour le
+  cap, il ne reste que 5 emplacements de 2,5 % d'EFF) ; la « gemme EFF à la place de DMG Increase » ne donnait 629 que
+  sur la fiche surcomptée. Même verdict en exhaustif (Top % 100, 27,9 M combos) : sans
+  palier 894,7, EFF ≥ 616 : 2 builds à 889,0, ≥ 620 et ≥ 629 : 0.
+- ✅ **Tests.** `packages/core/test/parse.test.ts` (+2) : une ligne de gemme d'EE à `Level 2` vaut la même chose qu'à
+  `Level 0` (2,5 % EFF, ticks 1, reforge 0, `gemSlots` inchangé) ; une sous-stat 160009 à `Level 3 / BaseLevel 1`
+  garde 4 ticks, 2 reforges, 12 %. Aucun test existant n'encodait le surcompte. `npm run typecheck` : vert
+  (`tsc --noEmit`, sans sortie) ; `npm test` : `Tests  1240 passed (1240)` (renderer, 111 fichiers), core 267,
+  desktop 171 ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ⏳ **Suivi possible (hors périmètre).** Exporter `OptionFactor` et `OptionMaxValue` dans `options.json` côté
+  outerpedia pour appliquer la règle générale du client `min(v + Level × f, max)` à toutes les lignes au lieu du test
+  « est une gemme ». Vu au passage dans `serveMinFilters` : le manque est mesuré sur la fiche AVEC l'allocation
+  appliquée, mais `allocateGemsServingMins` repart de zéro, donc les gemmes de la stat déjà posées ne sont pas
+  créditées ; avec `wantCritCap`, le cap crit prend ensuite les emplacements (EFF ≥ 629 seul : Talisman 4 EFF + 1 CHC,
+  EE 5 CHC, 2 gemmes EFF du pool inemployées). Le build passe le palier, mais son score n'est pas le meilleur possible
+  pour ce combo (jamais au-dessus du sans-palier, la monotonie tient).
+
 ### 🗂️ Optimizer : cartes de gear plus denses, preset sous Never use, qualité et effet +15 sur une ligne (G129) (2026-11-15)
 - ✅ **Pourquoi.** Demande de Sevih du 15/11 après test de la bande du bas de l'Optimizer : la ligne rareté / slot
   répète ce que disent déjà la couleur du cadre et du nom, l'icône et la place dans la bande ; « from preset ‹nom› »

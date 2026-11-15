@@ -41,6 +41,13 @@ pièce d'équipement). Les stackables (orbes / matériaux) sont droppés.
 - **Pour Talisman/EE** : `SubOptionList[i]` = OptionID du gem socketé au
   slot `i`. Convention `gemSlots: number[]` length 5 (`0` = empty slot,
   5e gated par `enhanceLevel ≥ 5` en jeu).
+- **Une ligne de gemme vaut sa valeur fixe, quel que soit son `Level`** (ticks 1,
+  reforge 0). Le client calcule une ligne `min(OptionValue + Level × OptionFactor,
+  OptionMaxValue)` (`CItemSubOptionData`) et les templets de gemmes (15001..15054)
+  n'ont pas de `OptionFactor`, avec `OptionMaxValue` = `OptionValue`. Le fil porte
+  pourtant un `Level` 0, 1 ou 2 sur ces lignes (recopié de la pile de gemmes) :
+  lu comme des ticks, il comptait une gemme 2,5 % EFF à 7,5 %. Une ligne est une
+  gemme quand son OptionID est dans `gems.json`.
 
 ### Main stat
 

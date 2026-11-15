@@ -43,6 +43,13 @@ equipment piece). Stackables (orbs / materials) are dropped.
 - **For Talisman/EE**: `SubOptionList[i]` = OptionID of the gem socketed at
   slot `i`. Convention `gemSlots: number[]` length 5 (`0` = empty slot,
   5th gated by `enhanceLevel ≥ 5` in-game).
+- **A gem line is worth its fixed value, whatever its `Level`** (1 tick, 0
+  reforges). The client computes a line as `min(OptionValue + Level × OptionFactor,
+  OptionMaxValue)` (`CItemSubOptionData`) and the gem templets (15001..15054) have
+  no `OptionFactor`, with `OptionMaxValue` = `OptionValue`. The wire still carries
+  a `Level` 0, 1 or 2 on those lines (copied from the gem stack): read as ticks, it
+  counted a 2.5 % EFF gem as 7.5 %. A line is a gem when its OptionID is in
+  `gems.json`.
 
 ### Main stat
 

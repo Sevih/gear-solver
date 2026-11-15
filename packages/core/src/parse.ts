@@ -203,7 +203,16 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
     //   Surefire +15: 160005 L3 B2 → LV4 = 4 × 2% = 8% DMG+, …
     //   Fine Sword +0: 160013 L0 B0 → LV1 = 1 × 3 = 3 SPD
     if (s.OptionID === 0) continue;
-    const totalTicks = s.Level + 1;
+    // A gem line (Talisman / EE socket, OptionID in the gem table) is worth its
+    // fixed value whatever its `Level`: the client computes a sub line as
+    // `min(OptionValue + Level × OptionFactor, OptionMaxValue)`
+    // (`CItemSubOptionData`), and every gem templet (ItemOptionTemplet
+    // 15001..15054) has no `OptionFactor` and `OptionMaxValue` = `OptionValue`.
+    // The wire still carries a Level 0, 1 or 2 on gem lines (copied from the gem
+    // stack it came from): reading it as ticks counted a 2.5 % EFF gem as 7.5 %.
+    const isGem = game?.gems[String(s.OptionID)] != null;
+    const totalTicks = isGem ? 1 : s.Level + 1;
+    const reforgeTicks = isGem ? 0 : s.Level - s.BaseLevel;
     const r = toRolled(s.OptionID, totalTicks, game);
     if (r) {
       // EFF / RES rate substats: keep the RAW per-mille display value (no bt
@@ -212,9 +221,9 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
       // a flat bt-scaled approximation only matches when baseline ≈ 100, and
       // diverges for higher baselines (e.g. G.Beth lv120 Ranger baseline EFF
       // 140 → +78 EFF mismatch vs in-game).
-      subs.push({ ...r, ticks: totalTicks, reforgeTicks: s.Level - s.BaseLevel });
+      subs.push({ ...r, ticks: totalTicks, reforgeTicks });
     } else {
-      subs.push({ stat: "atk", value: 0, percent: false, ticks: totalTicks, reforgeTicks: s.Level - s.BaseLevel });
+      subs.push({ stat: "atk", value: 0, percent: false, ticks: totalTicks, reforgeTicks });
     }
   }
 
