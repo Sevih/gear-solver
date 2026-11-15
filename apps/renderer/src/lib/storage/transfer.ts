@@ -16,7 +16,7 @@
  * logic independent of each key's in-memory shape: it only knows the shape
  * rules of the registry (`MergeRule`), each written once below.
  */
-import { BACKUP_KEYS, type MergeRule } from "./keys.js";
+import { BACKUP_KEYS, type MergeContext, type MergeRule } from "./keys.js";
 import { SAVED_BUILDS_KEY } from "./savedBuilds.js";
 import { FILTER_PRESETS_KEY } from "./filterPresets.js";
 import { PRESET_HEROES_KEY } from "./presetHeroes.js";
@@ -167,20 +167,21 @@ function mergeSet(stored: unknown, incoming: unknown[], accept: (id: unknown) =>
   return { merged, count };
 }
 
-/** One value: the imported one, normalized (bounded), replaces the stored one. */
-function mergeValue(stored: unknown, incoming: unknown, normalize: (v: unknown) => unknown): Merged {
-  const value = normalize(incoming);
+/** One value: the imported one, normalized (bounded, relinked), replaces the
+ *  stored one. */
+function mergeValue(stored: unknown, incoming: unknown, normalize: (v: unknown, ctx: MergeContext) => unknown, ctx: MergeContext): Merged {
+  const value = normalize(incoming, ctx);
   if (value === undefined || same(stored, value)) return { merged: stored, count: 0 };
   return { merged: value, count: 1 };
 }
 
-function merge(rule: MergeRule, stored: unknown, incoming: unknown): Merged {
+function merge(rule: MergeRule, stored: unknown, incoming: unknown, ctx: MergeContext): Merged {
   switch (rule.shape) {
     case "heroLists": return mergeHeroLists(stored, incoming as Json, rule.accept);
     case "list": return mergeList(stored, incoming as unknown[], rule);
     case "map": return mergeMap(stored, incoming as Json, rule);
     case "set": return mergeSet(stored, incoming as unknown[], rule.accept);
-    case "value": return mergeValue(stored, incoming, rule.normalize);
+    case "value": return mergeValue(stored, incoming, rule.normalize, ctx);
   }
 }
 
@@ -247,12 +248,21 @@ export function applyBackup(value: unknown): ImportResult {
   const values = bundleValues(value);
   const result: ImportResult = {};
   const writes: Array<[string, unknown]> = [];
+  // Each key as the import leaves it, for the keys merged after it.
+  const after = new Map<string, unknown>();
+  const ctx: MergeContext = {
+    merged: (key) => (after.has(key) ? after.get(key) : readStored(key)),
+    incoming: (key) => values.get(key),
+  };
   for (const { key, merge: rule } of BACKUP_KEYS) {
     result[key] = 0;
     if (!values.has(key)) continue;
-    const { merged, count } = merge(rule, readStored(key), values.get(key));
+    const { merged, count } = merge(rule, readStored(key), values.get(key), ctx);
     result[key] = count;
-    if (count > 0) writes.push([key, merged]);
+    if (count > 0) {
+      writes.push([key, merged]);
+      after.set(key, merged);
+    }
   }
   // A write failing halfway (quota) still notifies: what was written must be
   // reloaded by the mounted screens, or their next save would drop it.

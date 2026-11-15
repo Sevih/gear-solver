@@ -23,7 +23,7 @@ import { SAVED_BUILDS_KEY } from "./savedBuilds.js";
 import { FILTER_PRESETS_KEY, isReadableFilterPreset } from "./filterPresets.js";
 import { HERO_FILTERS_KEY } from "./heroFilters.js";
 import { PRESET_HEROES_KEY } from "./presetHeroes.js";
-import { INVENTORY_FILTER_PRESETS_KEY, SCRAP_DEFAULT_KEY, isReadableInventoryPreset } from "./inventoryFilterPresets.js";
+import { INVENTORY_FILTER_PRESETS_KEY, SCRAP_CANDIDATES, SCRAP_DEFAULT_KEY, isReadableInventoryPreset } from "./inventoryFilterPresets.js";
 import { LOCAL_PRESETS_KEY, isReadableLocalPreset } from "./localPresets.js";
 import { EXCLUDED_PIECES_KEY } from "./excludedPieces.js";
 import { HERO_PRIORITY_KEY, HERO_PRIORITY_SEEN_KEY } from "./heroPriority.js";
@@ -51,8 +51,17 @@ export type MergeRule =
   /** A list of identifiers: union. */
   | { shape: "set"; accept: (id: unknown) => boolean }
   /** One value: the imported one replaces the stored one once `normalize`d
-   *  (bounded); `undefined` = not a value of this key, ignored. */
-  | { shape: "value"; normalize: (value: unknown) => unknown };
+   *  (bounded, or relinked to the keys merged before it); `undefined` = not a
+   *  value of this key, ignored (the stored one stays). */
+  | { shape: "value"; normalize: (value: unknown, ctx: MergeContext) => unknown };
+
+/** What a `value` rule's `normalize` sees of the rest of the import: a key's
+ *  value once merged (`merged`: a key earlier in registry order as the import
+ *  leaves it, a later one as stored) and the file's value (`incoming`). */
+export interface MergeContext {
+  merged: (key: string) => unknown;
+  incoming: (key: string) => unknown;
+}
 
 /** How the import status cites a key: « 12 saved builds » (`count`),
  *  « worklist (4) » (`paren`), or the label alone (`label`). */
@@ -111,12 +120,28 @@ function normalizeSetting<N extends SettingName>(name: N, value: unknown): Setti
   return clampSetting(name, parsed);
 }
 
-/** The Scrap default's import value: a list of non-empty ids (other entries
- *  dropped), or one id (the one-set format) as a list of one; nothing usable
- *  → refused. */
-function normalizeScrapDefault(value: unknown): string[] | undefined {
+/** The Scrap default's import value, read once the Gear filter sets are merged
+ *  (they come first in the registry): a list of non-empty ids, or one id (the
+ *  one-set format) as a list of one, keeping the built-in's and the ids of the
+ *  merged sets. An id whose set the merge skipped (a stored set holds its name)
+ *  becomes that stored set's id; any other id is dropped. Nothing left →
+ *  refused, the stored default stays. */
+function normalizeScrapDefault(value: unknown, ctx: MergeContext): string[] | undefined {
   const ids = typeof value === "string" ? [value] : Array.isArray(value) ? value : [];
-  const kept = ids.filter((id): id is string => typeof id === "string" && id !== "");
+  const sets = (v: unknown) => (Array.isArray(v) ? v.filter(isRecord) : []);
+  const merged = sets(ctx.merged(INVENTORY_FILTER_PRESETS_KEY)).filter(isReadableInventoryPreset);
+  const file = sets(ctx.incoming(INVENTORY_FILTER_PRESETS_KEY));
+  const kept: string[] = [];
+  for (const id of ids) {
+    if (typeof id !== "string" || id === "") continue;
+    if (id === SCRAP_CANDIDATES.id || merged.some((s) => s.id === id)) {
+      kept.push(id);
+      continue;
+    }
+    const name = file.find((s) => s.id === id)?.name;
+    const local = typeof name === "string" ? merged.find((s) => s.name === name)?.id : undefined;
+    if (typeof local === "string") kept.push(local);
+  }
   return kept.length > 0 ? kept : undefined;
 }
 
@@ -134,7 +159,8 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   { key: SAVED_BUILDS_KEY, store: "local", backup: true, prune: false, label: "Saved builds", owner: "lib/storage/savedBuilds.ts", merge: { shape: "heroLists" }, summary: "count" },
   { key: FILTER_PRESETS_KEY, store: "local", backup: true, prune: true, label: "Filter sets", owner: "lib/storage/filterPresets.ts", merge: { shape: "heroLists", accept: isReadableFilterPreset }, summary: "count" },
   { key: INVENTORY_FILTER_PRESETS_KEY, store: "local", backup: true, prune: false, label: "Gear filter sets", owner: "lib/storage/inventoryFilterPresets.ts", merge: { shape: "list", id: "id", keep: "stored", uniqueName: true, accept: isReadableInventoryPreset }, summary: "count" },
-  // Ids this machine doesn't know are skipped when read (the built-in when none is left).
+  // After the Gear filter sets: its ids are relinked to the merged sets (see
+  // `normalizeScrapDefault`); ids unknown here are still skipped when read.
   { key: SCRAP_DEFAULT_KEY, store: "local", backup: true, prune: false, label: "Scrap default", owner: "lib/storage/inventoryFilterPresets.ts", merge: { shape: "value", normalize: normalizeScrapDefault }, summary: "label" },
   { key: LOCAL_PRESETS_KEY, store: "local", backup: true, prune: false, label: "Local presets", owner: "lib/storage/localPresets.ts", merge: { shape: "list", id: "id", keep: "stored", accept: isReadableLocalPreset }, summary: "count" },
   { key: PRESET_HEROES_KEY, store: "local", backup: true, prune: false, label: "Preset heroes", owner: "lib/storage/presetHeroes.ts", merge: { shape: "map", accept: holdsHeroes, keepStored: holdsHeroes }, summary: "paren" },

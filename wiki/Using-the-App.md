@@ -613,8 +613,10 @@ passed).
   last filters per hero, the Optimizer layout, the Scrap default and your Solver, Display and
   developer settings (and the Presets loss threshold). The list is shown under the Export button.
   Never the captured gear: that comes from the game (re-capture it on the other PC). Import merges:
-  builds and presets already present are kept; ranks, worklist entries, notes, the Scrap default
-  and settings from the file replace yours (settings held within their bounds). A file exported by
+  builds and presets already present are kept (a filter set whose name you already use is
+  skipped); ranks, worklist entries, notes, the Scrap default and settings from the file replace
+  yours (settings held within their bounds; the Scrap default points at your own set where the
+  file's set of the same name was skipped, and stays yours when none of its sets is here). A file exported by
   an older version (builds & presets only) still imports.
 - **Advanced** — developer toggles (stat-lock tooling on Heroes, solver fan-out logging; safe to
   ignore), **Reset onboarding prompt** (shows Settings as the setup wizard on next launch), then the

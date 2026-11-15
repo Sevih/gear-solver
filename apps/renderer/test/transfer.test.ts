@@ -102,19 +102,55 @@ describe("transfer — backup v2 round-trip", () => {
 });
 
 describe("transfer — Scrap default", () => {
-  it("the file's ids replace mine, even ones this machine doesn't know (read skips them, not the import)", () => {
-    store.set("gs.gear.scrap.default", JSON.stringify(["mine"]));
-    expect(applyBackup(v2({ "gs.gear.scrap.default": ["elsewhere", 3, "", "too"] }))["gs.gear.scrap.default"]).toBe(1);
-    expect(stored("gs.gear.scrap.default")).toEqual(["elsewhere", "too"]);
+  const SCRAP = "gs.gear.scrap.default";
+  const BUILTIN = "builtin:scrap-candidates";
+
+  it("is merged after the Gear filter sets (registry order)", () => {
+    const keys = BACKUP_KEYS.map((s) => s.key);
+    expect(keys.indexOf(INV_KEY)).toBeLessThan(keys.indexOf(SCRAP));
+  });
+
+  it("the file's ids replace mine when they name a set here (the built-in, a merged set); others dropped, none left → mine stays", () => {
+    store.set(INV_KEY, JSON.stringify([invPreset("mine", "Mine")]));
+    store.set(SCRAP, JSON.stringify(["mine"]));
+    expect(applyBackup(v2({ [INV_KEY]: [invPreset("too", "Too")], [SCRAP]: ["elsewhere", 3, "", "too", BUILTIN] }))[SCRAP]).toBe(1);
+    expect(stored(SCRAP)).toEqual(["too", BUILTIN]);
+    writes.length = 0;
+    expect(applyBackup(v2({ [SCRAP]: ["elsewhere", "gone"] }))[SCRAP]).toBe(0);
+    expect(stored(SCRAP)).toEqual(["too", BUILTIN]);
+    expect(writes).toEqual([]);
   });
 
   it("a single id (one-set format) is accepted as a list of one; a number or an empty list refused", () => {
-    expect(applyBackup(v2({ "gs.gear.scrap.default": "elsewhere" }))["gs.gear.scrap.default"]).toBe(1);
-    expect(stored("gs.gear.scrap.default")).toEqual(["elsewhere"]);
+    store.set(INV_KEY, JSON.stringify([invPreset("elsewhere", "E")]));
+    expect(applyBackup(v2({ [SCRAP]: "elsewhere" }))[SCRAP]).toBe(1);
+    expect(stored(SCRAP)).toEqual(["elsewhere"]);
     for (const bad of [3, [], [""], ""]) {
-      expect(applyBackup(v2({ "gs.gear.scrap.default": bad }))["gs.gear.scrap.default"]).toBe(0);
-      expect(stored("gs.gear.scrap.default")).toEqual(["elsewhere"]);
+      expect(applyBackup(v2({ [SCRAP]: bad }))[SCRAP]).toBe(0);
+      expect(stored(SCRAP)).toEqual(["elsewhere"]);
     }
+  });
+
+  it("a file set skipped for its name (a set of mine holds it, another id) → the default points at my set of that name", () => {
+    store.set(INV_KEY, JSON.stringify([invPreset("a", "A"), invPreset("b", "B")]));
+    store.set(SCRAP, JSON.stringify([BUILTIN]));
+    const res = applyBackup(v2({ [INV_KEY]: [invPreset("x", "A"), invPreset("c", "C"), invPreset("y", "B")], [SCRAP]: ["x", "c", "y"] }));
+    expect(res[INV_KEY]).toBe(1);
+    expect((stored(INV_KEY) as Array<{ id: string }>).map((e) => e.id)).toEqual(["a", "b", "c"]);
+    expect(res[SCRAP]).toBe(1);
+    expect(stored(SCRAP)).toEqual(["a", "c", "b"]);
+    // One id, the one-set format, relinked the same way.
+    expect(applyBackup(v2({ [INV_KEY]: [invPreset("y", "B")], [SCRAP]: "y" }))[SCRAP]).toBe(1);
+    expect(stored(SCRAP)).toEqual(["b"]);
+  });
+
+  it("without a name conflict the file's sets and default come in as they are", () => {
+    store.set(INV_KEY, JSON.stringify([invPreset("a", "A")]));
+    store.set(SCRAP, JSON.stringify(["a"]));
+    const res = applyBackup(v2({ [INV_KEY]: [invPreset("p", "P"), invPreset("q", "Q")], [SCRAP]: [BUILTIN, "q", "p"] }));
+    expect(res[INV_KEY]).toBe(2);
+    expect(res[SCRAP]).toBe(1);
+    expect(stored(SCRAP)).toEqual([BUILTIN, "q", "p"]);
   });
 });
 

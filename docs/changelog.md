@@ -8,6 +8,36 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗂️ Sauvegarde : défaut Scrap normalisé après la fusion des filter sets Gear à l'import (G138) (2026-11-15)
+- ✅ **Pourquoi.** Revue de code du 15/11 : à l'import d'une sauvegarde, un filter set Gear dont le nom existe déjà ici
+  est écarté (`uniqueName` de la règle `list`), mais `gs.gear.scrap.default` (règle `value`) prenait sans condition
+  les ids du fichier, ceux des sets écartés compris ; `scrapDefaultPresets` saute ces ids inconnus et Gear › Scrap
+  retombait sur « Scrap candidates » sans message, alors que l'utilisateur a ici un set du même nom.
+- ✅ **Comment.** `lib/storage/keys.ts` : le `normalize` d'une règle `value` reçoit un `MergeContext` (`merged(key)` :
+  la valeur d'une clé telle que l'import la laisse pour une clé antérieure dans le registre, stockée sinon ;
+  `incoming(key)` : celle du fichier), que les réglages ignorent. `normalizeScrapDefault` lit les filter sets Gear
+  fusionnés (lisibles, `isReadableInventoryPreset`) et ceux du fichier : il garde l'id de l'intégré et ceux des sets
+  fusionnés, remplace un id dont le set a été écarté pour son nom par l'id de mon set homonyme, écarte les autres ;
+  rien de restant → `undefined`, donc la valeur stockée reste (compte 0, rien d'écrit). La clé suit déjà les filter
+  sets Gear dans `STORAGE_KEYS` (commentaire mis à jour). `lib/storage/transfer.ts` : `applyBackup` tient la valeur
+  fusionnée de chaque clé changée (`after`) et passe le contexte à `merge` → `mergeValue`. Effet assumé de la règle :
+  un id du fichier qui ne nomme aucun set ici (fichier sans ses sets, set refusé à la lecture) n'est plus recopié ;
+  il était de toute façon sauté à la lecture, et un défaut entièrement inconnu garde désormais le mien au lieu de
+  ramener Scrap sur l'intégré.
+- ✅ **Tests.** `apps/renderer/test/transfer.test.ts` (+3, 33) : l'ordre du registre (filter sets Gear avant le Scrap
+  default) ; sets homonymes d'ids différents (`x`/`A`, `y`/`B` du fichier face à `a`/`A`, `b`/`B` ici, plus `c`/`C`
+  nouveau) → défaut `["a", "c", "b"]`, et un id seul (`"y"`) → `["b"]` ; sans conflit de nom, les sets et le défaut du
+  fichier tels quels (`[intégré, "q", "p"]`). Les deux tests existants du Scrap default sont gardés, leurs données
+  adaptées à la règle : les ids du fichier remplacent les miens quand ils nomment un set ici (l'intégré, un set
+  fusionné), les autres écartés, un fichier aux seuls ids inconnus garde le mien sans écriture ; l'id seul et les
+  valeurs refusées inchangés, sur un set présent. Aucun test retiré. `npm run typecheck` : sans erreur (dernière ligne
+  `> tsc --noEmit`, renderer) ; `npm test` : core `Tests  183 passed (183)`, desktop `Tests  273 passed (273)`,
+  renderer `Tests  1278 passed (1278)` ; `npm run lint` : `✖ 6 problems (0 errors, 6 warnings)`, comme avant. Docs :
+  `wiki/Using-the-App.md` (Settings › Backup : le set homonyme écarté, le Scrap default qui pointe mon set de même
+  nom ou reste le mien), `docs/reference.md` + `wiki/Engine-Reference.md` (ligne de `transfer.test.ts`, 33 tests).
+- ⏳ **Laissé.** À voir sur une vraie sauvegarde : importer un fichier dont un set Gear porte le nom d'un des miens et
+  sert de Scrap default → Gear › Scrap s'ouvre sur mon set de ce nom. Le reste de la sauvegarde n'est pas touché.
+
 ### 🧮 Parseur : seuils d'enchantement au taux du modèle (enchantCostRate), ligne Hit AP / Kill AP des EE à +1 et plus (G137) (2026-11-15)
 - ✅ **Pourquoi.** Revue de code du 15/11, deux écarts de `packages/core/src/parse.ts` avec le client. (1) Le client
   calcule chaque seuil d'Exp d'une pièce comme `CItemEnchantTemplet.RequireExp(colonne, Templet.ItemEnchantCostRate)`
