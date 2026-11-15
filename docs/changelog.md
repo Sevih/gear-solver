@@ -8,6 +8,51 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧮 Parseur : seuils d'enchantement au taux du modèle (enchantCostRate), ligne Hit AP / Kill AP des EE à +1 et plus (G137) (2026-11-15)
+- ✅ **Pourquoi.** Revue de code du 15/11, deux écarts de `packages/core/src/parse.ts` avec le client. (1) Le client
+  calcule chaque seuil d'Exp d'une pièce comme `CItemEnchantTemplet.RequireExp(colonne, Templet.ItemEnchantCostRate)`
+  = `(int)((float)seuil × ((float)taux × 0.001f))`, la courbe brute quand le taux vaut ≤ 0 (`CItemEnchantTemplet.cs`
+  l.143-147, `CItem.GetEnchantLevel` l.425) ; `levelFromExp` prenait la courbe `slot|grade|star` brute. Une arme
+  Festival à +10 (Exp 3 750, taux 300) était lue +6 : main ×3,4 au lieu de ×5, « +N », CP, « Maxed only » et
+  emplacements de gemmes faux. Les modèles concernés sont 27 au patch 1.11.601 (et non 33, recompté par outerpedia
+  A89) : armes et accessoires Festival 5★ 645-649 / 1653-1657 et pièces « Settlement » 6★ 9950001-9950016 à 300, l'arme
+  débutant 650 à 500. (2) Dès que l'EnchantLevel d'une EE dépasse 0, le client lui pose `m_ExclusiveStatOption` =
+  `CItemSubOptionData(<ligne du groupe de l'EE>, 0, EnchantLevel)` (`CItem.InitializeOptionData` l.310-314, lue par
+  `CStatValue.cs` l.287), soit `min(OptionValue + Level × OptionFactor, OptionMaxValue)` sans `OptionValue` : Hit AP
+  ×1 plafond 10, Kill AP ×2 plafond 20 (une EE Kill AP ×1 plafond 10). Le parseur ne la produisait pas.
+- ✅ **Données.** Les deux champs sont livrés par outerpedia A89 (`9725afef`, commité, pas encore poussé) ; tables de
+  `data/derived/` rafraîchies par le chemin habituel, `npm run data:sync` (copie du checkout local d'outerpedia, rien
+  n'y est lancé) : `equipment.json` (+27 `enchantCostRate`), `options.json` (+`st` / `ap` / `f` / `max` sur les 130
+  lignes main d'EE, `buffId` gardé), `stat-keys.json` (+`ST_HIT_AP` / `ST_KILL_AP` → `hitAp` / `killAp`),
+  `version.json` au hash `8bcfe0d36418` ; `game-client.json` inchangé.
+- ✅ **Comment.** `levelFromExp` (désormais exportée) lit `meta.enchantCostRate` : quand > 0, seuil =
+  `Math.trunc(f32(courbe[i] × f32(taux × f32(0.001))))` (`Math.fround`, l'ordre du client), sinon la courbe brute,
+  comme avant. Ligne d'AP : pour une EE à `enhanceLevel > 0`, chaque OptionID de `OptionList` dont la ligne
+  d'`options.json` porte `buffId` + `st` / `ap` / `f` / `max` (la main de l'EE : son `MainOptionGroupID` est l'id de
+  l'EE, une ligne par groupe, la même que le client lit) donne une main `hitAp` / `killAp` de valeur
+  `min(enhanceLevel × f, max)`, `source: "option"`, `combatOnly: true` : tous les agrégateurs (fiche `composeBuild`,
+  CP, scores du solver, catalogues du Builder) sautent déjà `combatOnly`, et l'adaptateur la range dans les mains de
+  la carte, qui l'affiche (libellé « Hit AP » / « Kill AP » de `tokens.ts`). Une table sans ces champs (cache d'avant
+  A89) ne produit aucune ligne. Conséquences forcées de la nouvelle forme : `gamedata.ts` (`EquipmentDef.enchantCostRate?`,
+  `BuffOption.st? / ap? / f? / max?`), `stats.ts` (`isStatOption` discrimine par l'absence de `buffId` et non plus par
+  `st`, sinon `resolveStat` aurait lu une ligne main d'EE comme un IOT_STAT sans `v` ; `CONTRACT_STAT_TO_ENGINE`
+  gagne `hitAp` / `killAp`, sans quoi `stat-keys.test.ts` tombait), `parse.ts` (chemin IOT_STAT des mains par
+  `!("buffId" in def)`), `test/main-stat-f32.test.ts` (même discriminant, typage seul).
+- ✅ **Tests.** `packages/core/test/parse.test.ts` (+10) : contrat commité (645 à 300, 650 à 500) ; taux 300, Exp
+  3 750 → +10, 3 749 → +9, 67 → +1 (225 × 0,3 = 67,5 tronqué), 66 → +0, sans taux → +6 ; taux 500, 6 250 → +10,
+  6 249 → +9, 3 100 → +8, 112 → +1 ; sans taux ou à 0, la courbe brute ; `parseInventory` d'une 645 à Exp 3 750 →
+  +10, main 200 → 1 000 ; EE (lignes commitées 20001 Hit AP, 20002 Kill AP) : +0 sans ligne, +3 « Kill AP +6 »
+  combat-only, plafonds à +10 (Kill AP 20, Hit AP 10), Hit AP +4 à +4, ligne IOT_BUFF sans les champs → aucune ligne.
+  Aucun test retiré. `npm run typecheck` : sans erreur (dernière ligne `> tsc --noEmit`, renderer) ; `npm test` :
+  core `Tests  183 passed (183)` (+10), desktop `Tests  273 passed (273)`, renderer `Tests  1275 passed (1275)` ;
+  `npm run lint` : `✖ 6 problems (0 errors, 6 warnings)`, comme avant. Docs : `docs/data-schema.md` +
+  `wiki/Data-Schema.md` (ligne `Exp`, paragraphe `enchantCostRate`, ligne Hit AP / Kill AP de l'EE).
+- ⏳ **Laissé.** Le contrat n'arrive aux installations qu'au push d'outerpedia `main` (A89) : d'ici là l'app
+  installée garde la courbe brute et aucune ligne d'AP, sans erreur. À voir sur la capture : une arme Festival +10
+  lue +10, la carte d'une EE ≥ +1 avec sa ligne. Effets visibles attendus : le filtre « mains » de l'Inventory
+  propose Hit AP / Kill AP dès qu'une EE ≥ +1 est dans le périmètre (comme il propose déjà les mains combat-only
+  des EE) ; `hitAp` / `killAp` n'ont pas d'icône dans `tokens.ts`, `StatIcon` affiche leur libellé court à la place.
+
 ### 🔒 Desktop : garde d'origine host:port, Content-Type JSON sur les POST à body, journal d'équipement relu seulement s'il a bougé (G136) (2026-11-15)
 - ✅ **Pourquoi, sécurité.** Revue de code du 15/11 : `isLocalRequest` (`apps/desktop/src/api-handler.ts`) ne comparait
   que le hostname de l'`Origin` à 127.0.0.1 / localhost, jamais son port ; une page servie par n'importe quel autre

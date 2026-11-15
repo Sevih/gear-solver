@@ -48,7 +48,7 @@ describe("scaleMain — float32 like the client", () => {
   });
 
   it("every IOT_STAT OptionValue × +0..+10 (and +10 ascended, singularity 0..5) × tier 0..4 matches the client", () => {
-    const values = [...new Set(Object.values(options).flatMap((d) => ("st" in d && d.v > 0 ? [d.v] : [])))];
+    const values = [...new Set(Object.values(options).flatMap((d) => (!("buffId" in d) && d.v > 0 ? [d.v] : [])))];
     expect(values.length).toBeGreaterThan(50);
     const states: Array<[number, boolean, number]> = [];
     for (let lv = 0; lv <= 10; lv++) states.push([lv, false, 0]);

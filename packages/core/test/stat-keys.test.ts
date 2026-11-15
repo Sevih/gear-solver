@@ -6,8 +6,8 @@ import statKeysJson from "../../../data/derived/stat-keys.json";
 // (ST_* → OAT_* → contract key, % nature, abbreviation). Nothing loads that
 // file at runtime: a pair outerpedia adds must fail here rather than silently
 // drop out of the panel. Coverage is checked per key, not by freezing the
-// contract's rows. `GAME_STAT` rows no contract pair carries (ST_HIT_AP,
-// ST_KILL_AP as of 2026-10-18) are allowed.
+// contract's rows. `GAME_STAT` rows no contract pair carries are allowed
+// (ST_HIT_AP / ST_KILL_AP were, until outerpedia A89 on 2026-11-15).
 interface ContractStatKey {
   key: string;
   percent: boolean;

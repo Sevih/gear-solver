@@ -23,9 +23,18 @@ For the **OptionID/ItemID/CharID → derived tables mapping** and the
 | `SmeltingCount` | number of reforges already spent |
 | `SingularityLevel` / `Step` / `OptionID` | Singularity Ascension (+11→+15) |
 | `IsLock` | 1 = locked piece |
-| `Exp` | accumulated XP — resolved into `enhanceLevel` via the `ItemEnchantTemplet` curve |
+| `Exp` | accumulated XP — resolved into `enhanceLevel` via the `ItemEnchantTemplet` curve (`slot\|grade\|star` of `enhance.json`), each threshold scaled by the template's `enchantCostRate` when `equipment.json` carries one (see below) |
 | `OptionList[]` | main stat OptionIDs (1-2 entries) |
 | `SubOptionList[]` | substats: `{OptionID, Level, BaseLevel}` |
+
+**Special enchant cost rate (`equipment.json › enchantCostRate`)**:
+`ItemTemplet.ItemEnchantCostRate`, in ‰ of the curve, omitted when 0. The client
+computes each threshold as `RequireExp(column, rate)` = `(int)((float)threshold ×
+((float)rate × 0.001f))` (float32, truncated; the raw curve for a rate ≤ 0);
+`levelFromExp` (`parse.ts`) does the same through `Math.fround`. 27 templates carry
+it as of patch 1.11.601: Festival 5★ weapons and accessories (645-649, 1653-1657)
+and "Settlement" 6★ pieces (9950001-9950016) at 300, the beginner weapon 650 at 500.
+A Festival weapon at Exp 3,750 is +10 (raw curve: +6).
 
 **Gear vs stackable item**: `isGear(item, game)` returns true iff
 `game.equipment[ItemID]` exists (i.e. the template is known as an
@@ -63,6 +72,15 @@ equipment piece). Stackables (orbs / materials) are dropped.
   `levelThreshold <= 1 || enhanceLevel >= levelThreshold` (a threshold-1
   passive is always on once equipped, even at +0 — cf. `parse.ts`),
   `source: "eePassive"`.
+- EE Hit AP / Kill AP line (the client's `m_ExclusiveStatOption`, set once
+  `enhanceLevel > 0`) → the `options.json` row of the EE's main OptionID (its
+  `MainOptionGroupID` is the EE's own id, one row per group) carries, beside its
+  `buffId`, `st` (`ST_HIT_AP` or `ST_KILL_AP`), `ap` (`OAT_ADD`), `f`
+  (`OptionFactor`) and `max` (`OptionMaxValue`); value `min(enhanceLevel × f, max)`
+  (Hit AP ×1 cap 10, Kill AP ×2 cap 20; one Kill AP EE ×1 cap 10). Added as
+  `source: "option", combatOnly: true`: shown on the EE card, off the sheet and
+  the CP (the client counts neither). A table without these fields (before
+  outerpedia A89) yields no line.
 - Weapon / accessory unique passive that hits the sheet
   (`game.equipmentPassives[ItemID].statsByTier`) → the tier
   `min(breakthrough, length − 1)`, each entry resolved by `resolveOption`, added as

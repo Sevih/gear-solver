@@ -49,16 +49,28 @@ function resolveBuffMain(optionId: number, enhanceLevel: number, game: GameData)
   };
 }
 
+const f32 = Math.fround;
+
 /** Resolve the cumulative-Exp curve for a piece (slot+grade+star) and walk it to
- *  the highest level whose threshold is ≤ exp. Curve missing or exp=0 ⇒ +0. */
-function levelFromExp(meta: EquipmentDef, enhance: EnhanceData, exp: number): number {
+ *  the highest level whose threshold is ≤ exp. Curve missing or exp=0 ⇒ +0.
+ *
+ *  A template carrying `enchantCostRate` (‰ of the curve: Festival 5★ 300,
+ *  the beginner weapon 500, the "Settlement" 6★ pieces 300) scales every
+ *  threshold the way the client does, `CItemEnchantTemplet.RequireExp(column,
+ *  ItemEnchantCostRate)` = `(int)((float)threshold × ((float)rate × 0.001f))`
+ *  (float32, truncated; the raw curve when the rate is ≤ 0). Without it a
+ *  Festival weapon at +10 (Exp 3 750) read +6. */
+export function levelFromExp(meta: EquipmentDef, enhance: EnhanceData, exp: number): number {
   if (exp <= 0 || !meta.grade || !meta.star) return 0;
   const curve = enhance.expCurves[`${meta.slot}|${meta.grade}|${meta.star}`];
   if (!curve) return 0;
+  const rate = meta.enchantCostRate ?? 0;
+  const scale = rate > 0 ? f32(rate * f32(0.001)) : 0;
   let lv = 0;
   for (let i = 1; i < curve.length; i++) {
-    const threshold = curve[i];
-    if (threshold === undefined) break;
+    const raw = curve[i];
+    if (raw === undefined) break;
+    const threshold = rate > 0 ? Math.trunc(f32(raw * scale)) : raw;
     if (exp >= threshold) lv = i;
     else break;
   }
@@ -88,8 +100,6 @@ function mainMult(slot: string, lv: number, tier: number, ascended: boolean, sin
 function roundMain(raw: number, percent: boolean): number {
   return percent ? Math.floor(raw * 10 + 1e-9) / 10 : Math.floor(raw + 1e-9);
 }
-
-const f32 = Math.fround;
 
 /** Sequential float32 sum (chained fadd in the client) — term order matters.
  *  `CItem.GetEnchantFactor` sums the piece's ItemEnchantTemplet factors for
@@ -240,11 +250,30 @@ export function parseGearPiece(item: RawItem, game?: GameData): GearPiece {
     const r = toRolled(oid, 1, game); // base (+0) value, before enhancement scaling
     if (!r) continue;
     const def = game?.options[String(oid)];
-    if (enhance && meta && def && "st" in def) {
+    if (enhance && meta && def && !("buffId" in def)) {
       const scaled = scaleMain(def.v, r.percent, meta.slot, enhanceLevel, item.BreakLimitLevel, ascended, item.SingularityLevel, enhance);
       main.push({ ...r, value: scaled, source: "option", rawBase: def.v });
     } else {
       main.push({ ...r, source: "option" });
+    }
+  }
+
+  // EE Hit AP / Kill AP line. Once its EnchantLevel is past 0, the client
+  // gives an EE `m_ExclusiveStatOption` = `CItemSubOptionData(<the row of the
+  // EE's option group>, 0, EnchantLevel)` (`CItem.InitializeOptionData`), i.e.
+  // `min(OptionValue + Level × OptionFactor, OptionMaxValue)` with no
+  // OptionValue: `min(Level × f, max)` (ST_HIT_AP ×1 cap 10, ST_KILL_AP ×2
+  // cap 20). That row is the EE's main option (its `MainOptionGroupID` is the
+  // EE's own id, one row per group), which the contract carries with `st` /
+  // `ap` / `f` / `max` beside its `buffId`. It is a chain-point gain: shown on
+  // the piece, off the character sheet and the CP (the client counts neither),
+  // hence `combatOnly` so every stat aggregator skips it.
+  if (game && meta?.slot === "exclusive" && enhanceLevel > 0) {
+    for (const oid of item.OptionList) {
+      const def = oid ? game.options[String(oid)] : undefined;
+      if (!def || !("buffId" in def) || !def.st || !def.ap || def.f == null || def.max == null) continue;
+      const r = resolveOption({ st: def.st, ap: def.ap, v: Math.min(enhanceLevel * def.f, def.max) }, 1);
+      if (r) main.push({ ...r, source: "option", combatOnly: true });
     }
   }
 

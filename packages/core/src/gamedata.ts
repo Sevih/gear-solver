@@ -4,10 +4,11 @@
  * loads these and hands them to the parser.
  */
 
-/** ItemOptionTemplet entry. Discriminated by shape:
+/** ItemOptionTemplet entry. Discriminated by shape (`buffId` present or not):
  *  - IOT_STAT: `{ st, ap, v }` — directly carries the stat encoding.
  *  - IOT_BUFF: `{ buffId }`    — defers to BuffsTable, indexed by enhancement level.
- *    Talisman (ooparts) main stats live here; EE mains too (not yet wired). */
+ *    Talisman (ooparts) main stats live here; EE mains too. An EE main row
+ *    also carries `st` / `ap` / `f` / `max` (outerpedia A89, no `v`). */
 export interface StatOption {
   st: string; // ST_ATK, ST_CRITICAL_RATE, ...
   ap: string; // OAT_ADD | OAT_RATE
@@ -15,6 +16,14 @@ export interface StatOption {
 }
 export interface BuffOption {
   buffId: string;
+  /** EE main rows only (`ST_HIT_AP` / `ST_KILL_AP`, `OAT_ADD`): the stat of
+   *  the line the client adds to an EE from +1 on (`m_ExclusiveStatOption`),
+   *  worth `min(enhanceLevel × f, max)` — `OptionFactor` / `OptionMaxValue`.
+   *  Absent on the other IOT_BUFF rows and from tables synced before A89. */
+  st?: string;
+  ap?: string;
+  f?: number;
+  max?: number;
 }
 export type OptionDef = StatOption | BuffOption;
 export type OptionsTable = Record<string, OptionDef>;
@@ -62,6 +71,11 @@ export interface EquipmentDef {
   armorSetIcon: string | null;
   /** Class restriction display name (Striker/Mage/Ranger/Defender/Healer). null when unrestricted. */
   class: string | null;
+  /** `ItemTemplet.ItemEnchantCostRate`, in ‰ of the Exp curve (outerpedia
+   *  A89): every enhance threshold of the piece is scaled by it
+   *  (`levelFromExp`). Omitted when 0 (raw curve), and from tables synced
+   *  before A89. */
+  enchantCostRate?: number;
   /** Scrap fields (outerpedia G73), absent from tables synced before them:
    *  `ItemTemplet.CanSell` / `SellPrice` (gold) and `CanDissolve` with the
    *  dissolve rewards — `assets` by asset type (`AT_GOLD` = gold), `items` by

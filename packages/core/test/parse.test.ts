@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseInventory, isGear, projectMainToCeiling, comparePresets } from "../src/parse.js";
+import { parseInventory, isGear, projectMainToCeiling, comparePresets, levelFromExp } from "../src/parse.js";
 import type { RawUserItem } from "../src/raw.js";
 import type { GameData } from "../src/gamedata.js";
 import eePassivesJson from "../../../data/derived/ee-passives.json";
 import enhanceJson from "../../../data/derived/enhance.json";
 import equipmentJson from "../../../data/derived/equipment.json";
+import optionsJson from "../../../data/derived/options.json";
 
 const game: GameData = {
   options: {
@@ -366,5 +367,112 @@ describe("gem lines (Talisman / EE sockets)", () => {
     const w = parseInventory(sample, undefined, gemGame).gear[0]!;
     expect(w.subs[0]).toMatchObject({ stat: "critRate", ticks: 4, reforgeTicks: 2 });
     expect(w.subs[0]!.value).toBeCloseTo(12);
+  });
+});
+
+describe("levelFromExp — template enchant cost rate (ItemEnchantCostRate)", () => {
+  // Client: `RequireExp(column, rate)` = (int)((float)threshold × ((float)rate × 0.001f)),
+  // the raw curve when the rate is ≤ 0. Curve = the committed weapon|unique|5 one.
+  const enhance = enhanceJson as GameData["enhance"];
+  const festival = { ...(equipmentJson["645"] as GameData["equipment"][string]) };
+  const plain: GameData["equipment"][string] = { ...festival, enchantCostRate: undefined };
+
+  it("the committed contract carries the rates (Festival weapon 645: 300, beginner weapon 650: 500)", () => {
+    expect(festival.enchantCostRate).toBe(300);
+    expect((equipmentJson["650"] as GameData["equipment"][string]).enchantCostRate).toBe(500);
+  });
+
+  it("rate 300: Exp 3 750 is +10 (raw curve would read +6), thresholds truncated", () => {
+    expect(levelFromExp(festival, enhance, 3750)).toBe(10);
+    expect(levelFromExp(festival, enhance, 3749)).toBe(9);
+    expect(levelFromExp(festival, enhance, 67)).toBe(1); // 225 × 0.3 = 67.5 → 67
+    expect(levelFromExp(festival, enhance, 66)).toBe(0);
+    expect(levelFromExp(plain, enhance, 3750)).toBe(6);
+  });
+
+  it("rate 500: 6 250 is +10, 3 100 is +8", () => {
+    const beginner = { ...festival, enchantCostRate: 500 };
+    expect(levelFromExp(beginner, enhance, 6250)).toBe(10);
+    expect(levelFromExp(beginner, enhance, 6249)).toBe(9);
+    expect(levelFromExp(beginner, enhance, 3100)).toBe(8);
+    expect(levelFromExp(beginner, enhance, 112)).toBe(1); // 225 × 0.5 = 112.5 → 112
+  });
+
+  it("no rate (or 0): the raw curve", () => {
+    expect(levelFromExp(plain, enhance, 12500)).toBe(10);
+    expect(levelFromExp(plain, enhance, 12499)).toBe(9);
+    expect(levelFromExp({ ...plain, enchantCostRate: 0 }, enhance, 3750)).toBe(6);
+  });
+
+  it("parseInventory reads a Festival weapon at Exp 3 750 as +10, main ×5", () => {
+    const g: GameData = { ...game, enhance, equipment: { ...game.equipment, "645": festival } };
+    const piece = parseInventory({
+      ItemList: [{
+        ItemUID: "fest", CharUID: "0", ItemID: 645, Exp: 3750, BreakLimitLevel: 0, Quantity: 1,
+        SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 0,
+        SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0, OptionList: [24], SubOptionList: [],
+      }],
+    }, undefined, g).gear[0]!;
+    expect(piece.enhanceLevel).toBe(10);
+    expect(piece.main[0]).toMatchObject({ stat: "atk", value: 1000 }); // 200 × (1 + 0.4 × 10)
+  });
+});
+
+describe("EE Hit AP / Kill AP line (m_ExclusiveStatOption) from +1", () => {
+  // Committed contract rows: 20001 = ST_HIT_AP ×1 cap 10, 20002 = ST_KILL_AP ×2 cap 20.
+  const optionsAll = optionsJson as GameData["options"];
+  const eeGame: GameData = {
+    ...game,
+    options: { ...game.options, "20001": optionsAll["20001"]!, "20002": optionsAll["20002"]! },
+    equipment: {
+      ...game.equipment,
+      "2000001": equipmentJson["2000001"] as GameData["equipment"][string],
+      "2000002": equipmentJson["2000002"] as GameData["equipment"][string],
+    },
+    enhance: enhanceJson as GameData["enhance"],
+  };
+  const curve = eeGame.enhance.expCurves["exclusive|unique|6"]!;
+  const ee = (itemId: number, optionId: number, level: number) => parseInventory({
+    ItemList: [{
+      ItemUID: `ee${level}`, CharUID: "0", ItemID: itemId, Exp: curve[level]!, BreakLimitLevel: 0, Quantity: 1,
+      SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 0,
+      SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0, OptionList: [optionId], SubOptionList: [],
+    }],
+  }, undefined, eeGame).gear[0]!;
+  const apLine = (itemId: number, optionId: number, level: number) => {
+    const g = ee(itemId, optionId, level);
+    expect(g.enhanceLevel).toBe(level);
+    return g.main.filter((m) => m.stat === "hitAp" || m.stat === "killAp");
+  };
+
+  it("the committed contract carries st / ap / f / max on the EE main rows", () => {
+    expect(optionsAll["20001"]).toMatchObject({ st: "ST_HIT_AP", ap: "OAT_ADD", f: 1, max: 10 });
+    expect(optionsAll["20002"]).toMatchObject({ st: "ST_KILL_AP", ap: "OAT_ADD", f: 2, max: 20 });
+  });
+
+  it("+0 → no line", () => {
+    expect(apLine(2000002, 20002, 0)).toEqual([]);
+  });
+
+  it("+3 → Kill AP +6, combat-only (off the sheet and the CP)", () => {
+    expect(apLine(2000002, 20002, 3)).toEqual([{ stat: "killAp", value: 6, percent: false, source: "option", combatOnly: true }]);
+  });
+
+  it("the cap holds: Kill AP +20 at +10, Hit AP +10 at +10", () => {
+    expect(apLine(2000002, 20002, 10)).toEqual([{ stat: "killAp", value: 20, percent: false, source: "option", combatOnly: true }]);
+    expect(apLine(2000001, 20001, 10)).toEqual([{ stat: "hitAp", value: 10, percent: false, source: "option", combatOnly: true }]);
+    expect(apLine(2000001, 20001, 4)).toEqual([{ stat: "hitAp", value: 4, percent: false, source: "option", combatOnly: true }]);
+  });
+
+  it("an IOT_BUFF row without the fields (older table) adds no line", () => {
+    const old: GameData = { ...eeGame, options: { ...eeGame.options, "20002": { buffId: "BID_CEQUIP_MAIN_DMG_DARK" } } };
+    const g = parseInventory({
+      ItemList: [{
+        ItemUID: "old", CharUID: "0", ItemID: 2000002, Exp: curve[5]!, BreakLimitLevel: 0, Quantity: 1,
+        SmeltingCount: 0, IsLock: 0, SelectSubOptionNum: 0,
+        SingularityOptionID: 0, SingularityStep: 0, SingularityLevel: 0, OptionList: [20002], SubOptionList: [],
+      }],
+    }, undefined, old).gear[0]!;
+    expect(g.main.filter((m) => m.stat === "killAp")).toEqual([]);
   });
 });

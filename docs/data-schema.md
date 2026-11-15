@@ -21,9 +21,18 @@ Pour le **mapping OptionID/ItemID/CharID → tables dérivées** et les
 | `SmeltingCount` | nombre de reforges déjà spent |
 | `SingularityLevel` / `Step` / `OptionID` | Singularity Ascension (+11→+15) |
 | `IsLock` | 1 = pièce verrouillée |
-| `Exp` | XP cumulée — résolue en `enhanceLevel` via la courbe `ItemEnchantTemplet` |
+| `Exp` | XP cumulée — résolue en `enhanceLevel` via la courbe `ItemEnchantTemplet` (`slot\|grade\|star` d'`enhance.json`), chaque seuil mis à l'échelle par l'`enchantCostRate` du modèle quand `equipment.json` en porte un (voir ci-dessous) |
 | `OptionList[]` | OptionIDs du main stat (1-2 entrées) |
 | `SubOptionList[]` | substats : `{OptionID, Level, BaseLevel}` |
+
+**Taux d'enchantement spécial (`equipment.json › enchantCostRate`)** :
+`ItemTemplet.ItemEnchantCostRate`, en ‰ de la courbe, omis quand 0. Le client
+calcule chaque seuil `RequireExp(colonne, taux)` = `(int)((float)seuil ×
+((float)taux × 0,001f))` (float32, tronqué ; la courbe brute pour un taux ≤ 0) ;
+`levelFromExp` (`parse.ts`) fait de même via `Math.fround`. 27 modèles le portent
+au patch 1.11.601 : armes et accessoires Festival 5★ (645-649, 1653-1657) et
+pièces « Settlement » 6★ (9950001-9950016) à 300, l'arme débutant 650 à 500.
+Une arme Festival à Exp 3 750 est à +10 (courbe brute : +6).
 
 **Gear vs item stackable** : `isGear(item, game)` retourne vrai ssi
 `game.equipment[ItemID]` existe (i.e. la template est connue comme une
@@ -61,6 +70,15 @@ pièce d'équipement). Les stackables (orbes / matériaux) sont droppés.
   `levelThreshold <= 1 || enhanceLevel >= levelThreshold` (un passif à seuil 1
   est toujours actif dès qu'équipé, même à +0 — cf. `parse.ts`),
   `source: "eePassive"`.
+- Ligne Hit AP / Kill AP de l'EE (`m_ExclusiveStatOption` du client, posée dès
+  `enhanceLevel > 0`) → la ligne d'`options.json` de l'OptionID main de l'EE
+  (son `MainOptionGroupID` est l'id de l'EE, une ligne par groupe) porte, à côté
+  de son `buffId`, `st` (`ST_HIT_AP` ou `ST_KILL_AP`), `ap` (`OAT_ADD`), `f`
+  (`OptionFactor`) et `max` (`OptionMaxValue`) ; valeur `min(enhanceLevel × f,
+  max)` (Hit AP ×1 plafond 10, Kill AP ×2 plafond 20 ; une EE Kill AP ×1 plafond
+  10). Ajoutée en `source: "option", combatOnly: true` : affichée sur la carte de
+  l'EE, hors fiche et hors CP (le client ne les y compte pas). Une table sans ces
+  champs (avant outerpedia A89) ne produit pas de ligne.
 - Passif unique d'arme / d'accessoire qui touche la fiche
   (`game.equipmentPassives[ItemID].statsByTier`) → le palier
   `min(breakthrough, longueur − 1)`, chaque entrée résolue par `resolveOption`,

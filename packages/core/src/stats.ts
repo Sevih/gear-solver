@@ -65,8 +65,7 @@ const GAME_STAT: Record<string, StatMeta> = {
 /** Contract stat key (outerpedia `stat-keys.json` › `key`) → engine StatType,
  *  or null for a key that is not an engine stat. Keyed by KEY, not by pair:
  *  `dmgInc` / `dmgRed` carry both OAT_ADD and OAT_RATE in the contract.
- *  `GAME_STAT` rows no contract pair carries yet are allowed (ST_HIT_AP,
- *  ST_KILL_AP as of 2026-10-18). */
+ *  `GAME_STAT` rows no contract pair carries are allowed. */
 export const CONTRACT_STAT_TO_ENGINE: Record<string, StatType | null> = {
   atk: "atk",
   atkPct: "atkPct",
@@ -89,6 +88,9 @@ export const CONTRACT_STAT_TO_ENGINE: Record<string, StatType | null> = {
   lifesteal: "lifesteal",
   counter: "counter",
   enterAp: "enterAp",
+  // EE Hit AP / Kill AP line (outerpedia A89), off the sheet (parse.ts).
+  hitAp: "hitAp",
+  killAp: "killAp",
   // Combat-only EE main (per-element accuracy): resolved for display, skipped
   // by the sheet through the row's `combatOnly`.
   avoid: "avoid",
@@ -115,7 +117,8 @@ export function resolveOption(def: StatOption, ticks: number): ResolvedStat | nu
 }
 
 function isStatOption(def: OptionDef): def is StatOption {
-  return "st" in def;
+  // An EE main row carries `st` beside its `buffId` (no `v`): still IOT_BUFF.
+  return !("buffId" in def);
 }
 
 /** Resolve a substat/main option by id from the options table. Handles both
