@@ -8,6 +8,61 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔒 Desktop : garde d'origine host:port, Content-Type JSON sur les POST à body, journal d'équipement relu seulement s'il a bougé (G136) (2026-11-15)
+- ✅ **Pourquoi, sécurité.** Revue de code du 15/11 : `isLocalRequest` (`apps/desktop/src/api-handler.ts`) ne comparait
+  que le hostname de l'`Origin` à 127.0.0.1 / localhost, jamais son port ; une page servie par n'importe quel autre
+  serveur local (`Origin: http://localhost:3000`) passait la garde. Et `readBody` n'exigeait aucun `Content-Type` : un
+  `fetch(…, { mode: "no-cors", body })` en `text/plain` part sans preflight CORS, donc une telle page pouvait viser les
+  POST du serveur local (`/api/capture/wipe`, `/api/steam/uninstall`, `/api/stat-locks`, `/api/captured/user-item`).
+- ✅ **Comment, sécurité.** `isLocalRequest` garde le test du `Host` loopback et, quand un `Origin` est présent, exige
+  `http:` et un `host:port` identique à celui du `Host` (normalisé par `hostKey`, comme `URL.host` : minuscules, port
+  par défaut retiré) : le renderer est servi par le serveur qu'il appelle (Electron `127.0.0.1:<port>`, Vite
+  `localhost:5173`), toute autre origine est étrangère, `Origin: null` compris. Sans `Origin` (curl local, GET
+  même-origine), comportement d'avant. Nouveau `hasJsonBodyOrNone` : tout POST qui porte un body (`Content-Length` > 0
+  ou `Transfer-Encoding`) doit le déclarer `application/json` (paramètre `charset` accepté), sinon 415
+  `{ error: "Content-Type must be application/json" }` avant toute lecture du body ; les POST sans body (Sync, Wipe,
+  Install, Launch, Check update…, qui n'envoient aucun en-tête) passent. Le test est générique, en tête du handler,
+  juste après la garde d'origine : toute route POST, présente ou future, en hérite. Les trois appelants à body du
+  renderer (`equip.ts` `writeUserItem`, `steam.ts` `uninstallSteamPlugin`, `BuildsScreen.tsx` stat-locks) envoyaient
+  déjà `Content-Type: application/json` : rien à corriger côté renderer. Refus 403 (texte inchangé,
+  `forbidden: non-local origin`) et 415 journalisés une fois par genre et par handler (`warnOnce`, `dwarn("server", …)`
+  avec méthode, route, `Host` / `Origin` ou `Content-Type` reçus) : une page hostile qui réessaie ne remplit pas le
+  journal.
+- ✅ **Pourquoi, vitesse.** `sync()` du suiveur du journal d'équipement (`apps/desktop/src/equip-events.ts`), appelé à
+  chaque `GET /api/capture/status` (toutes les 5 s), lisait et parsait tout `equip-events.ndjson` avant de comparer
+  quoi que ce soit à sa marque, même quand rien n'avait bougé.
+- ✅ **Comment, vitesse.** Le suiveur garde en mémoire `seen` : taille et mtime du journal, mtime de `user_item.json` à
+  la dernière lecture complète. Tant que les trois tiennent, `sync()` rend 0 après deux `stat`, sans lire ni parser ;
+  sinon il relit le journal et compare à la marque comme avant (l'instantané n'est parsé que si la marque diffère). Le
+  `stat` du journal est pris avant sa lecture (une ligne ajoutée entre les deux le fait bouger, le `sync()` suivant
+  relit), `seen` est posé à chaque sortie qui a tout vu (journal vidé, marque identique, instantané absent, pli écrit)
+  et pas sur un `user_item.json` illisible (réessai au tick suivant, comme avant) ; `noteSnapshotWritten()` y reporte
+  la mtime de l'écriture de l'app, si bien que le tick suivant ne relit rien non plus. Mémoire seulement : le premier
+  `sync()` après un redémarrage lit une fois et compare à `.equip-events.applied`, format inchangé. Côté
+  `apps/desktop/src/`, c'est la seule relecture périodique du journal ou de l'instantané, et aucune route ne parse de
+  table dérivée (`main.ts` ne lit `equipment.json` qu'au démarrage, pour le préchargement d'images) : rien
+  d'autre à mettre en cache.
+- ✅ **Tests.** `apps/desktop/test/api-handler.test.ts` (+4) : `Origin` `http://localhost:3000`,
+  `http://127.0.0.1:3000`, `http://localhost` (port 80), `https://localhost:<même port>` et `null` sous
+  `Host: localhost:17891` → 403 sur `POST /api/capture/wipe`, `GET /api/capture/status` et `POST /api/stat-locks`,
+  rien d'effacé ni d'écrit, un seul avertissement ; même `host:port` → 200 / 204 ; sans `Origin` → comme avant (GET,
+  POST JSON, wipe sans body ni `Content-Type`) ; POST à body sans `Content-Type`, en `text/plain` ou en
+  `application/x-www-form-urlencoded` sur `/api/stat-locks`, `/api/captured/user-item` et `/api/steam/uninstall` →
+  415, `user_item.json` intact, un seul avertissement ; `application/json; charset=utf-8` → 204.
+  `apps/desktop/test/equip-events.test.ts` (+2) : `readFileSync` de `node:fs` remplacé par un compteur de lectures par
+  nom de fichier (`vi.mock`, la vraie lecture derrière) ; dix `sync()` sans changement → zéro lecture du journal et de
+  l'instantané ; journal seulement touché (mtime) → une lecture du journal, instantané non parsé ; instantané remplacé →
+  journal relu, instantané parsé et replié ; nouvelle ligne → relu et plié ; après `noteSnapshotWritten()` → zéro
+  lecture. Les POST à body des tests existants (`api-handler.test.ts` stat-locks, `server-writeback.test.ts` ×2)
+  envoient désormais `Content-Type: application/json`, comme le renderer. Aucun test retiré. `npm run typecheck` :
+  `> tsc --noEmit` (dernière ligne, renderer, sans erreur) ; `npm test` : `Tests 1275 passed (1275)` (renderer ; 171
+  dans core, 273 dans desktop, 267 avant) ; `npm run lint` : `✖ 6 problems (0 errors, 6 warnings)`, comme avant. Pas
+  de changement visuel. Aucun passage de `docs/` ni de `wiki/` ne décrivait la garde : rien d'autre à corriger.
+- ⏳ À voir sur le fixe : l'app installée (Electron, `127.0.0.1:<port>`) et `npm run dev` (Vite, `localhost:5173`)
+  doivent tout faire comme avant (Equip / Apply, stat-locks, Uninstall du plugin, Wipe), sans ligne
+  `refused … non-local Host/Origin` ni `not application/json` dans `desktop.log`. Gain de vitesse non mesuré : deux
+  `stat` au lieu d'une lecture et d'un parse du journal par tick de 5 s, partie de jeu ouverte.
+
 ### ⚡ Renderer : live upg en O(8), colonnes de stats stables, un seul import par écriture, GameData gardé à hash égal, rangs par défaut conditionnels, statut Steam sans re-rendu (G135) (2026-11-15)
 - ✅ **Pourquoi.** Revue de code du 15/11 (inventaire ~1 500 pièces, topN 1 000), six travaux faits pour rien à chaque
   solve, frappe, import ou tick : (1) le `upg` vivant du tableau de résultats appelait `diffBuildVsLoadout` par build,

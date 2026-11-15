@@ -62,7 +62,7 @@
  *
  * Electron-free (Vite's dev middleware loads it through api-handler.ts).
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { writeAtomic } from "./atomic-write.js";
 import { dlog, dwarn } from "./log.js";
@@ -481,7 +481,8 @@ interface JournalMark { first: number; last: number; mtime: number | null }
 const NO_MARK: JournalMark = { first: 0, last: 0, mtime: null };
 
 /** Keeps `user_item.json` in step with the plugin's journal. `sync()` is cheap
- *  when nothing changed (one stat + one small read); it replays the whole journal
+ *  when nothing changed (two stats: the journal's size and mtime, the
+ *  snapshot's mtime — nothing read or parsed); it replays the whole journal
  *  when it holds a new line, when it was truncated/restarted (its first `seq`
  *  changed — a new `/user/item`, or a new game session), or when the snapshot
  *  was replaced underneath (a lobby `/user/item`). `noteSnapshotWritten()` is
@@ -491,6 +492,11 @@ export function createEquipJournalFollower(captureOut: string) {
   const stateFile = join(captureOut, EQUIP_JOURNAL_STATE);
   const snapshot = join(captureOut, "user_item.json");
   let mark: JournalMark | null = null;
+  /** The journal's size and mtime and the snapshot's mtime when `sync()` last
+   *  looked at them all: while all three hold, nothing new can be in the
+   *  journal nor under it, so it doesn't read or parse anything. Memory only —
+   *  the first `sync()` after a restart reads once and compares to `mark`. */
+  let seen: { size: number; mtime: number; snap: number | null } | null = null;
 
   const mtimeOf = (f: string) => statSync(f, { throwIfNoEntry: false })?.mtimeMs ?? null;
   const load = (): JournalMark => {
@@ -511,21 +517,27 @@ export function createEquipJournalFollower(captureOut: string) {
     /** Fold pending in-game changes into the snapshot. Returns how many
      *  items changed (0 when nothing was written). */
     sync(): number {
-      if (!existsSync(journal)) return 0;
-      const prev = load();
       // Journal first, snapshot second: the plugin truncates the journal
       // before it rewrites the snapshot, so this order never pairs a fresh
       // journal with a stale base.
+      const js = statSync(journal, { throwIfNoEntry: false });
+      if (!js) return 0;
+      if (seen && seen.size === js.size && seen.mtime === js.mtimeMs && seen.snap === mtimeOf(snapshot)) return 0;
+      const prev = load();
+      // The stat is taken before the read: a line appended in between moves it
+      // again, and the next sync() looks once more.
+      const look = { size: js.size, mtime: js.mtimeMs };
       const events = parseEquipJournal(readFileSync(journal, "utf-8"));
       const mtime = mtimeOf(snapshot);
       if (events.length === 0) {
         // Emptied by a new /user/item: start from zero.
         const now = { first: 0, last: 0, mtime };
         if (!same(prev, now)) save(now);
+        seen = { ...look, snap: mtime };
         return 0;
       }
       const now = { first: events[0]!.seq, last: events[events.length - 1]!.seq, mtime };
-      if (same(prev, now) || mtime === null) return 0;
+      if (same(prev, now) || mtime === null) { seen = { ...look, snap: mtime }; return 0; }
       let raw: FoldableUserItem;
       try {
         raw = JSON.parse(readFileSync(snapshot, "utf-8")) as FoldableUserItem;
@@ -536,7 +548,9 @@ export function createEquipJournalFollower(captureOut: string) {
       }
       const { next, applied, skipped } = foldEquipEvents(raw, events);
       if (applied > 0) writeAtomic(snapshot, JSON.stringify(next));
-      save({ ...now, mtime: mtimeOf(snapshot) });
+      const written = mtimeOf(snapshot);
+      save({ ...now, mtime: written });
+      seen = { ...look, snap: written };
       dlog("capture", `equip journal #${now.first}-#${now.last}: ${applied} item(s) changed, ${skipped} skipped`);
       return applied;
     },
@@ -544,7 +558,9 @@ export function createEquipJournalFollower(captureOut: string) {
      *  base so the next `sync()` doesn't replay the journal over the edit. */
     noteSnapshotWritten(): void {
       const m = load();
-      save({ ...m, mtime: mtimeOf(snapshot) });
+      const written = mtimeOf(snapshot);
+      save({ ...m, mtime: written });
+      if (seen) seen = { ...seen, snap: written };
     },
   };
 }

@@ -67,7 +67,7 @@ describe("shared API handler", () => {
     const handle = createApiHandler(cfg);
     const body = JSON.stringify({ hero: { atk: 1234 } });
     await withServer((req, res) => { handle(req, res); }, async (call) => {
-      expect((await call("/api/stat-locks", { method: "POST", body })).status).toBe(204);
+      expect((await call("/api/stat-locks", { method: "POST", headers: { "content-type": "application/json" }, body })).status).toBe(204);
     });
     expect(readFileSync(cfg.statLocks, "utf-8")).toBe(body);
     expect(readdirSync(dirname(cfg.statLocks)).filter((f) => f.endsWith(".tmp"))).toEqual([]);
@@ -146,6 +146,76 @@ describe("/api/capture/wipe — empties the whole capture folder", () => {
     });
     expect(existsSync(out)).toBe(true);
     expect(readdirSync(out)).toEqual([]);
+  });
+});
+
+describe("origin guard (host:port) and JSON bodies on POST", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  const JSON_TYPE = { "content-type": "application/json" };
+
+  it("refuses a page of another local port (Origin hostname loopback, port not ours) with a 403, logged once", async () => {
+    const cfg = devConfig();
+    writeFileSync(join(cfg.captureOut, "user_item.json"), "{}");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handle = createApiHandler(cfg);
+    await withServer((req, res) => { handle(req, res); }, async (call) => {
+      for (const origin of ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost", "https://localhost:17891", "null"]) {
+        const headers = { host: "localhost:17891", origin };
+        const wipe = await call("/api/capture/wipe", { method: "POST", headers });
+        expect(wipe.status).toBe(403);
+        expect(wipe.body).toBe("forbidden: non-local origin");
+        expect((await call("/api/capture/status", { headers })).status).toBe(403);
+        expect((await call("/api/stat-locks", { method: "POST", headers: { ...headers, ...JSON_TYPE }, body: "{}" })).status).toBe(403);
+      }
+    });
+    expect(existsSync(join(cfg.captureOut, "user_item.json"))).toBe(true);
+    expect(existsSync(cfg.statLocks)).toBe(false);
+    expect(warn.mock.calls.filter((c) => String(c[1]).includes("non-local Host/Origin"))).toHaveLength(1);
+  });
+
+  it("lets the renderer through: Origin with the same host:port as Host", async () => {
+    const cfg = devConfig();
+    const handle = createApiHandler(cfg);
+    await withServer((req, res) => { handle(req, res); }, async (call) => {
+      for (const [host, origin] of [["localhost:17891", "http://localhost:17891"], ["127.0.0.1:5173", "http://127.0.0.1:5173"]]) {
+        expect((await call("/api/capture/status", { headers: { host: host!, origin: origin! } })).status).toBe(200);
+        const r = await call("/api/stat-locks", { method: "POST", headers: { host: host!, origin: origin!, ...JSON_TYPE }, body: "{}" });
+        expect(r.status).toBe(204);
+      }
+    });
+  });
+
+  it("keeps today's behaviour without an Origin (a local curl)", async () => {
+    const cfg = devConfig();
+    const handle = createApiHandler(cfg);
+    await withServer((req, res) => { handle(req, res); }, async (call) => {
+      expect((await call("/api/capture/status")).status).toBe(200);
+      expect((await call("/api/stat-locks", { method: "POST", headers: JSON_TYPE, body: "{\"a\":1}" })).status).toBe(204);
+      // A body-less POST needs no Content-Type (the renderer's buttons send none).
+      expect((await call("/api/capture/wipe", { method: "POST" })).status).toBe(200);
+    });
+    expect(readFileSync(cfg.statLocks, "utf-8")).toBe('{"a":1}');
+  });
+
+  it("refuses a POST body that isn't declared JSON with a 415, before any write, logged once", async () => {
+    const cfg = devConfig();
+    const file = join(cfg.captureOut, "user_item.json");
+    writeFileSync(file, '{"ItemList":["before"]}');
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handle = createApiHandler(cfg);
+    await withServer((req, res) => { handle(req, res); }, async (call) => {
+      for (const headers of [{} as Record<string, string>, { "content-type": "text/plain" }, { "content-type": "application/x-www-form-urlencoded" }]) {
+        for (const url of ["/api/stat-locks", "/api/captured/user-item", "/api/steam/uninstall"]) {
+          const r = await call(url, { method: "POST", headers, body: '{"ItemList":["after"]}' });
+          expect(r.status).toBe(415);
+          expect(JSON.parse(r.body)).toEqual({ error: "Content-Type must be application/json" });
+        }
+      }
+      // A charset parameter is still JSON.
+      expect((await call("/api/stat-locks", { method: "POST", headers: { "content-type": "application/json; charset=utf-8" }, body: "{}" })).status).toBe(204);
+    });
+    expect(readFileSync(file, "utf-8")).toBe('{"ItemList":["before"]}');
+    expect(warn.mock.calls.filter((c) => String(c[1]).includes("not application/json"))).toHaveLength(1);
   });
 });
 

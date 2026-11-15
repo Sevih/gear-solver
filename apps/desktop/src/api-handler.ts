@@ -147,23 +147,45 @@ function beginStream(res: ServerResponse): void {
   res.flushHeaders?.();
 }
 
+/** `host[:port]` of a `Host` header, normalized the way `URL.host` writes an
+ *  `Origin` (lowercase, default port dropped), or null when unparsable. */
+function hostKey(host: string): string | null {
+  try { return new URL(`http://${host}`).host; } catch { return null; }
+}
+
 /** DNS-rebinding / CSRF guard for the mutating endpoints and the account
  *  reads. A page served from another origin but pointed at 127.0.0.1 still
  *  carries its own hostname in the `Host` (and `Origin`) header, so requiring
  *  a loopback host blocks it from POSTing to `/api/capture/*` or reading
- *  `/captured/user_item.json`. Same-origin requests from our own renderer
- *  always pass. */
+ *  `/captured/user_item.json`. When an `Origin` is sent it must be this very
+ *  server — same host AND port as `Host`: the renderer is served by the server
+ *  it calls (Electron's 127.0.0.1:<port>, Vite's localhost:5173), while a page
+ *  of another local server (`http://localhost:3000`) is a foreign origin even
+ *  though its hostname is loopback. No `Origin` (curl, a same-origin GET) →
+ *  the `Host` check alone. */
 export function isLocalRequest(req: IncomingMessage): boolean {
-  const host = (req.headers.host ?? "").split(":")[0];
+  const hostHeader = req.headers.host ?? "";
+  const host = hostHeader.split(":")[0];
   if (host !== "127.0.0.1" && host !== "localhost") return false;
   const origin = req.headers.origin;
   if (origin) {
     try {
-      const h = new URL(origin).hostname;
-      if (h !== "127.0.0.1" && h !== "localhost") return false;
+      const o = new URL(origin);
+      if (o.protocol !== "http:" || o.host !== hostKey(hostHeader)) return false;
     } catch { return false; }
   }
   return true;
+}
+
+/** A POST that carries a body must declare it as JSON: every body the API reads
+ *  is JSON, and a `text/plain` body is what a cross-origin `fetch(…, { mode:
+ *  "no-cors" })` can send without a CORS preflight. Body-less POSTs (the
+ *  renderer's Sync / Wipe / Install… buttons) carry no Content-Type and pass. */
+function hasJsonBodyOrNone(req: IncomingMessage): boolean {
+  const length = Number(req.headers["content-length"] ?? 0);
+  if (req.headers["transfer-encoding"] === undefined && !(length > 0)) return true;
+  const type = (req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+  return type === "application/json";
 }
 
 /** Run an async task while streaming its progress lines through the capture
@@ -209,6 +231,13 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
   const { captureOut } = cfg;
   const equipJournal = createEquipJournalFollower(captureOut);
   const gameVersion = createGameVersionRoute();
+  /** Refusals are logged once per kind: a hostile page could retry forever. */
+  const warned = new Set<string>();
+  const warnOnce = (kind: string, msg: string) => {
+    if (warned.has(kind)) return;
+    warned.add(kind);
+    dwarn("server", msg);
+  };
 
   /** GET /api/capture/status — whether a snapshot exists, and the mtime of
    *  every file the renderer's import reads (the Steam follower re-imports
@@ -240,10 +269,20 @@ export function createApiHandler(cfg: ApiConfig): (req: IncomingMessage, res: Se
     // endpoints are POSTs) AND on every read of account data: `/captured/*` is
     // the player's snapshot and `/api/*` GETs expose capture/Steam state —
     // a DNS-rebinding page could otherwise read them. Static renderer files,
-    // `/gamedata/*` and `/img/*` are public and stay open.
+    // `/gamedata/*` and `/img/*` are public and stay open. A POST with a body
+    // must then be JSON (415 otherwise): a no-cors `text/plain` request never
+    // reaches a write route, on top of the Origin check.
     if ((req.method === "POST" || url.startsWith("/captured/") || url.startsWith("/api/")) && !isLocalRequest(req)) {
+      warnOnce("origin", `refused ${req.method} ${url}: non-local Host/Origin (Host ${req.headers.host ?? "-"}, Origin ${req.headers.origin ?? "-"})`);
       res.statusCode = 403;
       res.end("forbidden: non-local origin");
+      return true;
+    }
+    if (req.method === "POST" && !hasJsonBodyOrNone(req)) {
+      warnOnce("content-type", `refused POST ${url}: body sent as ${req.headers["content-type"] ?? "no Content-Type"}, not application/json`);
+      res.statusCode = 415;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Content-Type must be application/json" }));
       return true;
     }
 

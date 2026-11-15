@@ -36,7 +36,7 @@ describe("POST /api/captured/user-item vs the Steam source", () => {
     const { handle, file } = await setup();
     steam.live = true;
     await withServer(handle, async (call) => {
-      const r = await call("/api/captured/user-item", { method: "POST", body: EDITED });
+      const r = await call("/api/captured/user-item", { method: "POST", headers: { "content-type": "application/json" }, body: EDITED });
       expect(r.status).toBe(409);
       expect(JSON.parse(r.body).error).toBe("The game is open: the app now follows in-game moves by itself; close it to apply a local-only edit");
     });
@@ -46,7 +46,7 @@ describe("POST /api/captured/user-item vs the Steam source", () => {
   it("is written when no capture source is live", async () => {
     const { handle, file } = await setup();
     await withServer(handle, async (call) => {
-      const r = await call("/api/captured/user-item", { method: "POST", body: EDITED });
+      const r = await call("/api/captured/user-item", { method: "POST", headers: { "content-type": "application/json" }, body: EDITED });
       expect(r.status).toBe(204);
     });
     expect(readFileSync(file, "utf-8")).toBe(EDITED);

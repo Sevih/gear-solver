@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createEquipJournalFollower,
   EQUIP_JOURNAL,
@@ -9,6 +9,20 @@ import {
   parseEquipJournal,
   type EquipEvent,
 } from "../src/equip-events.js";
+
+// Counts the reads of the follower (journal, snapshot) by file name; the
+// real readFileSync does the work.
+const reads = vi.hoisted(() => new Map<string, number>());
+vi.mock("node:fs", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:fs")>();
+  const readFileSync = ((file: Parameters<typeof real.readFileSync>[0], ...rest: unknown[]) => {
+    const name = String(file).split(/[\\/]/).pop()!;
+    reads.set(name, (reads.get(name) ?? 0) + 1);
+    return (real.readFileSync as (...a: unknown[]) => unknown)(file, ...rest);
+  }) as typeof real.readFileSync;
+  return { ...real, default: { ...real, readFileSync }, readFileSync };
+});
+const readsOf = (name: string) => reads.get(name) ?? 0;
 
 // Uids shaped like the real capture (10-digit strings, far below 2^53).
 const HERO_A = "6012124257";
@@ -790,6 +804,50 @@ describe("createEquipJournalFollower", () => {
     f.journal([equip(1, { CharUID: HERO_A, ToEquipUID: H2 })]);
     expect(follower.sync()).toBe(1);
     expect(f.read()).toMatchObject({ [H2]: HERO_A, [W1]: "0", [W2]: HERO_A });
+  });
+
+  it("reads and parses nothing while the journal's size and mtime and the snapshot's mtime hold", () => {
+    const f = folder();
+    const follower = createEquipJournalFollower(f.dir);
+    f.journal([equip(1, { CharUID: HERO_B, ToEquipUID: W1 })]);
+    expect(follower.sync()).toBe(1);
+    reads.clear();
+    for (let i = 0; i < 10; i++) expect(follower.sync()).toBe(0);
+    expect(readsOf(EQUIP_JOURNAL)).toBe(0);
+    expect(readsOf("user_item.json")).toBe(0);
+    // Journal touched without a new line: read once, the snapshot not parsed.
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(join(f.dir, EQUIP_JOURNAL), later, later);
+    expect(follower.sync()).toBe(0);
+    expect(follower.sync()).toBe(0);
+    expect(readsOf(EQUIP_JOURNAL)).toBe(1);
+    expect(readsOf("user_item.json")).toBe(0);
+    // Snapshot replaced underneath (a lobby): journal re-read, snapshot parsed and refolded.
+    writeFileSync(f.file, JSON.stringify(snapshot()));
+    utimesSync(f.file, new Date(2026, 0, 2), new Date(2026, 0, 2));
+    expect(follower.sync()).toBe(1);
+    expect(readsOf(EQUIP_JOURNAL)).toBe(2);
+    expect(readsOf("user_item.json")).toBe(1);
+    expect(f.read()[W1]).toBe(HERO_B); // (the test's own read: one more)
+    // A new line: read and folded again.
+    f.journal([equip(1, { CharUID: HERO_B, ToEquipUID: W1 }), equip(2, { CharUID: HERO_A, ToInvenUID: W2 })]);
+    expect(follower.sync()).toBe(1);
+    expect(readsOf(EQUIP_JOURNAL)).toBe(3);
+    expect(readsOf("user_item.json")).toBe(3);
+  });
+
+  it("reads nothing after the app's own write-back either", () => {
+    const f = folder();
+    const follower = createEquipJournalFollower(f.dir);
+    f.journal([equip(1, { CharUID: HERO_B, ToEquipUID: W1 })]);
+    expect(follower.sync()).toBe(1);
+    writeFileSync(f.file, JSON.stringify(snapshot()));
+    follower.noteSnapshotWritten();
+    reads.clear();
+    expect(follower.sync()).toBe(0);
+    expect(readsOf(EQUIP_JOURNAL)).toBe(0);
+    expect(readsOf("user_item.json")).toBe(0);
+    expect(f.read()[W1]).toBe("0");
   });
 
   it("does not replay the journal over the app's own write-back", () => {
