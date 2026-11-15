@@ -15,7 +15,7 @@ import { availableCores, readSetting, settingDefault, WORKER_COUNT_CEILING } fro
 import type { HeroPriority } from "../storage/heroPriority.js";
 import type { PresetHolds } from "../presets/presetHolds.js";
 import { hasPriority } from "../heroPriority/weights.js";
-import { collapseTalismanVariants, compareBuilds, precomputeContext, TALISMAN_VARIANTS_KEPT, type ReforgeTickWeights } from "./engine.js";
+import { collapseTalismanVariants, compareBuilds, maxPartitionChunks, precomputeContext, TALISMAN_VARIANTS_KEPT, type ReforgeTickWeights } from "./engine.js";
 import type {
   EquippedScope,
   EstimateRequestMsg,
@@ -45,9 +45,11 @@ export interface SolveDebugInfo {
   hasPriority: boolean;
   equippedScope: EquippedScope;
   workers: number;
-  /** Workers actually dispatched (≤ pool, capped by the partition pool size). */
+  /** Workers actually dispatched (≤ pool, capped by the partition units). */
   chunks: number;
-  /** Largest partitionable pool — the parallelism ceiling for this solve. */
+  /** Partition units (weapon × helmet × armor × gloves × boots pools,
+   *  `maxPartitionChunks`) — the parallelism ceiling for this solve. The key
+   *  keeps its name from when it was the largest pool's size. */
   maxPoolHit: number;
   poolSizes: PoolSizes;
   /** Main-thread precompute time (compose + per-slot prune + gem scoring). */
@@ -337,17 +339,16 @@ export class SolverOrchestrator {
     this.poolSizes = precomputed.poolSizes;
     this.reforgeTickWeights = precomputed.reforgeTickWeights;
     this.emitProgress();
-    // Cap the worker count to the partitioned pool size. `solveChunk` splits
-    // the largest pool (pickPartitionSlot), so a pool of N items can keep at
-    // most N workers busy — any extra worker gets an empty slice and burns a
-    // postMessage + precompute clone for zero work. The largest pool size is
-    // the max hit across the partitionable slots (EE is never partitioned).
+    // Cap the worker count to the partition units. `solveChunk` splits the
+    // flattened weapon × helmet (× armor × gloves × boots when that is too
+    // few units) index across the chunks (`partitionDepthOf`), so at most
+    // `maxPartitionChunks` workers get work — an extra one would burn a
+    // postMessage + precompute clone for nothing. A slot the precompute
+    // doesn't report caps nothing.
     const ps = precomputed.poolSizes;
-    const maxPoolHit = Math.max(
-      ps.weapon?.hit ?? 0, ps.helmet?.hit ?? 0, ps.armor?.hit ?? 0,
-      ps.gloves?.hit ?? 0, ps.boots?.hit ?? 0, ps.accessory?.hit ?? 0,
-      ps.talisman?.hit ?? 0, // engine keys the ooparts pool as "talisman"
-    );
+    const maxPoolHit = maxPartitionChunks([
+      ps.weapon?.hit ?? 1, ps.helmet?.hit ?? 1, ps.armor?.hit ?? 1, ps.gloves?.hit ?? 1, ps.boots?.hit ?? 1,
+    ]);
     const chunkCount = Math.max(1, Math.min(this.workers.length, maxPoolHit));
     this.activeChunks = chunkCount;
     this.fanoutAt = performance.now();

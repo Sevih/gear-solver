@@ -8,6 +8,75 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚡ Solver : composition unique au CHC additif, buckets cumulés, chunks weapon × helmet, seaux en tableau typé (G133) (2026-11-15)
+- ✅ **Pourquoi.** Revue de code du 15/11, quatre coûts mesurés dans la boucle de `solveChunk` : (1) avec `critRate` en
+  priorité, presque chaque combo était composé deux fois, la première fiche ne servant qu'à lire le CHC avant gemmes ;
+  (2) chaque nœud accessory re-sommait les six pièces (`aggregatePrefixBuckets`) et refaisait `computeSetBonuses`, qui
+  ne dépend que des quatre armures ; (3) `chunkCount` plafonné à la taille du plus grand pool (10 à 12 pièces à
+  Top % 60), donc jamais plus de 12 workers, et un découpage déséquilibré ; (4) la compose sur des records (quatre
+  clones par spread, objets du talisman qui changent de forme, `?? 0` sur des clés absentes, `setBonusStatKey` par
+  combo).
+- ✅ **Comment, (4) seaux typés.** `composeBuild.ts` : les quatre buckets dans un `Float64Array` à index fixes catégorie ×
+  stat (`BucketArray`, 16 stats : celles que lit la formule, une autre clé n'atteint jamais la fiche) ; chaque
+  contribution résolue une fois en couples index / valeur (`BucketAdds` : `pieceBucketAdds`, `gemOverrideBucketAdds`,
+  `setBonusBucketAdds`, appliqués par `applyBucketAdds`) par les MÊMES visiteurs que le chemin en records
+  (`forEachPieceAdd` / `forEachGemOverrideAdd` / `forEachSetBonusAdd`, d'où viennent désormais `addPieceToBuckets`,
+  `addGemOverride`, `addSetBonuses`) : mêmes additions, même ordre, même fiche bit pour bit. `finalStatsFromBucketArray`
+  est la formule unique, `finalStatsFromBuckets` y convertit ses records (`bucketArrayOf`) ; `critRateUncappedOf` est
+  l'expression du CHC non borné que la fiche emploie. API publique inchangée (`FinalStats`, `GearBuckets`,
+  `computeFinalStats`, `computeFinalStatsFromPrefix`, `aggregatePrefixBuckets` gardés pour les écrans et les tests).
+- ✅ **Comment, (2) buckets cumulés.** `engine.ts` : un `BucketArray` par profondeur (weapon..accessory), celui d'un
+  nœud = celui du parent (`.set`) + sa pièce, les pièces des pools résolues une fois par chunk (talisman et EE en deux
+  variantes, avec et sans leurs gemmes serties) ; les bonus de set calculés et résolus une fois par nœud boots sur les
+  quatre armures (seules elles portent un `armorSetId`, vérifié sur `equipment.json`) ; par combo `fillCombo` clone le
+  bucket accessory puis ajoute talisman, EE, delta, sets — l'ordre de `computeFinalStatsFromPrefix`. Boucles par
+  index, `serveMinFilters` compose par la même fermeture (`composeCombo`).
+- ✅ **Comment, (1) composition unique.** Le combo est rempli avec les gemmes par défaut, le CHC lu sur les buckets
+  (`critRateUncappedOf`), le cap crit ou l'anti-dépassement choisit l'allocation, et la fiche n'est composée qu'une
+  fois : sur les buckets déjà en place si l'allocation reste celle par défaut, sinon avec l'autre delta. Seuls SOLVE CP
+  sans priorité (comparaison de CP des deux allocations, G132) et le service des paliers composent deux fiches.
+- ✅ **Comment, (3) partition.** `pickPartitionSlot` / `partition` remplacés par `partitionDepthOf` : l'index aplati
+  weapon × helmet, un niveau plus bas (armor, gloves, boots) tant qu'il fait moins de 4 unités par chunk ; l'unité `u`
+  va au chunk `u % chunkCount` (en quinconce), le test se fait avant `incSet` au niveau de partition. Chaque unité est
+  un sous-arbre parcouru par un seul chunk : rien de dupliqué sous ce niveau, et `permutations`, `searched`,
+  `brokenSetsRejected` (autrefois comptés plusieurs fois quand l'axe était l'accessoire ou le talisman) se somment aux
+  valeurs mono-chunk. `orchestrator.ts` plafonne le fan-out à `maxPartitionChunks` (weapon × … × boots, un slot non
+  rapporté ne plafonne rien) ; la clé `maxPoolHit` de « Copy Debug Info » garde son nom et porte ces unités.
+- ✅ **Identité des résultats (script hors dépôt, capture du 15/11 copiée, `precomputeContext` + `solveChunk` +
+  `finalizeBuilds`, six solves de 9,1 à 17,7 M de combos : Score crit, CP crit, Score ATK/SPD/CHD, CP sans priorité,
+  Score avec palier SPD ≥ 160, Score avec plan de set et sets cassés refusés).** Top **200 000** comparé par empreinte
+  SHA-256 du JSON complet (pièces, gemmes, fiche, ratings, score, CP) : identique avant / après mono-chunk / après en
+  7 chunks fusionnés, sur les six ; même n°1, mêmes `permutations` / `searched`. Idem au top 1 000.
+- ✅ **Mesures (même banc, mono-thread, top 1 000, meilleur de 2).** Avant → après : Score crit 22 343 → 4 103 ms ;
+  CP crit 18 137 → 4 080 ; Score ATK/SPD 17 128 → 4 341 ; CP sans priorité 10 545 → 2 502 ; Score palier 10 559 →
+  2 524 ; Score sets 19 263 → 4 520 (÷ 3,9 à ÷ 5,4). Une optimisation retirée à la fois : sans (1) 8 991 / 7 900 /
+  7 462 / 4 499 / 4 449 / 7 944 ms ; sans (2) 7 172 / 6 734 / 8 657 / 5 152 / 5 127 / 9 436 ; sans (1) ni (2), soit
+  (4) seule, 9 898 / 8 636 / 8 817 / 5 082 / 5 123 / 9 276. (4) seule fait ÷ 1,9 à ÷ 2,3 (la revue mesurait ×3 sur
+  la compose seule) ; (2) vaut −39 à −52 % une fois (4) en place, plus que les −12 à −14 % annoncés (le re-sum pèse
+  plus quand la compose ne coûte plus rien) ; (1) vaut −47 à −54 % sur les solves crit, mais retirer (1) ralentit
+  aussi les solves sans priorité crit, où il ne change rien au calcul : effet d'optimisation du JIT, la part propre
+  de (1) n'est pas isolable plus finement que « gain sur crit, rien de perdu ailleurs ». (3), temps réel simulé
+  (chunks de l'orchestrateur chronométrés un à un, temps réel = le plus lent) : W = 7, déséquilibre 18 % / 17 % →
+  6 % / 4 % ; W = 15 (16 threads), 12 chunks avant, temps réel 27 % au-dessus de l'idéal → 15 chunks, 10 % / 15 % ;
+  W = 31, 12 chunks avant, ×2,6 l'idéal → 31 chunks, +20 % / +36 % (chunks de ~150 ms, le premier paie la compilation
+  JIT). Score crit : 2 002 → 341 ms simulés à 15 workers, 2 004 → 185 ms à 31.
+- ✅ **Tests.** Nouveau `apps/renderer/test/solveChunkFastPath.test.ts` (9), inventaire synthétique à graine fixe :
+  buckets typés = `computeFinalStatsFromPrefix` = `computeFinalStats` bit pour bit (`Object.is` par axe, 400 combos ×
+  quatre deltas dont une clé inconnue × bonus de set réels × avec / sans EE, mains `fromBuff` et `combatOnly`) ;
+  `solveChunk` = une référence par combo écrite à l'ancienne (fiche avec les gemmes par défaut, CHC lu dessus,
+  allocateur, seconde fiche si l'allocation diffère, CP comparés en SOLVE CP sans priorité) sur cinq cas, chacun avec
+  des builds gardés sur l'allocation par défaut et des builds réalloués ; `partitionDepthOf` / `maxPartitionChunks` ;
+  2, 3, 5, 7, 16, 32 et 64 chunks = mono-chunk (builds, `permutations`, `searched`, `brokenSetsRejected`, plan 2pc
+  avec sets cassés refusés). Tests existants inchangés et verts, aucun retiré. `npm run typecheck` : `> tsc --noEmit`
+  (dernière ligne, renderer, sans erreur) ; `npm test` : `Tests 1253 passed (1253)` (renderer ; 171 et 267 dans les
+  autres workspaces) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (phase 4 partition, phase 5 compose, merge, § Gems pré-gem CHC,
+  §7.3, 7.4, 7.4b, 7.10, § 8 perf, carte des fichiers), `docs/reference.md` / `wiki/Engine-Reference.md` (§ 2.6 buckets
+  typés, table des tests), `docs/architecture.md` / `wiki/Architecture.md` (flux de données).
+- ⏳ **À voir par Sevih.** Un solve réel dans l'app sur le fixe et sur le portable (temps du pied de page, « Copy Debug
+  Info » : `chunks` doit valoir le nombre de workers). Hors périmètre, relevé : `collapseTalismanVariants` au merge ne
+  peut plus rien retirer (une signature ne s'étend plus sur deux chunks), gardé comme garde-fou.
+
 ### 🧮 Solver : CP garde la meilleure allocation de gemmes, manque d'un palier mesuré sans les gemmes par défaut (G132) (2026-11-15)
 - ✅ **Pourquoi.** Revue de code du 15/11, deux bugs d'allocation de gemmes dans `lib/solver/engine.ts`. (1) SOLVE CP
   sans priorité : un combo dont le CHC brut dépasse 102 voyait ses gemmes réallouées par `allocateGemsCapped`, qui

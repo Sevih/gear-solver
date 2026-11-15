@@ -117,7 +117,7 @@ Inventory + filters + hero
    └─ apps/renderer/src/lib/solver/orchestrator.ts (main thread, fan-out)
         └─ apps/renderer/src/workers/solver.worker.ts × W (fan-in top-K → merged top-N)
              └─ apps/renderer/src/lib/solver/engine.ts (pure compute: precomputeContext on the main thread, then solveChunk + finalizeBuilds in the workers)
-                  ├─ composeBuild.ts (computeFinalStats / computeFinalStatsFromPrefix in the hot loop, mirror in-game CalcFinalStat)
+                  ├─ composeBuild.ts (computeFinalStats; typed buckets + finalStatsFromBucketArray in the hot loop, mirror in-game CalcFinalStat)
                   ├─ solver/cp.ts (calcBattlePower, mirror in-game CalcBattlePower)
                   ├─ solver/ratings.ts (8 cheap ratings + Score)
                   └─ solver/gems.ts (gem sub-solver greedy)

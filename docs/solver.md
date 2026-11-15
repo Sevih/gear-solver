@@ -180,8 +180,10 @@ bornes min de stat restent compatibles (le dominant les tient dès que le domin�
 
 ### Phase 4 — Cartesian + set-prune
 Énumération nested loop : `weapon × helmet × armor × gloves × boots × accessory × ooparts`.
-- **Partition** : un slot (le plus externe dont le pool fait ≥ 4 × `chunkCount`, sinon le plus grand — `pickPartitionSlot`) est sliced en `chunkCount` parts ; chaque
-  worker reçoit sa slice → embarrassingly parallel, aucune comm inter-worker.
+- **Partition** : l'index aplati des boucles externes — weapon × helmet, un niveau plus bas (armor, gloves, boots)
+  tant qu'il fait moins de 4 unités par chunk (`partitionDepthOf`) — est réparti entre les `chunkCount` chunks, l'unité
+  `u` au chunk `u % chunkCount` ; chaque worker parcourt des sous-arbres disjoints → embarrassingly parallel, aucune comm
+  inter-worker, rien de refait deux fois sous le niveau de partition.
 - **Set tracking** : à chaque slot armor, `incSet(armorSetId)` au début de la pièce, `decSet` après l'inner loop.
 - **Mid-tree pruning** : à chaque depth `D` (D armor slots itérés, `4-D` restants), pour chaque set requis (2pc ou 4pc) on vérifie qu'il reste assez de slots pour atteindre le seuil. Sinon, `continue` au prochain frère.
 - **Leaf no-broken-set** : si **Allow broken sets** est *off*, à la profondeur boots (`remaining === 0`) on rejette aussi tout build dont le tally `setCount` n'est pas « complet » (`allSetsComplete` : tout set présent ≥2 ET 4 pièces armor toutes set-trackées → soit un 4pc, soit deux 2pc). Check leaf-only : un singleton mid-tree peut encore s'apparier plus bas.
@@ -189,16 +191,24 @@ bornes min de stat restent compatibles (le dominant les tient dès que le domin�
 ### Phase 5 — Per-combo : compose + ratings + filtres + heap
 Pour chaque combo qui passe phase 4 :
 
-1. **Compose** : `computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, gemDelta, setBonuses)`.
-   - `prefixBuckets` = `aggregatePrefixBuckets(pieces.slice(0, 6))`, les six pièces arme..accessoire sommées
-     **une fois par nœud accessory** ; la boucle talisman clone ce préfixe et n'ajoute que talisman, EE, gemmes et
-     bonus de set, dans l'ordre des slots — **bit-identique** au re-sum complet (`computeFinalStats`, qui reste la
-     compose des chemins hors boucle : héros, cartes, presets).
-   - `setBonuses` = `computeSetBonuses(pieces, …)`, aussi calculé une fois par nœud accessory (le talisman ne porte
-     pas d'`armorSetId`).
+1. **Compose** sur des **buckets typés** (`BucketArray` de `composeBuild.ts` : un `Float64Array`, les quatre
+   buckets à index fixes catégorie × stat — un clone est un `.set`, une stat absente lit 0, aucun objet ne change
+   de forme).
+   - Chaque pièce des pools est résolue **une fois par chunk** en couples index / valeur (`pieceBucketAdds` ;
+     talisman et EE en deux variantes, avec et sans leurs gemmes serties), un delta de gemmes à son premier usage
+     (`gemOverrideBucketAdds`), les bonus de set **une fois par nœud boots**
+     (`setBonusBucketAdds(computeSetBonuses(helmet..boots))` : seules les quatre armures portent un `armorSetId`).
+   - Un bucket cumulé par profondeur : celui d'un nœud est celui du parent plus sa pièce, un nœud accessory n'ajoute
+     donc qu'une pièce au lieu de re-sommer les six.
+   - Par combo : clone du bucket accessory, puis talisman, EE, gemmes et bonus de set — l'ordre de
+     `computeFinalStatsFromPrefix`, donc la même fiche **bit pour bit** que le re-sum complet (`computeFinalStats`,
+     qui reste la compose des chemins hors boucle : héros, cartes, presets). `finalStatsFromBucketArray` est la
+     formule elle-même, le chemin en records y passe aussi.
    - `pieces` est un array hoisted (mutée en place) pour éviter 10M+ allocations.
-   - `gemDelta` est pré-agrégé (cf. § Gems) ; les chemins lents (cap crit, mins de stat) recomposent par la même
-     fonction avec un autre delta.
+   - `gemDelta` est pré-agrégé (cf. § Gems). Le CHC avant gemmes se lit sur les buckets remplis avec les gemmes
+     par défaut (`critRateUncappedOf`, le CHC est additif) et la fiche n'est composée **qu'une fois**, avec
+     l'allocation retenue (cap crit, anti-dépassement) ; seuls SOLVE CP sans priorité (CP des deux allocations
+     comparés) et le service des mins de stat composent une seconde fiche.
 2. **Stat filter** : si une `FinalStats[key]` est hors `[min, max]` user, `continue`.
 3. **Cheap ratings** : 8 produits simples (HpS, Ehp, EhpS, Dmg, DmgS, Mcd, McdS, DmgH).
    Dmg/Mcd sont multipliés par le **facteur du meilleur skill** du héros
@@ -236,8 +246,9 @@ Pour chaque combo qui passe phase 4 :
 - Merge des top-K en un buffer global, sort final (`compareBuilds`), **collapse des variantes talisman**
   (`collapseTalismanVariants` : max 3 builds par signature 6-gear — les gemmes étant une allocation
   globale, les talismans d'un même gear ne diffèrent quasi que par leur main et noyaient le top-N ;
-  chaque heap applique déjà le même plafond, ce passage couvre une signature répartie sur plusieurs
-  workers quand le talisman est l'axe de partition), slice top-N (1000 par défaut), forward à React.
+  chaque heap applique déjà le même plafond et une signature ne s'étend jamais sur deux chunks, la partition
+  s'arrêtant à boots ; ce passage garde le merge juste quel que soit le découpage), slice top-N (1000 par
+  défaut), forward à React.
 - Solve complet vide, aucune combinaison atteinte (`permutations` 0) et des loadouts rejetés par
   « Allow broken sets » off → `onResult` porte la cause `"brokenSets"` (`SolveEmptyCause`), que la table
   affiche (cf. § 4, tableau des résultats).
@@ -904,7 +915,7 @@ qu'il vient des gemmes d'EE proposées.
 1. **Étage 1** — dépenser des gems crit pour **atteindre** le cap CHC à 100 % (en priorité, même si l'atk score plus haut), overshoot ≤ un gem 3 %.
 2. **Étage 2** — remplir le reste **par priorité puis par remplissage** (en sautant tout gem crit une fois le cap atteint, désormais gaspillé — une gemme crit de remplissage suit le même saut).
 
-Le pré-gem CHC du combo est récupéré depuis `fs.critRateUncapped − defaultCrcGem` (le crit rate est purement additif ; la somme non bornée, la CHC de la fiche étant bornée à 100). On ne **recompose** que si le delta cap-aware diffère du greedy par défaut (`gemDeltaEquals`) — souvent identique quand les gems crit rankent déjà haut. Le cas sans priorité `critRate` (ex. fallback SOLVE CP, ou des gemmes crit de remplissage) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.critRateUncapped > 102`) — lui aussi gated par `gemDeltaEquals` avant recompose. En SOLVE CP sans priorité, l'allocation par défaut est celle du CP marginal (`allocateGemsByCp`) alors que `allocateGemsCapped` suit l'ordre linéaire des poids CP : la réallocation pouvait faire perdre du CP (Astei, jusqu'à 14 324 sur un build, 162 builds du top 1 000 sous leur CP avec les gemmes par défaut). Le CP des deux compositions est donc comparé et la plus haute gardée (à égalité, celle par défaut) ; ce CP sert ensuite de clé de tas sans être recalculé.
+Le pré-gem CHC du combo est `critRateUncapped − defaultCrcGem` (le crit rate est purement additif ; la somme non bornée, la CHC de la fiche étant bornée à 100), lu sur les buckets du combo remplis avec les gemmes par défaut (`critRateUncappedOf`, l'expression même de la fiche) sans composer la fiche. Celle-ci n'est composée qu'une fois, avec le delta cap-aware s'il diffère du greedy par défaut (`gemDeltaEquals`), sinon avec le défaut déjà en place — avec une priorité `critRate`, la quasi-totalité des combos composaient deux fois (100 %, 99,9 %, 94,7 % mesurés sur 2,65 M de combos). Le cas sans priorité `critRate` (ex. fallback SOLVE CP, ou des gemmes crit de remplissage) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.critRateUncapped > 102`) — lui aussi gated par `gemDeltaEquals` avant recompose. En SOLVE CP sans priorité, l'allocation par défaut est celle du CP marginal (`allocateGemsByCp`) alors que `allocateGemsCapped` suit l'ordre linéaire des poids CP : la réallocation pouvait faire perdre du CP (Astei, jusqu'à 14 324 sur un build, 162 builds du top 1 000 sous leur CP avec les gemmes par défaut). Le CP des deux compositions est donc comparé et la plus haute gardée (à égalité, celle par défaut) ; ce CP sert ensuite de clé de tas sans être recalculé.
 
 Les deux allocateurs sont **mémoïsés par `(talismanSlots, preGemCrc)`** (`capAllocCache`, par run
 `solveChunk`) : purs en (pool, slots, preGemCrc) avec pool + slots EE constants par solve, et le CHC
@@ -983,30 +994,42 @@ lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloqu
    de plusieurs secondes — scaler avec la machine est donc le bon défaut. Le log
    debug `solver` (`pool`) affiche le nombre résolu + `hardwareConcurrency`.
 
-3. **Partition embarrassingly parallel** — chaque worker prend une slice du
-   **slot le plus externe dont le pool est confortablement plus grand que le
-   nombre de workers** (≥ 4×, pour des slices ⌈N/W⌉ équilibrées à ≤ 25 % près) ;
-   fallback : le plus gros pool (l'ancien choix, meilleures slices quand rien
-   n'est assez grand). Trancher un slot externe donne à chaque worker son
-   sous-arbre disjoint ; trancher le slot **interne** (talisman — souvent le
-   plus gros pool) faisait re-parcourir tout l'arbre weapon..accessory à chaque
-   worker et re-payer ×W le travail hoisté par nœud accessory (set tallies,
-   `computeSetBonuses`, `aggregatePrefixBuckets`), amorti sur ⌈N/W⌉ feuilles au
-   lieu de N. Aucune comm inter-worker, merge final O(W × K). Le nombre de
-   workers réellement sollicités est cappé à la taille du plus gros pool
-   (`chunkCount = clamp(1, W, maxPoolHit)`) — inutile d'envoyer une slice vide à
-   un worker quand le pool a moins d'items que de workers. Test d'équivalence
-   union-des-chunks == mono-chunk dans `solveChunk.test.ts`.
+3. **Partition embarrassingly parallel** — l'index aplati **weapon × helmet**
+   (~110 unités à Top % 60) est réparti entre les workers, l'unité `u` au chunk
+   `u % W` (en quinconce : les unités coûteuses se répartissent) ; un niveau plus
+   bas (× armor, × gloves, × boots) tant qu'il fait moins de 4 unités par worker
+   (`partitionDepthOf`, ⌈U/W⌉ vs ⌊U/W⌋ à ≤ 25 % près). Chaque unité est un
+   sous-arbre disjoint parcouru par un seul worker : rien n'est refait sous le
+   niveau de partition (buckets cumulés, bonus de set par boots), les compteurs
+   (`permutations`, `searched`, `brokenSetsRejected`) se somment aux valeurs du
+   mono-chunk. L'ancien découpage du plus gros pool plafonnait les workers utiles
+   à sa taille (10 à 12 pièces à Top % 60 : jamais plus de 12 workers, ~25 % de
+   temps réel en trop sur 16 threads, ×2,6 sur 32) et, sur l'axe talisman, faisait
+   re-parcourir à chaque worker tout l'arbre weapon..accessory. Aucune comm
+   inter-worker, merge final O(W × K). Le nombre de workers réellement sollicités
+   est cappé aux unités de la partition la plus profonde (`chunkCount = clamp(1,
+   W, maxPartitionChunks)`, weapon × … × boots). Tests d'équivalence
+   union-des-chunks == mono-chunk dans `solveChunk.test.ts` et
+   `solveChunkFastPath.test.ts` (2 à 64 chunks, builds et compteurs).
 
 4. **`pieces` array hoisted + mutée en place** — évite 10M+ allocations dans
-   la boucle inner. Sûr car ni `aggregatePrefixBuckets` ni `computeFinalStatsFromPrefix` ne gardent la référence.
+   la boucle inner. Sûr car la compose ne garde pas la référence.
 
-4b. **Accumulateur de buckets incrémental** — les 6 pièces invariantes
-    (weapon..accessory) sont agrégées **1× par itération accessory**
-    (`aggregatePrefixBuckets`) ; le talisman loop clone ce prefix et n'ajoute que
-    talisman + EE + gems + sets (`computeFinalStatsFromPrefix`). **Bit-identique**
-    au re-sum complet (ordre de slot préservé, prefix = somme partielle clonée),
-    validé par un test d'équivalence dédié + le 0-diff end-to-end.
+4b. **Buckets typés, cumulés par profondeur** — un `Float64Array` à index fixes
+    par stat (`BucketArray`), un par profondeur : un nœud clone celui de son
+    parent (`.set`) et ajoute sa pièce, résolue une fois par chunk en couples
+    index / valeur (`BucketAdds`). Le nœud accessory n'ajoute donc qu'une pièce
+    au lieu de re-sommer les six, et `computeSetBonuses` remonte au nœud boots ;
+    la boucle talisman clone le bucket accessory et n'ajoute que talisman + EE +
+    gems + sets. Plus de clone de quatre objets par spread, de changement de
+    forme des objets du talisman, de `?? 0` sur une clé absente, ni de
+    `setBonusStatKey` / `PERCENT_STATS.has` par combo. Sur un banc mono-thread
+    (9 à 18 M de combos), les quatre changements de G133 ensemble divisent le
+    temps par 3,9 à 5,4.
+    **Bit-identique** au re-sum complet : mêmes additions dans le même ordre
+    (visiteurs `forEachPieceAdd` / `forEachGemOverrideAdd` / `forEachSetBonusAdd`
+    partagés avec le chemin en records), validé par `solveChunkFastPath.test.ts`
+    + les tests d'équivalence existants + le 0-diff end-to-end.
 
 5. **Gem delta pré-agrégé** — la contribution gem ne se calcule qu'**une fois
    par variant talismanSlots** au lieu de N combos × 10 gems × resolveStat.
@@ -1036,8 +1059,9 @@ lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloqu
    tableau plat itéré par index. Mineur mais cumulé sur des millions de combos.
 
 10. **Set bonuses hoistés** — `computeSetBonuses` (rebuild de Map + lookups) est calculé
-    1× par combo accessory et passé à `computeFinalStatsFromPrefix`, pas recalculé par talisman.
-    Bit-identique (invariant sur la boucle talisman puisque le talisman n'a pas d'`armorSetId`).
+    1× par nœud boots, sur les quatre armures, et résolu en `BucketAdds` (`setBonusBucketAdds`),
+    pas recalculé par accessoire ni par talisman. Bit-identique (seules les armures portent un
+    `armorSetId`, même ordre de pièces).
 
 11. **Min-heap top-K** — `O(N log K)` au lieu de `O(N log N)` si on triait
     l'ensemble. K=1000 → log K ≈ 10.
@@ -1066,9 +1090,10 @@ lent et propose de baisser Top% / poser une priorité / exiger un set. Non-bloqu
 (rien de bloquant aujourd'hui — voir [todo.md](todo.md) pour le backlog.)
 - **Equip / Unequip vers le jeu** : absents — nécessitent une API jeu inexistante
   (le pipeline de capture est read-only pour l'instant).
-- **Perf hot-path** : le rebuild des set bonuses par talisman est hoisté (§7.10), les
-  6 pièces invariantes ne sont plus re-sommées par talisman (accumulateur de buckets
-  incrémental bit-identique, §7.4b), et la table de résultats est virtualisée
+- **Perf hot-path** : les set bonuses sont calculés par nœud boots (§7.10), les
+  buckets sont typés et cumulés par profondeur (bit-identique, §7.4b), la fiche n'est
+  composée qu'une fois par combo (CHC additif lu sur les buckets, § Gems), la
+  partition weapon × helmet occupe tous les workers (§7.3), et la table de résultats est virtualisée
   (`@tanstack/react-virtual`). Le **nombre de combos** est attaqué côté pool :
   défaut Top% 60 + auto-prune CP-pondéré (phase 3b) + dominance prune (§3) +
   set-prune (§armor). Reste optionnel : borne CP par upper-bound (branch-and-bound
@@ -1093,7 +1118,7 @@ apps/renderer/src/
 ├── lib/
 │   ├── settings.ts                ← registre des réglages (clé, défaut, bornes, libellé, aide) : Settings, App et les lecteurs hors React
 │   ├── statRegistry.ts            ← vocabulaire unique des stats (noms moteur) : ROLL_NORMS, STAT_NORMS, STAT_TO_PRIORITY, LEGACY_STAT_KEY_RENAME
-│   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride)
+│   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride) + BucketArray (buckets typés du solver)
 │   ├── overcap.ts                 ← overcapOf + overcapText (caps CRC 102 / PEN 100 gaspillés, Heroes et Presets)
 │   ├── deltaCp.ts                 ← deltaCpLabel : le « ΔCP … vs equipped (build at +10R6) » du build sélectionné
 │   ├── buildDiff.ts               ← diffBuildVsLoadout : slots changés, lu par N slots change, Swaps, Apply to snapshot, + Worklist

@@ -569,10 +569,19 @@ then `computeFinalStatsFromPrefix` clones that prefix and only adds talisman →
 gemOverride → setBonuses. **Bit-identical** to the full-array path: float addition is
 left-associative, the cloned prefix is the same partial sum, and the slot order is
 preserved (the EE, at index 7 after the talisman, is re-folded per talisman rather than
-pre-summed — pre-summing would break the order). The `addPieceToBuckets` /
-`addGemOverride` / `addSetBonuses` helpers are shared by both paths → identity by
+pre-summed — pre-summing would break the order). The `forEachPieceAdd` /
+`forEachGemOverrideAdd` / `forEachSetBonusAdd` visitors are shared by both paths → identity by
 construction. Critical because `Math.trunc` in `composeMultStat` is unforgiving of ULP
 drift; covered by a dedicated equivalence test + the end-to-end solveChunk 0-diff test.
+
+**Typed buckets (solver loop)**: `solveChunk` holds the four buckets in one
+`Float64Array` at fixed category × stat indices (`BucketArray`), one per loop depth (a
+node clones its parent's and adds its piece), each contribution resolved once into index /
+value pairs (`pieceBucketAdds`, `gemOverrideBucketAdds`, `setBonusBucketAdds`) by the same
+visitors. The same additions in the same order as `computeFinalStatsFromPrefix` →
+bit-identical sheet; `finalStatsFromBucketArray` is the single formula (the record path
+converts its buckets into it). Only the stats the formula reads have an index; any other
+key never reaches the sheet (`solveChunkFastPath.test.ts`).
 
 ### 2.7 Gem sub-solver (`gems.ts`)
 
@@ -857,6 +866,7 @@ Heroes tab, with a "drift" badge when a stat diverges.
 | `apps/renderer/test/transfer.test.ts`   | 30 tests — backup v2: export → import round-trip of a localStorage holding every `backup: true` key (the app's own state stays home), a key never written left out, re-importing the same file writes nothing; v1 file (five blocks under their keys, optional blocks absent); each merge rule (per-hero lists: the stored entry wins; Gear filter sets on id or name; local presets; preset heroes; maps by id: the imported entry replaces — notes, per-hero filters, columns; ranks renumbered 1..N; id lists merged as a union; worklist by hero; settings bounded, wrong type ignored; Scrap default: the file's list of ids replaces mine even when unknown here, non-string or empty entries dropped, a single id — the old format — read as a list of one, a number or an empty list ignored); unknown key ignored; validation (kind, version, v1 blocks, v2 container before any write); mounted screen reloaded after import (also when a write fails halfway); static render of Settings › Backup (what leaves, never the capture) and import status by label |
 | `apps/renderer/test/keys.test.ts`       | 7 tests — `lib/storage/keys.ts` registry: unique keys, every `"gs.` literal of the code in the registry and back, owner module exists, settings composed from `SETTINGS`, `backup: false` localStorage exceptions limited to `gs.tab`, `gs.onboarding.done`, `gs.settings.pane`, `gs.data.hash`, `gs.*.seen` and no session key backed up, pruned keys = filter sets + per-hero filters, each with its pruner, list labels unique |
 | `apps/renderer/test/solveChunk.test.ts` | 4 tests — end-to-end `solveChunk` (hand-built `SolveContext`): **mid-tree set prune** (req-4pc → 1 scored combo vs 16 brute-force; infeasible → 0), **solver↔Heroes 0-diff**, **chunk partition equivalence** (union of N chunks = single-chunk run, no combo lost or duplicated) |
+| `apps/renderer/test/solveChunkFastPath.test.ts` | 9 tests — `solveChunk`'s fast path on a synthetic inventory (fixed seed): typed buckets = the record path bit for bit (400 combos × gem deltas × set bonuses × with / without EE); builds = a per-combo reference written the old way (sheet with the default gems, CHC read on it, a second sheet when the allocation differs) on five cases (crit cap Score / CP, anti-overshoot, SOLVE CP without a priority); `partitionDepthOf` / `maxPartitionChunks`; 2 to 64 chunks = mono-chunk (builds, `permutations`, `searched`, `brokenSetsRejected`) |
 | `apps/renderer/test/solveChunkCritCap.test.ts` | 3 tests — `solveChunk` crit-cap path (`critRate` priority + crit gems): each build gets `allocateGemsReachingCap`'s gems for its pre-gem CHC, sheet + CP = independent recompose, default allocation kept (same object) when the delta is equal, below / on / above the cap, 4- and 5-slot talismans; union of 2 chunks = single chunk |
 | `apps/renderer/test/orchestratorFlow.test.ts` | 10 tests — `SolverOrchestrator` with a fake `Worker` (`vi.mock` of the `?worker` import): one `onResult` once every dispatched chunk answered (fewer chunks than workers included), stale output of a superseded solve dropped (`solveId`), `cancel`, `onerror` crash (during a solve / idle), estimate (stale response dropped, `null` on a failed precompute, crash without a banner, superseded by a solve) |
 | `apps/renderer/test/setPlans.test.ts`   | 26 tests — chip expansion (`setPicksToPlans`), `planSetIds`, `planSlots`, `planFeasible` (multi-cond sum), `setsFeasible` OR + leaf-validation at `remaining 0`, mono-plan req-4pc parity, **`armorSetWhitelist`** (full vs partial prune × broken on/off), **`allSetsComplete`** |

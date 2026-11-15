@@ -17,18 +17,24 @@ import type { GameData, GearPiece, ReforgeCeiling, RolledStat } from "@gear-solv
 import { composeCharStats, DEFAULT_RULES, effectiveCharacter, expToLevel, gameRulesOf, pieceSetLevel, projectMainToCeiling, type GameRules } from "@gear-solver/core";
 import {
   aggregatePrefixBuckets,
+  applyBucketAdds,
+  BUCKET_ARRAY_LENGTH,
   computeFinalStats,
-  computeFinalStatsFromPrefix,
   computeFinalStatsPlusRoll,
   computeSetBonuses,
+  critRateUncappedOf,
+  finalStatsFromBucketArray,
+  gemOverrideBucketAdds,
   PERCENT_STATS,
+  pieceBucketAdds,
   rollGainOnSheet,
+  setBonusBucketAdds,
+  type BucketAdds,
   type FinalStats,
   type FinalStatsBaseline,
   type GearBuckets,
   type GemOverride,
   type ScalingMap,
-  type SetBonusList,
 } from "../composeBuild.js";
 import { calcBattlePower, makeCpEvaluator } from "./cp.js";
 import { debug, debugEnabled } from "../log.js";
@@ -1414,7 +1420,7 @@ export function pruneDominatedForCp(pieces: GearPiece[], groupKeyOf: (p: GearPie
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Phase 4-6 — solveChunk
- * Cartesian enumeration over the chunk-partitioned first slot, with
+ * Cartesian enumeration over the chunk-partitioned outer loops, with
  * incremental set tracking for branch-and-prune. Each surviving combo runs
  * the gem sub-solver, composes finalStats, computes ratings, applies
  * stat/rating filters, and pushes into a fixed-size top-K min-heap.
@@ -1648,25 +1654,15 @@ export async function solveChunk(
   // solve (`wantCritCap` is constant per run), so one cache serves both.
   const capAllocCache = new Map<number, GemAllocation>();
 
-  // Partition axis — outermost comfortably-large slot (falls back to the
-  // largest pool); see `pickPartitionSlot` for the duplication-vs-balance
-  // trade-off.
-  const partitionSlot = pickPartitionSlot(pools, chunkCount);
-  const partitioned = partition(pools[partitionSlot], chunkIndex, chunkCount);
-
-  // Precompute "other slots" we'll iterate inside the partition — same
-  // pools regardless of chunk. Typed as the same shape as `pools` so the
-  // index-access keeps narrow types.
-  const slotPools: SolveContext["pools"] = {
-    weapon: pools.weapon,
-    helmet: pools.helmet,
-    armor: pools.armor,
-    gloves: pools.gloves,
-    boots: pools.boots,
-    accessory: pools.accessory,
-    ooparts: pools.ooparts,
-  };
-  slotPools[partitionSlot] = partitioned;
+  // Partition — the flattened index of the outer loops (weapon × helmet, one
+  // level deeper while that leaves fewer than PARTITION_BALANCE_FACTOR units
+  // per chunk; see `partitionDepthOf`). Unit `u` belongs to chunk
+  // `u % chunkCount`: the chunks walk disjoint subtrees, so nothing below the
+  // partition level is done twice and the counters sum to the mono-chunk ones.
+  const { weapon: weapons, helmet: helmets, armor: armors, gloves: glovesPool, boots: bootsPool, accessory: accessories, ooparts: talismans } = pools;
+  const partitionDepth = partitionDepthOf(
+    [weapons.length, helmets.length, armors.length, glovesPool.length, bootsPool.length], chunkCount);
+  const mine = (unit: number): boolean => chunkCount <= 1 || unit % chunkCount === chunkIndex;
 
   // Set counts incrementally tracked as we descend the armor slots.
   const setCount = new Map<string, number>();
@@ -1677,6 +1673,52 @@ export async function solveChunk(
   const piecesLen = ee ? 8 : 7;
   const pieces: GearPiece[] = new Array(piecesLen);
   if (ee) pieces[7] = ee;
+
+  // Typed buckets (`BucketArray`, see composeBuild.ts). Every piece's
+  // contribution is resolved once into (index, value) pairs, then one running
+  // bucket per depth: `prefix[d]` = the pieces of depths 0..d folded in slot
+  // order, a clone of `prefix[d - 1]` plus the piece of depth d — so an
+  // accessory node adds one piece instead of re-summing six. The talisman loop
+  // starts each combo from `prefix[5]` and tops up with the talisman, the EE,
+  // the gem delta and the set bonuses: the order of `computeFinalStatsFromPrefix`,
+  // hence the same sheet bit for bit. Talisman and EE carry two variants: with
+  // their socketed gems (no override) and without (an override replaces them).
+  const addsOfPool = (pool: GearPiece[]): BucketAdds[] => pool.map((p) => pieceBucketAdds(p, false));
+  const weaponAdds = addsOfPool(weapons), helmetAdds = addsOfPool(helmets), armorAdds = addsOfPool(armors);
+  const glovesAdds = addsOfPool(glovesPool), bootsAdds = addsOfPool(bootsPool), accessoryAdds = addsOfPool(accessories);
+  const talismanAdds = talismans.map((p) => [pieceBucketAdds(p, false), pieceBucketAdds(p, true)] as const);
+  const eeAdds = ee ? [pieceBucketAdds(ee, false), pieceBucketAdds(ee, true)] as const : null;
+  const prefix = Array.from({ length: 6 }, () => new Float64Array(BUCKET_ARRAY_LENGTH));
+  const prefixAcc = prefix[5]!;
+  const comboBuckets = new Float64Array(BUCKET_ARRAY_LENGTH);
+  const deltaAddsCache = new Map<GemOverride, BucketAdds>();
+  const deltaAddsOf = (d: GemOverride): BucketAdds => {
+    let a = deltaAddsCache.get(d);
+    if (!a) { a = gemOverrideBucketAdds(d); deltaAddsCache.set(d, a); }
+    return a;
+  };
+  // The armor pieces of the current loadout — set bonuses depend on them
+  // alone (only helmet / armor / gloves / boots carry an `armorSetId`), so they
+  // are computed once per boots node, not per accessory.
+  const armorQuad: GearPiece[] = new Array(4);
+  // Loop state the composer reads: the talisman index and the set bonuses.
+  let curTalisman = 0;
+  let curSetAdds: BucketAdds = setBonusBucketAdds([]);
+  /** Fill `comboBuckets` for the current combo with gem `delta` (`null` /
+   *  `undefined` = no override: the talisman's and EE's socketed gems). */
+  const fillCombo = (delta: GemOverride | null | undefined): void => {
+    comboBuckets.set(prefixAcc);
+    const variant = delta ? 1 : 0;
+    applyBucketAdds(comboBuckets, talismanAdds[curTalisman]![variant]);
+    if (eeAdds) applyBucketAdds(comboBuckets, eeAdds[variant]);
+    if (delta) applyBucketAdds(comboBuckets, deltaAddsOf(delta));
+    applyBucketAdds(comboBuckets, curSetAdds);
+  };
+  /** The current combo's sheet with gem `delta`. */
+  const composeCombo = (delta: GemOverride | null | undefined): FinalStats => {
+    fillCombo(delta);
+    return finalStatsFromBucketArray(baseline, scaling, comboBuckets);
+  };
 
   // Pre-extracted rating-filter specs (avoid `for...in` on `filters.ratingFilters`
   // per combo — typically 0-3 specs).
@@ -1715,12 +1757,9 @@ export async function solveChunk(
   };
   const serveMinFilters = (
     fs: FinalStats,
-    talisman: GearPiece,
     talismanSlots: number,
     preGemCrc: number,
     appliedDelta: GemOverride,
-    prefixBuckets: GearBuckets,
-    setBonuses: SetBonusList,
   ): { fs: FinalStats; alloc: { talisman: number[]; ee: number[] } } | null => {
     const fsRec = fs as unknown as Record<string, number>;
     // Only a `max` bound failed: the gems that serve it are out of scope.
@@ -1739,7 +1778,7 @@ export async function solveChunk(
       // bound still missed); a bound met only thanks to them is served too.
       // Same sheet as `fs` when the applied delta touches no bound's axis.
       const bare = touchesMinAxis(appliedDelta)
-        ? computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, NO_GEMS, setBonuses) as unknown as Record<string, number>
+        ? composeCombo(NO_GEMS) as unknown as Record<string, number>
         : fsRec;
       const rootKey = talismanSlots * 1_000_000 + preGemCrc;
       let root = minsMemo.get(rootKey);
@@ -1768,11 +1807,11 @@ export async function solveChunk(
       }
       const served = node.alloc;
       if (served.delta && !gemDeltaEquals(served.delta, appliedDelta)) {
-        const servedFs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, served.delta, setBonuses);
+        const servedFs = composeCombo(served.delta);
         if (passesSpecs(servedFs, statFilterSpecs)) return { fs: servedFs, alloc: served.alloc };
       }
     }
-    const socketed = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, undefined, setBonuses);
+    const socketed = composeCombo(undefined);
     return passesSpecs(socketed, statFilterSpecs) ? { fs: socketed, alloc: { talisman: [], ee: [] } } : null;
   };
   const ratingFilterSpecs = compileFilterSpecs(filters.ratingFilters);
@@ -1860,11 +1899,17 @@ export async function solveChunk(
     return true;
   };
 
-  for (const weapon of slotPools.weapon) {
+  for (let wi = 0; wi < weapons.length; wi++) {
     if (aborted) break;
+    const weapon = weapons[wi]!;
     pieces[0] = weapon;
-    for (const helmet of slotPools.helmet) {
+    prefix[0]!.fill(0);
+    applyBucketAdds(prefix[0]!, weaponAdds[wi]!);
+    for (let hi = 0; hi < helmets.length; hi++) {
       if (aborted) break;
+      const u1 = wi * helmets.length + hi;
+      if (partitionDepth === 2 && !mine(u1)) continue;
+      const helmet = helmets[hi]!;
       if (helmet.armorSetId) incSet(setCount, helmet.armorSetId);
       // After helmet (depth 1): 3 armor slots remaining.
       if (!checkSetsFeasible(3)) {
@@ -1872,24 +1917,41 @@ export async function solveChunk(
         continue;
       }
       pieces[1] = helmet;
-      for (const armor of slotPools.armor) {
+      armorQuad[0] = helmet;
+      prefix[1]!.set(prefix[0]!);
+      applyBucketAdds(prefix[1]!, helmetAdds[hi]!);
+      for (let ai = 0; ai < armors.length; ai++) {
         if (aborted) break;
+        const u2 = u1 * armors.length + ai;
+        if (partitionDepth === 3 && !mine(u2)) continue;
+        const armor = armors[ai]!;
         if (armor.armorSetId) incSet(setCount, armor.armorSetId);
         if (!checkSetsFeasible(2)) {
           if (armor.armorSetId) decSet(setCount, armor.armorSetId);
           continue;
         }
         pieces[2] = armor;
-        for (const gloves of slotPools.gloves) {
+        armorQuad[1] = armor;
+        prefix[2]!.set(prefix[1]!);
+        applyBucketAdds(prefix[2]!, armorAdds[ai]!);
+        for (let gi = 0; gi < glovesPool.length; gi++) {
           if (aborted) break;
+          const u3 = u2 * glovesPool.length + gi;
+          if (partitionDepth === 4 && !mine(u3)) continue;
+          const gloves = glovesPool[gi]!;
           if (gloves.armorSetId) incSet(setCount, gloves.armorSetId);
           if (!checkSetsFeasible(1)) {
             if (gloves.armorSetId) decSet(setCount, gloves.armorSetId);
             continue;
           }
           pieces[3] = gloves;
-          for (const boots of slotPools.boots) {
+          armorQuad[2] = gloves;
+          prefix[3]!.set(prefix[2]!);
+          applyBucketAdds(prefix[3]!, glovesAdds[gi]!);
+          for (let bi = 0; bi < bootsPool.length; bi++) {
             if (aborted) break;
+            if (partitionDepth === 5 && !mine(u3 * bootsPool.length + bi)) continue;
+            const boots = bootsPool[bi]!;
             // Heartbeat at boots depth (see `steps`) — placed BEFORE incSet so
             // a break here leaves the set tally consistent (gloves' decSet
             // still runs on the way out).
@@ -1900,27 +1962,28 @@ export async function solveChunk(
               continue;
             }
             pieces[4] = boots;
-            for (const accessory of slotPools.accessory) {
+            armorQuad[3] = boots;
+            prefix[4]!.set(prefix[3]!);
+            applyBucketAdds(prefix[4]!, bootsAdds[bi]!);
+            // Set bonuses depend only on the armor pieces' `armorSetId`, so
+            // they're invariant across the accessory and talisman loops:
+            // computed and resolved ONCE per boots node. Same pieces in the
+            // same order as a per-combo recompute, same output.
+            curSetAdds = setBonusBucketAdds(computeSetBonuses(armorQuad, game?.sets ?? null));
+            for (let ci = 0; ci < accessories.length; ci++) {
               if (aborted) break;
-              pieces[5] = accessory;
-              // Set bonuses depend only on the armor pieces' `armorSetId`
-              // (weapon/accessory/talisman/EE never carry one), so they're
-              // invariant across the talisman loop. Compute them ONCE here
-              // (all relevant pieces are now set) instead of rebuilding the
-              // map inside every per-talisman compose. Bit-identical to the
-              // in-loop recompute — same pieces, same output order.
-              const setBonuses = computeSetBonuses(pieces, game?.sets ?? null);
-              // Prefix buckets — the 6 invariant pieces (weapon..accessory) are
-              // fixed across the talisman loop, so aggregate them ONCE here
-              // instead of re-summing all 6 (+EE) per talisman. The talisman
-              // loop clones this and tops up with talisman + EE + gems + sets,
-              // in the exact slot order, so the compose stays bit-identical
-              // (see `computeFinalStatsFromPrefix`).
-              const prefixBuckets = aggregatePrefixBuckets(pieces.slice(0, 6));
-              for (const talisman of slotPools.ooparts) {
+              pieces[5] = accessories[ci]!;
+              // Prefix buckets — the 6 invariant pieces (weapon..accessory):
+              // the boots bucket plus the accessory, cloned per combo by
+              // `fillCombo`.
+              prefixAcc.set(prefix[4]!);
+              applyBucketAdds(prefixAcc, accessoryAdds[ci]!);
+              for (let ti = 0; ti < talismans.length; ti++) {
+                const talisman = talismans[ti]!;
                 permutations++;
                 if (++steps % tickEvery === 0 && !(await tick())) break;
                 pieces[6] = talisman;
+                curTalisman = ti;
 
                 // Pre-aggregated gem delta lookup — O(1), no per-combo
                 // gem resolve. `null` delta = no priority set → no override,
@@ -1930,16 +1993,22 @@ export async function solveChunk(
                 const gemDelta = gemDeltaByTalismanSlots.get(talismanSlots) ?? null;
                 let gemAlloc = gemAllocByTalismanSlots.get(talismanSlots) ?? { talisman: [], ee: [] };
                 let appliedDelta = gemDelta;
-                let fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, gemDelta ?? undefined, setBonuses);
 
                 // Gem cap handling (slow path). The precomputed default delta is
                 // CHC-blind, so it neither guarantees the crit cap nor avoids
-                // overshooting it. The pre-gem CHC for THIS combo is recoverable
-                // from the composed CHC minus the default gem crc contribution
-                // (crit rate is purely additive — no scaling compounding) —
-                // on the UNBOUNDED CHC: the sheet's is clamped at 100.
+                // overshooting it. The pre-gem CHC for THIS combo is the
+                // composed CHC minus the default gem crc contribution — on the
+                // UNBOUNDED CHC: the sheet's is clamped at 100. Crit rate is
+                // purely additive (no scaling compounding), so it is read on
+                // the buckets filled with the default gems (`critRateUncappedOf`,
+                // the sheet's own expression) and the sheet is composed ONCE,
+                // with the allocation that wins below.
+                fillCombo(gemDelta);
                 const defaultCrcGem = gemDelta?.pct?.critRate ?? 0;
-                const crcUncapped = fs.critRateUncapped ?? fs.critRate;
+                const crcUncapped = critRateUncappedOf(baseline, comboBuckets);
+                // The sheet of the winning allocation, when it isn't the default
+                // one still sitting in `comboBuckets`.
+                let fs: FinalStats | null = null;
                 // CP of the current `fs`, when the CP-alloc arbitration below
                 // already computed it (reset whenever `fs` changes after it).
                 let knownCp: number | null = null;
@@ -1956,7 +2025,7 @@ export async function solveChunk(
                     capAllocCache.set(cacheKey, reached);
                   }
                   if (!gemDeltaEquals(reached.delta, gemDelta)) {
-                    fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, reached.delta ?? undefined, setBonuses);
+                    fs = composeCombo(reached.delta ?? undefined);
                     gemAlloc = reached.alloc;
                     appliedDelta = reached.delta;
                   }
@@ -1976,32 +2045,36 @@ export async function solveChunk(
                   // lands on the exact same delta as the default greedy, the
                   // recompose would be a bit-identical no-op — skip it.
                   if (!gemDeltaEquals(capped.delta, gemDelta)) {
-                    const cappedFs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, capped.delta ?? undefined, setBonuses);
                     // SOLVE CP without a priority: the default allocation is the
                     // marginal-CP one (`allocateGemsByCp`), the capped one walks
                     // the linear CP-weight order — it can lose CP (Astei: up to
                     // 14 324 on one build). Keep whichever composes to the
-                    // higher CP (a tie keeps the default).
+                    // higher CP (a tie keeps the default) — the only case that
+                    // composes both sheets.
                     let keepDefault = false;
                     if (cpGemAlloc) {
-                      const defaultCp = cpEval(fs, talisman);
+                      const defaultFs = finalStatsFromBucketArray(baseline, scaling, comboBuckets);
+                      const cappedFs = composeCombo(capped.delta ?? undefined);
+                      const defaultCp = cpEval(defaultFs, talisman);
                       const cappedCp = cpEval(cappedFs, talisman);
                       keepDefault = cappedCp <= defaultCp;
                       knownCp = keepDefault ? defaultCp : cappedCp;
+                      fs = keepDefault ? defaultFs : cappedFs;
                     }
                     if (!keepDefault) {
-                      fs = cappedFs;
+                      fs ??= composeCombo(capped.delta ?? undefined);
                       gemAlloc = capped.alloc;
                       appliedDelta = capped.delta;
                     }
                   }
                 }
+                if (!fs) fs = finalStatsFromBucketArray(baseline, scaling, comboBuckets);
 
                 if (!passesSpecs(fs, statFilterSpecs)) {
                   // A missed minimum with gems applied: serve it (see
                   // `serveMinFilters`), else drop the combo as before.
                   if (!appliedDelta || !hasMinSpec) continue;
-                  const served = serveMinFilters(fs, talisman, talismanSlots, crcUncapped - defaultCrcGem, appliedDelta, prefixBuckets, setBonuses);
+                  const served = serveMinFilters(fs, talismanSlots, crcUncapped - defaultCrcGem, appliedDelta);
                   if (!served) continue;
                   fs = served.fs;
                   gemAlloc = served.alloc;
@@ -2086,8 +2159,9 @@ export async function solveChunk(
  *  of the result table. Keeping the best `k` per signature still shows the top
  *  talisman alternatives while freeing the tail for other gear combos. The list
  *  must already be sorted by the active objective (the kept ones are the best).
- *  Each worker's heap already applies the same cap (`TopKHeap`); this pass
- *  covers a signature split across workers (talisman-partitioned solve).
+ *  Each worker's heap already applies the same cap (`TopKHeap`) and a
+ *  signature never spans two chunks (the partition stops at boots,
+ *  `partitionDepthOf`); this pass keeps the merge right whatever the split.
  *  Pure; exported for tests — the orchestrator applies it before the top-N slice. */
 export function collapseTalismanVariants(builds: SolveBuild[], k: number): SolveBuild[] {
   if (k <= 0 || builds.length === 0) return builds;
@@ -2173,41 +2247,38 @@ function decSet(map: Map<string, number>, id: string): void {
   else map.set(id, n);
 }
 
-/** Minimum pool-size-to-worker ratio for an outer slot to be preferred as the
- *  partition axis. Slices of ⌈N/W⌉ vs ⌊N/W⌋ differ by at most 1, so at N ≥ 4W
- *  the wall-clock imbalance between workers is ≤ 25% — an acceptable trade for
- *  not duplicating the hoisted per-node work (see `pickPartitionSlot`). */
+/** Minimum partition units per chunk. Chunks get ⌈U/W⌉ or ⌊U/W⌋ units of the
+ *  flattened outer index, so at U ≥ 4W the unit-count imbalance between
+ *  workers is ≤ 25% (and the strided assignment spreads the costly units). */
 const PARTITION_BALANCE_FACTOR = 4;
 
-/** Choose the slot to partition across workers. Preference: the OUTERMOST
- *  loop whose pool is comfortably larger than the worker count (≥ 4×, so
- *  ⌈N/W⌉ slices stay balanced). Partitioning an outer slot gives each worker
- *  its own disjoint subtree; partitioning the INNERMOST slot (talisman —
- *  often the largest pool) instead makes every worker re-walk the full
- *  weapon..accessory tree and re-pay the hoisted per-accessory work
- *  (set tallies, `computeSetBonuses`, `aggregatePrefixBuckets`) W times,
- *  amortizing it over only ⌈N/W⌉ leaves instead of N. Fallback when nothing
- *  is comfortably big: the largest pool (finest slices = best balance —
- *  the old behavior). */
-function pickPartitionSlot(pools: SolveContext["pools"], chunkCount: number): keyof SolveContext["pools"] {
-  const order = ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const;
-  for (const k of order) {
-    if (pools[k].length >= chunkCount * PARTITION_BALANCE_FACTOR) return k;
+/** Depth of the outer loops whose flattened index is partitioned across the
+ *  chunks: 2 (weapon × helmet), one level deeper (armor, gloves, boots) while
+ *  that index has fewer than `PARTITION_BALANCE_FACTOR` units per chunk.
+ *  Partitioning there — never below boots — keeps every hoisted per-node
+ *  work (the running buckets, the set bonuses per boots node, the accessory
+ *  prefix) done once: each unit's subtree is walked by one chunk only. The
+ *  old split of the largest pool capped the useful chunks at its size
+ *  (10 to 12 pieces at Top % 60) and, on the talisman axis, made every worker
+ *  re-walk the whole weapon..accessory tree. `sizes` = weapon, helmet, armor,
+ *  gloves, boots pool sizes. */
+export function partitionDepthOf(sizes: readonly number[], chunkCount: number): number {
+  let units = (sizes[0] ?? 0) * (sizes[1] ?? 0);
+  let depth = 2;
+  while (depth < 5 && units < chunkCount * PARTITION_BALANCE_FACTOR) {
+    units *= sizes[depth] ?? 0;
+    depth++;
   }
-  let best: keyof SolveContext["pools"] = "weapon";
-  let max = pools.weapon.length;
-  for (const k of ["helmet", "armor", "gloves", "boots", "accessory", "ooparts"] as const) {
-    if (pools[k].length > max) { best = k; max = pools[k].length; }
-  }
-  return best;
+  return depth;
 }
 
-/** Even slice: chunk i out of N takes indices [floor(i*L/N), floor((i+1)*L/N)). */
-function partition<T>(items: T[], idx: number, count: number): T[] {
-  const n = items.length;
-  const start = Math.floor(idx * n / count);
-  const end = Math.floor((idx + 1) * n / count);
-  return items.slice(start, end);
+/** Most chunks a solve can keep busy: the units of the deepest partition
+ *  (weapon × helmet × armor × gloves × boots). The orchestrator caps its
+ *  fan-out to it — any extra chunk would get no unit. */
+export function maxPartitionChunks(sizes: readonly number[]): number {
+  let units = 1;
+  for (let i = 0; i < 5; i++) units *= sizes[i] ?? 0;
+  return units;
 }
 
 /** Compiled filter spec — flat array form so the hot path iterates without

@@ -153,12 +153,26 @@ export interface GearBuckets {
   buffFlat: Record<string, number>;
 }
 
-/** Fold one piece's mains + subs into the buckets, IN PLACE. Shared by the
- *  full-array aggregation and the solver's incremental path so both apply the
- *  exact same per-piece logic (and thus the same float summation when fed the
- *  same piece order). `gemOverrideActive` skips a gem-slot piece's subs (its
- *  socketed gems are replaced by the override delta). */
-function addPieceToBuckets(p: GearPiece, b: GearBuckets, gemOverrideActive: boolean): void {
+/** Bucket categories, in `GearBuckets` field order — the first argument of a
+ *  `BucketAdd`. */
+const CAT_FLAT = 0;
+const CAT_PCT = 1;
+const CAT_BUFF_PCT = 2;
+const CAT_BUFF_FLAT = 3;
+
+/** One addition into a bucket: category, engine stat key, value. The record
+ *  buckets (`GearBuckets`) and the solver's typed ones (`BucketArray`) both
+ *  apply the sequence the visitors below emit, so they sum the same values in
+ *  the same order. */
+type BucketAdd = (cat: number, key: string, value: number) => void;
+
+/** Emit one piece's mains + subs as bucket additions, in fold order. Shared by
+ *  the full-array aggregation, the solver's incremental path and its typed
+ *  pre-resolution so all apply the exact same per-piece logic (and thus the
+ *  same float summation when fed the same piece order). `gemOverrideActive`
+ *  skips a gem-slot piece's subs (its socketed gems are replaced by the
+ *  override delta). */
+function forEachPieceAdd(p: GearPiece, gemOverrideActive: boolean, add: BucketAdd): void {
   for (const s of p.main) {
     if (s.combatOnly) continue;
     // A buff-routed SPEED RATE (Phantasm Necrosis' −30 %) gets its own key,
@@ -166,34 +180,53 @@ function addPieceToBuckets(p: GearPiece, b: GearBuckets, gemOverrideActive: bool
     // A buff-routed FLAT (EE mains `ST_SPEED OAT_ADD`, an ATK / EFF OAT_ADD
     // buff) goes to `buffFlat` — CalcFinalStat's `BuffValue`, never a rate.
     const key = s.fromBuff && s.percent && s.stat === "spd" ? "spdRate" : s.stat;
-    const target = s.fromBuff ? (s.percent ? b.buffPct : b.buffFlat) : (s.percent ? b.pct : b.flat);
-    target[key] = (target[key] ?? 0) + s.value;
+    add(s.fromBuff ? (s.percent ? CAT_BUFF_PCT : CAT_BUFF_FLAT) : (s.percent ? CAT_PCT : CAT_FLAT), key, s.value);
   }
   const isGemSlot = p.slot === "ooparts" || p.slot === "exclusive";
   if (!(isGemSlot && gemOverrideActive)) {
-    for (const s of p.subs) {
-      const target = s.percent ? b.pct : b.flat;
-      target[s.stat] = (target[s.stat] ?? 0) + s.value;
-    }
+    for (const s of p.subs) add(s.percent ? CAT_PCT : CAT_FLAT, s.stat, s.value);
   }
 }
 
-/** Add the pre-aggregated gem override delta to the buckets, IN PLACE. */
-function addGemOverride(gemOverride: GemOverride, b: GearBuckets): void {
-  for (const k in gemOverride.flat) b.flat[k] = (b.flat[k] ?? 0) + (gemOverride.flat[k] ?? 0);
-  for (const k in gemOverride.pct) b.pct[k] = (b.pct[k] ?? 0) + (gemOverride.pct[k] ?? 0);
+/** Emit the pre-aggregated gem override delta as bucket additions. */
+function forEachGemOverrideAdd(gemOverride: GemOverride, add: BucketAdd): void {
+  for (const k in gemOverride.flat) add(CAT_FLAT, k, gemOverride.flat[k] ?? 0);
+  for (const k in gemOverride.pct) add(CAT_PCT, k, gemOverride.pct[k] ?? 0);
 }
 
-/** Add the active set bonuses to the buckets, IN PLACE. */
-function addSetBonuses(setBonuses: SetBonusList, b: GearBuckets): void {
+/** Emit the active set bonuses as bucket additions. */
+function forEachSetBonusAdd(setBonuses: SetBonusList, add: BucketAdd): void {
   for (const sb of setBonuses) {
     const isRate = sb.ap === "OAT_RATE";
     const statKey = setBonusStatKey(sb.st, isRate);
     if (!statKey) continue;
-    const value = (isRate || PERCENT_STATS.has(statKey)) ? sb.v / 10 : sb.v;
-    const bucket = (isRate || PERCENT_STATS.has(statKey)) ? b.pct : b.flat;
-    bucket[statKey] = (bucket[statKey] ?? 0) + value;
+    const pctLike = isRate || PERCENT_STATS.has(statKey);
+    add(pctLike ? CAT_PCT : CAT_FLAT, statKey, pctLike ? sb.v / 10 : sb.v);
   }
+}
+
+/** The `BucketAdd` that folds into record buckets, IN PLACE. */
+function recordAdd(b: GearBuckets): BucketAdd {
+  const recs = [b.flat, b.pct, b.buffPct, b.buffFlat];
+  return (cat, key, value) => {
+    const target = recs[cat]!;
+    target[key] = (target[key] ?? 0) + value;
+  };
+}
+
+/** Fold one piece's mains + subs into the buckets, IN PLACE. */
+function addPieceToBuckets(p: GearPiece, b: GearBuckets, gemOverrideActive: boolean): void {
+  forEachPieceAdd(p, gemOverrideActive, recordAdd(b));
+}
+
+/** Add the pre-aggregated gem override delta to the buckets, IN PLACE. */
+function addGemOverride(gemOverride: GemOverride, b: GearBuckets): void {
+  forEachGemOverrideAdd(gemOverride, recordAdd(b));
+}
+
+/** Add the active set bonuses to the buckets, IN PLACE. */
+function addSetBonuses(setBonuses: SetBonusList, b: GearBuckets): void {
+  forEachSetBonusAdd(setBonuses, recordAdd(b));
 }
 
 /** Aggregate gear pieces (mains, subs, set bonuses) into flat/pct/buffPct/buffFlat
@@ -332,10 +365,115 @@ export function computeFinalStatsFromPrefix(
   return finalStatsFromBuckets(baseline, scaling, b);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * Typed buckets — the solver hot path's form of `GearBuckets`
+ *
+ * One `Float64Array` holds the four buckets at fixed indices (category × stat),
+ * so a clone is a `.set`, an absent stat reads 0 instead of `?? 0` on a missing
+ * key, and the objects never change shape. Every contribution (a piece, a gem
+ * delta, the set bonuses) is resolved ONCE into (index, value) pairs
+ * (`BucketAdds`) by the same visitors the record path folds, so the additions
+ * land in the same order on the same running sums: the sheet is bit-identical
+ * to `computeFinalStatsFromPrefix` (the in-game `Math.trunc` is unforgiving of
+ * ULP drift — see the equivalence test). Only the stats `finalStatsFromBuckets`
+ * reads have a slot; any other key is dropped, it never reaches the sheet.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/** The stat keys with a slot in each category of a `BucketArray`. */
+const BUCKET_STATS = [
+  "atk", "def", "hp", "spd", "critRate", "critDmg", "eff", "effRes",
+  "dmgUp", "dmgReduce", "pen", "critDmgReduce", "atkPct", "defPct", "hpPct", "spdRate",
+] as const;
+const NS = BUCKET_STATS.length;
+const STAT_SLOT = new Map<string, number>(BUCKET_STATS.map((k, i) => [k, i]));
+const slot = (cat: number, key: (typeof BUCKET_STATS)[number]): number => cat * NS + STAT_SLOT.get(key)!;
+
+/** Length of a `BucketArray` (4 categories × `BUCKET_STATS`). */
+export const BUCKET_ARRAY_LENGTH = 4 * NS;
+
+/** The four `GearBuckets` in one typed array, at fixed indices. */
+export type BucketArray = Float64Array;
+
+/** A contribution resolved once into the bucket additions it makes, in fold
+ *  order: `arr[idx[i]] += val[i]`. */
+export interface BucketAdds {
+  readonly idx: Int32Array;
+  readonly val: Float64Array;
+}
+
+function collectAdds(visit: (add: BucketAdd) => void): BucketAdds {
+  const idx: number[] = [];
+  const val: number[] = [];
+  visit((cat, key, value) => {
+    const s = STAT_SLOT.get(key);
+    if (s === undefined) return;
+    idx.push(cat * NS + s);
+    val.push(value);
+  });
+  return { idx: Int32Array.from(idx), val: Float64Array.from(val) };
+}
+
+/** One piece's additions (see `forEachPieceAdd`). */
+export function pieceBucketAdds(p: GearPiece, gemOverrideActive: boolean): BucketAdds {
+  return collectAdds((add) => forEachPieceAdd(p, gemOverrideActive, add));
+}
+
+/** A gem override delta's additions. */
+export function gemOverrideBucketAdds(gemOverride: GemOverride): BucketAdds {
+  return collectAdds((add) => forEachGemOverrideAdd(gemOverride, add));
+}
+
+/** The active set bonuses' additions (`computeSetBonuses` output). */
+export function setBonusBucketAdds(setBonuses: SetBonusList): BucketAdds {
+  return collectAdds((add) => forEachSetBonusAdd(setBonuses, add));
+}
+
+/** Apply `adds` to `arr`, IN PLACE, in their order. */
+export function applyBucketAdds(arr: BucketArray, adds: BucketAdds): void {
+  const { idx, val } = adds;
+  for (let i = 0; i < idx.length; i++) arr[idx[i]!]! += val[i]!;
+}
+
+/** The typed form of record buckets (a missing key reads 0, as `?? 0` does). */
+export function bucketArrayOf(b: GearBuckets): BucketArray {
+  const arr = new Float64Array(BUCKET_ARRAY_LENGTH);
+  const recs = [b.flat, b.pct, b.buffPct, b.buffFlat];
+  for (let c = 0; c < 4; c++) {
+    const rec = recs[c]!;
+    for (let i = 0; i < NS; i++) arr[c * NS + i] = rec[BUCKET_STATS[i]!] ?? 0;
+  }
+  return arr;
+}
+
+const F_ATK = slot(CAT_FLAT, "atk"), F_DEF = slot(CAT_FLAT, "def"), F_HP = slot(CAT_FLAT, "hp"), F_SPD = slot(CAT_FLAT, "spd");
+const F_EFF = slot(CAT_FLAT, "eff"), F_RES = slot(CAT_FLAT, "effRes"), F_DMGUP = slot(CAT_FLAT, "dmgUp");
+const F_DMGRED = slot(CAT_FLAT, "dmgReduce"), F_PEN = slot(CAT_FLAT, "pen"), F_CDR = slot(CAT_FLAT, "critDmgReduce");
+const P_ATK = slot(CAT_PCT, "atkPct"), P_DEF = slot(CAT_PCT, "defPct"), P_HP = slot(CAT_PCT, "hpPct"), P_SPD = slot(CAT_PCT, "spd");
+const P_CHC = slot(CAT_PCT, "critRate"), P_CHD = slot(CAT_PCT, "critDmg"), P_EFF = slot(CAT_PCT, "eff"), P_RES = slot(CAT_PCT, "effRes");
+const P_DMGUP = slot(CAT_PCT, "dmgUp"), P_DMGRED = slot(CAT_PCT, "dmgReduce"), P_PEN = slot(CAT_PCT, "pen"), P_CDR = slot(CAT_PCT, "critDmgReduce");
+const BP_ATK = slot(CAT_BUFF_PCT, "atkPct"), BP_DEF = slot(CAT_BUFF_PCT, "defPct"), BP_HP = slot(CAT_BUFF_PCT, "hpPct");
+const BP_SPDRATE = slot(CAT_BUFF_PCT, "spdRate"), BP_CHC = slot(CAT_BUFF_PCT, "critRate"), BP_CHD = slot(CAT_BUFF_PCT, "critDmg");
+const BP_EFF = slot(CAT_BUFF_PCT, "eff"), BP_RES = slot(CAT_BUFF_PCT, "effRes"), BP_DMGUP = slot(CAT_BUFF_PCT, "dmgUp");
+const BP_DMGRED = slot(CAT_BUFF_PCT, "dmgReduce"), BP_PEN = slot(CAT_BUFF_PCT, "pen"), BP_CDR = slot(CAT_BUFF_PCT, "critDmgReduce");
+const BF_ATK = slot(CAT_BUFF_FLAT, "atk"), BF_DEF = slot(CAT_BUFF_FLAT, "def"), BF_HP = slot(CAT_BUFF_FLAT, "hp");
+const BF_SPD = slot(CAT_BUFF_FLAT, "spd"), BF_EFF = slot(CAT_BUFF_FLAT, "eff"), BF_RES = slot(CAT_BUFF_FLAT, "effRes");
+
+/** The sheet's CHC before its [0, 100] bound (`FinalStats.critRateUncapped`)
+ *  — additive, so the solver reads it on the buckets without composing the
+ *  whole sheet. The one expression `finalStatsFromBucketArray` uses too. */
+export function critRateUncappedOf(baseline: FinalStatsBaseline, b: BucketArray): number {
+  return round1(baseline.chc + b[P_CHC]! + b[BP_CHC]!);
+}
+
 /** Plug the aggregated gear buckets into the per-axis CalcFinalStat formula.
  *  Shared by both the full-array and incremental compose paths so the final
- *  arithmetic is defined once. */
-function finalStatsFromBuckets(baseline: FinalStatsBaseline, scaling: ScalingMap, { flat, pct, buffPct, buffFlat }: GearBuckets): FinalStats {
+ *  arithmetic is defined once (`finalStatsFromBucketArray`). */
+function finalStatsFromBuckets(baseline: FinalStatsBaseline, scaling: ScalingMap, b: GearBuckets): FinalStats {
+  return finalStatsFromBucketArray(baseline, scaling, bucketArrayOf(b));
+}
+
+/** `finalStatsFromBuckets` on typed buckets — the formula itself. */
+export function finalStatsFromBucketArray(baseline: FinalStatsBaseline, scaling: ScalingMap, b: BucketArray): FinalStats {
   // Speed: the no-gear speed before its buff rate, plus gear, then the rate
   // ONCE on that total (`applySpdRate`, same rule as the no-gear composer).
   // The rate is the hero's (`scaling.spd.buffPct`, core passive) plus the
@@ -345,22 +483,22 @@ function finalStatsFromBuckets(baseline: FinalStatsBaseline, scaling: ScalingMap
   // (Skill_8 +10 SPD) that `value` also carries.
   const spdBase = scaling.spd?.value ?? baseline.spd;
   const spdRateBase = scaling.spd?.rateBase ?? spdBase;
-  const spdTotal = spdBase + (flat.spd ?? 0) + (buffFlat.spd ?? 0) + Math.floor(spdRateBase * (pct.spd ?? 0) / 100);
+  const spdTotal = spdBase + b[F_SPD]! + b[BF_SPD]! + Math.floor(spdRateBase * b[P_SPD]! / 100);
   // CHC bounded to [0, 100] like the client's sheet; the raw sum rides along.
-  const critRateUncapped = round1(baseline.chc + (pct.critRate ?? 0) + (buffPct.critRate ?? 0));
+  const critRateUncapped = critRateUncappedOf(baseline, b);
   return {
-    atk: composeMultStat(scaling.atk, flat.atk ?? 0, pct.atkPct ?? 0, buffPct.atkPct ?? 0, buffFlat.atk ?? 0),
-    def: composeMultStat(scaling.def, flat.def ?? 0, pct.defPct ?? 0, buffPct.defPct ?? 0, buffFlat.def ?? 0),
-    hp:  composeMultStat(scaling.hp,  flat.hp  ?? 0, pct.hpPct  ?? 0, buffPct.hpPct  ?? 0, buffFlat.hp  ?? 0),
-    spd: applySpdRate(spdTotal, (scaling.spd?.buffPct ?? 0) + (buffPct.spdRate ?? 0)),
+    atk: composeMultStat(scaling.atk, b[F_ATK]!, b[P_ATK]!, b[BP_ATK]!, b[BF_ATK]!),
+    def: composeMultStat(scaling.def, b[F_DEF]!, b[P_DEF]!, b[BP_DEF]!, b[BF_DEF]!),
+    hp:  composeMultStat(scaling.hp,  b[F_HP]!,  b[P_HP]!,  b[BP_HP]!,  b[BF_HP]!),
+    spd: applySpdRate(spdTotal, (scaling.spd?.buffPct ?? 0) + b[BP_SPDRATE]!),
     critRate: Math.min(100, Math.max(0, critRateUncapped)),
     critRateUncapped,
-    critDmg:  round1(baseline.chd + (pct.critDmg  ?? 0) + (buffPct.critDmg  ?? 0)),
-    eff: composeMultStat(scaling.eff, flat.eff    ?? 0, pct.eff    ?? 0, buffPct.eff    ?? 0, buffFlat.eff    ?? 0),
-    effRes: composeMultStat(scaling.res, flat.effRes ?? 0, pct.effRes ?? 0, buffPct.effRes ?? 0, buffFlat.effRes ?? 0),
-    dmgUp: round1(baseline.dmgInc + (pct.dmgUp ?? 0) + (flat.dmgUp ?? 0) + (buffPct.dmgUp ?? 0)),
-    dmgReduce: round1(baseline.dmgRed + (pct.dmgReduce ?? 0) + (flat.dmgReduce ?? 0) + (buffPct.dmgReduce ?? 0)),
-    pen:    round1(baseline.pen    + (pct.pen ?? 0) + (flat.pen ?? 0) + (buffPct.pen ?? 0)),
-    critDmgReduce: round1((pct.critDmgReduce ?? 0) + (flat.critDmgReduce ?? 0) + (buffPct.critDmgReduce ?? 0)),
+    critDmg:  round1(baseline.chd + b[P_CHD]! + b[BP_CHD]!),
+    eff: composeMultStat(scaling.eff, b[F_EFF]!, b[P_EFF]!, b[BP_EFF]!, b[BF_EFF]!),
+    effRes: composeMultStat(scaling.res, b[F_RES]!, b[P_RES]!, b[BP_RES]!, b[BF_RES]!),
+    dmgUp: round1(baseline.dmgInc + b[P_DMGUP]! + b[F_DMGUP]! + b[BP_DMGUP]!),
+    dmgReduce: round1(baseline.dmgRed + b[P_DMGRED]! + b[F_DMGRED]! + b[BP_DMGRED]!),
+    pen:    round1(baseline.pen    + b[P_PEN]! + b[F_PEN]! + b[BP_PEN]!),
+    critDmgReduce: round1(b[P_CDR]! + b[F_CDR]! + b[BP_CDR]!),
   };
 }
