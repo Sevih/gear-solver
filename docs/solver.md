@@ -488,7 +488,7 @@ car ils dépendent du loadout équipé / d'un calcul coûteux non disponible à 
   seulement : les gemmes du Talisman d'un preset verrouillé ou mieux classé restent dans le gem pool (un
   verrou retient des pièces, pas des gemmes ; elles se changent librement). L'Optimizer le dit
   dans la Library (« Optimizing preset ‹nom› (rank N) — … », perdu au changement de héros) et les gear
-  cards nomment le preset d'où vient une pièce (« from preset ‹nom› »).
+  cards nomment le preset d'où vient une pièce (« preset ‹nom› » sous leur Never use).
 - **Keep current** (`keepCurrent`, `setOption`) — verrouille les slots déjà équipés à leur pièce actuelle (les
   gemmes restent réallouées).
 - **Allow broken sets** (`allowBrokenSets`, `setOption`, défaut **true**) — *true* : un set requis partiel
@@ -647,12 +647,19 @@ chaque colonne d'au moins 320 px (et d'au moins un quart de la bande moins ses t
 carte à la largeur de sa colonne (`fluid` de `GearCardPanel` : `w-full`) ; plus étroit, le même ordre passe à la
 ligne. Hors de la bande (Gear › Pieces, infobulles, presets) la carte garde sa largeur fixe (`w-80`, `w-56` en
 compact). Le nom passe sur deux lignes au plus (`line-clamp-2`) et le slot et la classe (« Striker Exclusive »)
-sont deux `span` qui passent l'un sous l'autre plutôt que sous le portrait du porteur. Chaque carte montre nom (avec
-**Never use** en haut à droite de sa rangée), enhance level, icône slot, puis à côté de l'icône la ligne rareté /
-slot et la ou les main stats (12 px, un nom long coupé avec son `title`, pour que les deux mains d'une arme
+sont deux `span` qui passent l'un sous l'autre plutôt que sous le portrait du porteur (carte de Gear : celle
+de la bande ne montre que la classe, voir `dense` plus bas). Chaque carte montre nom (avec
+**Never use** en haut à droite de sa rangée), enhance level, icône slot, puis à côté de l'icône la ou les main
+stats (12 px, un nom long coupé avec son `title`, pour que les deux mains d'une arme
 tiennent dans la hauteur de l'icône), subs (avec ticks). C'est la carte de pièce de Gear
-(`design/GearCard.tsx` : `GearCardPanel` autour de `GearCardBody`, `effects="none"`) : même ligne rareté /
-slot, même bloc Qualité (titre, aide au survol, barre), même « Active Effect at +15 Enhancement » ; le passif
+(`design/GearCard.tsx` : `GearCardPanel` autour de `GearCardBody`, `effects="none"`) en version dense (`dense`,
+passé par `BottomGearBand` seulement, pleine et compacte) : plus de texte rareté / slot à côté de l'icône (la
+couleur du cadre et du nom porte la rareté, l'icône et la place dans la bande le slot ; « ‹Classe› Exclusive »
+reste si la pièce en a une), « preset ‹noms› » aligné à droite sous Never use (au lieu de « from preset ‹noms› »
+sous l'en-tête, tronqué avec les noms complets dans son `title`), et qualité + effets Singularity sur UNE ligne en
+forme compacte (`14/20 →17 Exc.` à gauche, `compactEffect` à droite, détails en `title`), sans barre de qualité ni
+titre « Active Effect at +15 Enhancement » — Gear › Pieces, le détail d'une pièce et les infobulles gardent la
+carte pleine ; le passif
 d'arme / d'accessoire et les bonus de set n'y sont pas (le panneau « Effects » de la colonne de droite les
 montre), l'EE n'y montre que son image et ses gemmes, et la projection marque ses ticks (`+n` cyan, `T+n`
 violet) sur une colonne de sous-stats aussi large que celle de Gear. Une carte vide dit « No weapon in this
@@ -665,7 +672,7 @@ build » (ou « No weapon yet » avant toute sélection, « Solve, then pick a b
   rangée) ; sans icône de pièce ; en-tête = `compactName` (« EE », le nom du set pour une armure, le nom de la pièce sinon, sans
   « - [Singularity] » mais avec le dégradé, sur deux lignes si la colonne est étroite), à sa droite deux lignes
   alignées à droite : les étoiles et le breakthrough (`6★ | T2`, `6★` seul sans breakthrough) puis l'enhance
-  (`+15`) ; main(s) en icône + valeur sur une ligne ; subs en grille 2 × 2, icône + valeur
+  (`+15`), et dessous, aligné à droite, « preset ‹noms› » (`dense`) ; main(s) en icône + valeur sur une ligne ; subs en grille 2 × 2, icône + valeur
   seulement (LV, base + reforges et marque Transistone en `title` ; valeur en cyan si des ticks projetés y
   entrent, en violet si c'est la Transistone, en ambre au cap) ; gemmes en une ligne de cinq icônes (détail
   en `title`) ; qualité sur une ligne (`14/20 →17 Exc.`) ; effets Singularity sur une ligne (icône + valeur
@@ -683,7 +690,7 @@ build » (ou « No weapon yet » avant toute sélection, « Solve, then pick a b
   indiquant les ticks de reforge ajoutés par la projection (delta vs la pièce capturée).
 - **État d'équipement** : badge par carte — 🟠 portrait + nom si la pièce est équipée sur un
   **autre héros** (l'appliquer la lui retire), 🟢 `equipped` si déjà sur le héros courant, `free` sinon ;
-  « from preset ‹nom› » quand un autre preset du jeu la tient (`presetHoldersOf`, mieux classé d'abord).
+  « preset ‹nom› » sous Never use quand un autre preset du jeu la tient (`presetHoldersOf`, mieux classé d'abord).
 - **Diff par slot** : une carte dont la pièce **diffère du loadout équipé** (même définition que
   `upg`) porte un **liseré cyan** + une ligne `← <pièce remplacée>` (ou `+ new slot` si le slot
   était vide). Pièce proposée, pièce portée et « slot changé » viennent d'une seule fonction,

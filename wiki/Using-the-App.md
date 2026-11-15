@@ -277,18 +277,21 @@ reforge mode, your loadout as it is now). Then two ways out:
 ### The piece cards
 
 One card per slot, laid out like the game's equipment screen (Weapon, EE, Helmet, Armor /
-Accessory, Talisman, Gloves, Boots). Each card is the Gear tab's piece card (the name with
-**Never use** at its top right, then the piece icon with, beside it, the rarity, the slot and the
-main stat(s), quality with its help and bar, the Singularity +15 effect), without the weapon / accessory
-passive and the set bonuses, which the **Effects** panel lists for the whole build. On top:
+Accessory, Talisman, Gloves, Boots). Each card is a denser take on the Gear tab's piece card: the
+name with **Never use** at its top right, then the piece icon with, beside it, the main stat(s) (no
+rarity or slot written out: the frame and the name's color give the rarity, the icon and the card's
+place the slot; « Striker Exclusive » stays when the piece has one), the substats, then quality
+and the Singularity +15 effect on one line (« 14/20 →17 Exc. » at the left, the effect as grade +
+short label + value at the right, details on hover, no quality bar). The weapon / accessory passive
+and the set bonuses aren't there: the **Effects** panel lists them for the whole build. On top:
 
 - the **recommended gem allocation** on the Talisman / EE (with a **swap** badge when it differs
   from what's socketed);
 - with a reforge mode on, the **projected** stats, with the ticks the projection added (`+n`) and
   the Transistone line (`T+n`);
 - who wears the piece now (another hero — applying takes it off them —, this hero, or free), the
-  piece it replaces when the slot changes, and **from preset ‹name›** when it sits in an in-game
-  preset;
+  piece it replaces when the slot changes, and **preset ‹name›** under **Never use** when it sits
+  in an in-game preset (the full names on hover when they don't fit);
 - **Never use**, top right of the card, which keeps the piece out of every solve from now on
   (**Never used — click to allow** brings it back).
 
@@ -310,7 +313,7 @@ Singularity +15 bonus as grade + short label + value, e.g. « S+ DS DMG+ +12% »
 Dimensional Singularity or « vs Fire DMG- » for DMG taken from Fire targets; details on hover),
 the talisman's passive moved to the hover text of its name, the EE and the talisman sharing one
 card (seven cards, four then three, each half with its own icon), and a small **Never use** icon
-at the top right instead of the button. A slot
+at the top right instead of the button (**preset ‹name›** right under it). A slot
 the build leaves empty says so on its card (« No weapon in this build »).
 
 ### The footer
@@ -393,8 +396,8 @@ weapon / accessory) and **Defensive** (helmet / armor / gloves / boots), "–" f
   every solve — any hero, any preset — except **Optimize preset →** on that preset itself; a
   locked card has an amber outline. A lock holds pieces, not gems: the gems on a locked (or
   higher-ranked) preset's Talisman can still be proposed, in the Optimizer as in the EE gems
-  here. In the Optimizer, a proposed piece that sits in another preset says **from preset
-  ‹name›** on its card.
+  here. In the Optimizer, a proposed piece that sits in another preset says **preset ‹name›**
+  under its card's **Never use**.
 - **Warnings** — a piece no longer in your inventory (**missing**), or a piece that sits in
   **two** presets (**shared** — two presets can't be worn in the same fight), is marked on the
   piece and in the card's banner. Empty presets are listed collapsed.

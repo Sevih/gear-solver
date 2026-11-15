@@ -52,7 +52,7 @@ export function BottomGearBand({
   /** Roster indexed by uid — resolves each piece's `equippedBy` to a character. */
   charsByUid: Map<string, Character>;
   /** In-game presets holding a piece, other than the one being optimized
-   *  (names, best-ranked first) — "from preset ‹name›" on its card. */
+   *  (names, best-ranked first) — "preset ‹name›" under its card's Never use. */
   presetsOf?: (uid: string) => string[];
   /** Global exclusion set + toggle — drives the inventory-style card's exclude
    *  footer so a trash roll can be excluded right from the results. */
@@ -152,7 +152,7 @@ export function BottomGearBand({
       {compact
         ? COMPACT_GEAR_GRID.map((cell) => typeof cell === "string"
           ? <GearCard key={cell} slot={cell} game={game} onToggleExclude={onToggleExclude} compact emptyLabel={emptyLabelOf(cell, build)} emptyHint={emptyHintOf(build)} {...cardOf(cell)} />
-          : <ResultPairDetail key={cell.join("+")} top={pairCell(cell[0])} bottom={pairCell(cell[1])} game={game} compact fluid />)
+          : <ResultPairDetail key={cell.join("+")} top={pairCell(cell[0])} bottom={pairCell(cell[1])} game={game} compact fluid dense />)
         : GAME_GEAR_GRID.map((slot) => <GearCard key={slot} slot={slot} game={game} onToggleExclude={onToggleExclude} emptyLabel={emptyLabelOf(slot, build)} emptyHint={emptyHintOf(build)} {...cardOf(slot)} />)}
     </div>
   );
@@ -181,7 +181,9 @@ const emptyHintOf = (build: SolveBuild | null): string | undefined =>
 
 /** A SOLVE-results gear card: the Inventory's piece panel (`GearCardPanel`:
  *  same container, scroll wrapper, body, exclude footer, empty state), its
- *  effects left to `BuildEffectsPanel` and the projection's ticks marked. The
+ *  effects left to `BuildEffectsPanel`, the projection's ticks marked, in its
+ *  denser form (`dense`: no rarity / slot text, "preset ‹names›" under Never
+ *  use, quality and the +15 effects on one line). The
  *  piece (already reforge-projected upstream in `BottomGearBand`) goes through
  *  the same `toUiPiece` adapter. */
 function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleExclude, addedTicks, transistoneTicks, why, compact, emptyLabel, emptyHint }: {
@@ -190,7 +192,7 @@ function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleEx
   game: GameData | null;
   /** Character currently wearing the piece (any owner) — header portrait. */
   equippedChar?: Character | null;
-  /** In-game presets the piece comes from — "from preset ‹name›". */
+  /** In-game presets the piece comes from — "preset ‹name›" under Never use. */
   fromPresets?: string[];
   /** This piece is in the global exclusion set — exclude-footer state. */
   excluded?: boolean;
@@ -223,6 +225,7 @@ function GearCard({ piece, game, equippedChar, fromPresets, excluded, onToggleEx
       effects="none"
       compact={compact}
       fluid
+      dense
       emptyLabel={emptyLabel}
       emptyHint={emptyHint}
     />

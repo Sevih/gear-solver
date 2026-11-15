@@ -21,7 +21,12 @@
  * (subs on a 2 × 2 grid, details in the `title`), gems as five icons, one-line
  * effects and quality, an icon exclude action at the top right instead of the
  * button, a narrower card, the talisman's multi-tier passive in the name's `title`, and
- * the EE + talisman sharing one card (`ResultPairDetail`).
+ * the EE + talisman sharing one card (`ResultPairDetail`). `dense` (the
+ * Optimizer's band only, full and compact): no rarity / slot text beside the
+ * icon (the "‹Class› Exclusive" stays), "preset ‹names›" under the header
+ * action instead of "from preset ‹names›" under the header, and — full card —
+ * quality and the Singularity effects on one line in their compact form, no
+ * quality bar, no "Active Effect at +15 Enhancement" title.
  */
 import type { ReactNode } from "react";
 import type { Character, GameData, SetCombatEffect } from "@gear-solver/core";
@@ -195,14 +200,65 @@ function CompactGemRow({ slots }: { slots: NonNullable<UiPiece["gemSlots"]> }) {
 }
 
 /** "from preset ‹name›" under the header — the in-game presets holding the
- *  piece, other than the one being optimized. */
-function FromPresetsLine({ fromPresets, compact }: { fromPresets: string[]; compact: boolean }) {
+ *  piece, other than the one being optimized. `dense`: "preset ‹name›",
+ *  right-aligned under the header action (the caller places it), cut with the
+ *  full names in the `title`. */
+function FromPresetsLine({ fromPresets, compact, dense = false, className }: { fromPresets: string[]; compact: boolean; dense?: boolean; className?: string }) {
+  const names = fromPresets.join(", ");
   return (
     <div
-      className={cx("truncate text-amber-200/85", compact ? "-mt-1 text-[10px]" : "-mt-2 text-[11px]")}
-      title={`Held by the in-game preset${fromPresets.length === 1 ? "" : "s"} ${fromPresets.join(", ")} — taking it changes ${fromPresets.length === 1 ? "that preset" : "those presets"}`}
+      className={cx(
+        "truncate text-amber-200/85",
+        dense ? "text-right" : compact ? "-mt-1" : "-mt-2",
+        compact ? "text-[10px]" : "text-[11px]",
+        className,
+      )}
+      title={`Held by the in-game preset${fromPresets.length === 1 ? "" : "s"} ${names} — taking it changes ${fromPresets.length === 1 ? "that preset" : "those presets"}`}
     >
-      from preset {fromPresets.join(", ")}
+      {dense ? "preset" : "from preset"} {names}
+    </div>
+  );
+}
+
+/** Quality on one line: "14/20 →17 Exc." — the full label and both help
+ *  texts in the `title` (the compact card, the dense one). */
+function CompactQuality({ q, className }: { q: NonNullable<UiPiece["quality"]>; className?: string }) {
+  const tone = QUALITY_TONE[q.tier];
+  const title = `${tone.label} — ${QUALITY_HELP}${q.reachable != null ? `\n\n${QUALITY_REACHABLE_HELP}` : ""}`;
+  return (
+    <div className={cx("font-mono text-[12px] tabular-nums", className)} title={title}>
+      <span className={cx("font-bold", tone.text)}>{q.current}/{q.max}</span>
+      {q.reachable != null && <span className="ml-1.5 text-violet-300">→{q.reachable}</span>}
+      <span className={cx("ml-1.5 font-semibold", tone.text)}>{qualityShortLabel(q.tier)}</span>
+    </div>
+  );
+}
+
+/** Singularity active effect: every effect on one line (icon + signed value,
+ *  the +15 bonus as grade + icon + short label + value, or a short name), the
+ *  full wording in each title (the compact card, the dense one). */
+function CompactEffects({ effects, className }: { effects: UiPiece["effects"]; className?: string }) {
+  return (
+    <div className={cx("flex items-center gap-2 overflow-hidden whitespace-nowrap font-mono text-[11px] leading-snug tabular-nums text-white", className)}>
+      {effects.map((e, i) => {
+        const c = compactEffect(e);
+        if (c.kind === "short") return (
+          <span key={i} className="flex min-w-0 items-center gap-1" title={c.title}>
+            {c.grade && <span className="shrink-0 font-sans font-bold" style={c.grade.color ? { color: c.grade.color } : undefined}>{c.grade.grade}</span>}
+            <StatIcon stat={c.stat} size={14} className="shrink-0" title={null} />
+            <span className="min-w-0 truncate font-sans">{c.label}</span>
+            <span className="shrink-0">{c.value}</span>
+          </span>
+        );
+        return c.kind === "stat" ? (
+          <span key={i} className="flex shrink-0 items-center gap-1" title={c.title}>
+            <StatIcon stat={c.stat} size={14} className="shrink-0" title={null} />
+            {c.value}
+          </span>
+        ) : (
+          <span key={i} className="min-w-0 truncate font-sans" title={c.title}>{c.text}</span>
+        );
+      })}
     </div>
   );
 }
@@ -234,13 +290,16 @@ export interface GearCardBodyProps {
   /** A control at the card's top right, in the header row (the panel's
    *  "Never use" — `GearCardPanel`, `PairCell`). */
   headerAction?: ReactNode;
+  /** The Optimizer band's denser card (see the file header) — Gear › Pieces,
+   *  the piece detail and the tooltips keep the full one. */
+  dense?: boolean;
 }
 
 export function GearCardBody(props: GearCardBodyProps) {
   return props.compact ? <CompactBody {...props} /> : <FullBody {...props} />;
 }
 
-function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPresets, projection, effects, inTooltip = false, headerAction }: GearCardBodyProps) {
+function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPresets, projection, effects, inTooltip = false, headerAction, dense = false }: GearCardBodyProps) {
   const slot = piece.slot ? SLOTS.find((s) => s.id === piece.slot) : null;
   const rarity = RARITY[piece.rarity];
   const onCard = effects === "card";
@@ -249,6 +308,10 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
   // 2-pc / 4-pc bonuses live only on armor pieces (armorSetId); don't fall back
   // to setId (that's the weapon/accessory unique-option group, not a set).
   const setEntry = onCard && game && piece.armorSetId ? pickSetLevel(game, piece.armorSetId, piece.bt) : null;
+  const hasPresets = !!fromPresets && fromPresets.length > 0;
+  const showEffects = !bareEE && piece.singularity && piece.effects.length > 0;
+  // Dense: only the "‹Class› Exclusive" stays above the main rolls.
+  const showLabels = !dense || !!piece.classLimit;
 
   return (
     <div className="space-y-4 text-left">
@@ -263,27 +326,36 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
         >
           {piece.name}{piece.singularity ? " - [Singularity]" : ""}
         </span>
-        {headerAction && <div className="ml-auto shrink-0 self-start">{headerAction}</div>}
+        {dense ? (
+          (headerAction || hasPresets) && (
+            <div className="ml-auto flex shrink-0 flex-col items-end gap-1 self-start">
+              {headerAction}
+              {hasPresets && <FromPresetsLine fromPresets={fromPresets} compact={false} dense className="max-w-40" />}
+            </div>
+          )
+        ) : headerAction && <div className="ml-auto shrink-0 self-start">{headerAction}</div>}
       </div>
-      {fromPresets && fromPresets.length > 0 && <FromPresetsLine fromPresets={fromPresets} compact={false} />}
+      {!dense && hasPresets && <FromPresetsLine fromPresets={fromPresets} compact={false} />}
 
       {/* icon + column (rarity/class line, main rolls) + equipped char */}
       <div className="flex items-start gap-3">
         <EquipmentIcon piece={piece.iconPiece} size={80} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-col text-[11px] leading-tight">
-            <span style={{ color: rarity?.fg ?? "#e4e4e7" }} className="font-semibold">{rarity?.label ?? piece.rarity}</span>
-            {/* slot and class on two spans: they wrap under each other
-             *  rather than run into the wearer's portrait */}
-            <span className="flex flex-wrap gap-x-2 text-white">
-              <span>{slot?.label ?? "Item"}</span>
-              {piece.classLimit && <span>{piece.classLimit} Exclusive</span>}
-            </span>
-          </div>
+          {showLabels && (
+            <div className="flex flex-col text-[11px] leading-tight">
+              {!dense && <span style={{ color: rarity?.fg ?? "#e4e4e7" }} className="font-semibold">{rarity?.label ?? piece.rarity}</span>}
+              {/* slot and class on two spans: they wrap under each other
+               *  rather than run into the wearer's portrait */}
+              <span className="flex flex-wrap gap-x-2 text-white">
+                {!dense && <span>{slot?.label ?? "Item"}</span>}
+                {piece.classLimit && <span>{piece.classLimit} Exclusive</span>}
+              </span>
+            </div>
+          )}
           {/* main rolls — beside the icon, at 12 px so a weapon's two mains
            *  fit its height; a long name is cut, in full in its title */}
           {!bareEE && piece.main.length > 0 && (
-            <div className="mt-1.5 space-y-1">
+            <div className={cx("space-y-1", showLabels && "mt-1.5")}>
               {piece.main.map((m, i) => {
                 const label = m.name ?? statLong(m.stat);
                 return (
@@ -321,8 +393,17 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
         </div>
       ) : null}
 
+      {/* dense: quality (short form) at the left, the Singularity effects
+       *  (compact form) at the right, on one line */}
+      {dense && (piece.quality || showEffects) && (
+        <div className="flex items-center gap-3">
+          {piece.quality && <CompactQuality q={piece.quality} className="shrink-0" />}
+          {showEffects && <CompactEffects effects={piece.effects} className="ml-auto min-w-0 justify-end" />}
+        </div>
+      )}
+
       {/* quality score */}
-      {(() => {
+      {!dense && (() => {
         const q = piece.quality;
         if (!q) return null;
         const tone = QUALITY_TONE[q.tier];
@@ -405,7 +486,7 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
       )}
 
       {/* Singularity active effect (ascended pieces) */}
-      {!bareEE && piece.singularity && piece.effects.length > 0 && (
+      {!dense && showEffects && (
         <div className="pt-1">
           <div className="mb-2 text-[11px] font-semibold text-amber-200">Active Effect at +15 Enhancement</div>
           <div className="space-y-1.5 text-[11px] leading-snug text-white">
@@ -429,7 +510,7 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
 
 /** The compact card (Builder only): see the file header. The EE shows just
  *  its gems, the card's effects stay in `BuildEffectsPanel`. */
-function CompactBody({ piece, game, equippedChar = null, fromPresets, projection, headerAction }: GearCardBodyProps) {
+function CompactBody({ piece, game, equippedChar = null, fromPresets, projection, headerAction, dense = false }: GearCardBodyProps) {
   const rarity = RARITY[piece.rarity];
   const isEE = piece.slot === "exclusive";
   const fullName = `${piece.name}${piece.singularity ? " - [Singularity]" : ""}`;
@@ -471,7 +552,9 @@ function CompactBody({ piece, game, equippedChar = null, fromPresets, projection
         {/* The panel's exclude action, at the very top right. */}
         {headerAction && <div className="shrink-0">{headerAction}</div>}
       </div>
-      {fromPresets && fromPresets.length > 0 && <FromPresetsLine fromPresets={fromPresets} compact />}
+      {/* dense: "preset ‹names›" right under the top-right action, aligned
+       *  right (its own row: the header has no room for it) */}
+      {fromPresets && fromPresets.length > 0 && <FromPresetsLine fromPresets={fromPresets} compact dense={dense} className={dense ? "-mt-1" : undefined} />}
 
       {/* the main(s) on one full-width line; none for the EE */}
       {!isEE && piece.main.length > 0 && (
@@ -495,46 +578,12 @@ function CompactBody({ piece, game, equippedChar = null, fromPresets, projection
       ) : null}
 
       {/* quality: "14/20 →17 Exc." — the full label and both help texts in the title */}
-      {(() => {
-        const q = piece.quality;
-        if (!q) return null;
-        const tone = QUALITY_TONE[q.tier];
-        const title = `${tone.label} — ${QUALITY_HELP}${q.reachable != null ? `\n\n${QUALITY_REACHABLE_HELP}` : ""}`;
-        return (
-          <div className="font-mono text-[12px] tabular-nums" title={title}>
-            <span className={cx("font-bold", tone.text)}>{q.current}/{q.max}</span>
-            {q.reachable != null && <span className="ml-1.5 text-violet-300">→{q.reachable}</span>}
-            <span className={cx("ml-1.5 font-semibold", tone.text)}>{qualityShortLabel(q.tier)}</span>
-          </div>
-        );
-      })()}
+      {piece.quality && <CompactQuality q={piece.quality} />}
 
       {/* Singularity active effect: every effect on one line (icon + signed
        *  value, the +15 bonus as grade + icon + short label + value, or a short
        *  name), the full wording in each title. Hidden for the EE. */}
-      {!isEE && piece.singularity && piece.effects.length > 0 && (
-        <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap font-mono text-[11px] leading-snug tabular-nums text-white">
-          {piece.effects.map((e, i) => {
-            const c = compactEffect(e);
-            if (c.kind === "short") return (
-              <span key={i} className="flex min-w-0 items-center gap-1" title={c.title}>
-                {c.grade && <span className="shrink-0 font-sans font-bold" style={c.grade.color ? { color: c.grade.color } : undefined}>{c.grade.grade}</span>}
-                <StatIcon stat={c.stat} size={14} className="shrink-0" title={null} />
-                <span className="min-w-0 truncate font-sans">{c.label}</span>
-                <span className="shrink-0">{c.value}</span>
-              </span>
-            );
-            return c.kind === "stat" ? (
-              <span key={i} className="flex shrink-0 items-center gap-1" title={c.title}>
-                <StatIcon stat={c.stat} size={14} className="shrink-0" title={null} />
-                {c.value}
-              </span>
-            ) : (
-              <span key={i} className="min-w-0 truncate font-sans" title={c.title}>{c.text}</span>
-            );
-          })}
-        </div>
-      )}
+      {!isEE && piece.singularity && piece.effects.length > 0 && <CompactEffects effects={piece.effects} />}
     </div>
   );
 }
@@ -590,7 +639,7 @@ const EXCLUDE_ICON = (
  *  `onOptimizeWearer`, and the empty placeholder — whose texts, like the
  *  exclude help, are the caller's. */
 export function GearCardPanel({
-  piece, equippedChar, game, fromPresets, excluded, onToggleExclude, onOptimizeWearer, projection, effects, compact = false, fluid = false,
+  piece, equippedChar, game, fromPresets, excluded, onToggleExclude, onOptimizeWearer, projection, effects, compact = false, fluid = false, dense = false,
   emptyLabel = "No piece in this build", emptyHint,
   excludeHint = "Never use this piece in any solve (e.g. trash rolls) — the same as a right-click on its tile in Gear.",
 }: {
@@ -609,6 +658,8 @@ export function GearCardPanel({
   /** Take the width of its grid column (the Optimizer's band) instead of
    *  the fixed `w-56` / `w-80` of Gear › Pieces and the tooltips. */
   fluid?: boolean;
+  /** The Optimizer band's denser card (`GearCardBody`'s `dense`). */
+  dense?: boolean;
   /** The empty state's label and hint. */
   emptyLabel?: string;
   emptyHint?: string;
@@ -657,7 +708,7 @@ export function GearCardPanel({
   return (
     <CardShell width={width} fill={!compact}>
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <GearCardBody piece={piece} game={game} equippedChar={equippedChar} onOptimizeWearer={onOptimizeWearer} fromPresets={fromPresets} projection={projection} effects={effects} compact={compact} headerAction={excludeAction} />
+        <GearCardBody piece={piece} game={game} equippedChar={equippedChar} onOptimizeWearer={onOptimizeWearer} fromPresets={fromPresets} projection={projection} effects={effects} compact={compact} dense={dense} headerAction={excludeAction} />
       </div>
       {!compact && onOptimizeWearer && (
         <div className="flex shrink-0 gap-2 border-t border-white/8 px-4 py-2.5">
@@ -725,18 +776,18 @@ export interface ResultPairCell {
 /** Compact EE + talisman card: two pieces stacked in ONE `w-56` container (the
  *  EE has no main and no effects, the compact talisman is short), split by a
  *  rule, each with its own exclude action at the top right of its half. `fluid`: the width of its grid
- *  column, as `GearCardPanel`'s. */
-export function ResultPairDetail({ top, bottom, game, fluid = false }: { top: ResultPairCell; bottom: ResultPairCell; game: GameData | null; compact: true; fluid?: boolean }) {
+ *  column, as `GearCardPanel`'s; `dense`: the Optimizer band's card (`GearCardBody`'s). */
+export function ResultPairDetail({ top, bottom, game, fluid = false, dense = false }: { top: ResultPairCell; bottom: ResultPairCell; game: GameData | null; compact: true; fluid?: boolean; dense?: boolean }) {
   return (
     <CardShell width={fluid ? "w-full" : "w-56"} fill={false}>
-      <PairCell cell={top} game={game} />
+      <PairCell cell={top} game={game} dense={dense} />
       <div className="border-t border-white/8" />
-      <PairCell cell={bottom} game={game} grow />
+      <PairCell cell={bottom} game={game} dense={dense} grow />
     </CardShell>
   );
 }
 
-function PairCell({ cell, game, grow = false }: { cell: ResultPairCell; game: GameData | null; grow?: boolean }) {
+function PairCell({ cell, game, grow = false, dense = false }: { cell: ResultPairCell; game: GameData | null; grow?: boolean; dense?: boolean }) {
   const { piece, onToggleExclude } = cell;
   if (!piece) {
     return <div className={cx("px-4 py-4 text-[12px] italic text-white/65", grow && "flex-1")}>{cell.emptyLabel}</div>;
@@ -747,7 +798,7 @@ function PairCell({ cell, game, grow = false }: { cell: ResultPairCell; game: Ga
     : undefined;
   const half = (
     <div className={cx("px-4 py-4", grow && "flex-1")}>
-      <GearCardBody piece={piece} game={game} equippedChar={cell.equippedChar} fromPresets={cell.fromPresets} projection={projection} effects="none" compact headerAction={excludeAction} />
+      <GearCardBody piece={piece} game={game} equippedChar={cell.equippedChar} fromPresets={cell.fromPresets} projection={projection} effects="none" compact dense={dense} headerAction={excludeAction} />
     </div>
   );
   return cell.wrap ? cell.wrap(half) : half;

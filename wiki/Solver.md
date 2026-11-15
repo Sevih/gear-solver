@@ -470,7 +470,7 @@ expensive computation not available at compile time.
   that preset; "Optimize preset →" doesn't take the pieces of a preset of equal or better rank. Pieces only: the
   gems of a locked or better-ranked preset's Talisman stay in the gem pool (a lock holds pieces, not gems; they
   change freely). The Optimizer says so in the Library ("Optimizing preset ‹name› (rank N) — …", lost on a hero
-  switch) and the gear cards name the preset a piece comes from ("from preset ‹name›").
+  switch) and the gear cards name the preset a piece comes from ("preset ‹name›" under their Never use).
 - **Keep current** (`keepCurrent`, `setOption`) — locks the already-equipped slots to their current piece (gems
   are still re-allocated).
 - **Allow broken sets** (`allowBrokenSets`, `setOption`, default **true**) — *true*: a partial required set
@@ -620,12 +620,18 @@ Accessory | Talisman | Gloves | Boots when the band allows it, each column at le
 quarter of the band less its three 8 px gutters), each card as wide as its column (`GearCardPanel`'s `fluid`:
 `w-full`); narrower, the same order wraps. Outside the band (Gear › Pieces, tooltips, presets) the card keeps its
 fixed width (`w-80`, `w-56` compact). The name runs on two lines at most (`line-clamp-2`) and the slot and the
-class ("Striker Exclusive") are two `span`s that wrap under each other rather than under the wearer's portrait.
+class ("Striker Exclusive") are two `span`s that wrap under each other rather than under the wearer's portrait
+(Gear's card: the band's shows only the class, see `dense` below).
 Each card shows name (with **Never use** at the
-top right of its row), enhance level, slot icon, then beside the icon the rarity / slot line and the main stat(s)
+top right of its row), enhance level, slot icon, then beside the icon the main stat(s)
 (12 px, a long name cut with its `title`, so a weapon's two mains fit the icon's height), subs (with ticks). It's Gear's piece card (`design/GearCard.tsx`: `GearCardPanel` around
-`GearCardBody`, `effects="none"`): same rarity / slot line, same Quality block (title, hover help, bar), same
-"Active Effect at +15 Enhancement"; the weapon / accessory passive and the set bonuses aren't there (the right
+`GearCardBody`, `effects="none"`) in its denser form (`dense`, passed by `BottomGearBand` only, full and compact):
+no rarity / slot text beside the icon (the frame and the name's color carry the rarity, the icon and the place in
+the band the slot; "‹Class› Exclusive" stays when the piece has one), "preset ‹names›" right-aligned under Never
+use (instead of "from preset ‹names›" under the header, cut with the names in full in its `title`), and quality +
+Singularity effects on ONE line in their compact form (`14/20 →17 Exc.` at the left, `compactEffect` at the right,
+details in the `title`s), no quality bar, no "Active Effect at +15 Enhancement" title — Gear › Pieces, the piece
+detail and the tooltips keep the full card; the weapon / accessory passive and the set bonuses aren't there (the right
 column's "Effects" panel shows them), the EE shows only its image and gems, and the projection marks its ticks
 (`+n` cyan, `T+n` violet) on a substat column as wide as Gear's. An empty card says "No weapon in this build" (or
 "No weapon yet" before any selection, "Solve, then pick a build in the table."). On top:
@@ -636,7 +642,8 @@ column's "Effects" panel shows them), the EE shows only its image and gems, and 
   Boots), each card at its own content height (no stretching to the row's tallest); no piece icon; header =
   `compactName` ("EE", the set name for an armor piece, the piece name otherwise, without "- [Singularity]" but with
   the gradient, on two lines when the column is narrow), with on its right two right-aligned lines: the stars and
-  the breakthrough (`6★ | T2`, `6★` alone without breakthrough) then the enhance (`+15`);
+  the breakthrough (`6★ | T2`, `6★` alone without breakthrough) then the enhance (`+15`), and under it, aligned
+  right, "preset ‹names›" (`dense`);
   main(s) as icon + value on one line; subs in a 2 × 2 grid, icon + value only (LV, base + reforges and the
   Transistone mark in the `title`; value in cyan when projected ticks enter it, violet when it's the Transistone,
   amber at the cap); gems as one row of five icons (detail in the `title`); quality on one line (`14/20 →17 Exc.`);
@@ -654,8 +661,8 @@ half in the pair card, no footer. Gear and the tooltips (the
   projected **singularity passive** (**+15R9 only**), and a cyan **`+N`** badge per sub with the reforge ticks the
   projection added (delta vs the captured piece).
 - **Equip state**: a badge per card — 🟠 portrait + name if the piece is equipped on **another hero** (applying
-  takes it off them), 🟢 `equipped` if already on the current hero, `free` otherwise; "from preset ‹name›" when
-  another in-game preset holds it (`presetHoldersOf`, best-ranked first).
+  takes it off them), 🟢 `equipped` if already on the current hero, `free` otherwise; "preset ‹name›" under
+  Never use when another in-game preset holds it (`presetHoldersOf`, best-ranked first).
 - **Per-slot diff**: a card whose piece **differs from the equipped loadout** (same definition as `upg`) gets a
   **cyan border** + a `← <replaced piece>` line (or `+ new slot` if the slot was empty). Proposed piece, worn piece
   and "slot changed" come from a single function, `diffBuildVsLoadout` (`lib/buildDiff.ts`), which Apply to

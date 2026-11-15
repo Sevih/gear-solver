@@ -8,6 +8,44 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗂️ Optimizer : cartes de gear plus denses, preset sous Never use, qualité et effet +15 sur une ligne (G129) (2026-11-15)
+- ✅ **Pourquoi.** Demande de Sevih du 15/11 après test de la bande du bas de l'Optimizer : la ligne rareté / slot
+  répète ce que disent déjà la couleur du cadre et du nom, l'icône et la place dans la bande ; « from preset ‹nom› »
+  prenait une ligne entière sous l'en-tête ; la qualité (titre, barre) et l'effet +15 (titre « Active Effect at +15
+  Enhancement ») en prenaient quatre. Les cartes de la bande gagnent ces lignes, celles de Gear › Pieces, du détail
+  d'une pièce et des infobulles ne bougent pas.
+- ✅ **Comment (`apps/renderer/src/design/GearCard.tsx`).** Prop optionnelle `dense` sur `GearCardBody`,
+  `GearCardPanel` et `ResultPairDetail` (jusqu'à `PairCell`), passée par `BottomGearBand` seulement (cartes pleines,
+  compactes et la carte double EE + talisman). Carte pleine dense : plus de texte rareté ni slot à côté de l'icône,
+  « ‹Classe› Exclusive » gardé quand la pièce en a une (les main stats remontent sous l'en-tête de la colonne, sans
+  marge quand rien n'est au-dessus) ; « preset ‹noms› » (sans « from ») dans une colonne avec le bouton Never use en
+  haut à droite, sous lui, aligné à droite, tronqué (`max-w-40`) avec le même `title` explicatif qu'avant ;
+  qualité et effets Singularity sur UNE ligne, à gauche la qualité courte (`14/20 →17 Exc.`, couleur du palier, les
+  deux aides dans le `title`), à droite les effets en forme `compactEffect` (grade + icône + libellé court + valeur,
+  libellé complet en `title`), plus de barre ni de titre +15. Carte compacte dense : « preset ‹noms› » sur sa propre
+  ligne juste sous l'en-tête, alignée à droite, donc sous l'icône Never use (l'en-tête compact, nom + étoiles +
+  portrait + action, n'a pas la place d'une colonne sous l'icône de 24 px) ; elle n'avait déjà ni rareté ni slot ni
+  barre. Pour que la carte pleine dense et la compacte affichent la même ligne, la qualité courte et la ligne
+  d'effets de `CompactBody` deviennent deux composants internes, `CompactQuality` et `CompactEffects` (rendu de la
+  carte compacte identique, ses tests passent sans retouche) ; `FromPresetsLine` prend `dense` et `className`.
+- ✅ **Tests.** `apps/renderer/test/denseCard.test.ts` (10), rendu statique dans le style de G124 : carte pleine dense
+  sans rareté ni slot, « Striker Exclusive » gardé, « preset Arena » sans « from », aligné à droite, tronqué, même
+  `title`, après le bouton et dans sa colonne, avant l'icône ; une seule ligne qualité + effet (texte, quality à
+  gauche, effets `ml-auto` avec leur `title`), pas de barre ni de titre +15, qualité seule ou effets seuls ; carte
+  compacte dense (preset sous l'action, avant les subs, sans « from ») et carte double (« preset » dans chaque
+  moitié) ; carte non dense (Gear › Pieces) inchangée : rareté, slot, « from preset » sous l'en-tête (mêmes
+  classes), bloc Quality avec barre, titre +15, et « from preset » en compact non dense ; la bande passe `dense`
+  (huit « preset Arena », pleine et compacte, ni « from preset » ni rareté / slot). Aucun test retiré.
+  `npm run typecheck` : `> tsc --noEmit` (dernière ligne, renderer, sans erreur) ; `npm test` : `Tests 1240 passed
+  (1240)` (renderer ; 169 et 267 dans les autres workspaces) ; `npm run lint` : `✖ 7 problems (0 errors, 7
+  warnings)`, comme avant.
+- ✅ **Docs.** `wiki/Using-the-App.md` (The piece cards, Compact result cards, Presets), `docs/solver.md` /
+  `wiki/Solver.md` (cartes de pièces, mode compact, état d'équipement, presets du jeu).
+- ⏳ À voir par Sevih en vrai : la place de « preset ‹noms› » sur la carte compacte (ligne à droite sous l'en-tête
+  plutôt que collée sous l'icône) et la troncature des noms longs (`max-w-40` en pleine) ; la ligne qualité + effet
+  quand une pièce porte deux effets Singularity dans une colonne étroite (les libellés se tronquent, la qualité
+  garde sa place).
+
 ### 📌 Optimizer : comparer deux builds, épingle dans la table et panneau côte à côte (G128) (2026-11-14)
 - ✅ **Pourquoi.** Demande de Sevih du 14/11 : la colonne « swaps » résume en un chiffre l'écart d'un build au
   loadout, sans le détail, et rien ne permettait de mettre deux résultats l'un à côté de l'autre. On épingle
