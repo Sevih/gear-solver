@@ -10,11 +10,11 @@ import { Pill } from "../../design/Chips.js";
 import { cx } from "../../design/cx.js";
 import type { DmgSkillInfo } from "../../lib/dmgSkill.js";
 import type { SolveBuild } from "../../lib/solver/types.js";
-import { diffBuildVsLoadout } from "../../lib/buildDiff.js";
+import { changedSlotCount } from "../../lib/buildDiff.js";
 import type { MinMax } from "../../lib/solver/builderFilters.js";
 import { usePersistedState } from "../../hooks/usePersistedState.js";
 import { useClickOutside } from "./useClickOutside.js";
-import { SOLVER_STATS, SKILL_SCALED_RATINGS, ratingTitle, TABLE_RATINGS, statHeaderTooltip } from "./statColumns.js";
+import { SOLVER_STATS, SKILL_SCALED_RATINGS, ratingTitle, TABLE_RATINGS, statColumnsOfKey, statHeaderTooltip, visibleStatKey } from "./statColumns.js";
 import type { ArmorSetEntry } from "./catalogs.js";
 import { critCellParts, critCellTitle, critRawOf } from "./critCell.js";
 import type { ReforgeContext } from "../../lib/solver/reforge.js";
@@ -349,14 +349,11 @@ export function ResultsTable({
     setCellMenu({ x: e.clientX, y: e.clientY, index, cell: kept ? { ...kept, value: roundDisplay(kept.value) } : null });
   }, [hasThreshold, hasPin]);
   const closeCellMenu = useCallback(() => setCellMenu(null), []);
-  const statCols = useMemo(
-    () => SOLVER_STATS.filter((s, i) => {
-      const b = statFilters[s.key];
-      const filtered = b != null && (b.min != null || b.max != null);
-      return filtered || (colPrefs[s.key] ?? i < 8);
-    }),
-    [statFilters, colPrefs],
-  );
+  // Memoized on WHICH columns show, not on `statFilters` (a new object at
+  // every keystroke in a min / max field): typing a bound keeps the columns,
+  // the heatmap ranges and the memoized rows.
+  const statColKey = visibleStatKey(statFilters, colPrefs);
+  const statCols = useMemo(() => statColumnsOfKey(statColKey), [statColKey]);
   const ratingCols = useMemo(
     () => TABLE_RATINGS.filter((r) => colPrefs[r.key] ?? true),
     [colPrefs],
@@ -386,13 +383,12 @@ export function ResultsTable({
     setSortKey(null); // back to native order
   };
   // Live `upg`: the engine's count is frozen at solve time, stale after an
-  // Equip + re-import — re-diff each build against the hero's loadout today.
+  // Equip + re-import — recount each build against the hero's loadout today
+  // (the `diffBuildVsLoadout` rule, read on the build's 8 uids).
   const liveUpg = useMemo(() => {
     const m = new Map<SolveBuild, number>();
     if (heroUid) {
-      for (const b of builds) {
-        m.set(b, diffBuildVsLoadout(b.pieceUids, heroUid, pieceByUid).filter((d) => d.changed).length);
-      }
+      for (const b of builds) m.set(b, changedSlotCount(b.pieceUids, heroUid, pieceByUid));
     }
     return m;
   }, [builds, heroUid, pieceByUid]);

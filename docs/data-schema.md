@@ -240,7 +240,8 @@ Au chargement de la donnée (`refreshInventory`, `App.tsx`), le `hash` de `versi
 au dernier vu (`gs.data.hash`, localStorage) : au changement, `reconcileDataHash`
 (`apps/renderer/src/lib/storage/dataHash.ts`) retire des filter sets et des filtres par héros les
 ids de set et les clés d'effet que la nouvelle donnée ne connaît plus, sans rien effacer d'autre ; les
-builds sauvés ne sont pas touchés.
+builds sauvés ne sont pas touchés. À `hash` égal au précédent import, les tables déjà chargées sont gardées
+(`keptGameData`, `data.ts`) : seul le compte capturé est relu.
 
 **Table facultative `items.json`.** Les objets hors équipement (matériaux, monnaies,
 consommables…) : `{ "<ItemID>": { name, icon, itemType, itemSubType, grade, canSell,

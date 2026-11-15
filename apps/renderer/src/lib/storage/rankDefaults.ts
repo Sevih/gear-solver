@@ -34,6 +34,14 @@ export function rankDefaults({ rank, seen, ordered }: { rank: PriorityRank; seen
   };
 }
 
+/** `rankDefaults` for the heroes: `order` (`heroRankOrder`, a stats + CP
+ *  composition of the whole roster) only runs when a hero of `inventory` was
+ *  never seen — on most imports every hero is, and nothing is composed. */
+export function heroRankDefaults({ rank, seen, inventory, order }: { rank: PriorityRank; seen: ReadonlySet<string>; inventory: Pick<Inventory, "characters">; order: () => readonly string[] }): RankDefaults {
+  if (!inventory.characters.some((c) => !seen.has(c.uid))) return { rank, seen, changed: false };
+  return rankDefaults({ rank, seen, ordered: order() });
+}
+
 /** Hero uids by in-game CP, highest first — the hero default rank order. The
  *  same CP as the Builds cards (compose, equipped gear, `calcBattlePower`); a
  *  hero with no resolved CP (missing game data / TransStar row) sinks. */

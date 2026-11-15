@@ -51,3 +51,21 @@ export function diffBuildVsLoadout(
   }
   return out;
 }
+
+/** `diffBuildVsLoadout(…).filter((d) => d.changed).length` without the diff:
+ *  the same rule (a build piece found in `pieceByUid`, with a slot, not on the
+ *  hero today) read on the build's own uids — O(pieces of the build), not a
+ *  scan of the whole inventory. The results table's live `upg` column counts
+ *  every build of the solve with it. */
+export function changedSlotCount(
+  pieceUids: readonly string[],
+  heroUid: string,
+  pieceByUid: ReadonlyMap<string, GearPiece>,
+): number {
+  let n = 0;
+  for (const uid of pieceUids) {
+    const proposed = pieceByUid.get(uid);
+    if (proposed?.slot && proposed.equippedBy !== heroUid) n++;
+  }
+  return n;
+}

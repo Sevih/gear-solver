@@ -34,6 +34,18 @@ export interface SnapshotFollower {
    *  rewrote any imported snapshot. No-op before init() completes or while another
    *  tick runs. `isAlive` lets the caller drop results after unmount. */
   tick(isAlive?: () => boolean): Promise<void>;
+  /** Before an explicit import (Reload, after a write by the app, a data
+   *  sync): read the capture status and take its mtimes as seen, so the next
+   *  tick doesn't import the same files a second time. Called BEFORE the
+   *  import: a write landing after this read shows as a new key next tick. */
+  reseed(): Promise<void>;
+}
+
+/** `prev` when `next` says the same (JSON-equal), else `next` — a polled
+ *  status put through `setState(prev => keepIfSame(prev, next))` keeps its
+ *  reference, so an unchanged poll re-renders nothing. */
+export function keepIfSame<T>(prev: T, next: T): T {
+  return prev === next || JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
 }
 
 const WATCHED: readonly ImportedSnapshot[] = ["user_item", "user_character", "user_gift", "user_archive"];
@@ -82,6 +94,12 @@ export function createSnapshotFollower(deps: SnapshotFollowerDeps): SnapshotFoll
       } finally {
         ticking = false;
       }
+    },
+
+    async reseed() {
+      const cs = await deps.getCaptureStatus();
+      deps.onCaptureStatus(cs);
+      lastKey = snapshotKey(cs);
     },
   };
 }

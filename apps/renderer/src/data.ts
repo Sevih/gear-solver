@@ -121,10 +121,25 @@ export interface LoadResult {
   source: "auto" | "none";
 }
 
-/** Try to auto-load everything. Returns nulls if the captured files aren't present. */
-export async function autoImport(): Promise<LoadResult> {
+/** Game data already loaded, with the `version.json` hash it was read under. */
+export interface KeptGameData {
+  hash: string;
+  game: GameData;
+}
+
+/** The kept game data when the tables on disk still carry its hash (same
+ *  content: nothing to fetch, and the same reference keeps every memo on
+ *  `game`); undefined = load them. No stamp on disk = no proof: load. */
+export function keptGameData(version: DataVersion | null, kept: KeptGameData | null): GameData | undefined {
+  return version && kept && kept.hash === version.hash ? kept.game : undefined;
+}
+
+/** Try to auto-load everything. Returns nulls if the captured files aren't
+ *  present. `keptGame` (see `keptGameData`) skips the 19 `/gamedata/*` tables:
+ *  only the captured account is read again. */
+export async function autoImport(keptGame?: GameData): Promise<LoadResult> {
   const [game, userItem, userChar, userGift, userArchive] = await Promise.all([
-    loadGameData(),
+    keptGame ?? loadGameData(),
     getJSON<RawUserItem>("/captured/user_item.json"),
     getJSON<RawUserCharacter>("/captured/user_character.json"),
     getJSON<RawUserGift>("/captured/user_gift.json"),

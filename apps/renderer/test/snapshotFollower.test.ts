@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CaptureStatus } from "../src/capture.js";
 import type { SteamStatus } from "../src/steam.js";
-import { createSnapshotFollower, type SnapshotFollowerDeps } from "../src/lib/snapshotFollower.js";
+import { createSnapshotFollower, keepIfSame, type SnapshotFollowerDeps } from "../src/lib/snapshotFollower.js";
 
 /** Deferred promise — lets a test decide which request answers first. */
 function deferred<T>() {
@@ -99,5 +99,65 @@ describe("snapshot follower — one import at launch", () => {
     await first;
     expect(steamCalls).toBe(1);
     expect(refresh.mock.calls.map((c) => c[0])).toEqual(["Auto-import", "Steam capture"]);
+  });
+});
+
+describe("snapshot follower — explicit imports", () => {
+  it("an import after a write by the app (reseed first) is not followed by an identical re-import", async () => {
+    let mtime = 1000;
+    const { follower, refresh } = harness(async () => status(mtime));
+    await follower.init();
+    mtime = 2000;                   // the desktop rewrote user_item.json (Equip, Apply…)
+    await follower.reseed();        // App's refreshInventory, before its own import
+    await follower.tick();
+    await follower.tick();
+    expect(refresh.mock.calls.map((c) => c[0])).toEqual(["Auto-import"]);
+  });
+
+  it("a write after the reseed is still followed on the next tick", async () => {
+    let mtime = 1000;
+    const { follower, refresh } = harness(async () => status(mtime));
+    await follower.init();
+    await follower.reseed();
+    mtime = 3000;                   // the plugin writes after the explicit import
+    await follower.tick();
+    expect(refresh.mock.calls.map((c) => c[0])).toEqual(["Auto-import", "Steam capture"]);
+  });
+
+  it("the reseed reports the fresh capture status", async () => {
+    const seen: (CaptureStatus | null)[] = [];
+    const deps: SnapshotFollowerDeps = {
+      getCaptureStatus: async () => status(4000),
+      getSteamStatus: async () => live,
+      refresh: async () => {},
+      onCaptureStatus: (cs) => seen.push(cs),
+      onSteamStatus: () => {},
+    };
+    await createSnapshotFollower(deps).reseed();
+    expect(seen).toEqual([status(4000)]);
+  });
+});
+
+describe("keepIfSame — a polled status without a re-render", () => {
+  it("an equal status keeps the previous reference, a different one replaces it", () => {
+    const a = { live: true, heartbeat: { captures: 3 } };
+    expect(keepIfSame(a, { live: true, heartbeat: { captures: 3 } })).toBe(a);
+    const b = { live: true, heartbeat: { captures: 4 } };
+    expect(keepIfSame(a, b)).toBe(b);
+    expect(keepIfSame<typeof a | null>(null, a)).toBe(a);
+    expect(keepIfSame<typeof a | null>(a, null)).toBeNull();
+  });
+
+  it("through a React-style updater, an unchanged poll leaves the state untouched", () => {
+    let state: SteamStatus | null = null;
+    let renders = 0;
+    const setState = (f: (prev: SteamStatus | null) => SteamStatus | null) => {
+      const next = f(state);
+      if (next !== state) { state = next; renders++; }
+    };
+    for (let i = 0; i < 5; i++) setState((prev) => keepIfSame(prev, { ...live }));
+    expect(renders).toBe(1);
+    setState((prev) => keepIfSame(prev, { ...live, live: false }));
+    expect(renders).toBe(2);
   });
 });

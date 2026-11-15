@@ -176,7 +176,8 @@ When the data loads (`refreshInventory`, `App.tsx`), the `version.json` `hash` i
 last one seen (`gs.data.hash`, localStorage): on a change, `reconcileDataHash`
 (`apps/renderer/src/lib/storage/dataHash.ts`) removes from the filter sets and the per-hero filters
 the set ids and effect keys the new data no longer knows, deleting nothing else; saved builds are
-left untouched.
+left untouched. With the same `hash` as the previous import, the tables already loaded are kept
+(`keptGameData`, `data.ts`): only the captured account is read again.
 
 **Optional table `items.json`.** The non-gear items (materials, currencies, consumables…):
 `{ "<ItemID>": { name, icon, itemType, itemSubType, grade, canSell, sellPrice } }` (`name` /

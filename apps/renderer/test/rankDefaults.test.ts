@@ -4,15 +4,17 @@
 //    second pass with nothing new is a no-op (same objects); a newcomer gets
 //    the next rank without moving the others; a key seen but unranked (the
 //    user cleared it) stays unranked;
+//  - heroRankDefaults: the roster's CP order is only composed when a hero was
+//    never seen;
 //  - heroRankOrder: by in-game CP, highest first, on the real contract
 //    (`data/derived/`); presetRankOrder: the in-game order (`presetGameOrder`);
 //  - the Builds and Presets screens no longer set any rank: their sources
 //    reference neither the `seen` helpers nor `fillUnrankedByOrder` (a source
 //    check: the node test environment has no DOM to run their mount effects).
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { GameData, GearPiece, Inventory, Preset, RolledStat } from "@gear-solver/core";
-import { heroRankOrder, presetRankOrder, rankDefaults } from "../src/lib/storage/rankDefaults.js";
+import { heroRankDefaults, heroRankOrder, presetRankOrder, rankDefaults } from "../src/lib/storage/rankDefaults.js";
 import { presetGameOrder } from "../src/lib/presets/presetHolds.js";
 
 describe("rankDefaults", () => {
@@ -109,5 +111,27 @@ describe("Builds and Presets no longer set a rank", () => {
     for (const name of ["loadSeenHeroes", "persistSeenHeroes", "loadSeenPresets", "persistSeenPresets", "fillUnrankedByOrder", "gs.priority.seen", "gs.presets.seen"]) {
       expect(s).not.toContain(name);
     }
+  });
+});
+
+describe("heroRankDefaults — the roster composed only for a hero never seen", () => {
+  const roster = { characters: [{ uid: "a" }, { uid: "b" }] } as unknown as Pick<Inventory, "characters">;
+
+  it("every hero seen: the order (stats + CP of the roster) is not computed", () => {
+    const order = vi.fn(() => ["b", "a"]);
+    const rank = { a: 1, b: 2 };
+    const seen = new Set(["a", "b"]);
+    const r = heroRankDefaults({ rank, seen, inventory: roster, order });
+    expect(order).not.toHaveBeenCalled();
+    expect(r).toEqual({ rank, seen, changed: false });
+    expect(r.rank).toBe(rank);
+  });
+
+  it("a hero never seen: the order runs once and the result is rankDefaults'", () => {
+    const order = vi.fn(() => ["b", "a"]);
+    const r = heroRankDefaults({ rank: { a: 1 }, seen: new Set(["a"]), inventory: roster, order });
+    expect(order).toHaveBeenCalledTimes(1);
+    expect(r).toEqual(rankDefaults({ rank: { a: 1 }, seen: new Set(["a"]), ordered: ["b", "a"] }));
+    expect(r.rank).toEqual({ a: 1, b: 2 });
   });
 });

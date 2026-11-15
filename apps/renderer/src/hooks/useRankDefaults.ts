@@ -10,7 +10,7 @@ import { useEffect, useMemo } from "react";
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { loadSeenHeroes, persistSeenHeroes, type HeroPriority } from "../lib/storage/heroPriority.js";
 import { loadSeenPresets, persistSeenPresets, type PresetRank } from "../lib/storage/presetPriority.js";
-import { heroRankOrder, presetRankOrder, rankDefaults } from "../lib/storage/rankDefaults.js";
+import { heroRankDefaults, heroRankOrder, presetRankOrder, rankDefaults } from "../lib/storage/rankDefaults.js";
 
 export function useRankDefaults({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, onHeroPriorityChange, presetRank, onPresetRankChange }: {
   inventory: Inventory | null;
@@ -22,19 +22,24 @@ export function useRankDefaults({ inventory, game, userGeasLevels, userCodexLeve
   presetRank: PresetRank;
   onPresetRankChange: (next: PresetRank) => void;
 }): void {
-  // The orders follow the inventory (and the CP inputs); a rank edit only
-  // re-runs the cheap `rankDefaults`, a no-op once every key is seen.
-  const heroOrder = useMemo(
-    () => (inventory ? heroRankOrder(inventory, game, userGeasLevels, userCodexLevel) : []),
-    [inventory, game, userGeasLevels, userCodexLevel],
-  );
-  const presetOrder = useMemo(() => (inventory ? presetRankOrder(inventory) : []), [inventory]);
+  // The hero order composes the stats and CP of the whole roster: only done
+  // when a hero was never seen (`heroRankDefaults`), not on every import or
+  // rank edit once the roster is known.
   useEffect(() => {
-    const r = rankDefaults({ rank: heroPriority, seen: loadSeenHeroes(), ordered: heroOrder });
+    if (!inventory) return;
+    const r = heroRankDefaults({
+      rank: heroPriority,
+      seen: loadSeenHeroes(),
+      inventory,
+      order: () => heroRankOrder(inventory, game, userGeasLevels, userCodexLevel),
+    });
     if (!r.changed) return;
     persistSeenHeroes(r.seen);
     onHeroPriorityChange(r.rank);
-  }, [heroOrder, heroPriority, onHeroPriorityChange]);
+  }, [inventory, game, userGeasLevels, userCodexLevel, heroPriority, onHeroPriorityChange]);
+  // The preset order follows the inventory; a rank edit only re-runs the
+  // cheap `rankDefaults`, a no-op once every key is seen.
+  const presetOrder = useMemo(() => (inventory ? presetRankOrder(inventory) : []), [inventory]);
   useEffect(() => {
     const r = rankDefaults({ rank: presetRank, seen: loadSeenPresets(), ordered: presetOrder });
     if (!r.changed) return;

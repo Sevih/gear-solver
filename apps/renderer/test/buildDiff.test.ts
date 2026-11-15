@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GearPiece } from "@gear-solver/core";
-import { diffBuildVsLoadout } from "../src/lib/buildDiff.js";
+import { changedSlotCount, diffBuildVsLoadout } from "../src/lib/buildDiff.js";
 
 function piece(slot: string, uid: string, equippedBy: string | null = null): GearPiece {
   return {
@@ -85,5 +85,28 @@ describe("diffBuildVsLoadout — one 'slot changed' rule for Equip, Worklist and
   it("skips a uid missing from the inventory (saved build after the piece left)", () => {
     const w = piece("weapon", "w1", "hero");
     expect(diffBuildVsLoadout(["gone", "w1"], "hero", byUid([w])).map((d) => d.proposed.uid)).toEqual(["w1"]);
+  });
+});
+
+describe("changedSlotCount — the results table's live upg without the diff", () => {
+  it("equals the diff's changed count on every build of a synthetic inventory", () => {
+    // 1 200 pieces over 8 slots, worn by the hero, another hero or nobody;
+    // builds mix them with a uid gone from the inventory and a slotless piece.
+    const slots = ["weapon", "helmet", "armor", "gloves", "boots", "accessory", "exclusive", "ooparts"];
+    const owners = ["hero", "other", null];
+    const pieces: GearPiece[] = [];
+    for (let i = 0; i < 1200; i++) pieces.push(piece(slots[i % 8]!, `p${i}`, owners[(i * 7) % 3] ?? null));
+    pieces.push(piece("", "slotless", null));
+    const m = byUid(pieces);
+    let checked = 0;
+    for (let b = 0; b < 300; b++) {
+      const uids = slots.map((_, s) => `p${(b * 37 + s * 101) % 1200}`);
+      if (b % 5 === 0) uids[3] = "gone";
+      if (b % 7 === 0) uids[5] = "slotless";
+      const old = diffBuildVsLoadout(uids, "hero", m).filter((d) => d.changed).length;
+      expect(changedSlotCount(uids, "hero", m)).toBe(old);
+      checked += old;
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });

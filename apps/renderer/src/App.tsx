@@ -1,13 +1,13 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
-import { autoImport, loadDataVersion, parseFiles, readManualFiles } from "./data.js";
+import { autoImport, keptGameData, loadDataVersion, parseFiles, readManualFiles, type KeptGameData } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
 import { getSteamStatus, launchSteamGame, type SteamStatus } from "./steam.js";
 import { applyBlockedReason } from "./equip.js";
 import { getGameVersion } from "./game-version.js";
 import { waitForStartupSync } from "./lib/startupSync.js";
 import { describeDataSync, requestDataSync, type DataSyncResult } from "./lib/dataSync.js";
-import { createSnapshotFollower } from "./lib/snapshotFollower.js";
+import { createSnapshotFollower, keepIfSame } from "./lib/snapshotFollower.js";
 import { GsHeader, PageBackground, parseTab, type Tab } from "./design/Shell.js";
 import { ToastStack, useToasts } from "./design/Toast.js";
 import { APP_LOG_MAX, appendBounded, stampLine } from "./lib/log/appLog.js";
@@ -281,9 +281,33 @@ export function App() {
     setExcludedPieces(loadExcludedPieces());
   }), []);
 
-  /** Re-import; resolves to the status message it reported ("" when silent). */
-  async function refreshInventory(label: string): Promise<string> {
-    const [r, version] = await Promise.all([autoImport(), loadDataVersion()]);
+  // Startup import + Steam snapshot following share one state machine (the
+  // last-seen user_item.json mtime, an init-before-ticks order, no overlapping
+  // ticks) so launch imports exactly once — see lib/snapshotFollower.ts.
+  const refreshRef = useRef(refreshInventory);
+  useEffect(() => { refreshRef.current = refreshInventory; });
+  const [follower] = useState(() => createSnapshotFollower({
+    getCaptureStatus,
+    getSteamStatus,
+    refresh: async (label) => { await refreshRef.current(label, true); },
+    // Polled every 5 s: an unchanged status keeps its reference (no re-render
+    // of the whole app).
+    onCaptureStatus: (cs) => setCapStatus((prev) => keepIfSame(prev, cs)),
+    onSteamStatus: (st) => setSteam((prev) => keepIfSame(prev, st)),
+  }));
+
+  // Game data of the last import, with its `version.json` hash: a re-import
+  // whose tables carry the same hash keeps it (no fetch of the 19 tables, and
+  // the same `game` reference keeps every memo built on it).
+  const keptGame = useRef<KeptGameData | null>(null);
+  /** Re-import; resolves to the status message it reported ("" when silent).
+   *  `seeded`: the snapshot follower already took the mtimes as seen (its own
+   *  imports); an explicit one (Reload, after a write by the app, a data sync)
+   *  seeds it first, or its next tick would import the same files again. */
+  async function refreshInventory(label: string, seeded = false): Promise<string> {
+    const [version] = await Promise.all([loadDataVersion(), seeded ? null : follower.reseed()]);
+    const r = await autoImport(keptGameData(version, keptGame.current));
+    keptGame.current = r.game && version ? { hash: version.hash, game: r.game } : null;
     // New game data (patch synced in) → prune the stored filters of the set /
     // effect ids it no longer knows, before a Builder mount reads them.
     if (r.game && version) reconcileDataHash(version.hash, r.game);
@@ -348,19 +372,6 @@ export function App() {
     const notice = appliedNotice(r.applied);
     if (notice && !quiet) notify(notice);
   }, [inv, equipped, notify]);
-
-  // Startup import + Steam snapshot following share one state machine (the
-  // last-seen user_item.json mtime, an init-before-ticks order, no overlapping
-  // ticks) so launch imports exactly once — see lib/snapshotFollower.ts.
-  const refreshRef = useRef(refreshInventory);
-  useEffect(() => { refreshRef.current = refreshInventory; });
-  const [follower] = useState(() => createSnapshotFollower({
-    getCaptureStatus,
-    getSteamStatus,
-    refresh: async (label) => { await refreshRef.current(label); },
-    onCaptureStatus: setCapStatus,
-    onSteamStatus: setSteam,
-  }));
 
   useEffect(() => { void follower.init(); }, [follower]);
   // The packaged app opens before its launch-time data sync finishes: once it

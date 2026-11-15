@@ -79,6 +79,27 @@ export function ratingTitle(r: { key: string; formula: string; desc: string }, d
  *  `hideInTable` ones so the row stays scannable. */
 export const TABLE_RATINGS = SOLVER_RATINGS.filter((r) => !r.hideInTable);
 
+/** Which stat columns the results table shows, as one text key: a stat with
+ *  a filter band (min or max) always, otherwise its column pref — the first 8
+ *  by default. A string so the table memoizes the columns on the visible set,
+ *  not on the filters object (recreated at every keystroke in a bound). */
+export function visibleStatKey(
+  statFilters: Readonly<Record<string, { min?: number; max?: number } | undefined>>,
+  colPrefs: Readonly<Record<string, boolean>>,
+): string {
+  return SOLVER_STATS.filter((s, i) => {
+    const b = statFilters[s.key];
+    const filtered = b != null && (b.min != null || b.max != null);
+    return filtered || (colPrefs[s.key] ?? i < 8);
+  }).map((s) => s.key).join(",");
+}
+
+/** The `SOLVER_STATS` columns named by a `visibleStatKey`, in table order. */
+export function statColumnsOfKey(key: string): ReadonlyArray<typeof SOLVER_STATS[number]> {
+  const keys = new Set(key.split(","));
+  return SOLVER_STATS.filter((s) => keys.has(s.key));
+}
+
 /** Slots whose in-game main is user-selectable — Weapon, Accessory, Talisman.
  *  Helmet / Armor / Gloves / Boots all have a fixed in-game main stat and
  *  don't need a filter. The actual stat options per slot are derived from

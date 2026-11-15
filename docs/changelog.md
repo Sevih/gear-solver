@@ -8,6 +8,57 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚡ Renderer : live upg en O(8), colonnes de stats stables, un seul import par écriture, GameData gardé à hash égal, rangs par défaut conditionnels, statut Steam sans re-rendu (G135) (2026-11-15)
+- ✅ **Pourquoi.** Revue de code du 15/11 (inventaire ~1 500 pièces, topN 1 000), six travaux faits pour rien à chaque
+  solve, frappe, import ou tick : (1) le `upg` vivant du tableau de résultats appelait `diffBuildVsLoadout` par build,
+  qui parcourt tout `pieceByUid` : ~1,5 à 3 M d'itérations et 1 000 tableaux de `SlotDiff` par solve et par réimport ;
+  (2) `statCols` dépendait de l'objet `statFilters`, recréé par le réducteur à chaque frappe dans un min / max : `ranges`
+  recalculé et toutes les `ResultRow` re-rendues malgré `memo` ; (3) un ré-import explicite (Reload, Equip, Apply de la
+  Worklist, Wipe, sync de données) ne posait pas la clé de mtimes du suiveur de capture : le tick suivant (≤ 5 s)
+  refaisait le même import complet ; (4) chaque import rechargeait les 19 tables de `/gamedata/*` (fetch + parse,
+  nouvelle référence `game` qui invalide tous les mémos) même à `version.hash` inchangé ; (5) `heroRankOrder`
+  recomposait stats et CP de tout le roster à chaque import alors qu'il ne sert qu'à un héros jamais vu ; (6) chaque tick
+  de 5 s posait un nouvel objet `steam` (et `capStatus`) même identique : toute l'application se re-rendait.
+- ✅ **Comment, (1).** `lib/buildDiff.ts` : `changedSlotCount(pieceUids, heroUid, pieceByUid)`, la même règle que
+  `diffBuildVsLoadout(…).filter((d) => d.changed).length` (pièce trouvée, slot présent, `equippedBy !== heroUid`) lue
+  sur les seules pièces du build ; `liveUpg` de `screens/builder/ResultsTable.tsx` l'appelle. `docs/solver.md` et
+  `wiki/Solver.md` (Swaps, arborescence) le disent.
+- ✅ **Comment, (2).** `screens/builder/statColumns.ts` : `visibleStatKey(statFilters, colPrefs)` (même règle : bande
+  min ou max posée → colonne forcée, sinon le pref, les 8 premières par défaut) rend une clé texte `keys.join(",")`, et
+  `statColumnsOfKey(key)` les colonnes dans l'ordre du tableau ; `statCols` est mémoïsé sur la clé.
+- ✅ **Comment, (3).** `lib/snapshotFollower.ts` : `reseed()` relit `getCaptureStatus` (qui plie d'abord le journal
+  d'équipement, comme au tick), le remonte par `onCaptureStatus` et pose `lastKey`. `refreshInventory(label, seeded)`
+  d'`App.tsx` l'appelle AVANT son import (en parallèle de `loadDataVersion`) : une écriture qui tombe après cette lecture
+  ressort au tick suivant, comme à l'`init`. Les imports du suiveur lui-même (`init`, tick) passent `seeded = true`. La
+  création du suiveur remonte au-dessus de `refreshInventory` (qui le lit), sans autre changement.
+- ✅ **Comment, (4).** `data.ts` : `keptGameData(version, kept)` rend le `GameData` gardé quand le `hash` de
+  `version.json` est celui sous lequel il a été chargé (pas de tampon = rechargement), et `autoImport(keptGame?)` saute
+  alors les 19 tables ; `App.tsx` garde `{ hash, game }` dans un ref après chaque import. Une sync qui change les tables
+  change le hash et recharge. `docs/data-schema.md` et `wiki/Data-Schema.md` le disent.
+- ✅ **Comment, (5).** `lib/storage/rankDefaults.ts` : `heroRankDefaults({ rank, seen, inventory, order })` teste
+  `inventory.characters.some((c) => !seen.has(c.uid))` avant d'appeler `order` (`heroRankOrder`) ; le mémo de
+  `hooks/useRankDefaults.ts` disparaît, l'effet la lit (un import de sauvegarde qui change `seen` est toujours vu au
+  prochain changement de rang, comme avant). Les presets ne bougent pas (leur ordre ne compose rien).
+- ✅ **Comment, (6).** `keepIfSame(prev, next)` (`lib/snapshotFollower.ts`, comparaison JSON) : `onSteamStatus` et
+  `onCaptureStatus` du suiveur posent `setSteam((prev) => keepIfSame(prev, st))` (idem `setCapStatus`) ; un statut
+  inchangé garde sa référence, React n'en re-rend rien. Les autres `setSteam` (gestes ponctuels) sont inchangés.
+- ✅ **Tests.** `apps/renderer/test/buildDiff.test.ts` (+1) : `changedSlotCount` égal à l'ancien compte sur 300 builds
+  d'un inventaire synthétique de 1 200 pièces (uid disparu, pièce sans slot compris). Nouveau
+  `apps/renderer/test/importKeep.test.ts` (6) : `visibleStatKey` stable quand seules les bornes changent, règle des 8 et
+  des bandes, `statColumnsOfKey` ; `keptGameData` (hash égal / autre / sans tampon / rien de gardé), `autoImport(kept)`
+  sans aucun fetch de `/gamedata/*` et même référence, `autoImport()` qui charge. `snapshotFollower.test.ts` (+5) :
+  import explicite après une écriture (`reseed` puis ticks) sans réimport identique, écriture après le `reseed` suivie,
+  statut remonté ; `keepIfSame` (référence gardée à égalité) et un updater façon React sans re-rendu à statut égal.
+  `rankDefaults.test.ts` (+2) : roster entièrement vu → `order` jamais appelé, mêmes objets ; héros nouveau → `order`
+  une fois, résultat de `rankDefaults`. `docs/reference.md` / `wiki/Engine-Reference.md` (ligne `rankDefaults.test.ts`
+  9 → 11, arborescence) à jour. Aucun test retiré. `npm run typecheck` : `> tsc --noEmit` (dernière ligne, renderer,
+  sans erreur) ; `npm test` : `Tests 1275 passed (1275)` (renderer, 1261 avant ; 171 et 267 dans les autres
+  workspaces) ; `npm run lint` : `✖ 6 problems (0 errors, 6 warnings)` (7 avant : l'avertissement « Cannot access refs
+  during render » d'`App.tsx` sur le `refreshRef` du suiveur a disparu avec son déplacement). Pas de changement visuel.
+- ⏳ Rien de mesuré en vrai : les gains sont raisonnés (O(inventaire) → O(8) par build, une lecture de 19 tables et un
+  import en moins par écriture, plus de re-rendu toutes les 5 s). À voir sur la capture : un Equip suivi de 10 s sans
+  second import dans le journal, la frappe d'un min fluide sur 1 000 lignes.
+
 ### 🐛 Optimizer et Gear › Pieces : sélection par référence après Clear filter, Restore annule la solve, filtres lus au moment de la solve, auto-prune des passifs (G134) (2026-11-15)
 - ✅ **Pourquoi.** Revue de code du 15/11, quatre bugs d'état : (1) `selectedBuildIdx` était un index dans
   `displayedResults` ; le ✕ du Filter remettait `displayFilter` à null sans le retoucher, l'index pointait alors dans

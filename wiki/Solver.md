@@ -592,7 +592,8 @@ The line above the cards: "Selected build" (or "No build selected"), **N slots c
 actions.
 - **N slots change** is read off the current inventory (`buildDiff`, `diffBuildVsLoadout` of `lib/buildDiff.ts`),
   not off the solve's `upg`: after Apply to snapshot it drops to 0. The Swaps column (cell and sort) and the `upg`
-  of the "+ Worklist" entry read the same live diff.
+  of the "+ Worklist" entry read the same live rule (the column counts it on the build's own pieces,
+  `changedSlotCount`, without scanning the inventory).
 - **ΔCP ±X** (`build.cp − currentCp`, `currentCp` = `calcBattlePower` of the equipped loadout, computed in
   `composition`). The build is counted in the results' reforge mode, the equipped gear as it is: outside `Off` the
   label names the base (`ΔCP +X vs equipped (build at +10R6)`, one-sentence tooltip — `deltaCpLabel`,
@@ -1039,7 +1040,7 @@ apps/renderer/src/
 │   ├── composeBuild.ts            ← computeFinalStats(+FromPrefix) + aggregate(Gear/Prefix)Buckets (+ GemOverride) + BucketArray (the solver's typed buckets)
 │   ├── overcap.ts                 ← overcapOf + overcapText (wasted CRC 102 / PEN 100 caps, Heroes and Presets)
 │   ├── deltaCp.ts                 ← deltaCpLabel: the selected build's "ΔCP … vs equipped (build at +10R6)"
-│   ├── buildDiff.ts               ← diffBuildVsLoadout: changed slots, read by N slots change, Swaps, Apply to snapshot, + Worklist
+│   ├── buildDiff.ts               ← diffBuildVsLoadout: changed slots, read by N slots change, Apply to snapshot, + Worklist; changedSlotCount (same rule) for Swaps
 │   ├── heroPriority/
 │   │   └── weights.ts              ← hasPriority + effectivePriority + priorityOf: a hero's priority, one source (Optimizer, Presets, solver)
 │   ├── heroes/
