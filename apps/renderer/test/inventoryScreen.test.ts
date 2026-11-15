@@ -279,6 +279,34 @@ describe("InventoryScreen — auto-prune waits for the inventory", () => {
   });
 });
 
+describe("InventoryScreen — auto-prune of the +15 passives", () => {
+  // A +15 weapon carrying the Dimensional Singularity passive.
+  const DS = "Increased DMG within Dimensional Singularity";
+  const weapon: GearPiece = {
+    ...piece("5", "weapon", []),
+    main: [{ stat: "dmgUp", value: 120, percent: true, source: "singularity", name: DS, desc: "[A] Increases DMG", combatOnly: true }],
+  } as GearPiece;
+  const withPassive = { gear: [helmet, talisman, weapon], characters: [] } as unknown as Inventory;
+
+  it("a family no piece of the scope carries is dropped, the one carried stays", () => {
+    seedSession("all", { ...emptyFilters(), passives: new Set([DS, "DMG Increase vs Fire"]) });
+    const tree = runtime.render(() => InventoryScreen({ inventory: withPassive, game: null }));
+    expect(find<ModalProps>(tree, FilterModal).props.current.passives).toEqual(new Set([DS]));
+    expect(unavailableNotice(tree)).toBeNull();
+  });
+
+  it("the scope narrowing to a slot without it prunes the family", () => {
+    seedSession("gear", { ...emptyFilters(), passives: new Set([DS]) });
+    const screen = () => InventoryScreen({ inventory: withPassive, game: null });
+    let tree = runtime.render(screen);
+    expect(find<ModalProps>(tree, FilterModal).props.current.passives).toEqual(new Set([DS]));
+    find<SlotBarProps>(tree, SlotBar).props.onToggle("helmet");
+    tree = runtime.render(screen);
+    expect(find<ModalProps>(tree, FilterModal).props.current.passives.size).toBe(0);
+    expect(unavailableNotice(tree)).toBeNull();
+  });
+});
+
 describe("InventoryScreen — filter preset applied on another scope", () => {
   // EFF only on boots: available on Gear with no slot, absent from the helmets.
   const boots: GearPiece = { ...piece("3", "boots", []), subs: [{ stat: "eff", value: 8, percent: true, ticks: 2, reforgeTicks: 0 }] };

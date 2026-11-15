@@ -304,7 +304,9 @@ même que celle avec laquelle Presets le note. Les *résultats* repartent vides 
   worker annulé sort sans rien poster ; l'orchestrator merge les résultats des workers déjà finis).
 - **Filter / ✕** — filtre client après solve : réapplique les bandes de Stat filters et de Ratings aux résultats
   gardés sans relancer de solve (`applyClientFilter` → `displayFilter` de l'écran ; actif dès qu'il y a des
-  résultats et une bande, ambre quand il filtre) ; **✕** le retire. Pas d'action de reducer.
+  résultats et une bande, ambre quand il filtre ; la sélection passe sur la première ligne filtrée) ; **✕** le retire,
+  le build sélectionné le restant (la session garde le build lui-même, l'index du tableau en est déduit). Pas
+  d'action de reducer.
 
 ### Bandeau de priorité (`screens/builder/PriorityBanner.tsx`)
 
@@ -606,7 +608,8 @@ Toute la hauteur, à côté du tableau et des cartes, dans cet ordre :
     sans l'EE, deviennent un preset local (`lib/storage/localPresets.ts`), le héros en référence.
   - Ligne de statut d'« Optimize preset → » (`presetStatus` : « Optimizing preset ‹nom› (rank N) — pieces of
     higher-ranked and locked presets excluded »).
-  - **Saved builds** — clic = `restoreBuild` (le build revient dans le tableau et sur les cartes) ; ✕ le supprime.
+  - **Saved builds** — clic = `restoreBuild` (le build revient dans le tableau et sur les cartes ; une solve encore
+    en cours est d'abord annulée, ses résultats ne peuvent plus le remplacer) ; ✕ le supprime.
   - **Filter sets** — clic = `loadPreset` du jeu nommé ; ✕ le supprime.
 
 ### Build sélectionné (`BuilderScreen.tsx`, `EquipBuildButton.tsx`)

@@ -686,7 +686,7 @@ export type CountedPassivesByStat = Partial<Record<string, CountedPassive[]>>;
 
 /** Memoized so a hover/sort/selection change only re-renders the rows whose
  *  props actually changed. Requires stable props: `onSelect` is the parent's
- *  useState setter, `ranges` is memoized, `build` refs are stable. The click
+ *  memoized `selectBuildAt` (new only with a new result list), `ranges` is memoized, `build` refs are stable. The click
  *  handler is bound to the stable `index` here rather than passed pre-closed. */
 export const ResultRow = memo(function ResultRow({
   build, upg, selected, pinned = false, ranges, statCols, ratingCols, showScore, showUpg, showTodo = false, todo, passives, showWpn, showAcc, effects, setTags, index, onSelect, onCellMenu,

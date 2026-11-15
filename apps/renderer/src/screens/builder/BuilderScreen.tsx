@@ -290,10 +290,16 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const {
     solveMode, setSolveMode, orchestratorRef, resultsReforge, setResultsReforge, solving, setSolving, progressStore,
     livePoolSizes, resetSolveProgress, solveResults, setSolveResults, lastSolveMs, setLastSolveMs, lastDebugInfo,
-    setLastDebugInfo, solveError, setSolveError, emptyCause, setEmptyCause, estimatePools, selectedBuildIdx,
-    setSelectedBuildIdx, displayFilter, setDisplayFilter, lastSolveMode, setLastSolveMode, startSolve, cancelSolve,
+    setLastDebugInfo, solveError, setSolveError, emptyCause, setEmptyCause, estimatePools, selectedBuild,
+    selectedBuildIdx, setSelectedBuild, selectBuildAt, displayFilter, setDisplayFilter, lastSolveMode, setLastSolveMode, startSolve, cancelSolve,
     displayedResults, resolvedWorkers, applyClientFilter,
   } = useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, workerCount, topN, topK });
+  /** The latest render's `startSolve` — read by `solve` after its reco fetch:
+   *  the click's own closure holds the filters, inventory, target preset and
+   *  exclusions of the click, while they stay editable (and a re-import can
+   *  land) during the fetch. Synced after each commit, like `filtersRef`. */
+  const startSolveRef = useRef(startSolve);
+  useLayoutEffect(() => { startSolveRef.current = startSolve; });
 
   /** Right-click on a result cell → "Min ≥ / Max ≤ <value>": set that bound
    *  (the other one stays) and re-solve in the last solve's mode. The solve
@@ -318,8 +324,6 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   /** Whether any stat/rating band is set — gates the Filter button (nothing to
    *  apply otherwise). */
   const hasAnyBand = Object.keys(filters.statFilters).length > 0 || Object.keys(filters.ratingFilters).length > 0;
-
-  const selectedBuild = selectedBuildIdx != null ? displayedResults[selectedBuildIdx] ?? null : null;
 
   /** Selected build vs the hero's current loadout, per slot — the ONE "slot
    *  changed" rule (the engine's `upg`: piece not on the hero today) read by
@@ -471,6 +475,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     // Push the saved build to the results table (visual confirmation) AND
     // select it so the BottomGearBand renders its 8 pieces. Replaces the
     // last solve's results — user can re-solve to get them back.
+    // A solve still running is cancelled first: its `onResult` (flushed by
+    // the cancel, or later) would otherwise replace the restored build with its
+    // own results, selection and reforge context. The cancel's flush lands in
+    // this same batch, before the sets below, so they win.
+    orchestratorRef.current?.cancel();
     // Clear any stale solve error so the red banner from a previous failed
     // solve doesn't linger over a freshly restored build.
     setSolveError(null);
@@ -479,7 +488,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     // Restore the build's reforge context so the bottom band projects the
     // same substats it was solved with (pre-field / legacy builds migrated).
     setResultsReforge(migrateReforge(b.reforge));
-    setSelectedBuildIdx(0);
+    setSelectedBuild(b.build);
     setLastSolveMode(b.mode);
   };
 
@@ -587,7 +596,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     prevHeroRef.current = selectedUid;
     setSolving(false);
     setSolveResults([]);
-    setSelectedBuildIdx(null);
+    setSelectedBuild(null);
     setDisplayFilter(null);
     setSolveError(null);
     setEmptyCause(null);
@@ -673,13 +682,14 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       for (const [stat, value] of Object.entries(weights)) dispatch({ type: "setPriority", stat, value });
       return;
     }
+    // After the await: the latest render's `startSolve`, not the click's.
     if (decision === "cp-fallback") {
       const meta = game?.characters[String(selected.charId)] ?? null;
       onNotify?.(`No priority and no reco for ${displayNameOf(selected, meta ? { nickname: meta.nickname ?? null } : null)} — solved by Combat Power`);
-      startSolve("cp");
+      startSolveRef.current("cp");
       return;
     }
-    startSolve(decision === "cp" ? "cp" : "score");
+    startSolveRef.current(decision === "cp" ? "cp" : "score");
   };
   const solveByCp = () => { setSolveMode("cp"); startSolve("cp"); };
   // The banner under the hero row: no weight (SOLVE will take the reco's, or
@@ -903,7 +913,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
             <ResultsTable
               builds={displayedResults}
               selectedIdx={selectedBuildIdx}
-              onSelect={setSelectedBuildIdx}
+              onSelect={selectBuildAt}
               solving={solving}
               error={solveError}
               emptyReason={emptyReason}

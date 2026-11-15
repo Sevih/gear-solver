@@ -105,7 +105,7 @@ options, reforge mode), saved as you change them and kept across relaunches.
   happen mid-chunk, so typically none).
 - **Filter** — after a solve, re-applies the **Stat filters** and **Ratings** bands to the
   results you already have, without solving again (instant). **✕** next to it shows every result
-  again.
+  again, the selected build staying selected.
 
 ### The priority banner
 
@@ -255,7 +255,8 @@ reforge mode and Transistone potential of **Settings › Solver**).
     reference. Nothing is sent to the game.
   - When the Optimizer was opened by **Optimize preset →**, a line says which preset is being
     optimized and what it keeps out.
-- **Saved builds** — click one to load it back into the table and the cards; ✕ deletes it.
+- **Saved builds** — click one to load it back into the table and the cards (a solve still running is
+  cancelled); ✕ deletes it.
 - **Filter sets** — click one to load it into the popovers (switch between, say, a crit build
   and a tank build without re-clicking every chip); ✕ deletes it.
 

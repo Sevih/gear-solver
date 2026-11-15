@@ -294,6 +294,7 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
       const nextRarities = new Set([...prev.rarities].filter((r) => availableRarities.has(r)));
       const nextQuality = new Set([...prev.quality].filter((q) => availableQualities.has(q)));
       const nextReachable = new Set([...prev.reachable].filter((q) => availableReachable.has(q)));
+      const nextPassives = new Set([...prev.passives].filter((fam) => availablePassives.has(fam)));
       if (nextMains.size === prev.mains.size
         && nextSubs.size === prev.subs.size
         && nextArmorSets.size === prev.armorSets.size
@@ -301,15 +302,16 @@ export function InventoryScreen({ inventory, game, drill = null, onDrillConsumed
         && nextStars.size === prev.stars.size
         && nextRarities.size === prev.rarities.size
         && nextQuality.size === prev.quality.size
-        && nextReachable.size === prev.reachable.size) return prev;
+        && nextReachable.size === prev.reachable.size
+        && nextPassives.size === prev.passives.size) return prev;
       return {
         ...prev,
         mains: nextMains, subs: nextSubs, armorSets: nextArmorSets, classes: nextClasses,
         stars: nextStars, rarities: nextRarities, quality: nextQuality,
-        reachable: nextReachable,
+        reachable: nextReachable, passives: nextPassives,
       };
     });
-  }, [drill, inventoryReady, availableMains, availableSubs, availableArmorSets, availableClasses, availableStars, availableRarities, availableQualities, availableReachable, setF]);
+  }, [drill, inventoryReady, availableMains, availableSubs, availableArmorSets, availableClasses, availableStars, availableRarities, availableQualities, availableReachable, availablePassives, setF]);
 
   // Selected values without a piece in the scope — the pills the modal greys
   // ("No piece in the current view"), counted for the line above the grid.

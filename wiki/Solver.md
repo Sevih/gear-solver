@@ -298,7 +298,8 @@ scores them with. The *results* start empty on each hero switch.
   cancelled worker exits without posting; the orchestrator merges the results of workers that already finished).
 - **Filter / ✕** — post-solve client filter: re-applies the Stat filters and Ratings bands to the kept results
   without re-solving (`applyClientFilter` → the screen's `displayFilter`; enabled once there are results and a
-  band, amber while it filters); **✕** removes it. No reducer action.
+  band, amber while it filters; the selection moves to the top filtered row); **✕** removes it, the selected build
+  staying selected (the session holds the build itself, the table's index is derived from it). No reducer action.
 
 ### Priority banner (`screens/builder/PriorityBanner.tsx`)
 
@@ -582,7 +583,8 @@ Full height, next to the table and the cards, in this order:
     without the EE, become a local preset (`lib/storage/localPresets.ts`), the hero as reference.
   - The "Optimize preset →" status line (`presetStatus`: "Optimizing preset ‹name› (rank N) — pieces of
     higher-ranked and locked presets excluded").
-  - **Saved builds** — a click = `restoreBuild` (the build comes back in the table and on the cards); ✕ deletes it.
+  - **Saved builds** — a click = `restoreBuild` (the build comes back in the table and on the cards; a solve still
+    running is cancelled first, so its results can't replace it); ✕ deletes it.
   - **Filter sets** — a click = `loadPreset` of the named set; ✕ deletes it.
 
 ### Selected build (`BuilderScreen.tsx`, `EquipBuildButton.tsx`)

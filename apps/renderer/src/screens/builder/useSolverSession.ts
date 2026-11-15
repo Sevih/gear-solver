@@ -41,6 +41,14 @@ function buildPassesFilters(
   return true;
 }
 
+type DisplayFilter = { statFilters: Record<string, MinMax>; ratingFilters: Record<string, MinMax> };
+
+/** The stored results narrowed by the post-solve client filter (all of them
+ *  without one). */
+function applyDisplayFilter(results: SolveBuild[], filter: DisplayFilter | null): SolveBuild[] {
+  return filter ? results.filter((b) => buildPassesFilters(b, filter.statFilters, filter.ratingFilters)) : results;
+}
+
 interface SolverSessionInput {
   selectedUid: string | null;
   selected: Character | null;
@@ -107,12 +115,16 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
    *  as filters/hero change, so the cartesian guard-rail appears BEFORE clicking
    *  SOLVE, not after the precompute at solve start. Null until first computed. */
   const [estimatePools, setEstimatePools] = useState<PoolSizes | null>(null);
-  const [selectedBuildIdx, setSelectedBuildIdx] = useState<number | null>(null);
+  /** The selected result, held by reference — not as an index: an index into
+   *  the filtered list pointed at another build once "Clear filter" brought
+   *  the full list back (the 3rd filtered row, #17, became row #3). The index
+   *  the table reads is derived from it (`selectedBuildIdx`). */
+  const [selectedBuild, setSelectedBuild] = useState<SolveBuild | null>(null);
   /** Post-solve client filter — a snapshot of the stat/rating bands applied to
    *  the STORED results (no re-solve). Null = show every stored build. Set by
    *  the toolbar's "Filter" button; cleared whenever a fresh result set lands
    *  (a new solve already applied the bands server-side). */
-  const [displayFilter, setDisplayFilter] = useState<{ statFilters: Record<string, MinMax>; ratingFilters: Record<string, MinMax> } | null>(null);
+  const [displayFilter, setDisplayFilter] = useState<DisplayFilter | null>(null);
   /** Track the mode used for the last solve — surfaces on Save Build so we
    *  preserve "this build came from SOLVE CP" vs "from SOLVE". */
   const [lastSolveMode, setLastSolveMode] = useState<SolveMode>("score");
@@ -146,10 +158,10 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     if (!orchestratorRef.current) {
       orchestratorRef.current = new SolverOrchestrator({
         onProgress: (p) => { progressStore.set({ permutations: p.permutations, searched: p.searched }); setLivePoolSizes(p.poolSizes ?? null); },
-        onResult:   (builds, durationMs, debugInfo, tickWeights, cause) => { setSolveResults(builds); setResultsReforge({ ...solveReforgeRef.current, tickWeights }); setSelectedBuildIdx(builds.length > 0 ? 0 : null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); setLastDebugInfo(debugInfo ?? null); setEmptyCause(cause); },
+        onResult:   (builds, durationMs, debugInfo, tickWeights, cause) => { setSolveResults(builds); setResultsReforge({ ...solveReforgeRef.current, tickWeights }); setSelectedBuild(builds[0] ?? null); setDisplayFilter(null); setSolving(false); setLastSolveMs(durationMs); setLastDebugInfo(debugInfo ?? null); setEmptyCause(cause); },
         // A failed solve never shows builds: the orchestrator drops what the
         // finished workers returned (a partial search), the table stays empty.
-        onError:    (msg) => { setSolveError(msg); setSolving(false); setSolveResults([]); setSelectedBuildIdx(null); },
+        onError:    (msg) => { setSolveError(msg); setSolving(false); setSolveResults([]); setSelectedBuild(null); },
       });
     }
     return orchestratorRef.current;
@@ -174,7 +186,7 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     setSolveError(null);
     setEmptyCause(null);
     setSolveResults([]);
-    setSelectedBuildIdx(null);
+    setSelectedBuild(null);
     setDisplayFilter(null);
     setLastSolveMs(null);
     resetSolveProgress();
@@ -221,14 +233,18 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
   const cancelSolve = () => orchestratorRef.current?.cancel();
 
   // Results actually shown — the stored set, optionally narrowed by the
-  // post-solve client filter (no re-solve). Selection + gear band index into
-  // THIS array, so a Filter that drops rows doesn't desync the selection.
-  const displayedResults = useMemo(
-    () => (displayFilter
-      ? solveResults.filter((b) => buildPassesFilters(b, displayFilter.statFilters, displayFilter.ratingFilters))
-      : solveResults),
-    [solveResults, displayFilter],
-  );
+  // post-solve client filter (no re-solve). The table's selection index points
+  // into THIS array; it is derived from the selected build, so adding or
+  // clearing the filter keeps the same build selected wherever its row moves
+  // (null while the build isn't shown).
+  const displayedResults = useMemo(() => applyDisplayFilter(solveResults, displayFilter), [solveResults, displayFilter]);
+  const selectedBuildIdx = useMemo(() => {
+    if (!selectedBuild) return null;
+    const i = displayedResults.indexOf(selectedBuild);
+    return i >= 0 ? i : null;
+  }, [displayedResults, selectedBuild]);
+  /** Select the row at `i` of the shown results (the table's click payload). */
+  const selectBuildAt = useCallback((i: number | null) => setSelectedBuild(i != null ? displayedResults[i] ?? null : null), [displayedResults]);
   // Resolved solver worker-pool size — surfaced in the footer so the user can
   // confirm the search uses the whole machine. Recomputes when the override
   // setting changes (Settings → Solver) so the read-out stays live.
@@ -236,8 +252,9 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
   // Apply the current stat/rating bands to the stored results without
   // re-solving. Re-anchors the selection to the new top row.
   const applyClientFilter = () => {
-    setDisplayFilter({ statFilters: filters.statFilters, ratingFilters: filters.ratingFilters });
-    setSelectedBuildIdx(solveResults.length > 0 ? 0 : null);
+    const next: DisplayFilter = { statFilters: filters.statFilters, ratingFilters: filters.ratingFilters };
+    setDisplayFilter(next);
+    setSelectedBuild(applyDisplayFilter(solveResults, next)[0] ?? null);
   };
 
   // Recompute the pre-solve cartesian estimate (debounced) whenever the hero /
@@ -281,8 +298,8 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
   return {
     solveMode, setSolveMode, orchestratorRef, resultsReforge, setResultsReforge, solving, setSolving, progressStore,
     livePoolSizes, resetSolveProgress, solveResults, setSolveResults, lastSolveMs, setLastSolveMs, lastDebugInfo,
-    setLastDebugInfo, solveError, setSolveError, emptyCause, setEmptyCause, estimatePools, selectedBuildIdx,
-    setSelectedBuildIdx, displayFilter, setDisplayFilter, lastSolveMode, setLastSolveMode, startSolve, cancelSolve,
+    setLastDebugInfo, solveError, setSolveError, emptyCause, setEmptyCause, estimatePools, selectedBuild: selectedBuildIdx != null ? selectedBuild : null,
+    selectedBuildIdx, setSelectedBuild, selectBuildAt, displayFilter, setDisplayFilter, lastSolveMode, setLastSolveMode, startSolve, cancelSolve,
     displayedResults, resolvedWorkers, applyClientFilter,
   };
 }

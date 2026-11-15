@@ -8,6 +8,55 @@
 
 ## Items de backlog clôturés (index)
 
+### 🐛 Optimizer et Gear › Pieces : sélection par référence après Clear filter, Restore annule la solve, filtres lus au moment de la solve, auto-prune des passifs (G134) (2026-11-15)
+- ✅ **Pourquoi.** Revue de code du 15/11, quatre bugs d'état : (1) `selectedBuildIdx` était un index dans
+  `displayedResults` ; le ✕ du Filter remettait `displayFilter` à null sans le retoucher, l'index pointait alors dans
+  la liste complète (3e ligne filtrée, n°17 du solve, puis ✕ → la ligne n°3) et la bande de cartes, Equip,
+  + Worklist, Save build visaient un autre build sans rien dire ; (2) Restore d'un build sauvé restait cliquable pendant
+  une solve sans l'annuler : le build restauré s'affichait sous « Solving… » puis l'`onResult` de la solve l'écrasait
+  (sélection et `resultsReforge` compris) ; (3) dans `solve()`, après l'`await fetchRecoForHero`, les branches
+  « cp-fallback » et « score » appelaient le `startSolve` du rendu du clic, donc les filtres, l'inventaire, le preset
+  visé et les exclusions de ce rendu-là, alors qu'ils restent éditables pendant la récupération ; (4) l'auto-prune de
+  Gear › Pieces (G125) élaguait tout sauf `f.passives`, pourtant compté dans `unavailableCount` : un passif +15 sans
+  pièce dans la portée restait actif et vidait la grille.
+- ✅ **Comment, (1).** `screens/builder/useSolverSession.ts` garde la sélection comme une référence `SolveBuild`
+  (`selectedBuild`) ; l'index lu par le tableau en est déduit (`indexOf` dans `displayedResults`, null si le build
+  n'est pas affiché) et `selectBuildAt(i)` (mémoïsé sur la liste affichée) remplace `setSelectedBuildIdx` comme
+  `onSelect` de `ResultsTable` ; `onResult` sélectionne `builds[0]`, Filter (`applyClientFilter`) la première ligne
+  filtrée comme avant (`applyDisplayFilter`, la même fonction que `displayedResults`), Restore le build restauré. Le
+  `selectedBuild` exposé est null quand le build n'est pas dans la liste affichée, comme l'ancien `displayedResults[i]`.
+  L'épingle de Compare (G128) n'avait pas le défaut : elle garde déjà le build lui-même (vérifié par un test).
+  Commentaire de `ResultRow` mis à jour (`onSelect` n'est plus un setter de `useState`).
+- ✅ **Comment, (2) : Restore annule la solve (le bouton n'est pas désactivé).** `restoreBuild` appelle
+  `orchestratorRef.current?.cancel()` avant ses `set*`, comme le changement de héros : le flush synchrone du cancel
+  (`onResult` des workers déjà finis, `solving` à faux) tombe dans le même lot de mises à jour, avant les `set*` du
+  restore qui l'emportent, et la sortie tardive de la solve annulée est jetée par `solveId`. Pas de changement visuel.
+- ✅ **Comment, (3).** `BuilderScreen.tsx` : `startSolveRef`, synchronisé à chaque commit par un `useLayoutEffect` comme
+  `filtersRef` ; les deux appels qui suivent l'`await` passent par `startSolveRef.current(…)`, donc le `startSolve` du
+  dernier rendu (filtres, inventaire réimporté, preset visé, exclusions et réservations du moment). La branche
+  « score-with-reco » garde `pendingSolveRef` et l'effet sur `filters`.
+- ✅ **Comment, (4).** `screens/inventory/InventoryScreen.tsx` : `passives` filtré par `availablePassives` dans
+  l'élagage, la comparaison des tailles et les dépendances de l'effet.
+- ✅ **Tests.** Nouveau `apps/renderer/test/builderScreenState.test.ts` (6) : `BuilderScreen` appelé en fonction sur un
+  runtime de hooks minimal (`useReducer`, effets de layout avant les passifs) avec un faux orchestrator qui suit le
+  contrat réel du cancel ; 3e ligne filtrée sélectionnée puis ✕ → index 13 dans la liste complète, même build sur la
+  bande de cartes ; épingle de Compare conservée ; Filter remet la sélection en tête ; Restore pendant une solve → build
+  restauré affiché et sélectionné, `solving` à faux, contexte de reforge restauré, résultats tardifs jetés ; reco en
+  attente (`vi.stubGlobal("fetch", …)`, 404) → une bande posée pendant le fetch est dans la solve CP de repli, une
+  priorité posée à la main fait partir Score avec elle. `apps/renderer/test/inventoryScreen.test.ts` (18 → 20) : une
+  famille de passif sans pièce dans la portée est élaguée, celle qui est portée reste ; la portée réduite à un slot sans
+  elle l'élague. Sur le code d'avant, 4 des 6 nouveaux tests de l'Optimizer et les 2 de Gear échouent (l'épingle et le
+  recentrage de Filter passaient déjà). Aucun test retiré. `npm run typecheck` : `> tsc --noEmit` (dernière ligne,
+  renderer, sans erreur) ; `npm test` : `Tests 1261 passed (1261)` (renderer ; 171 et 267 dans les autres workspaces) ;
+  `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (Filter / ✕ : la sélection reste ; Saved builds : la solve en cours
+  est annulée), `wiki/Using-the-App.md` (mêmes deux points), `docs/reference.md` / `wiki/Engine-Reference.md` (ligne
+  `builderScreenState.test.ts` de la table des tests).
+- ⏳ À vérifier par Sevih dans l'app : Filter, sélection d'une ligne, ✕ (la même ligne reste en surbrillance, les
+  cartes ne changent pas) ; Restore pendant une longue solve (le build restauré reste, plus de « Solving… »).
+- ⏳ Hors périmètre, repéré : un Restore pendant la récupération de la reco (« Loading reco… », `solving` encore à faux)
+  n'annule rien, la solve part ensuite et remplace le build restauré (lot à part si c'est gênant).
+
 ### ⚡ Solver : composition unique au CHC additif, buckets cumulés, chunks weapon × helmet, seaux en tableau typé (G133) (2026-11-15)
 - ✅ **Pourquoi.** Revue de code du 15/11, quatre coûts mesurés dans la boucle de `solveChunk` : (1) avec `critRate` en
   priorité, presque chaque combo était composé deux fois, la première fiche ne servant qu'à lire le CHC avant gemmes ;
