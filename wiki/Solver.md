@@ -621,13 +621,13 @@ quarter of the band less its three 8 px gutters), each card as wide as its colum
 `w-full`); narrower, the same order wraps. Outside the band (Gear › Pieces, tooltips, presets) the card keeps its
 fixed width (`w-80`, `w-56` compact). The name runs on two lines at most (`line-clamp-2`) and the slot and the
 class ("Striker Exclusive") are two `span`s that wrap under each other rather than under the wearer's portrait
-(Gear's card: the band's shows only the class, see `dense` below).
+(Gear's card: the band's has neither line, see `dense` below).
 Each card shows name (with **Never use** at the
 top right of its row), enhance level, slot icon, then beside the icon the main stat(s)
 (12 px, a long name cut with its `title`, so a weapon's two mains fit the icon's height), subs (with ticks). It's Gear's piece card (`design/GearCard.tsx`: `GearCardPanel` around
 `GearCardBody`, `effects="none"`) in its denser form (`dense`, passed by `BottomGearBand` only, full and compact):
-no rarity / slot text beside the icon (the frame and the name's color carry the rarity, the icon and the place in
-the band the slot; "‹Class› Exclusive" stays when the piece has one), "preset ‹names›" right-aligned under Never
+no rarity / slot / "‹Class› Exclusive" text beside the icon, the main stats right beside it (the frame and the
+name's color carry the rarity, the icon and the place in the band the slot), "preset ‹names›" right-aligned under Never
 use (instead of "from preset ‹names›" under the header, cut with the names in full in its `title`), and quality +
 Singularity effects on ONE line in their compact form (`14/20 →17 Exc.` at the left, `compactEffect` at the right,
 details in the `title`s), no quality bar, no "Active Effect at +15 Enhancement" title — Gear › Pieces, the piece

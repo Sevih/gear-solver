@@ -648,14 +648,14 @@ carte à la largeur de sa colonne (`fluid` de `GearCardPanel` : `w-full`) ; plus
 ligne. Hors de la bande (Gear › Pieces, infobulles, presets) la carte garde sa largeur fixe (`w-80`, `w-56` en
 compact). Le nom passe sur deux lignes au plus (`line-clamp-2`) et le slot et la classe (« Striker Exclusive »)
 sont deux `span` qui passent l'un sous l'autre plutôt que sous le portrait du porteur (carte de Gear : celle
-de la bande ne montre que la classe, voir `dense` plus bas). Chaque carte montre nom (avec
+de la bande n'a aucune de ces lignes, voir `dense` plus bas). Chaque carte montre nom (avec
 **Never use** en haut à droite de sa rangée), enhance level, icône slot, puis à côté de l'icône la ou les main
 stats (12 px, un nom long coupé avec son `title`, pour que les deux mains d'une arme
 tiennent dans la hauteur de l'icône), subs (avec ticks). C'est la carte de pièce de Gear
 (`design/GearCard.tsx` : `GearCardPanel` autour de `GearCardBody`, `effects="none"`) en version dense (`dense`,
-passé par `BottomGearBand` seulement, pleine et compacte) : plus de texte rareté / slot à côté de l'icône (la
-couleur du cadre et du nom porte la rareté, l'icône et la place dans la bande le slot ; « ‹Classe› Exclusive »
-reste si la pièce en a une), « preset ‹noms› » aligné à droite sous Never use (au lieu de « from preset ‹noms› »
+passé par `BottomGearBand` seulement, pleine et compacte) : plus de texte rareté / slot / « ‹Classe› Exclusive »
+à côté de l'icône, les main stats directement à côté d'elle (la couleur du cadre et du nom porte la rareté,
+l'icône et la place dans la bande le slot), « preset ‹noms› » aligné à droite sous Never use (au lieu de « from preset ‹noms› »
 sous l'en-tête, tronqué avec les noms complets dans son `title`), et qualité + effets Singularity sur UNE ligne en
 forme compacte (`14/20 →17 Exc.` à gauche, `compactEffect` à droite, détails en `title`), sans barre de qualité ni
 titre « Active Effect at +15 Enhancement » — Gear › Pieces, le détail d'une pièce et les infobulles gardent la

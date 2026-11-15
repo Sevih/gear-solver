@@ -1,11 +1,11 @@
 // The Optimizer band's denser gear cards (G129, `dense` on `GearCardPanel` /
 // `GearCardBody` / `ResultPairDetail`, passed by `BottomGearBand` only): no
-// rarity nor slot text beside the icon (the "‹Class› Exclusive" stays),
+// rarity, slot nor "‹Class› Exclusive" text beside the icon (G131),
 // "preset ‹names›" under the top-right Never use instead of "from preset
 // ‹names›" under the header, and — full card — quality and the Singularity
 // +15 effects on one line in their compact form, no quality bar, no "Active
 // Effect at +15 Enhancement" title. Gear › Pieces' card (no `dense`) keeps its
-// rarity, slot, "from preset" line and bar. Rendered server-side, the
+// rarity, slot, "‹Class› Exclusive", "from preset" line and bar. Rendered server-side, the
 // equipment icon mocked to a marker element.
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
@@ -58,8 +58,12 @@ describe("dense full card (Optimizer band)", () => {
     expect(html.indexOf("data-equipment-icon")).toBeLessThan(html.indexOf(">500<"));
   });
 
-  it("keeps « ‹Class› Exclusive » when the piece has one", () => {
-    expect(text(render(piece({ classLimit: "Striker" }), { dense: true }))).toContain("Striker Exclusive");
+  it("drops « ‹Class› Exclusive » too: the main rolls come right after the icon", () => {
+    const html = render(piece({ classLimit: "Striker" }), { dense: true });
+    expect(text(html)).not.toContain("Exclusive");
+    expect(html).not.toContain("Striker");
+    // No text line between the icon and the main rolls' column.
+    expect(html).toMatch(/<i data-equipment-icon=""><\/i><div class="min-w-0 flex-1"><div class="space-y-1">/);
   });
 
   it("« preset X » under Never use, right-aligned, without « from », same title, cut", () => {
@@ -139,6 +143,13 @@ describe("non-dense card (Gear › Pieces) unchanged", () => {
     expect(html).toMatch(BAR);
     expect(html).toMatch(/<div class="truncate text-amber-200\/85 -mt-2 text-\[11px\]" title="Held by/);
     expect(html).not.toContain("flex-col items-end");
+  });
+
+  it("full: « ‹Class› Exclusive » stays above the main rolls", () => {
+    const html = render(piece({ classLimit: "Striker" }), {});
+    expect(text(html)).toContain("Striker Exclusive");
+    expect(html.indexOf("Striker Exclusive")).toBeGreaterThan(html.indexOf("data-equipment-icon"));
+    expect(html.indexOf("Striker Exclusive")).toBeLessThan(html.indexOf(">500<"));
   });
 
   it("compact: « from preset » under the header", () => {

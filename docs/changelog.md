@@ -8,6 +8,29 @@
 
 ## Items de backlog clôturés (index)
 
+### 🗂️ Optimizer : cartes denses sans la mention « ‹Classe› Exclusive » (G131) (2026-11-15)
+- ✅ **Pourquoi.** Suite de G129, demande de Sevih du 15/11 : sur les cartes denses de la bande du bas de l'Optimizer,
+  « ‹Classe› Exclusive » était la dernière ligne de texte au-dessus des main stats ; elle part aussi, les main stats
+  viennent directement à côté de l'icône. Les cartes non denses (Gear › Pieces, détail d'une pièce, infobulles) la
+  gardent.
+- ✅ **Comment (`apps/renderer/src/design/GearCard.tsx`).** Dans `FullBody`, `showLabels` vaut `!dense` (au lieu de
+  `!dense || !!piece.classLimit`) : en dense, plus aucune ligne rareté / slot / classe, et la colonne des main stats
+  perd sa marge haute ; les deux `!dense &&` devenus inutiles dans ce bloc (qui n'est plus rendu qu'en non dense)
+  sont retirés, rendu non dense identique. `CompactBody` n'affichait déjà pas la classe : rien à y changer. Ni
+  l'icône d'équipement ni la carte n'ont de `title`, la contrainte de classe n'est donc reportée nulle part
+  (consigne : seulement si un `title` existe déjà). En-tête du fichier mis à jour.
+- ✅ **Tests.** `apps/renderer/test/denseCard.test.ts` (11) : « keeps « ‹Class› Exclusive » » devient « drops
+  « ‹Class› Exclusive » too » (carte pleine dense d'une pièce `Striker` : ni « Exclusive » ni « Striker » dans le
+  rendu, la colonne des main stats suit l'icône sans ligne entre les deux) ; nouveau test côté non dense :
+  « Striker Exclusive » reste, entre l'icône et la main stat. Le nouveau test dense échoue sur l'ancien
+  `GearCard.tsx` et passe sur le nouveau. Aucun test retiré. `npm run typecheck` : `> tsc --noEmit` (dernière
+  ligne, renderer, sans erreur) ; `npm test` : `Tests 1241 passed (1241)` (renderer ; 171 et 267 dans les autres
+  workspaces) ; `npm run lint` : `✖ 7 problems (0 errors, 7 warnings)`, comme avant.
+- ✅ **Docs.** `wiki/Using-the-App.md` (The piece cards), `docs/solver.md` / `wiki/Solver.md` (cartes de pièces :
+  la carte de la bande n'a plus ni slot ni classe, `dense` sans « ‹Classe› Exclusive »).
+- ⏳ À voir par Sevih en vrai : une pièce de classe dans la bande (accessoire, EE) se distingue désormais seulement
+  par son nom, aucune infobulle ne porte la classe.
+
 ### 🧮 Solver : gemmes serties comptées à leur valeur fixe, paliers de stat de nouveau monotones (G130) (2026-11-15)
 - ✅ **Pourquoi.** Bug remonté par Sevih le 15/11 dans l'Optimizer sur Gnosis Beth (priorité EFF 3, SPD 2, CHC 1,
   CHD / CDMG RED / DMG RED / DMG UP à −1, filtres EFF ≥ 628, CHC ≥ 100, SPD ≥ 265, Top % 60, reforge désactivé). Avec

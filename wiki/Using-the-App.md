@@ -279,8 +279,8 @@ reforge mode, your loadout as it is now). Then two ways out:
 One card per slot, laid out like the game's equipment screen (Weapon, EE, Helmet, Armor /
 Accessory, Talisman, Gloves, Boots). Each card is a denser take on the Gear tab's piece card: the
 name with **Never use** at its top right, then the piece icon with, beside it, the main stat(s) (no
-rarity or slot written out: the frame and the name's color give the rarity, the icon and the card's
-place the slot; « Striker Exclusive » stays when the piece has one), the substats, then quality
+rarity, slot or « Striker Exclusive » written out: the frame and the name's color give the rarity,
+the icon and the card's place the slot), the substats, then quality
 and the Singularity +15 effect on one line (« 14/20 →17 Exc. » at the left, the effect as grade +
 short label + value at the right, details on hover, no quality bar). The weapon / accessory passive
 and the set bonuses aren't there: the **Effects** panel lists them for the whole build. On top:

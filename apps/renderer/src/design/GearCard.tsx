@@ -22,8 +22,8 @@
  * effects and quality, an icon exclude action at the top right instead of the
  * button, a narrower card, the talisman's multi-tier passive in the name's `title`, and
  * the EE + talisman sharing one card (`ResultPairDetail`). `dense` (the
- * Optimizer's band only, full and compact): no rarity / slot text beside the
- * icon (the "‹Class› Exclusive" stays), "preset ‹names›" under the header
+ * Optimizer's band only, full and compact): no rarity / slot / "‹Class›
+ * Exclusive" text beside the icon, "preset ‹names›" under the header
  * action instead of "from preset ‹names›" under the header, and — full card —
  * quality and the Singularity effects on one line in their compact form, no
  * quality bar, no "Active Effect at +15 Enhancement" title.
@@ -310,8 +310,8 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
   const setEntry = onCard && game && piece.armorSetId ? pickSetLevel(game, piece.armorSetId, piece.bt) : null;
   const hasPresets = !!fromPresets && fromPresets.length > 0;
   const showEffects = !bareEE && piece.singularity && piece.effects.length > 0;
-  // Dense: only the "‹Class› Exclusive" stays above the main rolls.
-  const showLabels = !dense || !!piece.classLimit;
+  // Dense: no text line above the main rolls (rarity, slot, "‹Class› Exclusive").
+  const showLabels = !dense;
 
   return (
     <div className="space-y-4 text-left">
@@ -343,11 +343,11 @@ function FullBody({ piece, game, equippedChar = null, onOptimizeWearer, fromPres
         <div className="min-w-0 flex-1">
           {showLabels && (
             <div className="flex flex-col text-[11px] leading-tight">
-              {!dense && <span style={{ color: rarity?.fg ?? "#e4e4e7" }} className="font-semibold">{rarity?.label ?? piece.rarity}</span>}
+              <span style={{ color: rarity?.fg ?? "#e4e4e7" }} className="font-semibold">{rarity?.label ?? piece.rarity}</span>
               {/* slot and class on two spans: they wrap under each other
                *  rather than run into the wearer's portrait */}
               <span className="flex flex-wrap gap-x-2 text-white">
-                {!dense && <span>{slot?.label ?? "Item"}</span>}
+                <span>{slot?.label ?? "Item"}</span>
                 {piece.classLimit && <span>{piece.classLimit} Exclusive</span>}
               </span>
             </div>
