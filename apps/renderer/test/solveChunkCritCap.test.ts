@@ -183,3 +183,69 @@ describe("solveChunk — crit-cap slow path (critRate priority + crit gems)", ()
     }
   });
 });
+
+describe("solveChunk — SOLVE CP without a priority: the overshoot reallocation never lowers CP", () => {
+  // The default allocation is the marginal-CP one (`allocateGemsByCp`), built
+  // by hand here: two crit + three ATK% gems. The reallocation of a combo over
+  // 102 CHC (`allocateGemsCapped`) walks the linear order of `scoredGems`
+  // instead — it skips the crit gems at the cap and takes the next ones.
+  const cpCtx = (second: ScoredGem): SolveContext => {
+    const scored: ScoredGem[] = [
+      ...[11, 12, 13].map((id) => crit(id, 3)),
+      ...[21, 22, 23, 24, 25].map((id) => ({ ...second, id })),
+      ...[1, 2, 3].map((id) => atk(id, 1)),
+    ].sort((a, b) => b.score - a.score);
+    const ctx = makeCtx(scored);
+    ctx.req = { ...ctx.req, mode: "cp", filters: { ...FILTERS, priority: {} } };
+    // CHC 85 / 100 before gems: + 6 → 91 (untriggered) and 106 (> 102).
+    ctx.pools.gloves = [80, 95].map((c) => piece("gloves", `g${c}`, { subs: [stat("critRate", c, true)] }));
+    ctx.pools.ooparts = [ctx.pools.ooparts[0]!]; // 5 slots
+    const def = { alloc: { talisman: [11, 12, 1, 2, 3], ee: [] }, delta: { flat: {}, pct: { critRate: 6, atkPct: 18 } } };
+    ctx.gemDeltaByTalismanSlots = new Map([[5, def.delta]]);
+    ctx.gemAllocByTalismanSlots = new Map([[5, def.alloc]]);
+    return ctx;
+  };
+  const cpOf = (ctx: SolveContext, b: SolveBuild, delta: { flat: Record<string, number>; pct: Record<string, number> }): number => {
+    const byUid = new Map<string, GearPiece>();
+    for (const arr of Object.values(ctx.pools)) for (const p of arr) byUid.set(p.uid, p);
+    const pieces = b.pieceUids.map((u) => byUid.get(u)!);
+    return calcBattlePower({
+      stats: computeFinalStats(BASELINE, SCALING, pieces, GAME, delta), showUIStar: STAR_META.showUIStar,
+      starPlus: STAR_META.starPlus, skills: SKILLS, ee: null, ooparts: pieces[pieces.length - 1]!, fused: STAR_META.fused,
+    });
+  };
+
+  it("a reallocation that would lose CP keeps the default allocation, at its CP", async () => {
+    // Linear order: crit, then tiny DMG-reduce gems, then ATK% — at the cap the
+    // reallocation trades the three ATK% gems for DMG-reduce ones.
+    const ctx = cpCtx({ id: 0, stat: "dmgReduce", value: 0.1, percent: true, score: 2 });
+    const out = await solveChunk(ctx, 0, 1, 1000);
+    expect(out.builds).toHaveLength(4);
+    const hot = out.builds.filter((x) => gloveOf(x) === "g95");
+    expect(hot).toHaveLength(2);
+    for (const b of hot) {
+      const def = ctx.gemDeltaByTalismanSlots.get(5)!;
+      const capped = { flat: {}, pct: { dmgReduce: 0.5 } };
+      expect(cpOf(ctx, b, capped)).toBeLessThan(cpOf(ctx, b, def)); // the premise
+      expect(b.gemAllocation).toBe(ctx.gemAllocByTalismanSlots.get(5));
+      expect(b.cp).toBe(cpOf(ctx, b, def));
+    }
+  });
+
+  it("a reallocation that gains CP is still taken", async () => {
+    // Linear order: crit, then ATK% gems worth more than the default's ATK% —
+    // at the cap the two wasted crit gems become ATK% ones.
+    const ctx = cpCtx({ id: 0, stat: "atkPct", value: 6, percent: true, score: 2 });
+    const out = await solveChunk(ctx, 0, 1, 1000);
+    const hot = out.builds.filter((x) => gloveOf(x) === "g95");
+    expect(hot).toHaveLength(2);
+    for (const b of hot) {
+      expect(b.gemAllocation.talisman).toEqual([21, 22, 23, 24, 25]);
+      const capped = { flat: {}, pct: { atkPct: 30 } };
+      expect(b.cp).toBe(cpOf(ctx, b, capped));
+      expect(b.cp!).toBeGreaterThan(cpOf(ctx, b, ctx.gemDeltaByTalismanSlots.get(5)!));
+    }
+    // Untriggered (CHC 91): the default.
+    for (const b of out.builds.filter((x) => gloveOf(x) === "g80")) expect(b.gemAllocation).toBe(ctx.gemAllocByTalismanSlots.get(5));
+  });
+});

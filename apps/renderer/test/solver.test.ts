@@ -1584,7 +1584,10 @@ describe("solveChunk — the gems serve a stat filter's minimum before the prior
     ...[0, 1, 2, 3, 4].map((): ScoredGem => ({ id: ATK_GEM, stat: "atkPct", value: 6, percent: true, score: 0, fill: 0 })),
   ];
 
-  function ctxFor(statFilters: SolveFilters["statFilters"], mode: SolveMode = "score", priority: Record<string, number> = { critDmg: 3 }): SolveContext {
+  function ctxFor(
+    statFilters: SolveFilters["statFilters"], mode: SolveMode = "score", priority: Record<string, number> = { critDmg: 3 },
+    scored: ScoredGem[] = SCORED, talismanSubs: RolledStat[] = [0, 1, 2, 3, 4].map(() => roll("atkPct", 6, true)),
+  ): SolveContext {
     const filters: SolveFilters = {
       options: { onlyMaxed: false, reforgeMode: "disable", equippedScope: "all", keepCurrent: false, allowBrokenSets: true },
       excludedHeroes: [], statFilters, ratingFilters: {}, priority, topPct: 100,
@@ -1596,14 +1599,14 @@ describe("solveChunk — the gems serve a stat filter's minimum before the prior
       game, userGeasLevels: null, userCodexLevel: null, heroPriority: {}, userSkills: SKILLS,
       filters, topK: 100, chunkIndex: 0, chunkCount: 1,
     };
-    const def = allocateGems(SCORED, 5, 0);
+    const def = allocateGems(scored, 5, 0);
     return {
-      req, baseline: BASELINE, scaling: SCALING, ee: null, poolSizes: {}, scoredGems: SCORED,
+      req, baseline: BASELINE, scaling: SCALING, ee: null, poolSizes: {}, scoredGems: scored,
       pools: {
         weapon: [piece("weapon", "w1", [roll("atk", 200, false)]), piece("weapon", "w2", [roll("atk", 500, false)])],
         helmet: [piece("helmet", "h")], armor: [piece("armor", "a")], gloves: [piece("gloves", "g")],
         boots: [piece("boots", "b")], accessory: [piece("accessory", "ac")],
-        ooparts: [{ ...piece("ooparts", "t", [], [0, 1, 2, 3, 4].map(() => roll("atkPct", 6, true))), gemSlots: [1, 1, 1, 1, 1] }],
+        ooparts: [{ ...piece("ooparts", "t", [], talismanSubs), gemSlots: [1, 1, 1, 1, 1] }],
       },
       gemDeltaByTalismanSlots: new Map([[5, def.delta]]),
       gemAllocByTalismanSlots: new Map([[5, def.alloc]]),
@@ -1640,6 +1643,29 @@ describe("solveChunk — the gems serve a stat filter's minimum before the prior
     expect(out.get("w1")!.gemAllocation).toEqual({ talisman: [], ee: [] });
     expect(out.get("w1")!.finalStats.atk).toBe(1500);
     expect(out.get("w2")!.gemAllocation.talisman).toEqual([CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM]);
+  });
+
+  it("a bound needing four gems of a stat the default already feeds once: the shortfall is measured without gems", async () => {
+    // Priority critDmg 3 + atk 1 with four CHD gems: the default allocation is
+    // four CHD + one ATK% (w1: 1260 ATK). ATK ≥ 1440 needs four ATK% gems on
+    // the gemless 1200. Measured on the 1260 sheet the shortfall was 180 →
+    // three ATK% placed (1380, still short), and the socketed CHD gems don't
+    // reach it either: the build was dropped.
+    const scored: ScoredGem[] = [
+      ...[0, 1, 2, 3].map((): ScoredGem => ({ id: CHD_GEM, stat: "critDmg", value: 5, percent: true, score: 0.75 })),
+      ...[0, 1, 2, 3, 4].map((): ScoredGem => ({ id: ATK_GEM, stat: "atkPct", value: 6, percent: true, score: 0.15 })),
+    ];
+    const chdSubs = [0, 1, 2, 3, 4].map(() => roll("critDmg", 5, true));
+    const ctx = ctxFor({ atk: { min: 1440 } }, "score", { critDmg: 3, atk: 1 }, scored, chdSubs);
+    expect(ctx.gemAllocByTalismanSlots.get(5)!.talisman).toEqual([CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM, ATK_GEM]);
+    const out = byWeapon((await solveChunk(ctx, 0, 1, 100)).builds);
+    expect(out.size).toBe(2);
+    expect(out.get("w1")!.gemAllocation.talisman).toEqual([ATK_GEM, ATK_GEM, ATK_GEM, ATK_GEM, CHD_GEM]);
+    expect(out.get("w1")!.finalStats.atk).toBe(1440);
+    expect(out.get("w1")!.finalStats.critDmg).toBe(55);
+    // w2 passes with the default allocation (1500 + 60): untouched.
+    expect(out.get("w2")!.gemAllocation.talisman).toEqual([CHD_GEM, CHD_GEM, CHD_GEM, CHD_GEM, ATK_GEM]);
+    expect(out.get("w2")!.finalStats.atk).toBe(1560);
   });
 
   it("a minimum out of reach with the served allocation and with the socketed gems: no result", async () => {

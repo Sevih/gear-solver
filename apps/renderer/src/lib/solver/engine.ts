@@ -1686,20 +1686,33 @@ export async function solveChunk(
   // priority alone: with `atk ≥ 12 000` and a priority elsewhere, the hero's
   // socketed ATK gems gave way to the priority's gems and every combo fell
   // under the bound. A combo that misses a minimum with gems applied is
-  // re-allocated by `allocateGemsServingMins` (the missed stats' gems first,
-  // then the usual rule), recomposed when that allocation differs and
-  // retested; failing that, retested with the pieces' socketed gems, kept
-  // with an empty allocation ("keep the piece's gems"). SOLVE CP without a
-  // priority keeps its CP allocation and gets only the socketed fallback.
+  // re-allocated by `allocateGemsServingMins` (the gems of the stats short on
+  // the gemless sheet first, then the usual rule), recomposed when that
+  // allocation differs and retested; failing that, retested with the pieces'
+  // socketed gems, kept with an empty allocation ("keep the piece's gems").
+  // SOLVE CP without a priority keeps its CP allocation and gets only the
+  // socketed fallback.
   const hasMinSpec = statFilterSpecs.some((sp) => sp.min > -Infinity);
-  const serveMinsByAlloc = !(mode === "cp" && !hasPriority(filters.priority));
+  // SOLVE CP without a priority: the gems were allocated by marginal CP
+  // (`allocateGemsByCp`, see `precomputeContext`).
+  const cpGemAlloc = mode === "cp" && !hasPriority(filters.priority);
+  const serveMinsByAlloc = !cpGemAlloc;
   const gemGain = (g: ScoredGem): number => rollGainOnSheet(scaling, STAT_TO_PRIORITY[g.stat] ?? g.stat, g.value, g.percent);
   // Memo of the serving allocations — a trie of integer keys: the variant and
-  // pre-gem CHC (`capAllocCache`'s key), then one level per missed minimum
-  // (`spec index × 2^21 + shortfall` in the stat's unit, rounded up). Rounded
-  // shortfalls take few distinct values, so the path costs one allocation per
-  // distinct value, not per combo.
+  // pre-gem CHC (`capAllocCache`'s key), then one level per minimum missed on
+  // the gemless sheet (`spec index × 2^21 + shortfall` in the stat's unit,
+  // rounded up). Rounded shortfalls take few distinct values, so the path
+  // costs one allocation per distinct value, not per combo.
   const minsMemo = new Map<number, MinsMemo>();
+  // `FinalStats` axes of the min bounds, and whether a gem delta feeds one of
+  // them (`STAT_TO_PRIORITY`, as `allocateGemsServingMins` maps a gem to a
+  // bound) — else the gemless sheet has the same values there as `fs`.
+  const minSpecKeys = new Set(statFilterSpecs.filter((sp) => sp.min > -Infinity).map((sp) => sp.key));
+  const touchesMinAxis = (d: GemOverride): boolean => {
+    for (const k in d.flat) if (minSpecKeys.has(STAT_TO_PRIORITY[k] ?? k)) return true;
+    for (const k in d.pct) if (minSpecKeys.has(STAT_TO_PRIORITY[k] ?? k)) return true;
+    return false;
+  };
   const serveMinFilters = (
     fs: FinalStats,
     talisman: GearPiece,
@@ -1710,32 +1723,42 @@ export async function solveChunk(
     setBonuses: SetBonusList,
   ): { fs: FinalStats; alloc: { talisman: number[]; ee: number[] } } | null => {
     const fsRec = fs as unknown as Record<string, number>;
-    let node: MinsMemo | undefined;
-    if (serveMinsByAlloc) {
-      const rootKey = talismanSlots * 1_000_000 + preGemCrc;
-      node = minsMemo.get(rootKey);
-      if (!node) { node = { next: new Map() }; minsMemo.set(rootKey, node); }
-    }
-    let missed = 0;
+    // Only a `max` bound failed: the gems that serve it are out of scope.
+    let missed = false;
     for (let i = 0; i < statFilterSpecs.length; i++) {
       const sp = statFilterSpecs[i]!;
       const v = fsRec[sp.key];
-      if (typeof v !== "number" || !(v < sp.min)) continue;
-      missed++;
-      if (!node) continue;
-      const k = i * SHORTFALL_KEY_STRIDE + shortfallSteps(sp.key, sp.min - v);
-      let child = node.next.get(k);
-      if (!child) { child = { next: new Map() }; node.next.set(k, child); }
-      node = child;
+      if (typeof v === "number" && v < sp.min) { missed = true; break; }
     }
-    // Only a `max` bound failed: the gems that serve it are out of scope.
-    if (missed === 0) return null;
-    if (node) {
+    if (!missed) return null;
+    if (serveMinsByAlloc) {
+      // The serving allocation starts from no gem at all, so the shortfalls are
+      // measured on the sheet WITHOUT gems. Measured with the applied gems, a
+      // stat they already fed came out short by their worth (one ATK gem in
+      // the priority's allocation, a bound needing four: three placed, the
+      // bound still missed); a bound met only thanks to them is served too.
+      // Same sheet as `fs` when the applied delta touches no bound's axis.
+      const bare = touchesMinAxis(appliedDelta)
+        ? computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, NO_GEMS, setBonuses) as unknown as Record<string, number>
+        : fsRec;
+      const rootKey = talismanSlots * 1_000_000 + preGemCrc;
+      let root = minsMemo.get(rootKey);
+      if (!root) { root = { next: new Map() }; minsMemo.set(rootKey, root); }
+      let node: MinsMemo = root;
+      for (let i = 0; i < statFilterSpecs.length; i++) {
+        const sp = statFilterSpecs[i]!;
+        const v = bare[sp.key];
+        if (typeof v !== "number" || !(v < sp.min)) continue;
+        const k = i * SHORTFALL_KEY_STRIDE + shortfallSteps(sp.key, sp.min - v);
+        let child = node.next.get(k);
+        if (!child) { child = { next: new Map() }; node.next.set(k, child); }
+        node = child;
+      }
       if (!node.alloc) {
         // Largest shortfall in proportion of its bound first.
         const mins: Array<GemMinNeed & { ratio: number }> = [];
         for (const sp of statFilterSpecs) {
-          const v = fsRec[sp.key];
+          const v = bare[sp.key];
           if (typeof v !== "number" || !(v < sp.min)) continue;
           const shortfall = shortfallSteps(sp.key, sp.min - v) * shortfallUnit(sp.key);
           mins.push({ stat: sp.key, shortfall, gainOf: gemGain, ratio: shortfall / (Math.abs(sp.min) || 1) });
@@ -1917,6 +1940,9 @@ export async function solveChunk(
                 // on the UNBOUNDED CHC: the sheet's is clamped at 100.
                 const defaultCrcGem = gemDelta?.pct?.critRate ?? 0;
                 const crcUncapped = fs.critRateUncapped ?? fs.critRate;
+                // CP of the current `fs`, when the CP-alloc arbitration below
+                // already computed it (reset whenever `fs` changes after it).
+                let knownCp: number | null = null;
                 if (wantCritCap) {
                   // User prioritized crc → REACH the 100% cap with crit gems
                   // first, then fill the rest by priority. Recompose only when
@@ -1950,9 +1976,24 @@ export async function solveChunk(
                   // lands on the exact same delta as the default greedy, the
                   // recompose would be a bit-identical no-op — skip it.
                   if (!gemDeltaEquals(capped.delta, gemDelta)) {
-                    fs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, capped.delta ?? undefined, setBonuses);
-                    gemAlloc = capped.alloc;
-                    appliedDelta = capped.delta;
+                    const cappedFs = computeFinalStatsFromPrefix(baseline, scaling, prefixBuckets, talisman, ee, capped.delta ?? undefined, setBonuses);
+                    // SOLVE CP without a priority: the default allocation is the
+                    // marginal-CP one (`allocateGemsByCp`), the capped one walks
+                    // the linear CP-weight order — it can lose CP (Astei: up to
+                    // 14 324 on one build). Keep whichever composes to the
+                    // higher CP (a tie keeps the default).
+                    let keepDefault = false;
+                    if (cpGemAlloc) {
+                      const defaultCp = cpEval(fs, talisman);
+                      const cappedCp = cpEval(cappedFs, talisman);
+                      keepDefault = cappedCp <= defaultCp;
+                      knownCp = keepDefault ? defaultCp : cappedCp;
+                    }
+                    if (!keepDefault) {
+                      fs = cappedFs;
+                      gemAlloc = capped.alloc;
+                      appliedDelta = capped.delta;
+                    }
                   }
                 }
 
@@ -1964,6 +2005,7 @@ export async function solveChunk(
                   if (!served) continue;
                   fs = served.fs;
                   gemAlloc = served.alloc;
+                  knownCp = null;
                 }
 
                 // Ratings deferred in SOLVE CP with no rating-band filter — the
@@ -1985,7 +2027,7 @@ export async function solveChunk(
                 // ranked just outside top-K (recall loss / under-return).
                 let cp: number | null = null;
                 if (mode === "cp" || cpFilter) {
-                  cp = cpEval(fs, talisman);
+                  cp = knownCp ?? cpEval(fs, talisman);
                   if (cpFilter && !inMinMax(cp, cpFilter)) continue;
                 }
 
@@ -2212,6 +2254,10 @@ interface MinsMemo {
   next: Map<number, MinsMemo>;
   alloc?: GemAllocation;
 }
+
+/** An empty gem override: composes the Talisman / EE without any gem (their
+ *  socketed ones skipped) — the sheet `serveMinFilters` measures shortfalls on. */
+const NO_GEMS: GemOverride = { flat: {}, pct: {} };
 
 /** Key stride of one missed minimum in `MinsMemo`: spec index × stride +
  *  shortfall steps (clamped below the stride). */

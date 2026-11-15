@@ -904,7 +904,7 @@ qu'il vient des gemmes d'EE proposées.
 1. **Étage 1** — dépenser des gems crit pour **atteindre** le cap CHC à 100 % (en priorité, même si l'atk score plus haut), overshoot ≤ un gem 3 %.
 2. **Étage 2** — remplir le reste **par priorité puis par remplissage** (en sautant tout gem crit une fois le cap atteint, désormais gaspillé — une gemme crit de remplissage suit le même saut).
 
-Le pré-gem CHC du combo est récupéré depuis `fs.critRateUncapped − defaultCrcGem` (le crit rate est purement additif ; la somme non bornée, la CHC de la fiche étant bornée à 100). On ne **recompose** que si le delta cap-aware diffère du greedy par défaut (`gemDeltaEquals`) — souvent identique quand les gems crit rankent déjà haut. Le cas sans priorité `critRate` (ex. fallback SOLVE CP, ou des gemmes crit de remplissage) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.critRateUncapped > 102`) — lui aussi gated par `gemDeltaEquals` avant recompose.
+Le pré-gem CHC du combo est récupéré depuis `fs.critRateUncapped − defaultCrcGem` (le crit rate est purement additif ; la somme non bornée, la CHC de la fiche étant bornée à 100). On ne **recompose** que si le delta cap-aware diffère du greedy par défaut (`gemDeltaEquals`) — souvent identique quand les gems crit rankent déjà haut. Le cas sans priorité `critRate` (ex. fallback SOLVE CP, ou des gemmes crit de remplissage) garde l'ancien anti-overshoot (`allocateGemsCapped`, déclenché seulement si `fs.critRateUncapped > 102`) — lui aussi gated par `gemDeltaEquals` avant recompose. En SOLVE CP sans priorité, l'allocation par défaut est celle du CP marginal (`allocateGemsByCp`) alors que `allocateGemsCapped` suit l'ordre linéaire des poids CP : la réallocation pouvait faire perdre du CP (Astei, jusqu'à 14 324 sur un build, 162 builds du top 1 000 sous leur CP avec les gemmes par défaut). Le CP des deux compositions est donc comparé et la plus haute gardée (à égalité, celle par défaut) ; ce CP sert ensuite de clé de tas sans être recalculé.
 
 Les deux allocateurs sont **mémoïsés par `(talismanSlots, preGemCrc)`** (`capAllocCache`, par run
 `solveChunk`) : purs en (pool, slots, preGemCrc) avec pool + slots EE constants par solve, et le CHC
@@ -916,9 +916,13 @@ priorité un ordre de préférence — les gemmes servent donc les `min` de `sta
 L'allocation par défaut (ou cap-aware) ne regarde que la priorité : avec `atk ≥ 12 000` et une priorité
 ailleurs, les gemmes ATK serties du héros cédaient la place et tous les combos tombaient sous la borne.
 Seulement quand `passesSpecs` échoue, qu'une borne `min` est manquée et qu'un delta de gemmes a été
-appliqué (`serveMinFilters` dans `solveChunk`) : manque par stat (`min − fs[key]`, arrondi vers le haut à
-10 sur ATK / DEF / HP, 0,1 sur les stats en %, 1 ailleurs), le plus grand en proportion de sa borne
-d'abord ; `allocateGemsServingMins` pose les gemmes de chaque stat manquée (tout le pool, même de score 0
+appliqué (`serveMinFilters` dans `solveChunk`) : manque par stat mesuré sur la fiche **sans gemmes**
+(`min − fs[key]` composé avec un `gemOverride` vide, arrondi vers le haut à 10 sur ATK / DEF / HP, 0,1
+sur les stats en %, 1 ailleurs), pour chaque borne `min` que cette fiche manque — l'allocation servie part
+de zéro gemme, un manque mesuré avec les gemmes appliquées oubliait celles de la même stat qu'elle retire
+(une gemme ATK dans l'allocation par défaut, une borne qui en demande quatre : trois posées, borne
+manquée) ; la fiche sans gemmes n'est composée que si le delta appliqué touche l'axe d'une borne `min`,
+sinon c'est `fs` —, le plus grand en proportion de sa borne d'abord ; `allocateGemsServingMins` pose les gemmes de chaque stat manquée (tout le pool, même de score 0
 ou négatif, plus gros gain d'abord) jusqu'à couvrir le manque — gain estimé par `rollGainOnSheet`
 (`composeMultStat` avec la gemme seule moins sans elle sur ATK / DEF / HP / EFF / RES, la valeur ailleurs)
 — puis le reste par la règle courante (cap CHC si `wantCritCap`, sinon `pickOrder` sans dépasser le cap) ;
@@ -926,7 +930,7 @@ recompose si l'allocation diffère, reteste. Échec (ou allocation inchangée) :
 **serties** (compose sans `gemOverride`) ; si ça passe, le build est gardé avec une allocation vide
 (« garde les gemmes de la pièce », comme sans priorité), sinon écarté. SOLVE CP sans priorité garde son
 allocation par CP et n'a que ce repli. Mémo en trie de clés entières (`(talismanSlots, preGemCrc)` puis
-`indice de spec × 2^21 + manque arrondi` par borne manquée) : une allocation par valeur distincte, pas par
+`indice de spec × 2^21 + manque arrondi` par borne manquée sur la fiche sans gemmes) : une allocation par valeur distincte, pas par
 combo ; les combos qui passent du premier coup ne paient rien.
 
 **Pré-agrégation** : la contribution gem est convertie en `{flat: {atk: 5, ...}, pct: {atkPct: 24, ...}}`, rendue par l'allocateur avec la répartition (`GemAllocation`). La compose ajoute juste ces deltas aux buckets après l'agrégation des pièces. Évite `resolveStat` × 10 gems × N combos.

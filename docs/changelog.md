@@ -8,6 +8,62 @@
 
 ## Items de backlog clôturés (index)
 
+### 🧮 Solver : CP garde la meilleure allocation de gemmes, manque d'un palier mesuré sans les gemmes par défaut (G132) (2026-11-15)
+- ✅ **Pourquoi.** Revue de code du 15/11, deux bugs d'allocation de gemmes dans `lib/solver/engine.ts`. (1) SOLVE CP
+  sans priorité : un combo dont le CHC brut dépasse 102 voyait ses gemmes réallouées par `allocateGemsCapped`, qui
+  suit l'ordre linéaire des poids CP (celui que `allocateGemsByCp` avait remplacé), sans contrôle que le CP monte :
+  classement CP faux, des builds notés sous le CP qu'ils auraient avec les gemmes par défaut. (2) Paliers de stat
+  (`serveMinFilters`) : le manque `min − fs[key]` était mesuré sur une fiche qui contient déjà les gemmes appliquées,
+  alors que `allocateGemsServingMins` repart de zéro gemme ; les gemmes de la même stat déjà posées par défaut étaient
+  oubliées, l'allocation servie restait courte et le combo retombait sur les gemmes serties ou était écarté alors
+  qu'une allocation valide existait.
+- ✅ **Comment, (1).** Dans la branche anti-overshoot (`crcUncapped > CRC_OVERSHOOT_CEIL`, sans priorité `critRate`),
+  quand le solve est un SOLVE CP sans priorité (`cpGemAlloc`, même condition que la composition de référence de
+  `precomputeContext`), le CP de la fiche par défaut et celui de la fiche réallouée sont calculés (`cpEval`) et la
+  plus haute est gardée, l'allocation par défaut à égalité. Ce CP est retenu (`knownCp`, remis à null si
+  `serveMinFilters` change la fiche) et sert de clé de tas sans second `cpEval`. Les autres modes (priorité, SOLVE
+  Score) gardent la réallocation telle quelle : leur allocation par défaut suit déjà l'ordre de `pickOrder`.
+- ✅ **Comment, (2).** `serveMinFilters` teste encore sur `fs` (avec gemmes) qu'une borne `min` est manquée (sinon seul
+  un `max` a échoué : `null`, comme avant), puis mesure les manques sur la fiche **sans gemmes** : composée avec un
+  override vide (`NO_GEMS`, les gemmes serties du Talisman / de l'EE écartées) seulement si le delta appliqué touche
+  l'axe d'une borne `min` (`touchesMinAxis`, même correspondance `STAT_TO_PRIORITY` que l'allocateur), sinon c'est
+  `fs`. Les bornes servies sont toutes celles que cette fiche manque, donc aussi une borne tenue seulement grâce aux
+  gemmes appliquées. Le memo `minsMemo` est clé sur ces manques-là (racine `(talismanSlots, preGemCrc)` inchangée,
+  qui détermine le delta appliqué) : une allocation par manque arrondi distinct, comme avant. SOLVE CP sans priorité
+  n'a toujours que le repli serti (pas de fiche sans gemmes composée pour lui).
+- ✅ **Mesures (script hors dépôt, capture du 15/11 copiée, `prepareContext` + `solveChunk` mono-chunk +
+  `finalizeBuilds`, top 1 000, reforge classic, `heroPriority` vide).** (1) Astei, SOLVE CP, Top % 30, portée
+  « all » : avant, 162 builds du top 1 000 sous leur CP avec les gemmes par défaut, perte max 14 324 (le chiffre de la
+  revue), n°1 254 553, 1 000ᵉ 232 387 ; après, 0, n°1 254 553, 1 000ᵉ 235 189. Portée « lower » (= gear propre +
+  libre sans rangs) : avant 210 builds sous, perte max 6 549, n°1 219 194, 1 000ᵉ 195 715 ; après 0, n°1 219 194,
+  1 000ᵉ 196 772. Beth : 0 build sous avant comme après sur ce banc (n°1 203 705 en « all », 137 740 en « lower ») ;
+  les chiffres de Beth de la revue (n°1 226 765, un build à 227 422) ne se reproduisent pas ici, réglages de la revue
+  inconnus (rangs, portée). Le n°1 ne bouge pas sur ces bancs : le meilleur CP par défaut était déjà n°1, c'est la
+  queue du classement qui se corrige. Durée inchangée (Astei « all » ~4,6 s avant et après). (2) Eternal, pools
+  réduites au build équipé, priorité critDmg 3 + atk 1, portée « all » (l'allocation par défaut y pose 8 CHD + 2 ATK) :
+  ATK ≥ 4 400 avant, repli sur les gemmes serties (allocation vide, 4 443) ; après, allocation servie 5 ATK + 5 CHD
+  (4 443). ATK ≥ 4 357 : avant repli serti, après 4 ATK (4 400). ATK ≥ 4 450 / 4 500 / 4 600 : avant aucun build ;
+  après 4 486 / 4 528 / 4 614 (6, 7, 9 gemmes ATK).
+- ✅ **Tests.** `apps/renderer/test/solveChunkCritCap.test.ts` (5) : nouveau bloc « SOLVE CP without a priority » sur
+  un `SolveContext` construit à la main (allocation par défaut 2 crit + 3 ATK % posée à la main comme
+  `allocateGemsByCp`, gants à CHC 85 et 100) ; une réallocation qui perdrait du CP (gemmes DMG reduce minuscules
+  devant l'ATK % dans l'ordre linéaire, prémisse vérifiée par `calcBattlePower`) garde l'allocation par défaut et son
+  CP ; une réallocation qui en gagne (ATK % devant) est prise, le combo non déclenché garde le défaut.
+  `apps/renderer/test/solver.test.ts` (124) : palier ATK ≥ 1 440 atteignable seulement en 4 gemmes ATK % dont 1 déjà
+  posée par défaut (4 CHD + 1 ATK %, gemmes serties CHD) → l'allocation servie en pose 4, le build est rendu (1 440) ;
+  `ctxFor` prend en option le pool noté et les gemmes serties du Talisman. Les deux nouveaux tests échouent sur
+  l'ancien `engine.ts` et passent sur le nouveau ; les tests existants passent inchangés. Aucun test retiré.
+  `npm run typecheck` : `> tsc --noEmit` (dernière ligne, renderer, sans erreur) ; `npm test` : `Tests 1244 passed
+  (1244)` (renderer ; 171 et 267 dans les autres workspaces) ; `npm run lint` : `✖ 7 problems (0 errors, 7
+  warnings)`, comme avant.
+- ✅ **Docs.** `docs/solver.md` / `wiki/Solver.md` (Gems : l'anti-overshoot en SOLVE CP sans priorité garde le
+  meilleur CP ; bornes minimales : manque mesuré sur la fiche sans gemmes, clé du memo).
+- ⏳ Observé, hors périmètre : sur Eternal à ATK ≥ 4 400 tout rond, l'allocation servie pose 5 gemmes ATK alors que 4
+  donnent 4 400 pile (dès 4 395, elle en pose 4). C'est l'arrondi vers le haut du manque au pas de 10 (clé du memo),
+  qui dépasse la somme des 4 gains estimés : prudent par construction, au prix d'une gemme de priorité. Le prune de
+  dominance CP ne retrouve pas une monotonie stricte avec le max des deux allocations (la réallocation dépend du CHC
+  du combo), mais le CP rendu n'est plus jamais sous celui de l'allocation par défaut, elle monotone.
+
 ### 🗂️ Optimizer : cartes denses sans la mention « ‹Classe› Exclusive » (G131) (2026-11-15)
 - ✅ **Pourquoi.** Suite de G129, demande de Sevih du 15/11 : sur les cartes denses de la bande du bas de l'Optimizer,
   « ‹Classe› Exclusive » était la dernière ligne de texte au-dessus des main stats ; elle part aussi, les main stats
