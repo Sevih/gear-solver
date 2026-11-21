@@ -10,7 +10,10 @@
  * by hand (`excludedPieces`) and the pieces of the builds retained by the
  * members placed BEFORE them (`memberExclusion`): member 1 takes anything,
  * member 2 anything but member 1's build, and so on. The hero ranks play no
- * part.
+ * part. The gems a member may take follow the same rule, widened to every
+ * other member: the gems socketed in a piece of the build retained by any
+ * other member of the team, before or after, are out of their gem pool
+ * (`reservedGemPieces`); those on any other hero's Talisman / EE stay in.
  *
  * A retained build is STALE when one of its pieces left the inventory, or when
  * a member placed before (after a reorder or a new build) retained one of them
@@ -167,6 +170,20 @@ function earlierClaims(team: Team, heroUid: string): Map<string, string> {
 export function memberExclusion(team: Team, heroUid: string, excludedPieces: ReadonlySet<string>): Set<string> {
   const out = new Set(excludedPieces);
   for (const uid of earlierClaims(team, heroUid).keys()) out.add(uid);
+  return out;
+}
+
+/** The Talisman / EE uids whose gems a member's solve leaves out of its gem
+ *  pool: the pieces of the builds retained by the team's OTHER members, placed
+ *  before or after (a member's retained build is theirs), never the member's
+ *  own; an empty slot holds none. Only the Talisman and the EE carry gems —
+ *  the other uids are inert in the gem pool. */
+export function reservedGemPieces(team: Team, heroUid: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of team.members) {
+    if (m.heroUid === heroUid || !m.build) continue;
+    for (const uid of buildPieces(m.build)) out.add(uid);
+  }
   return out;
 }
 

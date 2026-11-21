@@ -477,7 +477,8 @@ expensive computation not available at compile time.
   worklist claim ?? `equippedBy`: a piece reserved by another hero's queued build counts as equipped on that hero
   (an applied/removed entry frees its claims — derived live by `worklistClaims`). The **gem pool**
   (`buildGemPool`) follows the same rule. In team context (a member's "Optimize →", Teams tab), the scope is
-  pinned to `All` and greyed out with the reason (cf. "Teams tab"). The **in-game presets** add to it, whatever the scope (`presetHolds`,
+  pinned to `All` and greyed out with the reason, and the gems of the pieces retained by the other members
+  leave the gem pool (cf. "Teams tab"). The **in-game presets** add to it, whatever the scope (`presetHolds`,
   cf. Engine Reference §1.6): the pieces of a **locked** preset never come out, except for "Optimize preset →" on
   that preset; "Optimize preset →" doesn't take the pieces of a preset of equal or better rank. Pieces only: the
   gems of a locked or better-ranked preset's Talisman stay in the gem pool (a lock holds pieces, not gems; they
@@ -886,7 +887,11 @@ localStorage, backed up, merged by `id` on import; tolerant read, filters serial
 in-game preset or reserved by the Worklist included — but the pieces excluded by hand (`excludedPieces`) and
 those of the builds retained by the members **placed before them**: `memberExclusion(team, hero,
 excludedPieces)` = `excludedPieces` ∪ the pieces of members 1..N-1's builds (never of the next ones). The
-hero ranks (`gs.priority.*`) play no part. A build is **stale** (`buildStaleness`) when one of its pieces
+hero ranks (`gs.priority.*`) play no part. The **gems** follow the same rule, widened to every other member:
+the gems socketed in a piece of a build retained by **another** member, placed before or after (a member's
+retained build is theirs), leave their gem pool, whoever wears the piece, the member included
+(`reservedGemPieces(team, hero)` → `buildGemPool`'s `GemPoolOptions.reservedPieceUids`); those on the
+Talisman or EE of any other hero, outside the team, stay in (scope `all`). A build is **stale** (`buildStaleness`) when one of its pieces
 left the inventory, or when a member placed before (after a reorder or a new build) retained one of its
 pieces: it stays shown, marked "Stale" with its reason, and doesn't go to "+ Worklist".
 
@@ -895,7 +900,8 @@ pieces: it stays shown, marked "Stale" with its reason, and doesn't go to "+ Wor
 ‹name› · ‹hero› (2/4)" banner and "← Back to Teams"; the filters loaded are the member's and every change is
 written there (`onTeamFiltersChange`; `BuilderScreen`'s filter source goes from `hero:<uid>` to
 `team:<id>:<uid>`); the solve and the estimate go through `teamSolveScope` (`lib/teams/teamContext.ts`):
-`equippedScope` forced to `all`, `excludedPieceUids` = the member's exclusion, no `presetHolds`, no
+`equippedScope` forced to `all`, `excludedPieceUids` = the member's exclusion, `gemReservedPieceUids` = the
+pieces whose gems the solve's gem pool leaves out (`reservedGemPieces`), no `presetHolds`, no
 `worklistClaims`, no hero rank, no target preset. The "Equipped items" control is greyed out on All with the
 reason. "Use for team" (next to "+ Worklist", and in a row's right-click menu) retains the result for the
 member and goes back to the Teams tab. Switching heroes in the Optimizer leaves the context (`onLeaveTeam`),
@@ -913,7 +919,8 @@ replaces its hero's, the team on top of the list, member 1 first) with one toast
 `lib/teams/buildTeam.ts`, pure, the solve injected): member 1, then 2, 3, 4, each with **their own** filters
 and **their own** mode (the one of their retained build, Score without one), under the piece rule above
 applied to the pass's copy of the team — member N's exclusion thus counts the builds this very pass just
-retained for 1..N-1. The best result (the first in the mode's sort order) becomes the retained build. SOLVE's
+retained for 1..N-1, and their gem pool leaves out the gems of the builds the other members hold at that
+point (those the pass just retained before them, the previous builds of those after). The best result (the first in the mode's sort order) becomes the retained build. SOLVE's
 rule applies as in the Optimizer (`solveDecision`): in Score without a priority, the weights of the hero's
 reco become their priority (written to the member's filters), and without reco weights the member is solved
 by CP for this pass (their retained build then carries the CP mode). A member without a result goes back to

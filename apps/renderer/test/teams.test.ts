@@ -15,7 +15,7 @@ import type { Character, GameData, GearPiece, Inventory } from "@gear-solver/cor
 import { filterDefaults, type SolverFilters } from "../src/lib/solver/builderFilters.js";
 import {
   addMember, addTeam, buildStaleness, createTeam, defaultTeamName, memberExclusion, moveMember, removeMember, removeTeam, renameTeam,
-  retainBuild, setMemberFilters, teamWorklistPlan, updateTeam, validTeamName, TEAM_MAX_MEMBERS, type Team, type TeamBuild,
+  reservedGemPieces, retainBuild, setMemberFilters, teamWorklistPlan, updateTeam, validTeamName, TEAM_MAX_MEMBERS, type Team, type TeamBuild,
 } from "../src/lib/teams/teams.js";
 import { teamWorklistFor, teamWorklistNotice, upsertWorklistEntries } from "../src/lib/teams/teamWorklist.js";
 import { teamContextOf, teamSolveScope, type SolveScope } from "../src/lib/teams/teamContext.js";
@@ -125,6 +125,20 @@ describe("teams — the piece rule", () => {
     const u = team(["a", "b"], { b: build("w2") });
     expect(memberExclusion(u, "b", new Set())).toEqual(new Set());
   });
+
+  it("the pieces whose gems a member leaves out: every other member's build, before or after, never their own", () => {
+    expect(reservedGemPieces(t, "a")).toEqual(new Set(["w2", "w3", "h3"]));
+    expect(reservedGemPieces(t, "b")).toEqual(new Set(["w1", "h1", "w3", "h3"]));
+    expect(reservedGemPieces(t, "c")).toEqual(new Set(["w1", "h1", "w2"]));
+  });
+
+  it("gems: an empty slot reserves nothing, a member without a build reserves nothing", () => {
+    expect(reservedGemPieces(t, "a").has("")).toBe(false);
+    expect(reservedGemPieces(t, "a").has("0")).toBe(false);
+    const u = team(["a", "b", "c"], { b: build("w2", "0") });
+    expect(reservedGemPieces(u, "a")).toEqual(new Set(["w2"]));
+    expect(reservedGemPieces(u, "b")).toEqual(new Set());
+  });
 });
 
 describe("teams — stale builds", () => {
@@ -209,22 +223,27 @@ describe("teams — Optimizer context", () => {
     expect(ctx).toMatchObject({ teamId: "t1", teamName: "GR PCU Ep1", heroUid: "b", position: 2, size: 2 });
     expect(ctx.filters).toBe(t.members[1]!.filters);
     expect(ctx.exclusion).toEqual(new Set(["junk", "w1"]));
+    expect(ctx.gemReserved).toEqual(new Set(["w1"]));
+    expect(teamContextOf([t], { teamId: "t1", heroUid: "a" }, new Set())!.gemReserved).toEqual(new Set());
     expect(teamContextOf([t], null, new Set())).toBeNull();
     expect(teamContextOf([t], { teamId: "t1", heroUid: "zz" }, new Set())).toBeNull();
     expect(teamContextOf([], { teamId: "t1", heroUid: "b" }, new Set())).toBeNull();
   });
 
-  it("the solve scope: equipped scope all, the exclusion, no rank / claim / hold / target; as is without a team", () => {
+  it("the solve scope: equipped scope all, the exclusion, the reserved gems, no rank / claim / hold / target; as is without a team", () => {
     const scope: SolveScope = {
       filters: blank(), heroPriority: { a: 1 }, excludedPieceUids: new Set(["junk"]),
       worklistClaims: { p: "x" }, presetHolds: { pieces: {}, rank: {}, locked: [] } as unknown as SolveScope["presetHolds"], targetPresetNum: 3,
     };
     expect(teamSolveScope(scope, null)).toBe(scope);
     const exclusion = new Set(["w1"]);
-    const s = teamSolveScope(scope, { exclusion });
+    const gemReserved = new Set(["t9"]);
+    const s = teamSolveScope(scope, { exclusion, gemReserved });
     expect(s.filters.options.equippedScope).toBe("all");
     expect(scope.filters.options.equippedScope).toBe("lower");
     expect(s).toMatchObject({ heroPriority: {}, excludedPieceUids: exclusion, worklistClaims: undefined, presetHolds: undefined, targetPresetNum: null });
+    expect(s.gemReservedPieceUids).toBe(gemReserved);
+    expect(scope.gemReservedPieceUids).toBeUndefined();
   });
 });
 

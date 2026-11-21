@@ -237,6 +237,19 @@ describe("buildGemPool", () => {
     });
     expect(pool.get(15001)).toBe(1); // claimed for the solving hero → own gear
   });
+
+  it("reservedPieceUids (team context): those pieces' gems are out whoever wears them, the hero included; without it, unchanged", () => {
+    const mine = { ...talismanWithGems([15001]), uid: "t-mine", equippedBy: "hero-a" };
+    const member1 = { ...talismanWithGems([15004]), uid: "t-m1", equippedBy: "hero-b" };
+    const outside = { ...talismanWithGems([15049]), uid: "t-out", equippedBy: "hero-x" };
+    const freeEe = { ...talismanWithGems([15037]), slot: "exclusive" as const, uid: "ee-free", equippedBy: null };
+    const inv = { gear: [mine, member1, outside, freeEe], characters: [], presets: [] } as Inventory;
+    const without = buildGemPool(inv, ALL_GEMS);
+    expect([...without.keys()].sort()).toEqual([15001, 15004, 15037, 15049]);
+    const reserved = buildGemPool(inv, { ...ALL_GEMS, reservedPieceUids: new Set(["t-m1", "ee-free", "t-mine"]) });
+    expect([...reserved.keys()]).toEqual([15049]); // only the hero outside the team
+    expect(buildGemPool(inv, { ...ALL_GEMS, reservedPieceUids: new Set() })).toEqual(without);
+  });
 });
 
 describe("scoreGemPool", () => {

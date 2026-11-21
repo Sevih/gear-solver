@@ -98,6 +98,12 @@ describe("runTeamBuild", () => {
     // Akarie's old w8, not their own old w9).
     expect([...calls[2]!.exclusion].sort()).toEqual(["h1", "h2", "w1", "w2", "x1"]);
     expect([...calls[3]!.exclusion].sort()).toEqual(["h1", "h2", "h3", "w1", "w2", "w3", "x1"]);
+    // Gems (G142): every OTHER member's retained build as the pass stands —
+    // Roxie's old w9 is hers until her solve replaces it; never the member's own.
+    expect([...calls[0]!.gemReserved].sort()).toEqual(["w9"]);
+    expect([...calls[1]!.gemReserved].sort()).toEqual(["h1", "w1", "w9"]);
+    expect([...calls[2]!.gemReserved].sort()).toEqual(["h1", "h2", "w1", "w2"]);
+    expect([...calls[3]!.gemReserved].sort()).toEqual(["h1", "h2", "h3", "w1", "w2", "w3"]);
     expect(live.members.map((m) => m.build?.pieceUids.slice(0, 2))).toEqual([["w1", "h1"], ["w2", "h2"], ["w3", "h3"], ["w4", "h4"]]);
   });
 

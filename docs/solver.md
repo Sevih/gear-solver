@@ -495,7 +495,8 @@ car ils dépendent du loadout équipé / d'un calcul coûteux non disponible à 
   réservée par le build en attente d'un autre héros compte comme équipée sur lui (une entrée
   appliquée/retirée libère ses claims — dérivés live par `worklistClaims`). Le **gem pool**
   (`buildGemPool`) suit la même règle. En contexte de team (« Optimize → » d'un membre, onglet Teams), le scope
-  est figé sur `All` et grisé avec sa raison (cf. « Onglet Teams »).
+  est figé sur `All` et grisé avec sa raison, et les gemmes des pièces retenues par les autres membres sortent
+  du gem pool (cf. « Onglet Teams »).
   Les **presets du jeu** s'y ajoutent, quel que soit le scope (`presetHolds`, cf. reference.md §1.6) :
   les pièces d'un preset **verrouillé** ne sortent jamais, sauf pour « Optimize preset → » sur ce preset ;
   « Optimize preset → » ne prend pas les pièces d'un preset de rang égal ou meilleur. Les pièces
@@ -925,7 +926,11 @@ sérialisés comme `heroFilters.ts`).
 tenues par un preset du jeu ou réservées par la Worklist comprises — sauf les pièces exclues à la main
 (`excludedPieces`) et celles des builds retenus par les membres **placés avant lui** : `memberExclusion(team,
 hero, excludedPieces)` = `excludedPieces` ∪ pièces des builds des membres 1..N-1 (jamais des suivants). La
-priorité des héros (`gs.priority.*`) ne joue aucun rôle. Un build est **périmé** (`buildStaleness`) quand une
+priorité des héros (`gs.priority.*`) ne joue aucun rôle. Les **gemmes** suivent la même règle, étendue à
+tous les autres membres : les gemmes serties dans une pièce d'un build retenu par un **autre** membre, placé
+avant ou après (le build retenu d'un membre est à lui), sortent de son gem pool, quel que soit le porteur de
+la pièce, lui compris (`reservedGemPieces(team, hero)` → `GemPoolOptions.reservedPieceUids` de
+`buildGemPool`) ; celles du Talisman ou de l'EE de tout autre héros, hors team, restent (scope `all`). Un build est **périmé** (`buildStaleness`) quand une
 de ses pièces n'est plus dans l'inventaire, ou qu'un membre placé avant lui (après un réordonnancement ou un
 nouveau build) a retenu une de ses pièces : il reste affiché, marqué « Stale » avec sa raison, et ne part pas
 dans « + Worklist ».
@@ -935,7 +940,8 @@ dans « + Worklist ».
 ‹nom› · ‹héros› (2/4) » et « ← Back to Teams » ; les filtres chargés sont ceux du membre et chaque changement
 y est écrit (`onTeamFiltersChange`, la source des filtres de `BuilderScreen` passe de `hero:<uid>` à
 `team:<id>:<uid>`) ; le solve et l'estimation passent par `teamSolveScope` (`lib/teams/teamContext.ts`) :
-`equippedScope` forcé à `all`, `excludedPieceUids` = l'exclusion du membre, ni `presetHolds`, ni
+`equippedScope` forcé à `all`, `excludedPieceUids` = l'exclusion du membre, `gemReservedPieceUids` = les
+pièces dont le gem pool du solve écarte les gemmes (`reservedGemPieces`), ni `presetHolds`, ni
 `worklistClaims`, ni rang de héros, ni preset visé. Le contrôle « Equipped items » est grisé sur All avec sa
 raison. « Use for team » (à côté de « + Worklist », et dans le menu du clic droit d'une ligne) retient le
 résultat pour le membre et revient à l'onglet Teams. Changer de héros dans l'Optimizer quitte le contexte
@@ -953,7 +959,9 @@ replaced) ». Rien n'est écrit dans le jeu.
 (`runTeamBuild`, `lib/teams/buildTeam.ts`, pur, solve injecté) : membre 1, puis 2, 3, 4, chacun avec **ses**
 filtres et **son** mode (celui de son build retenu, Score sans build), sous la règle des pièces ci-dessus
 appliquée à la copie de la team que tient le passage — l'exclusion du membre N compte donc les builds que ce
-même passage vient de retenir pour 1..N-1. Le meilleur résultat (le premier dans l'ordre de tri du mode)
+même passage vient de retenir pour 1..N-1, et son gem pool écarte les gemmes des builds que tiennent alors
+les autres membres (ceux que le passage vient de retenir avant lui, les builds précédents de ceux qui
+suivent). Le meilleur résultat (le premier dans l'ordre de tri du mode)
 devient le build retenu. La règle de SOLVE s'applique comme dans l'Optimizer (`solveDecision`) : en Score
 sans priorité, les poids de la reco du héros deviennent sa priorité (écrite dans les filtres du membre), et
 sans poids de reco le membre est résolu au CP pour ce passage (son build retenu porte alors le mode CP). Un

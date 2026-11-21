@@ -24,6 +24,9 @@ export interface SolveInputs {
   worklistClaims: Record<string, string> | undefined;
   presetHolds: PresetHolds | undefined;
   targetPresetNum: number | null;
+  /** Talisman / EE uids whose gems stay out of the gem pool — a team member's
+   *  solve (`teamSolveScope`). Absent = none. */
+  gemReservedPieceUids?: ReadonlySet<string>;
   /** Already serialized (`buildSolveFilters`). */
   filters: SolveFilters;
 }
@@ -42,6 +45,7 @@ export function estimateArgsOf(i: SolveInputs): EstimateArgs {
     worklistClaims: i.worklistClaims,
     presetHolds: i.presetHolds,
     targetPresetNum: i.targetPresetNum,
+    ...(i.gemReservedPieceUids?.size ? { gemReservedPieceUids: Array.from(i.gemReservedPieceUids) } : {}),
     userSkills: {
       first: i.hero.skills.first,
       second: i.hero.skills.second,

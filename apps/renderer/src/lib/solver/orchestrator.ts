@@ -151,6 +151,8 @@ export interface SolveArgs {
    *  (null for a hero solve) — see `presetBlockedUids`. */
   presetHolds?: PresetHolds;
   targetPresetNum?: number | null;
+  /** Talisman / EE uids whose gems stay out of the gem pool (team context). */
+  gemReservedPieceUids?: string[];
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
   /** Per-worker local top-K (orchestrator merges → returns top-N). Default: `settingDefault("topK")`. */
@@ -315,6 +317,7 @@ export class SolverOrchestrator {
       worklistClaims: args.worklistClaims,
       presetHolds: args.presetHolds,
       targetPresetNum: args.targetPresetNum,
+      ...(args.gemReservedPieceUids?.length ? { gemReservedPieceUids: args.gemReservedPieceUids } : {}),
       userSkills: args.userSkills,
       filters: args.filters,
       ...(args.pinPieceUids?.length ? { pinPieceUids: args.pinPieceUids } : {}),
@@ -451,6 +454,7 @@ export class SolverOrchestrator {
       worklistClaims: args.worklistClaims,
       presetHolds: args.presetHolds,
       targetPresetNum: args.targetPresetNum,
+      ...(args.gemReservedPieceUids?.length ? { gemReservedPieceUids: args.gemReservedPieceUids } : {}),
       userSkills: args.userSkills,
       filters: args.filters,
     };

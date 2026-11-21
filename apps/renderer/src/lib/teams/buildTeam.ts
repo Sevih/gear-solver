@@ -3,7 +3,8 @@
  * member 1's solve, then 2, 3, 4, each with the member's own filters and mode
  * and under the team's piece rule (`memberExclusion`: the whole inventory but
  * the never-use pieces and the builds of the members placed before — the ones
- * this very pass just retained). The best result (the first, in the mode's
+ * this very pass just retained — and, for the gems, without those socketed in
+ * any other member's retained build: `reservedGemPieces`). The best result (the first, in the mode's
  * order) becomes the member's retained build. Rebuilding them all, in order,
  * is what keeps the builds consistent with each other; there is no joint
  * optimum (the team order and each member's filters decide).
@@ -29,7 +30,7 @@ import { hasPriority, type Priority } from "../heroPriority/weights.js";
 import { solveDecision } from "../reco/recoPriority.js";
 import { solverFiltersReducer, type SolverFilters } from "../solver/builderFilters.js";
 import type { SolveBuild, SolveMode } from "../solver/types.js";
-import { clearBuild, memberExclusion, retainBuild, teamBuildOf, type Team, type TeamBuild } from "./teams.js";
+import { clearBuild, memberExclusion, reservedGemPieces, retainBuild, teamBuildOf, type Team, type TeamBuild } from "./teams.js";
 
 /** What one member's solve came back with: its best build, or none and why. */
 export interface MemberSolveOutcome {
@@ -44,6 +45,9 @@ export interface MemberSolveRequest {
   mode: SolveMode;
   /** The pieces this solve leaves out (`memberExclusion` on the pass's team). */
   exclusion: ReadonlySet<string>;
+  /** The pieces whose gems this solve's gem pool leaves out (`reservedGemPieces`
+   *  on the pass's team: every other member's retained build). */
+  gemReserved: ReadonlySet<string>;
 }
 
 export type MemberSolver = (req: MemberSolveRequest) => Promise<MemberSolveOutcome>;
@@ -122,7 +126,8 @@ export async function runTeamBuild(pass: TeamBuildPass): Promise<TeamBuildSummar
       else if (decision === "cp-fallback") { runMode = "cp"; cpFallback = true; }
     }
     const exclusion = memberExclusion(working, member.heroUid, excludedPieces);
-    const outcome = await pass.solve({ heroUid: member.heroUid, filters, mode: runMode, exclusion });
+    const gemReserved = reservedGemPieces(working, member.heroUid);
+    const outcome = await pass.solve({ heroUid: member.heroUid, filters, mode: runMode, exclusion, gemReserved });
     const build = outcome.build ? teamBuildOf(outcome.build, runMode, pass.now()) : null;
     const reason = build ? null : (outcome.reason ?? "No build passes the filters");
     working = build ? retainBuild(working, member.heroUid, build) : clearBuild(working, member.heroUid);

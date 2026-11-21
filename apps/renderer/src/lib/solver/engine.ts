@@ -891,7 +891,9 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // unequipping a Talisman/EE on a hero the user just opted out of / outranks.
   // The in-game presets don't gate it: the gems of a Talisman a locked or
   // better-ranked preset keeps stay on offer — a lock holds pieces, not gems
-  // (`presetBlocked` gates the piece pool only, in `allow()`).
+  // (`presetBlocked` gates the piece pool only, in `allow()`). In team context
+  // the gems of the pieces retained by the team's other members are out,
+  // whoever wears them (`gemReservedPieceUids`).
   //
   // Once the priority is served, the slots it leaves free take the zero-score
   // gems by the `dmg` gain they bring the hero (`gemDmgGains`, weighed once on
@@ -902,6 +904,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     heroPriority,
     excludedHeroes: excludedSet,
     worklistClaims,
+    ...(req.gemReservedPieceUids?.length ? { reservedPieceUids: new Set(req.gemReservedPieceUids) } : {}),
   });
   const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
   // SOLVE CP without a priority: the reference composition the gems are weighed

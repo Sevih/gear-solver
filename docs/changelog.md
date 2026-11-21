@@ -8,6 +8,49 @@
 
 ## Items de backlog clôturés (index)
 
+### 💎 Teams : les gemmes des pièces retenues par les autres membres sortent du gem pool d'un membre (G142) (2026-11-21)
+- ✅ **Pourquoi.** Constat de relecture du 21/11 : en contexte de team, `teamSolveScope` passe `equippedScope: "all"` et
+  `buildGemPool` (`lib/solver/gems.ts`) comptait les gemmes serties dans le Talisman et l'EE de n'importe quel héros, y
+  compris dans les pièces RETENUES par un autre membre. Les pièces retenues par un membre précédent sortaient bien du
+  pool de pièces (`memberExclusion`), pas leurs gemmes : le membre 2 pouvait se voir allouer une gemme du Talisman
+  retenu par le membre 1, ce que la team ne peut pas tenir.
+- ✅ **Règle.** Celle de Sevih pour les pièces, étendue aux gemmes : en contexte de team, les gemmes serties dans une
+  pièce d'un build retenu par un AUTRE membre, précédent ou suivant (le build retenu d'un membre est à lui), ne
+  comptent pas dans son gem pool, quel que soit le porteur de la pièce, le membre lui-même compris ; celles de tout
+  autre héros, hors team, comptent (scope `all`). Hors contexte de team, rien ne change.
+- ✅ **Comment.** `reservedGemPieces(team, heroUid)` (`lib/teams/teams.ts`, pur) : les pièces des builds retenus par
+  les autres membres (`buildPieces`, slot vide ignoré), jamais celles du membre. `GemPoolOptions.reservedPieceUids`
+  (nouvelle option, seul ajout à `gems.ts`) : `buildGemPool` saute ces pièces avant la règle du propriétaire. Le fil :
+  `TeamContext.gemReserved` (`teamContextOf`) et `MemberSolveRequest.gemReserved` (`runTeamBuild`, sur la copie de la
+  team que tient le passage) → `teamSolveScope` (`SolveScope.gemReservedPieceUids`) → `solveArgsOf`
+  (`SolveInputs.gemReservedPieceUids`, sérialisé en tableau, absent quand vide) → `SolveArgs` / `SolveRequest` (champ
+  `gemReservedPieceUids`, relayé par l'orchestrateur au solve et à l'estimation) → `precomputeContext`
+  (`engine.ts`). L'Optimizer (`useSolverSession.ts`) le passe à son solve ; l'estimation pré-solve n'en a pas besoin
+  (elle ne rend que la taille des pools de pièces) et reste inchangée.
+- ✅ **Build team.** Lecture littérale de « précédent ou suivant » : au solve du membre N, le gem pool écarte les gemmes
+  des builds que tiennent alors les autres membres, ceux que le passage vient de retenir pour 1..N-1 ET les builds
+  précédents de N+1..4 (pas encore rebuildés). C'est plus prudent que nécessaire pour les suivants (leur ancien build
+  sera remplacé), mais toujours tenable par la team.
+- ✅ **Docs.** `docs/solver.md` et `wiki/Solver.md` (scope du gem pool, règle des pièces de l'onglet Teams, Optimizer
+  en contexte, Build team) ; index des tests de `docs/reference.md` et `wiki/Engine-Reference.md` (`solver.test.ts`
+  125, `teams.test.ts` 25, `buildTeam.test.ts`, `teamSolver.test.ts`, nouveau `teamGemPool.test.ts`).
+- ✅ **Tests.** `solver.test.ts` : `buildGemPool` avec et sans `reservedPieceUids` (gemmes d'un autre membre, de l'EE
+  libre et du héros lui-même écartées, celles d'un héros hors team gardées, ensemble vide = sans l'option).
+  `teams.test.ts` : `reservedGemPieces` (autres membres seulement, avant et après, jamais le membre lui-même ; slot
+  vide `""` / `"0"` et membre sans build sans effet), `teamContextOf` porte `gemReserved`, `teamSolveScope` le pose
+  (et ne touche pas le scope hors team). `buildTeam.test.ts` : les gemmes réservées de chaque membre au fil du passage.
+  `teamSolver.test.ts` : `gemReservedPieceUids` dans la requête, absent quand vide. Nouveau `teamGemPool.test.ts`,
+  solve complet sur le contrat réel (`teamContextOf` → `teamSolveScope` → `solveArgsOf` → `precomputeContext` →
+  `solveChunk` → `finalizeBuilds`) : une borne de CHD que seule la gemme du Talisman retenu par le membre 1 atteint →
+  aucun build pour le membre 2 ; la même gemme sur le Talisman d'un héros hors team → sertie, borne tenue (vérifié
+  rouge sans la garde de `buildGemPool`). `npm run typecheck` : `> tsc --noEmit` (renderer, dernier workspace, sans
+  erreur) ; `npm test` : `Tests  1342 passed (1342)` (renderer ; core 183, desktop 273).
+- ⏳ Sevih : en jeu, une team dont le membre 1 retient un Talisman serti de gemmes utiles au membre 2 → « Optimize → »
+  du membre 2 ne les lui propose plus (Build team pareil). Hors périmètre, non touché : le libellé du scope grisé
+  (`TEAM_SCOPE_LOCK`) et la bannière de l'Optimizer ne parlent que des pièces ; une gemme allouée au membre 1 depuis
+  le Talisman d'un héros hors team reste offerte au membre 2 (la règle porte sur les gemmes serties dans les pièces
+  retenues, pas sur l'allocation de gemmes des builds).
+
 ### ⚡ Build team : chaque membre d'une team buildé dans l'ordre, avec ses filtres, annulable (G140) (2026-11-21)
 - ✅ **Pourquoi.** Demande de Sevih du 21/11 : « build la team facilement et rapidement ». Après G139, chaque membre
   se buildait à la main (Optimize →, SOLVE, Use for team), quatre allers-retours par team, à refaire dans l'ordre dès

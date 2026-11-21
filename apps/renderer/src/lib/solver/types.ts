@@ -158,6 +158,10 @@ export interface SolveRequest {
   /** The preset being optimized ("Optimize preset →"), null/absent for a
    *  plain hero solve — then only the locks apply. */
   targetPresetNum?: number | null;
+  /** Talisman / EE uids whose socketed gems stay out of the gem pool (never
+   *  the piece pools) — in team context, the pieces of the builds retained by
+   *  the team's other members (`reservedGemPieces`). Absent = none. */
+  gemReservedPieceUids?: string[];
   /** Pieces kept through the combo-budget prune (Top % < 100) and the SOLVE CP
    *  dominance prune whatever their rank — the pieces of the result row a
    *  "Min ≥ / Max ≤" was set from, on the solve that gesture launches only, so
@@ -228,6 +232,7 @@ export interface EstimateRequestMsg {
   worklistClaims?: Record<string, string>;
   presetHolds?: PresetHolds;
   targetPresetNum?: number | null;
+  gemReservedPieceUids?: string[];
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
 }
