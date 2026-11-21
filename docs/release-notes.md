@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [2.1.1] — 2026-11-21
+
 ### Teams
 - **Gems stay with their team member**: when a team member is optimized (or built by Build team), the gems socketed
   in a Talisman or Exclusive Equipment kept by another member of the team are no longer counted. Before, a member
