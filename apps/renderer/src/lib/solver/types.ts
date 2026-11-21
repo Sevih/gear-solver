@@ -162,6 +162,11 @@ export interface SolveRequest {
    *  the piece pools) — in team context, the pieces of the builds retained by
    *  the team's other members (`reservedGemPieces`). Absent = none. */
   gemReservedPieceUids?: string[];
+  /** Talisman main stat keys (`mainStatKeysOf`) out of the Talisman pool — in
+   *  team context, the mains of the Talismans retained by the members placed
+   *  before (`reservedTalismanMains`): a Talisman's main applies to the whole
+   *  team and doesn't stack. Never the member's `mainExcludes`. Absent = none. */
+  reservedTalismanMains?: string[];
   /** Pieces kept through the combo-budget prune (Top % < 100) and the SOLVE CP
    *  dominance prune whatever their rank — the pieces of the result row a
    *  "Min ≥ / Max ≤" was set from, on the solve that gesture launches only, so
@@ -233,6 +238,7 @@ export interface EstimateRequestMsg {
   presetHolds?: PresetHolds;
   targetPresetNum?: number | null;
   gemReservedPieceUids?: string[];
+  reservedTalismanMains?: string[];
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
 }

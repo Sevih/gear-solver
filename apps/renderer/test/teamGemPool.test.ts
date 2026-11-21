@@ -74,7 +74,7 @@ function team(): Team {
 /** Member B's Optimizer solve in team context, CHD as priority, `critDmgMin` as
  *  a CHD bound. */
 async function solveB(inv: Inventory, critDmgMin?: number): Promise<SolveBuild[]> {
-  const ctx = teamContextOf([team()], { teamId: "t1", heroUid: "B" }, new Set())!;
+  const ctx = teamContextOf([team()], { teamId: "t1", heroUid: "B" }, new Set(), new Map(inv.gear.map((g) => [g.uid, g])))!;
   const base = filterDefaults("classic", false);
   const filters = {
     ...base, priority: { critDmg: 1 },

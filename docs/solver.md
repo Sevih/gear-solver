@@ -930,10 +930,16 @@ priorité des héros (`gs.priority.*`) ne joue aucun rôle. Les **gemmes** suive
 tous les autres membres : les gemmes serties dans une pièce d'un build retenu par un **autre** membre, placé
 avant ou après (le build retenu d'un membre est à lui), sortent de son gem pool, quel que soit le porteur de
 la pièce, lui compris (`reservedGemPieces(team, hero)` → `GemPoolOptions.reservedPieceUids` de
-`buildGemPool`) ; celles du Talisman ou de l'EE de tout autre héros, hors team, restent (scope `all`). Un build est **périmé** (`buildStaleness`) quand une
-de ses pièces n'est plus dans l'inventaire, ou qu'un membre placé avant lui (après un réordonnancement ou un
-nouveau build) a retenu une de ses pièces : il reste affiché, marqué « Stale » avec sa raison, et ne part pas
-dans « + Worklist ».
+`buildGemPool`) ; celles du Talisman ou de l'EE de tout autre héros, hors team, restent (scope `all`). La
+**main stat du Talisman** s'applique à toute la team et ne se cumule pas : le pool de Talismans d'un membre
+écarte ceux dont la main stat est celle du Talisman retenu par un membre **placé avant lui**
+(`reservedTalismanMains(team, hero, pièces)`, sur la clé des main stats de l'Optimizer, `mainStatKeysOf` :
+ATK et ATK% y sont deux clés, mais les Talismans du jeu n'ont que l'ATK%) ; le membre 1 a le choix libre, un
+Talisman sorti de l'inventaire ne réserve rien, et rien n'est écrit dans les `mainExcludes` du membre. Un build
+est **périmé** (`buildStaleness`) quand une de ses pièces n'est plus dans l'inventaire, qu'un membre placé
+avant lui (après un réordonnancement ou un nouveau build) a retenu une de ses pièces, ou que son Talisman a la
+main stat du Talisman d'un membre placé avant lui (« same talisman main stat as ‹héros› (member n) », le
+Talisman cerclé d'ambre) : il reste affiché, marqué « Stale » avec sa raison, et ne part pas dans « + Worklist ».
 
 **Optimizer en contexte de team.** « Optimize → » d'un membre ouvre l'Optimizer sur ce héros (App :
 `builderTeam` → `teamContextOf`, qui recalcule l'exclusion à chaque changement des teams) : bannière « Team:
@@ -941,9 +947,11 @@ dans « + Worklist ».
 y est écrit (`onTeamFiltersChange`, la source des filtres de `BuilderScreen` passe de `hero:<uid>` à
 `team:<id>:<uid>`) ; le solve et l'estimation passent par `teamSolveScope` (`lib/teams/teamContext.ts`) :
 `equippedScope` forcé à `all`, `excludedPieceUids` = l'exclusion du membre, `gemReservedPieceUids` = les
-pièces dont le gem pool du solve écarte les gemmes (`reservedGemPieces`), ni `presetHolds`, ni
-`worklistClaims`, ni rang de héros, ni preset visé. Le contrôle « Equipped items » est grisé sur All avec sa
-raison. « Use for team » (à côté de « + Worklist », et dans le menu du clic droit d'une ligne) retient le
+pièces dont le gem pool du solve écarte les gemmes (`reservedGemPieces`), `reservedTalismanMains` = les main
+stats de Talisman des membres précédents (`allow` de `precomputeContext` les écarte du pool de Talismans et les
+compte avec les main stats exclues de `poolSizes`), ni `presetHolds`, ni `worklistClaims`, ni rang de héros,
+ni preset visé. La bannière dit, quand il y en a, les main stats réservées (« Talisman main stat taken by
+‹héros›: ATK% »). Le contrôle « Equipped items » est grisé sur All avec sa raison. « Use for team » (à côté de « + Worklist », et dans le menu du clic droit d'une ligne) retient le
 résultat pour le membre et revient à l'onglet Teams. Changer de héros dans l'Optimizer quitte le contexte
 (`onLeaveTeam`), comme l'ouvrir depuis un autre écran (les « Optimize → » des autres onglets) ; le simple
 passage d'un onglet à l'autre le garde (l'Optimizer reste monté, ses résultats aussi).
@@ -961,7 +969,8 @@ filtres et **son** mode (celui de son build retenu, Score sans build), sous la r
 appliquée à la copie de la team que tient le passage — l'exclusion du membre N compte donc les builds que ce
 même passage vient de retenir pour 1..N-1, et son gem pool écarte les gemmes des builds que tiennent alors
 les autres membres (ceux que le passage vient de retenir avant lui, les builds précédents de ceux qui
-suivent). Le meilleur résultat (le premier dans l'ordre de tri du mode)
+suivent), et son pool de Talismans les main stats des Talismans que le passage vient de retenir pour 1..N-1.
+Le meilleur résultat (le premier dans l'ordre de tri du mode)
 devient le build retenu. La règle de SOLVE s'applique comme dans l'Optimizer (`solveDecision`) : en Score
 sans priorité, les poids de la reco du héros deviennent sa priorité (écrite dans les filtres du membre), et
 sans poids de reco le membre est résolu au CP pour ce passage (son build retenu porte alors le mode CP). Un
@@ -1224,7 +1233,7 @@ apps/renderer/src/
 │   │   ├── presetWorklist.ts       ← presetWorklistFor : l'entrée Worklist d'un héros du preset
 │   │   └── optimize.ts             ← presetOptimizePatch + presetOptimizeNote : « Optimize preset → » (effets requis, sous-stats prioritaires)
 │   ├── teams/
-│   │   ├── teams.ts                ← modèle des teams : membres ordonnés (1 à 4), filtres et build retenu par membre, memberExclusion, buildStaleness, teamWorklistPlan
+│   │   ├── teams.ts                ← modèle des teams : membres ordonnés (1 à 4), filtres et build retenu par membre, memberExclusion, reservedGemPieces, reservedTalismanMains, buildStaleness, teamWorklistPlan
 │   │   ├── teamContext.ts          ← teamContextOf + teamSolveScope : l'Optimizer en contexte de team (scope all, exclusion du membre)
 │   │   ├── buildTeam.ts            ← runTeamBuild + teamBuildNotice + buildTeamBlockedReason : « Build team », chaque membre dans l'ordre
 │   │   ├── teamSolver.ts           ← createTeamSolver : les solves d'un passage sur le SolverOrchestrator (règle de la team)

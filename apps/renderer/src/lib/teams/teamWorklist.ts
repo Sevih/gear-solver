@@ -36,7 +36,7 @@ export function teamWorklistFor(
   now: number,
 ): TeamWorklist {
   const pieceByUid = new Map<string, GearPiece>(inventory.gear.map((g) => [g.uid, g]));
-  const plan = teamWorklistPlan(team, new Set(pieceByUid.keys()));
+  const plan = teamWorklistPlan(team, pieceByUid);
   const out: TeamWorklist = { entries: [], noBuild: plan.noBuild, stale: plan.stale, unchanged: [], notInRoster: [] };
   for (const m of plan.ready) {
     const hero = inventory.characters.find((c) => c.uid === m.heroUid);

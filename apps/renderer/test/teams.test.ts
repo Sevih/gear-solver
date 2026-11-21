@@ -3,7 +3,8 @@
  * hero twice, the order, the piece rule (a member's exclusion = the never-use
  * pieces ∪ the builds of the members placed before, never those after), a
  * stale build (a piece gone, a piece retained by an earlier member after a
- * reorder) — the team's "+ Worklist" (`lib/teams/teamWorklist.ts`: stale
+ * reorder), the Talisman main stats an earlier member's Talisman reserves
+ * (G143: out of the member's pool, a build that carries one stale) — the team's "+ Worklist" (`lib/teams/teamWorklist.ts`: stale
  * builds and members without one left out, one entry per member, the team on
  * top of the list, one toast), the Optimizer's team context
  * (`lib/teams/teamContext.ts`), and the `gs.teams` storage (round-trip, a
@@ -11,14 +12,15 @@
  * backed up).
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Character, GameData, GearPiece, Inventory } from "@gear-solver/core";
+import type { Character, GameData, GearPiece, Inventory, RolledStat } from "@gear-solver/core";
 import { filterDefaults, type SolverFilters } from "../src/lib/solver/builderFilters.js";
 import {
   addMember, addTeam, buildStaleness, createTeam, defaultTeamName, memberExclusion, moveMember, removeMember, removeTeam, renameTeam,
-  reservedGemPieces, retainBuild, setMemberFilters, teamWorklistPlan, updateTeam, validTeamName, TEAM_MAX_MEMBERS, type Team, type TeamBuild,
+  reservedGemPieces, reservedTalismanMains, retainBuild, setMemberFilters, teamWorklistPlan, updateTeam, validTeamName, TEAM_MAX_MEMBERS,
+  type Team, type TeamBuild, type TeamPieces,
 } from "../src/lib/teams/teams.js";
 import { teamWorklistFor, teamWorklistNotice, upsertWorklistEntries } from "../src/lib/teams/teamWorklist.js";
-import { teamContextOf, teamSolveScope, type SolveScope } from "../src/lib/teams/teamContext.js";
+import { talismanMainsNotice, teamContextOf, teamSolveScope, type SolveScope } from "../src/lib/teams/teamContext.js";
 import { isReadableTeam, loadTeams, persistTeams, TEAMS_KEY } from "../src/lib/storage/teams.js";
 import { BACKUP_KEYS, STORAGE_KEYS } from "../src/lib/storage/keys.js";
 import type { WorklistEntry } from "../src/lib/storage/worklist.js";
@@ -41,6 +43,15 @@ const blank = (): SolverFilters => filterDefaults("classic", false);
 const build = (...uids: string[]): TeamBuild => ({
   pieceUids: [...uids, ...Array(8 - uids.length).fill("")], mode: "score", cp: 1000, at: 1,
 });
+/** The inventory's pieces: these uids (a weapon each), plus the Talismans
+ *  given with their main stat key. */
+function pieces(uids: string[], talismans: Record<string, string> = {}): TeamPieces {
+  const m = new Map<string, Pick<GearPiece, "slot" | "main">>(uids.map((u) => [u, { slot: "weapon", main: [] }]));
+  for (const [uid, stat] of Object.entries(talismans)) {
+    m.set(uid, { slot: "ooparts", main: [{ stat: stat as RolledStat["stat"], value: 12, percent: true, fromBuff: true, source: "option" }] });
+  }
+  return m;
+}
 /** A team whose members are `heroes`, in order, with these builds. */
 function team(heroes: string[], builds: Record<string, TeamBuild> = {}): Team {
   let t = createTeam("GR PCU Ep1", "t1", 0)!;
@@ -142,24 +153,24 @@ describe("teams — the piece rule", () => {
 });
 
 describe("teams — stale builds", () => {
-  const present = new Set(["w1", "h1", "w2", "h2"]);
+  const present = pieces(["w1", "h1", "w2", "h2"]);
 
   it("no build → null; a build whose pieces are all there and free → not stale", () => {
     const t = team(["a", "b"], { a: build("w1") });
     expect(buildStaleness(t, "b", present)).toBeNull();
-    expect(buildStaleness(t, "a", present)).toEqual({ stale: false, missing: [], taken: [] });
+    expect(buildStaleness(t, "a", present)).toEqual({ stale: false, missing: [], taken: [], talismanMainTaken: [] });
   });
 
   it("a piece gone from the inventory", () => {
     const t = team(["a"], { a: build("w1", "gone") });
-    expect(buildStaleness(t, "a", present)).toEqual({ stale: true, missing: ["gone"], taken: [] });
+    expect(buildStaleness(t, "a", present)).toEqual({ stale: true, missing: ["gone"], taken: [], talismanMainTaken: [] });
   });
 
   it("a piece retained by an earlier member after a reorder (not by a later one)", () => {
     // b built first with h1, then a retained it too: a is member 1 → b is stale.
     const t = team(["a", "b"], { a: build("w1", "h1"), b: build("w2", "h1") });
     expect(buildStaleness(t, "a", present)!.stale).toBe(false);
-    expect(buildStaleness(t, "b", present)).toEqual({ stale: true, missing: [], taken: [{ pieceUid: "h1", byHeroUid: "a" }] });
+    expect(buildStaleness(t, "b", present)).toEqual({ stale: true, missing: [], taken: [{ pieceUid: "h1", byHeroUid: "a" }], talismanMainTaken: [] });
     const swapped = moveMember(t, "b", 0);
     expect(buildStaleness(swapped, "b", present)!.stale).toBe(false);
     expect(buildStaleness(swapped, "a", present)!.taken).toEqual([{ pieceUid: "h1", byHeroUid: "b" }]);
@@ -171,6 +182,76 @@ describe("teams — stale builds", () => {
     expect(plan.ready.map((m) => m.heroUid)).toEqual(["a"]);
     expect(plan.stale).toEqual(["b", "d"]);
     expect(plan.noBuild).toEqual(["c"]);
+  });
+});
+
+describe("teams — one Talisman main stat per team (G143)", () => {
+  // tA, tB, tC: ATK% Talismans; tD: CHD. w*: weapons.
+  const inv = pieces(["w1", "w2", "w3"], { tA: "atkPct", tB: "atkPct", tC: "atkPct", tD: "critDmg" });
+
+  it("the mains reserved for a member: the Talismans of the members before, never after nor their own", () => {
+    const t = team(["a", "b", "c"], { a: build("w1", "tA"), b: build("w2", "tD"), c: build("w3", "tC") });
+    expect(reservedTalismanMains(t, "a", inv)).toEqual(new Map());
+    expect(reservedTalismanMains(t, "b", inv)).toEqual(new Map([["atkPct", "a"]]));
+    expect(reservedTalismanMains(t, "c", inv)).toEqual(new Map([["atkPct", "a"], ["critDmg", "b"]]));
+  });
+
+  it("the first earlier member holding a main keeps it", () => {
+    const t = team(["a", "b", "c"], { a: build("w1", "tA"), b: build("w2", "tB") });
+    expect(reservedTalismanMains(t, "c", inv)).toEqual(new Map([["atkPct", "a"]]));
+  });
+
+  it("no build, an empty slot, a Talisman gone from the inventory, a build without a Talisman: nothing reserved", () => {
+    const t = team(["a", "b", "c", "d"], { a: build("w1", "", "0"), b: build("w2", "tGone"), c: build("w3") });
+    expect(reservedTalismanMains(t, "d", inv)).toEqual(new Map());
+  });
+
+  it("stale: a Talisman of the main stat of an earlier member's Talisman, with that member", () => {
+    const t = team(["a", "b"], { a: build("w1", "tA"), b: build("w2", "tB") });
+    expect(buildStaleness(t, "a", inv)!.stale).toBe(false);
+    expect(buildStaleness(t, "b", inv)).toEqual({ stale: true, missing: [], taken: [], talismanMainTaken: [{ stat: "atkPct", byHeroUid: "a" }] });
+    // Another main: not stale.
+    const u = team(["a", "b"], { a: build("w1", "tA"), b: build("w2", "tD") });
+    expect(buildStaleness(u, "b", inv)!.stale).toBe(false);
+  });
+
+  it("a reorder makes the new second stale, the new first fresh", () => {
+    const t = team(["a", "b", "c"], { a: build("w1", "tA"), b: build("w2", "tD"), c: build("w3", "tC") });
+    expect(buildStaleness(t, "c", inv)!.talismanMainTaken).toEqual([{ stat: "atkPct", byHeroUid: "a" }]);
+    const moved = moveMember(t, "c", 0);
+    expect(buildStaleness(moved, "c", inv)!.stale).toBe(false);
+    expect(buildStaleness(moved, "a", inv)!.talismanMainTaken).toEqual([{ stat: "atkPct", byHeroUid: "c" }]);
+    expect(buildStaleness(moved, "b", inv)!.stale).toBe(false);
+  });
+
+  it("the earlier member's Talisman gone from the inventory: no main-stat reason", () => {
+    const t = team(["a", "b"], { a: build("w1", "tGone"), b: build("w2", "tB") });
+    expect(buildStaleness(t, "b", inv)!.stale).toBe(false);
+  });
+
+  it("the very Talisman taken by an earlier member says so once, as a taken piece", () => {
+    const t = team(["a", "b"], { a: build("w1", "tA"), b: build("w2", "tA") });
+    expect(buildStaleness(t, "b", inv)).toEqual({ stale: true, missing: [], taken: [{ pieceUid: "tA", byHeroUid: "a" }], talismanMainTaken: [] });
+  });
+
+  it("+ Worklist leaves out a build stale by its Talisman main", () => {
+    const t = team(["a", "b"], { a: build("w1", "tA"), b: build("w2", "tB") });
+    const plan = teamWorklistPlan(t, inv);
+    expect(plan.ready.map((m) => m.heroUid)).toEqual(["a"]);
+    expect(plan.stale).toEqual(["b"]);
+  });
+
+  it("the Optimizer context carries the reserved mains; the banner names them", () => {
+    const t = team(["a", "b", "c"], { a: build("w1", "tA"), b: build("w2", "tD") });
+    const ctx = teamContextOf([t], { teamId: "t1", heroUid: "c" }, new Set(), inv)!;
+    expect(ctx.talismanMains).toEqual(new Map([["atkPct", "a"], ["critDmg", "b"]]));
+    // The member's own filters are untouched.
+    expect(ctx.filters.mainExcludes).toEqual({});
+    const label = (k: string) => ({ atkPct: "ATK%", critDmg: "CHD" })[k] ?? k;
+    const name = (uid: string) => uid.toUpperCase();
+    expect(talismanMainsNotice(ctx.talismanMains, name, label)).toBe("Talisman main stat taken by A: ATK% · B: CHD");
+    expect(talismanMainsNotice(new Map([["atkPct", "a"], ["critDmg", "a"]]), name, label)).toBe("Talisman main stat taken by A: ATK%, CHD");
+    expect(talismanMainsNotice(new Map(), name, label)).toBeNull();
   });
 });
 
@@ -219,15 +300,16 @@ describe("teams — Optimizer context", () => {
   const t = team(["a", "b"], { a: build("w1") });
 
   it("resolves a member: place, size, filters, exclusion; null when gone", () => {
-    const ctx = teamContextOf([t], { teamId: "t1", heroUid: "b" }, new Set(["junk"]))!;
+    const ctx = teamContextOf([t], { teamId: "t1", heroUid: "b" }, new Set(["junk"]), pieces(["w1"]))!;
     expect(ctx).toMatchObject({ teamId: "t1", teamName: "GR PCU Ep1", heroUid: "b", position: 2, size: 2 });
     expect(ctx.filters).toBe(t.members[1]!.filters);
     expect(ctx.exclusion).toEqual(new Set(["junk", "w1"]));
     expect(ctx.gemReserved).toEqual(new Set(["w1"]));
-    expect(teamContextOf([t], { teamId: "t1", heroUid: "a" }, new Set())!.gemReserved).toEqual(new Set());
-    expect(teamContextOf([t], null, new Set())).toBeNull();
-    expect(teamContextOf([t], { teamId: "t1", heroUid: "zz" }, new Set())).toBeNull();
-    expect(teamContextOf([], { teamId: "t1", heroUid: "b" }, new Set())).toBeNull();
+    expect(ctx.talismanMains).toEqual(new Map());
+    expect(teamContextOf([t], { teamId: "t1", heroUid: "a" }, new Set(), pieces([]))!.gemReserved).toEqual(new Set());
+    expect(teamContextOf([t], null, new Set(), pieces([]))).toBeNull();
+    expect(teamContextOf([t], { teamId: "t1", heroUid: "zz" }, new Set(), pieces([]))).toBeNull();
+    expect(teamContextOf([], { teamId: "t1", heroUid: "b" }, new Set(), pieces([]))).toBeNull();
   });
 
   it("the solve scope: equipped scope all, the exclusion, the reserved gems, no rank / claim / hold / target; as is without a team", () => {
@@ -238,12 +320,16 @@ describe("teams — Optimizer context", () => {
     expect(teamSolveScope(scope, null)).toBe(scope);
     const exclusion = new Set(["w1"]);
     const gemReserved = new Set(["t9"]);
-    const s = teamSolveScope(scope, { exclusion, gemReserved });
+    const s = teamSolveScope(scope, { exclusion, gemReserved, talismanMains: new Map([["atkPct", "a"]]) });
     expect(s.filters.options.equippedScope).toBe("all");
     expect(scope.filters.options.equippedScope).toBe("lower");
     expect(s).toMatchObject({ heroPriority: {}, excludedPieceUids: exclusion, worklistClaims: undefined, presetHolds: undefined, targetPresetNum: null });
     expect(s.gemReservedPieceUids).toBe(gemReserved);
     expect(scope.gemReservedPieceUids).toBeUndefined();
+    // The Talisman mains go to the solve, never to the member's filters.
+    expect(s.reservedTalismanMains).toEqual(new Set(["atkPct"]));
+    expect(s.filters.mainExcludes).toEqual(scope.filters.mainExcludes);
+    expect(scope.reservedTalismanMains).toBeUndefined();
   });
 });
 

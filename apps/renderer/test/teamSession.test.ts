@@ -2,7 +2,8 @@
 // useSolverSession.ts): a member's "Optimize →" loads the member's filters
 // (never the hero's own), writes each edit back to the member only, solves
 // under the team's piece rule — equipped scope forced to "all", no preset holds
-// nor Worklist claims nor hero ranks, the member's exclusion passed — greys the
+// nor Worklist claims nor hero ranks, the member's exclusion passed, and the
+// earlier members' Talisman mains (G143) out of the solve and in the banner — greys the
 // scope out, retains a result for the member, and leaves the context when the
 // hero is switched. Outside a team the solve is unchanged. Same harness as
 // builderScreenState.test.ts: `react` mocked with a minimal hooks runtime, the
@@ -144,7 +145,7 @@ const memberFilters: SolverFilters = { ...filterDefaults("classic", false), topP
 const heroOwn: SolverFilters = { ...filterDefaults("classic", false), topPct: 40 };
 const teamCtx: TeamContext = {
   teamId: "t1", teamName: "GR PCU Ep1", heroUid: "h1", position: 2, size: 4,
-  filters: memberFilters, exclusion: new Set(["w0", "junk"]), gemReserved: new Set(),
+  filters: memberFilters, exclusion: new Set(["w0", "junk"]), gemReserved: new Set(), talismanMains: new Map(),
 };
 const holds = { holders: { p9: [1] }, rank: { 1: 1 }, locked: [1] } as unknown as NonNullable<Parameters<typeof BuilderScreen>[0]["presetHolds"]>;
 
@@ -180,6 +181,17 @@ const find = <P>(tree: unknown, type: unknown) => {
   for (const el of walk(tree)) if (el.type === type) return el.props as P;
   throw new Error("element not found");
 };
+/** The tree's text (its string and number children, in order). */
+const textOf = (tree: unknown): string => {
+  const out: string[] = [];
+  const visit = (n: unknown) => {
+    if (typeof n === "string" || typeof n === "number") out.push(String(n));
+    else if (Array.isArray(n)) n.forEach(visit);
+    else if (n && typeof n === "object" && "props" in n) visit((n as ReactElement<{ children?: unknown }>).props.children);
+  };
+  visit(tree);
+  return out.join("");
+};
 type ToolbarProps = Parameters<typeof BuilderToolbar>[0];
 type TableProps = Parameters<typeof ResultsTable>[0];
 
@@ -197,6 +209,25 @@ describe("Optimizer in team context", () => {
     expect(req.heroPriority).toEqual({});
     expect(req.targetPresetNum).toBeNull();
     expect(req.excludedPieceUids).toEqual(["w0", "junk"]);
+  });
+
+  it("the earlier members' Talisman mains (G143): out of the solve, named in the banner, not in the member's filters", () => {
+    const { render, calls } = harness({ ...teamCtx, talismanMains: new Map([["atkPct", "h2"]]) });
+    const tree = render();
+    expect(textOf(tree)).toContain("Talisman main stat taken by h2: ATK%");
+    const toolbar = find<ToolbarProps>(tree, BuilderToolbar);
+    expect(toolbar.filters.mainExcludes).toEqual({});
+    toolbar.onSolve("cp");
+    const req = orch.state.solves[0]!;
+    expect(req.reservedTalismanMains).toEqual(["atkPct"]);
+    expect(req.filters).toMatchObject({ mainExcludes: {} });
+    expect(calls.teamFilters).toHaveLength(0);
+    // None reserved: no line, no field.
+    const plain = harness(teamCtx);
+    const t2 = plain.render();
+    expect(textOf(t2)).not.toContain("Talisman main stat taken");
+    find<ToolbarProps>(t2, BuilderToolbar).onSolve("cp");
+    expect(orch.state.solves.at(-1)).not.toHaveProperty("reservedTalismanMains");
   });
 
   it("outside a team the solve keeps the hero's filters and every account rule", () => {

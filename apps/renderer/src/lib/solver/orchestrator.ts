@@ -153,6 +153,9 @@ export interface SolveArgs {
   targetPresetNum?: number | null;
   /** Talisman / EE uids whose gems stay out of the gem pool (team context). */
   gemReservedPieceUids?: string[];
+  /** Talisman main stats out of the Talisman pool (team context: the earlier
+   *  members' Talisman mains). */
+  reservedTalismanMains?: string[];
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
   /** Per-worker local top-K (orchestrator merges → returns top-N). Default: `settingDefault("topK")`. */
@@ -318,6 +321,7 @@ export class SolverOrchestrator {
       presetHolds: args.presetHolds,
       targetPresetNum: args.targetPresetNum,
       ...(args.gemReservedPieceUids?.length ? { gemReservedPieceUids: args.gemReservedPieceUids } : {}),
+      ...(args.reservedTalismanMains?.length ? { reservedTalismanMains: args.reservedTalismanMains } : {}),
       userSkills: args.userSkills,
       filters: args.filters,
       ...(args.pinPieceUids?.length ? { pinPieceUids: args.pinPieceUids } : {}),
@@ -455,6 +459,7 @@ export class SolverOrchestrator {
       presetHolds: args.presetHolds,
       targetPresetNum: args.targetPresetNum,
       ...(args.gemReservedPieceUids?.length ? { gemReservedPieceUids: args.gemReservedPieceUids } : {}),
+      ...(args.reservedTalismanMains?.length ? { reservedTalismanMains: args.reservedTalismanMains } : {}),
       userSkills: args.userSkills,
       filters: args.filters,
     };

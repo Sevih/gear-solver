@@ -5,8 +5,9 @@
  * the orchestrator itself), the same request (`solveArgsOf`) with the same
  * result-set size and heap depth, under the team's piece rule
  * (`teamSolveScope`: scope "all", the member's exclusion, the other members'
- * retained pieces' gems out of the gem pool, no hero rank, Worklist claim,
- * preset hold or target preset).
+ * retained pieces' gems out of the gem pool, the earlier members' Talisman
+ * mains out of the Talisman pool, no hero rank, Worklist claim, preset hold or
+ * target preset).
  *
  * One orchestrator per pass, created at its start and disposed at its end
  * (`dispose`), so its workers live only while a team is being built: the
@@ -56,12 +57,12 @@ export function createTeamSolver(ctx: TeamSolverContext): TeamSolver {
     onError: (message) => settle({ build: null, reason: `Solve failed: ${message}` }),
   });
 
-  const solve: MemberSolver = ({ heroUid, filters, mode, exclusion, gemReserved }) => {
+  const solve: MemberSolver = ({ heroUid, filters, mode, exclusion, gemReserved, talismanMains }) => {
     const hero = ctx.inventory.characters.find((c) => c.uid === heroUid);
     if (!hero) return Promise.resolve({ build: null, reason: "No longer in the roster" });
     const scope = teamSolveScope(
       { filters, heroPriority: {}, excludedPieceUids: undefined, worklistClaims: undefined, presetHolds: undefined, targetPresetNum: null },
-      { exclusion, gemReserved },
+      { exclusion, gemReserved, talismanMains },
     );
     return new Promise<MemberSolveOutcome>((resolve) => {
       pending = { resolve, poolSizes: null };
@@ -70,6 +71,7 @@ export function createTeamSolver(ctx: TeamSolverContext): TeamSolver {
           mode, hero, inventory: ctx.inventory, game: ctx.game, userGeasLevels: ctx.userGeasLevels, userCodexLevel: ctx.userCodexLevel,
           heroPriority: scope.heroPriority, excludedPieceUids: scope.excludedPieceUids, worklistClaims: scope.worklistClaims,
           presetHolds: scope.presetHolds, targetPresetNum: scope.targetPresetNum, gemReservedPieceUids: scope.gemReservedPieceUids,
+          reservedTalismanMains: scope.reservedTalismanMains,
           filters: buildSolveFilters(scope.filters),
         },
         { topN: ctx.topN, topK: ctx.topK },

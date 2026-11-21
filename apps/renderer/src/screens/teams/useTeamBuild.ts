@@ -73,6 +73,7 @@ export function useTeamBuild({ teams, setTeams, inventory, game, userGeasLevels,
         return await runTeamBuild({
           team,
           excludedPieces,
+          pieces: new Map(inventory.gear.map((g) => [g.uid, g])),
           solve: solver.solve,
           recoPriority: async (uid) => {
             const charId = charIdOf(uid);

@@ -27,6 +27,9 @@ export interface SolveInputs {
   /** Talisman / EE uids whose gems stay out of the gem pool — a team member's
    *  solve (`teamSolveScope`). Absent = none. */
   gemReservedPieceUids?: ReadonlySet<string>;
+  /** Talisman main stats out of the Talisman pool — a team member's solve
+   *  (`teamSolveScope`: the earlier members' Talisman mains). Absent = none. */
+  reservedTalismanMains?: ReadonlySet<string>;
   /** Already serialized (`buildSolveFilters`). */
   filters: SolveFilters;
 }
@@ -46,6 +49,7 @@ export function estimateArgsOf(i: SolveInputs): EstimateArgs {
     presetHolds: i.presetHolds,
     targetPresetNum: i.targetPresetNum,
     ...(i.gemReservedPieceUids?.size ? { gemReservedPieceUids: Array.from(i.gemReservedPieceUids) } : {}),
+    ...(i.reservedTalismanMains?.size ? { reservedTalismanMains: Array.from(i.reservedTalismanMains) } : {}),
     userSkills: {
       first: i.hero.skills.first,
       second: i.hero.skills.second,

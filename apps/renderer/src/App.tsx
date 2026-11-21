@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
-import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
+import type { GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { autoImport, keptGameData, loadDataVersion, parseFiles, readManualFiles, type KeptGameData } from "./data.js";
 import { streamCapture, getCaptureStatus, type CaptureStatus } from "./capture.js";
 import { getSteamStatus, launchSteamGame, type SteamStatus } from "./steam.js";
@@ -295,7 +295,9 @@ export function App() {
   // filters and retained builds. Durable (localStorage, `gs.teams`).
   const [teams, setTeams] = useState<Team[]>(loadTeams);
   usePersistOnChange(teams, persistTeams);
-  const builderTeamContext = useMemo(() => teamContextOf(teams, builderTeam, excludedPieces), [teams, builderTeam, excludedPieces]);
+  // The inventory's pieces by uid — the team rule reads the retained Talismans' main stats there.
+  const pieceByUid = useMemo(() => new Map<string, GearPiece>(inv?.gear.map((g) => [g.uid, g]) ?? []), [inv]);
+  const builderTeamContext = useMemo(() => teamContextOf(teams, builderTeam, excludedPieces, pieceByUid), [teams, builderTeam, excludedPieces, pieceByUid]);
   const optimizeTeamMember = useCallback((teamId: string, heroUid: string) => {
     setBuilderHero(heroUid);
     setBuilderPatch(null);

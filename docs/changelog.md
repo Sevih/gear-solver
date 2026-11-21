@@ -8,6 +8,67 @@
 
 ## Items de backlog clôturés (index)
 
+### 🔮 Teams : une main stat de Talisman par team, les membres précédents l'emportent (G143) (2026-11-21)
+- ✅ **Pourquoi.** Demande de Sevih du 21/11 : « la mainstat du talisman s'applique à la team et n'est pas
+  cumulable, donc il faut éviter d'avoir 2 persos dans la team avec un talisman qui a la même main stat ». Jusqu'ici
+  rien ne l'empêchait : deux membres pouvaient retenir chacun un Talisman ATK%, dont un ne sert à rien.
+- ✅ **Règle.** Même logique d'ordre que les pièces de G139 : en contexte de team, le pool de Talismans d'un membre
+  écarte les Talismans dont la main stat est celle du Talisman RETENU par un membre placé AVANT lui ; le membre 1 a
+  le choix libre, le 2 ne peut pas prendre la main stat du 1, etc. Build team applique la même règle avec les
+  Talismans que le passage vient de retenir (jamais l'ancien build d'un suivant). Hors contexte de team, rien ne
+  change.
+- ✅ **La clé.** Celle de l'Optimizer pour le slot Talisman, sans seconde notion : `mainStatKeysOf`
+  (`lib/solver/builderFilters.ts`, extrait tel quel du filtre `allow` de `precomputeContext`, qui l'utilise
+  désormais) = les `stat` des mains `source: "option"` non combat-only, celles que `mainPicks` / `mainExcludes`
+  comparent. Elle sépare la valeur fixe du pourcentage (`atk` / `atkPct`), mais les Talismans du jeu n'ont qu'une
+  main parmi neuf, toutes en clés distinctes (contrat `data/derived/` : ATK%, DEF%, HP%, CHC, CHD, EFF, RES, DMG
+  Increase, DMG Reduction ; aucune ATK fixe) : la clé ne confond ni ne sépare rien en pratique.
+- ✅ **Comment.** `reservedTalismanMains(team, heroUid, pieces)` (`lib/teams/teams.ts`, pur) : stat → membre
+  précédent dont le Talisman retenu la porte (le premier gagne) ; le Talisman d'un build est la pièce de slot
+  `ooparts` lue dans la carte des pièces de l'inventaire (`TeamPieces`), donc slot vide, membre sans build et
+  Talisman sorti de l'inventaire ne réservent rien. Le fil, celui de G139 / G142 : `TeamContext.talismanMains`
+  (`teamContextOf`, qui prend la carte des pièces, App la tient en `useMemo` sur l'inventaire) et
+  `MemberSolveRequest.talismanMains` (`runTeamBuild`, `TeamBuildPass.pieces` posé par `useTeamBuild`) →
+  `teamSolveScope` (`SolveScope.reservedTalismanMains`, nouveau type `TeamSolveRule` pour la règle) →
+  `solveArgsOf` / `estimateArgsOf` (`SolveInputs.reservedTalismanMains`, tableau, absent quand vide) → `SolveArgs` /
+  `SolveRequest` / `EstimateRequestMsg` (relayé par l'orchestrateur au solve et à l'estimation : ici la taille du
+  pool change, l'estimation en a besoin) → `allow` de `precomputeContext` (`engine.ts`), qui écarte le Talisman et le
+  compte avec les main stats exclues (`poolSizes.talisman.mainExcluded`, donc « n dropped: main stat excluded »
+  quand le slot se vide). Les `mainExcludes` du membre ne sont jamais touchés.
+- ✅ **Péremption.** `buildStaleness` gagne `talismanMainTaken` (stat, membre) : un build dont le Talisman porte une
+  main stat réservée est PÉRIMÉ, la ligne dit « same talisman main stat as ‹héros› (member n) » à côté des autres
+  raisons et cercle le Talisman d'ambre (infobulle « Same main stat as ‹héros›'s Talisman ») ; il sort de
+  « + Worklist » par `teamWorklistPlan`, comme tout build périmé. Un Talisman lui-même repris par un membre
+  précédent n'est dit qu'une fois (pièce reprise). `buildStaleness` et `teamWorklistPlan` prennent désormais la
+  carte des pièces au lieu de l'ensemble des uids présents (`TeamsScreen` et `teamWorklistFor` la tenaient déjà) ;
+  un appelant qui passe encore un `Set` est refusé à la compilation.
+- ✅ **Bannière.** En contexte de team, la bannière de l'Optimizer ajoute, quand il y en a, « Talisman main stat
+  taken by Akarie: ATK% » (`talismanMainsNotice`, `lib/teams/teamContext.ts` ; une part par membre précédent, stats
+  par `statLabelFor`), l'infobulle explique la règle.
+- ✅ **Docs.** `docs/solver.md` + `wiki/Solver.md` (règle des pièces, Optimizer en contexte, Build team, carte des
+  fichiers), `docs/reference.md` + `wiki/Engine-Reference.md` (§1.6 et index des tests), `wiki/Using-the-App.md`.
+- ✅ **Tests.** `teams.test.ts` (34, +9) : main stats réservées (précédents seulement, jamais les suivants ni le
+  sien, le premier gagne ; sans build, slot vide, Talisman disparu, build sans Talisman sans effet), péremption par
+  main stat avec le membre, réordonnancement qui rend périmé le nouveau second et frais le nouveau premier, Talisman
+  précédent disparu sans raison, Talisman repris compté une fois, « + Worklist » qui l'écarte, `teamContextOf` et
+  `talismanMainsNotice`, `teamSolveScope` qui pose les main stats sans toucher aux `mainExcludes`. Nouveau
+  `teamTalismanMain.test.ts`, solve complet sur le contrat réel (`teamContextOf` → `teamSolveScope` → `solveArgsOf`
+  → `precomputeContext` → `solveChunk` → `finalizeBuilds`, comme `teamGemPool.test.ts`) : Talisman CHD retenu par le
+  membre 1 → le meilleur Talisman du membre 2 (CHD, priorité CHD) sort, il reçoit le DEF%, `poolSizes.talisman`
+  `{ hit: 1, mainExcluded: 1 }`, `mainExcludes` vides ; DEF% au membre 1 → le membre 2 prend le CHD ; le membre 1 a le
+  choix (vérifié rouge sans la garde de `allow`). `buildTeam.test.ts` (+1) : le membre 2 ne reçoit pas la main stat
+  que le passage vient de retenir pour le 1, l'ancien Talisman ATK% du 2 ne compte pas pour le 1. `teamSolver.test.ts`
+  : `reservedTalismanMains` dans la requête, absent quand vide. `teamSession.test.ts` (+1) : la ligne de la bannière,
+  le champ dans le solve, filtres du membre intacts. `teamsScreen.test.ts` (+1) : rendu statique de la ligne
+  périmée (raison, Talisman cerclé, « + Worklist (1) »). `npm run typecheck` : `> tsc --noEmit` (renderer, dernier
+  workspace, sans erreur) ; `npm test` : `Tests  1355 passed (1355)` (renderer ; core 183, desktop 273). `npm run
+  lint` : `✖ 6 problems (0 errors, 6 warnings)`, les six d'avant.
+- ⏳ Sevih : Build team sur une team dont deux membres prenaient le même Talisman ATK% → le second reçoit une autre
+  main stat ; avant de relancer, sa ligne dit « Stale — same talisman main stat as ‹membre 1› (member 1) ».
+  Laissé, comme pour l'exclusion de pièces de G139 : « Keep current » verrouille le Talisman porté sans passer par
+  le filtre, il peut donc garder une main stat réservée (le build sortira alors périmé). Hors périmètre : modéliser
+  l'effet de team du Talisman (la main stat d'un membre appliquée aux autres dans leurs stats calculées).
+
 ### 💎 Teams : les gemmes des pièces retenues par les autres membres sortent du gem pool d'un membre (G142) (2026-11-21)
 - ✅ **Pourquoi.** Constat de relecture du 21/11 : en contexte de team, `teamSolveScope` passe `equippedScope: "all"` et
   `buildGemPool` (`lib/solver/gems.ts`) comptait les gemmes serties dans le Talisman et l'EE de n'importe quel héros, y

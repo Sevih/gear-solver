@@ -12,7 +12,7 @@ import type { HeroPriority } from "../../lib/storage/heroPriority.js";
 import type { PresetHolds } from "../../lib/presets/presetHolds.js";
 import { buildSolveFilters, type MinMax, type SolverFilters } from "../../lib/solver/builderFilters.js";
 import type { ReforgeContext } from "../../lib/solver/reforge.js";
-import { teamSolveScope } from "../../lib/teams/teamContext.js";
+import { teamSolveScope, type TeamSolveRule } from "../../lib/teams/teamContext.js";
 import { estimateArgsOf, solveArgsOf } from "../../lib/solver/solveArgs.js";
 import { ZERO_SOLVE_COUNTS, createSolveCountsStore } from "./solveCounts.js";
 
@@ -67,10 +67,11 @@ interface SolverSessionInput {
   /** The preset being optimized ("Optimize preset →"), null otherwise. */
   targetPresetNum: number | null;
   /** Team context (a member's "Optimize →" on the Teams tab): the solve takes
-   *  any piece but `exclusion` and no gem socketed in a `gemReserved` piece,
-   *  scope "all", without the ranks, the Worklist claims, the preset holds or
-   *  a target preset (`teamSolveScope`). */
-  team?: { exclusion: ReadonlySet<string>; gemReserved: ReadonlySet<string> } | null;
+   *  any piece but `exclusion`, no gem socketed in a `gemReserved` piece and no
+   *  Talisman of a main stat in `talismanMains`, scope "all", without the
+   *  ranks, the Worklist claims, the preset holds or a target preset
+   *  (`teamSolveScope`). */
+  team?: TeamSolveRule | null;
   workerCount: number | null;
   topN: number;
   topK: number;
@@ -83,7 +84,7 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     () => teamSolveScope({ filters, heroPriority: globalHeroPriority, excludedPieceUids: globalExcludedPieceUids, worklistClaims: globalWorklistClaims, presetHolds: globalPresetHolds, targetPresetNum: globalTargetPresetNum }, team),
     [filters, globalHeroPriority, globalExcludedPieceUids, globalWorklistClaims, globalPresetHolds, globalTargetPresetNum, team],
   );
-  const { heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, gemReservedPieceUids } = scope;
+  const { heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, gemReservedPieceUids, reservedTalismanMains } = scope;
   const solveFilters = scope.filters;
   // SOLVE mode (the toolbar's Score | CP control), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
@@ -223,7 +224,7 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
       ...(serializedFilters.passivePicks ? { passivePicks: serializedFilters.passivePicks } : {}),
     };
     orchestrator.solve(solveArgsOf(
-      { mode, hero: selected, inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, gemReservedPieceUids, filters: serializedFilters },
+      { mode, hero: selected, inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, gemReservedPieceUids, reservedTalismanMains, filters: serializedFilters },
       // Result-set size + per-worker heap depth from Settings → Solver.
       { topN, topK, pinPieceUids },
     ));
@@ -271,12 +272,12 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     const handle = setTimeout(() => {
       getOrchestrator().estimate(estimateArgsOf({
         mode: solveMode, hero: selected, inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum,
-        filters: buildSolveFilters(solveFilters),
+        reservedTalismanMains, filters: buildSolveFilters(solveFilters),
       }), (poolSizes) => setEstimatePools(poolSizes));
     }, 250);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [solving, selectedUid, inventory, game, selected, solveFilters, solveMode, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, userGeasLevels, userCodexLevel]);
+  }, [solving, selectedUid, inventory, game, selected, solveFilters, solveMode, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, reservedTalismanMains, userGeasLevels, userCodexLevel]);
 
   return {
     solveMode, setSolveMode, orchestratorRef, resultsReforge, setResultsReforge, solving, setSolving, progressStore,

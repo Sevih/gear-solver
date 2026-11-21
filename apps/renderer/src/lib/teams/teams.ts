@@ -14,16 +14,22 @@
  * other member: the gems socketed in a piece of the build retained by any
  * other member of the team, before or after, are out of their gem pool
  * (`reservedGemPieces`); those on any other hero's Talisman / EE stay in.
+ * A Talisman's main stat applies to the whole team and doesn't stack, so a
+ * member's Talisman pool also leaves out the Talismans whose main stat is the
+ * one of a Talisman retained by a member placed BEFORE them
+ * (`reservedTalismanMains`, on the Optimizer's main-stat key `mainStatKeysOf`).
  *
- * A retained build is STALE when one of its pieces left the inventory, or when
- * a member placed before (after a reorder or a new build) retained one of them
+ * A retained build is STALE when one of its pieces left the inventory, when a
+ * member placed before (after a reorder or a new build) retained one of them,
+ * or when its Talisman has the main stat of an earlier member's Talisman
  * (`buildStaleness`). It stays shown, flagged, and never goes to the Worklist.
  *
  * Pure: no React, no storage (`lib/storage/teams.ts` keeps the list). Every
  * edit returns a new team, the same one when nothing changes; a refused edit
  * (a fifth member, a hero twice, an invalid name) returns null.
  */
-import type { SolverFilters } from "../solver/builderFilters.js";
+import type { GearPiece } from "@gear-solver/core";
+import { mainStatKeysOf, type SolverFilters } from "../solver/builderFilters.js";
 import type { SolveBuild, SolveMode } from "../solver/types.js";
 
 /** Heroes in a team — the in-game team size. */
@@ -187,30 +193,78 @@ export function reservedGemPieces(team: Team, heroUid: string): Set<string> {
   return out;
 }
 
-/** Why a retained build is stale: its pieces gone from the inventory, and
- *  those retained by an earlier member (with that member). */
+/** The inventory's pieces by uid — what the Talisman rule reads a retained
+ *  Talisman's main stat from (a uid it doesn't hold left the inventory). */
+export type TeamPieces = ReadonlyMap<string, Pick<GearPiece, "slot" | "main">>;
+
+/** The Talisman of a retained build, when it is still in the inventory. */
+function talismanOf(build: TeamBuild, pieces: TeamPieces): Pick<GearPiece, "slot" | "main"> | null {
+  for (const uid of buildPieces(build)) {
+    const p = pieces.get(uid);
+    if (p?.slot === "ooparts") return p;
+  }
+  return null;
+}
+
+/** The Talisman main stats a member's solve leaves out of their Talisman pool:
+ *  stat key (`mainStatKeysOf`, the key of the Optimizer's main-stat picks) →
+ *  heroUid of the member placed BEFORE `heroUid` whose retained build's
+ *  Talisman carries it (the first of them when two do). Never the members
+ *  after, never the member's own; a member without a build, a build without a
+ *  Talisman (empty slot) and a Talisman gone from the inventory reserve
+ *  nothing. */
+export function reservedTalismanMains(team: Team, heroUid: string, pieces: TeamPieces): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const m of team.members) {
+    if (m.heroUid === heroUid) break;
+    const talisman = m.build ? talismanOf(m.build, pieces) : null;
+    if (!talisman) continue;
+    for (const stat of mainStatKeysOf(talisman)) if (!out.has(stat)) out.set(stat, m.heroUid);
+  }
+  return out;
+}
+
+/** Why a retained build is stale: its pieces gone from the inventory, those
+ *  retained by an earlier member (with that member), and its Talisman's main
+ *  stats an earlier member's Talisman already carries (with that member). */
 export interface BuildStaleness {
   stale: boolean;
   missing: string[];
   taken: Array<{ pieceUid: string; byHeroUid: string }>;
+  talismanMainTaken: Array<{ stat: string; byHeroUid: string }>;
 }
 
-/** The staleness of `heroUid`'s retained build against the inventory's piece
- *  uids (`present`); null when the member has no build (or isn't in the team). */
-export function buildStaleness(team: Team, heroUid: string, present: ReadonlySet<string>): BuildStaleness | null {
+/** The staleness of `heroUid`'s retained build against the inventory's pieces
+ *  (`pieces`: a uid it doesn't hold is gone); null when the member has no
+ *  build (or isn't in the team). A Talisman itself taken by an earlier member
+ *  says so once, as a taken piece, not again by its main stat. */
+export function buildStaleness(team: Team, heroUid: string, pieces: TeamPieces): BuildStaleness | null {
   const member = team.members.find((m) => m.heroUid === heroUid);
   if (!member?.build) return null;
   const claims = earlierClaims(team, heroUid);
   const missing: string[] = [];
   const taken: BuildStaleness["taken"] = [];
+  let talismanTaken = false;
   for (const uid of buildPieces(member.build)) {
-    if (!present.has(uid)) missing.push(uid);
+    if (!pieces.has(uid)) missing.push(uid);
     else {
       const by = claims.get(uid);
-      if (by) taken.push({ pieceUid: uid, byHeroUid: by });
+      if (by) {
+        taken.push({ pieceUid: uid, byHeroUid: by });
+        if (pieces.get(uid)?.slot === "ooparts") talismanTaken = true;
+      }
     }
   }
-  return { stale: missing.length > 0 || taken.length > 0, missing, taken };
+  const talismanMainTaken: BuildStaleness["talismanMainTaken"] = [];
+  const talisman = talismanTaken ? null : talismanOf(member.build, pieces);
+  if (talisman) {
+    const reserved = reservedTalismanMains(team, heroUid, pieces);
+    for (const stat of new Set(mainStatKeysOf(talisman))) {
+      const by = reserved.get(stat);
+      if (by) talismanMainTaken.push({ stat, byHeroUid: by });
+    }
+  }
+  return { stale: missing.length > 0 || taken.length > 0 || talismanMainTaken.length > 0, missing, taken, talismanMainTaken };
 }
 
 /** What "+ Worklist" can push for a team: the members with a retained build
@@ -221,10 +275,10 @@ export interface TeamWorklistPlan {
   stale: string[];
 }
 
-export function teamWorklistPlan(team: Team, present: ReadonlySet<string>): TeamWorklistPlan {
+export function teamWorklistPlan(team: Team, pieces: TeamPieces): TeamWorklistPlan {
   const plan: TeamWorklistPlan = { ready: [], noBuild: [], stale: [] };
   for (const m of team.members) {
-    const s = buildStaleness(team, m.heroUid, present);
+    const s = buildStaleness(team, m.heroUid, pieces);
     if (!s) plan.noBuild.push(m.heroUid);
     else if (s.stale) plan.stale.push(m.heroUid);
     else plan.ready.push(m);

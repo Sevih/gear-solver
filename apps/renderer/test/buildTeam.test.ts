@@ -4,7 +4,8 @@
  * exclusion (member 3 gets neither member 1's nor member 2's pieces just
  * retained), a member without a result who takes nothing, a Cancel during
  * member 2 (1 and 2 retained, 3 and 4 as they were), each member's mode, the
- * reco rule of SOLVE, the toast and the greyed-out button's reason; then the
+ * Talisman main stats the members before just retained (G143), the reco rule
+ * of SOLVE, the toast and the greyed-out button's reason; then the
  * Teams card rendered during a pass (the member being solved, Cancel) and
  * after it (a member without a build, with the reason).
  */
@@ -14,7 +15,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Character, GameData, GearPiece, Inventory } from "@gear-solver/core";
 import { filterDefaults, type SolverFilters } from "../src/lib/solver/builderFilters.js";
 import type { SolveBuild } from "../src/lib/solver/types.js";
-import { addMember, clearBuild, createTeam, retainBuild, type Team, type TeamBuild } from "../src/lib/teams/teams.js";
+import { addMember, clearBuild, createTeam, retainBuild, type Team, type TeamBuild, type TeamPieces } from "../src/lib/teams/teams.js";
 import {
   buildTeamBlockedReason, runTeamBuild, teamBuildNotice, type MemberBuilt, type MemberSolveOutcome, type MemberSolveRequest,
 } from "../src/lib/teams/buildTeam.js";
@@ -52,7 +53,7 @@ function fakeSolve(candidates: Record<string, string[][]>, onCall?: (req: Member
   return { solve, calls };
 }
 
-async function run(t: Team, solve: (req: MemberSolveRequest) => Promise<MemberSolveOutcome>, opts: { excluded?: string[]; stop?: () => boolean; reco?: (uid: string) => Promise<Record<string, number> | null> } = {}) {
+async function run(t: Team, solve: (req: MemberSolveRequest) => Promise<MemberSolveOutcome>, opts: { excluded?: string[]; pieces?: TeamPieces; stop?: () => boolean; reco?: (uid: string) => Promise<Record<string, number> | null> } = {}) {
   const done: MemberBuilt[] = [];
   const started: string[] = [];
   // Apply each outcome as App does, to check what the live team ends as.
@@ -60,6 +61,7 @@ async function run(t: Team, solve: (req: MemberSolveRequest) => Promise<MemberSo
   const summary = await runTeamBuild({
     team: t,
     excludedPieces: new Set(opts.excluded ?? []),
+    pieces: opts.pieces ?? new Map(),
     solve,
     ...(opts.reco ? { recoPriority: opts.reco } : {}),
     shouldStop: opts.stop ?? (() => false),
@@ -105,6 +107,29 @@ describe("runTeamBuild", () => {
     expect([...calls[2]!.gemReserved].sort()).toEqual(["h1", "h2", "w1", "w2"]);
     expect([...calls[3]!.gemReserved].sort()).toEqual(["h1", "h2", "h3", "w1", "w2", "w3"]);
     expect(live.members.map((m) => m.build?.pieceUids.slice(0, 2))).toEqual([["w1", "h1"], ["w2", "h2"], ["w3", "h3"], ["w4", "h4"]]);
+  });
+
+  it("Talisman main stat (G143): a member never receives the main stat this pass just retained for a member before", async () => {
+    const talisman = (stat: string) => ({ slot: "ooparts", main: [{ stat, value: 12, percent: true, fromBuff: true, source: "option" }] }) as unknown as GearPiece;
+    const pieces: TeamPieces = new Map([["tA1", talisman("atkPct")], ["tA2", talisman("atkPct")], ["tC", talisman("critDmg")], ["tA9", talisman("atkPct")]]);
+    // Maxie's old build holds tA9 (ATK%): she comes after Akarie, so it doesn't count for her.
+    const t = retainBuild(team(), "ma", retained(["w8", "tA9"]));
+    const candidates: Record<string, string[][]> = {
+      ak: [["w1", "tA1"]], ma: [["w2", "tA2"], ["w2", "tC"]], ro: [["w3", "tA2"], ["w3", "tC"], ["w3"]], vl: [["w4", "tC"], ["w4"]],
+    };
+    const calls: MemberSolveRequest[] = [];
+    // The best candidate whose pieces are free and whose Talisman's main isn't reserved.
+    const solve = async (req: MemberSolveRequest): Promise<MemberSolveOutcome> => {
+      calls.push(req);
+      const pick = (candidates[req.heroUid] ?? []).find((c) => c.every((u) => !req.exclusion.has(u) && !(pieces.get(u)?.main ?? []).some((m) => req.talismanMains.has(m.stat))));
+      return pick ? { build: result(pick), reason: null } : { build: null, reason: "Talisman: 0 pieces after filters" };
+    };
+    const { live } = await run(t, solve, { pieces });
+    expect(calls[0]!.talismanMains).toEqual(new Map());
+    expect(calls[1]!.talismanMains).toEqual(new Map([["atkPct", "ak"]]));
+    expect(calls[2]!.talismanMains).toEqual(new Map([["atkPct", "ak"], ["critDmg", "ma"]]));
+    expect(calls[3]!.talismanMains).toEqual(new Map([["atkPct", "ak"], ["critDmg", "ma"]]));
+    expect(live.members.map((m) => m.build?.pieceUids.slice(0, 2))).toEqual([["w1", "tA1"], ["w2", "tC"], ["w3", ""], ["w4", ""]]);
   });
 
   it("a member without a result keeps no build, says why, and takes nothing from the next ones", async () => {

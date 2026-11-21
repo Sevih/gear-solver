@@ -4,7 +4,8 @@
  * member whose build is stale (a piece retained by the member before them) —
  * its "stale" mark and reason, the team full (no "+ Add hero" picker), and
  * "+ Worklist" counting only the fresh builds and saying whom it leaves out;
- * and the "+ Add hero" picker listing the team's heroes greyed out.
+ * a member stale by its Talisman main stat (G143); and the "+ Add hero" picker
+ * listing the team's heroes greyed out.
  */
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
@@ -78,6 +79,28 @@ describe("TeamsScreen", () => {
     expect(html.match(/>Optimize →</g)).toHaveLength(4);
     expect(html.match(/>Remove</g)).toHaveLength(4);
     expect(html).toContain(">Delete team<");
+  });
+
+  it("a member stale by its Talisman main stat (G143): the reason, the Talisman ringed, left out of + Worklist", () => {
+    const talisman = (uid: string, stat: string): GearPiece => ({
+      ...piece("ooparts", uid), main: [{ stat, value: 12, percent: true, fromBuff: true, source: "option" }],
+    } as unknown as GearPiece);
+    const inv = { ...inventory, gear: [...inventory.gear, talisman("tA1", "atkPct"), talisman("tA2", "atkPct")] } as unknown as Inventory;
+    // Engine order: weapon, helmet, armor, gloves, boots, accessory, Talisman, EE.
+    const withTalisman = (weapon: string, t: string): TeamBuild => ({ ...build(weapon), pieceUids: [weapon, "", "", "", "", "", t, ""] });
+    let t = createTeam("WB", "t3", 0)!;
+    for (const uid of ["ak", "ma"]) t = addMember(t, uid, filterDefaults("classic", false))!;
+    t = retainBuild(t, "ak", withTalisman("w1", "tA1"));
+    t = retainBuild(t, "ma", withTalisman("w2", "tA2"));
+    const html = renderToStaticMarkup(createElement(TeamsScreen, {
+      inventory: inv, game: null, teams: [t], onTeamsChange: () => {}, heroPriority: {},
+      defaultReforgeMode: "classic", defaultRerollPotential: false, onOptimizeMember: () => {}, onAddToWorklist: () => {},
+    }));
+    expect(html.match(/>Stale</g)).toHaveLength(1);
+    expect(html).toContain("same talisman main stat as Akarie (member 1)");
+    expect(html.match(/title="Same main stat as Akarie&#x27;s Talisman/g)).toHaveLength(1);
+    expect(html).toContain("+ Worklist (1)");
+    expect(html).toContain("Leaves out 1 stale (Maxie)");
   });
 
   it("a team with room: the + Add hero picker", () => {

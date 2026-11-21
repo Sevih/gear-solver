@@ -36,7 +36,7 @@ import { equipPieces, type EquipOutcome } from "../../equip.js";
 import type { WorklistEntry } from "../../lib/storage/worklist.js";
 import { worklistChangesFor } from "../../lib/worklist/changes.js";
 import { cloneFilters, filtersForHero, withHeroFilters, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
-import type { TeamContext } from "../../lib/teams/teamContext.js";
+import { talismanMainsNotice, type TeamContext } from "../../lib/teams/teamContext.js";
 import { teamBuildOf, type TeamBuild } from "../../lib/teams/teams.js";
 import { hasPriority, priorityOf, type Priority } from "../../lib/heroPriority/weights.js";
 import { recoPriorityOf, samePriority, solveDecision } from "../../lib/reco/recoPriority.js";
@@ -58,7 +58,7 @@ import type { SelectedComposition } from "./composition.js";
 import { displayNameOf } from "../../lib/heroes/heroName.js";
 import { heroListOrder } from "../../lib/heroes/heroListOrder.js";
 import { armorSetCatalogFromInventory, effectCatalogFromInventory, mainStatCatalogFromInventory, passiveCatalogFromInventory, type MainStatEntry } from "./catalogs.js";
-import { MAIN_STAT_SLOTS } from "./statColumns.js";
+import { MAIN_STAT_SLOTS, statLabelFor } from "./statColumns.js";
 import { BuilderToolbar } from "./BuilderToolbar.js";
 import { ResultsTable, RESULT_ROW_H } from "./ResultsTable.js";
 import { EquipBuildButton } from "./EquipBuildButton.js";
@@ -900,6 +900,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     }
     return out;
   }, [inventory, heroClass]);
+  // Team context: the Talisman main stats the members before took (banner).
+  const teamTalismanNotice = useMemo(() => teamActive ? talismanMainsNotice(teamActive.talismanMains, (uid) => {
+    const c = inventory?.characters.find((x) => x.uid === uid);
+    return c ? displayNameOf(c, effectiveCharacter(c, game?.characters).def) : uid;
+  }, statLabelFor) : null, [teamActive, inventory, game]);
 
   if (!inventory) {
     return <Empty title="No capture yet" subtitle="Install the capture plugin (Settings, top right) and play OUTERPLANE to the lobby: your roster imports by itself, then pick a hero here." />;
@@ -913,6 +918,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
             {" · "}{selected ? displayNameOf(selected, effectiveCharacter(selected, game?.characters).def) : teamActive.heroUid} ({teamActive.position}/{teamActive.size})
           </span>
           <span className="text-violet-200/70">Filters kept for this team only · any piece but the never-use ones and the builds of the members before</span>
+          {teamTalismanNotice && (
+            <span className="text-violet-50" title="A Talisman's main stat applies to the whole team and doesn't stack: this member's Talisman pool leaves out the main stats the members before already bring (their filters are untouched)">
+              {teamTalismanNotice}
+            </span>
+          )}
           <button
             type="button"
             onClick={onBackToTeams}

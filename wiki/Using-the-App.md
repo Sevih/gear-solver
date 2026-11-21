@@ -432,7 +432,9 @@ a guild raid boss…): build each hero for that fight without regard for the res
 - **The order matters**: drag the ⠿ handle or use ▲ / ▼. Member 1 may take any piece of your
   inventory — worn by a hero outside the team, held by an in-game preset or reserved by the
   Worklist included — but your **never-use** pieces; member 2 the same minus member 1's build;
-  and so on. Hero ranks play no part.
+  and so on. Hero ranks play no part. A Talisman's main stat applies to the whole team and
+  doesn't stack, so member 2 doesn't get a Talisman of the main stat of member 1's (ATK% after an
+  ATK% one), and so on; the banner of **Optimize →** names the main stats taken.
 - **Optimize →** on a member opens the Optimizer on them with their filters for this team, under a
   banner (**Team: ‹name› · ‹hero› (2/4)**, **← Back to Teams**). Every filter you change goes to the
   team only, **Equipped items** is pinned to **All**, and **Use for team** (next to **+ Worklist**,
@@ -442,15 +444,17 @@ a guild raid boss…): build each hero for that fight without regard for the res
   their own filters and mode (the one of their kept build, Score if they have none; without a
   priority, Score takes the weights of the hero's reco — or goes by CP when there are none — as
   **SOLVE** does), on everything but your never-use pieces and the builds just kept for the members
-  before them, and the best result becomes their build. The member being solved says
+  before them (and without a Talisman of the main stat a member before them just got), and the best
+  result becomes their build. The member being solved says
   **Solving…**; **Cancel** stops after that member (what was kept stays, the others keep their
   previous build). A member with no possible build gets **No build** and the reason. A notice
   sums it up (*GR PCU Ep1 built — 4/4 members*). One team at a time, and not while the Optimizer
   solves (the button is greyed out, the reason on hover).
 - Each member shows their kept build: the pieces (hover for the card), the CP and the solve mode.
-  A build turns **stale** when one of its pieces left your inventory, or when a member placed
-  before (after a reorder or a new build) took one of them: it stays shown with the reason —
-  run **Optimize →** again.
+  A build turns **stale** when one of its pieces left your inventory, when a member placed
+  before (after a reorder or a new build) took one of them, or when its Talisman has the same
+  main stat as the Talisman of a member placed before (a Talisman's main stat applies to the
+  whole team and doesn't stack): it stays shown with the reason — run **Optimize →** again.
 - **+ Worklist** queues one entry per member with a build that isn't stale (each replaces the
   entry the hero already had; one notice for the team, e.g. *Added to worklist — GR PCU Ep1 (4
   heroes, 1 replaced)*); next to it, the members it leaves out and why. Nothing is written to the

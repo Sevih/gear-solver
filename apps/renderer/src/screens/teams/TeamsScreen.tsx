@@ -5,7 +5,8 @@
  * (renamable), its 1 to 4 members in order (⠿ drag, or ▲ / ▼) and, for each,
  * the build retained for them: its pieces on the game's grid (the piece card on
  * hover, as on Presets), its CP and solve mode, and a "stale" mark with its
- * reason (a piece gone from the inventory, or taken by a member placed before).
+ * reason (a piece gone from the inventory, or taken by a member placed before,
+ * or a Talisman of the main stat of an earlier member's Talisman).
  *
  * "Optimize →" opens the Optimizer on the member in team context (their own
  * filters, any piece but the never-use ones and the earlier members' builds;
@@ -95,7 +96,6 @@ export function TeamsScreen({ inventory, game, teams, onTeamsChange, heroPriorit
     return m;
   }, [inventory, game]);
   const pieceByUid = useMemo(() => new Map<string, GearPiece>(inventory?.gear.map((g) => [g.uid, g]) ?? []), [inventory]);
-  const present = useMemo(() => new Set(pieceByUid.keys()), [pieceByUid]);
 
   if (!inventory) {
     return <Empty title="No capture yet" subtitle="Install the capture plugin (Settings, top right) and play OUTERPLANE to the lobby: your roster imports by itself, then build your teams here." />;
@@ -145,7 +145,6 @@ export function TeamsScreen({ inventory, game, teams, onTeamsChange, heroPriorit
           heroes={heroes}
           roster={pickerHeroes}
           pieceByUid={pieceByUid}
-          present={present}
           onRename={(name) => {
             if (!validTeamName(name)) return false;
             edit(team.id, (t) => renameTeam(t, name));
@@ -169,7 +168,7 @@ export function TeamsScreen({ inventory, game, teams, onTeamsChange, heroPriorit
 }
 
 function TeamCard({
-  team, game, inventory, heroes, roster, pieceByUid, present, onRename, onDelete, onAddMember, onRemoveMember, onMoveMember, onOptimize, onAddToWorklist,
+  team, game, inventory, heroes, roster, pieceByUid, onRename, onDelete, onAddMember, onRemoveMember, onMoveMember, onOptimize, onAddToWorklist,
   building, buildBlocked, noBuildReasons, onBuild, onCancelBuild,
 }: {
   team: Team;
@@ -178,7 +177,6 @@ function TeamCard({
   heroes: ReadonlyMap<string, HeroView>;
   roster: Character[];
   pieceByUid: ReadonlyMap<string, GearPiece>;
-  present: ReadonlySet<string>;
   /** False when the name is refused. */
   onRename: (name: string) => boolean;
   onDelete: () => void;
@@ -292,7 +290,7 @@ function TeamCard({
             index={i}
             count={team.members.length}
             hero={heroes.get(m.heroUid) ?? null}
-            staleness={buildStaleness(team, m.heroUid, present)}
+            staleness={buildStaleness(team, m.heroUid, pieceByUid)}
             nameOf={nameOf}
             positionOf={(uid) => team.members.findIndex((x) => x.heroUid === uid) + 1}
             game={game}
@@ -367,7 +365,10 @@ function MemberRow({
       const n = staleness.taken.filter((t) => t.byHeroUid === by).length;
       return `${n} piece${n === 1 ? "" : "s"} taken by ${nameOf(by)} (member ${positionOf(by)})`;
     }),
+    ...[...new Set(staleness.talismanMainTaken.map((t) => t.byHeroUid))].map((by) => `same talisman main stat as ${nameOf(by)} (member ${positionOf(by)})`),
   ].filter((s): s is string => !!s) : [];
+  // The Talisman whose main stat an earlier member's Talisman carries.
+  const mainTakenBy = staleness?.talismanMainTaken[0]?.byHeroUid ?? null;
   const arrow = "grid h-5 w-5 place-items-center rounded border border-white/8 bg-white/3 text-[9px] text-zinc-300 hover:bg-white/6 disabled:cursor-not-allowed disabled:opacity-30";
 
   return (
@@ -409,12 +410,12 @@ function MemberRow({
               const piece = uid ? pieceByUid.get(uid) ?? null : null;
               const ui = piece ? toUiPiece(piece, game) : null;
               const tile = <SlotMini slot={designSlot} piece={ui?.iconPiece ?? null} size={36} />;
-              const flag = missing.has(uid) ? "missing" : takenBy.has(uid) ? "taken" : null;
+              const flag = missing.has(uid) ? "missing" : takenBy.has(uid) ? "taken" : mainTakenBy && piece?.slot === "ooparts" ? "mainTaken" : null;
               return (
                 <div
                   key={designSlot}
-                  className={cx("rounded-md", flag === "missing" && "ring-1 ring-rose-400/60", flag === "taken" && "ring-1 ring-amber-400/60")}
-                  title={flag === "missing" ? "No longer in your inventory" : flag === "taken" ? `Taken by ${nameOf(takenBy.get(uid)!)}` : undefined}
+                  className={cx("rounded-md", flag === "missing" && "ring-1 ring-rose-400/60", (flag === "taken" || flag === "mainTaken") && "ring-1 ring-amber-400/60")}
+                  title={flag === "missing" ? "No longer in your inventory" : flag === "taken" ? `Taken by ${nameOf(takenBy.get(uid)!)}` : flag === "mainTaken" ? `Same main stat as ${nameOf(mainTakenBy!)}'s Talisman — a Talisman's main stat doesn't stack in a team` : undefined}
                 >
                   {ui ? <RichTooltip placement="right" className="cursor-help" content={<GearCardBody piece={ui} game={game} effects="card" inTooltip />}>{tile}</RichTooltip> : tile}
                 </div>

@@ -5,6 +5,7 @@
  * `useReducer`, and the filter persistence (`storage/filterPresets.ts`,
  * `storage/heroFilters.ts`) stores its state shape.
  */
+import type { GearPiece } from "@gear-solver/core";
 import type { SlotId } from "../../design/tokens.js";
 import type { QualityTier } from "../quality.js";
 import { SINGULARITY_GRADES, type PassiveGroup, type SingularityGrade } from "../singularityPassives.js";
@@ -113,6 +114,15 @@ export function emptyPassivePicks(): PassivePicks {
 export function passivePickCount(picks: PassivePicks | undefined): number {
   if (!picks) return 0;
   return Object.keys(picks.weapon ?? {}).length + Object.keys(picks.accessory ?? {}).length + Object.keys(picks.armor ?? {}).length;
+}
+
+/** A piece's main stats as a main-stat pick or exclusion matches them
+ *  (`mainPicks` / `mainExcludes`, checked in the engine's pool filter): its
+ *  regular mains (`source: "option"`, not combat-only), by engine stat key
+ *  ("atkPct", "critDmg"…). In team context, the Talisman mains the earlier
+ *  members took are matched on the same keys (`reservedTalismanMains`). */
+export function mainStatKeysOf(piece: Pick<GearPiece, "main">): string[] {
+  return piece.main.filter((m) => !m.combatOnly && (m.source ?? "option") === "option").map((m) => m.stat);
 }
 
 export function nextChipState(s: ChipState | undefined): ChipState {

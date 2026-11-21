@@ -49,6 +49,7 @@ import type { PoolSizes, SetPlan, SolveBuild, SolveMode, SolveRequest } from "./
 import { allSetsComplete, armorSetWhitelist, planSetIds, setsFeasible } from "./setPlans.js";
 import { gearPieceQualityTier, QUALITY_TIERS, type QualityTier } from "../quality.js";
 import { applyRerollPotential } from "./reroll.js";
+import { mainStatKeysOf } from "./builderFilters.js";
 import { hasPriority } from "../heroPriority/weights.js";
 
 /** Map engine GearSlot → design SlotId used by the BuilderScreen's
@@ -446,6 +447,10 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // optimized) and, when a preset is optimized, of every preset not strictly
   // lower priority than it. Built once; checked right after the exclusions.
   const presetBlocked = presetBlockedUids(req.presetHolds, req.targetPresetNum);
+  // Team context — the Talisman main stats the members placed before took: a
+  // Talisman with one of them is out of the pool (a Talisman's main applies to
+  // the whole team and doesn't stack). Never written to the member's filters.
+  const reservedTalismanMains = new Set(req.reservedTalismanMains ?? []);
   // "Only maxed" = NO extrapolation: the solve only uses pieces ALREADY at
   // their own ceiling in the reforge mode, taken as-is (the projection below
   // is skipped). The floor is each piece's ceiling (`meetsMaxedFloor` on
@@ -493,17 +498,18 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     }
     if (heroClass && g.classLimit && g.classLimit !== heroClass) return false;
     // Main stat picks (per design slot — only weapon/accessory/talisman in UI).
-    // An excluded main rejects the piece before the acceptables are checked.
+    // An excluded main rejects the piece before the acceptables are checked;
+    // so does, on the Talisman in team context, a main an earlier member's
+    // Talisman took (counted with the excluded mains).
     const dslot = engineToDesign(slot);
     const mainPicks = filters.mainPicks[dslot] ?? {};
     const mainExcludes = filters.mainExcludes?.[dslot] ?? {};
     const hasPicks = Object.keys(mainPicks).length > 0;
     const hasExcludes = Object.keys(mainExcludes).length > 0;
-    if (hasPicks || hasExcludes) {
-      const stats = g.main
-        .filter((m) => !m.combatOnly && (m.source ?? "option") === "option")
-        .map((m) => m.stat);
-      if (hasExcludes && stats.some((s) => mainExcludes[s])) {
+    const hasTeamTaken = slot === "ooparts" && reservedTalismanMains.size > 0;
+    if (hasPicks || hasExcludes || hasTeamTaken) {
+      const stats = mainStatKeysOf(g);
+      if ((hasExcludes && stats.some((s) => mainExcludes[s])) || (hasTeamTaken && stats.some((s) => reservedTalismanMains.has(s)))) {
         mainExcludedDrops[slot] = (mainExcludedDrops[slot] ?? 0) + 1;
         return false;
       }
