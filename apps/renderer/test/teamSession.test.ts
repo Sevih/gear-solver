@@ -146,7 +146,7 @@ const teamCtx: TeamContext = {
   teamId: "t1", teamName: "GR PCU Ep1", heroUid: "h1", position: 2, size: 4,
   filters: memberFilters, exclusion: new Set(["w0", "junk"]),
 };
-const holds = { pieces: { p9: [1] }, rank: { 1: 1 }, locked: [1] } as unknown as NonNullable<Parameters<typeof BuilderScreen>[0]["presetHolds"]>;
+const holds = { holders: { p9: [1] }, rank: { 1: 1 }, locked: [1] } as unknown as NonNullable<Parameters<typeof BuilderScreen>[0]["presetHolds"]>;
 
 type Props = Parameters<typeof BuilderScreen>[0];
 function harness(team: TeamContext | null) {
