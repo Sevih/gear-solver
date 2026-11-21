@@ -3,7 +3,7 @@
  * (main thread) and the worker pool. Pure types, no runtime code.
  */
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
-import type { FinalStats } from "../composeBuild.js";
+import type { FinalStats, TeamBuff } from "../composeBuild.js";
 import type { PrecomputedSolveContext, ReforgeMode } from "./engine.js";
 import type { CheapRatings } from "./ratings.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
@@ -167,6 +167,13 @@ export interface SolveRequest {
    *  before (`reservedTalismanMains`): a Talisman's main applies to the whole
    *  team and doesn't stack. Never the member's `mainExcludes`. Absent = none. */
   reservedTalismanMains?: string[];
+  /** The main stats of the Talismans the team's OTHER members retain, one per
+   *  stat key (the strongest, `teamTalismanBuffs`) — in team context, a fixed
+   *  input of the member's solve: each combo's sheet takes, per stat,
+   *  max(team, its own Talisman's) (`teamBuffTopUp`), so they move its stats,
+   *  bounds and Score, never its CP (the in-game `CalcBattlePower` reads the
+   *  hero's own sheet, without them) nor its pools. Absent = none. */
+  teamTalismanBuffs?: TeamBuff[];
   /** Pieces kept through the combo-budget prune (Top % < 100) and the SOLVE CP
    *  dominance prune whatever their rank — the pieces of the result row a
    *  "Min ≥ / Max ≤" was set from, on the solve that gesture launches only, so

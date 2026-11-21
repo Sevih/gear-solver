@@ -6,7 +6,10 @@
  * this very pass just retained — and, for the gems, without those socketed in
  * any other member's retained build: `reservedGemPieces`; for the Talisman,
  * without the main stats of the Talismans the members before retain:
- * `reservedTalismanMains`). The best result (the first, in the mode's
+ * `reservedTalismanMains`; and its stats count the main stats of the
+ * Talismans the other members hold at that point: `teamTalismanBuffs`, the
+ * ones just retained for the members before, the previous ones of the members
+ * after — no second pass). The best result (the first, in the mode's
  * order) becomes the member's retained build. Rebuilding them all, in order,
  * is what keeps the builds consistent with each other; there is no joint
  * optimum (the team order and each member's filters decide).
@@ -32,7 +35,7 @@ import { hasPriority, type Priority } from "../heroPriority/weights.js";
 import { solveDecision } from "../reco/recoPriority.js";
 import { solverFiltersReducer, type SolverFilters } from "../solver/builderFilters.js";
 import type { SolveBuild, SolveMode } from "../solver/types.js";
-import { clearBuild, memberExclusion, reservedGemPieces, reservedTalismanMains, retainBuild, teamBuildOf, type Team, type TeamBuild, type TeamPieces } from "./teams.js";
+import { clearBuild, memberExclusion, reservedGemPieces, reservedTalismanMains, retainBuild, teamBuildOf, teamTalismanBuffs, type Team, type TeamBuild, type TeamPieces, type TeamTalismanBuff } from "./teams.js";
 
 /** What one member's solve came back with: its best build, or none and why. */
 export interface MemberSolveOutcome {
@@ -54,6 +57,10 @@ export interface MemberSolveRequest {
    *  member holding each (`reservedTalismanMains` on the pass's team: the
    *  Talismans of the members before, the ones this pass just retained). */
   talismanMains: ReadonlyMap<string, string>;
+  /** The other members' Talisman mains this solve's stats count
+   *  (`teamTalismanBuffs` on the pass's team: the Talismans just retained for
+   *  the members before, the current ones of the members after). */
+  talismanBuffs: readonly TeamTalismanBuff[];
 }
 
 export type MemberSolver = (req: MemberSolveRequest) => Promise<MemberSolveOutcome>;
@@ -136,7 +143,8 @@ export async function runTeamBuild(pass: TeamBuildPass): Promise<TeamBuildSummar
     const exclusion = memberExclusion(working, member.heroUid, excludedPieces);
     const gemReserved = reservedGemPieces(working, member.heroUid);
     const talismanMains = reservedTalismanMains(working, member.heroUid, pass.pieces);
-    const outcome = await pass.solve({ heroUid: member.heroUid, filters, mode: runMode, exclusion, gemReserved, talismanMains });
+    const talismanBuffs = teamTalismanBuffs(working, member.heroUid, pass.pieces);
+    const outcome = await pass.solve({ heroUid: member.heroUid, filters, mode: runMode, exclusion, gemReserved, talismanMains, talismanBuffs });
     const build = outcome.build ? teamBuildOf(outcome.build, runMode, pass.now()) : null;
     const reason = build ? null : (outcome.reason ?? "No build passes the filters");
     working = build ? retainBuild(working, member.heroUid, build) : clearBuild(working, member.heroUid);

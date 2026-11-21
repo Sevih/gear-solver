@@ -3,7 +3,8 @@
 // (never the hero's own), writes each edit back to the member only, solves
 // under the team's piece rule — equipped scope forced to "all", no preset holds
 // nor Worklist claims nor hero ranks, the member's exclusion passed, and the
-// earlier members' Talisman mains (G143) out of the solve and in the banner — greys the
+// earlier members' Talisman mains (G143) out of the solve and in the banner, the
+// other members' Talisman mains (G144) in the solve's stats and the banner — greys the
 // scope out, retains a result for the member, and leaves the context when the
 // hero is switched. Outside a team the solve is unchanged. Same harness as
 // builderScreenState.test.ts: `react` mocked with a minimal hooks runtime, the
@@ -145,7 +146,7 @@ const memberFilters: SolverFilters = { ...filterDefaults("classic", false), topP
 const heroOwn: SolverFilters = { ...filterDefaults("classic", false), topPct: 40 };
 const teamCtx: TeamContext = {
   teamId: "t1", teamName: "GR PCU Ep1", heroUid: "h1", position: 2, size: 4,
-  filters: memberFilters, exclusion: new Set(["w0", "junk"]), gemReserved: new Set(), talismanMains: new Map(),
+  filters: memberFilters, exclusion: new Set(["w0", "junk"]), gemReserved: new Set(), talismanMains: new Map(), talismanBuffs: [],
 };
 const holds = { holders: { p9: [1] }, rank: { 1: 1 }, locked: [1] } as unknown as NonNullable<Parameters<typeof BuilderScreen>[0]["presetHolds"]>;
 
@@ -228,6 +229,22 @@ describe("Optimizer in team context", () => {
     expect(textOf(t2)).not.toContain("Talisman main stat taken");
     find<ToolbarProps>(t2, BuilderToolbar).onSolve("cp");
     expect(orch.state.solves.at(-1)).not.toHaveProperty("reservedTalismanMains");
+  });
+
+  it("the other members' Talisman mains (G144): in the solve, named in the banner, not in the member's filters", () => {
+    const { render, calls } = harness({ ...teamCtx, talismanBuffs: [{ stat: "atkPct", value: 15, percent: true, fromBuff: true, heroUid: "h2" }] });
+    const tree = render();
+    expect(textOf(tree)).toContain("Team talismans: ATK% +15% (h2)");
+    find<ToolbarProps>(tree, BuilderToolbar).onSolve("cp");
+    const req = orch.state.solves[0]!;
+    expect(req.teamTalismanBuffs).toEqual([{ stat: "atkPct", value: 15, percent: true, fromBuff: true }]);
+    expect(calls.teamFilters).toHaveLength(0);
+    // None: no line, no field.
+    const plain = harness(teamCtx);
+    const t2 = plain.render();
+    expect(textOf(t2)).not.toContain("Team talismans");
+    find<ToolbarProps>(t2, BuilderToolbar).onSolve("cp");
+    expect(orch.state.solves.at(-1)).not.toHaveProperty("teamTalismanBuffs");
   });
 
   it("outside a team the solve keeps the hero's filters and every account rule", () => {

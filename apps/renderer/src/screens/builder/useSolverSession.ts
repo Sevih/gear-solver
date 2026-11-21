@@ -68,7 +68,8 @@ interface SolverSessionInput {
   targetPresetNum: number | null;
   /** Team context (a member's "Optimize →" on the Teams tab): the solve takes
    *  any piece but `exclusion`, no gem socketed in a `gemReserved` piece and no
-   *  Talisman of a main stat in `talismanMains`, scope "all", without the
+   *  Talisman of a main stat in `talismanMains`, the `talismanBuffs` counted
+   *  in its stats (not its CP), scope "all", without the
    *  ranks, the Worklist claims, the preset holds or a target preset
    *  (`teamSolveScope`). */
   team?: TeamSolveRule | null;
@@ -84,7 +85,7 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     () => teamSolveScope({ filters, heroPriority: globalHeroPriority, excludedPieceUids: globalExcludedPieceUids, worklistClaims: globalWorklistClaims, presetHolds: globalPresetHolds, targetPresetNum: globalTargetPresetNum }, team),
     [filters, globalHeroPriority, globalExcludedPieceUids, globalWorklistClaims, globalPresetHolds, globalTargetPresetNum, team],
   );
-  const { heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, gemReservedPieceUids, reservedTalismanMains } = scope;
+  const { heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, gemReservedPieceUids, reservedTalismanMains, teamTalismanBuffs } = scope;
   const solveFilters = scope.filters;
   // SOLVE mode (the toolbar's Score | CP control), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
@@ -224,7 +225,7 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
       ...(serializedFilters.passivePicks ? { passivePicks: serializedFilters.passivePicks } : {}),
     };
     orchestrator.solve(solveArgsOf(
-      { mode, hero: selected, inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, gemReservedPieceUids, reservedTalismanMains, filters: serializedFilters },
+      { mode, hero: selected, inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, gemReservedPieceUids, reservedTalismanMains, teamTalismanBuffs, filters: serializedFilters },
       // Result-set size + per-worker heap depth from Settings → Solver.
       { topN, topK, pinPieceUids },
     ));

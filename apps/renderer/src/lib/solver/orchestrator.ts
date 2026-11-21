@@ -12,6 +12,7 @@ import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import SolverWorker from "../../workers/solver.worker.ts?worker";
 import { debug, debugEnabled } from "../log.js";
 import { availableCores, readSetting, settingDefault, WORKER_COUNT_CEILING } from "../settings.js";
+import type { TeamBuff } from "../composeBuild.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
 import type { PresetHolds } from "../presets/presetHolds.js";
 import { hasPriority } from "../heroPriority/weights.js";
@@ -156,6 +157,9 @@ export interface SolveArgs {
   /** Talisman main stats out of the Talisman pool (team context: the earlier
    *  members' Talisman mains). */
   reservedTalismanMains?: string[];
+  /** The other members' Talisman mains the stats count (team context;
+   *  `SolveRequest.teamTalismanBuffs`). Solve only. */
+  teamTalismanBuffs?: TeamBuff[];
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
   /** Per-worker local top-K (orchestrator merges → returns top-N). Default: `settingDefault("topK")`. */
@@ -322,6 +326,7 @@ export class SolverOrchestrator {
       targetPresetNum: args.targetPresetNum,
       ...(args.gemReservedPieceUids?.length ? { gemReservedPieceUids: args.gemReservedPieceUids } : {}),
       ...(args.reservedTalismanMains?.length ? { reservedTalismanMains: args.reservedTalismanMains } : {}),
+      ...(args.teamTalismanBuffs?.length ? { teamTalismanBuffs: args.teamTalismanBuffs } : {}),
       userSkills: args.userSkills,
       filters: args.filters,
       ...(args.pinPieceUids?.length ? { pinPieceUids: args.pinPieceUids } : {}),

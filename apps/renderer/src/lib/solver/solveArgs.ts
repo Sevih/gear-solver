@@ -9,6 +9,7 @@
 import type { Character, GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
 import type { EstimateArgs, SolveArgs } from "./orchestrator.js";
 import type { SolveFilters, SolveMode } from "./types.js";
+import type { TeamBuff } from "../composeBuild.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
 import type { PresetHolds } from "../presets/presetHolds.js";
 
@@ -30,6 +31,10 @@ export interface SolveInputs {
   /** Talisman main stats out of the Talisman pool — a team member's solve
    *  (`teamSolveScope`: the earlier members' Talisman mains). Absent = none. */
   reservedTalismanMains?: ReadonlySet<string>;
+  /** The other members' Talisman mains the stats count — a team member's
+   *  solve (`teamSolveScope`). Absent = none. Not in the estimate: they change
+   *  no pool. */
+  teamTalismanBuffs?: readonly TeamBuff[];
   /** Already serialized (`buildSolveFilters`). */
   filters: SolveFilters;
 }
@@ -68,6 +73,7 @@ export function solveArgsOf(i: SolveInputs, extra: { topN: number; topK: number;
     ...estimateArgsOf(i),
     topN: extra.topN,
     topK: extra.topK,
+    ...(i.teamTalismanBuffs?.length ? { teamTalismanBuffs: i.teamTalismanBuffs.map((b) => ({ ...b })) } : {}),
     ...(extra.pinPieceUids?.length ? { pinPieceUids: [...extra.pinPieceUids] } : {}),
   };
 }

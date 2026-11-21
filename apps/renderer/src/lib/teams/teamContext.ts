@@ -4,17 +4,21 @@
  * (`teams.ts`): every piece of the inventory but the excluded ones and those
  * of the earlier members' builds, whoever wears them, a gem pool without
  * the gems of the pieces the other members' builds retain, and a Talisman pool
- * without the main stats of the earlier members' Talismans. So the scope is
- * pinned to "all", and neither the Worklist reservations, the in-game presets' holds nor
+ * without the main stats of the earlier members' Talismans; and the member's
+ * stats count the main stats of the Talismans the other members retain (a
+ * fixed input of the solve: its stats, bounds and Score, not its CP — the
+ * in-game CP doesn't count them — nor its pools). So the scope is pinned to
+ * "all", and neither the Worklist reservations, the in-game presets' holds nor
  * the hero ranks reach the solve.
  *
  * Pure: App resolves the context from its teams, the solver session swaps its
  * inputs through `teamSolveScope`.
  */
+import type { TeamBuff } from "../composeBuild.js";
 import type { SolverFilters } from "../solver/builderFilters.js";
 import type { HeroPriority } from "../storage/heroPriority.js";
 import type { PresetHolds } from "../presets/presetHolds.js";
-import { memberExclusion, reservedGemPieces, reservedTalismanMains, type Team, type TeamPieces } from "./teams.js";
+import { memberExclusion, reservedGemPieces, reservedTalismanMains, teamTalismanBuffs, type Team, type TeamPieces, type TeamTalismanBuff } from "./teams.js";
 
 /** The member the Optimizer is open on, as App hands it to the Builder. */
 export interface TeamContext {
@@ -33,6 +37,9 @@ export interface TeamContext {
   /** The Talisman main stats the member's Talisman pool leaves out, each with
    *  the earlier member whose Talisman carries it (`reservedTalismanMains`). */
   talismanMains: ReadonlyMap<string, string>;
+  /** The main stats of the other members' Talismans the member's stats count,
+   *  with the member bringing each (`teamTalismanBuffs`). */
+  talismanBuffs: readonly TeamTalismanBuff[];
 }
 
 /** The context of member `target.heroUid` of team `target.teamId`; null when
@@ -59,6 +66,7 @@ export function teamContextOf(
     exclusion: memberExclusion(team, target.heroUid, excludedPieces),
     gemReserved: reservedGemPieces(team, target.heroUid),
     talismanMains: reservedTalismanMains(team, target.heroUid, pieces),
+    talismanBuffs: teamTalismanBuffs(team, target.heroUid, pieces),
   };
 }
 
@@ -76,6 +84,9 @@ export interface SolveScope {
   /** Talisman main stats out of the Talisman pool (a team member's solve
    *  only: the earlier members' Talisman mains). */
   reservedTalismanMains?: ReadonlySet<string>;
+  /** The other members' Talisman mains the member's stats count (a team
+   *  member's solve only, `teamTalismanBuffs`). */
+  teamTalismanBuffs?: readonly TeamBuff[];
 }
 
 /** The Optimizer banner's line on the Talisman rule — « Talisman main stat
@@ -92,6 +103,20 @@ export function talismanMainsNotice(
   return `Talisman main stat taken by ${[...byHero].map(([uid, stats]) => `${nameOf(uid)}: ${stats.join(", ")}`).join(" · ")}`;
 }
 
+/** The Optimizer banner's line on the team buffs — « Team talismans: ATK%
+ *  +15% (Akarie), CHD +12% (Maxie) », one part per stat counted (team order),
+ *  its label by `labelOf` and the member bringing it by `nameOf`; null when no
+ *  other member's Talisman brings anything. */
+export function talismanBuffsNotice(
+  buffs: readonly TeamTalismanBuff[],
+  nameOf: (heroUid: string) => string,
+  labelOf: (stat: string) => string,
+): string | null {
+  if (buffs.length === 0) return null;
+  const value = (b: TeamTalismanBuff) => `+${Math.round(b.value * 10) / 10}${b.percent ? "%" : ""}`;
+  return `Team talismans: ${buffs.map((b) => `${labelOf(b.stat)} ${value(b)} (${nameOf(b.heroUid)})`).join(", ")}`;
+}
+
 const NO_PRIORITY: HeroPriority = {};
 
 /** What the team's rule hands a member's solve (a `TeamContext`, or a "Build
@@ -101,13 +126,16 @@ export interface TeamSolveRule {
   gemReserved: ReadonlySet<string>;
   /** Talisman main stat → the earlier member whose Talisman carries it. */
   talismanMains: ReadonlyMap<string, string>;
+  /** The other members' Talisman mains the member's stats count. */
+  talismanBuffs: readonly TeamTalismanBuff[];
 }
 
 /** `scope` as a team member's solve sees it: the equipped scope "all", the
  *  member's exclusion, the gems of the other members' retained pieces out of
  *  the gem pool, the earlier members' Talisman mains out of the Talisman pool
- *  (not written to the member's `mainExcludes`), and no hero rank, Worklist
- *  claim, preset hold or target preset. Without a team, `scope` as is. */
+ *  (not written to the member's `mainExcludes`), the other members' Talisman
+ *  mains counted in its stats, and no hero rank, Worklist claim, preset hold
+ *  or target preset. Without a team, `scope` as is. */
 export function teamSolveScope(
   scope: SolveScope,
   team: TeamSolveRule | null,
@@ -123,5 +151,6 @@ export function teamSolveScope(
     targetPresetNum: null,
     gemReservedPieceUids: team.gemReserved,
     reservedTalismanMains: new Set(team.talismanMains.keys()),
+    teamTalismanBuffs: team.talismanBuffs.map((b) => ({ stat: b.stat, value: b.value, percent: b.percent, ...(b.fromBuff ? { fromBuff: true } : {}) })),
   };
 }

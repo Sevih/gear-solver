@@ -19,7 +19,7 @@ import { composeCharStats, effectiveCharacter, expToLevel, gameRulesOf } from "@
 import { cx } from "../../design/cx.js";
 import { deadSlotsReason } from "../../lib/solver/emptyReason.js";
 import { dmgSkillInfo } from "../../lib/dmgSkill.js";
-import { computeFinalStats } from "../../lib/composeBuild.js";
+import { computeFinalStats, computeFinalStatsInTeam, type TeamBuff } from "../../lib/composeBuild.js";
 import { calcBattlePower } from "../../lib/solver/cp.js";
 import type { ReforgeMode } from "../../lib/solver/engine.js";
 import type { SolveBuild, SolveMode } from "../../lib/solver/types.js";
@@ -36,7 +36,7 @@ import { equipPieces, type EquipOutcome } from "../../equip.js";
 import type { WorklistEntry } from "../../lib/storage/worklist.js";
 import { worklistChangesFor } from "../../lib/worklist/changes.js";
 import { cloneFilters, filtersForHero, withHeroFilters, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
-import { talismanMainsNotice, type TeamContext } from "../../lib/teams/teamContext.js";
+import { talismanBuffsNotice, talismanMainsNotice, type TeamContext } from "../../lib/teams/teamContext.js";
 import { teamBuildOf, type TeamBuild } from "../../lib/teams/teams.js";
 import { hasPriority, priorityOf, type Priority } from "../../lib/heroPriority/weights.js";
 import { recoPriorityOf, samePriority, solveDecision } from "../../lib/reco/recoPriority.js";
@@ -181,6 +181,8 @@ const TEAM_SCOPE_LOCK = "Team: pinned to All — a member may take any piece (wo
  *  ~26M at 99), so those clear it, while an exhaustive (Top% 100) solve on a
  *  real account trips it. */
 const CARTESIAN_WARN = 50_000_000;
+/** No team buffs (outside team context) — a stable reference for the memos. */
+const NO_TEAM_BUFFS: readonly TeamBuff[] = [];
 
 /** Compact big-number label for the guard-rail (2.4e9 → "2.4B"). */
 function formatCombos(n: number): string {
@@ -206,6 +208,8 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // Team context applies while the open hero is the member it names; the
   // filters loaded follow it (`sourceKey`: the member, else the hero).
   const teamActive = team && team.heroUid === selectedUid ? team : null;
+  // Team context: the other members' Talisman mains the stats count.
+  const teamBuffs: readonly TeamBuff[] = teamActive?.talismanBuffs ?? NO_TEAM_BUFFS;
   const sourceKey = teamActive ? `team:${teamActive.teamId}:${teamActive.heroUid}` : `hero:${selectedUid ?? ""}`;
   // The preset "Optimize preset →" aims at, tied to the hero it opened — set
   // with the patch below, dropped as soon as the user switches heroes.
@@ -761,7 +765,10 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
       ...(userCodexLevel != null ? { codexLevel: userCodexLevel } : {}),
     });
     const equippedPieces = inventory.gear.filter((g) => g.equippedBy === selected.uid);
-    const current = computeFinalStats(composed.noGearStats, composed.scaling, equippedPieces, game);
+    // The CP reads the hero's own sheet; in team context the Current column
+    // counts the other members' Talisman mains, as the results do.
+    const own = computeFinalStats(composed.noGearStats, composed.scaling, equippedPieces, game);
+    const current = teamBuffs.length > 0 ? computeFinalStatsInTeam(composed.noGearStats, composed.scaling, equippedPieces, game, teamBuffs) : own;
     // Current-loadout Battle Power — same CalcBattlePower the Builds tab computes,
     // so ΔCP in the gear-band header reads against a faithful baseline. Needs the
     // TransStar UI metadata (showUIStar/starPlus) + equipped EE/Talisman.
@@ -770,7 +777,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const ooparts = equippedPieces.find((p) => p.slot === "ooparts") ?? null;
     const currentCp = transRow
       ? calcBattlePower({
-          stats: current,
+          stats: own,
           showUIStar: transRow.showUIStar ?? 0,
           starPlus: transRow.starPlus ?? 0,
           skills: selected.skills,
@@ -785,7 +792,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const amp = (k: "atk" | "def" | "hp") => 1 + (composed.scaling[k]?.buffPct ?? 0) / 100;
     const dmgAmp = { atk: amp("atk"), def: amp("def"), hp: amp("hp") };
     return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false, dmgSkill: dmgSkillInfo(meta.bestSkill, meta.rotation), sheet: { baseline: composed.noGearStats, scaling: composed.scaling } };
-  }, [inventory, game, selected, userGeasLevels, userCodexLevel]);
+  }, [inventory, game, selected, userGeasLevels, userCodexLevel, teamBuffs]);
 
   /** The Compare panel's two sides: the pinned build, and the selected one or
    *  the current loadout — as captured (no reforge projection), its ratings
@@ -905,6 +912,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const c = inventory?.characters.find((x) => x.uid === uid);
     return c ? displayNameOf(c, effectiveCharacter(c, game?.characters).def) : uid;
   }, statLabelFor) : null, [teamActive, inventory, game]);
+  // …and the other members' Talisman mains its stats count (banner).
+  const teamBuffsNotice = useMemo(() => teamActive ? talismanBuffsNotice(teamActive.talismanBuffs, (uid) => {
+    const c = inventory?.characters.find((x) => x.uid === uid);
+    return c ? displayNameOf(c, effectiveCharacter(c, game?.characters).def) : uid;
+  }, statLabelFor) : null, [teamActive, inventory, game]);
 
   if (!inventory) {
     return <Empty title="No capture yet" subtitle="Install the capture plugin (Settings, top right) and play OUTERPLANE to the lobby: your roster imports by itself, then pick a hero here." />;
@@ -921,6 +933,11 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
           {teamTalismanNotice && (
             <span className="text-violet-50" title="A Talisman's main stat applies to the whole team and doesn't stack: this member's Talisman pool leaves out the main stats the members before already bring (their filters are untouched)">
               {teamTalismanNotice}
+            </span>
+          )}
+          {teamBuffsNotice && (
+            <span className="text-violet-50" title="A Talisman's main stat applies to the whole team and doesn't stack: this member's stats, bounds and Score count the main stats of the other members' Talismans, the strongest of each, over their own Talisman's (not the CP — the in-game Combat Power doesn't count them)">
+              {teamBuffsNotice}
             </span>
           )}
           <button

@@ -8,6 +8,98 @@
 
 ## Items de backlog clôturés (index)
 
+### ✨ Teams : la main stat des Talismans des autres membres comptée dans les stats d'un membre, non cumulable (G144) (2026-11-21)
+- ✅ **Pourquoi.** Demande de Sevih du 21/11 : la main stat du Talisman s'applique à toute la team et n'est pas
+  cumulable. G143 empêchait deux membres d'avoir la même ; la fiche d'un membre ignorait encore les Talismans des
+  autres, donc ses stats, ses bornes et son Score en contexte de team sous-estimaient ce qu'il a en combat.
+- ✅ **Vérifié dans la donnée du jeu (point 0).** Les mains de Talisman sont des `BuffTemplet`
+  `BID_ITEM_STAT_OOPARTS_<stat>_<4|5|6>` (IOT_BUFF de `ItemOptionTemplet`, `resolveBuffMain`) : `Type:
+  BT_STAT_PREMIUM`, **`TargetType: MY_TEAM`**, `IsEquip` / `IsEquipBuff: True`, `BuffCreateType: PASSIVE`,
+  `TurnDuration: -1`, `StackCount: 1`, `IsIDOverlap: False`, et un **`PriorityGroup`** propre à la stat (1 ATK%,
+  2 DEF%, 3 HP%, 4 CHC, 5 CHD, 6 DMG Reduction, 7 DMG Increase, 8 EFF, 9 RES ; aucun autre buff du jeu n'utilise
+  ces groupes) avec un **`PriorityLevel`** qui croît avec la valeur (4★ 1, 5★ 2, 6★ de +0 à +10 : 3 à 13). Côté
+  client, `CBuff` (création d'un buff) : quand `PriorityGroup != 0`, `FindBuffByPriorityGroup` cherche le buff du
+  même groupe déjà porté ; si son `PriorityLevel` est **≥** à celui du nouveau, le nouveau est refusé
+  (`FAIL_10`), sinon l'ancien est retiré. Donc : toute l'équipe, non cumulable, **le plus fort l'emporte** (à
+  égalité de niveau, donc de valeur, le premier reste : même effet). En combat, `CCharacterBattle.Initialize`
+  retire de la fiche du héros ses propres buffs premium `MY_TEAM` (`RemoveStatPremiumTeamBuff`) : ma lecture est
+  qu'ils sont alors posés comme buffs passifs sur toute l'équipe, par ce même `CBuff` (création non suivie
+  jusqu'au bout dans le dump), donc que son propre Talisman est soumis à la même règle (max). Les deux chemins
+  nourrissent les mêmes seaux de CalcFinalStat (`SetBuffValue` / `SetBuffPremiumValue` : `BuffValue` en
+  `OAT_ADD`, `BuffValueRate` en `OAT_RATE`), la même étape que la main de son propre Talisman.
+- ✅ **CP (vérifié comme au point 0) : les buffs de team n'y sont pas.** `CFormula.CalcBattlePower` lit
+  `CCharacterData` (`_Data.Atk`, …), dont les buffs premium viennent du seul `SkillManager` du héros
+  (`InitStatPremiumBuff`, ses propres équipements et passifs), et le CP d'un deck
+  (`CCharacterDeck.GetAvgLevelAndBattlePower`) est la somme des CP des membres, sans buff croisé (seul l'écran
+  tactique du PvP temps réel ajoute un aperçu, `AddPreviewStatPremiumBuff`). Le mode SOLVE CP ne les compte donc
+  pas : seules les stats, les bornes et le Score les comptent.
+- ✅ **Règle.** En contexte de team (Optimizer ouvert sur un membre, Build team), la fiche calculée d'un membre
+  ajoute la main stat du Talisman RETENU par chacun des AUTRES membres, avant comme après, à la valeur de la pièce
+  (sa `main`, résolue par `resolveBuffMain` au niveau d'enchantement du Talisman : réutilisée, pas recalculée).
+  Une par stat, la plus forte (le premier dans l'ordre de la team à égalité) ; puis, par combinaison, max(team,
+  son propre Talisman) sur cette stat. C'est une entrée fixe du solve : elle change ses stats, ses bornes et son
+  Score, pas son pool (ni l'élagage) ni son CP. Hors contexte de team, rien ne change (champ absent, mêmes
+  additions dans le même ordre).
+- ✅ **Comment.** `teamTalismanBuffs(team, heroUid, pieces)` (`lib/teams/teams.ts`, pur) : les mains (non
+  combat-only, `source: "option"`, celles de `mainStatKeysOf`) des Talismans retenus par les autres membres
+  (`talismanOf` de G143 : membre sans build, slot vide et Talisman sorti de l'inventaire n'apportent rien), une
+  entrée par clé de stat avec le membre qui l'apporte. Côté fiche, `composeBuild.ts` : `teamBuffTopUp(buffs,
+  talisman)` (ce que la team ajoute au-dessus du Talisman du membre : valeur − sa main sur la même clé, si
+  positif), `teamBuffBucketAdds` (ces ajouts routés par `forEachMainAdd`, extrait tel quel de `forEachPieceAdd` :
+  un buff en pourcentage va dans `buffPct`, un plat dans `buffFlat`, comme la main du Talisman) et
+  `computeFinalStatsInTeam` (la même chose sur des pièces). Le fil, celui de G139 à G143 : `TeamContext.talismanBuffs`
+  (`teamContextOf`) et `MemberSolveRequest.talismanBuffs` (`runTeamBuild`, sur la copie de la team du passage) →
+  `teamSolveScope` (`SolveScope.teamTalismanBuffs`, sans le membre) → `solveArgsOf` (`SolveInputs.teamTalismanBuffs`,
+  absent quand vide ; pas dans l'estimation, aucun pool n'en dépend) → `SolveArgs` / `SolveRequest` (relayé par
+  l'orchestrateur au solve) → `solveChunk` (`engine.ts`) : un `BucketAdds` par Talisman du pool, appliqué en
+  dernier par `fillCombo` (donc compté partout dans la boucle : bornes, Score, ratings, logique de cap de crit
+  des gemmes) ; le CP passe par `cpOf`, qui recompose la combinaison sans eux (`fillOwn`, mêmes additions dans le
+  même ordre que hors team, avec le delta de gemmes de la fiche retenue, suivi par `fsDelta` ; l'arbitrage CP de
+  l'allocation de gemmes de SOLVE CP le prend aussi). `finalizeBuilds` ne peut plus refaire le CP depuis la fiche
+  stockée (elle compte la team) : en SOLVE, la boucle le calcule pour tout build qui peut entrer dans le tas
+  (`TopKHeap.admits`, la condition nécessaire de `push`), `finalizeBuilds` le saute alors. Coût : une
+  recomposition par build admis en SOLVE, par combinaison en SOLVE CP, en contexte de team avec buffs seulement.
+- ✅ **Affichage.** Bannière de l'Optimizer en contexte de team : « Team talismans: ATK% +15% (Akarie), CHD
+  +12% (Maxie) » (`talismanBuffsNotice`, `lib/teams/teamContext.ts`, libellés par `statLabelFor`), l'infobulle dit
+  la règle et que le CP ne les compte pas. Les stats des résultats (table, cartes, Compare, Current → Projected)
+  viennent du moteur et les incluent ; la colonne Current de la fiche (« Current → Projected », Compare « Current
+  loadout ») les inclut aussi en contexte de team (`computeFinalStatsInTeam`, sinon le delta aurait montré le
+  buff comme un gain), son CP reste celui de sa propre fiche. Onglet Teams inchangé : une ligne par membre garde
+  le CP retenu du solve (`TeamBuild.cp`, sans buff de team).
+- ✅ **Build team.** Au solve du membre N : les Talismans que le passage vient de retenir pour 1..N-1 et les
+  Talismans retenus actuels de N+1..4 (`teamTalismanBuffs` sur `working`). Pas de second passage : un membre ne
+  voit pas le Talisman qu'un suivant reçoit plus loin dans le même passage, seulement l'ancien (ou rien si le
+  suivant n'avait pas de build). Ce que ça change : seulement le classement en Score et les bornes de ce membre
+  (sa fiche au moment du solve), jamais son CP retenu ni ses pièces au-delà de ce choix ; un passage relancé
+  remet les membres précédents en phase avec les Talismans des suivants.
+- ✅ **Docs.** `docs/solver.md` + `wiki/Solver.md` (règle de l'onglet Teams, Optimizer en contexte, Build team,
+  carte des fichiers), `docs/reference.md` + `wiki/Engine-Reference.md` (§1.6 avec les champs du jeu, index des
+  tests), `wiki/Using-the-App.md`.
+- ✅ **Tests.** `teams.test.ts` (39, +5) : `teamTalismanBuffs` (autres membres seulement, avant comme après, jamais
+  le sien ; non cumul, la plus forte, le premier à égalité ; sans build, slot vide, Talisman disparu, main
+  combat-only sans effet), `teamBuffTopUp` (ATK% 12 sous 15 → +3, 15 ou plus → rien, autre main ou sans Talisman
+  → tout), `teamContextOf` et `talismanBuffsNotice`, `teamSolveScope` qui les pose sans le membre. Nouveau
+  `teamTalismanBuff.test.ts` (3), sur le contrat réel avec des Talismans lus du fil (`parseGearPiece`,
+  Executioner's Charm 6★ : main ATK% 12 à +0, 15 à +10, valeur portée par `teamContextOf`) et le solve complet
+  (`teamContextOf` → `teamSolveScope` → `solveArgsOf` → `precomputeContext` → `solveChunk` → `finalizeBuilds`) :
+  une borne d'ATK que seul le Talisman ATK% du membre 2 fait atteindre au membre 1 → tenue en team, aucun build
+  hors team, même build, Score plus haut, CP identique en SOLVE et en SOLVE CP ; non cumul avec son propre
+  Talisman (ATK% 12 sous les 15 de la team → fiche identique à celle d'un Talisman à 15 hors team, CP de sa propre
+  fiche). Vérifié rouge sans les ajouts de `fillCombo` (2 tests) et avec le CP lu sur la fiche de team (2 tests).
+  `buildTeam.test.ts` (+1) : le membre 2 voit le Talisman tout juste retenu du 1, le 1 l'ancien du 2, le 4 ceux
+  des trois autres. `teamSolver.test.ts` : `teamTalismanBuffs` dans la requête, sans le membre, absent quand vide.
+  `teamSession.test.ts` (+1) : la ligne de la bannière (rendu), le champ dans le solve, filtres du membre intacts,
+  ni ligne ni champ sans buff. `npm run typecheck` : `> tsc --noEmit` (renderer, dernier workspace, sans erreur) ;
+  `npm test` : `Tests  1365 passed (1365)` (renderer ; core 183, desktop 273). `npm run lint` : `✖ 6 problems (0
+  errors, 6 warnings)`, les six d'avant.
+- ⏳ Sevih : sur une vraie team (par exemple un membre avec un Talisman ATK% et un autre avec un CHD), composer la
+  team en jeu et comparer les stats d'un membre dans le combat (fiche en combat, team composée) à celles de
+  l'Optimizer en contexte de team (bannière « Team talismans: … », colonne Projected du build porté) ; le CP de
+  l'écran de team du jeu doit rester celui de l'Optimizer. Laissé, hors périmètre : l'élagage des pools (Top % <
+  100) ne connaît pas les buffs de team (un Talisman ATK% plus faible que celui d'un autre membre y garde sa
+  valeur hors team), pas plus que l'infobulle « pourquoi cette pièce ? » de la bande (fiche du héros seul) ; les
+  autres effets de team (sets, EE, passifs) ne sont pas modélisés.
+
 ### 🔮 Teams : une main stat de Talisman par team, les membres précédents l'emportent (G143) (2026-11-21)
 - ✅ **Pourquoi.** Demande de Sevih du 21/11 : « la mainstat du talisman s'applique à la team et n'est pas
   cumulable, donc il faut éviter d'avoir 2 persos dans la team avec un talisman qui a la même main stat ». Jusqu'ici

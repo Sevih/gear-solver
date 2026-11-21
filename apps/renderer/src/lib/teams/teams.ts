@@ -17,7 +17,9 @@
  * A Talisman's main stat applies to the whole team and doesn't stack, so a
  * member's Talisman pool also leaves out the Talismans whose main stat is the
  * one of a Talisman retained by a member placed BEFORE them
- * (`reservedTalismanMains`, on the Optimizer's main-stat key `mainStatKeysOf`).
+ * (`reservedTalismanMains`, on the Optimizer's main-stat key `mainStatKeysOf`),
+ * and a member's stats count the main stats of the Talismans the OTHER members
+ * retain, once per stat, the strongest (`teamTalismanBuffs`).
  *
  * A retained build is STALE when one of its pieces left the inventory, when a
  * member placed before (after a reorder or a new build) retained one of them,
@@ -29,6 +31,7 @@
  * (a fifth member, a hero twice, an invalid name) returns null.
  */
 import type { GearPiece } from "@gear-solver/core";
+import type { TeamBuff } from "../composeBuild.js";
 import { mainStatKeysOf, type SolverFilters } from "../solver/builderFilters.js";
 import type { SolveBuild, SolveMode } from "../solver/types.js";
 
@@ -220,6 +223,39 @@ export function reservedTalismanMains(team: Team, heroUid: string, pieces: TeamP
     const talisman = m.build ? talismanOf(m.build, pieces) : null;
     if (!talisman) continue;
     for (const stat of mainStatKeysOf(talisman)) if (!out.has(stat)) out.set(stat, m.heroUid);
+  }
+  return out;
+}
+
+/** A Talisman main stat a member receives from another member's Talisman,
+ *  with that member. */
+export interface TeamTalismanBuff extends TeamBuff {
+  heroUid: string;
+}
+
+/** The team buffs of `heroUid` in team context: the main stats of the
+ *  Talismans retained by the team's OTHER members, placed before or after
+ *  (what each of them wears for this fight), at the value the parser resolved
+ *  at the Talisman's enhance level (its `main`, the mains `mainStatKeysOf`
+ *  matches). A Talisman's main applies to the whole team and doesn't stack —
+ *  the strongest of a stat applies (`teamBuffTopUp` in `composeBuild.ts`) — so
+ *  one entry per stat key: the highest value, the first member in team order
+ *  on a tie. Never the member's own Talisman (the engine weighs it build by
+ *  build); a member without a build, an empty slot and a Talisman gone from
+ *  the inventory bring nothing. In team order of first appearance. */
+export function teamTalismanBuffs(team: Team, heroUid: string, pieces: TeamPieces): TeamTalismanBuff[] {
+  const out: TeamTalismanBuff[] = [];
+  for (const m of team.members) {
+    if (m.heroUid === heroUid) continue;
+    const talisman = m.build ? talismanOf(m.build, pieces) : null;
+    if (!talisman) continue;
+    for (const s of talisman.main) {
+      if (s.combatOnly || (s.source ?? "option") !== "option") continue;
+      const buff: TeamTalismanBuff = { stat: s.stat, value: s.value, percent: s.percent, ...(s.fromBuff ? { fromBuff: true } : {}), heroUid: m.heroUid };
+      const i = out.findIndex((b) => b.stat === s.stat);
+      if (i < 0) out.push(buff);
+      else if (s.value > out[i]!.value) out[i] = buff;
+    }
   }
   return out;
 }

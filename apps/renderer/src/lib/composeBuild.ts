@@ -10,7 +10,7 @@
  * NOTE: keep this file pure — no React, no IO. The screens own the React
  * state + memoization; this lib is the deterministic engine.
  */
-import { applySpdRate, calcFinalStat, wornSetRows, type GameData, type GearPiece, type SpeedScaling, type StatScaling } from "@gear-solver/core";
+import { applySpdRate, calcFinalStat, wornSetRows, type GameData, type GearPiece, type RolledStat, type SpeedScaling, type StatScaling } from "@gear-solver/core";
 
 export interface FinalStats {
   atk: number; hp: number; def: number; spd: number;
@@ -172,20 +172,83 @@ type BucketAdd = (cat: number, key: string, value: number) => void;
  *  same float summation when fed the same piece order). `gemOverrideActive`
  *  skips a gem-slot piece's subs (its socketed gems are replaced by the
  *  override delta). */
+/** Emit one main stat as its bucket addition. */
+function forEachMainAdd(s: TeamBuff, add: BucketAdd): void {
+  // A buff-routed SPEED RATE (Phantasm Necrosis' −30 %) gets its own key,
+  // the speed buff rate, applied once on the total (`finalStatsFromBuckets`).
+  // A buff-routed FLAT (EE mains `ST_SPEED OAT_ADD`, an ATK / EFF OAT_ADD
+  // buff) goes to `buffFlat` — CalcFinalStat's `BuffValue`, never a rate.
+  const key = s.fromBuff && s.percent && s.stat === "spd" ? "spdRate" : s.stat;
+  add(s.fromBuff ? (s.percent ? CAT_BUFF_PCT : CAT_BUFF_FLAT) : (s.percent ? CAT_PCT : CAT_FLAT), key, s.value);
+}
+
 function forEachPieceAdd(p: GearPiece, gemOverrideActive: boolean, add: BucketAdd): void {
   for (const s of p.main) {
     if (s.combatOnly) continue;
-    // A buff-routed SPEED RATE (Phantasm Necrosis' −30 %) gets its own key,
-    // the speed buff rate, applied once on the total (`finalStatsFromBuckets`).
-    // A buff-routed FLAT (EE mains `ST_SPEED OAT_ADD`, an ATK / EFF OAT_ADD
-    // buff) goes to `buffFlat` — CalcFinalStat's `BuffValue`, never a rate.
-    const key = s.fromBuff && s.percent && s.stat === "spd" ? "spdRate" : s.stat;
-    add(s.fromBuff ? (s.percent ? CAT_BUFF_PCT : CAT_BUFF_FLAT) : (s.percent ? CAT_PCT : CAT_FLAT), key, s.value);
+    forEachMainAdd(s, add);
   }
   const isGemSlot = p.slot === "ooparts" || p.slot === "exclusive";
   if (!(isGemSlot && gemOverrideActive)) {
     for (const s of p.subs) add(s.percent ? CAT_PCT : CAT_FLAT, s.stat, s.value);
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Team buffs — the Talisman mains of a team's other members
+ *
+ * A Talisman's main stat is a `BT_STAT_PREMIUM` buff with `TargetType`
+ * `MY_TEAM`: in a fight it applies to every member. It doesn't stack: each
+ * main stat has its own `PriorityGroup` (1 ATK% … 9 RES, used by no other
+ * buff) and `CBuff` keeps, per group, the buff of the highest `PriorityLevel`
+ * (an equal one doesn't replace it) — a level that rises with the value
+ * (4★ 1, 5★ 2, 6★ +0..+10 3..13), so the strongest Talisman of the team
+ * applies. A member's sheet in team context therefore takes, per stat,
+ * max(the other members' best, its own Talisman's): the team buffs top up
+ * what its own Talisman brings, in CalcFinalStat's buff buckets (`BuffValue` /
+ * `BuffValueRate`, where its own Talisman main lands too).
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/** A Talisman main stat another member of the team brings (`teamTalismanBuffs`
+ *  in `lib/teams/teams.ts`), as the parser resolved it at that Talisman's
+ *  enhance level. */
+export type TeamBuff = Pick<RolledStat, "stat" | "value" | "percent" | "fromBuff">;
+
+/** What the team buffs add on top of the member's own Talisman (`talisman`,
+ *  null without one): per buff, its value minus the own Talisman's main on the
+ *  same stat key when that leaves something (`max(team, own)` on the sheet),
+ *  nothing otherwise. */
+export function teamBuffTopUp(buffs: readonly TeamBuff[], talisman: Pick<GearPiece, "main"> | null): TeamBuff[] {
+  const out: TeamBuff[] = [];
+  for (const b of buffs) {
+    let own = 0;
+    for (const m of talisman?.main ?? []) {
+      if (!m.combatOnly && (m.source ?? "option") === "option" && m.stat === b.stat) own = Math.max(own, m.value);
+    }
+    if (b.value > own) out.push({ ...b, value: b.value - own });
+  }
+  return out;
+}
+
+/** The team buffs' additions over Talisman `talisman` (`teamBuffTopUp`). */
+export function teamBuffBucketAdds(buffs: readonly TeamBuff[], talisman: Pick<GearPiece, "main"> | null): BucketAdds {
+  return collectAdds((add) => { for (const s of teamBuffTopUp(buffs, talisman)) forEachMainAdd(s, add); });
+}
+
+/** `computeFinalStats` of `pieces` in team context: plus the team buffs over
+ *  the pieces' Talisman (`teamBuffTopUp`) — the Optimizer's Current column for
+ *  a team member. Without buffs, `computeFinalStats` itself. */
+export function computeFinalStatsInTeam(
+  baseline: FinalStatsBaseline,
+  scaling: ScalingMap,
+  pieces: GearPiece[],
+  game: GameData | null,
+  buffs: readonly TeamBuff[],
+): FinalStats {
+  if (buffs.length === 0) return computeFinalStats(baseline, scaling, pieces, game);
+  const b = aggregateGearBuckets(pieces, game);
+  const add = recordAdd(b);
+  for (const s of teamBuffTopUp(buffs, pieces.find((p) => p.slot === "ooparts") ?? null)) forEachMainAdd(s, add);
+  return finalStatsFromBuckets(baseline, scaling, b);
 }
 
 /** Emit the pre-aggregated gem override delta as bucket additions. */

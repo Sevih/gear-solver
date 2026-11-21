@@ -4,7 +4,8 @@
  * exclusion (member 3 gets neither member 1's nor member 2's pieces just
  * retained), a member without a result who takes nothing, a Cancel during
  * member 2 (1 and 2 retained, 3 and 4 as they were), each member's mode, the
- * Talisman main stats the members before just retained (G143), the reco rule
+ * Talisman main stats the members before just retained (G143), the team
+ * buffs of the other members' Talismans each solve counts (G144), the reco rule
  * of SOLVE, the toast and the greyed-out button's reason; then the
  * Teams card rendered during a pass (the member being solved, Cancel) and
  * after it (a member without a build, with the reason).
@@ -130,6 +131,20 @@ describe("runTeamBuild", () => {
     expect(calls[2]!.talismanMains).toEqual(new Map([["atkPct", "ak"], ["critDmg", "ma"]]));
     expect(calls[3]!.talismanMains).toEqual(new Map([["atkPct", "ak"], ["critDmg", "ma"]]));
     expect(live.members.map((m) => m.build?.pieceUids.slice(0, 2))).toEqual([["w1", "tA1"], ["w2", "tC"], ["w3", ""], ["w4", ""]]);
+  });
+
+  it("Talisman team buffs (G144): member 2 counts the Talisman just retained for member 1, member 1 the current one of member 2", async () => {
+    const talisman = (stat: string, value: number) => ({ slot: "ooparts", main: [{ stat, value, percent: true, fromBuff: true, source: "option" }] }) as unknown as GearPiece;
+    const pieces: TeamPieces = new Map([["tA", talisman("atkPct", 15)], ["tC", talisman("critDmg", 12)], ["tH", talisman("hpPct", 17.5)], ["tOld", talisman("defPct", 13)]]);
+    // Maxie's previous build holds tOld (DEF%): Akarie, solved first, counts it.
+    const t = retainBuild(team(), "ma", retained(["w8", "tOld"]));
+    const { solve, calls } = fakeSolve({ ak: [["w1", "tA"]], ma: [["w2", "tC"]], ro: [["w3", "tH"]], vl: [["w4"]] });
+    await run(t, solve, { pieces });
+    const buffs = (i: number) => calls[i]!.talismanBuffs.map((b) => [b.stat, b.value, b.heroUid]);
+    expect(buffs(0)).toEqual([["defPct", 13, "ma"]]);
+    expect(buffs(1)).toEqual([["atkPct", 15, "ak"]]);
+    expect(buffs(2)).toEqual([["atkPct", 15, "ak"], ["critDmg", 12, "ma"]]);
+    expect(buffs(3)).toEqual([["atkPct", 15, "ak"], ["critDmg", 12, "ma"], ["hpPct", 17.5, "ro"]]);
   });
 
   it("a member without a result keeps no build, says why, and takes nothing from the next ones", async () => {

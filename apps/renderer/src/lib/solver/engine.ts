@@ -29,6 +29,7 @@ import {
   pieceBucketAdds,
   rollGainOnSheet,
   setBonusBucketAdds,
+  teamBuffBucketAdds,
   type BucketAdds,
   type FinalStats,
   type FinalStatsBaseline,
@@ -1553,6 +1554,14 @@ export class TopKHeap {
   toSorted(): SolveBuild[] {
     return this.a.map((e) => e.b).sort((x, y) => compareBuilds(x, y, this.mode));
   }
+  /** A build keyed `key` with `pieceUids` can enter: the heap isn't full, or
+   *  it ranks above the root (the per-signature cap may still refuse it) —
+   *  the necessary condition of `push`, read before building the entry. */
+  admits(key: number, pieceUids: readonly string[]): boolean {
+    if (this.a.length < this.k) return true;
+    const root = this.a[0];
+    return !!root && (key > root.key || (key === root.key && compareUids(pieceUids, root.b.pieceUids) < 0));
+  }
   /** `(key, b)` ranks above entry `e`. */
   private beats(key: number, b: SolveBuild, e: HeapEntry): boolean {
     return key > e.key || (key === e.key && compareUids(b.pieceUids, e.b.pieceUids) < 0);
@@ -1727,20 +1736,46 @@ export async function solveChunk(
   // Loop state the composer reads: the talisman index and the set bonuses.
   let curTalisman = 0;
   let curSetAdds: BucketAdds = setBonusBucketAdds([]);
-  /** Fill `comboBuckets` for the current combo with gem `delta` (`null` /
-   *  `undefined` = no override: the talisman's and EE's socketed gems). */
-  const fillCombo = (delta: GemOverride | null | undefined): void => {
-    comboBuckets.set(prefixAcc);
+  // Team context: the main stats of the Talismans the other members retain
+  // (`req.teamTalismanBuffs`), resolved once per Talisman of the pool into
+  // what they add over its own main (`teamBuffBucketAdds`: per stat,
+  // max(team, own) on the sheet — a Talisman main doesn't stack). Applied
+  // last by `fillCombo`, so every sheet of the loop counts them — bounds,
+  // Score, ratings, the crit-cap gem logic —, but the CP (`cpOf`).
+  const teamBuffs = req.teamTalismanBuffs ?? [];
+  const teamTopUps = teamBuffs.length > 0 ? talismans.map((t) => teamBuffBucketAdds(teamBuffs, t)) : null;
+  const cpBuckets = teamTopUps ? new Float64Array(BUCKET_ARRAY_LENGTH) : null;
+  /** Fill `arr` for the current combo with gem `delta` (`null` / `undefined`
+   *  = no override: the talisman's and EE's socketed gems), without the team
+   *  buffs. */
+  const fillOwn = (arr: Float64Array, delta: GemOverride | null | undefined): void => {
+    arr.set(prefixAcc);
     const variant = delta ? 1 : 0;
-    applyBucketAdds(comboBuckets, talismanAdds[curTalisman]![variant]);
-    if (eeAdds) applyBucketAdds(comboBuckets, eeAdds[variant]);
-    if (delta) applyBucketAdds(comboBuckets, deltaAddsOf(delta));
-    applyBucketAdds(comboBuckets, curSetAdds);
+    applyBucketAdds(arr, talismanAdds[curTalisman]![variant]);
+    if (eeAdds) applyBucketAdds(arr, eeAdds[variant]);
+    if (delta) applyBucketAdds(arr, deltaAddsOf(delta));
+    applyBucketAdds(arr, curSetAdds);
+  };
+  /** Fill `comboBuckets` for the current combo with gem `delta`, the team
+   *  buffs included. */
+  const fillCombo = (delta: GemOverride | null | undefined): void => {
+    fillOwn(comboBuckets, delta);
+    if (teamTopUps) applyBucketAdds(comboBuckets, teamTopUps[curTalisman]!);
   };
   /** The current combo's sheet with gem `delta`. */
   const composeCombo = (delta: GemOverride | null | undefined): FinalStats => {
     fillCombo(delta);
     return finalStatsFromBucketArray(baseline, scaling, comboBuckets);
+  };
+  /** The in-game CP of the current combo, `fs` being its sheet with gem
+   *  `delta`. The client's `CalcBattlePower` reads the hero's own sheet,
+   *  without the other members' Talisman buffs: in team context the combo is
+   *  recomposed without them (same additions, same order: the CP a solve
+   *  outside the team gives). */
+  const cpOf = (fs: FinalStats, delta: GemOverride | null | undefined, talisman: GearPiece): number => {
+    if (!cpBuckets) return cpEval(fs, talisman);
+    fillOwn(cpBuckets, delta);
+    return cpEval(finalStatsFromBucketArray(baseline, scaling, cpBuckets), talisman);
   };
 
   // Pre-extracted rating-filter specs (avoid `for...in` on `filters.ratingFilters`
@@ -1783,7 +1818,7 @@ export async function solveChunk(
     talismanSlots: number,
     preGemCrc: number,
     appliedDelta: GemOverride,
-  ): { fs: FinalStats; alloc: { talisman: number[]; ee: number[] } } | null => {
+  ): { fs: FinalStats; alloc: { talisman: number[]; ee: number[] }; delta: GemOverride | undefined } | null => {
     const fsRec = fs as unknown as Record<string, number>;
     // Only a `max` bound failed: the gems that serve it are out of scope.
     let missed = false;
@@ -1831,11 +1866,11 @@ export async function solveChunk(
       const served = node.alloc;
       if (served.delta && !gemDeltaEquals(served.delta, appliedDelta)) {
         const servedFs = composeCombo(served.delta);
-        if (passesSpecs(servedFs, statFilterSpecs)) return { fs: servedFs, alloc: served.alloc };
+        if (passesSpecs(servedFs, statFilterSpecs)) return { fs: servedFs, alloc: served.alloc, delta: served.delta };
       }
     }
     const socketed = composeCombo(undefined);
-    return passesSpecs(socketed, statFilterSpecs) ? { fs: socketed, alloc: { talisman: [], ee: [] } } : null;
+    return passesSpecs(socketed, statFilterSpecs) ? { fs: socketed, alloc: { talisman: [], ee: [] }, delta: undefined } : null;
   };
   const ratingFilterSpecs = compileFilterSpecs(filters.ratingFilters);
   // CP filter is separate so we can skip it cheaply in SOLVE mode when no CP
@@ -2032,6 +2067,9 @@ export async function solveChunk(
                 // The sheet of the winning allocation, when it isn't the default
                 // one still sitting in `comboBuckets`.
                 let fs: FinalStats | null = null;
+                // The gem delta `fs` was composed with (the CP recomposes it
+                // without the team buffs, `cpOf`).
+                let fsDelta: GemOverride | null | undefined = gemDelta;
                 // CP of the current `fs`, when the CP-alloc arbitration below
                 // already computed it (reset whenever `fs` changes after it).
                 let knownCp: number | null = null;
@@ -2049,6 +2087,7 @@ export async function solveChunk(
                   }
                   if (!gemDeltaEquals(reached.delta, gemDelta)) {
                     fs = composeCombo(reached.delta ?? undefined);
+                    fsDelta = reached.delta ?? undefined;
                     gemAlloc = reached.alloc;
                     appliedDelta = reached.delta;
                   }
@@ -2078,14 +2117,15 @@ export async function solveChunk(
                     if (cpGemAlloc) {
                       const defaultFs = finalStatsFromBucketArray(baseline, scaling, comboBuckets);
                       const cappedFs = composeCombo(capped.delta ?? undefined);
-                      const defaultCp = cpEval(defaultFs, talisman);
-                      const cappedCp = cpEval(cappedFs, talisman);
+                      const defaultCp = cpOf(defaultFs, gemDelta, talisman);
+                      const cappedCp = cpOf(cappedFs, capped.delta ?? undefined, talisman);
                       keepDefault = cappedCp <= defaultCp;
                       knownCp = keepDefault ? defaultCp : cappedCp;
                       fs = keepDefault ? defaultFs : cappedFs;
                     }
                     if (!keepDefault) {
                       fs ??= composeCombo(capped.delta ?? undefined);
+                      fsDelta = capped.delta ?? undefined;
                       gemAlloc = capped.alloc;
                       appliedDelta = capped.delta;
                     }
@@ -2100,6 +2140,7 @@ export async function solveChunk(
                   const served = serveMinFilters(fs, talismanSlots, crcUncapped - defaultCrcGem, appliedDelta);
                   if (!served) continue;
                   fs = served.fs;
+                  fsDelta = served.delta;
                   gemAlloc = served.alloc;
                   knownCp = null;
                 }
@@ -2123,7 +2164,7 @@ export async function solveChunk(
                 // ranked just outside top-K (recall loss / under-return).
                 let cp: number | null = null;
                 if (mode === "cp" || cpFilter) {
-                  cp = knownCp ?? cpEval(fs, talisman);
+                  cp = knownCp ?? cpOf(fs, fsDelta, talisman);
                   if (cpFilter && !inMinMax(cp, cpFilter)) continue;
                 }
 
@@ -2148,6 +2189,10 @@ export async function solveChunk(
                      pieces[4]!.uid, pieces[5]!.uid, ee.uid, pieces[6]!.uid]
                   : [pieces[0]!.uid, pieces[1]!.uid, pieces[2]!.uid, pieces[3]!.uid,
                      pieces[4]!.uid, pieces[5]!.uid, pieces[6]!.uid];
+                // Team context, SOLVE: `finalizeBuilds` can't rebuild the CP
+                // from the stored sheet (it counts the team buffs), so the CP
+                // of a build that can enter the heap is computed here.
+                if (cp === null && teamTopUps && heap.admits(score, pieceUids)) cp = cpOf(fs, fsDelta, talisman);
                 heap.push({
                   pieceUids,
                   gemAllocation: gemAlloc,
@@ -2232,7 +2277,9 @@ export function finalizeBuilds(ctx: SolveContext, builds: SolveBuild[], mode: So
   const out: SolveBuild[] = [];
   for (const b of builds) {
     let cp = b.cp;
-    if (cp == null && mode !== "cp") {
+    // In team context the stored sheet counts the team buffs, the CP doesn't:
+    // `solveChunk` already computed it for every build of its heap.
+    if (cp == null && mode !== "cp" && !req.teamTalismanBuffs?.length) {
       // Talisman is always last in `pieceUids` (engine writes it there).
       const talisman = byUid.get(b.pieceUids[b.pieceUids.length - 1] ?? "") ?? null;
       cp = calcBattlePower({

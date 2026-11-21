@@ -4,7 +4,9 @@
  * pieces ∪ the builds of the members placed before, never those after), a
  * stale build (a piece gone, a piece retained by an earlier member after a
  * reorder), the Talisman main stats an earlier member's Talisman reserves
- * (G143: out of the member's pool, a build that carries one stale) — the team's "+ Worklist" (`lib/teams/teamWorklist.ts`: stale
+ * (G143: out of the member's pool, a build that carries one stale), the
+ * Talisman mains of the other members a member's stats count (G144: others
+ * only, the strongest per stat, over the member's own Talisman) — the team's "+ Worklist" (`lib/teams/teamWorklist.ts`: stale
  * builds and members without one left out, one entry per member, the team on
  * top of the list, one toast), the Optimizer's team context
  * (`lib/teams/teamContext.ts`), and the `gs.teams` storage (round-trip, a
@@ -16,11 +18,12 @@ import type { Character, GameData, GearPiece, Inventory, RolledStat } from "@gea
 import { filterDefaults, type SolverFilters } from "../src/lib/solver/builderFilters.js";
 import {
   addMember, addTeam, buildStaleness, createTeam, defaultTeamName, memberExclusion, moveMember, removeMember, removeTeam, renameTeam,
-  reservedGemPieces, reservedTalismanMains, retainBuild, setMemberFilters, teamWorklistPlan, updateTeam, validTeamName, TEAM_MAX_MEMBERS,
+  reservedGemPieces, reservedTalismanMains, retainBuild, setMemberFilters, teamTalismanBuffs, teamWorklistPlan, updateTeam, validTeamName, TEAM_MAX_MEMBERS,
   type Team, type TeamBuild, type TeamPieces,
 } from "../src/lib/teams/teams.js";
 import { teamWorklistFor, teamWorklistNotice, upsertWorklistEntries } from "../src/lib/teams/teamWorklist.js";
-import { talismanMainsNotice, teamContextOf, teamSolveScope, type SolveScope } from "../src/lib/teams/teamContext.js";
+import { talismanBuffsNotice, talismanMainsNotice, teamContextOf, teamSolveScope, type SolveScope } from "../src/lib/teams/teamContext.js";
+import { teamBuffTopUp, type TeamBuff } from "../src/lib/composeBuild.js";
 import { isReadableTeam, loadTeams, persistTeams, TEAMS_KEY } from "../src/lib/storage/teams.js";
 import { BACKUP_KEYS, STORAGE_KEYS } from "../src/lib/storage/keys.js";
 import type { WorklistEntry } from "../src/lib/storage/worklist.js";
@@ -255,6 +258,65 @@ describe("teams — one Talisman main stat per team (G143)", () => {
   });
 });
 
+describe("teams — the Talisman mains of the other members (G144)", () => {
+  /** Talismans by uid: [main stat key, value]. */
+  function talismans(t: Record<string, [string, number] | [string, number, boolean]>): TeamPieces {
+    const m = new Map<string, Pick<GearPiece, "slot" | "main">>(["w1", "w2", "w3", "w4"].map((u) => [u, { slot: "weapon", main: [] }]));
+    for (const [uid, [stat, value, combatOnly]] of Object.entries(t)) {
+      m.set(uid, { slot: "ooparts", main: [{ stat: stat as RolledStat["stat"], value, percent: true, fromBuff: true, source: "option", ...(combatOnly ? { combatOnly } : {}) }] });
+    }
+    return m;
+  }
+  const inv = talismans({ tA15: ["atkPct", 15], tA12: ["atkPct", 12], tA15b: ["atkPct", 15], tD: ["critDmg", 12], tH: ["hpPct", 17.5] });
+  const row = (b: { stat: string; value: number; heroUid: string }) => [b.stat, b.value, b.heroUid];
+
+  it("the other members' Talismans, placed before and after, never the member's own", () => {
+    const t = team(["a", "b", "c"], { a: build("w1", "tA15"), b: build("w2", "tD"), c: build("w3", "tH") });
+    expect(teamTalismanBuffs(t, "b", inv).map(row)).toEqual([["atkPct", 15, "a"], ["hpPct", 17.5, "c"]]);
+    expect(teamTalismanBuffs(t, "a", inv).map(row)).toEqual([["critDmg", 12, "b"], ["hpPct", 17.5, "c"]]);
+    expect(teamTalismanBuffs(t, "c", inv).map(row)).toEqual([["atkPct", 15, "a"], ["critDmg", 12, "b"]]);
+    // The value is the Talisman's main as the parser resolved it, flags kept.
+    expect(teamTalismanBuffs(t, "b", inv)[0]).toEqual({ stat: "atkPct", value: 15, percent: true, fromBuff: true, heroUid: "a" });
+  });
+
+  it("doesn't stack: one entry per stat, the strongest, the first member on a tie", () => {
+    const t = team(["a", "b", "c", "d"], { a: build("w1", "tA12"), b: build("w2", "tA15"), c: build("w3", "tA15b") });
+    expect(teamTalismanBuffs(t, "d", inv).map(row)).toEqual([["atkPct", 15, "b"]]);
+    const u = team(["a", "b", "c"], { a: build("w1", "tA15"), b: build("w2", "tA15b") });
+    expect(teamTalismanBuffs(u, "c", inv).map(row)).toEqual([["atkPct", 15, "a"]]);
+  });
+
+  it("no build, an empty slot, a build without a Talisman, a Talisman gone, a combat-only main: nothing", () => {
+    const withCombat = talismans({ tX: ["critDmg", 30, true] });
+    const t = team(["a", "b", "c", "d"], { a: build("w1", "", "0"), b: build("w2", "tGone"), c: build("w3", "tX") });
+    expect(teamTalismanBuffs(t, "d", inv)).toEqual([]);
+    expect(teamTalismanBuffs(t, "d", withCombat)).toEqual([]);
+  });
+
+  it("over the member's own Talisman: the strongest of a stat applies once (max), the other stats in full", () => {
+    const buffs: TeamBuff[] = [{ stat: "atkPct", value: 15, percent: true, fromBuff: true }, { stat: "critDmg", value: 12, percent: true, fromBuff: true }];
+    const own = (stat: string, value: number) => ({ main: [{ stat: stat as RolledStat["stat"], value, percent: true, fromBuff: true, source: "option" as const }] });
+    // Own ATK% 12 under the team's 15: the team tops it up by 3 (sheet 15, not 27).
+    expect(teamBuffTopUp(buffs, own("atkPct", 12))).toEqual([{ stat: "atkPct", value: 3, percent: true, fromBuff: true }, buffs[1]]);
+    // Own ATK% 15 or more: the team's adds nothing there.
+    expect(teamBuffTopUp(buffs, own("atkPct", 15))).toEqual([buffs[1]]);
+    expect(teamBuffTopUp(buffs, own("atkPct", 18))).toEqual([buffs[1]]);
+    // Another main, or no Talisman: every buff in full.
+    expect(teamBuffTopUp(buffs, own("hpPct", 17.5))).toEqual(buffs);
+    expect(teamBuffTopUp(buffs, null)).toEqual(buffs);
+  });
+
+  it("the Optimizer context carries them; the banner names each with its member", () => {
+    const t = team(["a", "b", "c"], { a: build("w1", "tA15"), c: build("w3", "tD") });
+    const ctx = teamContextOf([t], { teamId: "t1", heroUid: "b" }, new Set(), inv)!;
+    expect(ctx.talismanBuffs.map(row)).toEqual([["atkPct", 15, "a"], ["critDmg", 12, "c"]]);
+    const label = (k: string) => ({ atkPct: "ATK%", critDmg: "CHD" })[k] ?? k;
+    const name = (uid: string) => uid.toUpperCase();
+    expect(talismanBuffsNotice(ctx.talismanBuffs, name, label)).toBe("Team talismans: ATK% +15% (A), CHD +12% (C)");
+    expect(talismanBuffsNotice([], name, label)).toBeNull();
+  });
+});
+
 describe("teams — + Worklist entries", () => {
   const hero = (uid: string, charId: number) => ({ uid, charId, fusionCharId: 0, name: uid.toUpperCase() }) as unknown as Character;
   const piece = (uid: string, slot: string, owner?: string) => ({ uid, slot, itemId: 1, name: null, main: [], equippedBy: owner }) as unknown as GearPiece;
@@ -320,7 +382,7 @@ describe("teams — Optimizer context", () => {
     expect(teamSolveScope(scope, null)).toBe(scope);
     const exclusion = new Set(["w1"]);
     const gemReserved = new Set(["t9"]);
-    const s = teamSolveScope(scope, { exclusion, gemReserved, talismanMains: new Map([["atkPct", "a"]]) });
+    const s = teamSolveScope(scope, { exclusion, gemReserved, talismanMains: new Map([["atkPct", "a"]]), talismanBuffs: [{ stat: "critDmg", value: 12, percent: true, fromBuff: true, heroUid: "c" }] });
     expect(s.filters.options.equippedScope).toBe("all");
     expect(scope.filters.options.equippedScope).toBe("lower");
     expect(s).toMatchObject({ heroPriority: {}, excludedPieceUids: exclusion, worklistClaims: undefined, presetHolds: undefined, targetPresetNum: null });
@@ -330,6 +392,9 @@ describe("teams — Optimizer context", () => {
     expect(s.reservedTalismanMains).toEqual(new Set(["atkPct"]));
     expect(s.filters.mainExcludes).toEqual(scope.filters.mainExcludes);
     expect(scope.reservedTalismanMains).toBeUndefined();
+    // The team buffs go to the solve, without the member bringing each (G144).
+    expect(s.teamTalismanBuffs).toEqual([{ stat: "critDmg", value: 12, percent: true, fromBuff: true }]);
+    expect(scope.teamTalismanBuffs).toBeUndefined();
   });
 });
 

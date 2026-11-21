@@ -435,6 +435,13 @@ a guild raid boss…): build each hero for that fight without regard for the res
   and so on. Hero ranks play no part. A Talisman's main stat applies to the whole team and
   doesn't stack, so member 2 doesn't get a Talisman of the main stat of member 1's (ATK% after an
   ATK% one), and so on; the banner of **Optimize →** names the main stats taken.
+- In return, a member's stats count the main stats of the Talismans the **other** members keep
+  (before or after them), once per stat, the strongest — their own Talisman's included, as in a
+  fight: ATK% 12 % on their own Talisman under a team mate's 15 % reads 15 %, not 27 %. Their
+  bounds and Score follow; their **CP** doesn't, like the game's (the in-game Combat Power counts
+  the hero's own gear only). The banner of **Optimize →** lists them (*Team talismans: ATK% +15%
+  (Akarie)*), and its Current column counts them too. **Build team** uses the Talismans just kept
+  for the members before and the current ones of the members after.
 - **Optimize →** on a member opens the Optimizer on them with their filters for this team, under a
   banner (**Team: ‹name› · ‹hero› (2/4)**, **← Back to Teams**). Every filter you change goes to the
   team only, **Equipped items** is pinned to **All**, and **Use for team** (next to **+ Worklist**,
