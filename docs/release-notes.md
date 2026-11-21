@@ -12,6 +12,41 @@
 
 ## [Unreleased]
 
+### Teams — one team per fight
+- **New Teams tab** (between Presets and Worklist): build a team of 1 to 4 heroes for a given fight — a guild raid
+  composition, a World Boss or Singularity team — in the order you choose, each hero with its own filters for that
+  fight. Your heroes' usual Optimizer filters are left untouched.
+- **A team only competes with itself**: a member may take any piece of your account (worn by another hero, held by
+  an in-game preset or reserved by the Worklist), except the pieces you set to Never use and those kept by the
+  members placed before it.
+- **Optimize →** on a member opens the Optimizer in team mode (a banner names the team, Equipped items is fixed on
+  All); **Use for team** keeps a result for that member. A kept build is marked **Stale** when one of its pieces is
+  gone or taken by an earlier member.
+- **Build team** solves every member in team order in one click, and can be cancelled; **+ Worklist** queues the
+  whole team.
+
+### Optimizer
+- **Min ≥ / Max ≤ from a result cell** always keeps the row it was read from, and the solve restarts right away.
+  Before, the display rounding (or the Top % pruning) could exclude that very build and return nothing.
+- **Compare two builds**: pin a result from its right-click menu, then select another row to see both side by side.
+- **"Why this piece?"**: hovering a card of the gear band shows its weighted gain over the equipped piece.
+- **Denser gear cards**: main stats next to the icon, Never use at the top right, quality and +15 effect on one line,
+  no more "‹Class› Exclusive" line.
+- The **To do** column now counts the ascension a +10R9 reforge needs.
+- Fixes: the selected row after clearing a Filter, Restore now cancels a running solve, a solve always reads the
+  filters as they are when it starts.
+
+### Solver
+- **Faster solves** on large inventories.
+- Gem fixes: SOLVE CP keeps the gem allocation with the best CP, socketed gems count at their fixed value, and stat
+  thresholds no longer flip when a bound is raised by one.
+- Equipment enhancement thresholds and the Hit AP / Kill AP lines of Exclusive Equipment now match the game.
+
+### Other
+- Game data of the 20/11 patch.
+- Backup import: the default Scrap filter set is kept right after merging filter sets.
+- Gear › Pieces: filter chips are no longer pruned before the inventory has loaded.
+- The local server only answers the app itself.
 - Electron 45 (Chromium and Node.js runtime update); no visible change expected.
 
 ## [2.0.0] — 2026-11-05
