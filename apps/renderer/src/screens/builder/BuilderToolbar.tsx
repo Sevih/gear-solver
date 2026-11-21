@@ -42,7 +42,7 @@ export function BuilderToolbar({
   defaultReforgeMode = settingDefault("reforgeMode"), defaultRerollPotential = settingDefault("rerollPotential"),
   solving, canSolve, solveMode, setSolveMode, onSolve, onCancelSolve, recoLoading,
   priorityBanner, onLoadReco, onUseCp,
-  canFilter, filterActive, onFilter, onClearFilter, dmgSkill,
+  canFilter, filterActive, onFilter, onClearFilter, dmgSkill, scopeLock = null,
 }: {
   heroes: Inventory["characters"];
   game: GameData | null;
@@ -87,6 +87,9 @@ export function BuilderToolbar({
   filterActive: boolean;
   onFilter: () => void;
   onClearFilter: () => void;
+  /** Why the "Equipped items" scope is pinned to All (team context), null
+   *  when it is editable. */
+  scopeLock?: string | null;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const close = () => setOpenKey(null);
@@ -222,7 +225,7 @@ export function BuilderToolbar({
        *  "reset filters". */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <PopoverButton label="Options" count={optionCount} openKey={openKey} myKey="options" onToggle={toggle} onClose={close}>
-          <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} />
+          <OptionsPanel options={filters.options} minQuality={filters.minQuality} excludedHeroes={filters.excludedHeroes} heroes={heroes} game={game} dispatch={dispatch} scopeLock={scopeLock} />
         </PopoverButton>
         <ReforgeModeControl value={filters.options.reforgeMode} defaultMode={defaultReforgeMode} dispatch={dispatch} />
         <ToolbarToggle

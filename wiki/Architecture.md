@@ -47,7 +47,11 @@ by hand (manual import).
   under them the local presets kept in GS only (`lib/storage/localPresets.ts`);
   nothing written to the game, `screens/presets/` over the pure `lib/presets/`),
   **Optimizer** (the solver — `screens/builder/`: one module per panel, the solve state in the
-  `useSolverSession` hook), **Worklist** (cross-hero queue of gear changes — the Optimizer's
+  `useSolverSession` hook), **Teams** (one team per fight: 1 to 4 heroes in order, each with
+  their own filters and retained build, member N solved on the whole inventory minus the
+  never-use pieces and the builds of members 1..N-1 — `screens/teams/` over the pure
+  `lib/teams/`, stored in `lib/storage/teams.ts`; a member's "Optimize →" opens the Optimizer in
+  team context, "+ Worklist" queues the team's fresh builds), **Worklist** (cross-hero queue of gear changes — the Optimizer's
   "+ Worklist" pushes a build's per-slot diff here as a checklist, `equipPieces` applies it
   locally), plus a tabbed **Settings** modal (`design/settings/`, one pane per file: Setup, Data &
   updates — with the update center —, Solver, Display, Backup, Advanced). The piece

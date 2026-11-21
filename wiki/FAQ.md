@@ -114,7 +114,7 @@ inventory (a Worklist line on it says the piece is gone), a piece locked in-game
 
 **Where are my saved builds stored? How do I move them to another PC?**
 In the app's local storage. Use **Settings › Backup › Export backup** to download them as JSON —
-with your filter sets, local presets, ranks, locks, never-use pieces, worklist and notes —, then
+with your filter sets, local presets, ranks, locks, never-use pieces, worklist, teams and notes —, then
 **Import backup** on the other PC. Captured gear isn't part of the backup — re-capture your account
 there.
 

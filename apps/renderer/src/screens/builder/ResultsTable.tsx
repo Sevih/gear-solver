@@ -133,7 +133,7 @@ type OpenCellMenu = (e: MouseEvent, index: number, cell: CellMenuCell | null) =>
  *  Cancel, Escape or an outside click. Fixed at the click point, kept on
  *  screen. */
 export function CellMenu({
-  target, pinned = false, onPick, onTogglePin, onClose,
+  target, pinned = false, onPick, onTogglePin, onUseForTeam, onClose,
 }: {
   target: CellMenuTarget;
   /** The right-clicked row is the pinned one — the entry unpins it. */
@@ -142,6 +142,8 @@ export function CellMenu({
   onPick?: (bound: "min" | "max") => void;
   /** Absent → no pin entry. */
   onTogglePin?: () => void;
+  /** Team context: retain the row as the member's build. Absent → no entry. */
+  onUseForTeam?: () => void;
   onClose: () => void;
 }) {
   const ref = useClickOutside<HTMLDivElement>(true, onClose);
@@ -154,7 +156,7 @@ export function CellMenu({
   const shown = cell ? `${cell.value}${cell.unit}` : "";
   const item = "block w-full rounded px-2 py-0.5 text-left hover:bg-white/8";
   // Kept on screen: 28 px per entry (84 for the three of the threshold menu).
-  const height = 28 * ((cell ? 2 : 0) + (onTogglePin ? 1 : 0) + 1);
+  const height = 28 * ((cell ? 2 : 0) + (onTogglePin ? 1 : 0) + (onUseForTeam ? 1 : 0) + 1);
   // `window` is absent in a static render (tests) — no clamp there.
   const vw = typeof window === "undefined" ? Infinity : window.innerWidth;
   const vh = typeof window === "undefined" ? Infinity : window.innerHeight;
@@ -183,6 +185,11 @@ export function CellMenu({
           {pinned ? "📌 Unpin compare" : "Pin for compare"}
         </button>
       )}
+      {onUseForTeam && (
+        <button type="button" role="menuitem" className={item} title="Retain this build for the team member and go back to the Teams tab" onClick={onUseForTeam}>
+          Use for team
+        </button>
+      )}
       <button type="button" role="menuitem" className={cx(item, "text-white/55")} onClick={onClose}>Cancel</button>
     </div>
   );
@@ -190,7 +197,7 @@ export function CellMenu({
 
 export function ResultsTable({
   builds, selectedIdx, onSelect, solving, error, emptyReason, brokenSetsEmpty, filteredOut, statFilters, rows, onRowsChange,
-  pieceByUid, heroUid, armorSets, game, heatmap, dmgSkill, reforge, onThreshold, pinned = null, onTogglePin,
+  pieceByUid, heroUid, armorSets, game, heatmap, dmgSkill, reforge, onThreshold, pinned = null, onTogglePin, onUseForTeam,
 }: {
   builds: SolveBuild[];
   /** Picked hero's best-skill factor — names the winning skill in the
@@ -244,6 +251,9 @@ export function ResultsTable({
   /** Row menu "Pin for compare" → pin / unpin the row at this index of
    *  `builds`. Absent → no pin entry. */
   onTogglePin?: (i: number) => void;
+  /** Row menu "Use for team" (team context) → retain the row at this index
+   *  of `builds` as the member's build. Absent → no entry. */
+  onUseForTeam?: (i: number) => void;
 }) {
   // setId → display meta, for the per-build Set tags.
   const armorSetById = useMemo(() => {
@@ -335,19 +345,19 @@ export function ResultsTable({
   // Columns menu open state lifted here so a right-click on any column header
   // opens the same menu the toolbar "columns" button does.
   const [colsMenuOpen, setColsMenuOpen] = useState(false);
-  // Menu of a right-clicked row (thresholds on a value cell, pin). The opener
+  // Menu of a right-clicked row (thresholds on a value cell, pin, use for team). The opener
   // is stable so it doesn't defeat the row memo. A value cell opens it first;
   // the row's own handler then sees the event handled and skips.
   const [cellMenu, setCellMenu] = useState<CellMenuTarget | null>(null);
   const hasThreshold = onThreshold != null;
-  const hasPin = onTogglePin != null;
+  const hasRowEntry = onTogglePin != null || onUseForTeam != null;
   const openCellMenu = useCallback<OpenCellMenu>((e, index, cell) => {
     if (e.isDefaultPrevented()) return;
     const kept = hasThreshold ? cell : null;
-    if (!kept && !hasPin) return; // nothing to offer: the native menu stays
+    if (!kept && !hasRowEntry) return; // nothing to offer: the native menu stays
     e.preventDefault();
     setCellMenu({ x: e.clientX, y: e.clientY, index, cell: kept ? { ...kept, value: roundDisplay(kept.value) } : null });
-  }, [hasThreshold, hasPin]);
+  }, [hasThreshold, hasRowEntry]);
   const closeCellMenu = useCallback(() => setCellMenu(null), []);
   // Memoized on WHICH columns show, not on `statFilters` (a new object at
   // every keystroke in a min / max field): typing a bound keeps the columns,
@@ -568,7 +578,7 @@ export function ResultsTable({
                   setTags={setTagsByBuild.get(b)}
                   index={idx}
                   onSelect={onSelect}
-                  onCellMenu={hasThreshold || hasPin ? openCellMenu : undefined}
+                  onCellMenu={hasThreshold || hasRowEntry ? openCellMenu : undefined}
                 />
               );
             })}
@@ -589,6 +599,10 @@ export function ResultsTable({
           onTogglePin={onTogglePin ? () => {
             setCellMenu(null);
             onTogglePin(cellMenu.index);
+          } : undefined}
+          onUseForTeam={onUseForTeam ? () => {
+            setCellMenu(null);
+            onUseForTeam(cellMenu.index);
           } : undefined}
         />
       )}

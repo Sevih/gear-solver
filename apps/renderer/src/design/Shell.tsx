@@ -107,8 +107,8 @@ export function CaptureControls({ steam, onReload, busy = false }: CaptureContro
   );
 }
 
-export type Tab = "Heroes" | "Optimizer" | "Presets" | "Worklist" | "Gear";
-const TABS: Tab[] = ["Heroes", "Optimizer", "Presets", "Worklist", "Gear"];
+export type Tab = "Heroes" | "Optimizer" | "Presets" | "Teams" | "Worklist" | "Gear";
+const TABS: Tab[] = ["Heroes", "Optimizer", "Presets", "Teams", "Worklist", "Gear"];
 
 /** Labels `gs.tab` held before the tabs were renamed or dissolved — an
  *  install updated from them reopens on the closest screen (Home, the
@@ -132,6 +132,7 @@ export interface TabCounts {
   Heroes: number | null;
   Optimizer: number | null;
   Presets: number | null;
+  Teams: number | null;
   /** Pending (not-yet-applied) gear changes queued in the worklist. */
   Worklist: number | null;
   Gear: number | null;

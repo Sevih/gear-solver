@@ -23,7 +23,7 @@ const EQUIPPED_SCOPES: ReadonlyArray<{ value: EquippedScope; label: string; hint
  * Options panel — pool / steal toggles + "Don't take from…" hero picker
  * ───────────────────────────────────────────────────────────────────────── */
 export function OptionsPanel({
-  options, minQuality, excludedHeroes, heroes, game, dispatch,
+  options, minQuality, excludedHeroes, heroes, game, dispatch, scopeLock = null,
 }: {
   options: SolverOptions;
   minQuality: QualityTier | null;
@@ -31,6 +31,8 @@ export function OptionsPanel({
   heroes: Inventory["characters"];
   game: GameData | null;
   dispatch: Dispatch<SolverAction>;
+  /** Set in team context: the scope shows All, greyed out, with this reason. */
+  scopeLock?: string | null;
 }) {
   const set = (key: Exclude<keyof SolverOptions, "reforgeMode" | "equippedScope">) => (v: boolean) => dispatch({ type: "setOption", key, value: v });
   return (
@@ -40,15 +42,16 @@ export function OptionsPanel({
           <HoverHint className="text-[11px] text-white/80" name="Equipped items" text="Which gear equipped on OTHER heroes the solver may pull in (your own hero's gear is always in). None = own + free only · ≤ Lower = also heroes ranked below this one in Heroes (never strips an equal/higher hero) · All = any equipped gear." />
           <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-white/10 bg-white/4 p-0.5">
             {EQUIPPED_SCOPES.map((s) => {
-              const on = (options.equippedScope ?? "lower") === s.value;
+              const on = (scopeLock ? "all" : options.equippedScope ?? "lower") === s.value;
               return (
                 <button
                   key={s.value}
                   type="button"
                   onClick={() => dispatch({ type: "setEquippedScope", value: s.value })}
+                  disabled={scopeLock != null}
                   aria-pressed={on}
-                  title={s.hint}
-                  className={cx("h-5 whitespace-nowrap rounded px-1.5 text-[10px] font-semibold transition-colors", on ? "bg-cyan-400/20 text-cyan-200" : "text-white/65 hover:text-white/85")}
+                  title={scopeLock ?? s.hint}
+                  className={cx("h-5 whitespace-nowrap rounded px-1.5 text-[10px] font-semibold transition-colors", scopeLock && "cursor-not-allowed opacity-50", on ? "bg-cyan-400/20 text-cyan-200" : "text-white/65", !on && !scopeLock && "hover:text-white/85")}
                 >
                   {s.label}
                 </button>

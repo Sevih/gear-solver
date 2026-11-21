@@ -29,6 +29,7 @@ import { EXCLUDED_PIECES_KEY } from "./excludedPieces.js";
 import { HERO_PRIORITY_KEY, HERO_PRIORITY_SEEN_KEY } from "./heroPriority.js";
 import { PRESET_LOCKED_KEY, PRESET_RANK_KEY, PRESET_SEEN_KEY } from "./presetPriority.js";
 import { WORKLIST_KEY, isReadableWorklistEntry } from "./worklist.js";
+import { TEAMS_KEY, isReadableTeam } from "./teams.js";
 import { FILTERS_STORAGE_KEY } from "../../screens/inventory/filters.js";
 
 /** How an import merges a key's value into the stored one — one rule per shape
@@ -170,6 +171,7 @@ export const STORAGE_KEYS: readonly StorageKeySpec[] = [
   { key: PRESET_LOCKED_KEY, store: "local", backup: true, prune: false, label: "Locked presets", owner: "lib/storage/presetPriority.ts", merge: { shape: "set", accept: (n) => typeof n === "number" && Number.isInteger(n) }, summary: "paren" },
   { key: EXCLUDED_PIECES_KEY, store: "local", backup: true, prune: false, label: "Never-use pieces", owner: "lib/storage/excludedPieces.ts", merge: { shape: "set", accept: (uid) => typeof uid === "string" }, summary: "paren" },
   { key: WORKLIST_KEY, store: "local", backup: true, prune: false, label: "Worklist", owner: "lib/storage/worklist.ts", merge: { shape: "list", id: "heroUid", keep: "imported", accept: isReadableWorklistEntry }, summary: "paren" },
+  { key: TEAMS_KEY, store: "local", backup: true, prune: false, label: "Teams", owner: "lib/storage/teams.ts", merge: { shape: "list", id: "id", keep: "stored", accept: isReadableTeam }, summary: "count" },
   { key: "gs.builds.notes", store: "local", backup: true, prune: false, label: "Hero notes", owner: "screens/BuildsScreen.tsx", merge: { shape: "map", accept: (note) => typeof note === "string" && note !== "" }, summary: "label" },
   { key: "gs.builder.cols", store: "local", backup: true, prune: false, label: "Optimizer layout", owner: "screens/builder/ResultsTable.tsx", merge: { shape: "map", accept: (shown) => typeof shown === "boolean" }, summary: "label" },
   ...settingKeys(),

@@ -476,7 +476,8 @@ expensive computation not available at compile time.
   equipped piece (the old default, silent stealing possible). The scope applies to the **effective owner** =
   worklist claim ?? `equippedBy`: a piece reserved by another hero's queued build counts as equipped on that hero
   (an applied/removed entry frees its claims — derived live by `worklistClaims`). The **gem pool**
-  (`buildGemPool`) follows the same rule. The **in-game presets** add to it, whatever the scope (`presetHolds`,
+  (`buildGemPool`) follows the same rule. In team context (a member's "Optimize →", Teams tab), the scope is
+  pinned to `All` and greyed out with the reason (cf. "Teams tab"). The **in-game presets** add to it, whatever the scope (`presetHolds`,
   cf. Engine Reference §1.6): the pieces of a **locked** preset never come out, except for "Optimize preset →" on
   that preset; "Optimize preset →" doesn't take the pieces of a preset of equal or better rank. Pieces only: the
   gems of a locked or better-ranked preset's Talisman stay in the gem pool (a lock holds pieces, not gems; they
@@ -719,7 +720,7 @@ half in the pair card, no footer. Gear and the tooltips (the
   last solve's diagnostic (precompute vs search, pool sizes, P/S, top vs current CP) as JSON.
 
 ### Presets tab
-A tab between Optimizer and Worklist (`screens/presets/PresetsScreen.tsx`), one card per in-game equipment
+A tab between Optimizer and Teams (`screens/presets/PresetsScreen.tsx`), one card per in-game equipment
 preset (`Inventory.presets`, up to 30): number, name, favorite ★, the 7 pieces (weapon, accessory, helmet,
 armor, gloves, boots, talisman — the EE is **never** part of it, the EE slot of `ItemUIDList` is skipped)
 with the inventory's tile and hover detail, and the **current wearers**: heroes whose gear, EE aside, is
@@ -862,6 +863,45 @@ displayed evaluation (proposed EE gems), on the reference as on the associated h
 orange with the line in the warning tone (the loss's) from `OVERCAP_WARN_PTS = 10` points wasted (a
 constant, not a setting), amber alone below; when the overflow is larger than with the gems as socketed, the
 badge's tooltip says it comes from the proposed EE gems.
+
+### Teams tab
+A tab between Presets and Worklist (`screens/teams/TeamsScreen.tsx`): one team per fight (World Boss,
+Dimensional Singularity, guild raid…), to build its members **regardless of the rest of the roster**. Pure
+model `lib/teams/teams.ts`: a team = a name (1 to 40 characters, trimmed), 1 to 4 heroes of the roster
+(`TEAM_MAX_MEMBERS`, the in-game team size) in an **order** the user sets (⠿ drag, ▲ / ▼: `moveMember`),
+never the same one twice (`addMember` refuses the duplicate and the fifth); a hero can be in several teams.
+Each member holds **their own** Optimizer filters for that fight (the full `SolverFilters`), started from
+blank settings (`filterDefaults(defaultReforgeMode, defaultRerollPotential)`), never read from nor written to
+`gs.solver.heroFilters`, and their **retained build** (`TeamBuild`: the uids of the result's 8 slots, EE
+included, the gem allocation, the mode, the CP and the date). Stored under `gs.teams` (`lib/storage/teams.ts`,
+localStorage, backed up, merged by `id` on import; tolerant read, filters serialized like `heroFilters.ts`).
+
+**Piece rule.** A member may take **the whole inventory** — pieces worn by a hero outside the team, held by an
+in-game preset or reserved by the Worklist included — but the pieces excluded by hand (`excludedPieces`) and
+those of the builds retained by the members **placed before them**: `memberExclusion(team, hero,
+excludedPieces)` = `excludedPieces` ∪ the pieces of members 1..N-1's builds (never of the next ones). The
+hero ranks (`gs.priority.*`) play no part. A build is **stale** (`buildStaleness`) when one of its pieces
+left the inventory, or when a member placed before (after a reorder or a new build) retained one of its
+pieces: it stays shown, marked "Stale" with its reason, and doesn't go to "+ Worklist".
+
+**The Optimizer in team context.** A member's "Optimize →" opens the Optimizer on that hero (App:
+`builderTeam` → `teamContextOf`, which recomputes the exclusion at every change of the teams): a "Team:
+‹name› · ‹hero› (2/4)" banner and "← Back to Teams"; the filters loaded are the member's and every change is
+written there (`onTeamFiltersChange`; `BuilderScreen`'s filter source goes from `hero:<uid>` to
+`team:<id>:<uid>`); the solve and the estimate go through `teamSolveScope` (`lib/teams/teamContext.ts`):
+`equippedScope` forced to `all`, `excludedPieceUids` = the member's exclusion, no `presetHolds`, no
+`worklistClaims`, no hero rank, no target preset. The "Equipped items" control is greyed out on All with the
+reason. "Use for team" (next to "+ Worklist", and in a row's right-click menu) retains the result for the
+member and goes back to the Teams tab. Switching heroes in the Optimizer leaves the context (`onLeaveTeam`),
+as does opening it from another screen (the other tabs' "Optimize →"); merely switching tabs keeps it (the
+Optimizer stays mounted, its results too).
+
+**+ Worklist.** `teamWorklistFor` (`lib/teams/teamWorklist.ts`) makes one entry per member with a build that
+isn't stale, as the Optimizer's "+ Worklist" does (`diffBuildVsLoadout` + `worklistChangesFor`, gems
+included), and leaves out — naming them on the card — the stale ones, the members without a build, those
+already wearing theirs and those gone from the roster. The entries go through `upsertWorklistEntries` (each
+replaces its hero's, the team on top of the list, member 1 first) with one toast: "Added to worklist —
+‹team› (n heroes, m replaced)". Nothing is written to the game.
 
 ---
 
@@ -1059,6 +1099,10 @@ apps/renderer/src/
 │   │   ├── eeGems.ts               ← bestEeGemsFor: per-hero EE gems, the preset's pieces fixed
 │   │   ├── presetWorklist.ts       ← presetWorklistFor: the Worklist entry of a preset's hero
 │   │   └── optimize.ts             ← presetOptimizePatch + presetOptimizeNote: "Optimize preset →" (required effects, priority substats)
+│   ├── teams/
+│   │   ├── teams.ts                ← the teams model: ordered members (1 to 4), filters and retained build per member, memberExclusion, buildStaleness, teamWorklistPlan
+│   │   ├── teamContext.ts          ← teamContextOf + teamSolveScope: the Optimizer in team context (scope all, the member's exclusion)
+│   │   └── teamWorklist.ts         ← teamWorklistFor + upsertWorklistEntries + teamWorklistNotice: a team's "+ Worklist"
 │   ├── storage/
 │   │   ├── keys.ts                 ← registry of the gs.* keys (store, backup, merge on import): Backup's Export / Import
 │   │   ├── savedBuilds.ts          ← per-hero build bookmarks (localStorage)
@@ -1067,6 +1111,7 @@ apps/renderer/src/
 │   │   ├── rankDefaults.ts         ← default hero and preset ranks, set by App on every import
 │   │   ├── localPresets.ts         ← local presets (localStorage)
 │   │   ├── heroFilters.ts          ← per-hero kept filters (localStorage, written on every change)
+│   │   ├── teams.ts                ← the teams (gs.teams, localStorage)
 │   │   └── filterPresets.ts        ← per-hero filter sets (localStorage)
 │   └── solver/
 │       ├── types.ts                ← SolveRequest / SolveBuild / WorkerOutput / SolveFilters
@@ -1081,7 +1126,7 @@ apps/renderer/src/
 ├── design/
 │   ├── Shell.tsx                   ← header: tabs, capture pill, action button, Reload, update badge, Settings
 │   ├── GearCard.tsx                ← the one piece card (Gear, Heroes, Presets, Optimizer results, compact or not)
-│   ├── HeroPicker.tsx              ← the one hero picker, single (Optimizer, Reference) or multi (Don't take from…, Associated)
+│   ├── HeroPicker.tsx              ← the one hero picker, single (Optimizer, Reference, Teams' + Add hero with the members greyed out) or multi (Don't take from…, Associated)
 │   └── settings/                   ← SettingsModal + the six panes (SteamSetupPane, DataPane + UpdateCard, SolverPane, DisplayPane, BackupPane, AdvancedPane + LogsPane)
 └── screens/
     ├── BuildsScreen.tsx            ← Heroes tab: equipped/composed roster, rank, notes, computeAdvice, Optimize →
@@ -1093,7 +1138,7 @@ apps/renderer/src/
     │   ├── PriorityBanner.tsx      ← the "No priority set" / "Priority from outerpedia reco" banner
     │   ├── SubstatPriorityPanel.tsx · SetsPanel.tsx · AccessoryMainStatsPanel.tsx · EffectPanel.tsx · PassivesPanel.tsx
     │   ├── StatFiltersPanel.tsx · RatingFiltersPanel.tsx · OptionsPanel.tsx   ← the ten popovers
-    │   ├── ResultsTable.tsx        ← virtualized table, sort, heatmap, columns menu, height, threshold and pin menu
+    │   ├── ResultsTable.tsx        ← virtualized table, sort, heatmap, columns menu, height, threshold, pin and Use for team menu
     │   ├── ComparePanel.tsx        ← Compare panel: pinned build vs selected or loadout (lib/solver/compareBuilds.ts)
     │   ├── StatsPanel.tsx · BuildEffectsPanel.tsx · SubValuePanel.tsx · DmgPer1PctPanel.tsx · RightSidebar.tsx   ← right column
     │   ├── EquipBuildButton.tsx    ← Apply to snapshot (confirmation, greyed-out reason)
@@ -1101,6 +1146,7 @@ apps/renderer/src/
     │   ├── PieceDeltaTooltip.tsx   ← "why this piece?" on a card's hover (lib/solver/pieceDelta.ts)
     │   └── catalogs.ts · statColumns.ts ← catalogs from the inventory, stats/ratings tables
     ├── presets/PresetsScreen.tsx   ← Presets tab: per-preset cards (game order, class or rank filter / sort), game grid, reference, associated, EE gems, loss, overcap, rank and lock, local presets, + Worklist, Optimize → / Optimize preset →
+    ├── teams/TeamsScreen.tsx       ← Teams tab: one card per team, ordered members (⠿, ▲ / ▼), retained build (tiles, CP, Stale), Optimize →, + Add hero, + Worklist
     ├── WorklistScreen.tsx          ← Worklist tab: per-hero cards, reservations, Apply to snapshot / Apply all, Remove
     ├── gear/                       ← Gear tab (formerly the Inventory and Home tabs): GearScreen.tsx (Overview / Pieces / Scrap sub-tabs), OverviewView.tsx + overview/
     └── inventory/                  ← the grid of Gear › Pieces and › Scrap: InventoryScreen, FilterModal, ScrapCard, ItemDetail, VirtualGearGrid

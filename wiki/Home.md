@@ -15,10 +15,11 @@ AppImage). Not a web service.
 ## Start here
 
 - **🎮 Just want to use it?** → **[Getting Started](Getting-Started)** (install + import your
-  account), then **[Using the App](Using-the-App)** — the five tabs in the order of a session:
+  account), then **[Using the App](Using-the-App)** — the six tabs in the order of a session:
   **Heroes** (your roster, ranks and advice), **Optimizer** (the best gear for one hero),
-  **Presets** (your in-game presets and the heroes who share them), **Worklist** (the changes to
-  make in-game), **Gear** (every piece you own, and what to scrap). Stuck?
+  **Presets** (your in-game presets and the heroes who share them), **Teams** (one team per
+  fight, its heroes built in order), **Worklist** (the changes to make in-game), **Gear** (every
+  piece you own, and what to scrap). Stuck?
   → **[FAQ & Troubleshooting](FAQ)**.
 - **🔧 Want to know how it works / contribute?** → [Architecture](Architecture),
   [Solver](Solver), [Engine Reference](Engine-Reference).
@@ -51,7 +52,7 @@ AppImage). Not a web service.
 | Page | What's in it |
 |------|--------------|
 | [Getting Started](Getting-Started) | Prerequisites, first-launch wizard, importing your account (capture) |
-| [Using the App](Using-the-App) | A typical session, then the five tabs in order (Heroes / Optimizer / Presets / Worklist / Gear), Settings, the menu bar, updates |
+| [Using the App](Using-the-App) | A typical session, then the six tabs in order (Heroes / Optimizer / Presets / Teams / Worklist / Gear), Settings, the menu bar, updates |
 | [FAQ & Troubleshooting](FAQ) | Capture issues, post-patch fixes, Optimizer tips, backups |
 
 **🔧 Internals (dev)**

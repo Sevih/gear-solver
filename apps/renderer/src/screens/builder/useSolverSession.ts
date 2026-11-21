@@ -12,6 +12,7 @@ import type { HeroPriority } from "../../lib/storage/heroPriority.js";
 import type { PresetHolds } from "../../lib/presets/presetHolds.js";
 import { buildSolveFilters, type MinMax, type SolverFilters } from "../../lib/solver/builderFilters.js";
 import type { ReforgeContext } from "../../lib/solver/reforge.js";
+import { teamSolveScope } from "../../lib/teams/teamContext.js";
 import { ZERO_SOLVE_COUNTS, createSolveCountsStore } from "./solveCounts.js";
 
 /** Client-side equivalent of the solver's stat/rating band check — used by the
@@ -64,12 +65,24 @@ interface SolverSessionInput {
   presetHolds: PresetHolds | undefined;
   /** The preset being optimized ("Optimize preset →"), null otherwise. */
   targetPresetNum: number | null;
+  /** Team context (a member's "Optimize →" on the Teams tab): the solve takes
+   *  any piece but `exclusion`, scope "all", without the ranks, the Worklist
+   *  claims, the preset holds or a target preset (`teamSolveScope`). */
+  team?: { exclusion: ReadonlySet<string> } | null;
   workerCount: number | null;
   topN: number;
   topK: number;
 }
 
-export function useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, workerCount, topN, topK }: SolverSessionInput) {
+export function useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority: globalHeroPriority, excludedPieceUids: globalExcludedPieceUids, worklistClaims: globalWorklistClaims, presetHolds: globalPresetHolds, targetPresetNum: globalTargetPresetNum, team = null, workerCount, topN, topK }: SolverSessionInput) {
+  // What the solve and the estimate read beyond the hero — the filters and the
+  // account-wide rules, or a team member's piece rule in team context.
+  const scope = useMemo(
+    () => teamSolveScope({ filters, heroPriority: globalHeroPriority, excludedPieceUids: globalExcludedPieceUids, worklistClaims: globalWorklistClaims, presetHolds: globalPresetHolds, targetPresetNum: globalTargetPresetNum }, team),
+    [filters, globalHeroPriority, globalExcludedPieceUids, globalWorklistClaims, globalPresetHolds, globalTargetPresetNum, team],
+  );
+  const { heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum } = scope;
+  const solveFilters = scope.filters;
   // SOLVE mode (the toolbar's Score | CP control), lifted here so the pre-solve cartesian
   // estimate can prepare pools for the mode that will actually fire (the prune
   // RANKING differs: Score ranks by priority — or raw roll magnitude without
@@ -198,7 +211,7 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     // engine scored, not a re-projected preview. Same for the Transistone
     // potential. The passive picks go with it: the table marks the required
     // families the engine counted (the solve's, not a later edit).
-    const serializedFilters = buildSolveFilters(filters);
+    const serializedFilters = buildSolveFilters(solveFilters);
     solveReforgeRef.current = {
       reforgeMode: filters.options.onlyMaxed ? "disable" : filters.options.reforgeMode,
       priority: { ...filters.priority },
@@ -288,12 +301,12 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
           ultimate: selected.skills.ultimate,
           chainPassive: selected.skills.chainPassive,
         },
-        filters: buildSolveFilters(filters),
+        filters: buildSolveFilters(solveFilters),
       }, (poolSizes) => setEstimatePools(poolSizes));
     }, 250);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [solving, selectedUid, inventory, game, selected, filters, solveMode, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, userGeasLevels, userCodexLevel]);
+  }, [solving, selectedUid, inventory, game, selected, solveFilters, solveMode, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, userGeasLevels, userCodexLevel]);
 
   return {
     solveMode, setSolveMode, orchestratorRef, resultsReforge, setResultsReforge, solving, setSolving, progressStore,

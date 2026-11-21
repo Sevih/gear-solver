@@ -8,6 +8,100 @@
 
 ## Items de backlog clôturés (index)
 
+### 👥 Onglet Teams : une équipe par combat, membres ordonnés aux filtres propres, Optimizer en contexte de team, + Worklist (G139) (2026-11-21)
+- ✅ **Pourquoi.** Demande du 21/11 : on ne buildait que globalement (le roster entier pris en compte : rangs des
+  héros, pièces portées, presets du jeu, Worklist), alors que la composition et les builds changent pour presque
+  chaque gros boss (World Boss, Dimensional Singularity, guild raid surtout ; deux compositions ce jour-là pour le
+  guild raid, par exemple « GR planetary control unit epsilon 1 » avec Akarie, Maxie, Roxie et Vlada, chacune avec un
+  build et des priorités propres à ce combat).
+- ✅ **Modèle.** `lib/teams/teams.ts` (pur) : une team = un nom (1 à 40 caractères, rogné, `validTeamName`), 1 à 4
+  membres (`TEAM_MAX_MEMBERS`) dans l'ordre, jamais deux fois le même héros (`addMember` rend `null` au cinquième et au
+  doublon ; un héros peut être dans plusieurs teams), chacun avec son `SolverFilters` complet, parti de
+  `filterDefaults(defaultReforgeMode, defaultRerollPotential)` et jamais lu ni écrit dans `gs.solver.heroFilters`, et son
+  build retenu (`TeamBuild` : les 8 uids du résultat dans l'ordre du moteur, EE comprise s'il la porte, l'allocation de
+  gemmes — pour que « + Worklist » liste les gemmes comme celui de l'Optimizer —, le mode, le CP et la date).
+  Fonctions : `createTeam`, `renameTeam`, `defaultTeamName` (« Team N » libre), `addMember`, `removeMember`,
+  `moveMember` (position bornée), `setMemberFilters`, `retainBuild`, `memberExclusion` (pièces exclues ∪ pièces des
+  builds retenus des membres placés avant, jamais des suivants ; un slot vide n'exclut rien), `buildStaleness`
+  (pièces disparues de l'inventaire, pièces reprises par un membre précédent, avec lui), `teamWorklistPlan`, et la
+  liste (`addTeam` en tête, `removeTeam`, `updateTeam` qui rend la même liste sur un refus). Un build retenu par un
+  membre précédent compte dans l'exclusion même s'il est lui-même périmé (lecture littérale de « les builds retenus
+  des membres précédents »).
+- ✅ **Stockage.** `lib/storage/teams.ts` sur `gs.teams` (localStorage), déclarée dans `lib/storage/keys.ts` :
+  `backup: true`, fusion `list` par `id` où la team stockée gagne (comme les presets locaux), résumé « N teams », pas
+  de prune au changement de données (le test du registre fixe les deux clés élaguées ; voir ⏳). Lecture tolérante :
+  une team malformée est sautée ; dans une team, un membre malformé est sauté, un héros en double ou au-delà du
+  quatrième écarté, un build malformé lu comme aucun. Filtres sérialisés comme `heroFilters.ts` : ses helpers sont
+  exportés (`serializeFilters`, `deserializeFilters`, `SerializedFilters`), `cloneFilters` à la lecture. App recharge
+  la liste après un import de sauvegarde (`onBackupImported`).
+- ✅ **Onglet Teams.** `design/Shell.tsx` : `Tab` / `TABS` gagnent « Teams » entre Presets et Worklist (pas de compteur
+  dans l'onglet : `counts.Teams` à `null`). `screens/teams/TeamsScreen.tsx`, chargé à la demande comme les autres
+  écrans : en tête la phrase de l'onglet, le champ de nom et « + New team » (nom vide → « Team N ») ; état vide
+  « No team yet » qui dit à quoi sert l'onglet ; une carte par team (la plus récente en tête) : nom et « Rename » en
+  place, « n/4 », « + Worklist (n) » avec à côté (et dans son infobulle) les membres écartés et pourquoi (périmés,
+  sans build, déjà équipés de leur build, sortis du roster), « Delete team » avec un second clic de confirmation
+  (« Delete team? ») ; une ligne par membre : poignée ⠿ (glisser-déposer sur la ligne visée) et ▲ / ▼, position,
+  portrait et nom, le build retenu (tuiles sur la grille du jeu avec la carte de pièce au survol comme Presets, une
+  pièce disparue cerclée de rose, une pièce reprise cerclée d'ambre ; CP et « Solve Score / CP » ; badge « Stale —
+  1 piece taken by Akarie (member 1) » ou « n pieces are no longer in your inventory »), « Optimize → » et « Remove » ;
+  sous les membres « + Add hero » : le `HeroPicker` simple, héros déjà dans la team grisés et non choisissables
+  (`design/HeroPicker.tsx` gagne `disabledUids` / `disabledTitle`, mode simple seulement), remplacé par « Team full
+  (4 heroes) » à 4.
+- ✅ **Optimizer en contexte de team.** App garde `builderTeam` (`{ teamId, heroUid }`) et le résout en
+  `TeamContext` par `teamContextOf` (`lib/teams/teamContext.ts` : nom, place « 2/4 », filtres du membre, exclusion
+  recalculée à chaque changement des teams ou des pièces exclues ; `null` si la team ou le membre a disparu).
+  `BuilderScreen` : le contexte s'applique tant que le héros ouvert est le membre ; la source des filtres devient
+  une clé (`hero:<uid>` ou `team:<id>:<uid>`, `prevSourceRef` remplace `prevHeroRef`) : entrer ou sortir du contexte,
+  même sur le même héros, charge les filtres du membre (ou ceux du héros) et vide les résultats comme un changement
+  de héros ; chaque changement de filtre va à `onTeamFiltersChange` (jamais à `heroFilters`). Bannière violette
+  « Team: ‹nom› · ‹héros› (2/4) » et « ← Back to Teams ». `useSolverSession` passe solve et estimation par
+  `teamSolveScope` : `equippedScope` forcé à `all`, `excludedPieceUids` = l'exclusion du membre, ni `presetHolds`,
+  ni `worklistClaims`, ni rang de héros (`{}`), ni preset visé ; hors contexte, les entrées telles quelles. Options ›
+  Equipped items : affiché sur All, grisé, la raison au survol (`scopeLock` de `BuilderToolbar` → `OptionsPanel`).
+  « Use for team » à côté de « + Worklist » (build sélectionné) et dans le menu du clic droit d'une ligne
+  (`ResultsTable` / `CellMenu` : `onUseForTeam`) retient le résultat pour le membre et ouvre l'onglet Teams. Changer
+  de héros dans l'Optimizer quitte le contexte (`onLeaveTeam`) ; les « Optimize → » des autres écrans (Heroes,
+  Presets, Gear, Worklist) le quittent aussi (`setBuilderTeam(null)`). Choix d'interprétation : passer simplement d'un
+  onglet à l'autre puis revenir sur Optimizer le garde (l'Optimizer reste monté avec ses résultats), seul un lien
+  « ouvrir l'Optimizer sur un héros » d'un autre écran le quitte. Hors contexte, l'Optimizer est inchangé.
+- ✅ **+ Worklist.** `lib/teams/teamWorklist.ts` : `teamWorklistFor` fait une entrée par membre au build non périmé,
+  comme le « + Worklist » de l'Optimizer (`diffBuildVsLoadout` + `worklistChangesFor`, gemmes comprises, nom et
+  portrait du héros, `upg` vivant), et écarte les périmés, les sans-build, ceux qui portent déjà leur build et ceux
+  sortis du roster ; App (`addTeamToWorklist`) les pousse par `upsertWorklistEntries` (chaque entrée remplace celle
+  du héros ; la team arrive en tête de la Worklist, membre 1 d'abord) avec un seul toast,
+  `teamWorklistNotice` : « Added to worklist — GR PCU Ep1 (4 heroes, 1 replaced) ». Rien n'est écrit dans le jeu.
+- ✅ **Tests.** `apps/renderer/test/teams.test.ts` (23 : noms, ajout au-delà de 4 et doublon refusés,
+  réordonnancement, exclusion = pièces exclues ∪ builds des précédents et pas des suivants, péremption par pièce
+  disparue et par pièce reprise après réordonnancement, « + Worklist » qui écarte périmés et sans-build, entrées,
+  ordre dans la Worklist, toast, `teamContextOf`, `teamSolveScope`, stockage : aller-retour avec `excludedHeroes` en
+  Set, team et membre malformés sautés, clé au registre et dans la sauvegarde) ; `teamSession.test.ts` (7 : le
+  `BuilderScreen` sur le runtime de hooks de `builderScreenState.test.ts` et un faux orchestrateur — en contexte,
+  `equippedScope` « all », `presetHolds` et `worklistClaims` absents, rang vide, l'exclusion passée au solve ; hors
+  team inchangé ; filtres du membre chargés, écrits au membre seulement ; scope grisé ; « Use for team » ; changer de
+  héros quitte le contexte) ; `teamsScreen.test.ts` (5 : rendu statique vide, sans capture, une team de 4 avec un
+  membre périmé, une team avec de la place, sélecteur aux héros grisés). Adaptés : `tabs.test.ts` (six onglets dans
+  l'ordre, Teams compris), `headerU8.test.ts` (`counts.Teams`), `transfer.test.ts` (la clé `gs.teams` dans le jeu
+  « toutes les clés sauvegardées »). `npm run typecheck` : sans erreur (dernière ligne `> tsc --noEmit`, renderer) ;
+  `npm test` : core `Tests  183 passed (183)`, renderer `Tests  1313 passed (1313)`, desktop `Tests  1 failed | 272
+  passed (273)` — l'échec est `test/game-client.test.ts` (« matches outerpedia's data/curated/game-client.json ») :
+  le checkout outerpedia voisin porte un client plus récent (1.4.22, build 26798910, dump du 2026-11-20) que la copie
+  `apps/desktop/src/game-client.json` (1.4.19), sans lien avec ce lot (aucun fichier desktop touché ; le test est
+  sauté en CI faute de checkout, et `npm run data:sync` / le workflow quotidien recopie le fichier) ;
+  `npm run lint` : `✖ 6 problems (0 errors, 6 warnings)`, les six d'avant. Docs : `README.md`, `wiki/Home.md`,
+  `wiki/Using-the-App.md` (six onglets, section « Teams — one team per fight », Equipped items figé, « Use for
+  team », contenu de la sauvegarde), `wiki/FAQ.md` (sauvegarde), `docs/architecture.md` + `wiki/Architecture.md`
+  (écrans), `docs/solver.md` + `wiki/Solver.md` (Options, Presets « entre Optimizer et Teams », section « Onglet
+  Teams », carte des fichiers), `docs/reference.md` + `wiki/Engine-Reference.md` (§1.6 règle des pièces d'un
+  membre, index des tests).
+- ⏳ **À contrôler à l'écran par Sevih** (pas de banc graphique) : créer « GR PCU Ep1 » avec 4 héros, régler
+  l'ordre (glisser et ▲ / ▼), « Optimize → » sur le 2e (bannière « Team: GR PCU Ep1 · ‹héros› (2/4) », Equipped items
+  grisé sur All, pièces du build du 1er absentes des résultats, pièces d'un héros hors team proposées), « Use for
+  team », retour sur Teams avec le build, puis « + Worklist » (un toast pour la team, entrées en tête de la Worklist).
+- ⏳ **Laissé.** Les filtres des membres ne sont pas élagués à un changement de données (`gs.teams` hors
+  `PRUNED_KEYS` ; le test du registre fixe la liste des clés élaguées) : un set ou un effet disparu d'un patch reste
+  dans les filtres d'un membre jusqu'à son prochain chargement dans l'Optimizer (l'élagage des filtres vivants
+  s'applique alors) — à ajouter si Sevih le veut. Le bouton qui builde toute la team d'un coup est G140.
+
 ### 🗂️ Sauvegarde : défaut Scrap normalisé après la fusion des filter sets Gear à l'import (G138) (2026-11-15)
 - ✅ **Pourquoi.** Revue de code du 15/11 : à l'import d'une sauvegarde, un filter set Gear dont le nom existe déjà ici
   est écarté (`uniqueName` de la règle `list`), mais `gs.gear.scrap.default` (règle `value`) prenait sans condition

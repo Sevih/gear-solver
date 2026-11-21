@@ -25,7 +25,12 @@ import { appliedNotice, equippedByHero, goneNotice, loadWorklist, persistWorklis
 import type { InventoryDrill } from "./screens/inventory/InventoryScreen.js";
 import { loadExcludedPieces, persistExcludedPieces, toggleExcludedPiece } from "./lib/storage/excludedPieces.js";
 import { onDataPruned, reconcileDataHash } from "./lib/storage/dataHash.js";
-import { loadHeroFilters, persistHeroFilters, type HeroFiltersMap } from "./lib/storage/heroFilters.js";
+import { cloneFilters, loadHeroFilters, persistHeroFilters, type HeroFiltersMap } from "./lib/storage/heroFilters.js";
+import { loadTeams, persistTeams } from "./lib/storage/teams.js";
+import { retainBuild, setMemberFilters, updateTeam, type Team, type TeamBuild } from "./lib/teams/teams.js";
+import { teamContextOf } from "./lib/teams/teamContext.js";
+import { teamWorklistNotice, upsertWorklistEntries } from "./lib/teams/teamWorklist.js";
+import type { SolverFilters } from "./lib/solver/builderFilters.js";
 import { onBackupImported } from "./lib/storage/transfer.js";
 import { createOnboardingGate } from "./lib/onboarding.js";
 import type { RecoFilterPatch } from "./lib/reco/translateReco.js";
@@ -41,6 +46,7 @@ const BuildsScreen = lazy(() => import("./screens/BuildsScreen.js").then((m) => 
 const BuilderScreen = lazy(() => import("./screens/builder/BuilderScreen.js").then((m) => ({ default: m.BuilderScreen })));
 const PresetsScreen = lazy(() => import("./screens/presets/PresetsScreen.js").then((m) => ({ default: m.PresetsScreen })));
 const WorklistScreen = lazy(() => import("./screens/WorklistScreen.js").then((m) => ({ default: m.WorklistScreen })));
+const TeamsScreen = lazy(() => import("./screens/teams/TeamsScreen.js").then((m) => ({ default: m.TeamsScreen })));
 
 /** Per-screen error boundary — a throw in a `useMemo`/render (e.g. a bad
  *  filter combo or stale persisted state) used to blank the whole app with
@@ -226,6 +232,10 @@ export function App() {
   // Filters the Presets tab's "Optimize preset →" sends along with the hero,
   // cleared with it.
   const [builderPatch, setBuilderPatch] = useState<{ patch: RecoFilterPatch; note: string; presetNum?: number } | null>(null);
+  // The team member the Optimizer is open on ("Optimize →" on the Teams tab),
+  // null outside a team context — resolved against the live teams below, so
+  // an earlier member's new build moves the exclusion at once.
+  const [builderTeam, setBuilderTeam] = useState<{ teamId: string; heroUid: string } | null>(null);
   // Cross-hero gear-change queue — built from the Builder ("+ Worklist"),
   // worked through on the Worklist tab. Owned here so an add in the (kept-mounted)
   // Builder is live on the Worklist tab. Persisted to localStorage on each change.
@@ -239,6 +249,13 @@ export function App() {
     const replaced = worklistHeroUids.has(entry.heroUid);
     setWorklist((prev) => upsertWorklistEntry(prev, entry));
     notify(`${replaced ? "Replaced in" : "Added to"} worklist — ${entry.heroName}${note ? ` (${note})` : ""}`);
+  }, [worklistHeroUids, notify]);
+  // A team's "+ Worklist": one entry per member, each replacing its hero's
+  // entry, and one toast for the team.
+  const addTeamToWorklist = useCallback((teamName: string, entries: WorklistEntry[]) => {
+    const replaced = entries.filter((e) => worklistHeroUids.has(e.heroUid)).length;
+    setWorklist((prev) => upsertWorklistEntries(prev, entries));
+    notify(teamWorklistNotice(teamName, entries.length, replaced));
   }, [worklistHeroUids, notify]);
   // heroUid → equipped piece uids, built once per inventory and shared by the
   // worklist helpers, the tab badges and the Worklist screen.
@@ -262,7 +279,8 @@ export function App() {
   const [invDrill, setInvDrill] = useState<InventoryDrill | null>(null);
   // The links back from the Worklist and the Gear piece card: the
   // Builder on a hero (no preset patch), or Gear › Pieces showing a piece.
-  const optimizeHero = useCallback((uid: string) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Optimizer"); }, [setTab]);
+  // Opening the Optimizer from another screen leaves the team context.
+  const optimizeHero = useCallback((uid: string) => { setBuilderHero(uid); setBuilderPatch(null); setBuilderTeam(null); setTab("Optimizer"); }, [setTab]);
   const showPiece = useCallback((uid: string) => { setInvDrill({ pieceUid: uid }); setTab("Gear"); }, [setTab]);
   // Account-global "never use" piece UIDs — edited in Inventory (right-click),
   // consumed by the Builder's solver. Owned here so an Inventory edit is live
@@ -272,6 +290,26 @@ export function App() {
   // Stable identity so the memoized Inventory GearTiles don't all re-render on
   // every App render (only the toggled tile's `excluded` prop changes).
   const toggleExclude = useCallback((uid: string) => setExcludedPieces((prev) => toggleExcludedPiece(prev, uid)), []);
+  // Teams (the Teams tab): each one a fight's heroes in order, with their own
+  // filters and retained builds. Durable (localStorage, `gs.teams`).
+  const [teams, setTeams] = useState<Team[]>(loadTeams);
+  usePersistOnChange(teams, persistTeams);
+  const builderTeamContext = useMemo(() => teamContextOf(teams, builderTeam, excludedPieces), [teams, builderTeam, excludedPieces]);
+  const optimizeTeamMember = useCallback((teamId: string, heroUid: string) => {
+    setBuilderHero(heroUid);
+    setBuilderPatch(null);
+    setBuilderTeam({ teamId, heroUid });
+    setTab("Optimizer");
+  }, [setTab]);
+  const setTeamMemberFilters = useCallback((teamId: string, heroUid: string, filters: SolverFilters) => {
+    setTeams((ts) => updateTeam(ts, teamId, (t) => setMemberFilters(t, heroUid, cloneFilters(filters))));
+  }, []);
+  const retainTeamBuild = useCallback((teamId: string, heroUid: string, build: TeamBuild) => {
+    setTeams((ts) => updateTeam(ts, teamId, (t) => retainBuild(t, heroUid, build)));
+    setTab("Teams");
+  }, [setTab]);
+  const backToTeams = useCallback(() => setTab("Teams"), [setTab]);
+  const leaveTeam = useCallback(() => setBuilderTeam(null), []);
   // A backup import (Settings) writes localStorage behind these maps: reload
   // them, or the next persist would put the pre-import values back (the
   // `usePersistedState` keys reload themselves).
@@ -279,6 +317,7 @@ export function App() {
     setHeroFilters(loadHeroFilters());
     setWorklist(loadWorklist());
     setExcludedPieces(loadExcludedPieces());
+    setTeams(loadTeams());
   }), []);
 
   // Startup import + Steam snapshot following share one state machine (the
@@ -463,6 +502,7 @@ export function App() {
           // the memoized `equipped` map.
           Heroes: inv ? equipped.size : null,
           Presets: null,
+          Teams: null,
           Optimizer: null,
           Worklist: worklistRemaining || null,
         }}
@@ -567,8 +607,25 @@ export function App() {
               </ScreenErrorBoundary>
             </div>
           )}
-          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} onLossWarnChange={setPresetLossWarn} worklistHeroUids={worklistHeroUids} worklistClaims={solverWorklistClaims} heroFilters={heroFilters} heroPriority={heroPriority} presetRank={presetRank} onPresetRankChange={setPresetRank} presetLocked={presetLocked} onPresetLockedChange={setPresetLocked} onAddToWorklist={addToWorklist} onOptimize={(uid) => { setBuilderHero(uid); setBuilderPatch(null); setTab("Optimizer"); }} onOptimizePreset={(uid, patch, note, presetNum) => { setBuilderHero(uid); setBuilderPatch({ patch, note, presetNum }); setTab("Optimizer"); }} /></ScreenErrorBoundary>}
-          {tab === "Heroes" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setTab("Optimizer"); }} worklistClaims={solverWorklistClaims} steam={steam} onOpenSetup={() => openSettings("setup")} /></ScreenErrorBoundary>}
+          {tab === "Teams" && (
+            <div className="h-full overflow-y-auto">
+              <ScreenErrorBoundary>
+                <TeamsScreen
+                  inventory={inv}
+                  game={game}
+                  teams={teams}
+                  onTeamsChange={setTeams}
+                  heroPriority={heroPriority}
+                  defaultReforgeMode={defaultReforgeMode}
+                  defaultRerollPotential={defaultRerollPotential}
+                  onOptimizeMember={optimizeTeamMember}
+                  onAddToWorklist={addTeamToWorklist}
+                />
+              </ScreenErrorBoundary>
+            </div>
+          )}
+          {tab === "Presets" && <ScreenErrorBoundary><PresetsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} lossWarnPct={presetLossWarn} onLossWarnChange={setPresetLossWarn} worklistHeroUids={worklistHeroUids} worklistClaims={solverWorklistClaims} heroFilters={heroFilters} heroPriority={heroPriority} presetRank={presetRank} onPresetRankChange={setPresetRank} presetLocked={presetLocked} onPresetLockedChange={setPresetLocked} onAddToWorklist={addToWorklist} onOptimize={optimizeHero} onOptimizePreset={(uid, patch, note, presetNum) => { setBuilderHero(uid); setBuilderPatch({ patch, note, presetNum }); setBuilderTeam(null); setTab("Optimizer"); }} /></ScreenErrorBoundary>}
+          {tab === "Heroes" && <ScreenErrorBoundary><BuildsScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} onHeroPriorityChange={setHeroPriority} debug={debugStatLocks} onOptimize={(uid) => { setBuilderHero(uid); setBuilderTeam(null); setTab("Optimizer"); }} worklistClaims={solverWorklistClaims} steam={steam} onOpenSetup={() => openSettings("setup")} /></ScreenErrorBoundary>}
           {/* Builder stays MOUNTED once first opened (hidden via display:none
               when inactive), so its solver results survive tab switches and a
               solve can finish in the background. The `h-full` wrapper keeps the
@@ -576,7 +633,7 @@ export function App() {
           {builderMounted && (
             <div className="h-full" style={{ display: tab === "Optimizer" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} heroFilters={heroFilters} onHeroFiltersChange={setHeroFilters} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} resultRows={resultRows} onResultRowsChange={setResultRows} onNotify={notify} defaultReforgeMode={defaultReforgeMode} defaultRerollPotential={defaultRerollPotential} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} heroFilters={heroFilters} onHeroFiltersChange={setHeroFilters} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} resultRows={resultRows} onResultRowsChange={setResultRows} onNotify={notify} defaultReforgeMode={defaultReforgeMode} defaultRerollPotential={defaultRerollPotential} team={builderTeamContext} onTeamFiltersChange={setTeamMemberFilters} onUseForTeam={retainTeamBuild} onBackToTeams={backToTeams} onLeaveTeam={leaveTeam} />
               </ScreenErrorBoundary>
             </div>
           )}

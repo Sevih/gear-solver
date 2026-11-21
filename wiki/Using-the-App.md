@@ -3,8 +3,8 @@
 How to drive gear-solver day to day. New here? Start with [Getting Started](Getting-Started)
 to import your account first.
 
-The window has five tabs, in the order of a session — **Heroes**, **Optimizer**, **Presets**,
-**Worklist**, **Gear** — plus a **Settings** modal. The header, top-right, holds:
+The window has six tabs, in the order of a session — **Heroes**, **Optimizer**, **Presets**,
+**Teams**, **Worklist**, **Gear** — plus a **Settings** modal. The header, top-right, holds:
 
 - the **capture pill** — one word for where the capture stands (Checking… · Steam not found ·
   Plugin needed · Plugin update available · Game closed · Waiting for game · Live); hover it for
@@ -194,7 +194,8 @@ is how many rules it holds. Esc or a click outside closes it.
   ranked strictly lower on Heroes; with no ranks set this falls back to own + free gear) or
   **All** (any equipped gear). Pieces **reserved by a Worklist entry** count as worn by the
   queued hero, so solving your next hero respects what earlier queued builds already took
-  (under **All**, reservations are ignored like equipment is). **Keep current** keeps the slots
+  (under **All**, reservations are ignored like equipment is). Opened from a team member
+  (**Teams** tab), the scope is pinned to **All** and greyed out (hover it for why). **Keep current** keeps the slots
   the hero already wears (gems are still re-allocated). **Allow broken sets** (on by default):
   off, every armor piece must complete a 2pc / 4pc. **Min quality** drops pieces below a
   quality tier (Talisman / EE are always kept). **Don't take from…** keeps the gear worn by the
@@ -269,6 +270,8 @@ reforge mode, your loadout as it is now). Then two ways out:
 - **+ Worklist** — queues the build's changes (the pieces, and the gems to socket on its
   Talisman / EE) on the **Worklist** tab, to do in-game. One entry per hero: if the hero is
   already queued, the button reads **Replace in worklist** and the new build replaces the old one.
+- **Use for team** — only when the Optimizer was opened from a team member (**Teams** tab):
+  retains the build for that member and goes back to **Teams** (also on a row's right-click menu).
 - **Apply to snapshot** — applies the build's pieces to the hero in your captured snapshot. A
   confirmation says how many pieces move (and how many are taken off other heroes); on **Apply**
   it rewrites the snapshot and re-imports. Only the local capture changes, never the game: equip
@@ -411,6 +414,37 @@ weapon / accessory) and **Defensive** (helmet / armor / gloves / boots), "–" f
   their score and **Optimize →**. No rank, lock, associated heroes, Worklist or **Optimize preset
   →**; **Rename** in place, **Delete** asks for one more click (**Delete?**). They keep no piece
   away from a solve, and the class filter applies to them too.
+
+---
+
+## Teams — one team per fight
+
+For the fights that call for their own team and builds (a World Boss, a Dimensional Singularity,
+a guild raid boss…): build each hero for that fight without regard for the rest of your roster.
+
+- **+ New team** (top right, with the name you type — 40 characters at most) adds a team card at
+  the top. **Rename** in place; **Delete team** asks for one more click.
+- **+ Add hero** picks from your roster: 1 to 4 heroes (the in-game team size), a hero already in
+  the team greyed out. A hero can be in several teams. A new member starts on blank filters
+  (Settings › Solver's reforge mode and Transistone potential), never on the filters you use for
+  them elsewhere — and what you set for them here stays in the team.
+- **The order matters**: drag the ⠿ handle or use ▲ / ▼. Member 1 may take any piece of your
+  inventory — worn by a hero outside the team, held by an in-game preset or reserved by the
+  Worklist included — but your **never-use** pieces; member 2 the same minus member 1's build;
+  and so on. Hero ranks play no part.
+- **Optimize →** on a member opens the Optimizer on them with their filters for this team, under a
+  banner (**Team: ‹name› · ‹hero› (2/4)**, **← Back to Teams**). Every filter you change goes to the
+  team only, **Equipped items** is pinned to **All**, and **Use for team** (next to **+ Worklist**,
+  or a row's right-click menu) keeps the build for the member and comes back here. Picking another
+  hero in the Optimizer, or opening it from another tab, leaves the team.
+- Each member shows their kept build: the pieces (hover for the card), the CP and the solve mode.
+  A build turns **stale** when one of its pieces left your inventory, or when a member placed
+  before (after a reorder or a new build) took one of them: it stays shown with the reason —
+  run **Optimize →** again.
+- **+ Worklist** queues one entry per member with a build that isn't stale (each replaces the
+  entry the hero already had; one notice for the team, e.g. *Added to worklist — GR PCU Ep1 (4
+  heroes, 1 replaced)*); next to it, the members it leaves out and why. Nothing is written to the
+  game.
 
 ---
 
@@ -609,7 +643,7 @@ passed).
   the same value). **Reset display settings to defaults** puts these three back.
 - **Backup** — **Export backup / Import backup**: one JSON file with everything you set up in the
   app — saved builds, filter sets (Optimizer and Gear), local presets, the heroes of your in-game
-  presets, hero and preset ranks, locked presets, never-use pieces, the worklist, hero notes, the
+  presets, hero and preset ranks, locked presets, never-use pieces, the worklist, your teams, hero notes, the
   last filters per hero, the Optimizer layout, the Scrap default and your Solver, Display and
   developer settings (and the Presets loss threshold). The list is shown under the Export button.
   Never the captured gear: that comes from the game (re-capture it on the other PC). Import merges:

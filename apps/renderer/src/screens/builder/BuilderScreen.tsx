@@ -35,7 +35,9 @@ import { fetchRecoForHero } from "../../lib/reco/fetchReco.js";
 import { equipPieces, type EquipOutcome } from "../../equip.js";
 import type { WorklistEntry } from "../../lib/storage/worklist.js";
 import { worklistChangesFor } from "../../lib/worklist/changes.js";
-import { filtersForHero, withHeroFilters, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
+import { cloneFilters, filtersForHero, withHeroFilters, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
+import type { TeamContext } from "../../lib/teams/teamContext.js";
+import type { TeamBuild } from "../../lib/teams/teams.js";
 import { hasPriority, priorityOf, type Priority } from "../../lib/heroPriority/weights.js";
 import { recoPriorityOf, samePriority, solveDecision } from "../../lib/reco/recoPriority.js";
 import { deltaCpLabel } from "../../lib/deltaCp.js";
@@ -153,7 +155,22 @@ interface BuilderScreenProps {
    *  hero's own choice stays with its filters. */
   defaultReforgeMode?: ReforgeMode;
   defaultRerollPotential?: boolean;
+  /** Team context — set by a member's "Optimize →" on the Teams tab (App's
+   *  `teamContextOf`). While the open hero is that member: their filters are
+   *  loaded and every edit goes to `onTeamFiltersChange` (never to
+   *  `heroFilters`), the solve follows the team's piece rule (scope pinned to
+   *  "all", `teamSolveScope`), a banner names the team and each result offers
+   *  "Use for team". Switching heroes here leaves it (`onLeaveTeam`). */
+  team?: TeamContext | null;
+  onTeamFiltersChange?: (teamId: string, heroUid: string, filters: SolverFilters) => void;
+  /** Retain a result as the member's build (App then opens the Teams tab). */
+  onUseForTeam?: (teamId: string, heroUid: string, build: TeamBuild) => void;
+  onBackToTeams?: () => void;
+  onLeaveTeam?: () => void;
 }
+
+/** Why the "Equipped items" scope is greyed out in team context. */
+const TEAM_SCOPE_LOCK = "Team: pinned to All — a member may take any piece (worn by a hero outside the team, held by an in-game preset or reserved by the Worklist), except the never-use pieces and those of the builds of the members placed before them.";
 
 /** Cartesian size (∏ per-slot pools) above which the Builder warns the solve
  *  will be slow and nudges the user to prune. Sits above the combo budget of
@@ -181,8 +198,12 @@ function startFiltersFor(uid: string | null, map: HeroFiltersMap, savedBuilds: S
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), resultRows = settingDefault("resultRows"), onResultRowsChange, onNotify, defaultReforgeMode = settingDefault("reforgeMode"), defaultRerollPotential = settingDefault("rerollPotential") }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), resultRows = settingDefault("resultRows"), onResultRowsChange, onNotify, defaultReforgeMode = settingDefault("reforgeMode"), defaultRerollPotential = settingDefault("rerollPotential"), team = null, onTeamFiltersChange, onUseForTeam, onBackToTeams, onLeaveTeam }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
+  // Team context applies while the open hero is the member it names; the
+  // filters loaded follow it (`sourceKey`: the member, else the hero).
+  const teamActive = team && team.heroUid === selectedUid ? team : null;
+  const sourceKey = teamActive ? `team:${teamActive.teamId}:${teamActive.heroUid}` : `hero:${selectedUid ?? ""}`;
   // The preset "Optimize preset →" aims at, tied to the hero it opened — set
   // with the patch below, dropped as soon as the user switches heroes.
   const [targetPreset, setTargetPreset] = useState<{ uid: string; num: number } | null>(null);
@@ -198,7 +219,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   const [savedBuildsMap, setSavedBuildsMap] = useState<SavedBuildsMap>(() => loadSavedBuilds());
   const [filterPresetsMap, setFilterPresetsMap] = useState<FilterPresetsMap>(() => loadFilterPresets());
   // Per-hero filter memory (App's `heroFilters`, durable — see
-  // `startFiltersFor`). `prevHeroRef` tracks whose filters are currently
+  // `startFiltersFor`). `prevSourceRef` tracks whose filters are currently
   // loaded and `loadedFiltersRef` the set they were loaded with (not written
   // back until changed); `heroFiltersRef` and `savedBuildsRef` mirror the map
   // and the saved builds for the hero-change effect, which mustn't re-fire on
@@ -209,10 +230,13 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // changing them leaves the open hero's filters as they are.
   const defaultsRef = useRef(filterDefaults(defaultReforgeMode, defaultRerollPotential));
   const [filters, dispatch] = useReducer(solverFiltersReducer, initialHeroUid ?? null,
-    (uid: string | null) => startFiltersFor(uid, heroFilters, savedBuildsMap, filterDefaults(defaultReforgeMode, defaultRerollPotential)));
+    (uid: string | null) => (teamActive ? cloneFilters(teamActive.filters) : startFiltersFor(uid, heroFilters, savedBuildsMap, filterDefaults(defaultReforgeMode, defaultRerollPotential))));
   const filtersRef = useRef(filters);
   const loadedFiltersRef = useRef(filters);
-  const prevHeroRef = useRef(selectedUid);
+  // Whose filters are loaded: the source key, and the team member when they
+  // are a member's (their edits are written there, not to `heroFilters`).
+  const prevSourceRef = useRef(sourceKey);
+  const loadedTeamRef = useRef<{ teamId: string; heroUid: string } | null>(teamActive ? { teamId: teamActive.teamId, heroUid: teamActive.heroUid } : null);
   // Live selection for async callbacks — their closure keeps the hero they
   // started on (see `getPreset`).
   const selectedUidRef = useRef(selectedUid);
@@ -293,7 +317,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setLastDebugInfo, solveError, setSolveError, emptyCause, setEmptyCause, estimatePools, selectedBuild,
     selectedBuildIdx, setSelectedBuild, selectBuildAt, displayFilter, setDisplayFilter, lastSolveMode, setLastSolveMode, startSolve, cancelSolve,
     displayedResults, resolvedWorkers, applyClientFilter,
-  } = useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, workerCount, topN, topK });
+  } = useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, team: teamActive, workerCount, topN, topK });
   /** The latest render's `startSolve` — read by `solve` after its reco fetch:
    *  the click's own closure holds the filters, inventory, target preset and
    *  exclusions of the click, while they stay editable (and a re-import can
@@ -565,16 +589,20 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   );
 
   // Every change of the open hero's filters is written to App's per-hero map
-  // (persisted there), so Presets reads it live and a relaunch keeps it.
+  // (persisted there), so Presets reads it live and a relaunch keeps it — or,
+  // in team context, to the team member's filters only.
   // Declared BEFORE the hero-change effect: on the commit that switches heroes
-  // `prevHeroRef` still names the outgoing hero, so the outgoing filters are
-  // never written under the incoming hero. A set just loaded (kept, or the
-  // defaults with `priorityOf`) is written at its first change only, so a hero
-  // merely opened keeps reading their saved build's priority in Presets.
+  // (or enters / leaves a team context) `prevSourceRef` still names the
+  // outgoing source, so the outgoing filters are never written under the
+  // incoming one. A set just loaded (kept, or the defaults with `priorityOf`)
+  // is written at its first change only, so a hero merely opened keeps reading
+  // their saved build's priority in Presets.
   useEffect(() => {
-    if (!selectedUid || prevHeroRef.current !== selectedUid || filters === loadedFiltersRef.current) return;
-    onHeroFiltersChange((m) => withHeroFilters(m, selectedUid, filters));
-  }, [filters, selectedUid, onHeroFiltersChange]);
+    if (!selectedUid || prevSourceRef.current !== sourceKey || filters === loadedFiltersRef.current) return;
+    const member = loadedTeamRef.current;
+    if (member) onTeamFiltersChange?.(member.teamId, member.heroUid, filters);
+    else onHeroFiltersChange((m) => withHeroFilters(m, selectedUid, filters));
+  }, [filters, selectedUid, sourceKey, onHeroFiltersChange, onTeamFiltersChange]);
 
   // Switching heroes: RESULTS are a clean slate (per-hero, stale otherwise), but
   // FILTERS are remembered per hero (kept by App, written at every change) —
@@ -584,16 +612,25 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // repopulate the table for the wrong hero. No-op while the hero is unchanged
   // — the initial mount and StrictMode's re-run (the reducer already holds the
   // initial hero's set).
+  // Entering or leaving a team context is a source change too: the member's
+  // filters come in (or the hero's own come back) and the results, solved
+  // under the other piece rule, are dropped. Switching heroes away from the
+  // member leaves the context (`onLeaveTeam`).
   useEffect(() => {
-    if (prevHeroRef.current === selectedUid) return;
+    if (prevSourceRef.current === sourceKey) return;
     orchestratorRef.current?.cancel();
-    const start = startFiltersFor(selectedUid, heroFiltersRef.current, savedBuildsRef.current, defaultsRef.current);
+    const leftMember = loadedTeamRef.current;
+    const start = teamActive
+      ? cloneFilters(teamActive.filters)
+      : startFiltersFor(selectedUid, heroFiltersRef.current, savedBuildsRef.current, defaultsRef.current);
     loadedFiltersRef.current = start;
+    loadedTeamRef.current = teamActive ? { teamId: teamActive.teamId, heroUid: teamActive.heroUid } : null;
     dispatch({ type: "loadPreset", filters: start });
     const pending = pendingPatchRef.current;
     if (pending && pending.uid === selectedUid) dispatch({ type: "mergePreset", patch: pending.patch });
     pendingPatchRef.current = null;
-    prevHeroRef.current = selectedUid;
+    prevSourceRef.current = sourceKey;
+    if (leftMember && !teamActive && team && team.teamId === leftMember.teamId && team.heroUid === leftMember.heroUid) onLeaveTeam?.();
     setSolving(false);
     setSolveResults([]);
     setSelectedBuild(null);
@@ -608,7 +645,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     // The session's setters and `orchestratorRef` are stable (useState / useRef
     // inside `useSolverSession`) — the lint can't see it through the hook.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedUid, resetSolveProgress]);
+  }, [sourceKey, resetSolveProgress]);
 
   const applyRecoBuild = (name: string, build: StructuredRecoBuild) => {
     // Resolve each recommended item to its unique effect key (setId) via the
@@ -818,6 +855,14 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     });
     setWorklistAdded(worklistReplaces ? "replaced" : "added");
   };
+  // Team context: retain a result as the member's build — its pieces (the EE
+  // included when it carries one), gems, solve mode and CP — and go back to
+  // the Teams tab.
+  const retainForTeam = useCallback((b: SolveBuild | null) => {
+    if (!b || !teamActive || !onUseForTeam) return;
+    onUseForTeam(teamActive.teamId, teamActive.heroUid, { pieceUids: [...b.pieceUids], gemAllocation: b.gemAllocation, mode: lastSolveMode, cp: b.cp ?? null, at: Date.now() });
+  }, [teamActive, onUseForTeam, lastSolveMode]);
+  const retainRowForTeam = useCallback((i: number) => retainForTeam(displayedResults[i] ?? null), [retainForTeam, displayedResults]);
   // "Added ✓" reverts after 1.5 s — the timer is cleared on unmount.
   useEffect(() => {
     if (!worklistAdded) return;
@@ -859,6 +904,20 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   }
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden p-2 pb-9">
+      {teamActive && (
+        <div className="flex shrink-0 items-center gap-3 rounded-lg border border-violet-400/35 bg-violet-500/10 px-3 py-1.5 text-[11.5px] text-violet-100">
+          <span>
+            <span className="font-semibold">Team: {teamActive.teamName}</span>
+            {" · "}{selected ? displayNameOf(selected, effectiveCharacter(selected, game?.characters).def) : teamActive.heroUid} ({teamActive.position}/{teamActive.size})
+          </span>
+          <span className="text-violet-200/70">Filters kept for this team only · any piece but the never-use ones and the builds of the members before</span>
+          <button
+            type="button"
+            onClick={onBackToTeams}
+            className="ml-auto inline-flex h-6 items-center rounded-md border border-violet-300/35 bg-violet-500/15 px-2 text-[11px] text-violet-50 hover:bg-violet-500/25"
+          >← Back to Teams</button>
+        </div>
+      )}
       <BuilderToolbar
         heroes={pickerHeroes}
         game={game}
@@ -889,6 +948,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
         onFilter={applyClientFilter}
         onClearFilter={() => setDisplayFilter(null)}
         dmgSkill={composition?.dmgSkill ?? null}
+        scopeLock={teamActive ? TEAM_SCOPE_LOCK : null}
       />
       {cartesianEstimate > CARTESIAN_WARN && (
         <div className="flex shrink-0 items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-[11px] leading-snug text-amber-200">
@@ -932,6 +992,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
               onThreshold={setThresholdAndResolve}
               pinned={pinnedBuild}
               onTogglePin={togglePin}
+              onUseForTeam={teamActive && onUseForTeam ? retainRowForTeam : undefined}
             />
           </div>
           {/* Gear band takes the remaining height and scrolls if the window is
@@ -959,6 +1020,18 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
+                {teamActive && onUseForTeam && (
+                  <button
+                    type="button"
+                    onClick={() => retainForTeam(selectedBuild)}
+                    disabled={!selectedBuild}
+                    title={`Retain this build for ${teamActive.teamName} (member ${teamActive.position}) and go back to the Teams tab`}
+                    className={cx(
+                      "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[11.5px] font-medium transition-colors",
+                      selectedBuild ? "border-violet-400/45 bg-violet-500/15 text-violet-100 hover:bg-violet-500/25" : "cursor-not-allowed border-white/6 bg-white/2 text-white/45",
+                    )}
+                  >Use for team</button>
+                )}
                 <button
                   type="button"
                   onClick={addToWorklist}

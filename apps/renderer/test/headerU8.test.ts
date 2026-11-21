@@ -95,7 +95,7 @@ describe("dataVersionLabel", () => {
 function header(status: SteamStatus | null, upd: HeaderUpdate | null = null) {
   return renderToStaticMarkup(createElement(GsHeader, {
     active: "Heroes", onTabChange: noop, onSetup: noop, version: "1.28.0", gameVersion: "1.11.503",
-    counts: { Heroes: null, Optimizer: null, Presets: null, Worklist: null, Gear: null },
+    counts: { Heroes: null, Optimizer: null, Presets: null, Teams: null, Worklist: null, Gear: null },
     capture: { steam: { status, onInstall: noop, onLaunch: noop }, onReload: noop },
     update: upd, onOpenUpdate: noop,
   }));

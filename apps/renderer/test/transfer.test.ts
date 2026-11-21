@@ -51,6 +51,7 @@ const EVERY_KEY: Record<string, unknown> = {
   "gs.presets.locked": [1],
   "gs.solver.excludedPieces": ["junk"],
   "gs.worklist": [worklistEntry("h1")],
+  "gs.teams": [{ id: "t1", name: "GR", members: [{ heroUid: "h1", filters: { options: {}, excludedHeroes: ["h2"] }, build: null }], createdAt: 0 }],
   "gs.builds.notes": { h1: "speed tune" },
   "gs.builder.cols": { score: false },
   "gs.gear.scrap.default": ["i1"],

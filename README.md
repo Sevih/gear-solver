@@ -22,10 +22,11 @@ install, import your account, optimize a hero. No build step, no command line. T
 **[player wiki](https://github.com/Sevih/gear-solver/wiki)** (Getting Started · Using the App ·
 FAQ) walks through everything.
 
-The app has five tabs, in the order of a session: **Heroes** (your roster, ranks and advice) →
+The app has six tabs, in the order of a session: **Heroes** (your roster, ranks and advice) →
 **Optimizer** (the best gear for one hero) → **Presets** (your in-game presets and the heroes who
-share them) → **Worklist** (the changes to make in-game) → **Gear** (every piece you own:
-Overview, Pieces, Scrap), plus a **Settings** modal. The
+share them) → **Teams** (one team per fight, its heroes built in order) → **Worklist** (the
+changes to make in-game) → **Gear** (every piece you own: Overview, Pieces, Scrap), plus a
+**Settings** modal. The
 [Using the App](https://github.com/Sevih/gear-solver/wiki/Using-the-App) page walks through a
 typical session.
 

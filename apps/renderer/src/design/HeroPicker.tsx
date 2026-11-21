@@ -27,6 +27,10 @@ export type HeroPickerProps = CommonProps & (
       mode: "single";
       value: string | null;
       onChange: (uid: string | null) => void;
+      /** Heroes listed greyed out, not pickable (a team's members), with
+       *  `disabledTitle` as their hover text. */
+      disabledUids?: ReadonlySet<string>;
+      disabledTitle?: string;
     }
   | {
       mode: "multi";
@@ -73,12 +77,12 @@ function usePickerList(heroes: readonly Character[], game: GameData | null, defa
   return { open, setOpen, query, setQuery, activeIdx, filtered, wrapRef, listId, optId, onKeyDown, activeId };
 }
 
-function SinglePicker({ heroes, game, value, onChange, defaultOpen = false }: CommonProps & { value: string | null; onChange: (uid: string | null) => void }) {
+function SinglePicker({ heroes, game, value, onChange, disabledUids, disabledTitle, defaultOpen = false }: CommonProps & { value: string | null; onChange: (uid: string | null) => void; disabledUids?: ReadonlySet<string>; disabledTitle?: string }) {
   const { open, setOpen, query, setQuery, activeIdx, filtered, wrapRef, listId, optId, onKeyDown, activeId } = usePickerList(heroes, game, defaultOpen);
   const selected = value ? heroes.find((c) => c.uid === value) ?? null : null;
   const selectedName = selected ? displayNameOf(selected, effectiveCharacter(selected, game?.characters).def) : "";
   const display = open ? query : selectedName;
-  const pick = (c: Character) => { onChange(c.uid); setOpen(false); setQuery(""); };
+  const pick = (c: Character) => { if (disabledUids?.has(c.uid)) return; onChange(c.uid); setOpen(false); setQuery(""); };
   return (
     <div ref={wrapRef} className="relative">
       <input
@@ -109,6 +113,8 @@ function SinglePicker({ heroes, game, value, onChange, defaultOpen = false }: Co
                   selected={c.uid === value}
                   highlighted={i === activeIdx}
                   onPick={() => pick(c)}
+                  disabled={disabledUids?.has(c.uid) ?? false}
+                  disabledTitle={disabledTitle}
                 />
               ))}
             </ul>
@@ -193,17 +199,19 @@ function MultiPicker({
 }
 
 /** One hero row: portrait (the fused one for a Core Fusion hero) and the
- *  displayed name; a checkbox ahead of them in multi mode. */
+ *  displayed name; a checkbox ahead of them in multi mode. A disabled row is
+ *  greyed out and can't be picked. */
 function HeroRow({
-  id, hero, game, selected, highlighted, onPick, checkbox = false,
-}: { id: string; hero: Character; game: GameData | null; selected: boolean; highlighted: boolean; onPick: () => void; checkbox?: boolean }) {
+  id, hero, game, selected, highlighted, onPick, checkbox = false, disabled = false, disabledTitle,
+}: { id: string; hero: Character; game: GameData | null; selected: boolean; highlighted: boolean; onPick: () => void; checkbox?: boolean; disabled?: boolean; disabledTitle?: string }) {
   const { charId: displayCharId, def: meta } = effectiveCharacter(hero, game?.characters);
   const name = displayNameOf(hero, meta);
   const ref = useRef<HTMLLIElement>(null);
   // Keep the keyboard-highlighted option in view as the user arrows through.
   useEffect(() => { if (highlighted) ref.current?.scrollIntoView({ block: "nearest" }); }, [highlighted]);
   const rowClass = cx(
-    "flex w-full cursor-pointer items-center gap-2 px-2 py-1 text-left hover:bg-white/6",
+    "flex w-full items-center gap-2 px-2 py-1 text-left",
+    disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:bg-white/6",
     highlighted && "bg-white/8",
     selected && !checkbox && "bg-cyan-500/10",
   );
@@ -214,7 +222,7 @@ function HeroRow({
     </>
   );
   return (
-    <li ref={ref} id={id} role="option" aria-selected={selected}>
+    <li ref={ref} id={id} role="option" aria-selected={selected} aria-disabled={disabled || undefined}>
       {checkbox ? (
         <label className={rowClass}>
           <input
@@ -226,7 +234,7 @@ function HeroRow({
           {body}
         </label>
       ) : (
-        <button type="button" onClick={onPick} className={rowClass}>{body}</button>
+        <button type="button" onClick={onPick} disabled={disabled} title={disabled ? disabledTitle : undefined} className={rowClass}>{body}</button>
       )}
     </li>
   );

@@ -19,13 +19,15 @@ const KEY = HERO_FILTERS_KEY;
 
 export type HeroFiltersMap = Record<string, SolverFilters>;
 
-type SerializedFilters = Omit<SolverFilters, "excludedHeroes"> & { excludedHeroes: string[] };
+/** `SolverFilters` as stored: the `excludedHeroes` Set as a list (also the
+ *  shape of a team member's filters, `teams.ts`). */
+export type SerializedFilters = Omit<SolverFilters, "excludedHeroes"> & { excludedHeroes: string[] };
 
-function serialize(f: SolverFilters): SerializedFilters {
+export function serializeFilters(f: SolverFilters): SerializedFilters {
   return { ...f, excludedHeroes: [...f.excludedHeroes] };
 }
 
-function deserialize(s: SerializedFilters): SolverFilters {
+export function deserializeFilters(s: SerializedFilters): SolverFilters {
   return { ...s, excludedHeroes: new Set(Array.isArray(s.excludedHeroes) ? s.excludedHeroes : []) };
 }
 
@@ -37,7 +39,7 @@ export function loadHeroFilters(): HeroFiltersMap {
     if (!parsed || typeof parsed !== "object") return {};
     const out: HeroFiltersMap = {};
     for (const [uid, f] of Object.entries(parsed as Record<string, SerializedFilters>)) {
-      if (f && typeof f === "object") out[uid] = deserialize(f);
+      if (f && typeof f === "object") out[uid] = deserializeFilters(f);
     }
     return out;
   } catch {
@@ -48,7 +50,7 @@ export function loadHeroFilters(): HeroFiltersMap {
 export function persistHeroFilters(map: HeroFiltersMap): void {
   try {
     const out: Record<string, SerializedFilters> = {};
-    for (const [uid, f] of Object.entries(map)) out[uid] = serialize(f);
+    for (const [uid, f] of Object.entries(map)) out[uid] = serializeFilters(f);
     localStorage.setItem(KEY, JSON.stringify(out));
   } catch {
     // Quota / locked-down context — skip; the next change retries.
