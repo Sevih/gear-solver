@@ -17,7 +17,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, u
 import type { Character, GameData, GearPiece, Inventory, UserGeasLevels } from "@gear-solver/core";
 import { composeCharStats, effectiveCharacter, expToLevel, gameRulesOf } from "@gear-solver/core";
 import { cx } from "../../design/cx.js";
-import { SLOT_BY } from "../../design/tokens.js";
+import { deadSlotsReason } from "../../lib/solver/emptyReason.js";
 import { dmgSkillInfo } from "../../lib/dmgSkill.js";
 import { computeFinalStats } from "../../lib/composeBuild.js";
 import { calcBattlePower } from "../../lib/solver/cp.js";
@@ -37,7 +37,7 @@ import type { WorklistEntry } from "../../lib/storage/worklist.js";
 import { worklistChangesFor } from "../../lib/worklist/changes.js";
 import { cloneFilters, filtersForHero, withHeroFilters, type HeroFiltersMap } from "../../lib/storage/heroFilters.js";
 import type { TeamContext } from "../../lib/teams/teamContext.js";
-import type { TeamBuild } from "../../lib/teams/teams.js";
+import { teamBuildOf, type TeamBuild } from "../../lib/teams/teams.js";
 import { hasPriority, priorityOf, type Priority } from "../../lib/heroPriority/weights.js";
 import { recoPriorityOf, samePriority, solveDecision } from "../../lib/reco/recoPriority.js";
 import { deltaCpLabel } from "../../lib/deltaCp.js";
@@ -167,6 +167,9 @@ interface BuilderScreenProps {
   onUseForTeam?: (teamId: string, heroUid: string, build: TeamBuild) => void;
   onBackToTeams?: () => void;
   onLeaveTeam?: () => void;
+  /** Whether a solve is running here — App greys the Teams tab's "Build
+   *  team" out meanwhile (one solve at a time). */
+  onSolvingChange?: (solving: boolean) => void;
 }
 
 /** Why the "Equipped items" scope is greyed out in team context. */
@@ -198,7 +201,7 @@ function startFiltersFor(uid: string | null, map: HeroFiltersMap, savedBuilds: S
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), resultRows = settingDefault("resultRows"), onResultRowsChange, onNotify, defaultReforgeMode = settingDefault("reforgeMode"), defaultRerollPotential = settingDefault("rerollPotential"), team = null, onTeamFiltersChange, onUseForTeam, onBackToTeams, onLeaveTeam }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), resultRows = settingDefault("resultRows"), onResultRowsChange, onNotify, defaultReforgeMode = settingDefault("reforgeMode"), defaultRerollPotential = settingDefault("rerollPotential"), team = null, onTeamFiltersChange, onUseForTeam, onBackToTeams, onLeaveTeam, onSolvingChange }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Team context applies while the open hero is the member it names; the
   // filters loaded follow it (`sourceKey`: the member, else the hero).
@@ -318,6 +321,9 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     selectedBuildIdx, setSelectedBuild, selectBuildAt, displayFilter, setDisplayFilter, lastSolveMode, setLastSolveMode, startSolve, cancelSolve,
     displayedResults, resolvedWorkers, applyClientFilter,
   } = useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, team: teamActive, workerCount, topN, topK });
+  // App's one-solve-at-a-time gate ("Build team" on the Teams tab).
+  useEffect(() => { onSolvingChange?.(solving); }, [solving, onSolvingChange]);
+  useEffect(() => () => onSolvingChange?.(false), [onSolvingChange]);
   /** The latest render's `startSolve` — read by `solve` after its reco fetch:
    *  the click's own closure holds the filters, inventory, target preset and
    *  exclusions of the click, while they stay editable (and a re-import can
@@ -416,22 +422,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // skipped: a hero without one reports `exclusive: 0` and solves without it.
   // A slot emptied (also) by an excluded main stat or the +15 passive picks
   // says so.
-  const emptyReason = useMemo(() => {
-    const ps = livePoolSizes;
-    if (!ps) return null;
-    const dead = Object.keys(ps).filter((s) => s !== "exclusive" && (ps[s]?.hit ?? 0) === 0);
-    if (dead.length === 0) return null;
-    return dead.map((s) => {
-      const excluded = ps[s]?.mainExcluded ?? 0;
-      const passive = ps[s]?.passiveExcluded ?? 0;
-      const causes = [
-        ...(excluded > 0 ? [`${excluded} dropped: main stat excluded`] : []),
-        ...(passive > 0 ? [`${passive} dropped: +15 passive filter`] : []),
-      ];
-      const cause = causes.length > 0 ? ` (${causes.join(", ")})` : "";
-      return `${SLOT_BY[s]?.label ?? s}: 0 pieces after filters${cause}`;
-    }).join(" · ");
-  }, [livePoolSizes]);
+  const emptyReason = useMemo(() => deadSlotsReason(livePoolSizes), [livePoolSizes]);
 
   // Guard-rail — rough size of the cartesian the solver walks (∏ of the
   // partitionable per-slot pools, post-prune; EE isn't partitioned). While
@@ -871,7 +862,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   // the Teams tab.
   const retainForTeam = useCallback((b: SolveBuild | null) => {
     if (!b || !teamActive || !onUseForTeam) return;
-    onUseForTeam(teamActive.teamId, teamActive.heroUid, { pieceUids: [...b.pieceUids], gemAllocation: b.gemAllocation, mode: lastSolveMode, cp: b.cp ?? null, at: Date.now() });
+    onUseForTeam(teamActive.teamId, teamActive.heroUid, teamBuildOf(b, lastSolveMode, Date.now()));
   }, [teamActive, onUseForTeam, lastSolveMode]);
   const retainRowForTeam = useCallback((i: number) => retainForTeam(displayedResults[i] ?? null), [retainForTeam, displayedResults]);
   // "Added ✓" reverts after 1.5 s — the timer is cleared on unmount.

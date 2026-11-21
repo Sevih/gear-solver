@@ -949,6 +949,29 @@ ceux sortis du roster. Les entrées passent par `upsertWorklistEntries` (chacune
 la team en tête de liste, membre 1 d'abord) et un seul toast : « Added to worklist — ‹team› (n heroes, m
 replaced) ». Rien n'est écrit dans le jeu.
 
+**Build team.** Le bouton de la carte rebuilde **tous** les membres d'un coup, dans l'ordre de la team
+(`runTeamBuild`, `lib/teams/buildTeam.ts`, pur, solve injecté) : membre 1, puis 2, 3, 4, chacun avec **ses**
+filtres et **son** mode (celui de son build retenu, Score sans build), sous la règle des pièces ci-dessus
+appliquée à la copie de la team que tient le passage — l'exclusion du membre N compte donc les builds que ce
+même passage vient de retenir pour 1..N-1. Le meilleur résultat (le premier dans l'ordre de tri du mode)
+devient le build retenu. La règle de SOLVE s'applique comme dans l'Optimizer (`solveDecision`) : en Score
+sans priorité, les poids de la reco du héros deviennent sa priorité (écrite dans les filtres du membre), et
+sans poids de reco le membre est résolu au CP pour ce passage (son build retenu porte alors le mode CP). Un
+membre sans résultat repasse à « no build » (son ancien build est retiré) et sa ligne dit la raison du
+solveur (`emptySolveReason`, `lib/solver/emptyReason.ts`, la même que la table vide de l'Optimizer :
+emplacement vidé par les filtres, sets cassés, sinon bornes) ; il ne prend rien, l'exclusion des suivants ne
+change pas. Pendant le passage, la ligne du membre en cours dit « Solving… » et « Cancel » remplace le bouton :
+il arrête **après** le solve en cours (ce qui est retenu reste retenu, les membres non atteints gardent leur
+ancien build, marqué périmé s'il l'est). À la fin, un toast (`teamBuildNotice`) : « ‹team› built — n/4
+members », puis les membres sans build, ceux passés au CP et ceux qu'un Cancel a laissés. Un seul passage à la
+fois dans l'app, et aucun pendant un solve de l'Optimizer (`BuilderScreen` le signale à App par
+`onSolvingChange`) : le bouton est alors grisé, la raison au survol (`buildTeamBlockedReason`). Le passage
+vit dans App (`screens/teams/useTeamBuild.ts`), il continue si l'on change d'onglet. Les solves passent par le
+même `SolverOrchestrator` que l'Optimizer (`lib/teams/teamSolver.ts`, chargé au premier passage), avec la même
+requête (`solveArgsOf`, `lib/solver/solveArgs.ts`, partagé avec `useSolverSession`), le même nombre de
+workers (`resolveWorkerCount`) et les mêmes `topN` / `topK` ; une instance par passage, créée à son début et
+libérée à sa fin (celle de l'Optimizer appartient à son écran).
+
 ---
 
 ## 5. Gems — sous-solver greedy
@@ -1195,6 +1218,8 @@ apps/renderer/src/
 │   ├── teams/
 │   │   ├── teams.ts                ← modèle des teams : membres ordonnés (1 à 4), filtres et build retenu par membre, memberExclusion, buildStaleness, teamWorklistPlan
 │   │   ├── teamContext.ts          ← teamContextOf + teamSolveScope : l'Optimizer en contexte de team (scope all, exclusion du membre)
+│   │   ├── buildTeam.ts            ← runTeamBuild + teamBuildNotice + buildTeamBlockedReason : « Build team », chaque membre dans l'ordre
+│   │   ├── teamSolver.ts           ← createTeamSolver : les solves d'un passage sur le SolverOrchestrator (règle de la team)
 │   │   └── teamWorklist.ts         ← teamWorklistFor + upsertWorklistEntries + teamWorklistNotice : le « + Worklist » d'une team
 │   ├── storage/
 │   │   ├── keys.ts                 ← registre des clés gs.* (store, sauvegarde, fusion à l'import) : Export / Import de Backup
@@ -1212,6 +1237,8 @@ apps/renderer/src/
 │       ├── reforge.ts              ← REFORGE_MODES (libellés, infobulles) + migration useReforged → reforgeMode
 │       ├── reroll.ts               ← potentiel Transistone (rerollPotential)
 │       ├── orchestrator.ts         ← pool de Web Workers, fan-out/fan-in, top-N merge
+│       ├── solveArgs.ts            ← solveArgsOf + estimateArgsOf : la requête d'un héros (Optimizer et Build team)
+│       ├── emptyReason.ts          ← deadSlotsReason + emptySolveReason : pourquoi un solve revient sans build
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + keepTopUnion + pruneDominatedForCp + simulateReforges
 │       ├── gems.ts                 ← buildGemPool + scoreGemPool + allocateGems + allocateGemsByCp
 │       ├── ratings.ts              ← computeCheapRatings + computeScore
@@ -1239,7 +1266,8 @@ apps/renderer/src/
     │   ├── PieceDeltaTooltip.tsx   ← « pourquoi cette pièce ? » au survol d'une carte (lib/solver/pieceDelta.ts)
     │   └── catalogs.ts · statColumns.ts ← catalogues tirés de l'inventaire, tables stats/ratings
     ├── presets/PresetsScreen.tsx   ← onglet Presets : cartes par preset (ordre du jeu, filtre / tri par classe ou rang), grille du jeu, référence, associés, gemmes d'EE, perte, overcap, rang et verrou, presets locaux, + Worklist, Optimize → / Optimize preset →
-    ├── teams/TeamsScreen.tsx       ← onglet Teams : une carte par team, membres ordonnés (⠿, ▲ / ▼), build retenu (tuiles, CP, Stale), Optimize →, + Add hero, + Worklist
+    ├── teams/TeamsScreen.tsx       ← onglet Teams : une carte par team, membres ordonnés (⠿, ▲ / ▼), build retenu (tuiles, CP, Stale), Optimize →, + Add hero, + Worklist, Build team / Cancel
+    ├── teams/useTeamBuild.ts       ← le passage « Build team » tenu par App (un à la fois, raisons des membres sans build, toast)
     ├── WorklistScreen.tsx          ← onglet Worklist : cartes par héros, réservations, Apply to snapshot / Apply all, Remove
     ├── gear/                       ← onglet Gear (ex-onglets Inventory et Home) : GearScreen.tsx (sous-onglets Overview / Pieces / Scrap), OverviewView.tsx + overview/
     └── inventory/                  ← la grille de Gear › Pieces et › Scrap : InventoryScreen, FilterModal, ScrapCard, ItemDetail, VirtualGearGrid

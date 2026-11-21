@@ -234,6 +234,19 @@ describe("Optimizer in team context", () => {
     expect(calls.used).toEqual([expect.objectContaining({ teamId: "t1", heroUid: "h1", pieceUids: result(4000).pieceUids, mode: "cp", cp: 4000 })]);
   });
 
+  it("reports its solving state to App (the gate of the Teams tab's Build team, G140)", () => {
+    const { props, render } = harness(null);
+    const seen: boolean[] = [];
+    props.onSolvingChange = (solving) => seen.push(solving);
+    const tree = render();
+    expect(seen).toEqual([false]);
+    find<ToolbarProps>(tree, BuilderToolbar).onSolve("cp");
+    render();
+    orch.finish([result(5000)]);
+    render();
+    expect(seen).toEqual([false, true, false]);
+  });
+
   it("no Use for team outside a team", () => {
     const { render } = harness(null);
     expect(find<TableProps>(render(), ResultsTable).onUseForTeam).toBeUndefined();

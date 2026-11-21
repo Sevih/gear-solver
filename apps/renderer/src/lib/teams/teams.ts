@@ -132,6 +132,18 @@ export function retainBuild(team: Team, heroUid: string, build: TeamBuild): Team
   return updateMember(team, heroUid, (m) => ({ ...m, build }));
 }
 
+/** The member back to "no build" (a "Build team" pass found no result for
+ *  them: they take nothing, so the members after them aren't held back). */
+export function clearBuild(team: Team, heroUid: string): Team {
+  return updateMember(team, heroUid, (m) => (m.build ? { ...m, build: null } : m));
+}
+
+/** An Optimizer result as a member's retained build — "Use for team" and
+ *  "Build team" both retain through it. */
+export function teamBuildOf(b: SolveBuild, mode: SolveMode, at: number): TeamBuild {
+  return { pieceUids: [...b.pieceUids], gemAllocation: b.gemAllocation, mode, cp: b.cp ?? null, at };
+}
+
 /** A build's real pieces — an empty slot ("" or "0") holds none. */
 export function buildPieces(build: TeamBuild): string[] {
   return build.pieceUids.filter((u) => u !== "" && u !== "0");

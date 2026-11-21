@@ -13,6 +13,7 @@ import type { PresetHolds } from "../../lib/presets/presetHolds.js";
 import { buildSolveFilters, type MinMax, type SolverFilters } from "../../lib/solver/builderFilters.js";
 import type { ReforgeContext } from "../../lib/solver/reforge.js";
 import { teamSolveScope } from "../../lib/teams/teamContext.js";
+import { estimateArgsOf, solveArgsOf } from "../../lib/solver/solveArgs.js";
 import { ZERO_SOLVE_COUNTS, createSolveCountsStore } from "./solveCounts.js";
 
 /** Client-side equivalent of the solver's stat/rating band check — used by the
@@ -220,30 +221,11 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
       rerollPotential: !filters.options.onlyMaxed && (filters.options.rerollPotential ?? false),
       ...(serializedFilters.passivePicks ? { passivePicks: serializedFilters.passivePicks } : {}),
     };
-    orchestrator.solve({
-      mode,
-      heroUid: selectedUid,
-      inventory,
-      game,
-      userGeasLevels,
-      userCodexLevel,
-      heroPriority,
-      excludedPieceUids: excludedPieceUids ? Array.from(excludedPieceUids) : undefined,
-      worklistClaims,
-      presetHolds,
-      targetPresetNum,
-      userSkills: {
-        first: selected.skills.first,
-        second: selected.skills.second,
-        ultimate: selected.skills.ultimate,
-        chainPassive: selected.skills.chainPassive,
-      },
-      filters: serializedFilters,
+    orchestrator.solve(solveArgsOf(
+      { mode, hero: selected, inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, filters: serializedFilters },
       // Result-set size + per-worker heap depth from Settings → Solver.
-      topN,
-      topK,
-      ...(pinPieceUids?.length ? { pinPieceUids: [...pinPieceUids] } : {}),
-    });
+      { topN, topK, pinPieceUids },
+    ));
   };
 
   const cancelSolve = () => orchestratorRef.current?.cancel();
@@ -286,26 +268,10 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     // doesn't linger from a previous hero. Live poolSizes cover the solving case.
     if (solving || !selectedUid || !inventory || !game || !selected) { setEstimatePools(null); return; }
     const handle = setTimeout(() => {
-      getOrchestrator().estimate({
-        mode: solveMode,
-        heroUid: selectedUid,
-        inventory,
-        game,
-        userGeasLevels,
-        userCodexLevel,
-        heroPriority,
-        excludedPieceUids: excludedPieceUids ? Array.from(excludedPieceUids) : undefined,
-        worklistClaims,
-        presetHolds,
-        targetPresetNum,
-        userSkills: {
-          first: selected.skills.first,
-          second: selected.skills.second,
-          ultimate: selected.skills.ultimate,
-          chainPassive: selected.skills.chainPassive,
-        },
+      getOrchestrator().estimate(estimateArgsOf({
+        mode: solveMode, hero: selected, inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum,
         filters: buildSolveFilters(solveFilters),
-      }, (poolSizes) => setEstimatePools(poolSizes));
+      }), (poolSizes) => setEstimatePools(poolSizes));
     }, 250);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps

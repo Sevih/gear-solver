@@ -13,7 +13,11 @@
  * (the team's heroes greyed out, 4 at most), each new member starting on the
  * blank defaults. "+ Worklist" queues one entry per member with a build that
  * isn't stale (`lib/teams/teamWorklist.ts`) and says which members it leaves
- * out. Nothing is written to the game.
+ * out. "Build team" rebuilds every member in team order (`lib/teams/
+ * buildTeam.ts`, run by App): the member being solved says "Solving…", Cancel
+ * stops after it, and a member left without a build says why. One pass at a
+ * time, none while the Optimizer solves: the button is greyed out, the reason
+ * on hover. Nothing is written to the game.
  *
  * App owns the list (`gs.teams`, `lib/storage/teams.ts`) and the Optimizer's
  * team context.
@@ -40,6 +44,8 @@ import {
   TEAM_MAX_MEMBERS, TEAM_NAME_MAX, validTeamName, type BuildStaleness, type Team, type TeamMember,
 } from "../../lib/teams/teams.js";
 import { teamWorklistFor, type TeamWorklist } from "../../lib/teams/teamWorklist.js";
+import { buildTeamBlockedReason } from "../../lib/teams/buildTeam.js";
+import type { TeamBuildState } from "./useTeamBuild.js";
 
 interface TeamsScreenProps {
   inventory: Inventory | null;
@@ -55,6 +61,14 @@ interface TeamsScreenProps {
   onOptimizeMember: (teamId: string, heroUid: string) => void;
   /** Queue a team's entries (App's batch `addToWorklist`, one toast). */
   onAddToWorklist?: (teamName: string, entries: WorklistEntry[]) => void;
+  /** The "Build team" pass in progress (App's `useTeamBuild`), null when none. */
+  teamBuild?: TeamBuildState | null;
+  /** teamId → heroUid → why the last pass found no build for the member. */
+  teamBuildReasons?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  /** A solve is running in the Optimizer ("Build team" waits for it). */
+  optimizerSolving?: boolean;
+  onBuildTeam?: (teamId: string) => void;
+  onCancelTeamBuild?: () => void;
 }
 
 interface HeroView {
@@ -69,7 +83,7 @@ const ENGINE_SLOTS: readonly GearSlot[] = ["weapon", "helmet", "armor", "gloves"
 
 const newId = () => crypto.randomUUID();
 
-export function TeamsScreen({ inventory, game, teams, onTeamsChange, heroPriority, defaultReforgeMode, defaultRerollPotential, onOptimizeMember, onAddToWorklist }: TeamsScreenProps) {
+export function TeamsScreen({ inventory, game, teams, onTeamsChange, heroPriority, defaultReforgeMode, defaultRerollPotential, onOptimizeMember, onAddToWorklist, teamBuild = null, teamBuildReasons = {}, optimizerSolving = false, onBuildTeam, onCancelTeamBuild }: TeamsScreenProps) {
   const [draftName, setDraftName] = useState("");
   const pickerHeroes = useMemo(() => heroListOrder(inventory?.characters ?? [], { rank: heroPriority }), [inventory, heroPriority]);
   const heroes = useMemo(() => {
@@ -143,6 +157,11 @@ export function TeamsScreen({ inventory, game, teams, onTeamsChange, heroPriorit
           onMoveMember={(uid, to) => edit(team.id, (t) => moveMember(t, uid, to))}
           onOptimize={(uid) => onOptimizeMember(team.id, uid)}
           onAddToWorklist={onAddToWorklist}
+          building={teamBuild?.teamId === team.id ? teamBuild : null}
+          buildBlocked={buildTeamBlockedReason(team, { passTeam: teamBuild ? { id: teamBuild.teamId, name: teamBuild.teamName } : null, optimizerSolving, ready: !!game })}
+          noBuildReasons={teamBuildReasons[team.id] ?? {}}
+          onBuild={onBuildTeam ? () => onBuildTeam(team.id) : undefined}
+          onCancelBuild={onCancelTeamBuild}
         />
       ))}
     </div>
@@ -151,6 +170,7 @@ export function TeamsScreen({ inventory, game, teams, onTeamsChange, heroPriorit
 
 function TeamCard({
   team, game, inventory, heroes, roster, pieceByUid, present, onRename, onDelete, onAddMember, onRemoveMember, onMoveMember, onOptimize, onAddToWorklist,
+  building, buildBlocked, noBuildReasons, onBuild, onCancelBuild,
 }: {
   team: Team;
   game: GameData | null;
@@ -167,6 +187,13 @@ function TeamCard({
   onMoveMember: (heroUid: string, to: number) => void;
   onOptimize: (heroUid: string) => void;
   onAddToWorklist?: (teamName: string, entries: WorklistEntry[]) => void;
+  /** This team's "Build team" pass, null when it isn't being built. */
+  building: TeamBuildState | null;
+  /** Why "Build team" is greyed out, null when it can run. */
+  buildBlocked: string | null;
+  noBuildReasons: Readonly<Record<string, string>>;
+  onBuild?: () => void;
+  onCancelBuild?: () => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -218,6 +245,23 @@ function TeamCard({
         )}
         <span className="font-mono text-[11px] tabular-nums text-zinc-400">{`${team.members.length}/${TEAM_MAX_MEMBERS}`}</span>
         <div className="ml-auto flex items-center gap-1.5">
+          {building ? (
+            <button
+              type="button"
+              onClick={onCancelBuild}
+              disabled={building.stopping || !onCancelBuild}
+              title="Stop after the member being solved — the builds retained so far stay, the members not reached keep their previous build"
+              className="inline-flex h-7 items-center rounded-md border border-rose-400/40 bg-rose-500/12 px-2.5 text-[11.5px] text-rose-100 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >{building.stopping ? "Stopping after this member…" : "Cancel"}</button>
+          ) : onBuild && (
+            <button
+              type="button"
+              onClick={onBuild}
+              disabled={buildBlocked != null}
+              title={buildBlocked ?? "Rebuild every member in team order — each one solved with their own filters and mode, on everything but the never-use pieces and the builds just retained by the members before; the best result becomes their build"}
+              className="inline-flex h-7 items-center rounded-md border border-cyan-400/40 bg-cyan-500/15 px-2.5 text-[11.5px] text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >Build team</button>
+          )}
           {skipped.length > 0 && <span className="text-[11px] text-zinc-400">{`Leaves out ${skipped.join(" · ")}`}</span>}
           <button
             type="button"
@@ -266,6 +310,8 @@ function TeamCard({
             onMove={(to) => onMoveMember(m.heroUid, to)}
             onOptimize={() => onOptimize(m.heroUid)}
             onRemove={() => onRemoveMember(m.heroUid)}
+            solving={building?.heroUid === m.heroUid}
+            noBuildReason={noBuildReasons[m.heroUid] ?? null}
           />
         ))}
       </div>
@@ -286,6 +332,7 @@ function TeamCard({
 
 function MemberRow({
   member, index, count, hero, staleness, nameOf, positionOf, game, pieceByUid, dragOver, onDragStart, onDragOver, onDragLeave, onDrop, onMove, onOptimize, onRemove,
+  solving = false, noBuildReason = null,
 }: {
   member: TeamMember;
   index: number;
@@ -304,6 +351,11 @@ function MemberRow({
   onMove: (to: number) => void;
   onOptimize: () => void;
   onRemove: () => void;
+  /** "Build team" is solving this member now. */
+  solving?: boolean;
+  /** Why the last "Build team" found no build for them (shown while they
+   *  have none). */
+  noBuildReason?: string | null;
 }) {
   const build = member.build;
   const stale = staleness?.stale ?? false;
@@ -346,6 +398,7 @@ function MemberRow({
         {hero ? <CharacterPortrait charId={hero.displayCharId} name={hero.name} cls={hero.cls} element={hero.element} size={32} /> : <div className="h-8 w-8 rounded-md border border-dashed border-white/12" />}
         <span className="truncate text-[12px] font-medium text-white">{hero?.name ?? "Not in the roster"}</span>
       </div>
+      {solving && <span className="shrink-0 animate-pulse text-[10.5px] uppercase tracking-wider text-cyan-300/80">Solving…</span>}
 
       {build ? (
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
@@ -378,6 +431,8 @@ function MemberRow({
             </span>
           )}
         </div>
+      ) : noBuildReason ? (
+        <span className="min-w-0 flex-1 text-[11.5px] text-amber-200/85"><b className="font-semibold">No build</b>{` — ${noBuildReason}`}</span>
       ) : (
         <span className="min-w-0 flex-1 text-[11.5px] italic text-zinc-400">No build yet — Optimize →, then Use for team on a result.</span>
       )}

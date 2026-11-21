@@ -8,6 +8,78 @@
 
 ## Items de backlog clôturés (index)
 
+### ⚡ Build team : chaque membre d'une team buildé dans l'ordre, avec ses filtres, annulable (G140) (2026-11-21)
+- ✅ **Pourquoi.** Demande de Sevih du 21/11 : « build la team facilement et rapidement ». Après G139, chaque membre
+  se buildait à la main (Optimize →, SOLVE, Use for team), quatre allers-retours par team, à refaire dans l'ordre dès
+  que le build d'un membre changeait.
+- ✅ **Le passage.** « Build team » sur la carte d'une team (`screens/teams/TeamsScreen.tsx`) lance `runTeamBuild`
+  (`lib/teams/buildTeam.ts`, pur, solve et reco injectés) : membre 1, puis 2, 3, 4, chacun avec SES filtres et SON
+  mode (celui de son build retenu, Score sans build), sous la règle de pièces de G139 appliquée à la copie de la team
+  que tient le passage — `memberExclusion` y voit les builds que ce même passage vient de retenir, donc le membre 3 ne
+  reçoit ni les pièces du 1 ni celles du 2 tout juste retenues. Le meilleur résultat (le premier dans l'ordre de tri
+  du mode, celui de l'orchestrateur) devient le build retenu (`teamBuildOf`, extrait de « Use for team » qui passe
+  désormais aussi par lui). Tous les membres sont rebuildés, dans l'ordre. Chaque résultat est appliqué à la liste
+  vivante dès qu'il arrive (App : `updateTeam` + `retainBuild`), un Cancel garde donc ce qui est retenu.
+- ✅ **Membre sans résultat.** Il repasse à « no build » (`clearBuild`, nouveau dans `teams.ts` : son ancien build
+  éventuel est retiré, lecture de « garde no build » et de « il n'a rien pris ») et sa ligne dit « No build — ‹la
+  raison› » tant qu'il n'a pas de build ; le passage continue, l'exclusion des suivants ne change pas. La raison est
+  celle de la table vide de l'Optimizer, extraite sans changement (`lib/solver/emptyReason.ts` : `deadSlotsReason`,
+  que `BuilderScreen` utilise maintenant à la place de son calcul en ligne, puis `emptySolveReason` : emplacement
+  vidé par les filtres, « Allow broken sets », sinon « No build passes the filters ») ; un solve en échec donne
+  « Solve failed: ‹message› », un héros sorti du roster « No longer in the roster ». Les raisons vivent dans la
+  session (pas dans `gs.teams`) et repartent de zéro au passage suivant de la team.
+- ✅ **Mode et priorité.** Choix d'interprétation : la règle de SOLVE de l'Optimizer s'applique (`solveDecision`,
+  comme un « Optimize → » + SOLVE en contexte de team) — en Score sans priorité, les poids de la reco du héros
+  (`fetchReco` + `recoPriorityOf`) deviennent sa priorité, écrite dans les filtres du membre ; sans poids de reco (ou
+  sur un fetch en échec) le membre est résolu au CP pour ce passage, son build retenu porte le mode CP (comme « Use
+  for team » après le repli de l'Optimizer, qui retient `lastSolveMode`), et le toast le dit. Sans cela, un membre
+  neuf (filtres vierges) aurait été classé au hasard (score nul partout).
+- ✅ **Pendant le passage.** La ligne du membre en cours dit « Solving… », « Cancel » remplace le bouton et arrête
+  APRÈS le solve en cours (« Stopping after this member… » ensuite) : ce qui est retenu reste retenu, les membres non
+  atteints gardent leur ancien build (marqué périmé par la règle habituelle s'il l'est). Un seul passage à la fois
+  dans l'app, aucun pendant un solve de l'Optimizer : `BuilderScreen` signale son état de solve à App
+  (`onSolvingChange`, remis à faux au démontage) ; le bouton est grisé, la raison au survol
+  (`buildTeamBlockedReason` : « ‹team› is being built — one team at a time », « A solve is running in the Optimizer —
+  wait for it or cancel it », données en chargement, team vide). Le passage est tenu par App
+  (`screens/teams/useTeamBuild.ts`), il continue si l'on quitte l'onglet Teams (qui se démonte). À la fin, un toast
+  (`teamBuildNotice`) : « GR PCU Ep1 built — 3/4 members · no build: Maxie », plus les membres passés au CP et, après
+  un Cancel, « cancelled before Roxie, Vlada (previous builds kept) ».
+- ✅ **Même orchestrateur, sans logique dupliquée.** `lib/teams/teamSolver.ts` (`createTeamSolver`) pose les solves
+  d'un passage sur `SolverOrchestrator`, en promesses (meilleur résultat, ou raison) : même requête que l'Optimizer —
+  `solveArgsOf` / `estimateArgsOf` (`lib/solver/solveArgs.ts`) sont extraits de `useSolverSession`, qui les utilise
+  pour le solve et l'estimation sans changer ce qu'il envoie (mêmes champs, épingle seulement si non vide) —, sous
+  `teamSolveScope` (scope all, exclusion du membre, ni rang ni claim ni hold ni preset visé), avec le `topN` / `topK`
+  de Settings › Solver et le nombre de workers que l'orchestrateur lit lui-même (`resolveWorkerCount`). Une instance
+  par passage, créée à son début et libérée à sa fin : celle de l'Optimizer appartient à son écran (créée au premier
+  SOLVE, détruite avec lui ou au changement de nombre de workers), la partager aurait changé son cycle de vie ; la
+  garde ci-dessus empêche qu'un passage démarre pendant qu'elle cherche. Le module est chargé au premier passage
+  (`import()`), le moteur ne rejoint pas le chunk d'App.
+- ✅ **Tests.** `apps/renderer/test/buildTeam.test.ts` (13) : ordre des solves et meilleur résultat retenu, exclusion
+  cumulée (membre 3 sans les pièces du 1 ni du 2 tout juste retenues, ni les anciens builds), membre sans résultat
+  repassé sans build avec sa raison et qui n'exclut rien (le suivant reprend son ancienne pièce), Cancel pendant le
+  membre 2 (1 et 2 retenus, 3 et 4 inchangés, à l'identique), mode par membre et ses propres filtres, règle de la reco
+  (poids écrits, sinon CP), toast, raison du bouton grisé, raisons de solve vide ; rendu statique de la carte au
+  repos, pendant un passage (Solving… sur la ligne du membre en cours, Cancel, Stopping), grisée (Optimizer en solve,
+  autre team) et après (« No build — ‹raison› », les autres membres sans build gardent leur invite).
+  `teamSolver.test.ts` (2) : la requête passée au faux orchestrateur (scope all, exclusion, topN / topK, sans épingle,
+  ni rang ni claim ni hold), meilleur résultat, raison sur un emplacement vidé, échec, héros disparu sans solve,
+  dispose. `teamSession.test.ts` (+1) : l'Optimizer signale son état de solve. Les tests de l'Optimizer
+  (`builderScreenState`, `teamSession`, `cellThreshold`, `orchestratorFlow`) passent inchangés sur l'extraction.
+  `npm run typecheck` : dernière ligne `> tsc --noEmit` (renderer), sans erreur. `npm test` : core `Tests  183 passed
+  (183)`, renderer `Tests  1338 passed (1338)`, desktop `Tests  1 failed | 272 passed (273)` — le même
+  `game-client.test.ts` qu'à G139 et G141 (copie `apps/desktop/src/game-client.json` en retard sur outerpedia), hors
+  lot. `npm run lint` : `✖ 6 problems (0 errors, 6 warnings)`, les six d'avant. Docs : `docs/solver.md` +
+  `wiki/Solver.md` (paragraphe « Build team », carte des fichiers), `wiki/Using-the-App.md`, `docs/reference.md` +
+  `wiki/Engine-Reference.md` (§1.6, index des tests), `docs/architecture.md` + `wiki/Architecture.md`.
+- ⏳ **À contrôler à l'écran par Sevih** (pas de banc graphique) : Build team sur « GR PCU Ep1 » → quatre builds sans
+  pièce en commun, le 1er au moins aussi bon que son build seul (Optimize → + SOLVE, même mode) ; Cancel au milieu
+  (le membre en cours finit, les suivants gardent leur build) ; puis « + Worklist ».
+- ⏳ **Laissé.** Pendant un passage, le SOLVE de l'Optimizer n'est pas grisé (la consigne ne grise que « Build team ») :
+  lancé quand même, il tourne sur son propre pool en même temps que le passage, plus lentement, sans mélange de
+  résultats — à griser aussi si Sevih le veut. Les contrôles d'édition de la team (ordre, Remove, + Add hero) restent
+  actifs pendant son passage : le passage suit l'ordre et les filtres du départ, et la règle de péremption signale
+  ce qu'un réordonnancement en cours de route rendrait incohérent.
+
 ### 🎯 Min ≥ / Max ≤ depuis une cellule de résultat : la ligne reste, le solve repart à chaque geste (G141) (2026-11-21)
 - ✅ **Pourquoi.** Signalé par Sevih le 21/11 : après un « Min ≥ » ou un « Max ≤ » posé par le clic droit d'une
   cellule de l'Optimizer, le nouveau solve ne rendait parfois plus aucun build, alors que le build de la ligne cliquée

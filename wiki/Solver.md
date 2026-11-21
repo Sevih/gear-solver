@@ -909,6 +909,29 @@ already wearing theirs and those gone from the roster. The entries go through `u
 replaces its hero's, the team on top of the list, member 1 first) with one toast: "Added to worklist —
 ‹team› (n heroes, m replaced)". Nothing is written to the game.
 
+**Build team.** The card's button rebuilds **every** member at once, in team order (`runTeamBuild`,
+`lib/teams/buildTeam.ts`, pure, the solve injected): member 1, then 2, 3, 4, each with **their own** filters
+and **their own** mode (the one of their retained build, Score without one), under the piece rule above
+applied to the pass's copy of the team — member N's exclusion thus counts the builds this very pass just
+retained for 1..N-1. The best result (the first in the mode's sort order) becomes the retained build. SOLVE's
+rule applies as in the Optimizer (`solveDecision`): in Score without a priority, the weights of the hero's
+reco become their priority (written to the member's filters), and without reco weights the member is solved
+by CP for this pass (their retained build then carries the CP mode). A member without a result goes back to
+"no build" (their previous build is dropped) and their line gives the solver's reason (`emptySolveReason`,
+`lib/solver/emptyReason.ts`, the same as the Optimizer's empty table: a slot emptied by the filters, broken
+sets, else the bands); they take nothing, the next members' exclusion doesn't change. During the pass, the
+line of the member being solved says "Solving…" and "Cancel" replaces the button: it stops **after** the
+solve in progress (what was retained stays, the members not reached keep their previous build, marked stale
+if it is). At the end, a toast (`teamBuildNotice`): "‹team› built — n/4 members", then the members without a
+build, those solved by CP and those a Cancel left as they were. One pass at a time in the app, and none while
+the Optimizer solves (`BuilderScreen` tells App through `onSolvingChange`): the button is then greyed out,
+the reason on hover (`buildTeamBlockedReason`). The pass lives in App (`screens/teams/useTeamBuild.ts`), it
+goes on when another tab is opened. The solves go through the same `SolverOrchestrator` as the Optimizer
+(`lib/teams/teamSolver.ts`, loaded with the first pass), with the same request (`solveArgsOf`,
+`lib/solver/solveArgs.ts`, shared with `useSolverSession`), the same worker count (`resolveWorkerCount`) and
+the same `topN` / `topK`; one instance per pass, created at its start and released at its end (the
+Optimizer's belongs to its screen).
+
 ---
 
 ## 5. Gems — greedy sub-solver
@@ -1108,6 +1131,8 @@ apps/renderer/src/
 │   ├── teams/
 │   │   ├── teams.ts                ← the teams model: ordered members (1 to 4), filters and retained build per member, memberExclusion, buildStaleness, teamWorklistPlan
 │   │   ├── teamContext.ts          ← teamContextOf + teamSolveScope: the Optimizer in team context (scope all, the member's exclusion)
+│   │   ├── buildTeam.ts            ← runTeamBuild + teamBuildNotice + buildTeamBlockedReason: "Build team", each member in order
+│   │   ├── teamSolver.ts           ← createTeamSolver: a pass's solves on the SolverOrchestrator (the team's rule)
 │   │   └── teamWorklist.ts         ← teamWorklistFor + upsertWorklistEntries + teamWorklistNotice: a team's "+ Worklist"
 │   ├── storage/
 │   │   ├── keys.ts                 ← registry of the gs.* keys (store, backup, merge on import): Backup's Export / Import
@@ -1125,6 +1150,8 @@ apps/renderer/src/
 │       ├── reforge.ts              ← REFORGE_MODES (labels, tooltips) + the useReforged → reforgeMode migration
 │       ├── reroll.ts               ← Transistone potential (rerollPotential)
 │       ├── orchestrator.ts         ← Web Worker pool, fan-out/fan-in, top-N merge
+│       ├── solveArgs.ts            ← solveArgsOf + estimateArgsOf: one hero's request (Optimizer and Build team)
+│       ├── emptyReason.ts          ← deadSlotsReason + emptySolveReason: why a solve came back without a build
 │       ├── engine.ts               ← prepareContext + solveChunk + finalizeBuilds + TopKHeap + keepTopUnion + pruneDominatedForCp + simulateReforges
 │       ├── gems.ts                 ← buildGemPool + scoreGemPool + allocateGems + allocateGemsByCp
 │       ├── ratings.ts              ← computeCheapRatings + computeScore
@@ -1152,7 +1179,8 @@ apps/renderer/src/
     │   ├── PieceDeltaTooltip.tsx   ← "why this piece?" on a card's hover (lib/solver/pieceDelta.ts)
     │   └── catalogs.ts · statColumns.ts ← catalogs from the inventory, stats/ratings tables
     ├── presets/PresetsScreen.tsx   ← Presets tab: per-preset cards (game order, class or rank filter / sort), game grid, reference, associated, EE gems, loss, overcap, rank and lock, local presets, + Worklist, Optimize → / Optimize preset →
-    ├── teams/TeamsScreen.tsx       ← Teams tab: one card per team, ordered members (⠿, ▲ / ▼), retained build (tiles, CP, Stale), Optimize →, + Add hero, + Worklist
+    ├── teams/TeamsScreen.tsx       ← Teams tab: one card per team, ordered members (⠿, ▲ / ▼), retained build (tiles, CP, Stale), Optimize →, + Add hero, + Worklist, Build team / Cancel
+    ├── teams/useTeamBuild.ts       ← the "Build team" pass held by App (one at a time, reasons of the members without a build, toast)
     ├── WorklistScreen.tsx          ← Worklist tab: per-hero cards, reservations, Apply to snapshot / Apply all, Remove
     ├── gear/                       ← Gear tab (formerly the Inventory and Home tabs): GearScreen.tsx (Overview / Pieces / Scrap sub-tabs), OverviewView.tsx + overview/
     └── inventory/                  ← the grid of Gear › Pieces and › Scrap: InventoryScreen, FilterModal, ScrapCard, ItemDetail, VirtualGearGrid
