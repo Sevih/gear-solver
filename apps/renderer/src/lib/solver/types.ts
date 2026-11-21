@@ -158,6 +158,12 @@ export interface SolveRequest {
   /** The preset being optimized ("Optimize preset →"), null/absent for a
    *  plain hero solve — then only the locks apply. */
   targetPresetNum?: number | null;
+  /** Pieces kept through the combo-budget prune (Top % < 100) and the SOLVE CP
+   *  dominance prune whatever their rank — the pieces of the result row a
+   *  "Min ≥ / Max ≤" was set from, on the solve that gesture launches only, so
+   *  that row stays reachable under its own bound (a Min re-splits the prune's
+   *  budget, `keepTopUnion`). Absent = no such pin (every other solve). */
+  pinPieceUids?: string[];
   /** Captured per-character skill levels. `chainPassive` is the auto-leveled
    *  Skill_5 row (not user-controllable) but it contributes additively to
    *  CP via the `skillSum` term, so feeding 0 would under-report CP for any

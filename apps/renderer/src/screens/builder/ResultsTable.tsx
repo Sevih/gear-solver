@@ -112,8 +112,12 @@ function ColumnsMenu({
 export interface CellMenuCell {
   kind: "stat" | "rating";
   key: string;
-  /** The value as the cell prints it (`roundDisplay`) — the bound set. */
+  /** The value as the cell prints it (`roundDisplay`) — what the menu shows. */
   value: number;
+  /** The unrounded value (crit: the sheet's, bounded at 100 — the one the
+   *  engine's `critRate` bound compares); the bound set derives from it
+   *  (`cellThresholdBound`). Absent → `value`. */
+  raw?: number;
   unit: string;
 }
 /** Where a right-click on a result row opened its menu: the row (its index in
@@ -244,7 +248,7 @@ export function ResultsTable({
   reforge: ReforgeContext;
   /** Right-click on a stat / rating / CP cell → set that value as the
    *  column's min or max bound and re-solve. Absent → no cell menu. */
-  onThreshold?: (kind: "stat" | "rating", key: string, bound: "min" | "max", value: number) => void;
+  onThreshold?: (kind: "stat" | "rating", key: string, bound: "min" | "max", value: number, rowPieceUids: readonly string[]) => void;
   /** The build pinned for compare (a ref into `builds`; absent from them →
    *  no row carries the pin), marked "📌" in its first cell. */
   pinned?: SolveBuild | null;
@@ -356,7 +360,7 @@ export function ResultsTable({
     const kept = hasThreshold ? cell : null;
     if (!kept && !hasRowEntry) return; // nothing to offer: the native menu stays
     e.preventDefault();
-    setCellMenu({ x: e.clientX, y: e.clientY, index, cell: kept ? { ...kept, value: roundDisplay(kept.value) } : null });
+    setCellMenu({ x: e.clientX, y: e.clientY, index, cell: kept ? { ...kept, value: roundDisplay(kept.value), raw: kept.value } : null });
   }, [hasThreshold, hasRowEntry]);
   const closeCellMenu = useCallback(() => setCellMenu(null), []);
   // Memoized on WHICH columns show, not on `statFilters` (a new object at
@@ -594,7 +598,7 @@ export function ResultsTable({
           onPick={onThreshold && cellMenu.cell ? (bound) => {
             const cell = cellMenu.cell!;
             setCellMenu(null);
-            onThreshold(cell.kind, cell.key, bound, cell.value);
+            onThreshold(cell.kind, cell.key, bound, cellThresholdBound(cell.raw ?? cell.value, bound), builds[cellMenu.index]?.pieceUids ?? []);
           } : undefined}
           onTogglePin={onTogglePin ? () => {
             setCellMenu(null);
@@ -854,6 +858,19 @@ function EffectCell({ chip }: { chip: EffectChip | null }) {
  *  the same colour. */
 function roundDisplay(v: number): number {
   return Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 10) / 10;
+}
+
+/** The bound "Min ≥ / Max ≤" sets from a cell of raw value `raw`: the printed
+ *  value (`roundDisplay`) when it keeps the row (≤ raw for a Min, ≥ raw for a
+ *  Max), else the next value at the same precision on the row's side — a build
+ *  at 1 234.6 prints 1235, and "Min ≥ 1235" excluded the very row it was read
+ *  on; it sets 1234 (1 234.4 → "Max ≤" 1235, 54.26 → "Min ≥" 54.2). The menu
+ *  keeps showing the printed value. */
+export function cellThresholdBound(raw: number, bound: "min" | "max"): number {
+  const shown = roundDisplay(raw);
+  if (bound === "min" ? shown <= raw : shown >= raw) return shown;
+  const scale = Math.abs(raw) >= 100 ? 1 : 10;
+  return (Math.round(raw * scale) + (bound === "min" ? -1 : 1)) / scale;
 }
 
 function fmt(v: number | null | undefined, unit: string): string {

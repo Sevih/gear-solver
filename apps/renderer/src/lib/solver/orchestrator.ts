@@ -157,6 +157,9 @@ export interface SolveArgs {
   topK?: number;
   /** Final ranked list size returned to the UI. Default: `settingDefault("topN")`. */
   topN?: number;
+  /** Pieces kept through the prunes — the row a cell's "Min ≥ / Max ≤" was
+   *  set from (`SolveRequest.pinPieceUids`). */
+  pinPieceUids?: string[];
 }
 
 export class SolverOrchestrator {
@@ -314,6 +317,7 @@ export class SolverOrchestrator {
       targetPresetNum: args.targetPresetNum,
       userSkills: args.userSkills,
       filters: args.filters,
+      ...(args.pinPieceUids?.length ? { pinPieceUids: args.pinPieceUids } : {}),
       topK,
     };
     let precomputed;

@@ -289,3 +289,84 @@ describe("Builder — SOLVE after the reco fetch reads the filters of that momen
     expect((req.filters as { priority: Record<string, number> }).priority.atk).toBe(3);
   });
 });
+
+describe("Builder — a cell's Min ≥ / Max ≤ re-solves once per gesture", () => {
+  const rowUids = ["weapon3", "helmet1", "armor0", "gloves2", "boots4", "accessory1", "ooparts2"];
+  const results = [build(2000), { ...build(1800), pieceUids: rowUids }, build(1600)];
+  type Req = { mode: string; pinPieceUids?: string[]; filters: { statFilters: Record<string, unknown>; ratingFilters: Record<string, unknown> } };
+  const solves = () => orch.state.solves as unknown as Req[];
+
+  function solvedOnce(mode: "score" | "cp") {
+    let tree = render();
+    // SOLVE in Score with a priority (without one, it fetches the reco first).
+    if (mode === "score") {
+      find<ToolbarProps>(tree, BuilderToolbar).dispatch({ type: "setPriority", stat: "atk", value: 1 });
+      tree = render();
+    }
+    find<ToolbarProps>(tree, BuilderToolbar).onSolve(mode);
+    orch.finish(results);
+    tree = render();
+    expect(solves()).toHaveLength(1);
+    return tree;
+  }
+
+  it("in the last solve's mode, with the band and the row's pieces pinned (that solve only)", () => {
+    let tree = solvedOnce("cp");
+    find<TableProps>(tree, ResultsTable).onThreshold!("stat", "atk", "min", 1800, rowUids);
+    render();
+    expect(solves()).toHaveLength(2);
+    expect(solves()[1]!.mode).toBe("cp");
+    expect(solves()[1]!.filters.statFilters).toEqual({ atk: { min: 1800 } });
+    expect(solves()[1]!.pinPieceUids).toEqual(rowUids);
+    // A rating / CP bound goes through the same path.
+    orch.finish(results);
+    tree = render();
+    find<TableProps>(tree, ResultsTable).onThreshold!("rating", "cp", "max", 1800, rowUids);
+    render();
+    expect(solves()).toHaveLength(3);
+    expect(solves()[2]!.filters.ratingFilters).toEqual({ cp: { max: 1800 } });
+    expect(solves()[2]!.filters.statFilters).toEqual({ atk: { min: 1800 } });
+  });
+
+  it("the same bound twice re-solves twice; a later filter edit or SOLVE starts no extra solve and pins nothing", () => {
+    let tree = solvedOnce("score");
+    find<TableProps>(tree, ResultsTable).onThreshold!("stat", "atk", "max", 1800, rowUids);
+    render();
+    orch.finish(results);
+    tree = render();
+    find<TableProps>(tree, ResultsTable).onThreshold!("stat", "atk", "max", 1800, rowUids);
+    render();
+    expect(solves()).toHaveLength(3);
+    expect(solves().map((s) => s.mode)).toEqual(["score", "score", "score"]);
+    orch.finish(results);
+    tree = render();
+    find<ToolbarProps>(tree, BuilderToolbar).dispatch({ type: "setStatFilter", stat: "spd", bound: "min", value: 120 });
+    tree = render();
+    find<ToolbarProps>(tree, BuilderToolbar).dispatch({ type: "setTopPct", value: 40 });
+    tree = render();
+    expect(solves()).toHaveLength(3);
+    find<ToolbarProps>(tree, BuilderToolbar).onSolve("cp");
+    render();
+    expect(solves()).toHaveLength(4);
+    expect(solves()[3]!.pinPieceUids).toBeUndefined();
+  });
+
+  it("before any solve: SOLVE (Score)", () => {
+    const tree = render();
+    find<TableProps>(tree, ResultsTable).onThreshold!("stat", "atk", "min", 1800, rowUids);
+    render();
+    expect(solves()).toHaveLength(1);
+    expect(solves()[0]!.mode).toBe("score");
+  });
+
+  it("a gesture during a solve supersedes it with one solve", () => {
+    let tree = solvedOnce("cp");
+    find<TableProps>(tree, ResultsTable).onThreshold!("stat", "atk", "min", 1700, rowUids);
+    tree = render();
+    expect(find<TableProps>(tree, ResultsTable).solving).toBe(true);
+    find<TableProps>(tree, ResultsTable).onThreshold!("stat", "atk", "min", 1800, rowUids);
+    render();
+    expect(solves()).toHaveLength(3);
+    expect(solves()[2]!.filters.statFilters).toEqual({ atk: { min: 1800 } });
+  });
+});

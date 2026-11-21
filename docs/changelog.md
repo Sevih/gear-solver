@@ -8,6 +8,65 @@
 
 ## Items de backlog clôturés (index)
 
+### 🎯 Min ≥ / Max ≤ depuis une cellule de résultat : la ligne reste, le solve repart à chaque geste (G141) (2026-11-21)
+- ✅ **Pourquoi.** Signalé par Sevih le 21/11 : après un « Min ≥ » ou un « Max ≤ » posé par le clic droit d'une
+  cellule de l'Optimizer, le nouveau solve ne rendait parfois plus aucun build, alors que le build de la ligne cliquée
+  respecte forcément la borne ; et le solve ne semblait pas toujours repartir.
+- ✅ **Cause 1, l'arrondi d'affichage.** `openCellMenu` (`screens/builder/ResultsTable.tsx`) posait la valeur imprimée
+  (`roundDisplay` : entier dès 100, une décimale en dessous). Un build à 1 234,6 affiché 1235 donnait « Min ≥ 1235 »
+  et s'excluait lui-même, un build à 1 234,4 affiché 1234 donnait « Max ≤ 1234 » (idem sous 100 : 54,26 → « Min ≥
+  54,3 »). Sur le test du moteur réel ci-dessous : CHD 295,4 → « Max ≤ 295 », Dmg 26 236,7 → « Min ≥ 26 237 » (9
+  résultats sans la ligne), et Min puis Max sur la même cellule donnait une bande vide (Dmg : 0 résultat). Correction :
+  `cellThresholdBound(raw, bound)` pose la valeur imprimée quand elle garde la ligne (≤ brute pour un Min, ≥ brute pour
+  un Max), sinon la valeur voisine à la même précision du côté de la ligne (1 234,6 → Min 1234, Max 1235 ; 54,26 → Min
+  54,2) ; le menu continue d'afficher la valeur imprimée (`CellMenuCell.value`), la brute voyage dans `raw`. Choisi
+  plutôt que la valeur brute : la borne reste lisible dans les popovers de filtres, à un cran d'affichage au plus de ce
+  que le menu montrait. Le crit était déjà sur la même base : la cellule passe la valeur de la fiche (bornée à 100,
+  l'excédent brut seulement en exposant), et le moteur compare `fs.critRate` de la fiche (`passesSpecs`,
+  `serveMinFilters`) ; ratings et CP passent par le même arrondi.
+- ✅ **Cause 2, l'élagage par budget (Top % < 100).** Sans aucun arrondi (ATK brute 3553, « Min ≥ 3553 »), la ligne
+  disparaissait quand même : un Min ajoute un floor scorer, et `keepTopUnion` partage le budget du slot entre l'objectif
+  et ce plancher, donc la tranche de l'objectif est coupée en deux et une pièce de la ligne tombait (helmet3 en SOLVE,
+  helmet1 en SOLVE CP sur un Min de CHC). Décision de Sevih du 21/11 : épingler les pièces de la ligne cliquée pour le
+  SEUL solve lancé depuis le menu Min/Max, par le mécanisme `pinUids` de `keepTopN` (celui de SOLVE CP pour
+  l'équipement porté) ; les autres solves (bouton SOLVE, Filter…) restent inchangés, et un SOLVE relancé à la main plus
+  tard avec la même borne peut de nouveau perdre la ligne. Mise en œuvre : `SolveRequest.pinPieceUids` (types.ts),
+  relayé par `SolverOrchestrator.solve` (`SolveArgs.pinPieceUids`) et `startSolve(mode, pinPieceUids)`
+  (`useSolverSession.ts`) ; dans `precomputeContext`, `pinOf(slot)` réunit ces pièces et la pièce portée de SOLVE CP,
+  dans les trois branches de l'élagage (priorité, CP, magnitude, cette dernière n'épinglait rien jusqu'ici, et toujours
+  rien hors de ce geste), et la dominance CP (`pruneDominatedForCp`) les rend si elle les a retirées (une pièce ajoutée
+  par la tranche plancher pouvait dominer celle de la ligne). Coût : au plus une pièce de plus par slot, sur ce solve-là.
+  Les autres chemins ont été écartés par le test : un Min ne change pas l'allocation de gemmes par défaut (la ligne passe
+  `passesSpecs` sans `serveMinFilters`) et un Max (stat dans `noFill`) ne fait que baisser la stat bornée.
+- ✅ **Relance.** Sur `HEAD`, dans le runtime de hooks de `builderScreenState.test.ts`, je n'ai reproduit aucun geste
+  qui ne relance pas : le reducer rend toujours un nouvel objet, donc l'effet sur `filters` part même pour une borne
+  identique. Mais la relance dépendait de l'identité de `filters` et d'un `pendingSolveRef` partagé avec le chemin de la
+  reco ; et ce que Sevih voyait comme « ne repart pas » est le plus probablement le solve relancé qui revenait vide
+  (cause 1). Rendue inconditionnelle : `setThresholdAndResolve` pose la borne et émet une requête `thresholdSolve`
+  (`{ seq, mode, pins }`, `seq` incrémenté à chaque geste) ; l'effet sur cette requête lance `startSolve` dans le mode
+  du dernier solve (SOLVE avant tout solve), une fois par geste, sur le rendu qui porte la nouvelle borne. Un changement
+  de filtre ultérieur ne relance rien (plus rien n'est armé sur `filters`) ; `pendingSolveRef` ne sert plus qu'au SOLVE
+  avec la priorité de la reco. Un geste pendant un solve le remplace (`orchestrator.solve` annule celui en cours).
+- ✅ **Tests.** `apps/renderer/test/cellThreshold.test.ts`, sur le moteur réel (`precomputeContext` → `solveChunk` →
+  `finalizeBuilds` → tri, `collapseTalismanVariants`, top-N comme l'orchestrateur) et le contrat réel (`data/derived/`) :
+  inventaire déterministe de 5 pièces par slot, héros 2000001 ; SOLVE (avec une priorité) et SOLVE CP, à Top % 100 et
+  élagués (Top % 0,2 sur ces petits pools, le rapport d'un vrai compte à Top % 60) ; lignes 2, 8 et 41 × ATK, CHD, CHC,
+  Dmg, CP ; Min, puis Max sur la même ligne du nouveau tableau (le Min gardé), et Max seul → le build de la ligne est
+  dans chaque re-solve ; plus les cas de `cellThresholdBound`. Il échoue avant la correction : avec la valeur imprimée,
+  les cinq tests (dont « Dmg min+max → 0 résultat ») ; sans l'épingle, les deux cas élagués (ATK Min des lignes 8 et 41
+  en SOLVE, CHC Min de la ligne 41 en SOLVE CP). `builderScreenState.test.ts` (« a cell's Min ≥ / Max ≤ re-solves once
+  per gesture ») : relance dans le mode du dernier solve, bande et pièces de la ligne dans la requête, borne
+  rating/CP par le même chemin, même borne deux fois → deux solves, aucun solve au changement de filtre suivant, un
+  SOLVE manuel ensuite sans épingle, SOLVE avant tout solve, un geste pendant un solve → un seul solve de plus.
+  `docs/solver.md`, `wiki/Solver.md` et `wiki/Using-the-App.md` mis à jour. `npm run typecheck` : dernière ligne
+  `tsc --noEmit` (renderer), sans erreur. `npm test` : renderer `Tests 1322 passed (1322)`, core `183 passed` ;
+  desktop `1 failed | 272 passed (273)`, déjà en échec sur `HEAD` et hors de ce lot : `game-client.test.ts` compare
+  `apps/desktop/src/game-client.json` (client 1.4.19 du 20/10) à la copie locale d'outerpedia (1.4.22 du 20/11) ; la CI
+  le saute (pas de checkout), `npm run data:sync` le réaligne.
+- ⏳ Sevih : sur un vrai compte, clic droit Min puis Max sur une stat, le crit et le CP d'une ligne qui n'est pas la
+  première → le solve repart seul et la ligne reste dans les résultats.
+- ⏳ Hors lot : la copie `apps/desktop/src/game-client.json` en retard sur outerpedia (voir ci-dessus).
+
 ### 👥 Onglet Teams : une équipe par combat, membres ordonnés aux filtres propres, Optimizer en contexte de team, + Worklist (G139) (2026-11-21)
 - ✅ **Pourquoi.** Demande du 21/11 : on ne buildait que globalement (le roster entier pris en compte : rangs des
   héros, pièces portées, presets du jeu, Worklist), alors que la composition et les builds changent pour presque

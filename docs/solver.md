@@ -543,7 +543,13 @@ curseur **height** de la même barre règle `resultRows` (5 à 15 lignes, `gs.bu
 Settings › Display › Result rows) ; le tableau est virtualisé et défile au-delà. **Clic-droit sur une cellule** de
 stat, de rating ou de CP → menu « Min ≥ v » / « Max ≤ v » (v telle qu'affichée) : pose la borne
 (`setStatFilter` / `setRatingFilter`, l'autre borne gardée), que les popovers montrent, et relance le solve dans
-le mode du dernier solve (`CellMenu`, `onThreshold`). Pas de seuil sur score, swaps, effets. **Pin for
+le mode du dernier solve (SOLVE avant tout solve), une fois par geste, même borne comprise (`CellMenu`,
+`onThreshold`, la requête `thresholdSolve` de `BuilderScreen`). La borne posée est v quand v garde la ligne, sinon
+la valeur voisine à la même précision du côté de la ligne (`cellThresholdBound` : 1 234,6 affiché 1235 pose
+Min ≥ 1234 ; le crit compare la valeur de la fiche, bornée à 100, comme la cellule). Ce solve-là, et lui seul,
+épingle les pièces de la ligne à travers l'élagage par budget et la dominance CP (`pinPieceUids`, les `pinUids`
+de `keepTopN`) : à Top % < 100 un Min recoupe le budget (`keepTopUnion`) et coupait une pièce de la ligne ; un
+SOLVE relancé à la main avec la même borne peut de nouveau la perdre. Pas de seuil sur score, swaps, effets. **Pin for
 compare** (G128) : le même menu, ouvert depuis n'importe quelle cellule d'une ligne (`onContextMenu` du `<tr>`,
 sauté quand une cellule de valeur a déjà traité l'événement), porte une entrée « Pin for compare »
 (`menuitemcheckbox` ; sur la ligne épinglée « 📌 Unpin compare ») ; la ligne épinglée montre un 📌 dans sa

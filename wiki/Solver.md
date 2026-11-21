@@ -522,8 +522,14 @@ by right-clicking any header** (`onContextMenu` on the header `<tr>`). The **hei
 `resultRows` (5 to 15 rows, `gs.builder.resultRows`, the value of Settings › Display › Result rows); the table is
 virtualized and scrolls past it. **Right-clicking a cell** of a stat, a rating or CP → a "Min ≥ v" / "Max ≤ v"
 menu (v as displayed): sets the bound (`setStatFilter` / `setRatingFilter`, the other bound kept), which the
-popovers show, and re-runs the solve in the last solve's mode (`CellMenu`, `onThreshold`). No threshold on
-score, swaps, effects. **Pin for compare** (G128): the same menu, opened from any cell of a row (the `<tr>`'s
+popovers show, and re-runs the solve in the last solve's mode (SOLVE before any solve), once per gesture, the
+same bound included (`CellMenu`, `onThreshold`, `BuilderScreen`'s `thresholdSolve` request). The bound set is v
+when v keeps the row, else the neighbouring value at the same precision on the row's side
+(`cellThresholdBound`: 1,234.6 shown 1235 sets Min ≥ 1234; crit compares the sheet's value, bounded at 100, as
+the cell does). That solve, and only that one, pins the row's pieces through the combo-budget prune and the CP
+dominance prune (`pinPieceUids`, `keepTopN`'s `pinUids`): at Top % < 100 a Min re-splits the budget
+(`keepTopUnion`) and used to cut a piece of the row; a SOLVE re-run by hand with the same bound may lose it
+again. No threshold on score, swaps, effects. **Pin for compare** (G128): the same menu, opened from any cell of a row (the `<tr>`'s
 `onContextMenu`, skipped when a value cell already handled the event), carries a "Pin for compare" entry
 (`menuitemcheckbox`; on the pinned row "📌 Unpin compare"); the pinned row shows a 📌 in its first cell while it
 survives the table's filters. The pin lives in `BuilderScreen` (`pin`, a `SolveBuild` ref plus the `solveResults`

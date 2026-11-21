@@ -682,6 +682,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // why). Protected pieces survive on top of the budget slice.
   let debugKeeps: number[] | null = null;
   let debugRequiredSets: string[] | null = null;
+  const rowPins = new Set(req.pinPieceUids ?? []);
   if (filters.topPct < 100) {
     const requiredSetIds = planSetIds(setPlans);
     if (debugEnabled("solver")) debugRequiredSets = Array.from(requiredSetIds);
@@ -719,9 +720,16 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     // top-K — with or without a priority (the ranking differs, not the
     // guarantee).
     const equipped = req.mode === "cp" ? inv.gear.filter((g) => g.equippedBy === heroUid) : [];
+    // Plus, in any mode, the pieces of the result row a cell's "Min ≥ / Max ≤"
+    // was set from (`pinPieceUids`, that gesture's solve only): its bound
+    // re-splits the budget (a Min halves the objective's slice for its floor
+    // scorer), which could cut a piece of the row it was read on.
     const pinOf = (slot: string): Set<string> | undefined => {
       const cur = equipped.find((g) => g.slot === slot);
-      return cur ? new Set([cur.uid]) : undefined;
+      if (!cur && rowPins.size === 0) return undefined;
+      const pins = new Set(rowPins);
+      if (cur) pins.add(cur.uid);
+      return pins;
     };
     if (prioritized) {
       // Explicit substat priority (SOLVE or SOLVE CP) — rank each slot by the
@@ -770,7 +778,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       // inherently arbitrary here (no priority = no objective); this only keeps
       // the solve from hanging.
       capSlots.forEach((slot, i) => {
-        pools[slot] = keepTopUnion(pools[slot], magnitudeScoreOf, floorScorers, keeps[i]!, requiredSetIds);
+        pools[slot] = keepTopUnion(pools[slot], magnitudeScoreOf, floorScorers, keeps[i]!, requiredSetIds, pinOf(slot));
       });
     }
   }
@@ -800,11 +808,17 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   if (req.mode === "cp" && noStatMax && noRatingBound) {
     const effKeyOf = (g: GearPiece): string => game.equipment[String(g.itemId)]?.setId ?? "—";
     const setKeyOf = (g: GearPiece): string => armorSetKeyOf(g, game.sets);
+    // The pinned pieces of a cell's bound stay (a dominator added by the
+    // bound's floor slice would otherwise replace the row's piece).
+    const keepRowPins = (before: GearPiece[], after: GearPiece[]): GearPiece[] =>
+      rowPins.size === 0 || after.length === before.length
+        ? after
+        : after.concat(before.filter((p) => rowPins.has(p.uid) && !after.includes(p)));
     for (const slot of ["weapon", "accessory"] as const) {
-      if (!lockedSlots.has(slot)) pools[slot] = pruneDominatedForCp(pools[slot], effKeyOf);
+      if (!lockedSlots.has(slot)) pools[slot] = keepRowPins(pools[slot], pruneDominatedForCp(pools[slot], effKeyOf));
     }
     for (const slot of ["helmet", "armor", "gloves", "boots"] as const) {
-      if (!lockedSlots.has(slot)) pools[slot] = pruneDominatedForCp(pools[slot], setKeyOf);
+      if (!lockedSlots.has(slot)) pools[slot] = keepRowPins(pools[slot], pruneDominatedForCp(pools[slot], setKeyOf));
     }
   }
 

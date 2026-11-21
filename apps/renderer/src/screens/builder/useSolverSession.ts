@@ -180,7 +180,9 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     return orchestratorRef.current;
   };
 
-  const startSolve = (mode: SolveMode) => {
+  /** `pinPieceUids`: the pieces kept through the prunes — only the solve a
+   *  result cell's "Min ≥ / Max ≤" launches passes them (its row). */
+  const startSolve = (mode: SolveMode, pinPieceUids?: readonly string[]) => {
     // The SOLVE button is only gated on `selectedUid`, so it can be clicked
     // while game data is still loading — surface that instead of bailing
     // silently (user otherwise gets no feedback at all).
@@ -240,6 +242,7 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
       // Result-set size + per-worker heap depth from Settings → Solver.
       topN,
       topK,
+      ...(pinPieceUids?.length ? { pinPieceUids: [...pinPieceUids] } : {}),
     });
   };
 

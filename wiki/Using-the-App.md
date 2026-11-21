@@ -219,7 +219,8 @@ reforge mode and Transistone potential of **Settings › Solver**).
   selected after a solve.
 - Click a column header to sort; **right-click** a header (or the **columns** button) to show or
   hide columns. **Right-click a value** (a stat, a rating or CP) → **Min ≥** / **Max ≤** that value:
-  the bound lands in the filter popovers and the solve re-runs.
+  the bound lands in the filter popovers and the solve re-runs, the row you clicked kept in the results
+  (a SOLVE you run again later with the same bound may drop it at Top % below 100).
 - **Compare two builds** — right-click a row → **Pin for compare** (📌 in its first cell; one pin at
   a time, the same entry on the pinned row unpins it). A **Compare** panel opens above the piece
   cards: the pinned build on the left, the selected row on the right — or the hero's current

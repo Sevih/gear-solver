@@ -326,17 +326,28 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
   useLayoutEffect(() => { startSolveRef.current = startSolve; });
 
   /** Right-click on a result cell → "Min ≥ / Max ≤ <value>": set that bound
-   *  (the other one stays) and re-solve in the last solve's mode. The solve
-   *  fires from the effect below, on the render that carries the new band —
-   *  `startSolve` reads `filters` from its closure, stale in this handler.
-   *  SOLVE with the reco's priority (`solve`) goes through it too. */
-  const pendingSolveRef = useRef<SolveMode | null>(null);
-  const setThresholdAndResolve = useCallback((kind: "stat" | "rating", key: string, bound: "min" | "max", value: number) => {
-    pendingSolveRef.current = lastSolveMode;
+   *  (the other one stays) and re-solve in the last solve's mode (Score before
+   *  any solve), with the row's pieces pinned through the prunes so it stays
+   *  reachable under its own bound (`pinPieceUids`, this solve only). Each
+   *  gesture is a request of its own (`seq`), so the re-solve fires once per
+   *  gesture whatever the filters became (a bound equal to the one set
+   *  included), never on a later filter edit; the effect runs on the render
+   *  that carries the new band — `startSolve` reads `filters` from its closure,
+   *  stale in this handler. */
+  const [thresholdSolve, setThresholdSolve] = useState<{ seq: number; mode: SolveMode; pins: readonly string[] } | null>(null);
+  const setThresholdAndResolve = useCallback((kind: "stat" | "rating", key: string, bound: "min" | "max", value: number, pinPieceUids: readonly string[]) => {
     dispatch(kind === "stat"
       ? { type: "setStatFilter", stat: key, bound, value }
       : { type: "setRatingFilter", rating: key, bound, value });
+    setThresholdSolve((prev) => ({ seq: (prev?.seq ?? 0) + 1, mode: lastSolveMode, pins: pinPieceUids }));
   }, [lastSolveMode]);
+  useEffect(() => {
+    if (thresholdSolve) startSolve(thresholdSolve.mode, thresholdSolve.pins);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thresholdSolve]);
+  /** SOLVE with the reco's priority (`solve`): the solve fires from the effect
+   *  below, on the render that carries the reco's weights. */
+  const pendingSolveRef = useRef<SolveMode | null>(null);
   useEffect(() => {
     const mode = pendingSolveRef.current;
     if (!mode) return;
