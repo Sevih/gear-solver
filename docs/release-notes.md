@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [2.2.0] — 2026-11-21
+
 ### Teams — Talismans
 - **One Talisman main stat per team**: a Talisman's main stat applies to the whole team and doesn't stack, so a
   member can no longer take a Talisman with the same main stat as the Talisman of a member placed before it. A kept
