@@ -12,7 +12,14 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+### Teams — Talismans
+- **One Talisman main stat per team**: a Talisman's main stat applies to the whole team and doesn't stack, so a
+  member can no longer take a Talisman with the same main stat as the Talisman of a member placed before it. A kept
+  build that breaks the rule is marked **Stale** ("same talisman main stat as …").
+- **Teammates' Talismans count in a member's stats**: when a member is optimized in team mode (or by Build team),
+  the main stats of the other members' Talismans are added to its stats, bounds and Score — the strongest one per
+  stat, as in game. The banner lists them ("Team talismans: ATK% +15% (…)"). CP is unchanged: the game doesn't
+  count team buffs in a hero's CP.
 
 ## [2.1.1] — 2026-11-21
 
