@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [2.1.0] — 2026-11-21
+
 ### Teams — one team per fight
 - **New Teams tab** (between Presets and Worklist): build a team of 1 to 4 heroes for a given fight — a guild raid
   composition, a World Boss or Singularity team — in the order you choose, each hero with its own filters for that

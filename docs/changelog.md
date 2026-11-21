@@ -7716,6 +7716,10 @@
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
 
+## [2.1.0] — 2026-11-21
+
+_(rien en attente — les nouvelles entrées de session se mettent ici)_
+
 ## [2.0.0] — 2026-11-05
 
 _(rien en attente — les nouvelles entrées de session se mettent ici)_
