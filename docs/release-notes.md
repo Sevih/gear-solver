@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+_Nothing yet — user-facing notes for the next release go here._
+
+## [2.3.0] — 2026-11-26
+
 ### Settings — Simulate 50% HP
 - **Revenge, Patience and Swiftness can now count**: these sets scale with missing HP, so the Optimizer counted
   nothing for them. A new switch in **Settings › Solver** counts them as if the hero were at 50% HP: a 6★ set gives
