@@ -42,6 +42,9 @@ export interface SettingValues {
   reforgeMode: ReforgeMode;
   /** Transistone potential a hero opens on in the Optimizer, likewise. */
   rerollPotential: boolean;
+  /** Optimizer + Teams: count the lost-HP sets (Revenge, Patience, Swiftness)
+   *  as if the hero were at 50 % HP (`SIMULATED_HP_FRACTION`), never in CP. */
+  simulateHalfHp: boolean;
   /** Results-table column heatmap on/off. */
   heatmap: boolean;
   /** Builder: compact gear cards under the results. */
@@ -117,6 +120,14 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
     label: "Per-worker depth",
     help: "Heap each worker keeps before the merge. Too low silently drops good builds — leave at default unless you know why.",
     helpEmphasis: "Too low silently drops good builds",
+    appliesNextSolve: true,
+  },
+  simulateHalfHp: {
+    key: "gs.solver.simulateHalfHp",
+    default: false,
+    kind: "bool",
+    label: "Simulate 50% HP",
+    help: "Counts Revenge, Patience and Swiftness as if the hero were at 50% HP. Not counted in CP.",
     appliesNextSolve: true,
   },
   reforgeMode: {
@@ -202,9 +213,9 @@ export const SETTINGS: { readonly [N in SettingName]: SettingSpec<SettingValues[
 };
 
 /** The settings Settings › Solver shows — and resets with « Reset solver
- *  settings to defaults »: the solver tuning, then the hero defaults
- *  (reforge mode, Transistone potential). */
-export const SOLVER_PANE_SETTINGS = ["workerCount", "topN", "topK", "reforgeMode", "rerollPotential"] as const;
+ *  settings to defaults »: the solver tuning (« Simulate 50% HP » with it),
+ *  then the hero defaults (reforge mode, Transistone potential). */
+export const SOLVER_PANE_SETTINGS = ["workerCount", "topN", "topK", "simulateHalfHp", "reforgeMode", "rerollPotential"] as const;
 export type SolverPaneSetting = (typeof SOLVER_PANE_SETTINGS)[number];
 
 /** The settings Settings › Display shows — and resets with « Reset display

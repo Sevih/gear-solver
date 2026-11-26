@@ -1,9 +1,11 @@
 /** Display lines for a set tier's combat effects (`SetLevel.combatEffects`,
  *  outerpedia B53). These buffs apply in battle only: the sheet and the CP never
- *  read them, this module only words them for the set-effect tooltips. */
+ *  read them — but the lost-HP ones, which « Simulate 50% HP » (Settings ›
+ *  Solver) has the Optimizer and Teams count —, this module only words them for
+ *  the set-effect tooltips. */
 import type { SetCombatEffect } from "@gear-solver/core";
 import { STAT } from "../design/tokens.js";
-import { setBonusStatKey } from "./composeBuild.js";
+import { isLostHpEffect, lostHpRateValue, setBonusStatKey, type LostHpFraction } from "./composeBuild.js";
 
 /** Fixed first line of every combat-effect tooltip. */
 export const COMBAT_EFFECT_NOTE = "Applies in battle only — not counted in stats or CP.";
@@ -36,12 +38,17 @@ function signedPct(v: number): string {
 }
 
 /** One line per effect: label, signed `v / 10` % when `v` exists, " · enemies"
- *  when the target is not the wearer. `cond` is left to the prose. */
-export function combatEffectLines(effects: readonly SetCombatEffect[]): string[] {
-  return effects.map((e) => {
+ *  when the target is not the wearer. `cond` is left to the prose. With
+ *  `hpFraction` (« Simulate 50% HP » on), a lost-HP effect is followed by the
+ *  value counted at that fraction (`lostHpRateValue`: "counted at 50% HP: ATK
+ *  +160%"); without it, the lines are the same as ever. */
+export function combatEffectLines(effects: readonly SetCombatEffect[], hpFraction: LostHpFraction = null): string[] {
+  return effects.flatMap((e) => {
     let line = typeLabel(e);
     if (e.v != null) line += ` ${signedPct(e.v)}`;
     if (e.target !== "ME") line += " · enemies";
-    return line;
+    if (hpFraction == null || !isLostHpEffect(e) || e.v == null) return [line];
+    const counted = lostHpRateValue(e.type, e.v, hpFraction) ?? 0;
+    return [line, `counted at ${Math.round(hpFraction * 100)}% HP: ${statLabel(e.st) ?? e.type} ${signedPct(counted)}`];
   });
 }

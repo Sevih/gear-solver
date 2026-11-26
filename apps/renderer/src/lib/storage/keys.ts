@@ -102,6 +102,7 @@ const SETTING_LABEL: Record<SettingName, string> = {
   topK: "Solver settings",
   reforgeMode: "Solver settings",
   rerollPotential: "Solver settings",
+  simulateHalfHp: "Solver settings",
   heatmap: "Display settings",
   compactCards: "Display settings",
   resultRows: "Result rows",

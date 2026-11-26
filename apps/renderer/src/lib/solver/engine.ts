@@ -25,6 +25,7 @@ import {
   critRateUncappedOf,
   finalStatsFromBucketArray,
   gemOverrideBucketAdds,
+  lostHpBucketAdds,
   PERCENT_STATS,
   pieceBucketAdds,
   rollGainOnSheet,
@@ -35,6 +36,7 @@ import {
   type FinalStatsBaseline,
   type GearBuckets,
   type GemOverride,
+  type LostHpFraction,
   type ScalingMap,
   type TeamBuff,
 } from "../composeBuild.js";
@@ -832,6 +834,7 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
         capSlots.forEach((slot, i) => { slices[slot] = kept[i]!; });
         const bound = sheetUpperBound(
           composed.noGearStats, composed.scaling, slices, ee, game.sets ?? null, gems, gemSlots, req.teamTalismanBuffs ?? [],
+          req.lostHpFraction ?? null,
         ) as unknown as Record<string, number>;
         // A key the sheet doesn't carry has no bound: its floor scorer stays.
         const short = minBounds.filter((m) => !engaged.has(m) && !(bound[m.key]! >= m.min));
@@ -1324,7 +1327,8 @@ export type GemRoll = { stat: string; value: number; percent: boolean };
  *  and the `gemSlots` largest gems of `gems` on that entry: the allocation, a
  *  min-serving one included, picks among those), the best armor-set bonus (a
  *  4-pc, or two 2-pc of distinct sets, over the sets and set levels the armor
- *  pools hold) and the team buffs taken whole. Every sheet stat is
+ *  pools hold, its lost-HP buffs at `lostHpFraction` included) and the team
+ *  buffs taken whole. Every sheet stat is
  *  non-decreasing in each bucket entry (see `pruneDominatedForCp`), so no
  *  build of `pools` beats it on any stat. The combo-budget prune engages a
  *  Min's floor scorer only when this bound, on the objective's slice, stays
@@ -1338,6 +1342,7 @@ export function sheetUpperBound(
   gems: readonly GemRoll[],
   gemSlots: number,
   teamBuffs: readonly TeamBuff[],
+  lostHpFraction: LostHpFraction = null,
 ): FinalStats {
   const L = BUCKET_ARRAY_LENGTH;
   const arrOf = (adds: BucketAdds): Float64Array => {
@@ -1398,8 +1403,12 @@ export function sheetUpperBound(
         if (!bySlot[si]!.has(lv)) bySlot[si]!.set(lv, p.breakthrough);
       }
     });
-    const bonusOf = (setId: string, bts: number[]): Float64Array =>
-      arrOf(setBonusBucketAdds(computeSetBonuses(bts.map((breakthrough) => ({ armorSetId: setId, breakthrough }) as GearPiece), sets)));
+    const bonusOf = (setId: string, bts: number[]): Float64Array => {
+      const worn = bts.map((breakthrough) => ({ armorSetId: setId, breakthrough }) as GearPiece);
+      const a = arrOf(setBonusBucketAdds(computeSetBonuses(worn, sets)));
+      if (lostHpFraction != null) applyBucketAdds(a, lostHpBucketAdds(worn, sets, lostHpFraction));
+      return a;
+    };
     const best4 = new Float64Array(L);
     const twoPc: Float64Array[] = [];
     for (const [setId, bySlot] of reps) {
@@ -1913,10 +1922,18 @@ export async function solveChunk(
   // Score, ratings, the crit-cap gem logic —, but the CP (`cpOf`).
   const teamBuffs = req.teamTalismanBuffs ?? [];
   const teamTopUps = teamBuffs.length > 0 ? talismans.map((t) => teamBuffBucketAdds(teamBuffs, t)) : null;
-  const cpBuckets = teamTopUps ? new Float64Array(BUCKET_ARRAY_LENGTH) : null;
+  // « Simulate 50% HP » (`req.lostHpFraction`): the lost-HP sets' buffs at
+  // that HP fraction (`lostHpBucketAdds`), resolved with the set bonuses once
+  // per boots node and applied after the team buffs — like them, in every
+  // sheet of the loop but the CP's.
+  const lostHpFraction = req.lostHpFraction ?? null;
+  let curLostHpAdds: BucketAdds | null = null;
+  // The sheet of the loop isn't the CP's (team buffs, lost-HP sets): the CP
+  // recomposes the combo without them (`cpOf`).
+  const cpBuckets = teamTopUps || lostHpFraction != null ? new Float64Array(BUCKET_ARRAY_LENGTH) : null;
   /** Fill `arr` for the current combo with gem `delta` (`null` / `undefined`
    *  = no override: the talisman's and EE's socketed gems), without the team
-   *  buffs. */
+   *  buffs nor the lost-HP sets. */
   const fillOwn = (arr: Float64Array, delta: GemOverride | null | undefined): void => {
     arr.set(prefixAcc);
     const variant = delta ? 1 : 0;
@@ -1926,10 +1943,11 @@ export async function solveChunk(
     applyBucketAdds(arr, curSetAdds);
   };
   /** Fill `comboBuckets` for the current combo with gem `delta`, the team
-   *  buffs included. */
+   *  buffs and the lost-HP sets included. */
   const fillCombo = (delta: GemOverride | null | undefined): void => {
     fillOwn(comboBuckets, delta);
     if (teamTopUps) applyBucketAdds(comboBuckets, teamTopUps[curTalisman]!);
+    if (curLostHpAdds) applyBucketAdds(comboBuckets, curLostHpAdds);
   };
   /** The current combo's sheet with gem `delta`. */
   const composeCombo = (delta: GemOverride | null | undefined): FinalStats => {
@@ -1938,9 +1956,9 @@ export async function solveChunk(
   };
   /** The in-game CP of the current combo, `fs` being its sheet with gem
    *  `delta`. The client's `CalcBattlePower` reads the hero's own sheet,
-   *  without the other members' Talisman buffs: in team context the combo is
-   *  recomposed without them (same additions, same order: the CP a solve
-   *  outside the team gives). */
+   *  without the other members' Talisman buffs nor a combat buff: in team
+   *  context or with the lost-HP sets counted, the combo is recomposed without
+   *  them (same additions, same order: the CP a plain solve gives). */
   const cpOf = (fs: FinalStats, delta: GemOverride | null | undefined, talisman: GearPiece): number => {
     if (!cpBuckets) return cpEval(fs, talisman);
     fillOwn(cpBuckets, delta);
@@ -2197,6 +2215,7 @@ export async function solveChunk(
             // computed and resolved ONCE per boots node. Same pieces in the
             // same order as a per-combo recompute, same output.
             curSetAdds = setBonusBucketAdds(computeSetBonuses(armorQuad, game?.sets ?? null));
+            if (lostHpFraction != null) curLostHpAdds = lostHpBucketAdds(armorQuad, game?.sets ?? null, lostHpFraction);
             for (let ci = 0; ci < accessories.length; ci++) {
               if (aborted) break;
               pieces[5] = accessories[ci]!;
@@ -2358,10 +2377,10 @@ export async function solveChunk(
                      pieces[4]!.uid, pieces[5]!.uid, ee.uid, pieces[6]!.uid]
                   : [pieces[0]!.uid, pieces[1]!.uid, pieces[2]!.uid, pieces[3]!.uid,
                      pieces[4]!.uid, pieces[5]!.uid, pieces[6]!.uid];
-                // Team context, SOLVE: `finalizeBuilds` can't rebuild the CP
-                // from the stored sheet (it counts the team buffs), so the CP
-                // of a build that can enter the heap is computed here.
-                if (cp === null && teamTopUps && heap.admits(score, pieceUids)) cp = cpOf(fs, fsDelta, talisman);
+                // Team context or lost-HP sets counted, SOLVE: `finalizeBuilds`
+                // can't rebuild the CP from the stored sheet (it counts them),
+                // so the CP of a build that can enter the heap is computed here.
+                if (cp === null && cpBuckets && heap.admits(score, pieceUids)) cp = cpOf(fs, fsDelta, talisman);
                 heap.push({
                   pieceUids,
                   gemAllocation: gemAlloc,
@@ -2446,9 +2465,10 @@ export function finalizeBuilds(ctx: SolveContext, builds: SolveBuild[], mode: So
   const out: SolveBuild[] = [];
   for (const b of builds) {
     let cp = b.cp;
-    // In team context the stored sheet counts the team buffs, the CP doesn't:
-    // `solveChunk` already computed it for every build of its heap.
-    if (cp == null && mode !== "cp" && !req.teamTalismanBuffs?.length) {
+    // In team context or with the lost-HP sets counted, the stored sheet
+    // counts them, the CP doesn't: `solveChunk` already computed it for every
+    // build of its heap.
+    if (cp == null && mode !== "cp" && !req.teamTalismanBuffs?.length && req.lostHpFraction == null) {
       // Talisman is always last in `pieceUids` (engine writes it there).
       const talisman = byUid.get(b.pieceUids[b.pieceUids.length - 1] ?? "") ?? null;
       cp = calcBattlePower({

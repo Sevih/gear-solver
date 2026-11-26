@@ -1,6 +1,7 @@
 /**
- * Settings › Solver — worker-pool size, result count and per-worker depth,
- * all read at the next solve (`appliesNextSolve`), then the hero defaults: the
+ * Settings › Solver — worker-pool size, result count, « Simulate 50% HP »
+ * (the lost-HP sets counted at 50 % HP) and per-worker depth, all read at the
+ * next solve (`appliesNextSolve`), then the hero defaults: the
  * reforge mode and Transistone potential a hero with no kept filters opens on
  * in the Optimizer (a hero's own choice stays with its filters). Keys,
  * defaults, bounds and texts come from `lib/settings.ts`; the settings applied
@@ -25,6 +26,8 @@ export interface SolverSettings {
   setTopN: Setter<"topN">;
   topK: number;
   setTopK: Setter<"topK">;
+  simulateHalfHp: boolean;
+  setSimulateHalfHp: Setter<"simulateHalfHp">;
   reforgeMode: SettingValues["reforgeMode"];
   setReforgeMode: Setter<"reforgeMode">;
   rerollPotential: boolean;
@@ -37,6 +40,7 @@ function settersOf(solver: SolverSettings): { [N in SolverPaneSetting]: Setter<N
     workerCount: solver.setWorkerCount,
     topN: solver.setTopN,
     topK: solver.setTopK,
+    simulateHalfHp: solver.setSimulateHalfHp,
     reforgeMode: solver.setReforgeMode,
     rerollPotential: solver.setRerollPotential,
   };
@@ -114,6 +118,19 @@ export function SolverPane({
           onDec={() => solver.setTopN(stepBy("topN", -1))}
           onInc={() => solver.setTopN(stepBy("topN", 1))}
         />
+      </div>
+
+      <Divider />
+
+      {/* Simulate 50% HP — the lost-HP sets in the Optimizer and Teams */}
+      <div className="flex items-start justify-between gap-4.5">
+        <div className="flex max-w-82.5 flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-white">{SETTINGS.simulateHalfHp.label}</span>
+          <span className="text-[11.5px] leading-snug text-zinc-400">
+            <HelpText name="simulateHalfHp" />
+          </span>
+        </div>
+        <Switch checked={solver.simulateHalfHp} onToggle={() => solver.setSimulateHalfHp((v) => !v)} />
       </div>
 
       {/* Advanced disclosure → per-worker depth (topK) */}

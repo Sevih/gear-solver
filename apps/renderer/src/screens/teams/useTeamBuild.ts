@@ -34,10 +34,12 @@ interface TeamBuildInput {
   excludedPieces: ReadonlySet<string>;
   topN: number;
   topK: number;
+  /** Settings › Solver's « Simulate 50% HP » (the lost-HP sets at 50 % HP). */
+  simulateHalfHp?: boolean;
   notify: (text: string) => void;
 }
 
-export function useTeamBuild({ teams, setTeams, inventory, game, userGeasLevels, userCodexLevel, excludedPieces, topN, topK, notify }: TeamBuildInput) {
+export function useTeamBuild({ teams, setTeams, inventory, game, userGeasLevels, userCodexLevel, excludedPieces, topN, topK, simulateHalfHp = false, notify }: TeamBuildInput) {
   const [pass, setPass] = useState<TeamBuildState | null>(null);
   /** teamId → heroUid → why the last pass found no build for that member. */
   const [reasons, setReasons] = useState<Record<string, Record<string, string>>>({});
@@ -45,13 +47,13 @@ export function useTeamBuild({ teams, setTeams, inventory, game, userGeasLevels,
   const runningRef = useRef(false);
   const disposeRef = useRef<(() => void) | null>(null);
   // The pass reads the inputs as they are when it starts.
-  const inputs = useRef({ teams, inventory, game, userGeasLevels, userCodexLevel, excludedPieces, topN, topK, notify });
-  useLayoutEffect(() => { inputs.current = { teams, inventory, game, userGeasLevels, userCodexLevel, excludedPieces, topN, topK, notify }; });
+  const inputs = useRef({ teams, inventory, game, userGeasLevels, userCodexLevel, excludedPieces, topN, topK, simulateHalfHp, notify });
+  useLayoutEffect(() => { inputs.current = { teams, inventory, game, userGeasLevels, userCodexLevel, excludedPieces, topN, topK, simulateHalfHp, notify }; });
 
   useEffect(() => () => { stopRef.current = true; disposeRef.current?.(); }, []);
 
   const start = useCallback((teamId: string) => {
-    const { teams, inventory, game, userGeasLevels, userCodexLevel, excludedPieces, topN, topK, notify } = inputs.current;
+    const { teams, inventory, game, userGeasLevels, userCodexLevel, excludedPieces, topN, topK, simulateHalfHp, notify } = inputs.current;
     const team = teams.find((t) => t.id === teamId);
     if (runningRef.current || !team || team.members.length === 0 || !inventory || !game) return;
     runningRef.current = true;
@@ -67,7 +69,7 @@ export function useTeamBuild({ teams, setTeams, inventory, game, userGeasLevels,
       // The solver (orchestrator, engine, workers) loads with the first pass,
       // as it loads with the Optimizer's screen — not in App's chunk.
       const { createTeamSolver } = await import("../../lib/teams/teamSolver.js");
-      const solver = createTeamSolver({ inventory, game, userGeasLevels, userCodexLevel, topN, topK });
+      const solver = createTeamSolver({ inventory, game, userGeasLevels, userCodexLevel, topN, topK, simulateHalfHp });
       disposeRef.current = solver.dispose;
       try {
         return await runTeamBuild({

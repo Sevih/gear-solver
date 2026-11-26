@@ -37,6 +37,7 @@ function solverSettings(rec: (name: string) => (v: unknown) => void): SolverSett
     workerCount: 4, setWorkerCount: rec("workerCount"),
     topN: 200, setTopN: rec("topN"),
     topK: 300, setTopK: rec("topK"),
+    simulateHalfHp: true, setSimulateHalfHp: rec("simulateHalfHp"),
     reforgeMode: "ascended", setReforgeMode: rec("reforgeMode"),
     rerollPotential: true, setRerollPotential: rec("rerollPotential"),
   } as SolverSettings;
@@ -121,10 +122,10 @@ describe("SettingsModal — six panes", () => {
 });
 
 describe("pane resets", () => {
-  it("resetSolverSettings puts back the five solver settings only", () => {
+  it("resetSolverSettings puts back the six solver settings only", () => {
     const { calls, rec } = recorder();
     resetSolverSettings(solverSettings(rec));
-    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000, reforgeMode: "classic", rerollPotential: false });
+    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000, simulateHalfHp: false, reforgeMode: "classic", rerollPotential: false });
   });
 
   it("resetDisplaySettings puts back the three display settings only", () => {

@@ -138,7 +138,8 @@ for a Min the objective's builds already met, it cut those, its strongest pieces
 (Max SPD 164 alone → builds at 162; Min 162 + Max 164 → none). The prune first keeps the objective's slice alone, then
 bounds the sheet over that slice (`sheetUpperBound`: each bucket entry at its per-slot maximum, summed; the Talisman +
 EE gem part at the best of their socketed gems or the pool's `gemSlots` strongest; the best set bonus, a 4-pc or two
-2-pc, over the sets and levels of the armor pools; the team buffs whole); a Min under that bound engages its scorer,
+2-pc, over the sets and levels of the armor pools, the lost-HP sets included with "Simulate 50% HP"; the team buffs
+whole); a Min under that bound engages its scorer,
 the slots are split again and the other Mins re-checked, until stable. A Min the objective's slice reaches therefore
 leaves the pools as without it.
 
@@ -211,6 +212,14 @@ For each combo that passes phase 4:
      of `computeFinalStatsFromPrefix`, hence the same sheet **bit for bit** as the full re-sum (`computeFinalStats`,
      which stays the compose of the out-of-loop paths: heroes, cards, presets). `finalStatsFromBucketArray` is the
      formula itself; the record path goes through it too.
+   - **"Simulate 50% HP"** (Settings › Solver, `SolveRequest.lostHpFraction`): the lost-HP sets' buffs (Revenge,
+     Patience, Swiftness) at 50 % HP (`lostHpBucketAdds`, resolved with the set bonuses once per boots node) are
+     added after the team buffs, in every sheet of the loop — bounds, Score, ratings, filters — but the CP's,
+     recomposed without them (`cpOf`); in SOLVE, the CP of every build that can enter the heap is computed in the
+     loop, `finalizeBuilds` doesn't redo it. The formula and the routing (buff rate, SPD into `spdRate`) are in
+     [Engine Reference §2.6](Engine-Reference#26-set-bonuses-composebuildtscomputesetbonuses). With the setting
+     on, a line above the results table says so, and the set effect's tooltip ("combat" pill) adds the value
+     counted ("counted at 50% HP: ATK +160%").
    - `pieces` is a hoisted array (mutated in place) to avoid 10M+ allocations.
    - `gemDelta` is pre-aggregated (cf. § Gems). The pre-gem CHC is read on the buckets filled with the default gems
      (`critRateUncappedOf`, CHC is additive) and the sheet is composed **once**, with the allocation that wins (crit

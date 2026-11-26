@@ -138,7 +138,8 @@ les builds de l'objectif atteignaient déjà, il coupait ceux-là, ses pièces l
 la même stat (Max SPD 164 seul → des builds à 162 ; Min 162 + Max 164 → aucun). Le prune garde d'abord la seule tranche
 de l'objectif, puis majore la fiche sur cette tranche (`sheetUpperBound` : chaque entrée de bucket à son maximum par
 slot, sommée ; la part gemmes Talisman + EE au mieux de leurs gemmes serties ou des `gemSlots` plus fortes du pool ; le
-meilleur bonus de set, un 4-pc ou deux 2-pc, sur les sets et niveaux des pools armor ; les buffs de team entiers) ; un
+meilleur bonus de set, un 4-pc ou deux 2-pc, sur les sets et niveaux des pools armor, sets à PV perdus compris avec
+« Simulate 50% HP » ; les buffs de team entiers) ; un
 Min sous cette borne engage son scorer, le slot est recoupé et les autres Min revérifiés, jusqu'à stabilité. Un Min que
 la tranche de l'objectif atteint laisse donc les pools tels que sans lui.
 
@@ -213,6 +214,14 @@ Pour chaque combo qui passe phase 4 :
      `computeFinalStatsFromPrefix`, donc la même fiche **bit pour bit** que le re-sum complet (`computeFinalStats`,
      qui reste la compose des chemins hors boucle : héros, cartes, presets). `finalStatsFromBucketArray` est la
      formule elle-même, le chemin en records y passe aussi.
+   - **« Simulate 50% HP »** (Settings › Solver, `SolveRequest.lostHpFraction`) : les buffs des sets à PV perdus
+     (Revenge, Patience, Swiftness) à 50 % de PV (`lostHpBucketAdds`, résolus avec les bonus de set une fois par
+     nœud boots) s'ajoutent après les buffs de team, dans toutes les fiches de la boucle — bornes, Score,
+     ratings, filtres — sauf celle du CP, recomposée sans eux (`cpOf`) ; en SOLVE, le CP de tout build qui peut
+     entrer dans le tas est calculé dans la boucle, `finalizeBuilds` ne le refait pas. La formule et le routage
+     (taux de buff, SPD en `spdRate`) sont dans [reference.md §2.6](reference.md#26-set-bonuses-composebuildtscomputesetbonuses).
+     Quand le réglage est actif, une ligne au-dessus du tableau des résultats le dit, et l'infobulle de l'effet
+     de set (pastille « combat ») ajoute la valeur comptée (« counted at 50% HP: ATK +160% »).
    - `pieces` est un array hoisted (mutée en place) pour éviter 10M+ allocations.
    - `gemDelta` est pré-agrégé (cf. § Gems). Le CHC avant gemmes se lit sur les buckets remplis avec les gemmes
      par défaut (`critRateUncappedOf`, le CHC est additif) et la fiche n'est composée **qu'une fois**, avec

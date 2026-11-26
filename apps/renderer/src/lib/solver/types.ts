@@ -174,6 +174,11 @@ export interface SolveRequest {
    *  bounds and Score, never its CP (the in-game `CalcBattlePower` reads the
    *  hero's own sheet, without them) nor its pools. Absent = none. */
   teamTalismanBuffs?: TeamBuff[];
+  /** « Simulate 50% HP » (Settings › Solver): the HP fraction the lost-HP sets
+   *  (Revenge, Patience, Swiftness) are counted at (`lostHpBucketAdds`) — in
+   *  each combo's sheet, so its stats, bounds and Score, never its CP nor its
+   *  pools. Absent = not counted. */
+  lostHpFraction?: number;
   /** Pieces kept through the combo-budget prune (Top % < 100) and the SOLVE CP
    *  dominance prune whatever their rank — the pieces of the result row a
    *  "Min ≥ / Max ≤" was set from, on the solve that gesture launches only, so

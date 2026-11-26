@@ -212,6 +212,9 @@ export function App() {
   // before merge (advanced — too low drops good builds).
   const [solverTopN, setSolverTopN] = useSetting("topN");
   const [solverTopK, setSolverTopK] = useSetting("topK");
+  // « Simulate 50% HP »: the Optimizer and Teams count the lost-HP sets
+  // (Revenge, Patience, Swiftness) at 50 % HP — never in CP.
+  const [simulateHalfHp, setSimulateHalfHp] = useSetting("simulateHalfHp");
   // Hero defaults: the reforge mode and Transistone potential a hero with no
   // kept filters opens on in the Optimizer (a hero's own choice stays with its
   // filters).
@@ -316,7 +319,7 @@ export function App() {
   // "Build team": one pass at a time, never while the Optimizer solves (it
   // reports its solving state here).
   const [optimizerSolving, setOptimizerSolving] = useState(false);
-  const teamBuild = useTeamBuild({ teams, setTeams, inventory: inv, game, userGeasLevels: userGeas, userCodexLevel: userCodex, excludedPieces, topN: solverTopN, topK: solverTopK, notify });
+  const teamBuild = useTeamBuild({ teams, setTeams, inventory: inv, game, userGeasLevels: userGeas, userCodexLevel: userCodex, excludedPieces, topN: solverTopN, topK: solverTopK, simulateHalfHp, notify });
   // A backup import (Settings) writes localStorage behind these maps: reload
   // them, or the next persist would put the pre-import values back (the
   // `usePersistedState` keys reload themselves).
@@ -555,6 +558,7 @@ export function App() {
           workerCount, setWorkerCount,
           topN: solverTopN, setTopN: setSolverTopN,
           topK: solverTopK, setTopK: setSolverTopK,
+          simulateHalfHp, setSimulateHalfHp,
           reforgeMode: defaultReforgeMode, setReforgeMode: setDefaultReforgeMode,
           rerollPotential: defaultRerollPotential, setRerollPotential: setDefaultRerollPotential,
         }}
@@ -645,7 +649,7 @@ export function App() {
           {builderMounted && (
             <div className="h-full" style={{ display: tab === "Optimizer" ? undefined : "none" }}>
               <ScreenErrorBoundary resetKey={tab}>
-                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} heroFilters={heroFilters} onHeroFiltersChange={setHeroFilters} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} heatmap={heatmap} compactCards={compactCards} resultRows={resultRows} onResultRowsChange={setResultRows} onNotify={notify} defaultReforgeMode={defaultReforgeMode} defaultRerollPotential={defaultRerollPotential} team={builderTeamContext} onTeamFiltersChange={setTeamMemberFilters} onUseForTeam={retainTeamBuild} onBackToTeams={backToTeams} onLeaveTeam={leaveTeam} onSolvingChange={setOptimizerSolving} />
+                <BuilderScreen inventory={inv} game={game} userGeasLevels={userGeas} userCodexLevel={userCodex} heroPriority={heroPriority} heroFilters={heroFilters} onHeroFiltersChange={setHeroFilters} excludedPieceUids={excludedPieces} worklistClaims={solverWorklistClaims} presetHolds={solverPresetHolds} worklistHeroUids={worklistHeroUids} onToggleExclude={toggleExclude} initialHeroUid={builderHero} initialPatch={builderPatch} onInitialHeroConsumed={() => { setBuilderHero(null); setBuilderPatch(null); }} onAfterEquip={() => void refreshInventory("Applied to snapshot")} applyBlockedReason={applyBlockedReason(steam)} onAddToWorklist={addToWorklist} workerCount={workerCount} topN={solverTopN} topK={solverTopK} simulateHalfHp={simulateHalfHp} heatmap={heatmap} compactCards={compactCards} resultRows={resultRows} onResultRowsChange={setResultRows} onNotify={notify} defaultReforgeMode={defaultReforgeMode} defaultRerollPotential={defaultRerollPotential} team={builderTeamContext} onTeamFiltersChange={setTeamMemberFilters} onUseForTeam={retainTeamBuild} onBackToTeams={backToTeams} onLeaveTeam={leaveTeam} onSolvingChange={setOptimizerSolving} />
               </ScreenErrorBoundary>
             </div>
           )}

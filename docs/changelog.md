@@ -8,6 +8,76 @@
 
 ## Items de backlog clôturés (index)
 
+### 🩸 Solveur : réglage « Simulate 50% HP » pour Revenge, Patience et Swiftness (G146) (2026-11-26)
+- ✅ **Pourquoi.** Demande de Sevih du 26/11. Depuis la session du 2026-06-27 (« sets conditionnels faussement
+  aplatis »), les trois sets à PV perdus (`BT_STAT_OWNER_LOST_HP_RATE` / `_HALF`) ne comptent plus rien : ils
+  étaient comptés à leur maximum en permanence (le build à 338 SPD). Rien ne permettait de les voir à une valeur
+  réaliste. Décisions prises : un interrupteur, coupé par défaut ; actif, le bonus compte dans la fiche, les
+  résultats, les filtres Min/Max et le Score, jamais dans le CP.
+- ✅ **Formule (client).** `CBuff.OnCreate` + `CCharacterBattle.GetLostHPRateValue` : niveau 1 `trunc((MaxHP − HP) ·
+  v / MaxHP)` ‰, niveau `_HALF` la même formule sur `clamp(2·HP − MaxHP, 0, MaxHP)`. À 50 % : niveau 1 = `v / 2`
+  (Revenge / Patience +80 %, Swiftness +50 %), `_HALF` (6★, `breakLimitCounts: [4]`) = `v` (+160 %, +100 %). Le
+  buff est un `BT_STAT` en `OAT_RATE`, versé par `AddStatBuff` dans le `BuffValueRate` de `CalcFinalStat`, et la
+  SPD passe par la même `CalcFinalStat` (`SetFinalValue`, pas de cas à part) : vérifié, le taux de buff de vitesse
+  (`spdRate`, appliqué une fois sur le total) et non le pourcentage propre de l'équipement (`ItemOptionValueRate`,
+  celui du set Speed) — le routage que le code fait déjà pour un buff `fromBuff` de vitesse (Phantasm Necrosis).
+- ✅ **Fonction pure** (`lib/composeBuild.ts`). `lostHpRateValue(type, v, hpFraction)` : la formule entière du
+  client sur 1000 PV (fraction arrondie au ‰, bornée à [0, 1]) ; null pour un autre type. `lostHpEffectBuff` en fait
+  un buff routé comme une main de buff (`TeamBuff` `fromBuff`, `forEachMainAdd` : ATK / DEF dans `buffPct`, SPD dans
+  `spdRate`) ; `lostHpSetBuffs(pieces, sets, fraction)` lit les mêmes paliers que `computeSetBonuses` (`wornSetRows`,
+  2pc retiré par `ignoreLowSet` écarté, regroupement partagé par un `forEachWornSet` privé, sortie de
+  `computeSetBonuses` inchangée) ; `lostHpBucketAdds` en tire les additions de buckets. `SIMULATED_HP_FRACTION =
+  0.5`, type `LostHpFraction` (null = pas compté).
+- ✅ **Relais.** Réglage `simulateHalfHp` (`gs.solver.simulateHalfHp`, `lib/settings.ts`, bool, défaut off,
+  `appliesNextSolve`, dans la sauvegarde comme les autres « Solver settings ») dans Settings › Solver sous *Solver
+  tuning*, après Result count, avec la phrase d'aide demandée ; le Reset du panneau le remet à off. App le passe à
+  l'Optimizer (`BuilderScreen` → `useSolverSession`) et à « Build team » (`useTeamBuild` → `createTeamSolver`) ;
+  `solveArgsOf` le pose en `lostHpFraction` (dans `extra`, comme topN/topK ; absent réglage coupé ; pas dans
+  l'estimation, il ne change aucun pool), l'orchestrateur le transmet aux workers. Moteur (`engine.ts`) : sur le
+  modèle des buffs de team (G144), `curLostHpAdds` résolu avec les bonus de set une fois par nœud de boots, appliqué
+  par `fillCombo` après les buffs de team, donc dans toutes les fiches de la boucle (filtres, Score, ratings,
+  allocation de gemmes) ; le CP recompose la combinaison sans eux (`cpOf`, `cpBuckets` dès que l'un des deux est
+  actif), le CP des builds admissibles au tas est calculé dans la boucle et `finalizeBuilds` ne le refait pas ;
+  `sheetUpperBound` (G145) prend la fraction et compte ces buffs dans son meilleur bonus de set, sinon un Min que
+  seul Swiftness atteint engagerait son floor scorer à tort. Colonne Current de l'Optimizer :
+  `computeFinalStatsInTeam(…, lostHpFraction)` (mêmes additions, même ordre que la boucle), son CP sur la fiche
+  propre. Les résultats, cartes, panneaux, Compare et builds retenus de Teams lisent `build.finalStats`, donc le
+  comptent ; le CP affiché vient du `cp` du solve.
+- ✅ **Affichage.** Réglage actif, une ligne au-dessus du tableau des résultats de l'Optimizer : « Revenge, Patience
+  and Swiftness counted at 50% HP (Settings › Solver) — in stats, bounds and Score, not in CP. ». L'infobulle de la
+  pastille « combat » (`combatEffectLines(effects, hpFraction)`, `SetCombatBadge` lisant le réglage par
+  `readSetting` à l'ouverture) ajoute sous la ligne d'un effet à PV perdus « counted at 50% HP: ATK +160% » (la
+  valeur du palier porté) ; réglage coupé, le texte est le même qu'avant.
+- ✅ **Laissé tel quel (hors périmètre ou hors de la demande).** Les fiches hors Optimizer/Teams ne le comptent pas :
+  onglet Heroes (`BuildsScreen`, comparé à la fiche du jeu par les stat-locks et la dérive), Presets, Advices,
+  `pieceDelta` des cartes (une pièce seule, pas de set) ; la phrase fixe « Applies in battle only — not counted in
+  stats or CP. » de l'infobulle reste en tête, la ligne « counted at » la nuance. L'élagage par budget note toujours
+  les pièces seules : une pièce Swiftness sans SPD peut encore être coupée avant la cartésienne sous Top % (la
+  limite connue des sets couplés, exiger le set la lève).
+- ✅ **Docs.** `docs/reference.md` + `wiki/Engine-Reference.md` (§ 1.6 Solver, puce « Simulate 50% HP » après celle des Teams, § 2.6
+  paragraphe des sets à PV perdus, lignes de tests), `docs/solver.md` + `wiki/Solver.md` (phase 5, borne de
+  `sheetUpperBound`), `docs/data-schema.md` + `wiki/Data-Schema.md` (l'exception à « affichage seulement »),
+  `wiki/Using-the-App.md` (Settings › Solver).
+- ✅ **Tests.** Nouveau `lostHpSets.test.ts` (15) : `lostHpRateValue` (niveau 1 et `_HALF` à 50 %, PV pleins → 0,
+  0 PV, `_HALF` au-dessus de 50 %, troncature et arrondi au ‰) ; `combatEffectLines` actif (Revenge niveau 2 « counted
+  at 50% HP: ATK +160% », niveau 1 +80 %, Swiftness SPD +50 %, Patience DEF +160 %) et coupé inchangé ; fiche sur le
+  catalogue de sets réel (`data/derived/sets.json`) : Swiftness 2pc de niveau 1 puis 6★ en taux de buff de vitesse
+  sur le total base + équipement (140 → 210, 280 ; en pourcentage d'équipement ce serait 190), Revenge 4pc de niveau
+  1 puis 6★ (+80 %, +160 %, `[4,4,4,3]` niveau 1), Patience sur la DEF seule, le CP identique, la fiche ordinaire
+  réglage coupé ; solve complet sur le contrat réel (`precomputeContext` → `solveChunk` → `finalizeBuilds`, héros
+  2000001, casque + armure Swiftness 6★ contre un casque sans set à +4 SPD) : vitesse 141 → 282 avec le réglage,
+  un Min SPD que seul Swiftness atteint passe réglage actif et rend `[]` coupé, même CP pour le même build (SOLVE et
+  SOLVE CP), Score plus haut, colonne Current = fiche du solve ; réglage coupé, chaque fiche = `computeFinalStats` ;
+  actif, un build sans set à PV perdus garde fiche et CP ; `sheetUpperBound` avec et sans la fraction. Mis à jour :
+  `settings.test.ts`, `settingsPanes.test.ts`, `reforgeDefaults.test.ts` (six réglages au Reset, `appliesNextSolve`),
+  `transfer.test.ts` (la clé dans la sauvegarde). `stat-locks` verts (aucune fiche hors réglage ne bouge).
+  `npm run typecheck` : `> tsc --noEmit` (renderer, dernier workspace, sans erreur) ; `npm test` : `Tests  1385
+  passed (1385)` (renderer ; core 183, desktop 273). `npm run lint` : `✖ 6 problems (0 errors, 6 warnings)`, les six
+  d'avant.
+- ⏳ Sevih : en jeu, un héros en Swiftness à 50 % de PV, comparer sa SPD de combat à celle de l'Optimizer réglage
+  actif (vérifie au passage le routage par le taux de buff de vitesse) ; idem, si l'occasion se présente, l'ATK d'un
+  porteur de Revenge.
+
 ### 🐛 Solveur : un Min et un Max sur la même stat ne vident plus les résultats sous Top % (G145) (2026-11-26)
 - ✅ **Pourquoi.** Signalé par Sevih le 26/11 sur la 2.2.0 : Max SPD 164 seul → des builds à 162 ; Min SPD ≤ 162
   et Max 164 → aucun build ; la même recherche à Top % = 100 (sans élagage) en trouve. Le filtre final n'y est pour

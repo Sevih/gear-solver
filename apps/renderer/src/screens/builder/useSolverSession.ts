@@ -9,6 +9,7 @@ import type { Character, GameData, Inventory, UserGeasLevels } from "@gear-solve
 import { resolveWorkerCount, SolverOrchestrator, type SolveDebugInfo } from "../../lib/solver/orchestrator.js";
 import type { PoolSizes, SolveBuild, SolveEmptyCause, SolveMode } from "../../lib/solver/types.js";
 import type { HeroPriority } from "../../lib/storage/heroPriority.js";
+import type { LostHpFraction } from "../../lib/composeBuild.js";
 import type { PresetHolds } from "../../lib/presets/presetHolds.js";
 import { buildSolveFilters, type MinMax, type SolverFilters } from "../../lib/solver/builderFilters.js";
 import type { ReforgeContext } from "../../lib/solver/reforge.js";
@@ -76,9 +77,12 @@ interface SolverSessionInput {
   workerCount: number | null;
   topN: number;
   topK: number;
+  /** HP fraction the lost-HP sets are counted at (Settings › Solver's
+   *  « Simulate 50% HP »), null = not counted. Read at the solve. */
+  lostHpFraction?: LostHpFraction;
 }
 
-export function useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority: globalHeroPriority, excludedPieceUids: globalExcludedPieceUids, worklistClaims: globalWorklistClaims, presetHolds: globalPresetHolds, targetPresetNum: globalTargetPresetNum, team = null, workerCount, topN, topK }: SolverSessionInput) {
+export function useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority: globalHeroPriority, excludedPieceUids: globalExcludedPieceUids, worklistClaims: globalWorklistClaims, presetHolds: globalPresetHolds, targetPresetNum: globalTargetPresetNum, team = null, workerCount, topN, topK, lostHpFraction = null }: SolverSessionInput) {
   // What the solve and the estimate read beyond the hero — the filters and the
   // account-wide rules, or a team member's piece rule in team context.
   const scope = useMemo(
@@ -227,7 +231,7 @@ export function useSolverSession({ selectedUid, selected, inventory, game, filte
     orchestrator.solve(solveArgsOf(
       { mode, hero: selected, inventory, game, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, gemReservedPieceUids, reservedTalismanMains, teamTalismanBuffs, filters: serializedFilters },
       // Result-set size + per-worker heap depth from Settings → Solver.
-      { topN, topK, pinPieceUids },
+      { topN, topK, lostHpFraction, pinPieceUids },
     ));
   };
 

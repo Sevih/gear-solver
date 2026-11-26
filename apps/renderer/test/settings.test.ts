@@ -51,6 +51,8 @@ describe("registry", () => {
     expect(settingDefault("workerCount")).toBeNull();
     expect(settingDefault("topN")).toBe(1000);
     expect(settingDefault("topK")).toBe(1000);
+    expect(SETTINGS.simulateHalfHp.key).toBe("gs.solver.simulateHalfHp");
+    expect(settingDefault("simulateHalfHp")).toBe(false);
     expect(settingDefault("heatmap")).toBe(true);
     expect(settingDefault("compactCards")).toBe(false);
     expect(SETTINGS.resultRows.key).toBe("gs.builder.resultRows");
@@ -65,7 +67,7 @@ describe("registry", () => {
 
   it("flags only the solver settings as applying on the next solve", () => {
     const next = NAMES.filter((n) => SETTINGS[n].appliesNextSolve);
-    expect(next).toEqual(["workerCount", "topN", "topK"]);
+    expect(next).toEqual(["workerCount", "topN", "topK", "simulateHalfHp"]);
     for (const n of ["heatmap", "compactCards", "resultRows", "presetLossWarn"] as const) expect(SETTINGS[n].appliesNextSolve).toBe(false);
   });
 });
@@ -172,6 +174,7 @@ function recordingSolver(): { solver: SolverSettings; calls: Record<string, unkn
     workerCount: 4, setWorkerCount: rec("workerCount"),
     topN: 200, setTopN: rec("topN"),
     topK: 300, setTopK: rec("topK"),
+    simulateHalfHp: true, setSimulateHalfHp: rec("simulateHalfHp"),
     reforgeMode: "ascended", setReforgeMode: rec("reforgeMode"),
     rerollPotential: true, setRerollPotential: rec("rerollPotential"),
   } as SolverSettings;
@@ -194,13 +197,13 @@ describe("Reset solver settings to defaults", () => {
   it("resetSettings puts every listed setting back to its default", () => {
     const calls: Record<string, unknown> = {};
     resetSettings(SOLVER_PANE_SETTINGS, (name, value) => { calls[name] = value; });
-    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000, reforgeMode: "classic", rerollPotential: false });
+    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000, simulateHalfHp: false, reforgeMode: "classic", rerollPotential: false });
   });
 
   it("the pane's reset (resetSolverSettings) calls every setter of the pane", () => {
     const { solver, calls } = recordingSolver();
     resetSolverSettings(solver);
-    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000, reforgeMode: "classic", rerollPotential: false });
+    expect(calls).toEqual({ workerCount: null, topN: 1000, topK: 1000, simulateHalfHp: false, reforgeMode: "classic", rerollPotential: false });
   });
 });
 
@@ -214,7 +217,7 @@ describe("SolverPane — « applies next solve » over the solver settings, noth
     const strip = h.indexOf("applies next solve");
     expect(strip).toBeGreaterThan(-1);
     expect(h.match(/applies next solve/g)).toHaveLength(1);
-    for (const n of ["workerCount", "topN", "topK"] as const) expect(h.indexOf(SETTINGS[n].label)).toBeGreaterThan(strip);
+    for (const n of ["workerCount", "topN", "topK", "simulateHalfHp"] as const) expect(h.indexOf(SETTINGS[n].label)).toBeGreaterThan(strip);
     expect(h).not.toContain(">Display<");
     for (const n of ["heatmap", "compactCards", "resultRows", "presetLossWarn"] as const) expect(h).not.toContain(SETTINGS[n].label);
   });

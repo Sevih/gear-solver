@@ -19,7 +19,7 @@ import { composeCharStats, effectiveCharacter, expToLevel, gameRulesOf } from "@
 import { cx } from "../../design/cx.js";
 import { deadSlotsReason } from "../../lib/solver/emptyReason.js";
 import { dmgSkillInfo } from "../../lib/dmgSkill.js";
-import { computeFinalStats, computeFinalStatsInTeam, type TeamBuff } from "../../lib/composeBuild.js";
+import { computeFinalStats, computeFinalStatsInTeam, SIMULATED_HP_FRACTION, type LostHpFraction, type TeamBuff } from "../../lib/composeBuild.js";
 import { calcBattlePower } from "../../lib/solver/cp.js";
 import type { ReforgeMode } from "../../lib/solver/engine.js";
 import type { SolveBuild, SolveMode } from "../../lib/solver/types.js";
@@ -139,6 +139,10 @@ interface BuilderScreenProps {
   topN?: number;
   /** Per-worker heap depth before merge (Settings → Solver). */
   topK?: number;
+  /** « Simulate 50% HP » (Settings → Solver): the lost-HP sets (Revenge,
+   *  Patience, Swiftness) counted at 50 % HP in the Current column and the
+   *  solve's sheets, never in CP. */
+  simulateHalfHp?: boolean;
   /** Results-table column heatmap on/off (Settings › Display). */
   heatmap?: boolean;
   /** Compact gear cards under the results (Settings › Display). */
@@ -203,13 +207,15 @@ function startFiltersFor(uid: string | null, map: HeroFiltersMap, savedBuilds: S
 /* ─────────────────────────────────────────────────────────────────────────
  * Top-level layout
  * ───────────────────────────────────────────────────────────────────────── */
-export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), resultRows = settingDefault("resultRows"), onResultRowsChange, onNotify, defaultReforgeMode = settingDefault("reforgeMode"), defaultRerollPotential = settingDefault("rerollPotential"), team = null, onTeamFiltersChange, onUseForTeam, onBackToTeams, onLeaveTeam, onSolvingChange }: BuilderScreenProps) {
+export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel, heroPriority, heroFilters, onHeroFiltersChange, excludedPieceUids, worklistClaims, presetHolds, worklistHeroUids, onToggleExclude, initialHeroUid, onInitialHeroConsumed, initialPatch, onAfterEquip, applyBlockedReason = null, onAddToWorklist, workerCount = settingDefault("workerCount"), topN = settingDefault("topN"), topK = settingDefault("topK"), simulateHalfHp = settingDefault("simulateHalfHp"), heatmap = settingDefault("heatmap"), compactCards = settingDefault("compactCards"), resultRows = settingDefault("resultRows"), onResultRowsChange, onNotify, defaultReforgeMode = settingDefault("reforgeMode"), defaultRerollPotential = settingDefault("rerollPotential"), team = null, onTeamFiltersChange, onUseForTeam, onBackToTeams, onLeaveTeam, onSolvingChange }: BuilderScreenProps) {
   const [selectedUid, setSelectedUid] = useState<string | null>(initialHeroUid ?? null);
   // Team context applies while the open hero is the member it names; the
   // filters loaded follow it (`sourceKey`: the member, else the hero).
   const teamActive = team && team.heroUid === selectedUid ? team : null;
   // Team context: the other members' Talisman mains the stats count.
   const teamBuffs: readonly TeamBuff[] = teamActive?.talismanBuffs ?? NO_TEAM_BUFFS;
+  // « Simulate 50% HP »: the HP fraction the lost-HP sets count at, or null.
+  const lostHpFraction: LostHpFraction = simulateHalfHp ? SIMULATED_HP_FRACTION : null;
   const sourceKey = teamActive ? `team:${teamActive.teamId}:${teamActive.heroUid}` : `hero:${selectedUid ?? ""}`;
   // The preset "Optimize preset →" aims at, tied to the hero it opened — set
   // with the patch below, dropped as soon as the user switches heroes.
@@ -324,7 +330,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     setLastDebugInfo, solveError, setSolveError, emptyCause, setEmptyCause, estimatePools, selectedBuild,
     selectedBuildIdx, setSelectedBuild, selectBuildAt, displayFilter, setDisplayFilter, lastSolveMode, setLastSolveMode, startSolve, cancelSolve,
     displayedResults, resolvedWorkers, applyClientFilter,
-  } = useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, team: teamActive, workerCount, topN, topK });
+  } = useSolverSession({ selectedUid, selected, inventory, game, filters, userGeasLevels, userCodexLevel, heroPriority, excludedPieceUids, worklistClaims, presetHolds, targetPresetNum, team: teamActive, workerCount, topN, topK, lostHpFraction });
   // App's one-solve-at-a-time gate ("Build team" on the Teams tab).
   useEffect(() => { onSolvingChange?.(solving); }, [solving, onSolvingChange]);
   useEffect(() => () => onSolvingChange?.(false), [onSolvingChange]);
@@ -766,9 +772,12 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     });
     const equippedPieces = inventory.gear.filter((g) => g.equippedBy === selected.uid);
     // The CP reads the hero's own sheet; in team context the Current column
-    // counts the other members' Talisman mains, as the results do.
+    // counts the other members' Talisman mains, and with « Simulate 50% HP »
+    // the lost-HP sets, as the results do.
     const own = computeFinalStats(composed.noGearStats, composed.scaling, equippedPieces, game);
-    const current = teamBuffs.length > 0 ? computeFinalStatsInTeam(composed.noGearStats, composed.scaling, equippedPieces, game, teamBuffs) : own;
+    const current = teamBuffs.length > 0 || lostHpFraction != null
+      ? computeFinalStatsInTeam(composed.noGearStats, composed.scaling, equippedPieces, game, teamBuffs, lostHpFraction)
+      : own;
     // Current-loadout Battle Power — same CalcBattlePower the Builds tab computes,
     // so ΔCP in the gear-band header reads against a faithful baseline. Needs the
     // TransStar UI metadata (showUIStar/starPlus) + equipped EE/Talisman.
@@ -792,7 +801,7 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
     const amp = (k: "atk" | "def" | "hp") => 1 + (composed.scaling[k]?.buffPct ?? 0) / 100;
     const dmgAmp = { atk: amp("atk"), def: amp("def"), hp: amp("hp") };
     return { current, currentCp, baseFlat, dmgStat, dmgSec: meta.dmgSec, dmgAmp, noCrit: meta.noCrit ?? false, dmgSkill: dmgSkillInfo(meta.bestSkill, meta.rotation), sheet: { baseline: composed.noGearStats, scaling: composed.scaling } };
-  }, [inventory, game, selected, userGeasLevels, userCodexLevel, teamBuffs]);
+  }, [inventory, game, selected, userGeasLevels, userCodexLevel, teamBuffs, lostHpFraction]);
 
   /** The Compare panel's two sides: the pinned build, and the selected one or
    *  the current loadout — as captured (no reforge projection), its ratings
@@ -986,6 +995,14 @@ export function BuilderScreen({ inventory, game, userGeasLevels, userCodexLevel,
             ~{formatCombos(cartesianEstimate)} combinations to search — this can take minutes.
             Lower <b>Top %</b>, set a substat <b>priority</b>, or require a <b>set</b> to cut it down.
           </span>
+        </div>
+      )}
+      {lostHpFraction != null && (
+        <div
+          className="shrink-0 px-0.5 text-[11px] leading-snug text-cyan-200/80"
+          title="Settings › Solver › Simulate 50% HP: the Current column and the results count these sets' combat buff as if the hero were at 50% HP — stats, bounds and Score. The CP doesn't (the in-game Combat Power never counts it)."
+        >
+          Revenge, Patience and Swiftness counted at {Math.round(lostHpFraction * 100)}% HP (Settings › Solver) — in stats, bounds and Score, not in CP.
         </div>
       )}
       <div className="flex min-h-0 flex-1 gap-2">

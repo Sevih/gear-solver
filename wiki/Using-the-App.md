@@ -652,12 +652,16 @@ passed).
   (download the latest game tables published by outerpedia after a patch) and **Wipe captured data**
   (with the game closed).
 - **Solver** — what the next solve reads (*Solver tuning · applies next solve*): worker count
-  (Auto = use your CPU; or pin a number), how many results to return and, under *Show advanced*,
-  the per-worker depth. Then the *Hero defaults* (*for a hero's first solve*): **Default reforge
+  (Auto = use your CPU; or pin a number), how many results to return, **Simulate 50% HP** (off out
+  of the box: counts Revenge, Patience and Swiftness, whose bonus grows with the hero's missing HP,
+  as if the hero were at 50% HP — in the Optimizer's Current column and results, their filters and
+  Score, and in Teams' builds, never in CP; a line above the Optimizer's results says when it is on,
+  and the set's "combat" tooltip shows the value counted) and, under *Show advanced*, the
+  per-worker depth. Then the *Hero defaults* (*for a hero's first solve*): **Default reforge
   mode** (Off / +10R6 / +10R9 / +15R9, +10R6 out of the box) and **Transistone potential by
   default** (off out of the box) — what a hero with no filters of their own opens on in the
   Optimizer; a hero who already has filters, and the hero open, keep theirs. **Reset solver
-  settings to defaults** puts these five back (+10R6, Transistone off).
+  settings to defaults** puts these six back (+10R6, Transistone off, Simulate 50% HP off).
 - **Display** — applied at once: results heatmap on/off, compact result cards (shorter piece cards
   under the Optimizer's results; Gear and tooltips unchanged) and **Result rows**, the height of the
   Optimizer's results table (5 to 15 rows, 12 by default — the **height** slider above the table sets

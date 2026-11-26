@@ -29,10 +29,10 @@ describe("registry", () => {
     expect(parseSetting("rerollPotential", "true")).toBe(true);
   });
 
-  it("the Solver pane's Reset puts back five settings, the hero defaults included", () => {
+  it("the Solver pane's Reset puts back six settings, the hero defaults included", () => {
     const calls: Record<string, unknown> = {};
     resetSettings(SOLVER_PANE_SETTINGS, (name, value) => { calls[name] = value; });
-    expect(Object.keys(calls)).toHaveLength(5);
+    expect(Object.keys(calls)).toHaveLength(6);
     expect(calls).toMatchObject({ reforgeMode: "classic", rerollPotential: false });
   });
 });
@@ -84,6 +84,7 @@ describe("SolverPane — Hero defaults", () => {
     workerCount: null, setWorkerCount: () => {},
     topN: 1000, setTopN: () => {},
     topK: 1000, setTopK: () => {},
+    simulateHalfHp: false, setSimulateHalfHp: () => {},
     reforgeMode: "classic", setReforgeMode: () => {},
     rerollPotential: false, setRerollPotential: () => {},
   } as SolverSettings;

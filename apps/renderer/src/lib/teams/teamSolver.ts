@@ -16,6 +16,7 @@
  * start while it solves.
  */
 import type { GameData, Inventory, UserGeasLevels } from "@gear-solver/core";
+import { SIMULATED_HP_FRACTION } from "../composeBuild.js";
 import { buildSolveFilters } from "../solver/builderFilters.js";
 import { emptySolveReason } from "../solver/emptyReason.js";
 import { SolverOrchestrator } from "../solver/orchestrator.js";
@@ -31,6 +32,9 @@ export interface TeamSolverContext {
   userCodexLevel: number | null;
   topN: number;
   topK: number;
+  /** Settings › Solver's « Simulate 50% HP »: the lost-HP sets counted at
+   *  `SIMULATED_HP_FRACTION`, as the Optimizer counts them. Absent = off. */
+  simulateHalfHp?: boolean;
 }
 
 export interface TeamSolver {
@@ -74,7 +78,7 @@ export function createTeamSolver(ctx: TeamSolverContext): TeamSolver {
           reservedTalismanMains: scope.reservedTalismanMains, teamTalismanBuffs: scope.teamTalismanBuffs,
           filters: buildSolveFilters(scope.filters),
         },
-        { topN: ctx.topN, topK: ctx.topK },
+        { topN: ctx.topN, topK: ctx.topK, lostHpFraction: ctx.simulateHalfHp ? SIMULATED_HP_FRACTION : null },
       ));
     });
   };

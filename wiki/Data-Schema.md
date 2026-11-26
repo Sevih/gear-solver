@@ -174,7 +174,10 @@ optional in `SetLevel` (`core/gamedata.ts`): an older cache lacks them and `worn
 signed, ‰ for a rate; absent on `BT_IMMUNE`). The client puts them in
 `m_ItemSetBuffTempletList`, off the sheet: **display only**, never read by the sheet nor
 the CP (Fortification, Revenge, Patience, Pulverization, Immunity, Swiftness, Weakness,
-Augmentation). Typed `SetCombatEffect`, optional in `SetLevel` (`core/gamedata.ts`): an
+Augmentation) — but, with "Simulate 50% HP" on (Settings › Solver), the lost-HP effects
+(`BT_STAT_OWNER_LOST_HP_RATE` / `_HALF` of Revenge, Patience and Swiftness), which the
+Optimizer and Teams count at 50 % HP in the sheet, never in the CP
+([Engine Reference §2.6](Engine-Reference#26-set-bonuses-composebuildtscomputesetbonuses)). Typed `SetCombatEffect`, optional in `SetLevel` (`core/gamedata.ts`): an
 older cache lacks it. The app shows it as a "combat" pill after the prose (Optimizer
 Effects panel, piece detail), worded by `combatEffectLines`
 (`renderer/src/lib/setCombatEffects.ts`); `wornSetRows` reads on it the combat-effect 4pc

@@ -7,18 +7,25 @@
  * `expanded` writes the tooltip body under the pill instead — for a pill that
  * already sits inside a hover popover (the Builder's Effects card), where a
  * nested tooltip could never be hovered.
+ *
+ * With « Simulate 50% HP » on (Settings › Solver), a lost-HP effect also says
+ * the value the Optimizer counts. The body reads the setting as it renders
+ * (`readSetting`) — when its popover opens.
  */
 import type { SetCombatEffect } from "@gear-solver/core";
+import { SIMULATED_HP_FRACTION } from "../lib/composeBuild.js";
+import { readSetting } from "../lib/settings.js";
 import { COMBAT_EFFECT_NOTE, combatEffectLines } from "../lib/setCombatEffects.js";
 import { HoverCard } from "./HoverCard.js";
 
 const PILL = "rounded border border-white/12 px-1 py-px font-mono text-[9px] text-white/55";
 
 function CombatEffectBody({ effects }: { effects: readonly SetCombatEffect[] }) {
+  const simulateHalfHp = readSetting("simulateHalfHp");
   return (
     <>
       <div className="text-white/60">{COMBAT_EFFECT_NOTE}</div>
-      {combatEffectLines(effects).map((line, i) => <div key={i}>{line}</div>)}
+      {combatEffectLines(effects, simulateHalfHp ? SIMULATED_HP_FRACTION : null).map((line, i) => <div key={i}>{line}</div>)}
     </>
   );
 }

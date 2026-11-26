@@ -66,14 +66,17 @@ export function estimateArgsOf(i: SolveInputs): EstimateArgs {
 }
 
 /** The solve request: the estimate's plus the result-set size and per-worker
- *  heap depth (Settings › Solver), and the pieces kept through the prunes
- *  (only a result cell's "Min ≥ / Max ≤" passes them). */
-export function solveArgsOf(i: SolveInputs, extra: { topN: number; topK: number; pinPieceUids?: readonly string[] }): SolveArgs {
+ *  heap depth (Settings › Solver), the HP fraction the lost-HP sets are counted
+ *  at (Settings › Solver's « Simulate 50% HP », null = not counted; it changes
+ *  no pool, so the estimate doesn't carry it), and the pieces kept through the
+ *  prunes (only a result cell's "Min ≥ / Max ≤" passes them). */
+export function solveArgsOf(i: SolveInputs, extra: { topN: number; topK: number; lostHpFraction?: number | null; pinPieceUids?: readonly string[] }): SolveArgs {
   return {
     ...estimateArgsOf(i),
     topN: extra.topN,
     topK: extra.topK,
     ...(i.teamTalismanBuffs?.length ? { teamTalismanBuffs: i.teamTalismanBuffs.map((b) => ({ ...b })) } : {}),
+    ...(extra.lostHpFraction != null ? { lostHpFraction: extra.lostHpFraction } : {}),
     ...(extra.pinPieceUids?.length ? { pinPieceUids: [...extra.pinPieceUids] } : {}),
   };
 }

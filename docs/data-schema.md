@@ -238,7 +238,10 @@ pas, `wornSetRows` (`core/set-level.ts`) retombe alors sur l'ancienne règle (cf
 ‰ pour un taux ; absent sur `BT_IMMUNE`). Le client les verse dans
 `m_ItemSetBuffTempletList`, hors fiche : **affichage seulement**, jamais lus par la fiche
 ni par la CP (Fortification, Revenge, Patience, Pulverization, Immunity, Swiftness,
-Weakness, Augmentation). Typé `SetCombatEffect` et optionnel dans `SetLevel`
+Weakness, Augmentation) — sauf, réglage « Simulate 50% HP » actif (Settings › Solver), les
+effets à PV perdus (`BT_STAT_OWNER_LOST_HP_RATE` / `_HALF` de Revenge, Patience et
+Swiftness), que l'Optimizer et Teams comptent à 50 % de PV dans la fiche, jamais dans la CP
+([reference.md §2.6](reference.md#26-set-bonuses-composebuildtscomputesetbonuses)). Typé `SetCombatEffect` et optionnel dans `SetLevel`
 (`core/gamedata.ts`) : un cache d'avant ne l'a pas. L'app le montre en pastille
 « combat » après la prose (panneau Effects de l'Optimizer, détail de pièce), libellé par
 `combatEffectLines` (`renderer/src/lib/setCombatEffects.ts`) ; `wornSetRows` y lit le

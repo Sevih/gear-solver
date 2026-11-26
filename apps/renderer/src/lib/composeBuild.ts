@@ -10,7 +10,7 @@
  * NOTE: keep this file pure — no React, no IO. The screens own the React
  * state + memoization; this lib is the deterministic engine.
  */
-import { applySpdRate, calcFinalStat, wornSetRows, type GameData, type GearPiece, type RolledStat, type SpeedScaling, type StatScaling } from "@gear-solver/core";
+import { applySpdRate, calcFinalStat, wornSetRows, type GameData, type GearPiece, type RolledStat, type SetCombatEffect, type SetLevel, type SpeedScaling, type StatScaling } from "@gear-solver/core";
 
 export interface FinalStats {
   atk: number; hp: number; def: number; spd: number;
@@ -99,7 +99,25 @@ export function computeSetBonuses(
   pieces: GearPiece[],
   sets: GameData["sets"] | null,
 ): Array<{ st: string; ap: string; v: number }> {
-  if (!sets) return [];
+  const out: Array<{ st: string; ap: string; v: number }> = [];
+  forEachWornSet(pieces, sets, (row2, row4, drop2) => {
+    const p2 = drop2 ? null : row2?.p2;
+    const p4 = row4?.p4;
+    if (p2 && p2.st !== "ST_NONE" && p2.v != null) out.push({ st: p2.st, ap: p2.ap, v: p2.v });
+    if (p4 && p4.st !== "ST_NONE" && p4.v != null) out.push({ st: p4.st, ap: p4.ap, v: p4.v });
+  });
+  return out;
+}
+
+/** Visit each armor set worn ≥ 2× in `pieces` with its rows (`wornSetRows`),
+ *  in first-seen order — the one grouping `computeSetBonuses` and
+ *  `lostHpSetBuffs` share. */
+function forEachWornSet(
+  pieces: GearPiece[],
+  sets: GameData["sets"] | null,
+  visit: (row2: SetLevel | null, row4: SetLevel | null, drop2: boolean) => void,
+): void {
+  if (!sets) return;
   const bts = new Map<string, number[]>();
   for (const p of pieces) {
     // `p?.` tolerates a sparse `pieces` array — the solver hoists this call
@@ -108,18 +126,86 @@ export function computeSetBonuses(
     const arr = bts.get(p.armorSetId);
     if (arr) arr.push(p.breakthrough); else bts.set(p.armorSetId, [p.breakthrough]);
   }
-  const out: Array<{ st: string; ap: string; v: number }> = [];
   for (const [setId, list] of bts) {
     if (list.length < 2) continue;
     const def = sets[setId];
     if (!def) continue;
     const { row2, row4, drop2 } = wornSetRows(def, list);
-    const p2 = drop2 ? null : row2?.p2;
-    const p4 = row4?.p4;
-    if (p2 && p2.st !== "ST_NONE" && p2.v != null) out.push({ st: p2.st, ap: p2.ap, v: p2.v });
-    if (p4 && p4.st !== "ST_NONE" && p4.v != null) out.push({ st: p4.st, ap: p4.ap, v: p4.v });
+    visit(row2, row4, drop2);
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Lost-HP sets — Revenge (ATK), Patience (DEF), Swiftness (SPD)
+ *
+ * Their tier is a combat effect (`combatEffects`), a `BT_STAT` buff whose
+ * value scales with the wearer's missing HP (client `CBuff.OnCreate`, then
+ * `CCharacterBattle.GetLostHPRateValue`): level 1 (`BT_STAT_OWNER_LOST_HP_RATE`)
+ * `trunc((MaxHP − HP) × v / MaxHP)` ‰, level 2 (`…_HALF`) the same formula on
+ * `clamp(2·HP − MaxHP, 0, MaxHP)` — its maximum reached at 50 % HP. The sheet
+ * never counts them on its own (no HP model); « Simulate 50% HP » (Settings ›
+ * Solver) has the Optimizer and Teams count them at that fraction. An
+ * `OAT_RATE` `BT_STAT` lands in CalcFinalStat's `BuffValueRate`, so ATK / DEF go
+ * to the buff-rate buckets and SPD to the speed buff rate (`spdRate`, applied
+ * once on the total) — never the gear's own rates. The CP never counts them.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/** HP fraction the lost-HP sets are counted at; null = not counted (the
+ *  setting off, and every sheet outside the Optimizer and Teams). */
+export type LostHpFraction = number | null;
+
+/** The fraction « Simulate 50% HP » counts them at. */
+export const SIMULATED_HP_FRACTION = 0.5;
+
+const LOST_HP_RATE = "BT_STAT_OWNER_LOST_HP_RATE";
+const LOST_HP_RATE_HALF = "BT_STAT_OWNER_LOST_HP_RATE_HALF";
+
+/** A combat effect that scales with the wearer's missing HP. */
+export function isLostHpEffect(e: Pick<SetCombatEffect, "type">): boolean {
+  return e.type === LOST_HP_RATE || e.type === LOST_HP_RATE_HALF;
+}
+
+/** Value (raw ‰) of a lost-HP effect of type `type` and maximum `v` ‰ with the
+ *  wearer at `hpFraction` of their max HP — the client's integer formula on a
+ *  1000-HP scale (the fraction rounded to ‰, held in [0, 1]); null for a type
+ *  that isn't one. Level 1 at 50 % → `v / 2`, `_HALF` at 50 % → `v`, full HP → 0. */
+export function lostHpRateValue(type: string, v: number, hpFraction: number): number | null {
+  if (type !== LOST_HP_RATE && type !== LOST_HP_RATE_HALF) return null;
+  const hp = Math.min(1000, Math.max(0, Math.round(hpFraction * 1000)));
+  const n = type === LOST_HP_RATE_HALF ? Math.min(1000, Math.max(0, 2 * hp - 1000)) : hp;
+  return Math.trunc((1000 - n) * v / 1000);
+}
+
+/** The value a lost-HP effect counts at `hpFraction`, as a buff routed like a
+ *  buff main (`forEachMainAdd`: `fromBuff` rate → the buff-rate bucket, SPD →
+ *  `spdRate`); null when it isn't a lost-HP `OAT_RATE` stat on the wearer or
+ *  counts 0. */
+export function lostHpEffectBuff(e: SetCombatEffect, hpFraction: number): TeamBuff | null {
+  if (!isLostHpEffect(e) || e.target !== "ME" || e.ap !== "OAT_RATE" || e.v == null || !e.st) return null;
+  const stat = setBonusStatKey(e.st, true) as TeamBuff["stat"] | null;
+  const v = lostHpRateValue(e.type, e.v, hpFraction);
+  if (!stat || !v) return null;
+  return { stat, value: v / 10, percent: true, fromBuff: true };
+}
+
+/** The lost-HP effects of the sets worn in `pieces` (the tiers
+ *  `computeSetBonuses` reads: `wornSetRows`, a 2-pc dropped by `ignoreLowSet`
+ *  left out) at `hpFraction`, as buffs (`lostHpEffectBuff`). */
+export function lostHpSetBuffs(pieces: GearPiece[], sets: GameData["sets"] | null, hpFraction: number): TeamBuff[] {
+  const out: TeamBuff[] = [];
+  forEachWornSet(pieces, sets, (row2, row4, drop2) => {
+    const effects = [...(drop2 ? [] : row2?.combatEffects?.p2 ?? []), ...(row4?.combatEffects?.p4 ?? [])];
+    for (const e of effects) {
+      const b = lostHpEffectBuff(e, hpFraction);
+      if (b) out.push(b);
+    }
+  });
   return out;
+}
+
+/** The lost-HP buffs' additions (`lostHpSetBuffs`). */
+export function lostHpBucketAdds(pieces: GearPiece[], sets: GameData["sets"] | null, hpFraction: number): BucketAdds {
+  return collectAdds((add) => { for (const s of lostHpSetBuffs(pieces, sets, hpFraction)) forEachMainAdd(s, add); });
 }
 
 /** Stat keys that the engine renders as a percent — gear contributions on
@@ -235,19 +321,23 @@ export function teamBuffBucketAdds(buffs: readonly TeamBuff[], talisman: Pick<Ge
 }
 
 /** `computeFinalStats` of `pieces` in team context: plus the team buffs over
- *  the pieces' Talisman (`teamBuffTopUp`) — the Optimizer's Current column for
- *  a team member. Without buffs, `computeFinalStats` itself. */
+ *  the pieces' Talisman (`teamBuffTopUp`), then, with `lostHpFraction`, the
+ *  lost-HP sets at that HP fraction (`lostHpSetBuffs`) — the additions and
+ *  order of the solver's combo sheet. The Optimizer's Current column. Without
+ *  either, `computeFinalStats` itself. */
 export function computeFinalStatsInTeam(
   baseline: FinalStatsBaseline,
   scaling: ScalingMap,
   pieces: GearPiece[],
   game: GameData | null,
   buffs: readonly TeamBuff[],
+  lostHpFraction: LostHpFraction = null,
 ): FinalStats {
-  if (buffs.length === 0) return computeFinalStats(baseline, scaling, pieces, game);
+  if (buffs.length === 0 && lostHpFraction == null) return computeFinalStats(baseline, scaling, pieces, game);
   const b = aggregateGearBuckets(pieces, game);
   const add = recordAdd(b);
   for (const s of teamBuffTopUp(buffs, pieces.find((p) => p.slot === "ooparts") ?? null)) forEachMainAdd(s, add);
+  if (lostHpFraction != null) for (const s of lostHpSetBuffs(pieces, game?.sets ?? null, lostHpFraction)) forEachMainAdd(s, add);
   return finalStatsFromBuckets(baseline, scaling, b);
 }
 

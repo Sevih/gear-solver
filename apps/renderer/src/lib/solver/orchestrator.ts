@@ -160,6 +160,9 @@ export interface SolveArgs {
   /** The other members' Talisman mains the stats count (team context;
    *  `SolveRequest.teamTalismanBuffs`). Solve only. */
   teamTalismanBuffs?: TeamBuff[];
+  /** HP fraction the lost-HP sets are counted at (« Simulate 50% HP »;
+   *  `SolveRequest.lostHpFraction`). Solve only. */
+  lostHpFraction?: number;
   userSkills: { first: number; second: number; ultimate: number; chainPassive: number };
   filters: SolveFilters;
   /** Per-worker local top-K (orchestrator merges → returns top-N). Default: `settingDefault("topK")`. */
@@ -327,6 +330,7 @@ export class SolverOrchestrator {
       ...(args.gemReservedPieceUids?.length ? { gemReservedPieceUids: args.gemReservedPieceUids } : {}),
       ...(args.reservedTalismanMains?.length ? { reservedTalismanMains: args.reservedTalismanMains } : {}),
       ...(args.teamTalismanBuffs?.length ? { teamTalismanBuffs: args.teamTalismanBuffs } : {}),
+      ...(args.lostHpFraction != null ? { lostHpFraction: args.lostHpFraction } : {}),
       userSkills: args.userSkills,
       filters: args.filters,
       ...(args.pinPieceUids?.length ? { pinPieceUids: args.pinPieceUids } : {}),
