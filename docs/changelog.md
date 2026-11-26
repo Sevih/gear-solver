@@ -8,6 +8,58 @@
 
 ## Items de backlog clôturés (index)
 
+### 🐛 Solveur : un Min et un Max sur la même stat ne vident plus les résultats sous Top % (G145) (2026-11-26)
+- ✅ **Pourquoi.** Signalé par Sevih le 26/11 sur la 2.2.0 : Max SPD 164 seul → des builds à 162 ; Min SPD ≤ 162
+  et Max 164 → aucun build ; la même recherche à Top % = 100 (sans élagage) en trouve. Le filtre final n'y est pour
+  rien (`passesSpecs`, vitesse entière, comparaison exacte) : c'est l'élagage par budget de combinaisons. Dès qu'une
+  stat portait un Min, `keepTopUnion` partageait le budget de chaque emplacement entre l'objectif et un floor scorer
+  par stat bornée en Min, qui garde les pièces les plus fortes sur cette stat : l'objectif ne gardait plus que la
+  moitié de ses pièces, les pièces les plus rapides faisaient dépasser le Max, et les combinaisons de la fourchette,
+  venues de la seconde moitié de la tranche de l'objectif, étaient perdues.
+- ✅ **Comment.** Un floor scorer n'est plus engagé que s'il sert (`precomputeContext`, `lib/solver/engine.ts`). Le
+  prune garde d'abord la seule tranche de l'objectif (`keepTopUnion` sans scorer, donc `keepTopN`), puis majore la
+  fiche sur cette tranche avec le nouveau `sheetUpperBound` (exporté) : chaque entrée de bucket (`pieceBucketAdds`)
+  à son maximum par emplacement, sommée sur les emplacements ; la part Talisman + EE au mieux de leurs gemmes
+  serties, ou de leurs mains plus les `gemSlots` plus fortes gemmes du pool sur chaque entrée (base et paliers du
+  Talisman, plus les slots de l'EE : l'allocation, celle qui sert les Min comprise, choisit parmi elles) ; le
+  meilleur bonus de set (un 4-pc, ou deux 2-pc de sets distincts, sur les sets et niveaux de set des pools armor,
+  `computeSetBonuses` sur une breakthrough représentative par niveau et par emplacement) ; les buffs de team
+  entiers. Toute stat de la fiche est croissante dans chaque entrée (l'argument de `pruneDominatedForCp`), donc
+  aucun build de la tranche ne dépasse la borne. Un Min sous la borne (ou sur une clé que la fiche ne porte pas)
+  engage son floor scorer ; la tranche de l'objectif rétrécit alors, et les Min restants sont revérifiés sur les
+  pools recoupés, jusqu'à stabilité (au plus un tour par Min). Tous les Min hors de portée au premier tour → les
+  pools exacts d'avant ; sans Min, rien ne change. Le budget tient : chaque passe est un `keepTopUnion` sur les
+  mêmes `keeps`, ∏ ≤ `COMBO_BUDGET * (topPct / 30)`. Le gem pool (`buildGemPool`) est construit avant l'élagage au
+  lieu d'après, sans autre changement ; le score CP par pièce est mémoïsé par slot (un slot peut être reclassé).
+  Log `gs.debug.solver` : `min-floor-scorers` (les stats engagées).
+- ✅ **Écart avec la piste du lot.** La borne compte les sets et les gemmes : sans eux ce n'est pas une borne haute
+  (un build Speed 4-pc à 162 aurait une borne sans set sous 162, le floor scorer resterait engagé, et le bug avec).
+- ✅ **Invariants.** Ajouter un Min que les résultats sans lui respectent laisse les pools tels que sans lui (un de
+  ces résultats est dans la tranche, la borne atteint donc le Min). Un Min que la tranche n'atteint pas, même
+  majorée, engage son scorer comme avant. Zone grise restante : borne atteinte sans qu'aucun build réel de la
+  tranche n'atteigne le Min (deux entrées maximisées par des pièces différentes, un set qui ne se forme pas avec les
+  meilleures pièces, des gemmes que deux Min se disputent) → le scorer n'est pas engagé et ce Min peut rester
+  vide là où l'ancien partage l'aurait servi ; l'écart est celui de la majoration, faible sur les stats additives
+  (SPD, EFF, PEN…), plus large sur ATK / DEF / HP (flat et % portés par des pièces différentes).
+- ✅ **`pinPieceUids`.** Reste utile, pas touché : un Min posé depuis une cellule n'engage plus de scorer dans le
+  cas courant (la ligne vient de la tranche de l'objectif), mais l'engage encore quand la ligne venait de pièces
+  qu'un scorer avait gardées (un autre Min engagé, ou ce Min déjà hors de portée de l'objectif) ; le recoupage peut
+  alors toujours couper une pièce de la ligne. Le commentaire « a Min halves the objective's slice » au-dessus de
+  `pinOf` ne vaut plus que pour ces cas-là.
+- ✅ **Docs.** `docs/solver.md` + `wiki/Solver.md` (rétention des mins, épinglage de la ligne d'une cellule).
+- ✅ **Tests.** Nouveau `pruneMinMax.test.ts` (5), moteur réel sur le contrat réel (`precomputeContext` →
+  `solveChunk` → `finalizeBuilds`) : inventaire synthétique (par slot A = la meilleure ATK sans SPD, B = un peu
+  moins d'ATK + 3 SPD, F = peu d'ATK + 11 SPD ; Top % 0.00025 → 2 pièces par slot), en SOLVE avec priorité et en
+  SOLVE CP : Max seul → all-B dans la fourchette ; Min = vitesse d'all-B + le même Max → les mêmes builds (rouge
+  avant le correctif dans les deux modes : 0 build) ; Min que seul le floor scorer atteint (vitesse d'all-F), seul
+  puis avec un Max → all-F trouvé et dans la fourchette ; `sheetUpperBound` sur des pools Speed 4-pc BT4 = la
+  meilleure vitesse exacte (sans les sets, en dessous). `cpPrune.test.ts` (le min que seul le floor scorer garde)
+  et `cellThreshold.test.ts` inchangés et verts. `npm run typecheck` : `> tsc --noEmit` (renderer, dernier
+  workspace, sans erreur) ; `npm test` : `Tests  1370 passed (1370)` (renderer ; core 183, desktop 273).
+  `npm run lint` : `✖ 6 problems (0 errors, 6 warnings)`, les six d'avant.
+- ⏳ Sevih : rejouer Min SPD 162 + Max 164 à son Top % habituel sur le héros du signalement (et Max 164 seul pour
+  comparer : les builds à 162 ou plus doivent être les mêmes).
+
 ### ✨ Teams : la main stat des Talismans des autres membres comptée dans les stats d'un membre, non cumulable (G144) (2026-11-21)
 - ✅ **Pourquoi.** Demande de Sevih du 21/11 : la main stat du Talisman s'applique à toute la team et n'est pas
   cumulable. G143 empêchait deux membres d'avoir la même ; la fiche d'un membre ignorait encore les Talismans des

@@ -133,6 +133,15 @@ objective's slice and one slice per scorer, the slot's budget split evenly (`⌈
 stays ≤ `keep` and the ∏ budget holds. A **max** bound doesn't enter (the in-loop filter holds it). With no min
 bound, `keepTopUnion` = `keepTopN` by the objective.
 
+A scorer is **engaged only when it is needed** (G145): it takes its share of the budget off the objective, and engaged
+for a Min the objective's builds already met, it cut those, its strongest pieces overshooting a Max on the same stat
+(Max SPD 164 alone → builds at 162; Min 162 + Max 164 → none). The prune first keeps the objective's slice alone, then
+bounds the sheet over that slice (`sheetUpperBound`: each bucket entry at its per-slot maximum, summed; the Talisman +
+EE gem part at the best of their socketed gems or the pool's `gemSlots` strongest; the best set bonus, a 4-pc or two
+2-pc, over the sets and levels of the armor pools; the team buffs whole); a Min under that bound engages its scorer,
+the slots are split again and the other Mins re-checked, until stable. A Min the objective's slice reaches therefore
+leaves the pools as without it.
+
 **a) Explicit priority (SOLVE or SOLVE CP)** — `priorityScoreOf`:
 ```
 score(piece) = Σ_rolls priority[STAT_TO_PRIORITY[roll.stat]] × (value / ROLL_NORMS[roll.stat])
@@ -528,7 +537,7 @@ same bound included (`CellMenu`, `onThreshold`, `BuilderScreen`'s `thresholdSolv
 when v keeps the row, else the neighbouring value at the same precision on the row's side
 (`cellThresholdBound`: 1,234.6 shown 1235 sets Min ≥ 1234; crit compares the sheet's value, bounded at 100, as
 the cell does). That solve, and only that one, pins the row's pieces through the combo-budget prune and the CP
-dominance prune (`pinPieceUids`, `keepTopN`'s `pinUids`): at Top % < 100 a Min re-splits the budget
+dominance prune (`pinPieceUids`, `keepTopN`'s `pinUids`): at Top % < 100 a Min out of the objective's slice's reach re-splits the budget
 (`keepTopUnion`) and used to cut a piece of the row; a SOLVE re-run by hand with the same bound may lose it
 again. No threshold on score, swaps, effects. **Pin for compare** (G128): the same menu, opened from any cell of a row (the `<tr>`'s
 `onContextMenu`, skipped when a value cell already handled the event), carries a "Pin for compare" entry

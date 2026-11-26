@@ -14,7 +14,7 @@
  * into postMessage events.
  */
 import type { GameData, GearPiece, ReforgeCeiling, RolledStat } from "@gear-solver/core";
-import { composeCharStats, DEFAULT_RULES, effectiveCharacter, expToLevel, gameRulesOf, pieceSetLevel, projectMainToCeiling, type GameRules } from "@gear-solver/core";
+import { composeCharStats, DEFAULT_RULES, effectiveCharacter, expToLevel, gameRulesOf, pieceSetLevel, projectMainToCeiling, resolveStat, type GameRules } from "@gear-solver/core";
 import {
   aggregatePrefixBuckets,
   applyBucketAdds,
@@ -36,6 +36,7 @@ import {
   type GearBuckets,
   type GemOverride,
   type ScalingMap,
+  type TeamBuff,
 } from "../composeBuild.js";
 import { calcBattlePower, makeCpEvaluator } from "./cp.js";
 import { debug, debugEnabled } from "../log.js";
@@ -687,6 +688,16 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // guard, a low-scoring set member could be dropped and `checkSetsFeasible`
   // would silently return 0 results (the user sees "no builds" without a clue
   // why). Protected pieces survive on top of the budget slice.
+  // Gem pool — full inventory union (eligibility below, where it is scored).
+  // Built here: the prune's Min check bounds the gems a Min may get from it.
+  const gemPool = buildGemPool(inv, {
+    heroUid,
+    equippedScope,
+    heroPriority,
+    excludedHeroes: excludedSet,
+    worklistClaims,
+    ...(req.gemReservedPieceUids?.length ? { reservedPieceUids: new Set(req.gemReservedPieceUids) } : {}),
+  });
   let debugKeeps: number[] | null = null;
   let debugRequiredSets: string[] | null = null;
   const rowPins = new Set(req.pinPieceUids ?? []);
@@ -718,9 +729,17 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
     // roll keys → the FinalStats/priority key). Only MIN bounds matter: a MAX
     // bound is honored by the in-loop filter, and dropping over-cap pieces early
     // is harmless. Applies to every objective branch below.
-    const floorScorers = Object.entries(filters.statFilters)
+    //
+    // A floor scorer takes its share of the slot's budget off the objective, so
+    // it is engaged only for a Min the objective's own slice can't reach: the
+    // sheet's upper bound over that slice (`sheetUpperBound`) under the Min.
+    // Engaged for a Min the objective's builds already meet, it halved their
+    // slice and its strongest pieces overshot a Max on the same stat — Max SPD
+    // 164 alone gave builds at 162, Min 162 + Max 164 none. A Min the slice
+    // reaches therefore leaves the pools as without it.
+    const minBounds = Object.entries(filters.statFilters)
       .filter(([, b]) => b?.min != null)
-      .map(([k]) => priorityScoreOf({ [k]: 1 }));
+      .map(([k, b]) => ({ key: k, min: b!.min!, score: priorityScoreOf({ [k]: 1 }) }));
     // SOLVE CP pins the currently-equipped piece of each slot so the current
     // build is always reachable → the solver can never return a lower CP than
     // the hero already has, even when the piece doesn't rank in the budget's
@@ -738,15 +757,15 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       if (cur) pins.add(cur.uid);
       return pins;
     };
+    // The objective's ranking of each slot of `capSlots`.
+    let objectives: Array<(p: GearPiece) => number>;
     if (prioritized) {
       // Explicit substat priority (SOLVE or SOLVE CP) — rank each slot by the
       // per-roll priority score. The build score is largely additive over
       // per-piece scores, so the highest-scoring pieces per slot make the best
       // builds; the budget just drops the long tail of weak combos.
       const scoreOf = priorityScoreOf(filters.priority);
-      capSlots.forEach((slot, i) => {
-        pools[slot] = keepTopUnion(pools[slot], scoreOf, floorScorers, keeps[i]!, requiredSetIds, pinOf(slot));
-      });
+      objectives = capSlots.map(() => scoreOf);
     } else if (req.mode === "cp") {
       // CP-weighted auto-prune — makes "max CP" tractable without a hand-tuned
       // priority (the default-Top% case the user actually hits). Rank each
@@ -768,14 +787,21 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
         showUIStar: starMeta.showUIStar, starPlus: starMeta.starPlus, skills, ee, fused: starMeta.fused,
       });
       const ooEquipped = equipped.find((g) => g.slot === "ooparts") ?? null;
-      capSlots.forEach((slot, i) => {
+      objectives = capSlots.map((slot) => {
         const others = equipped.filter((g) => g.slot !== slot);
-        const scoreOf = (p: GearPiece): number =>
+        // Memoized: the slot may be ranked again once a floor scorer is engaged.
+        const memo = new Map<GearPiece, number>();
+        return (p: GearPiece): number => {
+          let v = memo.get(p);
           // For the ooparts slot the candidate IS the talisman, so it's also the
           // CP evaluator's ooparts arg (its ooBp bonus); elsewhere the equipped
           // talisman stays fixed.
-          cpEval(computeFinalStats(composed.noGearStats, composed.scaling, others.concat(p), game), slot === "ooparts" ? p : ooEquipped);
-        pools[slot] = keepTopUnion(pools[slot], scoreOf, floorScorers, keeps[i]!, requiredSetIds, pinOf(slot));
+          if (v === undefined) {
+            v = cpEval(computeFinalStats(composed.noGearStats, composed.scaling, others.concat(p), game), slot === "ooparts" ? p : ooEquipped);
+            memo.set(p, v);
+          }
+          return v;
+        };
       });
     } else {
       // SOLVE (Score) with NO priority — the score is uniformly 0, so there's no
@@ -784,10 +810,38 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
       // of the fullest-rolled pieces per slot (`magnitudeScoreOf`). Results are
       // inherently arbitrary here (no priority = no objective); this only keeps
       // the solve from hanging.
-      capSlots.forEach((slot, i) => {
-        pools[slot] = keepTopUnion(pools[slot], magnitudeScoreOf, floorScorers, keeps[i]!, requiredSetIds, pinOf(slot));
-      });
+      objectives = capSlots.map(() => magnitudeScoreOf);
     }
+    const pruneWith = (floors: typeof minBounds): GearPiece[][] =>
+      capSlots.map((slot, i) => keepTopUnion(pools[slot], objectives[i]!, floors.map((f) => f.score), keeps[i]!, requiredSetIds, pinOf(slot)));
+    // Objective alone first; then, while a Min not yet engaged is out of reach
+    // of the slices kept so far, its floor scorer joins (each one engaged
+    // shrinks the objective's slice, so the others are checked again).
+    let kept = pruneWith([]);
+    if (minBounds.length > 0) {
+      const gems: GemRoll[] = [];
+      for (const [id, count] of gemPool) {
+        const r = resolveStat(id, 1, game.options);
+        if (r) for (let k = 0; k < count; k++) gems.push({ stat: r.stat, value: r.value, percent: r.percent });
+      }
+      const talismanRule = rules.gemSlots.ooparts;
+      const gemSlots = talismanRule.base + talismanRule.unlocks.reduce((n, u) => n + u.slots, 0) + gemSlotsOf(ee, rules);
+      const engaged = new Set<(typeof minBounds)[number]>();
+      for (;;) {
+        const slices = { ...pools };
+        capSlots.forEach((slot, i) => { slices[slot] = kept[i]!; });
+        const bound = sheetUpperBound(
+          composed.noGearStats, composed.scaling, slices, ee, game.sets ?? null, gems, gemSlots, req.teamTalismanBuffs ?? [],
+        ) as unknown as Record<string, number>;
+        // A key the sheet doesn't carry has no bound: its floor scorer stays.
+        const short = minBounds.filter((m) => !engaged.has(m) && !(bound[m.key]! >= m.min));
+        if (short.length === 0) break;
+        for (const m of short) engaged.add(m);
+        kept = pruneWith(minBounds.filter((m) => engaged.has(m)));
+      }
+      if (debugEnabled("solver")) debug("solver", "min-floor-scorers", { engaged: minBounds.filter((m) => engaged.has(m)).map((m) => m.key) });
+    }
+    capSlots.forEach((slot, i) => { pools[slot] = kept[i]!; });
   }
 
   // CP-mode dominance prune (structural combo-count reduction — see Phase 3).
@@ -905,14 +959,8 @@ export function precomputeContext(req: SolveRequest): PrecomputedSolveContext {
   // Once the priority is served, the slots it leaves free take the zero-score
   // gems by the `dmg` gain they bring the hero (`gemDmgGains`, weighed once on
   // the equipped build), never a stat under a `max` bound — see `scoreGemPool`.
-  const gemPool = buildGemPool(inv, {
-    heroUid,
-    equippedScope,
-    heroPriority,
-    excludedHeroes: excludedSet,
-    worklistClaims,
-    ...(req.gemReservedPieceUids?.length ? { reservedPieceUids: new Set(req.gemReservedPieceUids) } : {}),
-  });
+  // (`gemPool` itself is built before the combo-budget prune, which bounds the
+  // gems a Min may get.)
   const equipped = inv.gear.filter((g) => g.equippedBy === heroUid);
   // SOLVE CP without a priority: the reference composition the gems are weighed
   // on (the equipped build, its CP evaluator and Talisman).
@@ -1264,6 +1312,127 @@ export function keepTopUnion(
     }
   }
   return kept;
+}
+
+/** One gem the solver may socket — its resolved stat (`resolveStat` at tick 1). */
+export type GemRoll = { stat: string; value: number; percent: boolean };
+
+/** Upper bound of every sheet stat over the builds `pools` can form: each
+ *  bucket entry at its best over the slot's pieces, summed over the slots —
+ *  a bound, as the pieces maxing two entries may differ —, plus on each entry
+ *  the best of the Talisman + EE gem part (their socketed gems, or their mains
+ *  and the `gemSlots` largest gems of `gems` on that entry: the allocation, a
+ *  min-serving one included, picks among those), the best armor-set bonus (a
+ *  4-pc, or two 2-pc of distinct sets, over the sets and set levels the armor
+ *  pools hold) and the team buffs taken whole. Every sheet stat is
+ *  non-decreasing in each bucket entry (see `pruneDominatedForCp`), so no
+ *  build of `pools` beats it on any stat. The combo-budget prune engages a
+ *  Min's floor scorer only when this bound, on the objective's slice, stays
+ *  under the Min (`precomputeContext`). */
+export function sheetUpperBound(
+  baseline: FinalStatsBaseline,
+  scaling: ScalingMap,
+  pools: Readonly<Record<"weapon" | "helmet" | "armor" | "gloves" | "boots" | "accessory" | "ooparts", readonly GearPiece[]>>,
+  ee: GearPiece | null,
+  sets: GameData["sets"] | null,
+  gems: readonly GemRoll[],
+  gemSlots: number,
+  teamBuffs: readonly TeamBuff[],
+): FinalStats {
+  const L = BUCKET_ARRAY_LENGTH;
+  const arrOf = (adds: BucketAdds): Float64Array => {
+    const a = new Float64Array(L);
+    applyBucketAdds(a, adds);
+    return a;
+  };
+  const maxInto = (acc: Float64Array, a: Float64Array): void => {
+    for (let i = 0; i < L; i++) if (a[i]! > acc[i]!) acc[i] = a[i]!;
+  };
+  const addInto = (acc: Float64Array, a: Float64Array): void => {
+    for (let i = 0; i < L; i++) acc[i]! += a[i]!;
+  };
+  /** Each entry at its best over `pieces` (0 for an empty pool). */
+  const bestOf = (pieces: readonly GearPiece[], gemOverrideActive: boolean): Float64Array => {
+    if (pieces.length === 0) return new Float64Array(L);
+    const m = new Float64Array(L).fill(Number.NEGATIVE_INFINITY);
+    for (const p of pieces) maxInto(m, arrOf(pieceBucketAdds(p, gemOverrideActive)));
+    return m;
+  };
+  const total = new Float64Array(L);
+  for (const slot of ["weapon", "helmet", "armor", "gloves", "boots", "accessory"] as const) addInto(total, bestOf(pools[slot], false));
+
+  // Talisman + EE: socketed gems, or the gem override in their place.
+  const socketed = bestOf(pools.ooparts, false);
+  const overridden = bestOf(pools.ooparts, true);
+  if (ee) {
+    addInto(socketed, arrOf(pieceBucketAdds(ee, false)));
+    addInto(overridden, arrOf(pieceBucketAdds(ee, true)));
+  }
+  const gemValues = new Map<number, number[]>();
+  for (const g of gems) {
+    const { idx, val } = gemOverrideBucketAdds(g.percent ? { flat: {}, pct: { [g.stat]: g.value } } : { flat: { [g.stat]: g.value }, pct: {} });
+    for (let i = 0; i < idx.length; i++) {
+      if (!(val[i]! > 0)) continue;
+      const list = gemValues.get(idx[i]!);
+      if (list) list.push(val[i]!); else gemValues.set(idx[i]!, [val[i]!]);
+    }
+  }
+  for (const [i, list] of gemValues) {
+    list.sort((a, b) => b - a);
+    for (let k = 0; k < Math.min(gemSlots, list.length); k++) overridden[i]! += list[k]!;
+  }
+  maxInto(socketed, overridden);
+  addInto(total, socketed);
+
+  // Armor sets: per set, one breakthrough per set level and armor slot.
+  if (sets) {
+    const ARMOR = ["helmet", "armor", "gloves", "boots"] as const;
+    const reps = new Map<string, Array<Map<number, number>>>();
+    ARMOR.forEach((slot, si) => {
+      for (const p of pools[slot]) {
+        const def = p.armorSetId ? sets[p.armorSetId] : undefined;
+        if (!def) continue;
+        let bySlot = reps.get(p.armorSetId!);
+        if (!bySlot) { bySlot = ARMOR.map(() => new Map<number, number>()); reps.set(p.armorSetId!, bySlot); }
+        const lv = pieceSetLevel(def, p.breakthrough);
+        if (!bySlot[si]!.has(lv)) bySlot[si]!.set(lv, p.breakthrough);
+      }
+    });
+    const bonusOf = (setId: string, bts: number[]): Float64Array =>
+      arrOf(setBonusBucketAdds(computeSetBonuses(bts.map((breakthrough) => ({ armorSetId: setId, breakthrough }) as GearPiece), sets)));
+    const best4 = new Float64Array(L);
+    const twoPc: Float64Array[] = [];
+    for (const [setId, bySlot] of reps) {
+      const slotBts = bySlot.map((m) => [...m.values()]).filter((b) => b.length > 0);
+      if (slotBts.length < 2) continue;
+      const b2 = new Float64Array(L);
+      for (let i = 0; i < slotBts.length; i++) {
+        for (let j = i + 1; j < slotBts.length; j++) {
+          for (const x of slotBts[i]!) for (const y of slotBts[j]!) maxInto(b2, bonusOf(setId, [x, y]));
+        }
+      }
+      twoPc.push(b2);
+      if (slotBts.length === 4) {
+        for (const a of slotBts[0]!) for (const b of slotBts[1]!) for (const c of slotBts[2]!) for (const d of slotBts[3]!) {
+          maxInto(best4, bonusOf(setId, [a, b, c, d]));
+        }
+      }
+    }
+    // Two 2-pc of distinct sets: the two largest per entry.
+    const setPart = best4;
+    for (let i = 0; i < L; i++) {
+      let top1 = 0, top2 = 0;
+      for (const b2 of twoPc) {
+        const v = b2[i]!;
+        if (v > top1) { top2 = top1; top1 = v; } else if (v > top2) top2 = v;
+      }
+      if (top1 + top2 > setPart[i]!) setPart[i] = top1 + top2;
+    }
+    addInto(total, setPart);
+  }
+
+  if (teamBuffs.length > 0) addInto(total, arrOf(teamBuffBucketAdds(teamBuffs, null)));
+  return finalStatsFromBucketArray(baseline, scaling, total);
 }
 
 /** CP weight per user priority key = ΔCP from adding one ROLL_NORM-sized bump of

@@ -133,6 +133,15 @@ de la tranche de l'objectif et d'une tranche par scorer, le budget du slot parta
 (`⌈keep / (k + 1)⌉` chacun), donc l'union reste ≤ `keep` et le budget ∏ tient. Une borne **max** n'y entre pas
 (le filtre in-loop la tient). Sans borne min, `keepTopUnion` = `keepTopN` par l'objectif.
 
+Un scorer n'est **engagé que s'il sert** (G145) : il retire à l'objectif sa part du budget, et engagé pour un Min que
+les builds de l'objectif atteignaient déjà, il coupait ceux-là, ses pièces les plus fortes faisant dépasser un Max sur
+la même stat (Max SPD 164 seul → des builds à 162 ; Min 162 + Max 164 → aucun). Le prune garde d'abord la seule tranche
+de l'objectif, puis majore la fiche sur cette tranche (`sheetUpperBound` : chaque entrée de bucket à son maximum par
+slot, sommée ; la part gemmes Talisman + EE au mieux de leurs gemmes serties ou des `gemSlots` plus fortes du pool ; le
+meilleur bonus de set, un 4-pc ou deux 2-pc, sur les sets et niveaux des pools armor ; les buffs de team entiers) ; un
+Min sous cette borne engage son scorer, le slot est recoupé et les autres Min revérifiés, jusqu'à stabilité. Un Min que
+la tranche de l'objectif atteint laisse donc les pools tels que sans lui.
+
 **a) Priorité explicite (SOLVE ou SOLVE CP)** — `priorityScoreOf` :
 ```
 score(piece) = Σ_rolls priority[STAT_TO_PRIORITY[roll.stat]] × (value / ROLL_NORMS[roll.stat])
@@ -549,7 +558,7 @@ le mode du dernier solve (SOLVE avant tout solve), une fois par geste, même bor
 la valeur voisine à la même précision du côté de la ligne (`cellThresholdBound` : 1 234,6 affiché 1235 pose
 Min ≥ 1234 ; le crit compare la valeur de la fiche, bornée à 100, comme la cellule). Ce solve-là, et lui seul,
 épingle les pièces de la ligne à travers l'élagage par budget et la dominance CP (`pinPieceUids`, les `pinUids`
-de `keepTopN`) : à Top % < 100 un Min recoupe le budget (`keepTopUnion`) et coupait une pièce de la ligne ; un
+de `keepTopN`) : à Top % < 100 un Min hors de portée de la tranche de l'objectif recoupe le budget (`keepTopUnion`) et coupait une pièce de la ligne ; un
 SOLVE relancé à la main avec la même borne peut de nouveau la perdre. Pas de seuil sur score, swaps, effets. **Pin for
 compare** (G128) : le même menu, ouvert depuis n'importe quelle cellule d'une ligne (`onContextMenu` du `<tr>`,
 sauté quand une cellule de valeur a déjà traité l'événement), porte une entrée « Pin for compare »
