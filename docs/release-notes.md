@@ -12,7 +12,10 @@
 
 ## [Unreleased]
 
-_Nothing yet — user-facing notes for the next release go here._
+### Optimizer
+- **A Min under a Max on the same stat no longer empties the results**: with a Top % below 100, setting a Min on a
+  stat that already had a Max (for example SPD between 162 and 164) could return no build, although the Max alone
+  found builds in that range. The Min now keeps the builds that already meet it.
 
 ## [2.2.0] — 2026-11-21
 
