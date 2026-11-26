@@ -18,8 +18,8 @@ _Nothing yet — user-facing notes for the next release go here._
 
 ### Settings — Simulate 50% HP
 - **Revenge, Patience and Swiftness can now count**: these sets scale with missing HP, so the Optimizer counted
-  nothing for them. A new switch in **Settings › Solver** counts them as if the hero were at 50% HP: a 6★ set gives
-  its full bonus (ATK or DEF +160%, SPD +100%), a lower one half of it. When it is on, it counts in stats, Min/Max
+  nothing for them. A new switch in **Settings › Solver** counts them as if the hero were at 50% HP: a tier 4 set
+  gives its full bonus (ATK or DEF +160%, SPD +100%), a tier 0 to 3 set half of it. When it is on, it counts in stats, Min/Max
   bounds and Score, and a line above the Optimizer results says so. CP is unchanged: the game doesn't count combat
   buffs in CP. Off by default.
 
